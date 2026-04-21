@@ -71,6 +71,7 @@ class Group(db.Model):
     telegram_group_id = db.Column(db.String(255), nullable=False)
     group_name = db.Column(db.String(255), nullable=True)
     settings = db.Column(db.JSON, nullable=False, default=dict)
+    telegram_member_count = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     members = db.relationship("Member", backref="group", lazy=True, cascade="all, delete-orphan")
@@ -86,7 +87,7 @@ class Group(db.Model):
             "group_name": self.group_name,
             "settings": self.settings,
             "created_at": self.created_at.isoformat(),
-            "member_count": len(self.members),
+            "member_count": self.telegram_member_count if self.telegram_member_count else len(self.members),
         }
 
 

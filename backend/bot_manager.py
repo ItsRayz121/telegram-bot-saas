@@ -45,10 +45,16 @@ class BotInstance:
                 telegram_group_id=str(chat_id),
             ).first()
 
-    def _get_or_create_group(self, chat_id, chat_title=None):
+    async def _get_or_create_group(self, chat_id, chat_title=None, bot=None):
+        member_count = None
+        if bot:
+            try:
+                member_count = await bot.get_chat_member_count(chat_id)
+            except Exception:
+                pass
         with self.app_context.app_context():
             from .database import DatabaseManager
-            return DatabaseManager.get_or_create_group(self.bot_id, chat_id, chat_title)
+            return DatabaseManager.get_or_create_group(self.bot_id, chat_id, chat_title, member_count)
 
     async def handle_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if update.effective_chat.type == "private":
@@ -83,7 +89,7 @@ class BotInstance:
             cfg = self.app_context.config
             frontend_url = cfg.get("FRONTEND_URL", "http://localhost:3000")
 
-        group = self._get_or_create_group(update.effective_chat.id, update.effective_chat.title)
+        group = await self._get_or_create_group(update.effective_chat.id, update.effective_chat.title, context.bot)
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton(
                 "⚙️ Open Dashboard",
@@ -100,7 +106,7 @@ class BotInstance:
             return
 
         user = update.effective_user
-        group = self._get_or_create_group(update.effective_chat.id, update.effective_chat.title)
+        group = await self._get_or_create_group(update.effective_chat.id, update.effective_chat.title, context.bot)
 
         with self.app_context.app_context():
             from .models import Member
@@ -139,7 +145,7 @@ class BotInstance:
         if update.effective_chat.type == "private":
             return
 
-        group = self._get_or_create_group(update.effective_chat.id, update.effective_chat.title)
+        group = await self._get_or_create_group(update.effective_chat.id, update.effective_chat.title, context.bot)
 
         with self.app_context.app_context():
             from .models import Member
@@ -203,7 +209,7 @@ class BotInstance:
         if update.message.reply_to_message:
             reason = " ".join(context.args) if context.args else "No reason provided"
 
-        group = self._get_or_create_group(update.effective_chat.id, update.effective_chat.title)
+        group = await self._get_or_create_group(update.effective_chat.id, update.effective_chat.title, context.bot)
         await self.moderation.warn_user(
             context.bot,
             update.effective_chat.id,
@@ -226,7 +232,7 @@ class BotInstance:
         if update.message.reply_to_message:
             reason = " ".join(context.args) if context.args else "No reason"
 
-        group = self._get_or_create_group(update.effective_chat.id, update.effective_chat.title)
+        group = await self._get_or_create_group(update.effective_chat.id, update.effective_chat.title, context.bot)
 
         try:
             await context.bot.ban_chat_member(update.effective_chat.id, target.id)
@@ -255,7 +261,7 @@ class BotInstance:
             return
 
         reason = " ".join(context.args) if context.args else "No reason"
-        group = self._get_or_create_group(update.effective_chat.id, update.effective_chat.title)
+        group = await self._get_or_create_group(update.effective_chat.id, update.effective_chat.title, context.bot)
 
         try:
             await context.bot.ban_chat_member(update.effective_chat.id, target.id)
@@ -293,7 +299,7 @@ class BotInstance:
             except (ValueError, IndexError):
                 reason = " ".join(context.args)
 
-        group = self._get_or_create_group(update.effective_chat.id, update.effective_chat.title)
+        group = await self._get_or_create_group(update.effective_chat.id, update.effective_chat.title, context.bot)
         until_date = datetime.utcnow() + timedelta(minutes=duration)
 
         try:
@@ -328,7 +334,7 @@ class BotInstance:
         if not target:
             return
 
-        group = self._get_or_create_group(update.effective_chat.id, update.effective_chat.title)
+        group = await self._get_or_create_group(update.effective_chat.id, update.effective_chat.title, context.bot)
 
         try:
             await context.bot.restrict_chat_member(
@@ -371,7 +377,7 @@ class BotInstance:
             except (ValueError, IndexError):
                 reason = " ".join(context.args)
 
-        group = self._get_or_create_group(update.effective_chat.id, update.effective_chat.title)
+        group = await self._get_or_create_group(update.effective_chat.id, update.effective_chat.title, context.bot)
         until_date = datetime.utcnow() + timedelta(hours=duration_hours)
 
         try:
@@ -411,7 +417,7 @@ class BotInstance:
         else:
             target = update.effective_user
 
-        group = self._get_or_create_group(update.effective_chat.id, update.effective_chat.title)
+        group = await self._get_or_create_group(update.effective_chat.id, update.effective_chat.title, context.bot)
 
         with self.app_context.app_context():
             from .models import Member
@@ -452,7 +458,7 @@ class BotInstance:
         except Exception:
             return
 
-        group = self._get_or_create_group(update.effective_chat.id, update.effective_chat.title)
+        group = await self._get_or_create_group(update.effective_chat.id, update.effective_chat.title, context.bot)
 
         with self.app_context.app_context():
             from .models import AuditLog
@@ -525,7 +531,7 @@ class BotInstance:
             return
 
         chat_id = update.effective_chat.id
-        group = self._get_or_create_group(chat_id, update.effective_chat.title)
+        group = await self._get_or_create_group(chat_id, update.effective_chat.title, context.bot)
 
         for new_user in update.message.new_chat_members:
             if new_user.is_bot:
@@ -554,7 +560,7 @@ class BotInstance:
 
         user = update.effective_user
         chat_id = update.effective_chat.id
-        group = self._get_or_create_group(chat_id, update.effective_chat.title)
+        group = await self._get_or_create_group(chat_id, update.effective_chat.title, context.bot)
 
         with self.app_context.app_context():
             from .database import DatabaseManager

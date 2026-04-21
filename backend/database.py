@@ -96,7 +96,7 @@ def get_default_settings():
 class DatabaseManager:
 
     @staticmethod
-    def get_or_create_group(bot_id, telegram_group_id, group_name=None):
+    def get_or_create_group(bot_id, telegram_group_id, group_name=None, member_count=None):
         group = Group.query.filter_by(
             bot_id=bot_id,
             telegram_group_id=str(telegram_group_id),
@@ -108,12 +108,20 @@ class DatabaseManager:
                 telegram_group_id=str(telegram_group_id),
                 group_name=group_name or str(telegram_group_id),
                 settings=get_default_settings(),
+                telegram_member_count=member_count or 0,
             )
             db.session.add(group)
             db.session.commit()
-        elif group_name and group.group_name != group_name:
-            group.group_name = group_name
-            db.session.commit()
+        else:
+            changed = False
+            if group_name and group.group_name != group_name:
+                group.group_name = group_name
+                changed = True
+            if member_count and group.telegram_member_count != member_count:
+                group.telegram_member_count = member_count
+                changed = True
+            if changed:
+                db.session.commit()
 
         return group
 
