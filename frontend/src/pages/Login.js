@@ -89,6 +89,15 @@ export default function Login() {
             </Button>
           </form>
 
+          <Typography variant="body2" textAlign="center" color="text.secondary" mb={1}>
+            <Link
+              component="button"
+              onClick={() => navigate('/forgot-password')}
+              sx={{ color: 'text.secondary', cursor: 'pointer' }}
+            >
+              Forgot password?
+            </Link>
+          </Typography>
           <Typography variant="body2" textAlign="center" color="text.secondary">
             Don't have an account?{' '}
             <Link

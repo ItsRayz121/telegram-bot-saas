@@ -32,6 +32,8 @@ export const auth = {
   login: (data) => api.post('/api/auth/login', data),
   getMe: () => api.get('/api/auth/me'),
   changePassword: (data) => api.post('/api/auth/change-password', data),
+  forgotPassword: (data) => api.post('/api/auth/forgot-password', data),
+  resetPassword: (data) => api.post('/api/auth/reset-password', data),
 };
 
 export const bots = {

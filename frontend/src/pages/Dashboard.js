@@ -11,7 +11,7 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { bots } from '../services/api';
+import { bots, auth } from '../services/api';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -24,7 +24,7 @@ export default function Dashboard() {
   const [adding, setAdding] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const [user, setUser] = useState(JSON.parse(localStorage.getItem('user') || '{}'));
 
   const fetchBots = useCallback(async () => {
     try {
@@ -37,9 +37,21 @@ export default function Dashboard() {
     }
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    try {
+      const res = await auth.getMe();
+      const fresh = res.data.user;
+      localStorage.setItem('user', JSON.stringify(fresh));
+      setUser(fresh);
+    } catch {
+      // silently ignore
+    }
+  }, []);
+
   useEffect(() => {
+    refreshUser();
     fetchBots();
-  }, [fetchBots]);
+  }, [refreshUser, fetchBots]);
 
   const handleAddBot = async () => {
     if (!newToken.trim()) return;
@@ -113,7 +125,7 @@ export default function Dashboard() {
             <MenuItem disabled>
               <Typography variant="body2">{user.email}</Typography>
             </MenuItem>
-            {user.email && ['admin@example.com'].includes(user.email) && (
+            {user.is_admin && (
               <MenuItem onClick={() => { setAnchorEl(null); navigate('/admin'); }}>
                 Admin Panel
               </MenuItem>

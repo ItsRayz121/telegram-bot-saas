@@ -13,6 +13,8 @@ import GroupSettings from './pages/GroupSettings';
 import Pricing from './pages/Pricing';
 import Analytics from './pages/Analytics';
 import AdminPanel from './pages/AdminPanel';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 
 const darkTheme = createTheme({
   palette: {
@@ -61,6 +63,8 @@ export default function App() {
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/pricing" element={<Pricing />} />
           <Route
             path="/dashboard"

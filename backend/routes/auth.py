@@ -80,7 +80,9 @@ def login():
         db.session.commit()
 
     token = create_access_token(identity=str(user.id))
-    return jsonify({"token": token, "user": user.to_dict()}), 200
+    user_data = user.to_dict()
+    user_data["is_admin"] = user.email in Config.ADMIN_EMAILS
+    return jsonify({"token": token, "user": user_data}), 200
 
 
 @auth_bp.route("/me", methods=["GET"])
@@ -90,7 +92,9 @@ def get_me():
     user = User.query.get(int(user_id))
     if not user:
         return jsonify({"error": "User not found"}), 404
-    return jsonify({"user": user.to_dict()}), 200
+    user_data = user.to_dict()
+    user_data["is_admin"] = user.email in Config.ADMIN_EMAILS
+    return jsonify({"user": user_data}), 200
 
 
 @auth_bp.route("/forgot-password", methods=["POST"])
