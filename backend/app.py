@@ -2,15 +2,15 @@ import os
 from flask import Flask, jsonify
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
-from config import Config
-from models import db
-from routes.auth import auth_bp
-from routes.bots import bots_bp
-from routes.settings import settings_bp
-from routes.billing import billing_bp
-from routes.analytics import analytics_bp
-from routes.admin import admin_bp
-from bot_manager import BotManager
+from .config import Config
+from .models import db
+from .routes.auth import auth_bp
+from .routes.bots import bots_bp
+from .routes.settings import settings_bp
+from .routes.billing import billing_bp
+from .routes.analytics import analytics_bp
+from .routes.admin import admin_bp
+from .bot_manager import BotManager
 
 bot_manager = BotManager()
 
@@ -52,7 +52,7 @@ def create_app():
 
 
 def _restart_active_bots(app):
-    from models import Bot
+    from .models import Bot
     try:
         active_bots = Bot.query.filter_by(is_active=True).all()
         for bot in active_bots:

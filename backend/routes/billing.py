@@ -2,10 +2,10 @@ import stripe
 from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from models import db, User
-from config import Config
-from middleware.rate_limit import rate_limit
-from notifications import send_subscription_confirmation, send_subscription_cancelled, send_payment_failed
+from ..models import db, User
+from ..config import Config
+from ..middleware.rate_limit import rate_limit
+from ..notifications import send_subscription_confirmation, send_subscription_cancelled, send_payment_failed
 
 stripe.api_key = Config.STRIPE_SECRET_KEY
 

@@ -2,9 +2,9 @@ from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func
-from models import db, User, Bot, Group, Member, AuditLog
-from config import Config
-from middleware.rate_limit import rate_limit
+from ..models import db, User, Bot, Group, Member, AuditLog
+from ..config import Config
+from ..middleware.rate_limit import rate_limit
 
 analytics_bp = Blueprint("analytics", __name__, url_prefix="/api")
 
