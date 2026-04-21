@@ -2,6 +2,7 @@ import os
 from flask import Flask, jsonify
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
+from sqlalchemy import text
 from .config import Config
 from .models import db
 from .routes.auth import auth_bp
@@ -49,9 +50,24 @@ def create_app():
 
     with app.app_context():
         db.create_all()
+        _run_migrations()
         _restart_active_bots(app)
 
     return app
+
+
+def _run_migrations():
+    """Add any missing columns to existing tables without dropping data."""
+    migrations = [
+        "ALTER TABLE groups ADD COLUMN IF NOT EXISTS telegram_member_count INTEGER DEFAULT 0",
+    ]
+    try:
+        with db.engine.connect() as conn:
+            for sql in migrations:
+                conn.execute(text(sql))
+            conn.commit()
+    except Exception:
+        pass
 
 
 def _restart_active_bots(app):

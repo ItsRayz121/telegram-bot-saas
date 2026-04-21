@@ -7,7 +7,7 @@ from telegram import (
 )
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, CallbackQueryHandler,
-    filters, ContextTypes,
+    ChatMemberHandler, filters, ContextTypes,
 )
 
 from .bot_features.verification import VerificationSystem
@@ -614,6 +614,18 @@ class BotInstance:
         else:
             await query.answer()
 
+    async def handle_my_chat_member(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Fires when the bot is added to or removed from a group."""
+        result = update.my_chat_member
+        if not result:
+            return
+        chat = result.chat
+        if chat.type not in ("group", "supergroup"):
+            return
+        new_status = result.new_chat_member.status
+        if new_status in ("member", "administrator"):
+            await self._get_or_create_group(chat.id, chat.title, context.bot)
+
     def _run_bot(self):
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
@@ -641,6 +653,7 @@ class BotInstance:
         app.add_handler(CommandHandler("userinfo", self.handle_userinfo))
         app.add_handler(CommandHandler("auditlog", self.handle_auditlog))
         app.add_handler(CommandHandler("purge", self.handle_purge))
+        app.add_handler(ChatMemberHandler(self.handle_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))
         app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, self.handle_new_member))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
         app.add_handler(CallbackQueryHandler(self.handle_callback))
