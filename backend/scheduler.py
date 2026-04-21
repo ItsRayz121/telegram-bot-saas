@@ -94,12 +94,16 @@ def send_scheduled_messages():
                                 rows.append(btn_row)
                             keyboard = InlineKeyboardMarkup(rows)
 
-                        sent = await b.application.bot.send_message(
-                            chat_id=g.telegram_group_id,
-                            text=m.message_text,
-                            parse_mode="Markdown",
-                            reply_markup=keyboard,
-                        )
+                        send_kwargs = {
+                            "chat_id": g.telegram_group_id,
+                            "text": m.message_text,
+                            "parse_mode": "Markdown",
+                            "reply_markup": keyboard,
+                            "disable_web_page_preview": not getattr(m, "link_preview_enabled", True),
+                        }
+                        if getattr(m, "topic_id", None):
+                            send_kwargs["message_thread_id"] = m.topic_id
+                        sent = await b.application.bot.send_message(**send_kwargs)
 
                         if m.pin_message:
                             await b.application.bot.pin_chat_message(

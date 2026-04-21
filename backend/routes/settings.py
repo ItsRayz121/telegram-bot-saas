@@ -1,7 +1,7 @@
 from datetime import datetime
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from ..models import db, User, Bot, Group, Member, AuditLog, ScheduledMessage, Raid
+from ..models import db, User, Bot, Group, Member, AuditLog, ScheduledMessage, Raid, AutoResponse, ReportedMessage
 from ..middleware.rate_limit import rate_limit
 
 settings_bp = Blueprint("settings", __name__, url_prefix="/api")
@@ -164,6 +164,8 @@ def create_scheduled_message(bot_id, group_id):
         stop_date=stop_date,
         pin_message=data.get("pin_message", False),
         auto_delete_after=data.get("auto_delete_after"),
+        link_preview_enabled=data.get("link_preview_enabled", True),
+        topic_id=data.get("topic_id"),
     )
     db.session.add(msg)
     db.session.commit()
@@ -206,3 +208,129 @@ def create_raid(bot_id, group_id):
     db.session.add(raid)
     db.session.commit()
     return jsonify({"raid": raid.to_dict(), "message": "Raid created"}), 201
+
+
+# ── Auto-Responses ──────────────────────────────────────────────────────────
+
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/auto-responses", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def get_auto_responses(bot_id, group_id):
+    user = _get_current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    bot, group, err = _get_bot_and_group(user, bot_id, group_id)
+    if err:
+        return err
+    responses = AutoResponse.query.filter_by(group_id=group.id).order_by(AutoResponse.created_at).all()
+    return jsonify({"auto_responses": [r.to_dict() for r in responses]})
+
+
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/auto-responses", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=20)
+def create_auto_response(bot_id, group_id):
+    user = _get_current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    bot, group, err = _get_bot_and_group(user, bot_id, group_id)
+    if err:
+        return err
+    data = request.get_json()
+    if not data or not data.get("trigger_text") or not data.get("response_text"):
+        return jsonify({"error": "trigger_text and response_text are required"}), 400
+    ar = AutoResponse(
+        group_id=group.id,
+        trigger_text=data["trigger_text"],
+        response_text=data["response_text"],
+        match_type=data.get("match_type", "contains"),
+        is_case_sensitive=data.get("is_case_sensitive", False),
+        is_enabled=data.get("is_enabled", True),
+    )
+    db.session.add(ar)
+    db.session.commit()
+    return jsonify({"auto_response": ar.to_dict(), "message": "Auto-response created"}), 201
+
+
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/auto-responses/<int:ar_id>", methods=["PUT"])
+@jwt_required()
+@rate_limit(requests_per_minute=20)
+def update_auto_response(bot_id, group_id, ar_id):
+    user = _get_current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    bot, group, err = _get_bot_and_group(user, bot_id, group_id)
+    if err:
+        return err
+    ar = AutoResponse.query.filter_by(id=ar_id, group_id=group.id).first()
+    if not ar:
+        return jsonify({"error": "Auto-response not found"}), 404
+    data = request.get_json() or {}
+    if "trigger_text" in data:
+        ar.trigger_text = data["trigger_text"]
+    if "response_text" in data:
+        ar.response_text = data["response_text"]
+    if "match_type" in data:
+        ar.match_type = data["match_type"]
+    if "is_case_sensitive" in data:
+        ar.is_case_sensitive = data["is_case_sensitive"]
+    if "is_enabled" in data:
+        ar.is_enabled = data["is_enabled"]
+    db.session.commit()
+    return jsonify({"auto_response": ar.to_dict(), "message": "Updated"})
+
+
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/auto-responses/<int:ar_id>", methods=["DELETE"])
+@jwt_required()
+@rate_limit(requests_per_minute=20)
+def delete_auto_response(bot_id, group_id, ar_id):
+    user = _get_current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    bot, group, err = _get_bot_and_group(user, bot_id, group_id)
+    if err:
+        return err
+    ar = AutoResponse.query.filter_by(id=ar_id, group_id=group.id).first()
+    if not ar:
+        return jsonify({"error": "Auto-response not found"}), 404
+    db.session.delete(ar)
+    db.session.commit()
+    return jsonify({"message": "Deleted"})
+
+
+# ── Reports ─────────────────────────────────────────────────────────────────
+
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/reports", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def get_reports(bot_id, group_id):
+    user = _get_current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    bot, group, err = _get_bot_and_group(user, bot_id, group_id)
+    if err:
+        return err
+    status_filter = request.args.get("status", "")
+    query = ReportedMessage.query.filter_by(group_id=group.id)
+    if status_filter:
+        query = query.filter_by(status=status_filter)
+    reports = query.order_by(ReportedMessage.created_at.desc()).all()
+    return jsonify({"reports": [r.to_dict() for r in reports]})
+
+
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/reports/<int:report_id>/resolve", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=20)
+def resolve_report(bot_id, group_id, report_id):
+    user = _get_current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    bot, group, err = _get_bot_and_group(user, bot_id, group_id)
+    if err:
+        return err
+    report = ReportedMessage.query.filter_by(id=report_id, group_id=group.id).first()
+    if not report:
+        return jsonify({"error": "Report not found"}), 404
+    report.status = "resolved"
+    db.session.commit()
+    return jsonify({"report": report.to_dict(), "message": "Report resolved"})

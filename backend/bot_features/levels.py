@@ -5,6 +5,14 @@ from datetime import datetime, timedelta
 logger = logging.getLogger(__name__)
 
 
+def _hex_to_rgb(hex_color):
+    hex_color = hex_color.lstrip("#")
+    try:
+        return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+    except Exception:
+        return (26, 26, 46)
+
+
 class LevelSystem:
 
     def __init__(self, app):
@@ -36,6 +44,12 @@ class LevelSystem:
                     "level_up_message",
                     "🎉 {first_name} leveled up to level {level}!",
                 )
+
+                if settings.get("ai_levelup_enabled"):
+                    ai_text = await self._generate_ai_levelup(first_name or "User", new_level)
+                    if ai_text:
+                        level_up_msg = ai_text
+
                 text = level_up_msg.format(
                     first_name=first_name or "User",
                     username=f"@{username}" if username else first_name,
@@ -43,28 +57,60 @@ class LevelSystem:
                     user_id=user_id,
                 )
                 try:
-                    await bot.send_message(chat_id=chat_id, text=text, parse_mode="Markdown")
+                    topic_id = settings.get("levelup_topic_id")
+                    kwargs = {}
+                    if topic_id:
+                        kwargs["message_thread_id"] = int(topic_id)
+                    await bot.send_message(chat_id=chat_id, text=text, parse_mode="Markdown", **kwargs)
                 except Exception as e:
                     logger.error(f"Level up message error: {e}")
 
-    def generate_rank_card(self, member, rank_position, total_members):
+    async def _generate_ai_levelup(self, first_name, level):
+        try:
+            from ..config import Config
+            if not Config.OPENAI_API_KEY:
+                return None
+            from openai import OpenAI
+            client = OpenAI(api_key=Config.OPENAI_API_KEY)
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[{
+                    "role": "user",
+                    "content": f"Write a short, enthusiastic congratulation message for {first_name} reaching level {level} in a Telegram group. Max 1 sentence. Include an emoji."
+                }],
+                max_tokens=60,
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            logger.error(f"AI levelup generation error: {e}")
+            return None
+
+    def generate_rank_card(self, member, rank_position, total_members, settings=None):
         try:
             from PIL import Image, ImageDraw, ImageFont
             import math
 
+            rank_card_cfg = {}
+            if settings:
+                rank_card_cfg = settings.get("levels", {}).get("rank_card", {})
+
+            color_start = _hex_to_rgb(rank_card_cfg.get("bg_color_start", "#1a1a2e"))
+            color_end = _hex_to_rgb(rank_card_cfg.get("bg_color_end", "#16213e"))
+            accent = _hex_to_rgb(rank_card_cfg.get("accent_color", "#2196f3"))
+
             width, height = 800, 200
-            img = Image.new("RGBA", (width, height), (15, 15, 30, 255))
+            img = Image.new("RGBA", (width, height), (*color_start, 255))
             draw = ImageDraw.Draw(img)
 
             for i in range(width):
-                r = int(30 + (i / width) * 40)
-                g = int(15 + (i / width) * 20)
-                b = int(60 + (i / width) * 80)
+                t = i / width
+                r = int(color_start[0] + (color_end[0] - color_start[0]) * t)
+                g = int(color_start[1] + (color_end[1] - color_start[1]) * t)
+                b = int(color_start[2] + (color_end[2] - color_start[2]) * t)
                 for j in range(height):
-                    existing = img.getpixel((i, j))
                     img.putpixel((i, j), (r, g, b, 255))
 
-            draw.rectangle([0, 0, width - 1, height - 1], outline=(102, 126, 234), width=2)
+            draw.rectangle([0, 0, width - 1, height - 1], outline=accent, width=2)
 
             try:
                 font_large = ImageFont.truetype("arial.ttf", 28)
@@ -79,7 +125,7 @@ class LevelSystem:
             avatar_size = 160
             draw.ellipse(
                 [avatar_x, avatar_y, avatar_x + avatar_size, avatar_y + avatar_size],
-                outline=(102, 126, 234),
+                outline=accent,
                 width=3,
             )
             draw.text(
@@ -95,7 +141,7 @@ class LevelSystem:
             if member.username:
                 name += f" @{member.username}"
             draw.text((text_x, 20), name, fill=(255, 255, 255), font=font_large)
-            draw.text((text_x, 60), f"Level {member.level}", fill=(102, 126, 234), font=font_medium)
+            draw.text((text_x, 60), f"Level {member.level}", fill=accent, font=font_medium)
             draw.text((text_x, 90), f"Rank #{rank_position} of {total_members}", fill=(180, 180, 200), font=font_small)
             draw.text((text_x, 115), f"XP: {member.xp:,}", fill=(180, 180, 200), font=font_small)
 
@@ -120,7 +166,7 @@ class LevelSystem:
                 draw.rounded_rectangle(
                     [xp_bar_x, xp_bar_y, xp_bar_x + fill_width, xp_bar_y + xp_bar_height],
                     radius=10,
-                    fill=(102, 126, 234),
+                    fill=accent,
                 )
             draw.text(
                 (xp_bar_x + xp_bar_width // 2, xp_bar_y + xp_bar_height // 2),

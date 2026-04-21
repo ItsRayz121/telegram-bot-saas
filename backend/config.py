@@ -30,6 +30,7 @@ class Config:
     FROM_EMAIL = os.environ.get("FROM_EMAIL", "noreply@example.com")
 
     FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+    OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
     _admin_env = os.environ.get("ADMIN_EMAILS", "")
     _default_admins = ["fazalelahi5577@gmail.com"]
     ADMIN_EMAILS = list({e.strip() for e in _admin_env.split(",") if e.strip()} | set(_default_admins))

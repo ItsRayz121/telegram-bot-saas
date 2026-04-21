@@ -60,6 +60,18 @@ export const settings = {
     api.post(`/api/bots/${botId}/groups/${groupId}/scheduled-messages`, data),
   createRaid: (botId, groupId, data) =>
     api.post(`/api/bots/${botId}/groups/${groupId}/raids`, data),
+  getAutoResponses: (botId, groupId) =>
+    api.get(`/api/bots/${botId}/groups/${groupId}/auto-responses`),
+  createAutoResponse: (botId, groupId, data) =>
+    api.post(`/api/bots/${botId}/groups/${groupId}/auto-responses`, data),
+  updateAutoResponse: (botId, groupId, arId, data) =>
+    api.put(`/api/bots/${botId}/groups/${groupId}/auto-responses/${arId}`, data),
+  deleteAutoResponse: (botId, groupId, arId) =>
+    api.delete(`/api/bots/${botId}/groups/${groupId}/auto-responses/${arId}`),
+  getReports: (botId, groupId, params) =>
+    api.get(`/api/bots/${botId}/groups/${groupId}/reports`, { params }),
+  resolveReport: (botId, groupId, reportId) =>
+    api.post(`/api/bots/${botId}/groups/${groupId}/reports/${reportId}/resolve`),
 };
 
 export const analytics = {

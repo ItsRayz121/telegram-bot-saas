@@ -19,6 +19,14 @@ class WelcomeSystem:
             "Welcome {first_name} to {group_name}! 👋",
         )
 
+        if settings.get("ai_welcome_enabled"):
+            ai_text = await self._generate_ai_welcome(
+                new_user.first_name or "User",
+                group.group_name or "the group",
+            )
+            if ai_text:
+                template = ai_text
+
         with self.app.app_context():
             from ..models import Member
             member_count = Member.query.filter_by(group_id=group.id).count()
@@ -42,6 +50,11 @@ class WelcomeSystem:
                 [InlineKeyboardButton("📜 Read Rules", callback_data=f"rules:{group.id}")]
             ])
 
+        topic_id = settings.get("topic_id")
+        send_kwargs = {}
+        if topic_id:
+            send_kwargs["message_thread_id"] = int(topic_id)
+
         try:
             media_url = settings.get("media_url", "")
             msg = None
@@ -54,6 +67,7 @@ class WelcomeSystem:
                         caption=message_text,
                         parse_mode="Markdown",
                         reply_markup=keyboard,
+                        **send_kwargs,
                     )
                 except Exception:
                     msg = await bot.send_message(
@@ -61,6 +75,7 @@ class WelcomeSystem:
                         text=message_text,
                         parse_mode="Markdown",
                         reply_markup=keyboard,
+                        **send_kwargs,
                     )
             else:
                 msg = await bot.send_message(
@@ -68,6 +83,7 @@ class WelcomeSystem:
                     text=message_text,
                     parse_mode="Markdown",
                     reply_markup=keyboard,
+                    **send_kwargs,
                 )
 
             delete_after = settings.get("delete_after_seconds", 0)
@@ -81,3 +97,23 @@ class WelcomeSystem:
 
         except Exception as e:
             logger.error(f"Welcome message error: {e}")
+
+    async def _generate_ai_welcome(self, first_name, group_name):
+        try:
+            from ..config import Config
+            if not Config.OPENAI_API_KEY:
+                return None
+            from openai import OpenAI
+            client = OpenAI(api_key=Config.OPENAI_API_KEY)
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[{
+                    "role": "user",
+                    "content": f"Write a short friendly welcome message for {first_name} joining the Telegram group '{group_name}'. Max 2 sentences. Include an emoji. Do not use placeholders."
+                }],
+                max_tokens=80,
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            logger.error(f"AI welcome generation error: {e}")
+            return None

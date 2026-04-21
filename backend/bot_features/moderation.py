@@ -1,4 +1,5 @@
 import re
+import unicodedata
 import logging
 from datetime import datetime, timedelta
 from telegram import ChatPermissions
@@ -17,6 +18,20 @@ EMOJI_PATTERN = re.compile(
     "\U00002702-\U000027B0\U000024C2-\U0001F251]+",
     flags=re.UNICODE,
 )
+EMAIL_PATTERN = re.compile(r"\b[\w.+-]+@[\w-]+\.\w{2,}\b")
+
+LANGUAGE_RANGES = {
+    "cyrillic": re.compile(r"[Ѐ-ӿ]"),
+    "chinese": re.compile(r"[一-鿿㐀-䶿]"),
+    "korean": re.compile(r"[가-힯ᄀ-ᇿ]"),
+    "arabic": re.compile(r"[؀-ۿ]"),
+    "hindi": re.compile(r"[ऀ-ॿ]"),
+    "japanese": re.compile(r"[぀-ヿㇰ-ㇿ]"),
+}
+
+
+def normalize_homoglyphs(text):
+    return unicodedata.normalize("NFKD", text)
 
 
 class ModerationSystem:
@@ -38,8 +53,9 @@ class ModerationSystem:
                 reason=reason,
             )
 
-            max_warnings = group.settings.get("moderation", {}).get("max_warnings", 3)
-            warning_action = group.settings.get("moderation", {}).get("warning_action", "ban")
+            mod_settings = group.settings.get("moderation", {})
+            max_warnings = mod_settings.get("max_warnings", 3)
+            warning_action = mod_settings.get("warning_action", "ban")
 
             await bot.send_message(
                 chat_id=chat_id,
@@ -50,7 +66,53 @@ class ModerationSystem:
                 ),
             )
 
-            if total_warnings >= max_warnings:
+            # Check escalation steps first
+            if mod_settings.get("escalation_enabled"):
+                steps = sorted(
+                    mod_settings.get("escalation_steps", []),
+                    key=lambda s: s["at_warning"],
+                    reverse=True,
+                )
+                for step in steps:
+                    if total_warnings >= step["at_warning"]:
+                        action = step.get("action", "warn")
+                        duration_min = step.get("duration_minutes", 60)
+                        duration_hr = step.get("duration_hours", 24)
+                        if action == "mute":
+                            until = datetime.utcnow() + timedelta(minutes=duration_min)
+                            try:
+                                await bot.restrict_chat_member(
+                                    chat_id=chat_id,
+                                    user_id=target_user_id,
+                                    permissions=ChatPermissions(can_send_messages=False),
+                                    until_date=until,
+                                )
+                                await bot.send_message(
+                                    chat_id=chat_id,
+                                    text=f"🔇 {target_username or target_user_id} muted for {duration_min}m (escalation at {total_warnings} warnings).",
+                                )
+                            except Exception as e:
+                                logger.error(f"Escalation mute error: {e}")
+                        elif action == "tempban":
+                            until = datetime.utcnow() + timedelta(hours=duration_hr)
+                            try:
+                                await bot.ban_chat_member(
+                                    chat_id=chat_id,
+                                    user_id=target_user_id,
+                                    until_date=until,
+                                )
+                                await bot.send_message(
+                                    chat_id=chat_id,
+                                    text=f"⛔ {target_username or target_user_id} temp-banned for {duration_hr}h (escalation at {total_warnings} warnings).",
+                                )
+                            except Exception as e:
+                                logger.error(f"Escalation tempban error: {e}")
+                        elif action == "ban":
+                            await self.check_automated_actions(
+                                bot, chat_id, target_user_id, target_username, group, "ban"
+                            )
+                        break
+            elif total_warnings >= max_warnings:
                 await self.check_automated_actions(
                     bot, chat_id, target_user_id, target_username, group, warning_action
                 )
@@ -114,7 +176,7 @@ class ModerationSystem:
         user_id = message.from_user.id if message.from_user else None
         chat_id = message.chat.id
 
-        if not user_id or not text:
+        if not user_id:
             return False
 
         try:
@@ -124,7 +186,11 @@ class ModerationSystem:
         except Exception:
             pass
 
-        checks = [
+        # Normalize homoglyphs before text checks
+        normalized_text = normalize_homoglyphs(text) if settings.get("homoglyphs", {}).get("enabled") else text
+
+        # Text-based checks
+        text_checks = [
             self.check_bad_words,
             self.check_spam,
             self.check_external_links,
@@ -132,11 +198,36 @@ class ModerationSystem:
             self.check_excessive_emojis,
             self.check_caps_lock,
             self.check_forwarded,
+            self.check_email_detection,
+            self.check_language_filter,
+            self.check_spoiler_content,
+            self.check_bot_mentions,
         ]
 
-        for check in checks:
+        for check in text_checks:
             try:
-                if await check(bot, message, text, group, settings):
+                if await check(bot, message, normalized_text, group, settings):
+                    return True
+            except Exception as e:
+                logger.error(f"Automod check {check.__name__} error: {e}")
+
+        # Media/content type checks (don't need text)
+        media_checks = [
+            self.check_contact_sharing,
+            self.check_location_sharing,
+            self.check_voice_notes,
+            self.check_video_notes,
+            self.check_file_attachments,
+            self.check_photos,
+            self.check_videos,
+            self.check_gifs,
+            self.check_stickers,
+            self.check_games,
+        ]
+
+        for check in media_checks:
+            try:
+                if await check(bot, message, group, settings):
                     return True
             except Exception as e:
                 logger.error(f"Automod check {check.__name__} error: {e}")
@@ -273,6 +364,199 @@ class ModerationSystem:
             await self.execute_automod_action(
                 bot, message, group, cfg.get("action", "delete"),
                 reason="Forwarded message",
+            )
+            return True
+        return False
+
+    async def check_email_detection(self, bot, message, text, group, settings):
+        cfg = settings.get("email_detection", {})
+        if not cfg.get("enabled", False):
+            return False
+        if EMAIL_PATTERN.search(text):
+            await self.execute_automod_action(
+                bot, message, group, cfg.get("action", "delete"),
+                reason="Email address detected",
+                warn=cfg.get("warn_user", False),
+            )
+            return True
+        return False
+
+    async def check_language_filter(self, bot, message, text, group, settings):
+        cfg = settings.get("language_filter", {})
+        if not cfg.get("enabled", False) or not text:
+            return False
+        for lang in cfg.get("languages", []):
+            pattern = LANGUAGE_RANGES.get(lang)
+            if pattern and pattern.search(text):
+                await self.execute_automod_action(
+                    bot, message, group, cfg.get("action", "delete"),
+                    reason=f"Blocked language detected: {lang}",
+                    warn=cfg.get("warn_user", False),
+                )
+                return True
+        return False
+
+    async def check_spoiler_content(self, bot, message, text, group, settings):
+        cfg = settings.get("spoiler_content", {})
+        if not cfg.get("enabled", False):
+            return False
+        entities = message.entities or message.caption_entities or []
+        for entity in entities:
+            if entity.type.name == "SPOILER" or str(entity.type) == "MessageEntityType.SPOILER":
+                await self.execute_automod_action(
+                    bot, message, group, cfg.get("action", "delete"),
+                    reason="Spoiler content",
+                    warn=cfg.get("warn_user", False),
+                )
+                return True
+        return False
+
+    async def check_bot_mentions(self, bot, message, text, group, settings):
+        cfg = settings.get("bot_mentions", {})
+        if not cfg.get("enabled", False):
+            return False
+        entities = message.entities or []
+        for entity in entities:
+            if str(entity.type) in ("MessageEntityType.MENTION", "mention"):
+                # Extract the @username from text
+                start = entity.offset
+                end = entity.offset + entity.length
+                mention = text[start:end].lstrip("@")
+                if mention.lower().endswith("bot"):
+                    await self.execute_automod_action(
+                        bot, message, group, cfg.get("action", "delete"),
+                        reason="Bot mention detected",
+                        warn=cfg.get("warn_user", False),
+                    )
+                    return True
+        return False
+
+    async def check_contact_sharing(self, bot, message, group, settings):
+        cfg = settings.get("contact_sharing", {})
+        if not cfg.get("enabled", False):
+            return False
+        if message.contact is not None:
+            await self.execute_automod_action(
+                bot, message, group, cfg.get("action", "delete"),
+                reason="Contact sharing blocked",
+                warn=cfg.get("warn_user", False),
+            )
+            return True
+        return False
+
+    async def check_location_sharing(self, bot, message, group, settings):
+        cfg = settings.get("location_sharing", {})
+        if not cfg.get("enabled", False):
+            return False
+        if message.location is not None:
+            await self.execute_automod_action(
+                bot, message, group, cfg.get("action", "delete"),
+                reason="Location sharing blocked",
+                warn=cfg.get("warn_user", False),
+            )
+            return True
+        return False
+
+    async def check_voice_notes(self, bot, message, group, settings):
+        cfg = settings.get("voice_notes", {})
+        if not cfg.get("enabled", False):
+            return False
+        if message.voice is not None:
+            await self.execute_automod_action(
+                bot, message, group, cfg.get("action", "delete"),
+                reason="Voice notes blocked",
+                warn=cfg.get("warn_user", False),
+            )
+            return True
+        return False
+
+    async def check_video_notes(self, bot, message, group, settings):
+        cfg = settings.get("video_notes", {})
+        if not cfg.get("enabled", False):
+            return False
+        if message.video_note is not None:
+            await self.execute_automod_action(
+                bot, message, group, cfg.get("action", "delete"),
+                reason="Video notes blocked",
+                warn=cfg.get("warn_user", False),
+            )
+            return True
+        return False
+
+    async def check_file_attachments(self, bot, message, group, settings):
+        cfg = settings.get("file_attachments", {})
+        if not cfg.get("enabled", False):
+            return False
+        if message.document is not None:
+            await self.execute_automod_action(
+                bot, message, group, cfg.get("action", "delete"),
+                reason="File attachments blocked",
+                warn=cfg.get("warn_user", False),
+            )
+            return True
+        return False
+
+    async def check_photos(self, bot, message, group, settings):
+        cfg = settings.get("photos", {})
+        if not cfg.get("enabled", False):
+            return False
+        if message.photo:
+            await self.execute_automod_action(
+                bot, message, group, cfg.get("action", "delete"),
+                reason="Photos blocked",
+                warn=cfg.get("warn_user", False),
+            )
+            return True
+        return False
+
+    async def check_videos(self, bot, message, group, settings):
+        cfg = settings.get("videos", {})
+        if not cfg.get("enabled", False):
+            return False
+        if message.video is not None:
+            await self.execute_automod_action(
+                bot, message, group, cfg.get("action", "delete"),
+                reason="Videos blocked",
+                warn=cfg.get("warn_user", False),
+            )
+            return True
+        return False
+
+    async def check_gifs(self, bot, message, group, settings):
+        cfg = settings.get("gifs", {})
+        if not cfg.get("enabled", False):
+            return False
+        if message.animation is not None:
+            await self.execute_automod_action(
+                bot, message, group, cfg.get("action", "delete"),
+                reason="GIFs/animations blocked",
+                warn=cfg.get("warn_user", False),
+            )
+            return True
+        return False
+
+    async def check_stickers(self, bot, message, group, settings):
+        cfg = settings.get("stickers", {})
+        if not cfg.get("enabled", False):
+            return False
+        if message.sticker is not None:
+            await self.execute_automod_action(
+                bot, message, group, cfg.get("action", "delete"),
+                reason="Stickers blocked",
+                warn=cfg.get("warn_user", False),
+            )
+            return True
+        return False
+
+    async def check_games(self, bot, message, group, settings):
+        cfg = settings.get("games", {})
+        if not cfg.get("enabled", False):
+            return False
+        if message.game is not None:
+            await self.execute_automod_action(
+                bot, message, group, cfg.get("action", "delete"),
+                reason="Games blocked",
+                warn=cfg.get("warn_user", False),
             )
             return True
         return False

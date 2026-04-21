@@ -195,6 +195,8 @@ class ScheduledMessage(db.Model):
     stop_date = db.Column(db.DateTime, nullable=True)
     pin_message = db.Column(db.Boolean, default=False)
     auto_delete_after = db.Column(db.Integer, nullable=True)
+    link_preview_enabled = db.Column(db.Boolean, default=True)
+    topic_id = db.Column(db.BigInteger, nullable=True)
     is_sent = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
@@ -211,6 +213,8 @@ class ScheduledMessage(db.Model):
             "stop_date": self.stop_date.isoformat() if self.stop_date else None,
             "pin_message": self.pin_message,
             "auto_delete_after": self.auto_delete_after,
+            "link_preview_enabled": self.link_preview_enabled,
+            "topic_id": self.topic_id,
             "is_sent": self.is_sent,
             "created_at": self.created_at.isoformat(),
         }
@@ -246,4 +250,58 @@ class Raid(db.Model):
             "created_at": self.created_at.isoformat(),
             "ends_at": self.ends_at.isoformat(),
             "participants": self.participants,
+        }
+
+
+class AutoResponse(db.Model):
+    __tablename__ = "auto_responses"
+
+    id = db.Column(db.Integer, primary_key=True)
+    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False)
+    trigger_text = db.Column(db.String(500), nullable=False)
+    response_text = db.Column(db.Text, nullable=False)
+    match_type = db.Column(db.String(20), default="contains")  # exact|contains|starts_with
+    is_case_sensitive = db.Column(db.Boolean, default=False)
+    is_enabled = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "group_id": self.group_id,
+            "trigger_text": self.trigger_text,
+            "response_text": self.response_text,
+            "match_type": self.match_type,
+            "is_case_sensitive": self.is_case_sensitive,
+            "is_enabled": self.is_enabled,
+            "created_at": self.created_at.isoformat(),
+        }
+
+
+class ReportedMessage(db.Model):
+    __tablename__ = "reported_messages"
+
+    id = db.Column(db.Integer, primary_key=True)
+    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False)
+    reporter_user_id = db.Column(db.BigInteger, nullable=False)
+    reporter_username = db.Column(db.String(100), nullable=True)
+    reported_message_id = db.Column(db.BigInteger, nullable=True)
+    reported_user_id = db.Column(db.BigInteger, nullable=True)
+    reported_username = db.Column(db.String(100), nullable=True)
+    reason = db.Column(db.String(500), nullable=True)
+    status = db.Column(db.String(20), default="open")  # open|resolved
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "group_id": self.group_id,
+            "reporter_user_id": self.reporter_user_id,
+            "reporter_username": self.reporter_username,
+            "reported_message_id": self.reported_message_id,
+            "reported_user_id": self.reported_user_id,
+            "reported_username": self.reported_username,
+            "reason": self.reason,
+            "status": self.status,
+            "created_at": self.created_at.isoformat(),
         }

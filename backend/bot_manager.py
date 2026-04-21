@@ -125,7 +125,7 @@ class BotInstance:
                 Member.xp > member.xp,
             ).count() + 1
 
-        rank_image = self.levels.generate_rank_card(member, rank, total)
+        rank_image = self.levels.generate_rank_card(member, rank, total, group.settings)
         if rank_image:
             await update.message.reply_photo(
                 photo=rank_image,
@@ -526,6 +526,205 @@ class BotInstance:
         except Exception:
             pass
 
+    async def handle_me(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if update.effective_chat.type == "private":
+            return
+        user = update.effective_user
+        group = await self._get_or_create_group(update.effective_chat.id, update.effective_chat.title, context.bot)
+        with self.app_context.app_context():
+            from .models import Member
+            member = Member.query.filter_by(
+                group_id=group.id,
+                telegram_user_id=str(user.id),
+            ).first()
+        if not member:
+            await update.message.reply_text("You have no stats yet. Start chatting!")
+            return
+        await update.message.reply_text(
+            f"👤 *Your Stats*\n"
+            f"Level: {member.level} | XP: {member.xp:,}\n"
+            f"Role: {member.role.replace('_', ' ').title()}\n"
+            f"Warnings: {member.warnings}\n"
+            f"Verified: {'✅' if member.is_verified else '❌'}\n"
+            f"Joined: {member.joined_at.strftime('%Y-%m-%d') if member.joined_at else 'Unknown'}",
+            parse_mode="Markdown",
+        )
+
+    async def handle_admins(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if update.effective_chat.type == "private":
+            return
+        try:
+            admins = await context.bot.get_chat_administrators(update.effective_chat.id)
+            lines = ["👮 *Group Admins*\n"]
+            for a in admins:
+                name = a.user.first_name or a.user.username or str(a.user.id)
+                title = f" ({a.custom_title})" if getattr(a, "custom_title", None) else ""
+                lines.append(f"• {name}{title}")
+            await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+        except Exception as e:
+            await update.message.reply_text(f"❌ Could not fetch admins: {e}")
+
+    async def handle_roles(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if update.effective_chat.type == "private":
+            return
+        group = await self._get_or_create_group(update.effective_chat.id, update.effective_chat.title, context.bot)
+        roles = group.settings.get("levels", {}).get("roles", [])
+        if not roles:
+            await update.message.reply_text("No roles configured.")
+            return
+        lines = ["🎖 *Roles*\n"]
+        for r in sorted(roles, key=lambda x: x["level"]):
+            lines.append(f"Level {r['level']}+ → {r['name']}")
+        await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+
+    async def handle_whois(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if update.effective_chat.type == "private":
+            return
+        try:
+            chat_member = await context.bot.get_chat_member(update.effective_chat.id, update.effective_user.id)
+            if chat_member.status not in ("creator", "administrator"):
+                await update.message.reply_text("❌ Admins only.")
+                return
+        except Exception:
+            return
+
+        target = None
+        if update.message.reply_to_message:
+            target = update.message.reply_to_message.from_user
+        elif context.args:
+            username = context.args[0].lstrip("@")
+            try:
+                cm = await context.bot.get_chat_member(update.effective_chat.id, username)
+                target = cm.user
+            except Exception:
+                await update.message.reply_text("❌ User not found.")
+                return
+        if not target:
+            await update.message.reply_text("Reply to a message or provide @username.")
+            return
+
+        group = await self._get_or_create_group(update.effective_chat.id, update.effective_chat.title, context.bot)
+        with self.app_context.app_context():
+            from .models import Member
+            member = Member.query.filter_by(
+                group_id=group.id,
+                telegram_user_id=str(target.id),
+            ).first()
+        if not member:
+            await update.message.reply_text("No data found for this user.")
+            return
+        await update.message.reply_text(
+            f"🔍 *Whois: {member.first_name or 'Unknown'}*\n"
+            f"Username: @{member.username or 'none'}\n"
+            f"ID: `{member.telegram_user_id}`\n"
+            f"Level: {member.level} | XP: {member.xp:,}\n"
+            f"Role: {member.role.replace('_', ' ').title()}\n"
+            f"Warnings: {member.warnings}\n"
+            f"Verified: {'✅' if member.is_verified else '❌'}\n"
+            f"Muted: {'🔇' if member.is_muted else '🔊'}\n"
+            f"Joined: {member.joined_at.strftime('%Y-%m-%d') if member.joined_at else 'Unknown'}",
+            parse_mode="Markdown",
+        )
+
+    async def handle_report(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if update.effective_chat.type == "private":
+            return
+        if not update.message.reply_to_message:
+            await update.message.reply_text("❌ Reply to the message you want to report.")
+            return
+
+        group = await self._get_or_create_group(update.effective_chat.id, update.effective_chat.title, context.bot)
+        rep_settings = group.settings.get("reports", {})
+        if not rep_settings.get("enabled", False):
+            await update.message.reply_text("❌ Reports are not enabled in this group.")
+            return
+
+        reporter = update.effective_user
+        reported_msg = update.message.reply_to_message
+        reported_user = reported_msg.from_user
+        reason = " ".join(context.args) if context.args else "No reason provided"
+
+        with self.app_context.app_context():
+            from .models import db, ReportedMessage
+            report = ReportedMessage(
+                group_id=group.id,
+                reporter_user_id=reporter.id,
+                reporter_username=reporter.username,
+                reported_message_id=reported_msg.message_id,
+                reported_user_id=reported_user.id if reported_user else None,
+                reported_username=reported_user.username if reported_user else None,
+                reason=reason,
+                status="open",
+            )
+            db.session.add(report)
+            db.session.commit()
+
+        await update.message.reply_text("✅ Report submitted. Admins have been notified.")
+
+        notify_mode = rep_settings.get("notify_admins", "all")
+        notification = (
+            f"🚨 *New Report*\n"
+            f"Reporter: @{reporter.username or reporter.first_name}\n"
+            f"Reported: @{reported_user.username or reported_user.first_name if reported_user else 'Unknown'}\n"
+            f"Reason: {reason}"
+        )
+        try:
+            if notify_mode == "all":
+                admins = await context.bot.get_chat_administrators(update.effective_chat.id)
+                for admin in admins:
+                    if not admin.user.is_bot:
+                        try:
+                            await context.bot.send_message(
+                                chat_id=admin.user.id,
+                                text=notification,
+                                parse_mode="Markdown",
+                            )
+                        except Exception:
+                            pass
+        except Exception as e:
+            logger.error(f"Report notification error: {e}")
+
+    async def handle_service_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not update.message:
+            return
+        message = update.message
+        chat_id = message.chat.id
+        group = self._get_group(chat_id)
+        if not group:
+            return
+
+        auto_clean = group.settings.get("auto_clean", {})
+        if not auto_clean.get("enabled", False):
+            return
+
+        should_delete = False
+        if auto_clean.get("delete_joins") and message.new_chat_members:
+            should_delete = True
+        elif auto_clean.get("delete_leaves") and message.left_chat_member:
+            should_delete = True
+        elif auto_clean.get("delete_photo_changes") and message.new_chat_photo:
+            should_delete = True
+        elif auto_clean.get("delete_pinned_messages") and message.pinned_message:
+            should_delete = True
+        elif auto_clean.get("delete_game_scores") and message.game_short_name:
+            should_delete = True
+        elif auto_clean.get("delete_voice_chat_events") and (
+            message.video_chat_started or message.video_chat_ended or
+            message.video_chat_scheduled or message.video_chat_participants_invited
+        ):
+            should_delete = True
+        elif auto_clean.get("delete_forum_events") and (
+            message.forum_topic_created or message.forum_topic_closed or
+            message.forum_topic_reopened or message.forum_topic_edited
+        ):
+            should_delete = True
+
+        if should_delete:
+            try:
+                await context.bot.delete_message(chat_id=chat_id, message_id=message.message_id)
+            except Exception:
+                pass
+
     async def handle_new_member(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not update.message.new_chat_members:
             return
@@ -568,6 +767,15 @@ class BotInstance:
                 group.id, user.id, user.username, user.first_name
             )
 
+        # Delete command messages if auto_clean.delete_commands is on
+        if (update.message.text or "").startswith("/"):
+            auto_clean = group.settings.get("auto_clean", {})
+            if auto_clean.get("enabled") and auto_clean.get("delete_commands"):
+                try:
+                    await context.bot.delete_message(chat_id=chat_id, message_id=update.message.message_id)
+                except Exception:
+                    pass
+
         if group.settings.get("automod", {}).get("enabled", True):
             blocked = await self.moderation.check_automod(context.bot, update.message, group)
             if blocked:
@@ -577,6 +785,30 @@ class BotInstance:
             await self.levels.add_message_xp(
                 context.bot, chat_id, user.id, user.username, user.first_name, group
             )
+
+        # Auto-response triggers
+        if group.settings.get("auto_responses", {}).get("enabled", True):
+            text = update.message.text or ""
+            if text:
+                with self.app_context.app_context():
+                    from .models import AutoResponse
+                    responses = AutoResponse.query.filter_by(group_id=group.id, is_enabled=True).all()
+                    for ar in responses:
+                        trigger = ar.trigger_text if ar.is_case_sensitive else ar.trigger_text.lower()
+                        check = text if ar.is_case_sensitive else text.lower()
+                        match = False
+                        if ar.match_type == "exact":
+                            match = check == trigger
+                        elif ar.match_type == "contains":
+                            match = trigger in check
+                        elif ar.match_type == "starts_with":
+                            match = check.startswith(trigger)
+                        if match:
+                            try:
+                                await update.message.reply_text(ar.response_text)
+                            except Exception as e:
+                                logger.error(f"Auto-response error: {e}")
+                            break
 
     async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
@@ -653,9 +885,15 @@ class BotInstance:
         app.add_handler(CommandHandler("userinfo", self.handle_userinfo))
         app.add_handler(CommandHandler("auditlog", self.handle_auditlog))
         app.add_handler(CommandHandler("purge", self.handle_purge))
+        app.add_handler(CommandHandler("me", self.handle_me))
+        app.add_handler(CommandHandler("admins", self.handle_admins))
+        app.add_handler(CommandHandler("roles", self.handle_roles))
+        app.add_handler(CommandHandler("whois", self.handle_whois))
+        app.add_handler(CommandHandler("report", self.handle_report))
         app.add_handler(ChatMemberHandler(self.handle_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))
+        app.add_handler(MessageHandler(filters.StatusUpdate.ALL, self.handle_service_message))
         app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, self.handle_new_member))
-        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
+        app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, self.handle_message))
         app.add_handler(CallbackQueryHandler(self.handle_callback))
 
         await app.initialize()
