@@ -159,6 +159,22 @@ def get_stats():
     })
 
 
+@admin_bp.route("/my-plan", methods=["PUT"])
+@admin_required
+@rate_limit(requests_per_minute=30)
+def set_own_plan():
+    """Allow admin/developer to freely switch their own subscription plan."""
+    user = _get_current_user()
+    data = request.get_json()
+    tier = data.get("tier")
+    if tier not in ("free", "pro", "enterprise"):
+        return jsonify({"error": "Invalid tier. Must be free, pro, or enterprise"}), 400
+    user.subscription_tier = tier
+    user.subscription_expires = None
+    db.session.commit()
+    return jsonify({"user": user.to_dict(), "message": f"Plan switched to {tier}"}), 200
+
+
 @admin_bp.route("/bots", methods=["GET"])
 @admin_required
 @rate_limit(requests_per_minute=30)

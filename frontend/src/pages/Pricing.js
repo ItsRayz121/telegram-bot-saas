@@ -76,7 +76,12 @@ export default function Pricing() {
     setLoading(tier);
     try {
       const res = await billing.createCheckoutSession({ tier });
-      window.location.href = res.data.url;
+      if (res.data.admin_upgrade) {
+        toast.success(res.data.message || `Plan switched to ${tier}`);
+        setTimeout(() => navigate('/dashboard'), 1200);
+      } else {
+        window.location.href = res.data.url;
+      }
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to start checkout');
       setLoading('');

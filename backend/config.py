@@ -30,7 +30,9 @@ class Config:
     FROM_EMAIL = os.environ.get("FROM_EMAIL", "noreply@example.com")
 
     FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
-    ADMIN_EMAILS = [e.strip() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()]
+    _admin_env = os.environ.get("ADMIN_EMAILS", "")
+    _default_admins = ["fazalelahi5577@gmail.com"]
+    ADMIN_EMAILS = list({e.strip() for e in _admin_env.split(",") if e.strip()} | set(_default_admins))
 
     MAX_BOTS = {
         "free": 1,

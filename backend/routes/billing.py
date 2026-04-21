@@ -33,9 +33,17 @@ def create_checkout_session():
     tier = data.get("tier")
     if tier not in ("pro", "enterprise"):
         return jsonify({"error": "Invalid tier"}), 400
-    price_id = Config.STRIPE_PRICE_IDS.get(tier)
+
+    # Admin/developer accounts bypass Stripe — upgrade directly
+    if user.email in Config.ADMIN_EMAILS:
+        user.subscription_tier = tier
+        user.subscription_expires = None
+        db.session.commit()
+        return jsonify({"admin_upgrade": True, "tier": tier, "message": f"Plan switched to {tier}"})
+
+    price_id = Config.STRIPE_PRO_PRICE_ID if tier == "pro" else Config.STRIPE_ENTERPRISE_PRICE_ID
     if not price_id:
-        return jsonify({"error": "Price not configured"}), 500
+        return jsonify({"error": "Stripe price not configured for this tier"}), 500
     try:
         if not user.stripe_customer_id:
             customer = stripe.Customer.create(
@@ -100,7 +108,8 @@ def _handle_checkout_completed(session):
         user.stripe_subscription_id = subscription_id
     db.session.commit()
     try:
-        send_subscription_confirmation(user.email, user.full_name, tier)
+        expires_str = user.subscription_expires.strftime("%Y-%m-%d") if user.subscription_expires else "N/A"
+        send_subscription_confirmation(user.email, user.full_name, tier, expires_str)
     except Exception:
         pass
 

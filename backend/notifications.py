@@ -151,6 +151,23 @@ def send_payment_failed(to_email, full_name):
     )
 
 
+def send_password_reset_email(to_email, full_name, reset_token):
+    reset_url = f"{current_app.config['FRONTEND_URL']}/reset-password?token={reset_token}"
+    content = f"""
+    <p>Hi <strong>{full_name}</strong>,</p>
+    <p>We received a request to reset your password. Click the button below to choose a new one.</p>
+    <p>This link expires in <strong>1 hour</strong>. If you didn't request a reset, you can safely ignore this email.</p>
+    <a href="{reset_url}" class="btn">Reset Password</a>
+    <p style="margin-top:24px;font-size:12px;color:#606070;">Or copy this link: {reset_url}</p>
+    """
+    return send_email(
+        to_email,
+        "Reset Your Password",
+        _base_template(content, "Reset Password"),
+        f"Reset your password: {reset_url}",
+    )
+
+
 def send_bot_added_notification(to_email, full_name, bot_name, bot_username):
     content = f"""
     <p>Hi <strong>{full_name}</strong>,</p>
