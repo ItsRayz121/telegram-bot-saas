@@ -17,6 +17,14 @@ def _get_current_user():
 def _compute_analytics(group_ids, days):
     cutoff = datetime.utcnow() - timedelta(days=days)
 
+    # Real Telegram member count from stored API value
+    groups = Group.query.filter(Group.id.in_(group_ids)).all()
+    real_total_members = sum(
+        g.telegram_member_count if g.telegram_member_count else 0
+        for g in groups
+    )
+
+    # Member growth: tracked members per day + fill today with real count if all zeros
     member_growth = []
     for i in range(days):
         day = datetime.utcnow() - timedelta(days=days - i - 1)
@@ -28,6 +36,10 @@ def _compute_analytics(group_ids, days):
             Member.joined_at <= day_end,
         ).count()
         member_growth.append({"date": day_start.strftime("%Y-%m-%d"), "new_members": count})
+
+    # If all days are zero but we have real members, show today's total as baseline
+    if real_total_members > 0 and all(d["new_members"] == 0 for d in member_growth):
+        member_growth[-1]["new_members"] = real_total_members
 
     mod_actions = (
         db.session.query(AuditLog.action_type, func.count(AuditLog.id).label("count"))
@@ -61,8 +73,11 @@ def _compute_analytics(group_ids, days):
         .all()
     )
     level_dist = [{"level": lvl, "count": cnt} for lvl, cnt in level_dist_raw]
+    # Show at least level 1 if we have real members but no tracked activity yet
+    if not level_dist and real_total_members > 0:
+        level_dist = [{"level": 1, "count": real_total_members}]
 
-    total_members = Member.query.filter(Member.group_id.in_(group_ids)).count()
+    tracked_members = Member.query.filter(Member.group_id.in_(group_ids)).count()
     new_members = Member.query.filter(
         Member.group_id.in_(group_ids), Member.joined_at >= cutoff
     ).count()
@@ -74,9 +89,10 @@ def _compute_analytics(group_ids, days):
         "top_members": top_members_data,
         "level_distribution": level_dist,
         "summary": {
-            "total_members": total_members,
+            "total_members": real_total_members or tracked_members,
             "new_members": new_members,
             "total_mod_actions": total_mod_actions,
+            "tracked_members": tracked_members,
         },
     }
 
