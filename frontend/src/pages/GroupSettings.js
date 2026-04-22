@@ -302,6 +302,21 @@ export default function GroupSettings() {
                     </Select>
                   </FormControl>
                 </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField fullWidth type="number" label="Max Verification Attempts"
+                    value={v.max_attempts ?? 3}
+                    onChange={(e) => updateSetting('verification.max_attempts', parseInt(e.target.value))} />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth>
+                    <InputLabel>Trigger Verification</InputLabel>
+                    <Select value={v.verify_on || 'join'} label="Trigger Verification"
+                      onChange={(e) => updateSetting('verification.verify_on', e.target.value)}>
+                      <MenuItem value="join">On Join</MenuItem>
+                      <MenuItem value="first_message">On First Message</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
               </Grid>
               <Divider sx={{ my: 2 }} />
               <Typography variant="subtitle2" fontWeight={600} mb={1}>Channel Verification</Typography>
@@ -422,6 +437,49 @@ export default function GroupSettings() {
                       onChange={(e) => updateSetting('levels.ai_levelup_enabled', e.target.checked)} />}
                     label="AI-generated level-up messages (requires OpenAI API key)"
                   />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField fullWidth type="number" label="XP per Reaction"
+                    value={l.xp_per_reaction ?? 10}
+                    onChange={(e) => updateSetting('levels.xp_per_reaction', parseInt(e.target.value))} />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField fullWidth type="number" label="Reaction XP Cooldown (s)"
+                    value={l.xp_reaction_cooldown_seconds ?? 30}
+                    onChange={(e) => updateSetting('levels.xp_reaction_cooldown_seconds', parseInt(e.target.value))} />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField fullWidth type="number" label="Delete Level-Up Message After (s, 0=never)"
+                    value={l.delete_levelup_after_seconds ?? 0}
+                    onChange={(e) => updateSetting('levels.delete_levelup_after_seconds', parseInt(e.target.value))} />
+                </Grid>
+              </Grid>
+            </CardContent>
+          </Card>
+          <Card sx={{ mb: 2 }}>
+            <CardContent>
+              <Typography variant="subtitle1" fontWeight={600} mb={1}>XP Penalties (Moderation Actions)</Typography>
+              <Typography variant="body2" color="text.secondary" mb={2}>XP deducted when a moderation action is applied to a member.</Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={6} sm={3}>
+                  <TextField fullWidth type="number" label="Warn Penalty"
+                    value={l.xp_penalty_warn ?? -10}
+                    onChange={(e) => updateSetting('levels.xp_penalty_warn', parseInt(e.target.value))} />
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                  <TextField fullWidth type="number" label="Mute Penalty"
+                    value={l.xp_penalty_mute ?? -20}
+                    onChange={(e) => updateSetting('levels.xp_penalty_mute', parseInt(e.target.value))} />
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                  <TextField fullWidth type="number" label="Kick Penalty"
+                    value={l.xp_penalty_kick ?? -30}
+                    onChange={(e) => updateSetting('levels.xp_penalty_kick', parseInt(e.target.value))} />
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                  <TextField fullWidth type="number" label="Ban Penalty"
+                    value={l.xp_penalty_ban ?? -50}
+                    onChange={(e) => updateSetting('levels.xp_penalty_ban', parseInt(e.target.value))} />
                 </Grid>
               </Grid>
             </CardContent>
@@ -659,6 +717,14 @@ export default function GroupSettings() {
                         updateSetting('moderation.escalation_steps', steps);
                       }} />
                   )}
+                  <TextField size="small" type="number" label="Time Window (hrs)" placeholder="Any" sx={{ width: 130 }}
+                    value={step.time_window_hours ?? ''}
+                    onChange={(e) => {
+                      const steps = [...(mod.escalation_steps || [])];
+                      const val = e.target.value === '' ? null : parseInt(e.target.value);
+                      steps[idx] = { ...steps[idx], time_window_hours: val };
+                      updateSetting('moderation.escalation_steps', steps);
+                    }} />
                   <IconButton size="small" color="error" onClick={() => {
                     const steps = (mod.escalation_steps || []).filter((_, i) => i !== idx);
                     updateSetting('moderation.escalation_steps', steps);
@@ -676,6 +742,24 @@ export default function GroupSettings() {
               </Button>
             </AccordionDetails>
           </Accordion>
+
+          <Card sx={{ mt: 2, mb: 2 }}>
+            <CardContent>
+              <Typography variant="subtitle1" fontWeight={600} mb={2}>Auto-Delete Moderation Messages</Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <TextField fullWidth type="number" label="Auto-Delete Warning Messages After (s, 0=never)"
+                    value={mod.auto_delete_warn_seconds ?? 0}
+                    onChange={(e) => updateSetting('moderation.auto_delete_warn_seconds', parseInt(e.target.value))} />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField fullWidth type="number" label="Auto-Delete Action Messages After (s, 0=never)"
+                    value={mod.auto_delete_action_seconds ?? 0}
+                    onChange={(e) => updateSetting('moderation.auto_delete_action_seconds', parseInt(e.target.value))} />
+                </Grid>
+              </Grid>
+            </CardContent>
+          </Card>
 
           <Card sx={{ mt: 2 }}>
             <CardContent>

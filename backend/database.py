@@ -7,8 +7,10 @@ def get_default_settings():
         "verification": {
             "enabled": False,
             "method": "button",
-            "timeout_seconds": 60,
+            "timeout_seconds": 300,
             "kick_on_fail": True,
+            "max_attempts": 3,
+            "verify_on": "join",
             "custom_question": "",
             "custom_answer": "",
             "channel_verification_enabled": False,
@@ -45,6 +47,14 @@ def get_default_settings():
             },
             "levelup_topic_id": None,
             "ai_levelup_enabled": False,
+            "delete_levelup_after_seconds": 0,
+            "xp_per_reaction": 10,
+            "xp_reaction_cooldown_seconds": 30,
+            "xp_per_raid": 50,
+            "xp_penalty_warn": -10,
+            "xp_penalty_mute": -20,
+            "xp_penalty_kick": -30,
+            "xp_penalty_ban": -50,
         },
         "automod": {
             "enabled": True,
@@ -117,10 +127,13 @@ def get_default_settings():
             "log_channel_id": "",
             "escalation_enabled": False,
             "escalation_steps": [
-                {"at_warning": 2, "action": "mute", "duration_minutes": 60},
-                {"at_warning": 3, "action": "tempban", "duration_hours": 24},
-                {"at_warning": 5, "action": "ban", "duration_minutes": 0},
+                {"at_warning": 3, "time_window_hours": None, "action": "mute", "duration_minutes": 30},
+                {"at_warning": 7, "time_window_hours": None, "action": "tempban", "duration_hours": 1},
+                {"at_warning": 12, "time_window_hours": 24, "action": "mute", "duration_minutes": 60},
+                {"at_warning": 20, "time_window_hours": 720, "action": "ban", "duration_minutes": 0},
             ],
+            "auto_delete_warn_seconds": 0,
+            "auto_delete_action_seconds": 0,
         },
         "raids": {
             "enabled": True,
@@ -265,6 +278,28 @@ class DatabaseManager:
         )
 
         return member.warnings
+
+    @staticmethod
+    def apply_xp_penalty(group_id, telegram_user_id, penalty_xp):
+        member = Member.query.filter_by(
+            group_id=group_id,
+            telegram_user_id=str(telegram_user_id),
+        ).first()
+        if member and penalty_xp < 0:
+            member.xp = max(0, member.xp + penalty_xp)
+            member.level = DatabaseManager._calculate_level(member.xp)
+            db.session.commit()
+
+    @staticmethod
+    def count_warnings_in_window(group_id, target_user_id, hours):
+        from datetime import timedelta
+        since = datetime.utcnow() - timedelta(hours=hours)
+        return AuditLog.query.filter(
+            AuditLog.group_id == group_id,
+            AuditLog.target_user_id == str(target_user_id),
+            AuditLog.action_type == "warn",
+            AuditLog.timestamp >= since,
+        ).count()
 
     @staticmethod
     def log_action(group_id, action_type, target_user_id=None, target_username=None,

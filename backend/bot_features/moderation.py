@@ -43,7 +43,7 @@ class ModerationSystem:
     async def warn_user(self, bot, chat_id, target_user_id, target_username,
                         moderator_id, moderator_username, reason, group):
         with self.app.app_context():
-            from ..database import DatabaseManager
+            from ..database import DatabaseManager  # noqa: used below for escalation too
             total_warnings = DatabaseManager.add_warning(
                 group_id=group.id,
                 target_user_id=target_user_id,
@@ -56,8 +56,9 @@ class ModerationSystem:
             mod_settings = group.settings.get("moderation", {})
             max_warnings = mod_settings.get("max_warnings", 3)
             warning_action = mod_settings.get("warning_action", "ban")
+            auto_delete_warn = mod_settings.get("auto_delete_warn_seconds", 0)
 
-            await bot.send_message(
+            warn_msg = await bot.send_message(
                 chat_id=chat_id,
                 text=(
                     f"⚠️ {target_username or target_user_id} has been warned.\n"
@@ -65,6 +66,9 @@ class ModerationSystem:
                     f"Warnings: {total_warnings}/{max_warnings}"
                 ),
             )
+            if auto_delete_warn and warn_msg:
+                import asyncio as _a
+                _a.ensure_future(self._delayed_delete(bot, chat_id, warn_msg.message_id, auto_delete_warn))
 
             # Check escalation steps first
             if mod_settings.get("escalation_enabled"):
@@ -74,10 +78,20 @@ class ModerationSystem:
                     reverse=True,
                 )
                 for step in steps:
-                    if total_warnings >= step["at_warning"]:
+                    threshold = step["at_warning"]
+                    time_window_hours = step.get("time_window_hours")
+                    if time_window_hours:
+                        count = DatabaseManager.count_warnings_in_window(
+                            group.id, target_user_id, time_window_hours
+                        )
+                    else:
+                        count = total_warnings
+                    if count >= threshold:
                         action = step.get("action", "warn")
                         duration_min = step.get("duration_minutes", 60)
                         duration_hr = step.get("duration_hours", 24)
+                        auto_delete = mod_settings.get("auto_delete_action_seconds", 0)
+                        label = f"in {time_window_hours}h window" if time_window_hours else "total"
                         if action == "mute":
                             until = datetime.utcnow() + timedelta(minutes=duration_min)
                             try:
@@ -87,24 +101,26 @@ class ModerationSystem:
                                     permissions=ChatPermissions(can_send_messages=False),
                                     until_date=until,
                                 )
-                                await bot.send_message(
+                                msg = await bot.send_message(
                                     chat_id=chat_id,
-                                    text=f"🔇 {target_username or target_user_id} muted for {duration_min}m (escalation at {total_warnings} warnings).",
+                                    text=f"🔇 {target_username or target_user_id} muted for {duration_min}m (escalation: {count} warnings {label}).",
                                 )
+                                if auto_delete and msg:
+                                    import asyncio as _a
+                                    _a.ensure_future(self._delayed_delete(bot, chat_id, msg.message_id, auto_delete))
                             except Exception as e:
                                 logger.error(f"Escalation mute error: {e}")
                         elif action == "tempban":
                             until = datetime.utcnow() + timedelta(hours=duration_hr)
                             try:
-                                await bot.ban_chat_member(
+                                await bot.ban_chat_member(chat_id=chat_id, user_id=target_user_id, until_date=until)
+                                msg = await bot.send_message(
                                     chat_id=chat_id,
-                                    user_id=target_user_id,
-                                    until_date=until,
+                                    text=f"⛔ {target_username or target_user_id} temp-banned for {duration_hr}h (escalation: {count} warnings {label}).",
                                 )
-                                await bot.send_message(
-                                    chat_id=chat_id,
-                                    text=f"⛔ {target_username or target_user_id} temp-banned for {duration_hr}h (escalation at {total_warnings} warnings).",
-                                )
+                                if auto_delete and msg:
+                                    import asyncio as _a
+                                    _a.ensure_future(self._delayed_delete(bot, chat_id, msg.message_id, auto_delete))
                             except Exception as e:
                                 logger.error(f"Escalation tempban error: {e}")
                         elif action == "ban":
@@ -118,6 +134,14 @@ class ModerationSystem:
                 )
 
         return total_warnings
+
+    async def _delayed_delete(self, bot, chat_id, message_id, delay_seconds):
+        import asyncio
+        await asyncio.sleep(delay_seconds)
+        try:
+            await bot.delete_message(chat_id=chat_id, message_id=message_id)
+        except Exception:
+            pass
 
     async def check_automated_actions(self, bot, chat_id, user_id, username, group, action):
         try:

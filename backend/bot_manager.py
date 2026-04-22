@@ -7,7 +7,7 @@ from telegram import (
 )
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, CallbackQueryHandler,
-    ChatMemberHandler, filters, ContextTypes,
+    ChatMemberHandler, MessageReactionHandler, filters, ContextTypes,
 )
 
 from .bot_features.verification import VerificationSystem
@@ -220,6 +220,11 @@ class BotInstance:
             reason,
             group,
         )
+        with self.app_context.app_context():
+            from .database import DatabaseManager
+            penalty = group.settings.get("levels", {}).get("xp_penalty_warn", -10)
+            if penalty < 0:
+                DatabaseManager.apply_xp_penalty(group.id, target.id, penalty)
 
     async def handle_ban(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if update.effective_chat.type == "private":
@@ -250,6 +255,9 @@ class BotInstance:
                     moderator_username=caller.username,
                     reason=reason,
                 )
+                penalty = group.settings.get("levels", {}).get("xp_penalty_ban", -50)
+                if penalty < 0:
+                    DatabaseManager.apply_xp_penalty(group.id, target.id, penalty)
         except Exception as e:
             await update.message.reply_text(f"❌ Failed to ban: {e}")
 
@@ -280,6 +288,9 @@ class BotInstance:
                     moderator_username=caller.username,
                     reason=reason,
                 )
+                penalty = group.settings.get("levels", {}).get("xp_penalty_kick", -30)
+                if penalty < 0:
+                    DatabaseManager.apply_xp_penalty(group.id, target.id, penalty)
         except Exception as e:
             await update.message.reply_text(f"❌ Failed to kick: {e}")
 
@@ -324,6 +335,9 @@ class BotInstance:
                     reason=reason,
                     extra_data={"duration_minutes": duration},
                 )
+                penalty = group.settings.get("levels", {}).get("xp_penalty_mute", -20)
+                if penalty < 0:
+                    DatabaseManager.apply_xp_penalty(group.id, target.id, penalty)
         except Exception as e:
             await update.message.reply_text(f"❌ Failed to mute: {e}")
 
@@ -684,6 +698,92 @@ class BotInstance:
         except Exception as e:
             logger.error(f"Report notification error: {e}")
 
+    async def handle_removewarning(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if update.effective_chat.type == "private":
+            return
+        caller, target = await self._require_admin_target(update, context)
+        if not target:
+            return
+        group = await self._get_or_create_group(update.effective_chat.id, update.effective_chat.title, context.bot)
+        with self.app_context.app_context():
+            from .models import db, Member
+            from .database import DatabaseManager
+            member = Member.query.filter_by(
+                group_id=group.id,
+                telegram_user_id=str(target.id),
+            ).first()
+            if not member:
+                await update.message.reply_text("No data found for this user.")
+                return
+            if member.warnings <= 0:
+                await update.message.reply_text(f"{target.first_name} has no warnings to remove.")
+                return
+            member.warnings -= 1
+            db.session.commit()
+            DatabaseManager.log_action(
+                group_id=group.id,
+                action_type="removewarning",
+                target_user_id=str(target.id),
+                target_username=target.username,
+                moderator_id=str(caller.id),
+                moderator_username=caller.username,
+                reason="Warning removed by admin",
+                extra_data={"remaining_warnings": member.warnings},
+            )
+        await update.message.reply_text(
+            f"✅ Removed 1 warning from {target.first_name}.\n"
+            f"Remaining warnings: {member.warnings}"
+        )
+
+    async def handle_groupinfo(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if update.effective_chat.type == "private":
+            return
+        chat = update.effective_chat
+        group = await self._get_or_create_group(chat.id, chat.title, context.bot)
+        with self.app_context.app_context():
+            from .models import Member, AuditLog
+            member_count = Member.query.filter_by(group_id=group.id).count()
+            total_warnings = sum(m.warnings for m in Member.query.filter_by(group_id=group.id).all())
+            bans = AuditLog.query.filter_by(group_id=group.id, action_type="ban").count()
+            mutes = AuditLog.query.filter_by(group_id=group.id, action_type="mute").count()
+        try:
+            tg_count = await context.bot.get_chat_member_count(chat.id)
+        except Exception:
+            tg_count = group.telegram_member_count or member_count
+        await update.message.reply_text(
+            f"ℹ️ *Group Info*\n"
+            f"Name: {chat.title}\n"
+            f"ID: `{chat.id}`\n"
+            f"Members: {tg_count:,}\n"
+            f"Tracked members: {member_count:,}\n"
+            f"Total warnings issued: {total_warnings}\n"
+            f"Total bans: {bans}\n"
+            f"Total mutes: {mutes}\n"
+            f"Type: {chat.type}",
+            parse_mode="Markdown",
+        )
+
+    async def handle_reaction(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        reaction = update.message_reaction
+        if not reaction or not reaction.new_reaction:
+            return
+        chat_id = reaction.chat.id
+        user_id = reaction.user.id if reaction.user else None
+        if not user_id:
+            return
+        group = self._get_group(chat_id)
+        if not group:
+            return
+        if not group.settings.get("levels", {}).get("enabled", True):
+            return
+        user = reaction.user
+        await self.levels.add_reaction_xp(
+            context.bot, chat_id, user_id,
+            user.username if user else None,
+            user.first_name if user else None,
+            group,
+        )
+
     async def handle_service_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not update.message:
             return
@@ -775,6 +875,11 @@ class BotInstance:
                     await context.bot.delete_message(chat_id=chat_id, message_id=update.message.message_id)
                 except Exception:
                     pass
+
+        if await self.verification.handle_first_message(context.bot, update.message, group, group.settings):
+            return
+        if await self.verification.handle_word_answer(context.bot, update.message, group):
+            return
 
         if group.settings.get("automod", {}).get("enabled", True):
             blocked = await self.moderation.check_automod(context.bot, update.message, group)
@@ -890,6 +995,10 @@ class BotInstance:
         app.add_handler(CommandHandler("roles", self.handle_roles))
         app.add_handler(CommandHandler("whois", self.handle_whois))
         app.add_handler(CommandHandler("report", self.handle_report))
+        app.add_handler(CommandHandler("removewarning", self.handle_removewarning))
+        app.add_handler(CommandHandler("unwarn", self.handle_removewarning))
+        app.add_handler(CommandHandler("groupinfo", self.handle_groupinfo))
+        app.add_handler(MessageReactionHandler(self.handle_reaction))
         app.add_handler(ChatMemberHandler(self.handle_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))
         app.add_handler(MessageHandler(filters.StatusUpdate.ALL, self.handle_service_message))
         app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, self.handle_new_member))

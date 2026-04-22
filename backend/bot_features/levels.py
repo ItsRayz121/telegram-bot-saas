@@ -61,9 +61,36 @@ class LevelSystem:
                     kwargs = {}
                     if topic_id:
                         kwargs["message_thread_id"] = int(topic_id)
-                    await bot.send_message(chat_id=chat_id, text=text, parse_mode="Markdown", **kwargs)
+                    sent = await bot.send_message(chat_id=chat_id, text=text, parse_mode="Markdown", **kwargs)
+                    delete_after = settings.get("delete_levelup_after_seconds", 0)
+                    if delete_after and delete_after > 0 and sent:
+                        import asyncio as _asyncio
+                        await _asyncio.sleep(delete_after)
+                        try:
+                            await bot.delete_message(chat_id=chat_id, message_id=sent.message_id)
+                        except Exception:
+                            pass
                 except Exception as e:
                     logger.error(f"Level up message error: {e}")
+
+    async def add_reaction_xp(self, bot, chat_id, user_id, username, first_name, group):
+        settings = group.settings.get("levels", {})
+        if not settings.get("enabled", True):
+            return
+        xp_amount = settings.get("xp_per_reaction", 10)
+        if xp_amount <= 0:
+            return
+        cooldown = settings.get("xp_reaction_cooldown_seconds", 30)
+
+        with self.app.app_context():
+            from ..database import DatabaseManager
+            from ..models import Member
+            member = DatabaseManager.get_or_create_member(group.id, user_id, username, first_name)
+            if member.last_xp_at:
+                elapsed = (datetime.utcnow() - member.last_xp_at).total_seconds()
+                if elapsed < cooldown:
+                    return
+            DatabaseManager.add_xp(group.id, user_id, xp_amount, username, first_name)
 
     async def _generate_ai_levelup(self, first_name, level):
         try:
