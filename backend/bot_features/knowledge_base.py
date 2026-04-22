@@ -67,7 +67,7 @@ class KnowledgeBaseSystem:
                 from ..models import UserApiKey
                 from ..utils.encryption import decrypt_value
                 record = UserApiKey.query.filter_by(group_id=group_id, is_active=True).order_by(
-                    UserApiKey.updated_at.desc()
+                    UserApiKey.created_at.desc()
                 ).first()
                 if not record:
                     return None

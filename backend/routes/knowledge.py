@@ -26,14 +26,18 @@ def _get_group(user, bot_id, group_id):
 @jwt_required()
 @rate_limit(requests_per_minute=30)
 def list_documents(bot_id, group_id):
-    user = _get_current_user()
-    if not user:
-        return jsonify({"error": "User not found"}), 404
-    _, group = _get_group(user, bot_id, group_id)
-    if not group:
-        return jsonify({"error": "Group not found"}), 404
-    docs = KnowledgeDocument.query.filter_by(group_id=group.id).order_by(KnowledgeDocument.created_at.desc()).all()
-    return jsonify({"documents": [d.to_dict() for d in docs]})
+    try:
+        user = _get_current_user()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        _, group = _get_group(user, bot_id, group_id)
+        if not group:
+            return jsonify({"error": "Group not found"}), 404
+        docs = KnowledgeDocument.query.filter_by(group_id=group.id).order_by(KnowledgeDocument.created_at.desc()).all()
+        return jsonify({"documents": [d.to_dict() for d in docs]})
+    except Exception as e:
+        logger.error(f"list_documents error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
 
 
 @knowledge_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/knowledge", methods=["POST"])
@@ -80,15 +84,23 @@ def upload_document(bot_id, group_id):
 @jwt_required()
 @rate_limit(requests_per_minute=30)
 def delete_document(bot_id, group_id, doc_id):
-    user = _get_current_user()
-    if not user:
-        return jsonify({"error": "User not found"}), 404
-    _, group = _get_group(user, bot_id, group_id)
-    if not group:
-        return jsonify({"error": "Group not found"}), 404
-    doc = KnowledgeDocument.query.filter_by(id=doc_id, group_id=group.id).first()
-    if not doc:
-        return jsonify({"error": "Document not found"}), 404
-    db.session.delete(doc)
-    db.session.commit()
-    return jsonify({"success": True})
+    try:
+        user = _get_current_user()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        _, group = _get_group(user, bot_id, group_id)
+        if not group:
+            return jsonify({"error": "Group not found"}), 404
+        doc = KnowledgeDocument.query.filter_by(id=doc_id, group_id=group.id).first()
+        if not doc:
+            return jsonify({"error": "Document not found"}), 404
+        db.session.delete(doc)
+        db.session.commit()
+        return jsonify({"success": True})
+    except Exception as e:
+        logger.error(f"delete_document error: {e}", exc_info=True)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return jsonify({"error": str(e)}), 500

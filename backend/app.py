@@ -95,6 +95,8 @@ def _run_migrations():
         "ALTER TABLE user_api_keys ADD COLUMN base_url VARCHAR(500)",
         "ALTER TABLE user_api_keys ADD COLUMN model_name VARCHAR(255)",
         "ALTER TABLE user_api_keys ADD COLUMN updated_at TIMESTAMP",
+        # Backfill NULL updated_at for rows added before the column existed
+        "UPDATE user_api_keys SET updated_at = created_at WHERE updated_at IS NULL",
     ]
     try:
         with db.engine.connect() as conn:

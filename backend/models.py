@@ -429,6 +429,7 @@ class UserApiKey(db.Model):
     def to_dict(self):
         from .utils.encryption import mask_key, decrypt_value
         raw = decrypt_value(self.api_key_encrypted) if self.api_key_encrypted else ""
+        updated = self.updated_at or self.created_at
         return {
             "id": self.id,
             "group_id": self.group_id,
@@ -439,7 +440,7 @@ class UserApiKey(db.Model):
             "is_active": self.is_active,
             "api_key_masked": mask_key(raw),
             "created_at": self.created_at.isoformat(),
-            "updated_at": self.updated_at.isoformat(),
+            "updated_at": updated.isoformat() if updated else None,
         }
 
 

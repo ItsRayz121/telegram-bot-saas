@@ -139,10 +139,10 @@ export default function GroupSettings() {
   }, [botId, groupId]);
 
   useEffect(() => { fetchSettings(); }, [fetchSettings]);
-  useEffect(() => { if (tab === 9) fetchMembers(membersPage); }, [tab, membersPage, fetchMembers]);
-  useEffect(() => { if (tab === 10) fetchAuditLogs(auditPage); }, [tab, auditPage, fetchAuditLogs]);
-  useEffect(() => { if (tab === 8) fetchAutoResponses(); }, [tab, fetchAutoResponses]);
-  useEffect(() => { if (tab === 7) fetchReports(); }, [tab, fetchReports]);
+  useEffect(() => { if (tab === 15) fetchMembers(membersPage); }, [tab, membersPage, fetchMembers]);
+  useEffect(() => { if (tab === 16) fetchAuditLogs(auditPage); }, [tab, auditPage, fetchAuditLogs]);
+  useEffect(() => { if (tab === 9) fetchAutoResponses(); }, [tab, fetchAutoResponses]);
+  useEffect(() => { if (tab === 8) fetchReports(); }, [tab, fetchReports]);
 
   const handleSave = async () => {
     setSaving(true);

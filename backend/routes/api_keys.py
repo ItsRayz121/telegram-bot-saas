@@ -42,102 +42,122 @@ def _get_group(user, bot_id, group_id):
 @jwt_required()
 @rate_limit(requests_per_minute=60)
 def get_api_key(bot_id, group_id):
-    user = _get_current_user()
-    if not user:
-        return jsonify({"error": "User not found"}), 404
-    _, group = _get_group(user, bot_id, group_id)
-    if not group:
-        return jsonify({"error": "Group not found"}), 404
+    try:
+        user = _get_current_user()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        _, group = _get_group(user, bot_id, group_id)
+        if not group:
+            return jsonify({"error": "Group not found"}), 404
 
-    key_record = UserApiKey.query.filter_by(group_id=group.id, is_active=True).order_by(
-        UserApiKey.updated_at.desc()
-    ).first()
+        key_record = UserApiKey.query.filter_by(group_id=group.id, is_active=True).order_by(
+            UserApiKey.created_at.desc()
+        ).first()
 
-    if not key_record:
-        return jsonify({"api_key": None})
+        if not key_record:
+            return jsonify({"api_key": None})
 
-    return jsonify({"api_key": key_record.to_dict()})
+        return jsonify({"api_key": key_record.to_dict()})
+    except Exception as e:
+        logger.error(f"get_api_key error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
 
 
 @api_keys_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/api-keys", methods=["POST"])
 @jwt_required()
 @rate_limit(requests_per_minute=20)
 def save_api_key(bot_id, group_id):
-    user = _get_current_user()
-    if not user:
-        return jsonify({"error": "User not found"}), 404
-    _, group = _get_group(user, bot_id, group_id)
-    if not group:
-        return jsonify({"error": "Group not found"}), 404
+    try:
+        user = _get_current_user()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        _, group = _get_group(user, bot_id, group_id)
+        if not group:
+            return jsonify({"error": "Group not found"}), 404
 
-    data = request.get_json() or {}
-    provider = (data.get("provider") or "").strip().lower()
-    api_key = (data.get("api_key") or "").strip()
-    base_url = (data.get("base_url") or "").strip() or None
-    model_name = (data.get("model_name") or "").strip() or None
+        data = request.get_json() or {}
+        provider = (data.get("provider") or "").strip().lower()
+        api_key = (data.get("api_key") or "").strip()
+        base_url = (data.get("base_url") or "").strip() or None
+        model_name = (data.get("model_name") or "").strip() or None
 
-    if not provider or provider not in VALID_PROVIDERS:
-        return jsonify({"error": f"Provider must be one of: {', '.join(VALID_PROVIDERS)}"}), 400
+        if not provider or provider not in VALID_PROVIDERS:
+            return jsonify({"error": f"Provider must be one of: {', '.join(VALID_PROVIDERS)}"}), 400
 
-    # Treat absent, empty, or masked api_key as "keep existing key"
-    keep_existing_key = not api_key or "****" in api_key
+        # Treat absent, empty, or masked api_key as "keep existing key"
+        keep_existing_key = not api_key or "****" in api_key
 
-    existing = UserApiKey.query.filter_by(group_id=group.id, is_active=True).first()
+        existing = UserApiKey.query.filter_by(group_id=group.id, is_active=True).first()
 
-    if keep_existing_key:
-        if not existing:
-            return jsonify({"error": "API key is required"}), 400
-        # Update metadata only — preserve the existing encrypted key
-        existing.provider = provider
-        existing.base_url = base_url
-        existing.model_name = model_name
-        from datetime import datetime
-        existing.updated_at = datetime.utcnow()
-        db.session.commit()
-        return jsonify({"api_key": existing.to_dict(), "message": "API key updated"})
+        if keep_existing_key:
+            if not existing:
+                return jsonify({"error": "API key is required"}), 400
+            # Update metadata only — preserve the existing encrypted key
+            existing.provider = provider
+            existing.base_url = base_url
+            existing.model_name = model_name
+            from datetime import datetime
+            existing.updated_at = datetime.utcnow()
+            db.session.commit()
+            return jsonify({"api_key": existing.to_dict(), "message": "API key updated"})
 
-    encrypted_key = encrypt_value(api_key)
-    if not encrypted_key:
-        return jsonify({"error": "Failed to encrypt API key. Check server configuration."}), 500
+        encrypted_key = encrypt_value(api_key)
+        if not encrypted_key:
+            return jsonify({"error": "Failed to encrypt API key. Check server configuration."}), 500
 
-    if existing:
-        existing.provider = provider
-        existing.api_key_encrypted = encrypted_key
-        existing.base_url = base_url
-        existing.model_name = model_name
-        from datetime import datetime
-        existing.updated_at = datetime.utcnow()
-        db.session.commit()
-        return jsonify({"api_key": existing.to_dict(), "message": "API key updated"})
-    else:
-        record = UserApiKey(
-            group_id=group.id,
-            user_id=user.id,
-            provider=provider,
-            api_key_encrypted=encrypted_key,
-            base_url=base_url,
-            model_name=model_name,
-            is_active=True,
-        )
-        db.session.add(record)
-        db.session.commit()
-        return jsonify({"api_key": record.to_dict(), "message": "API key saved"}), 201
+        if existing:
+            existing.provider = provider
+            existing.api_key_encrypted = encrypted_key
+            existing.base_url = base_url
+            existing.model_name = model_name
+            from datetime import datetime
+            existing.updated_at = datetime.utcnow()
+            db.session.commit()
+            return jsonify({"api_key": existing.to_dict(), "message": "API key updated"})
+        else:
+            record = UserApiKey(
+                group_id=group.id,
+                user_id=user.id,
+                provider=provider,
+                api_key_encrypted=encrypted_key,
+                base_url=base_url,
+                model_name=model_name,
+                is_active=True,
+            )
+            db.session.add(record)
+            db.session.commit()
+            return jsonify({"api_key": record.to_dict(), "message": "API key saved"}), 201
+    except Exception as e:
+        logger.error(f"save_api_key error: {e}", exc_info=True)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return jsonify({"error": str(e)}), 500
 
 
 @api_keys_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/api-keys", methods=["DELETE"])
 @jwt_required()
 @rate_limit(requests_per_minute=20)
 def delete_api_key(bot_id, group_id):
-    user = _get_current_user()
-    if not user:
-        return jsonify({"error": "User not found"}), 404
-    _, group = _get_group(user, bot_id, group_id)
-    if not group:
-        return jsonify({"error": "Group not found"}), 404
+    try:
+        user = _get_current_user()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        _, group = _get_group(user, bot_id, group_id)
+        if not group:
+            return jsonify({"error": "Group not found"}), 404
 
-    UserApiKey.query.filter_by(group_id=group.id).delete()
-    db.session.commit()
-    return jsonify({"success": True, "message": "API key removed"})
+        UserApiKey.query.filter_by(group_id=group.id).delete()
+        db.session.commit()
+        return jsonify({"success": True, "message": "API key removed"})
+    except Exception as e:
+        logger.error(f"delete_api_key error: {e}", exc_info=True)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return jsonify({"error": str(e)}), 500
 
 
 @api_keys_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/api-keys/test", methods=["POST"])

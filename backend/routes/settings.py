@@ -73,7 +73,10 @@ def update_group_settings(bot_id, group_id):
         return jsonify({"settings": group.settings, "message": "Settings updated"})
     except Exception as e:
         logger.error(f"update_group_settings error: {e}", exc_info=True)
-        db.session.rollback()
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
         return jsonify({"error": str(e)}), 500
 
 
@@ -178,14 +181,22 @@ def create_scheduled_message(bot_id, group_id):
         for field in required:
             if not data.get(field):
                 return jsonify({"error": f"{field} is required"}), 400
+        def _parse_dt(s):
+            s = s.replace("Z", "+00:00")
+            # datetime-local inputs omit seconds ("YYYY-MM-DDTHH:MM") which
+            # Python 3.10 and below do not support — normalise to HH:MM:SS.
+            if len(s) == 16:
+                s += ":00"
+            return datetime.fromisoformat(s)
+
         try:
-            send_at = datetime.fromisoformat(data["send_at"].replace("Z", "+00:00"))
+            send_at = _parse_dt(data["send_at"])
         except ValueError:
             return jsonify({"error": "Invalid send_at format"}), 400
         stop_date = None
         if data.get("stop_date"):
             try:
-                stop_date = datetime.fromisoformat(data["stop_date"].replace("Z", "+00:00"))
+                stop_date = _parse_dt(data["stop_date"])
             except ValueError:
                 return jsonify({"error": "Invalid stop_date format"}), 400
         msg = ScheduledMessage(
@@ -207,7 +218,10 @@ def create_scheduled_message(bot_id, group_id):
         return jsonify({"scheduled_message": msg.to_dict(), "message": "Scheduled message created"}), 201
     except Exception as e:
         logger.error(f"create_scheduled_message error for group {group_id}: {e}", exc_info=True)
-        db.session.rollback()
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
         return jsonify({"error": str(e)}), 500
 
 
@@ -230,7 +244,10 @@ def delete_scheduled_message(bot_id, group_id, msg_id):
         return jsonify({"success": True})
     except Exception as e:
         logger.error(f"delete_scheduled_message error: {e}", exc_info=True)
-        db.session.rollback()
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
         return jsonify({"error": str(e)}), 500
 
 
@@ -272,7 +289,10 @@ def create_raid(bot_id, group_id):
         return jsonify({"raid": raid.to_dict(), "message": "Raid created"}), 201
     except Exception as e:
         logger.error(f"create_raid error: {e}", exc_info=True)
-        db.session.rollback()
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
         return jsonify({"error": str(e)}), 500
 
 
@@ -323,7 +343,10 @@ def create_auto_response(bot_id, group_id):
         return jsonify({"auto_response": ar.to_dict(), "message": "Auto-response created"}), 201
     except Exception as e:
         logger.error(f"create_auto_response error: {e}", exc_info=True)
-        db.session.rollback()
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
         return jsonify({"error": str(e)}), 500
 
 
@@ -356,7 +379,10 @@ def update_auto_response(bot_id, group_id, ar_id):
         return jsonify({"auto_response": ar.to_dict(), "message": "Updated"})
     except Exception as e:
         logger.error(f"update_auto_response error: {e}", exc_info=True)
-        db.session.rollback()
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
         return jsonify({"error": str(e)}), 500
 
 
@@ -379,7 +405,10 @@ def delete_auto_response(bot_id, group_id, ar_id):
         return jsonify({"message": "Deleted"})
     except Exception as e:
         logger.error(f"delete_auto_response error: {e}", exc_info=True)
-        db.session.rollback()
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
         return jsonify({"error": str(e)}), 500
 
 
@@ -426,5 +455,8 @@ def resolve_report(bot_id, group_id, report_id):
         return jsonify({"report": report.to_dict(), "message": "Report resolved"})
     except Exception as e:
         logger.error(f"resolve_report error: {e}", exc_info=True)
-        db.session.rollback()
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
         return jsonify({"error": str(e)}), 500
