@@ -1,4 +1,5 @@
 import os
+import threading
 from flask import Flask, jsonify
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
@@ -57,7 +58,7 @@ def create_app():
         return jsonify({
             "status": "ok",
             "db": "connected" if db_ok else "error",
-            "version": "2026-04-22-v4",
+            "version": "2026-04-22-v5",
         })
 
     @app.errorhandler(404)
@@ -71,7 +72,17 @@ def create_app():
     with app.app_context():
         db.create_all()
         _run_migrations()
-        _restart_active_bots(app)
+
+    # Start bots in a background thread after a short delay so Gunicorn can
+    # pass its healthcheck before bot polling (which may contact Telegram and
+    # hold DB connections) begins.
+    def _deferred_bot_start():
+        import time
+        time.sleep(5)
+        with app.app_context():
+            _restart_active_bots(app)
+
+    threading.Thread(target=_deferred_bot_start, daemon=True).start()
 
     return app
 
