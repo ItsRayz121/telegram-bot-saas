@@ -1172,7 +1172,27 @@ class BotInstance:
     def _run_bot(self):
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
-        self.loop.run_until_complete(self._start_polling())
+        # Retry loop so a Conflict error (two instances) recovers automatically
+        max_retries = 5
+        for attempt in range(max_retries):
+            if self._stop_event.is_set():
+                break
+            try:
+                self.loop.run_until_complete(self._start_polling())
+                break  # clean exit
+            except Exception as e:
+                from telegram.error import Conflict
+                if isinstance(e, Conflict):
+                    wait = 15 * (attempt + 1)
+                    logger.warning(
+                        f"Bot {self.bot_id}: Conflict error (another instance is polling). "
+                        f"Retrying in {wait}s (attempt {attempt + 1}/{max_retries})"
+                    )
+                    import time
+                    time.sleep(wait)
+                else:
+                    logger.error(f"Bot {self.bot_id}: polling crashed: {e}", exc_info=True)
+                    break
 
     async def _start_polling(self):
         self.application = (
