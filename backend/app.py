@@ -48,7 +48,17 @@ def create_app():
 
     @app.route("/health")
     def health():
-        return jsonify({"status": "ok"})
+        db_ok = False
+        try:
+            db.session.execute(text("SELECT 1"))
+            db_ok = True
+        except Exception:
+            pass
+        return jsonify({
+            "status": "ok",
+            "db": "connected" if db_ok else "error",
+            "version": "2026-04-22-v3",
+        })
 
     @app.errorhandler(404)
     def not_found(e):
@@ -67,30 +77,37 @@ def create_app():
 
 
 def _run_migrations():
-    """Add any missing columns to existing tables without dropping data."""
+    """Add any missing columns to existing tables without dropping data.
+    Uses plain ALTER TABLE (no IF NOT EXISTS) so it works on both PostgreSQL
+    and SQLite — duplicate-column errors are silently caught and ignored.
+    """
     migrations = [
-        "ALTER TABLE groups ADD COLUMN IF NOT EXISTS telegram_member_count INTEGER DEFAULT 0",
+        "ALTER TABLE groups ADD COLUMN telegram_member_count INTEGER DEFAULT 0",
         # Invite link creator tracking
-        "ALTER TABLE invite_links ADD COLUMN IF NOT EXISTS created_by_user_id INTEGER",
-        "ALTER TABLE invite_links ADD COLUMN IF NOT EXISTS created_by_telegram_id VARCHAR(255)",
-        "ALTER TABLE invite_links ADD COLUMN IF NOT EXISTS created_by_username VARCHAR(255)",
-        # Scheduled messages — topic_id added later
-        "ALTER TABLE scheduled_messages ADD COLUMN IF NOT EXISTS topic_id BIGINT",
-        "ALTER TABLE scheduled_messages ADD COLUMN IF NOT EXISTS auto_delete_after INTEGER",
-        "ALTER TABLE scheduled_messages ADD COLUMN IF NOT EXISTS link_preview_enabled BOOLEAN DEFAULT TRUE",
-        # User API keys table columns
-        "ALTER TABLE user_api_keys ADD COLUMN IF NOT EXISTS base_url VARCHAR(500)",
-        "ALTER TABLE user_api_keys ADD COLUMN IF NOT EXISTS model_name VARCHAR(255)",
-        "ALTER TABLE user_api_keys ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()",
+        "ALTER TABLE invite_links ADD COLUMN created_by_user_id INTEGER",
+        "ALTER TABLE invite_links ADD COLUMN created_by_telegram_id VARCHAR(255)",
+        "ALTER TABLE invite_links ADD COLUMN created_by_username VARCHAR(255)",
+        # Scheduled messages extra columns added in later commits
+        "ALTER TABLE scheduled_messages ADD COLUMN topic_id BIGINT",
+        "ALTER TABLE scheduled_messages ADD COLUMN auto_delete_after INTEGER",
+        "ALTER TABLE scheduled_messages ADD COLUMN link_preview_enabled BOOLEAN DEFAULT TRUE",
+        # User API keys extra columns
+        "ALTER TABLE user_api_keys ADD COLUMN base_url VARCHAR(500)",
+        "ALTER TABLE user_api_keys ADD COLUMN model_name VARCHAR(255)",
+        "ALTER TABLE user_api_keys ADD COLUMN updated_at TIMESTAMP",
     ]
     try:
         with db.engine.connect() as conn:
             for sql in migrations:
                 try:
                     conn.execute(text(sql))
+                    conn.commit()
                 except Exception:
-                    pass
-            conn.commit()
+                    # Column already exists or table not yet created — safe to skip
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
     except Exception:
         pass
 
