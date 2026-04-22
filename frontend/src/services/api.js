@@ -43,6 +43,7 @@ export const bots = {
   delete: (id) => api.delete(`/api/bots/${id}`),
   getGroups: (id) => api.get(`/api/bots/${id}/groups`),
   toggle: (id) => api.post(`/api/bots/${id}/toggle`),
+  getStatus: (id) => api.get(`/api/bots/${id}/status`),
 };
 
 export const settings = {
@@ -80,7 +81,7 @@ export const knowledge = {
   list: (botId, groupId) => api.get(`/api/bots/${botId}/groups/${groupId}/knowledge`),
   upload: (botId, groupId, formData) =>
     api.post(`/api/bots/${botId}/groups/${groupId}/knowledge`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+      headers: { 'Content-Type': undefined }, // let Axios set multipart + boundary automatically
     }),
   delete: (botId, groupId, docId) =>
     api.delete(`/api/bots/${botId}/groups/${groupId}/knowledge/${docId}`),

@@ -1269,7 +1269,14 @@ class BotManager:
         return self.start_bot(bot_id, token, app_context)
 
     def is_running(self, bot_id):
-        return bot_id in self.active_bots
+        instance = self.active_bots.get(bot_id)
+        if not instance:
+            return False
+        if instance.thread and not instance.thread.is_alive():
+            logger.warning(f"Bot {bot_id} thread has died — removing from active_bots")
+            del self.active_bots[bot_id]
+            return False
+        return True
 
     def get_knowledge_base(self):
         # Return KB system from any active bot instance (they all share the same app context logic)

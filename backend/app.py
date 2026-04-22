@@ -57,7 +57,7 @@ def create_app():
         return jsonify({
             "status": "ok",
             "db": "connected" if db_ok else "error",
-            "version": "2026-04-22-v3",
+            "version": "2026-04-22-v4",
         })
 
     @app.errorhandler(404)

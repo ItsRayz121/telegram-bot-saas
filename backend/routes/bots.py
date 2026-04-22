@@ -169,3 +169,29 @@ def toggle_bot(bot_id):
 
     db.session.commit()
     return jsonify({"message": msg, "is_active": bot.is_active}), 200
+
+
+@bots_bp.route("/<int:bot_id>/status", methods=["GET"])
+@jwt_required()
+def bot_status(bot_id):
+    user = _get_current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    bot = Bot.query.filter_by(id=bot_id, user_id=user.id).first()
+    if not bot:
+        return jsonify({"error": "Bot not found"}), 404
+
+    from ..bot_manager import bot_manager
+    running = bot_manager.is_running(bot_id)
+
+    auto_restarted = False
+    if not running and bot.is_active:
+        auto_restarted = bot_manager.start_bot(bot_id, bot.bot_token, current_app._get_current_object())
+
+    return jsonify({
+        "bot_id": bot_id,
+        "is_active": bot.is_active,
+        "thread_alive": running,
+        "auto_restarted": auto_restarted,
+    }), 200
