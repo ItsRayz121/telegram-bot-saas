@@ -254,6 +254,7 @@ export default function GroupSettings() {
           <Tab label="Levels" />
           <Tab label="AutoMod" />
           <Tab label="Moderation" />
+          <Tab label="Raids" />
           <Tab label="Auto Clean" />
           <Tab label="Roles" />
           <Tab label="Reports" />
@@ -761,23 +762,29 @@ export default function GroupSettings() {
             </CardContent>
           </Card>
 
-          <Card sx={{ mt: 2 }}>
+        </TabPanel>
+
+        {/* ── Raids Tab ── */}
+        <TabPanel value={tab} index={5}>
+          <Card>
             <CardContent>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                <Typography variant="subtitle1" fontWeight={600}>Raid Manager</Typography>
-                <Button variant="contained" size="small" startIcon={<Add />} onClick={() => setRaidOpen(true)}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Box>
+                  <Typography variant="h6" fontWeight={600}>Raid Manager</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Coordinate Twitter/X raids with your community. Members earn XP for participating.
+                  </Typography>
+                </Box>
+                <Button variant="contained" startIcon={<Add />} onClick={() => setRaidOpen(true)}>
                   Create Raid
                 </Button>
               </Box>
-              <Typography variant="body2" color="text.secondary">
-                Coordinate Twitter/X raids with your community. Members earn XP for participating.
-              </Typography>
             </CardContent>
           </Card>
         </TabPanel>
 
         {/* ── Auto Clean Tab ── */}
-        <TabPanel value={tab} index={5}>
+        <TabPanel value={tab} index={6}>
           <Card>
             <CardContent>
               <Typography variant="h6" fontWeight={600} mb={1}>Auto Clean</Typography>
@@ -813,7 +820,7 @@ export default function GroupSettings() {
         </TabPanel>
 
         {/* ── Roles Tab ── */}
-        <TabPanel value={tab} index={6}>
+        <TabPanel value={tab} index={7}>
           <Card>
             <CardContent>
               <Typography variant="h6" fontWeight={600} mb={1}>Roles</Typography>
@@ -858,7 +865,7 @@ export default function GroupSettings() {
         </TabPanel>
 
         {/* ── Reports Tab ── */}
-        <TabPanel value={tab} index={7}>
+        <TabPanel value={tab} index={8}>
           <Card sx={{ mb: 2 }}>
             <CardContent>
               <Typography variant="h6" fontWeight={600} mb={2}>Reports Settings</Typography>
@@ -937,7 +944,7 @@ export default function GroupSettings() {
         </TabPanel>
 
         {/* ── Auto Response Tab ── */}
-        <TabPanel value={tab} index={8}>
+        <TabPanel value={tab} index={9}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
@@ -994,7 +1001,7 @@ export default function GroupSettings() {
         </TabPanel>
 
         {/* ── Members Tab ── */}
-        <TabPanel value={tab} index={9}>
+        <TabPanel value={tab} index={10}>
           <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider' }}>
             <Table size="small">
               <TableHead>
@@ -1038,7 +1045,7 @@ export default function GroupSettings() {
         </TabPanel>
 
         {/* ── Audit Logs Tab ── */}
-        <TabPanel value={tab} index={10}>
+        <TabPanel value={tab} index={11}>
           <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider' }}>
             <Table size="small">
               <TableHead>
