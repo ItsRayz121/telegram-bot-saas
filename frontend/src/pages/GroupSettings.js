@@ -15,6 +15,11 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { settings } from '../services/api';
 import RaidCreator from '../components/RaidCreator';
+import ScheduledMessages from '../components/ScheduledMessages';
+import KnowledgeBase from '../components/KnowledgeBase';
+import PollCreator from '../components/PollCreator';
+import WebhookManager from '../components/WebhookManager';
+import InviteLinks from '../components/InviteLinks';
 
 function TabPanel({ children, value, index }) {
   return value === index ? <Box sx={{ pt: 3 }}>{children}</Box> : null;
@@ -259,6 +264,11 @@ export default function GroupSettings() {
           <Tab label="Roles" />
           <Tab label="Reports" />
           <Tab label="Auto Response" />
+          <Tab label="Scheduled" />
+          <Tab label="Knowledge Base" />
+          <Tab label="Polls" />
+          <Tab label="Webhooks" />
+          <Tab label="Invite Links" />
           <Tab label="Members" />
           <Tab label="Audit Logs" />
         </Tabs>
@@ -388,6 +398,25 @@ export default function GroupSettings() {
                   </Grid>
                 )}
               </Grid>
+            </CardContent>
+          </Card>
+
+          <Card sx={{ mt: 2 }}>
+            <CardContent>
+              <Typography variant="subtitle1" fontWeight={600} mb={1}>Private Welcome DM</Typography>
+              <Typography variant="body2" color="text.secondary" mb={2}>
+                Send a private message to each new member in addition to the group welcome.
+              </Typography>
+              <FormControlLabel
+                control={<Switch checked={!!w.dm_enabled} onChange={e => updateSetting('welcome.dm_enabled', e.target.checked)} />}
+                label="Send DM to new members"
+              />
+              {w.dm_enabled && (
+                <TextField fullWidth multiline rows={3} label="DM Message" sx={{ mt: 2 }}
+                  value={w.dm_message || ''}
+                  onChange={e => updateSetting('welcome.dm_message', e.target.value)}
+                  helperText="Placeholders: {first_name}, {group_name}, {username}" />
+              )}
             </CardContent>
           </Card>
         </TabPanel>
@@ -1000,8 +1029,33 @@ export default function GroupSettings() {
           </Card>
         </TabPanel>
 
-        {/* ── Members Tab ── */}
+        {/* ── Scheduled Messages Tab ── */}
         <TabPanel value={tab} index={10}>
+          <ScheduledMessages botId={botId} groupId={groupId} />
+        </TabPanel>
+
+        {/* ── Knowledge Base Tab ── */}
+        <TabPanel value={tab} index={11}>
+          <KnowledgeBase botId={botId} groupId={groupId} settings={settings} updateSetting={updateSetting} />
+        </TabPanel>
+
+        {/* ── Polls Tab ── */}
+        <TabPanel value={tab} index={12}>
+          <PollCreator botId={botId} groupId={groupId} />
+        </TabPanel>
+
+        {/* ── Webhooks Tab ── */}
+        <TabPanel value={tab} index={13}>
+          <WebhookManager botId={botId} groupId={groupId} />
+        </TabPanel>
+
+        {/* ── Invite Links Tab ── */}
+        <TabPanel value={tab} index={14}>
+          <InviteLinks botId={botId} groupId={groupId} />
+        </TabPanel>
+
+        {/* ── Members Tab ── */}
+        <TabPanel value={tab} index={15}>
           <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider' }}>
             <Table size="small">
               <TableHead>
@@ -1045,7 +1099,7 @@ export default function GroupSettings() {
         </TabPanel>
 
         {/* ── Audit Logs Tab ── */}
-        <TabPanel value={tab} index={11}>
+        <TabPanel value={tab} index={16}>
           <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider' }}>
             <Table size="small">
               <TableHead>

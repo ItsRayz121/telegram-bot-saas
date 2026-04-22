@@ -31,6 +31,10 @@ def make_celery(app=None):
                 "task": "backend.scheduler.check_raid_reminders",
                 "schedule": 300.0,
             },
+            "send-scheduled-polls": {
+                "task": "backend.scheduler.send_scheduled_polls",
+                "schedule": 60.0,
+            },
         },
     )
 
@@ -138,6 +142,64 @@ def send_scheduled_messages():
 
     except Exception as e:
         logger.error(f"send_scheduled_messages error: {e}")
+
+
+@celery.task(name="backend.scheduler.send_scheduled_polls")
+def send_scheduled_polls():
+    try:
+        from .app import create_app
+        app = create_app()
+        with app.app_context():
+            from .models import db, Poll, Group, Bot
+            from .bot_manager import bot_manager
+            import asyncio
+
+            now = datetime.utcnow()
+            pending = Poll.query.filter(
+                Poll.scheduled_at <= now,
+                Poll.scheduled_at != None,
+                Poll.is_sent == False,
+            ).all()
+
+            for poll in pending:
+                group = Group.query.get(poll.group_id)
+                if not group:
+                    continue
+                bot = Bot.query.get(group.bot_id)
+                if not bot or not bot.is_active:
+                    continue
+                instance = bot_manager.active_bots.get(bot.id)
+                if not instance or not instance.application:
+                    continue
+
+                async def _send(p=poll, g=group):
+                    try:
+                        kwargs = {
+                            "chat_id": g.telegram_group_id,
+                            "question": p.question,
+                            "options": p.options,
+                            "is_anonymous": p.is_anonymous,
+                        }
+                        if p.is_quiz:
+                            kwargs["type"] = "quiz"
+                            kwargs["correct_option_id"] = p.correct_option_index
+                            if p.explanation:
+                                kwargs["explanation"] = p.explanation
+                        else:
+                            kwargs["allows_multiple_answers"] = p.allows_multiple
+                        await instance.application.bot.send_poll(**kwargs)
+                    except Exception as e:
+                        logger.error(f"Scheduled poll send error: {e}")
+
+                loop = instance.loop
+                if loop and loop.is_running():
+                    asyncio.run_coroutine_threadsafe(_send(), loop)
+
+                poll.is_sent = True
+
+            db.session.commit()
+    except Exception as e:
+        logger.error(f"send_scheduled_polls error: {e}")
 
 
 @celery.task(name="backend.scheduler.check_raid_reminders")

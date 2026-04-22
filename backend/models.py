@@ -99,6 +99,10 @@ class Group(db.Model):
     audit_logs = db.relationship("AuditLog", backref="group", lazy=True, cascade="all, delete-orphan")
     scheduled_messages = db.relationship("ScheduledMessage", backref="group", lazy=True, cascade="all, delete-orphan")
     raids = db.relationship("Raid", backref="group", lazy=True, cascade="all, delete-orphan")
+    knowledge_documents = db.relationship("KnowledgeDocument", backref="group", lazy=True, cascade="all, delete-orphan")
+    polls = db.relationship("Poll", backref="group", lazy=True, cascade="all, delete-orphan")
+    webhook_integrations = db.relationship("WebhookIntegration", backref="group", lazy=True, cascade="all, delete-orphan")
+    invite_links = db.relationship("InviteLink", backref="group", lazy=True, cascade="all, delete-orphan")
 
     def to_dict(self):
         return {
@@ -274,6 +278,113 @@ class AutoResponse(db.Model):
             "match_type": self.match_type,
             "is_case_sensitive": self.is_case_sensitive,
             "is_enabled": self.is_enabled,
+            "created_at": self.created_at.isoformat(),
+        }
+
+
+class KnowledgeDocument(db.Model):
+    __tablename__ = "knowledge_documents"
+
+    id = db.Column(db.Integer, primary_key=True)
+    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False)
+    filename = db.Column(db.String(255), nullable=False)
+    file_type = db.Column(db.String(20), nullable=False)
+    content_text = db.Column(db.Text, nullable=False)
+    chunks = db.Column(db.JSON, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "group_id": self.group_id,
+            "filename": self.filename,
+            "file_type": self.file_type,
+            "chunk_count": len(self.chunks) if self.chunks else 0,
+            "created_at": self.created_at.isoformat(),
+        }
+
+
+class Poll(db.Model):
+    __tablename__ = "polls"
+
+    id = db.Column(db.Integer, primary_key=True)
+    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False)
+    question = db.Column(db.String(500), nullable=False)
+    options = db.Column(db.JSON, nullable=False)
+    correct_option_index = db.Column(db.Integer, nullable=True)
+    is_quiz = db.Column(db.Boolean, default=False)
+    is_anonymous = db.Column(db.Boolean, default=True)
+    allows_multiple = db.Column(db.Boolean, default=False)
+    explanation = db.Column(db.String(200), nullable=True)
+    scheduled_at = db.Column(db.DateTime, nullable=True)
+    is_sent = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "group_id": self.group_id,
+            "question": self.question,
+            "options": self.options,
+            "correct_option_index": self.correct_option_index,
+            "is_quiz": self.is_quiz,
+            "is_anonymous": self.is_anonymous,
+            "allows_multiple": self.allows_multiple,
+            "explanation": self.explanation,
+            "scheduled_at": self.scheduled_at.isoformat() if self.scheduled_at else None,
+            "is_sent": self.is_sent,
+            "created_at": self.created_at.isoformat(),
+        }
+
+
+class WebhookIntegration(db.Model):
+    __tablename__ = "webhook_integrations"
+
+    id = db.Column(db.Integer, primary_key=True)
+    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    webhook_token = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    description = db.Column(db.String(255), nullable=True)
+    message_template = db.Column(db.Text, nullable=False, default="{payload}")
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "group_id": self.group_id,
+            "name": self.name,
+            "webhook_token": self.webhook_token,
+            "description": self.description,
+            "message_template": self.message_template,
+            "is_active": self.is_active,
+            "created_at": self.created_at.isoformat(),
+        }
+
+
+class InviteLink(db.Model):
+    __tablename__ = "invite_links"
+
+    id = db.Column(db.Integer, primary_key=True)
+    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    telegram_invite_link = db.Column(db.String(255), nullable=True)
+    uses_count = db.Column(db.Integer, default=0)
+    max_uses = db.Column(db.Integer, nullable=True)
+    expire_date = db.Column(db.DateTime, nullable=True)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "group_id": self.group_id,
+            "name": self.name,
+            "telegram_invite_link": self.telegram_invite_link,
+            "uses_count": self.uses_count,
+            "max_uses": self.max_uses,
+            "expire_date": self.expire_date.isoformat() if self.expire_date else None,
+            "is_active": self.is_active,
             "created_at": self.created_at.isoformat(),
         }
 

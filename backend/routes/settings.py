@@ -172,6 +172,24 @@ def create_scheduled_message(bot_id, group_id):
     return jsonify({"scheduled_message": msg.to_dict(), "message": "Scheduled message created"}), 201
 
 
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/scheduled-messages/<int:msg_id>", methods=["DELETE"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def delete_scheduled_message(bot_id, group_id, msg_id):
+    user = _get_current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    bot, group, err = _get_bot_and_group(user, bot_id, group_id)
+    if err:
+        return err
+    msg = ScheduledMessage.query.filter_by(id=msg_id, group_id=group.id).first()
+    if not msg:
+        return jsonify({"error": "Scheduled message not found"}), 404
+    db.session.delete(msg)
+    db.session.commit()
+    return jsonify({"success": True})
+
+
 @settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/raids", methods=["POST"])
 @jwt_required()
 @rate_limit(requests_per_minute=5)

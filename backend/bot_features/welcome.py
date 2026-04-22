@@ -98,6 +98,24 @@ class WelcomeSystem:
         except Exception as e:
             logger.error(f"Welcome message error: {e}")
 
+        # Send DM if enabled
+        dm_settings = settings.get("welcome", {})
+        if dm_settings.get("dm_enabled") and dm_settings.get("dm_message"):
+            dm_text = dm_settings["dm_message"].format(
+                first_name=new_user.first_name or "Unknown",
+                last_name=new_user.last_name or "",
+                username=f"@{new_user.username}" if new_user.username else new_user.first_name,
+                group_name=group.group_name or "the group",
+            )
+            try:
+                await bot.send_message(
+                    chat_id=new_user.id,
+                    text=dm_text,
+                    parse_mode="Markdown",
+                )
+            except Exception:
+                pass  # User may have DMs blocked
+
     async def _generate_ai_welcome(self, first_name, group_name):
         try:
             from ..config import Config

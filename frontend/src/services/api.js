@@ -72,6 +72,41 @@ export const settings = {
     api.get(`/api/bots/${botId}/groups/${groupId}/reports`, { params }),
   resolveReport: (botId, groupId, reportId) =>
     api.post(`/api/bots/${botId}/groups/${groupId}/reports/${reportId}/resolve`),
+  deleteScheduledMessage: (botId, groupId, msgId) =>
+    api.delete(`/api/bots/${botId}/groups/${groupId}/scheduled-messages/${msgId}`),
+};
+
+export const knowledge = {
+  list: (botId, groupId) => api.get(`/api/bots/${botId}/groups/${groupId}/knowledge`),
+  upload: (botId, groupId, formData) =>
+    api.post(`/api/bots/${botId}/groups/${groupId}/knowledge`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  delete: (botId, groupId, docId) =>
+    api.delete(`/api/bots/${botId}/groups/${groupId}/knowledge/${docId}`),
+};
+
+export const polls = {
+  list: (botId, groupId) => api.get(`/api/bots/${botId}/groups/${groupId}/polls`),
+  create: (botId, groupId, data) => api.post(`/api/bots/${botId}/groups/${groupId}/polls`, data),
+  delete: (botId, groupId, pollId) => api.delete(`/api/bots/${botId}/groups/${groupId}/polls/${pollId}`),
+};
+
+export const webhooks = {
+  list: (botId, groupId) => api.get(`/api/bots/${botId}/groups/${groupId}/webhooks`),
+  create: (botId, groupId, data) => api.post(`/api/bots/${botId}/groups/${groupId}/webhooks`, data),
+  update: (botId, groupId, hookId, data) =>
+    api.put(`/api/bots/${botId}/groups/${groupId}/webhooks/${hookId}`, data),
+  delete: (botId, groupId, hookId) =>
+    api.delete(`/api/bots/${botId}/groups/${groupId}/webhooks/${hookId}`),
+};
+
+export const invites = {
+  list: (botId, groupId) => api.get(`/api/bots/${botId}/groups/${groupId}/invite-links`),
+  create: (botId, groupId, data) =>
+    api.post(`/api/bots/${botId}/groups/${groupId}/invite-links`, data),
+  delete: (botId, groupId, linkId) =>
+    api.delete(`/api/bots/${botId}/groups/${groupId}/invite-links/${linkId}`),
 };
 
 export const analytics = {

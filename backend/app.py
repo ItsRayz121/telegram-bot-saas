@@ -11,6 +11,10 @@ from .routes.settings import settings_bp
 from .routes.billing import billing_bp
 from .routes.analytics import analytics_bp
 from .routes.admin import admin_bp
+from .routes.knowledge import knowledge_bp
+from .routes.polls import polls_bp
+from .routes.webhooks import webhooks_bp
+from .routes.invites import invites_bp
 from .bot_manager import BotManager
 
 bot_manager = BotManager()
@@ -33,6 +37,10 @@ def create_app():
     app.register_blueprint(billing_bp)
     app.register_blueprint(analytics_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(knowledge_bp)
+    app.register_blueprint(polls_bp)
+    app.register_blueprint(webhooks_bp)
+    app.register_blueprint(invites_bp)
 
     app.bot_manager = bot_manager
 

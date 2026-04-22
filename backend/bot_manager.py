@@ -14,6 +14,7 @@ from .bot_features.verification import VerificationSystem
 from .bot_features.welcome import WelcomeSystem
 from .bot_features.levels import LevelSystem
 from .bot_features.moderation import ModerationSystem
+from .bot_features.knowledge_base import KnowledgeBaseSystem
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,7 @@ class BotInstance:
         self.welcome = WelcomeSystem(app_context)
         self.levels = LevelSystem(app_context)
         self.moderation = ModerationSystem(app_context)
+        self.knowledge_base = KnowledgeBaseSystem(app_context)
 
     def _get_group(self, chat_id):
         with self.app_context.app_context():
@@ -763,6 +765,59 @@ class BotInstance:
             parse_mode="Markdown",
         )
 
+    async def handle_ask(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not update.message:
+            return
+        chat = update.effective_chat
+        question = " ".join(context.args) if context.args else ""
+        if not question:
+            await update.message.reply_text("Usage: /ask <your question>")
+            return
+        group = self._get_group(chat.id)
+        if not group:
+            return
+        if not group.settings.get("knowledge_base", {}).get("enabled", True):
+            return
+        typing_msg = await update.message.reply_text("🔍 Searching knowledge base...")
+        answer = await self.knowledge_base.answer_question(question, group.id)
+        try:
+            await context.bot.delete_message(chat_id=chat.id, message_id=typing_msg.message_id)
+        except Exception:
+            pass
+        if answer:
+            await update.message.reply_text(f"💡 {answer}", parse_mode="Markdown")
+        else:
+            await update.message.reply_text("I couldn't find an answer in the knowledge base.")
+
+    async def handle_invitelink(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if update.effective_chat.type == "private":
+            return
+        chat = update.effective_chat
+        user = update.effective_user
+        try:
+            member = await context.bot.get_chat_member(chat.id, user.id)
+            if member.status not in ("administrator", "creator"):
+                await update.message.reply_text("⚠️ Only admins can create invite links.")
+                return
+        except Exception:
+            return
+        name = " ".join(context.args) if context.args else f"Link by {user.first_name}"
+        try:
+            link = await context.bot.create_chat_invite_link(chat_id=chat.id, name=name[:32])
+            group = self._get_group(chat.id)
+            if group:
+                with self.app_context.app_context():
+                    from .models import InviteLink, db
+                    il = InviteLink(group_id=group.id, name=name, telegram_invite_link=link.invite_link)
+                    db.session.add(il)
+                    db.session.commit()
+            await update.message.reply_text(
+                f"🔗 *Invite Link Created*\nName: {name}\nLink: {link.invite_link}",
+                parse_mode="Markdown",
+            )
+        except Exception as e:
+            await update.message.reply_text(f"❌ Failed to create invite link: {e}")
+
     async def handle_reaction(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         reaction = update.message_reaction
         if not reaction or not reaction.new_reaction:
@@ -998,6 +1053,8 @@ class BotInstance:
         app.add_handler(CommandHandler("removewarning", self.handle_removewarning))
         app.add_handler(CommandHandler("unwarn", self.handle_removewarning))
         app.add_handler(CommandHandler("groupinfo", self.handle_groupinfo))
+        app.add_handler(CommandHandler("ask", self.handle_ask))
+        app.add_handler(CommandHandler("invitelink", self.handle_invitelink))
         app.add_handler(MessageReactionHandler(self.handle_reaction))
         app.add_handler(ChatMemberHandler(self.handle_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))
         app.add_handler(MessageHandler(filters.StatusUpdate.ALL, self.handle_service_message))
@@ -1061,6 +1118,13 @@ class BotManager:
 
     def is_running(self, bot_id):
         return bot_id in self.active_bots
+
+    def get_knowledge_base(self):
+        # Return KB system from any active bot instance (they all share the same app context logic)
+        for instance in self.active_bots.values():
+            return instance.knowledge_base
+        # Fallback: create one without app context (will fail gracefully)
+        return None
 
     def start_all(self, app_context):
         with app_context.app_context():
