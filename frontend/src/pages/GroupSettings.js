@@ -82,7 +82,7 @@ export default function GroupSettings() {
 
   const [raidOpen, setRaidOpen] = useState(false);
 
-  const READONLY_TABS = [9, 10]; // Members, Audit Logs
+  const READONLY_TABS = [15, 16]; // Members, Audit Logs
 
   const fetchSettings = useCallback(async () => {
     try {
@@ -1036,7 +1036,7 @@ export default function GroupSettings() {
 
         {/* ── Knowledge Base Tab ── */}
         <TabPanel value={tab} index={11}>
-          <KnowledgeBase botId={botId} groupId={groupId} settings={settings} updateSetting={updateSetting} />
+          <KnowledgeBase botId={botId} groupId={groupId} settings={settingsData} updateSetting={updateSetting} />
         </TabPanel>
 
         {/* ── Polls Tab ── */}
