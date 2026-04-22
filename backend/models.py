@@ -103,6 +103,7 @@ class Group(db.Model):
     polls = db.relationship("Poll", backref="group", lazy=True, cascade="all, delete-orphan")
     webhook_integrations = db.relationship("WebhookIntegration", backref="group", lazy=True, cascade="all, delete-orphan")
     invite_links = db.relationship("InviteLink", backref="group", lazy=True, cascade="all, delete-orphan")
+    api_keys = db.relationship("UserApiKey", backref="group", lazy=True, cascade="all, delete-orphan")
 
     def to_dict(self):
         return {
@@ -374,9 +375,15 @@ class InviteLink(db.Model):
     expire_date = db.Column(db.DateTime, nullable=True)
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # Who created this link
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    created_by_telegram_id = db.Column(db.String(255), nullable=True)
+    created_by_username = db.Column(db.String(255), nullable=True)
 
-    def to_dict(self):
-        return {
+    joins = db.relationship("InviteLinkJoin", backref="invite_link", lazy=True, cascade="all, delete-orphan")
+
+    def to_dict(self, include_analytics=False):
+        data = {
             "id": self.id,
             "group_id": self.group_id,
             "name": self.name,
@@ -386,6 +393,72 @@ class InviteLink(db.Model):
             "expire_date": self.expire_date.isoformat() if self.expire_date else None,
             "is_active": self.is_active,
             "created_at": self.created_at.isoformat(),
+            "created_by_telegram_id": self.created_by_telegram_id,
+            "created_by_username": self.created_by_username,
+        }
+        if include_analytics:
+            from datetime import timedelta
+            now = datetime.utcnow()
+            joins_all = len(self.joins)
+            joins_1d = sum(1 for j in self.joins if j.joined_at >= now - timedelta(days=1))
+            joins_7d = sum(1 for j in self.joins if j.joined_at >= now - timedelta(days=7))
+            joins_30d = sum(1 for j in self.joins if j.joined_at >= now - timedelta(days=30))
+            data.update({
+                "joins_total": joins_all,
+                "joins_1d": joins_1d,
+                "joins_7d": joins_7d,
+                "joins_30d": joins_30d,
+            })
+        return data
+
+
+class UserApiKey(db.Model):
+    __tablename__ = "user_api_keys"
+
+    id = db.Column(db.Integer, primary_key=True)
+    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    provider = db.Column(db.String(50), nullable=False)  # openai|openrouter|anthropic|gemini|custom
+    api_key_encrypted = db.Column(db.Text, nullable=False)
+    base_url = db.Column(db.String(500), nullable=True)
+    model_name = db.Column(db.String(255), nullable=True)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    def to_dict(self):
+        from .utils.encryption import mask_key, decrypt_value
+        raw = decrypt_value(self.api_key_encrypted) if self.api_key_encrypted else ""
+        return {
+            "id": self.id,
+            "group_id": self.group_id,
+            "user_id": self.user_id,
+            "provider": self.provider,
+            "base_url": self.base_url,
+            "model_name": self.model_name,
+            "is_active": self.is_active,
+            "api_key_masked": mask_key(raw),
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+        }
+
+
+class InviteLinkJoin(db.Model):
+    __tablename__ = "invite_link_joins"
+
+    id = db.Column(db.Integer, primary_key=True)
+    invite_link_id = db.Column(db.Integer, db.ForeignKey("invite_links.id"), nullable=False)
+    joined_user_id = db.Column(db.String(255), nullable=False)
+    joined_username = db.Column(db.String(255), nullable=True)
+    joined_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "invite_link_id": self.invite_link_id,
+            "joined_user_id": self.joined_user_id,
+            "joined_username": self.joined_username,
+            "joined_at": self.joined_at.isoformat(),
         }
 
 

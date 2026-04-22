@@ -102,11 +102,25 @@ export const webhooks = {
 };
 
 export const invites = {
-  list: (botId, groupId) => api.get(`/api/bots/${botId}/groups/${groupId}/invite-links`),
+  list: (botId, groupId, params) =>
+    api.get(`/api/bots/${botId}/groups/${groupId}/invite-links`, { params }),
   create: (botId, groupId, data) =>
     api.post(`/api/bots/${botId}/groups/${groupId}/invite-links`, data),
   delete: (botId, groupId, linkId) =>
     api.delete(`/api/bots/${botId}/groups/${groupId}/invite-links/${linkId}`),
+  getLinkAnalytics: (botId, groupId, linkId, params) =>
+    api.get(`/api/bots/${botId}/groups/${groupId}/invite-links/${linkId}/analytics`, { params }),
+};
+
+export const apiKeys = {
+  get: (botId, groupId) =>
+    api.get(`/api/bots/${botId}/groups/${groupId}/api-keys`),
+  save: (botId, groupId, data) =>
+    api.post(`/api/bots/${botId}/groups/${groupId}/api-keys`, data),
+  delete: (botId, groupId) =>
+    api.delete(`/api/bots/${botId}/groups/${groupId}/api-keys`),
+  test: (botId, groupId, data) =>
+    api.post(`/api/bots/${botId}/groups/${groupId}/api-keys/test`, data),
 };
 
 export const analytics = {

@@ -159,6 +159,15 @@ def get_default_settings():
         "auto_responses": {
             "enabled": True,
         },
+        "knowledge_base": {
+            "enabled": True,
+            "auto_reply_enabled": False,
+            "auto_reply_mention_only": False,
+            "auto_reply_in_groups": True,
+            "confidence_threshold": 0.35,
+            "fallback_enabled": False,
+            "min_message_words": 5,
+        },
     }
 
 

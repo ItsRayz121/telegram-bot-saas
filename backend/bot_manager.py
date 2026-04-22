@@ -2,6 +2,7 @@ import asyncio
 import logging
 import threading
 from datetime import datetime, timedelta
+import re
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatPermissions
 )
@@ -779,13 +780,13 @@ class BotInstance:
         if not group.settings.get("knowledge_base", {}).get("enabled", True):
             return
         typing_msg = await update.message.reply_text("🔍 Searching knowledge base...")
-        answer = await self.knowledge_base.answer_question(question, group.id)
+        answer, confidence = await self.knowledge_base.answer_question(question, group.id)
         try:
             await context.bot.delete_message(chat_id=chat.id, message_id=typing_msg.message_id)
         except Exception:
             pass
         if answer:
-            await update.message.reply_text(f"💡 {answer}", parse_mode="Markdown")
+            await update.message.reply_text(answer, parse_mode="Markdown")
         else:
             await update.message.reply_text("I couldn't find an answer in the knowledge base.")
 
@@ -808,7 +809,13 @@ class BotInstance:
             if group:
                 with self.app_context.app_context():
                     from .models import InviteLink, db
-                    il = InviteLink(group_id=group.id, name=name, telegram_invite_link=link.invite_link)
+                    il = InviteLink(
+                        group_id=group.id,
+                        name=name,
+                        telegram_invite_link=link.invite_link,
+                        created_by_telegram_id=str(user.id),
+                        created_by_username=user.username,
+                    )
                     db.session.add(il)
                     db.session.commit()
             await update.message.reply_text(
@@ -970,6 +977,145 @@ class BotInstance:
                                 logger.error(f"Auto-response error: {e}")
                             break
 
+        # Automatic KB reply
+        kb_settings = group.settings.get("knowledge_base", {})
+        if kb_settings.get("enabled", True) and kb_settings.get("auto_reply_enabled", False):
+            await self._handle_auto_kb_reply(update, context, group, kb_settings)
+
+    def _is_kb_question(self, text: str, kb_settings: dict) -> bool:
+        """Classify whether a message looks like a knowledge-base question worth answering."""
+        if not text or not text.strip():
+            return False
+
+        # Skip commands
+        if text.startswith("/"):
+            return False
+
+        words = text.split()
+        min_words = kb_settings.get("min_message_words", 5)
+        if len(words) < min_words:
+            logger.debug(f"KB auto-reply: skipped (too short: {len(words)} words)")
+            return False
+
+        # Skip emoji-only or non-alphabetic messages
+        stripped = re.sub(r"[^\w\s]", "", text, flags=re.UNICODE)
+        if not stripped.strip():
+            logger.debug("KB auto-reply: skipped (no alphabetic content)")
+            return False
+
+        # Skip very common casual phrases (not exhaustive, just basic guard)
+        casual_patterns = [
+            r"^(hi|hello|hey|hiya|howdy|sup|yo|ok|okay|lol|lmao|haha|thanks|thank you|thx|np|yw|brb|gtg|bye|cya|gm|gn|gg)[\s!?.]*$",
+        ]
+        lower_text = text.lower().strip()
+        for pattern in casual_patterns:
+            if re.match(pattern, lower_text):
+                logger.debug(f"KB auto-reply: skipped (casual phrase: {lower_text!r})")
+                return False
+
+        return True
+
+    async def _handle_auto_kb_reply(self, update: Update, context: ContextTypes.DEFAULT_TYPE, group, kb_settings: dict):
+        """Handle automatic knowledge-base replies for qualifying messages."""
+        text = update.message.text or ""
+        bot_username = context.bot.username or ""
+
+        # Mention-only mode: only reply when bot is @mentioned or message is a reply to bot
+        if kb_settings.get("auto_reply_mention_only", False):
+            mentioned = f"@{bot_username}".lower() in text.lower() if bot_username else False
+            replied_to_bot = (
+                update.message.reply_to_message and
+                update.message.reply_to_message.from_user and
+                update.message.reply_to_message.from_user.username == bot_username
+            )
+            if not mentioned and not replied_to_bot:
+                return
+
+        # Group chat check
+        if not kb_settings.get("auto_reply_in_groups", True):
+            return
+
+        if not self._is_kb_question(text, kb_settings):
+            return
+
+        threshold = float(kb_settings.get("confidence_threshold", 0.35))
+
+        logger.debug(f"KB auto-reply: querying KB for group {group.id}, question: {text[:80]!r}")
+        answer, confidence = await self.knowledge_base.answer_question(text, group.id)
+
+        logger.debug(f"KB auto-reply: confidence={confidence:.3f}, threshold={threshold:.3f}")
+
+        if answer and confidence >= threshold:
+            logger.debug(f"KB auto-reply: replying (confidence={confidence:.3f})")
+            try:
+                await update.message.reply_text(answer, parse_mode="Markdown")
+            except Exception:
+                try:
+                    await update.message.reply_text(answer)
+                except Exception as e:
+                    logger.error(f"KB auto-reply send error: {e}")
+        elif kb_settings.get("fallback_enabled", False) and answer:
+            # Fallback: reply with a softer phrasing when confidence is low
+            logger.debug(f"KB auto-reply: low confidence fallback (confidence={confidence:.3f})")
+            try:
+                fallback_text = f"I found some related information, but I'm not fully certain: {answer}"
+                await update.message.reply_text(fallback_text)
+            except Exception as e:
+                logger.error(f"KB fallback reply error: {e}")
+        else:
+            logger.debug(f"KB auto-reply: no confident answer (confidence={confidence:.3f})")
+
+    async def handle_chat_member(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Track when users join via a tracked invite link."""
+        result = update.chat_member
+        if not result:
+            return
+
+        old_status = result.old_chat_member.status
+        new_status = result.new_chat_member.status
+
+        # Detect a fresh join (not already a member)
+        if old_status not in ("left", "kicked", "banned", "restricted") or new_status != "member":
+            return
+
+        chat_id = result.chat.id
+        group = self._get_group(chat_id)
+        if not group:
+            return
+
+        joined_user = result.new_chat_member.user
+        invite_link_obj = result.invite_link  # ChatInviteLink or None
+
+        if not invite_link_obj:
+            return
+
+        invite_link_url = invite_link_obj.invite_link
+        if not invite_link_url:
+            return
+
+        with self.app_context.app_context():
+            from .models import InviteLink, InviteLinkJoin, db
+            # Match against stored invite links by URL
+            link_record = InviteLink.query.filter_by(
+                group_id=group.id,
+                telegram_invite_link=invite_link_url,
+                is_active=True,
+            ).first()
+
+            if link_record:
+                join = InviteLinkJoin(
+                    invite_link_id=link_record.id,
+                    joined_user_id=str(joined_user.id),
+                    joined_username=joined_user.username,
+                )
+                db.session.add(join)
+                link_record.uses_count = (link_record.uses_count or 0) + 1
+                db.session.commit()
+                logger.debug(
+                    f"Invite join tracked: user {joined_user.id} via link '{link_record.name}' "
+                    f"(group {group.id})"
+                )
+
     async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
         if not query:
@@ -1057,6 +1203,7 @@ class BotInstance:
         app.add_handler(CommandHandler("invitelink", self.handle_invitelink))
         app.add_handler(MessageReactionHandler(self.handle_reaction))
         app.add_handler(ChatMemberHandler(self.handle_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))
+        app.add_handler(ChatMemberHandler(self.handle_chat_member, ChatMemberHandler.CHAT_MEMBER))
         app.add_handler(MessageHandler(filters.StatusUpdate.ALL, self.handle_service_message))
         app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, self.handle_new_member))
         app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, self.handle_message))

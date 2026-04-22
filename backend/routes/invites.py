@@ -1,9 +1,12 @@
 import asyncio
-from datetime import datetime
+import logging
+from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from ..models import db, User, Bot, Group, InviteLink
+from ..models import db, User, Bot, Group, InviteLink, InviteLinkJoin
 from ..middleware.rate_limit import rate_limit
+
+logger = logging.getLogger(__name__)
 
 invites_bp = Blueprint("invites", __name__, url_prefix="/api")
 
@@ -30,8 +33,25 @@ def list_invite_links(bot_id, group_id):
     _, group = _get_group(user, bot_id, group_id)
     if not group:
         return jsonify({"error": "Group not found"}), 404
+
+    time_filter = request.args.get("time_filter", "all")  # 1d | 7d | 30d | all
     links = InviteLink.query.filter_by(group_id=group.id).order_by(InviteLink.created_at.desc()).all()
-    return jsonify({"invite_links": [l.to_dict() for l in links]})
+
+    result = []
+    for link in links:
+        d = link.to_dict(include_analytics=True)
+        # Apply time filter to the "featured" count shown
+        if time_filter == "1d":
+            d["featured_joins"] = d["joins_1d"]
+        elif time_filter == "7d":
+            d["featured_joins"] = d["joins_7d"]
+        elif time_filter == "30d":
+            d["featured_joins"] = d["joins_30d"]
+        else:
+            d["featured_joins"] = d["joins_total"]
+        result.append(d)
+
+    return jsonify({"invite_links": result})
 
 
 @invites_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/invite-links", methods=["POST"])
@@ -64,6 +84,7 @@ def create_invite_link(bot_id, group_id):
         max_uses=int(max_uses) if max_uses else None,
         expire_date=expire_date,
         is_active=True,
+        created_by_user_id=user.id,
     )
     db.session.add(link)
     db.session.flush()
@@ -80,11 +101,10 @@ def create_invite_link(bot_id, group_id):
             tg_link = future.result(timeout=10)
             link.telegram_invite_link = tg_link
         except Exception as e:
-            import logging
-            logging.getLogger(__name__).error(f"Telegram invite link creation error: {e}")
+            logger.error(f"Telegram invite link creation error: {e}")
 
     db.session.commit()
-    return jsonify({"invite_link": link.to_dict()}), 201
+    return jsonify({"invite_link": link.to_dict(include_analytics=True)}), 201
 
 
 async def _create_telegram_link(instance, group, link, expire_date, max_uses):
@@ -96,7 +116,6 @@ async def _create_telegram_link(instance, group, link, expire_date, max_uses):
     if max_uses:
         kwargs["member_limit"] = int(max_uses)
     if expire_date:
-        import pytz
         kwargs["expire_date"] = expire_date
     result = await instance.application.bot.create_chat_invite_link(**kwargs)
     return result.invite_link
@@ -118,3 +137,37 @@ def delete_invite_link(bot_id, group_id, link_id):
     link.is_active = False
     db.session.commit()
     return jsonify({"success": True})
+
+
+@invites_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/invite-links/<int:link_id>/analytics", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def invite_link_analytics(bot_id, group_id, link_id):
+    """Return join events for a specific invite link, optionally filtered by time range."""
+    user = _get_current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    _, group = _get_group(user, bot_id, group_id)
+    if not group:
+        return jsonify({"error": "Group not found"}), 404
+
+    link = InviteLink.query.filter_by(id=link_id, group_id=group.id).first()
+    if not link:
+        return jsonify({"error": "Invite link not found"}), 404
+
+    now = datetime.utcnow()
+    joins_query = InviteLinkJoin.query.filter_by(invite_link_id=link.id)
+
+    time_filter = request.args.get("time_filter", "all")
+    if time_filter == "1d":
+        joins_query = joins_query.filter(InviteLinkJoin.joined_at >= now - timedelta(days=1))
+    elif time_filter == "7d":
+        joins_query = joins_query.filter(InviteLinkJoin.joined_at >= now - timedelta(days=7))
+    elif time_filter == "30d":
+        joins_query = joins_query.filter(InviteLinkJoin.joined_at >= now - timedelta(days=30))
+
+    joins = joins_query.order_by(InviteLinkJoin.joined_at.desc()).limit(100).all()
+    return jsonify({
+        "link": link.to_dict(include_analytics=True),
+        "joins": [j.to_dict() for j in joins],
+    })

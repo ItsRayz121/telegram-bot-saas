@@ -15,6 +15,7 @@ from .routes.knowledge import knowledge_bp
 from .routes.polls import polls_bp
 from .routes.webhooks import webhooks_bp
 from .routes.invites import invites_bp
+from .routes.api_keys import api_keys_bp
 from .bot_manager import BotManager
 
 bot_manager = BotManager()
@@ -41,6 +42,7 @@ def create_app():
     app.register_blueprint(polls_bp)
     app.register_blueprint(webhooks_bp)
     app.register_blueprint(invites_bp)
+    app.register_blueprint(api_keys_bp)
 
     app.bot_manager = bot_manager
 
@@ -68,11 +70,18 @@ def _run_migrations():
     """Add any missing columns to existing tables without dropping data."""
     migrations = [
         "ALTER TABLE groups ADD COLUMN IF NOT EXISTS telegram_member_count INTEGER DEFAULT 0",
+        # Invite link creator tracking
+        "ALTER TABLE invite_links ADD COLUMN IF NOT EXISTS created_by_user_id INTEGER",
+        "ALTER TABLE invite_links ADD COLUMN IF NOT EXISTS created_by_telegram_id VARCHAR(255)",
+        "ALTER TABLE invite_links ADD COLUMN IF NOT EXISTS created_by_username VARCHAR(255)",
     ]
     try:
         with db.engine.connect() as conn:
             for sql in migrations:
-                conn.execute(text(sql))
+                try:
+                    conn.execute(text(sql))
+                except Exception:
+                    pass
             conn.commit()
     except Exception:
         pass
