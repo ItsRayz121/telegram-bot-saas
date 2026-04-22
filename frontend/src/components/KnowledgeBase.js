@@ -117,16 +117,15 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
         base_url: keyForm.base_url || null,
         model_name: keyForm.model_name || DEFAULT_MODELS[keyForm.provider] || null,
       };
-      // Only include api_key if user typed something new (not the masked placeholder)
+      // Only include api_key if user typed something new (not masked or empty)
       if (keyForm.api_key.trim() && !keyForm.api_key.includes('****')) {
         payload.api_key = keyForm.api_key.trim();
       } else if (!savedApiKey) {
         toast.error('Please enter your API key');
         return;
-      } else {
-        // Re-save with stored key; pass a sentinel to signal "don't change key"
-        payload.api_key = savedApiKey.api_key_masked || '****keep****';
       }
+      // If savedApiKey exists and no new key entered, omit api_key from payload.
+      // Backend will keep the existing encrypted key and only update metadata.
       const res = await apiKeys.save(botId, groupId, payload);
       setSavedApiKey(res.data.api_key);
       setKeyForm(prev => ({ ...prev, api_key: '' }));

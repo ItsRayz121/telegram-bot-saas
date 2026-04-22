@@ -78,14 +78,28 @@ def save_api_key(bot_id, group_id):
 
     if not provider or provider not in VALID_PROVIDERS:
         return jsonify({"error": f"Provider must be one of: {', '.join(VALID_PROVIDERS)}"}), 400
-    if not api_key:
-        return jsonify({"error": "API key is required"}), 400
+
+    # Treat absent, empty, or masked api_key as "keep existing key"
+    keep_existing_key = not api_key or "****" in api_key
+
+    existing = UserApiKey.query.filter_by(group_id=group.id, is_active=True).first()
+
+    if keep_existing_key:
+        if not existing:
+            return jsonify({"error": "API key is required"}), 400
+        # Update metadata only — preserve the existing encrypted key
+        existing.provider = provider
+        existing.base_url = base_url
+        existing.model_name = model_name
+        from datetime import datetime
+        existing.updated_at = datetime.utcnow()
+        db.session.commit()
+        return jsonify({"api_key": existing.to_dict(), "message": "API key updated"})
 
     encrypted_key = encrypt_value(api_key)
     if not encrypted_key:
         return jsonify({"error": "Failed to encrypt API key. Check server configuration."}), 500
 
-    existing = UserApiKey.query.filter_by(group_id=group.id, is_active=True).first()
     if existing:
         existing.provider = provider
         existing.api_key_encrypted = encrypted_key

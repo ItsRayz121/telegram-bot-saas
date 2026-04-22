@@ -1,10 +1,21 @@
+import logging
 from datetime import datetime
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..models import db, User, Bot, Group, Member, AuditLog, ScheduledMessage, Raid, AutoResponse, ReportedMessage
 from ..middleware.rate_limit import rate_limit
 
+logger = logging.getLogger(__name__)
 settings_bp = Blueprint("settings", __name__, url_prefix="/api")
+
+
+def _deep_merge(base: dict, override: dict):
+    """Recursively merge override into base in-place, preserving nested dicts."""
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(base.get(key), dict):
+            _deep_merge(base[key], value)
+        else:
+            base[key] = value
 
 
 def _get_current_user():
@@ -48,9 +59,11 @@ def update_group_settings(bot_id, group_id):
     data = request.get_json()
     if not data:
         return jsonify({"error": "No data provided"}), 400
-    current = group.settings or {}
-    current.update(data)
+    current = dict(group.settings or {})
+    _deep_merge(current, data)
     group.settings = current
+    from sqlalchemy.orm.attributes import flag_modified
+    flag_modified(group, "settings")
     db.session.commit()
     return jsonify({"settings": group.settings, "message": "Settings updated"})
 
@@ -122,8 +135,12 @@ def get_scheduled_messages(bot_id, group_id):
     bot, group, err = _get_bot_and_group(user, bot_id, group_id)
     if err:
         return err
-    messages = ScheduledMessage.query.filter_by(group_id=group.id).order_by(ScheduledMessage.send_at).all()
-    return jsonify({"scheduled_messages": [m.to_dict() for m in messages]})
+    try:
+        messages = ScheduledMessage.query.filter_by(group_id=group.id).order_by(ScheduledMessage.send_at).all()
+        return jsonify({"scheduled_messages": [m.to_dict() for m in messages]})
+    except Exception as e:
+        logger.error(f"get_scheduled_messages error for group {group_id}: {e}", exc_info=True)
+        return jsonify({"error": f"Failed to load scheduled messages: {str(e)}"}), 500
 
 
 @settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/scheduled-messages", methods=["POST"])

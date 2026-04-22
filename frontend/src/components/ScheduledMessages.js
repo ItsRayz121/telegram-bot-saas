@@ -22,7 +22,9 @@ export default function ScheduledMessages({ botId, groupId }) {
     try {
       const res = await settings.getScheduledMessages(botId, groupId);
       setMessages(res.data.scheduled_messages || []);
-    } catch { toast.error('Failed to load scheduled messages'); }
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Failed to load scheduled messages');
+    }
   };
 
   useEffect(() => { load(); }, [botId, groupId]);

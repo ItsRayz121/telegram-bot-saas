@@ -800,7 +800,12 @@ class BotInstance:
             if member.status not in ("administrator", "creator"):
                 await update.message.reply_text("⚠️ Only admins can create invite links.")
                 return
-        except Exception:
+        except Exception as e:
+            logger.warning(f"handle_invitelink: could not verify admin status for user {user.id} in chat {chat.id}: {e}")
+            await update.message.reply_text(
+                "⚠️ Could not verify your admin status. "
+                "Make sure the bot is an admin with 'Invite Users via Link' permission."
+            )
             return
         name = " ".join(context.args) if context.args else f"Link by {user.first_name}"
         try:

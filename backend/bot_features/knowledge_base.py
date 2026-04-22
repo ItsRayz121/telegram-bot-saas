@@ -129,9 +129,16 @@ class KnowledgeBaseSystem:
             return None, "File appears to be empty"
 
         embeddings = self._embed(chunks, group_id=group_id)
+        if all(e is None for e in embeddings):
+            return None, (
+                "Embeddings failed: no AI API key is configured. "
+                "Add your OpenAI API key in the Knowledge Base → AI Provider & API Key section, "
+                "or set OPENAI_API_KEY on the server."
+            )
         chunk_data = [
             {"text": c, "embedding": e}
             for c, e in zip(chunks, embeddings)
+            if e is not None
         ]
 
         with self.app.app_context():

@@ -74,6 +74,14 @@ def _run_migrations():
         "ALTER TABLE invite_links ADD COLUMN IF NOT EXISTS created_by_user_id INTEGER",
         "ALTER TABLE invite_links ADD COLUMN IF NOT EXISTS created_by_telegram_id VARCHAR(255)",
         "ALTER TABLE invite_links ADD COLUMN IF NOT EXISTS created_by_username VARCHAR(255)",
+        # Scheduled messages — topic_id added later
+        "ALTER TABLE scheduled_messages ADD COLUMN IF NOT EXISTS topic_id BIGINT",
+        "ALTER TABLE scheduled_messages ADD COLUMN IF NOT EXISTS auto_delete_after INTEGER",
+        "ALTER TABLE scheduled_messages ADD COLUMN IF NOT EXISTS link_preview_enabled BOOLEAN DEFAULT TRUE",
+        # User API keys table columns
+        "ALTER TABLE user_api_keys ADD COLUMN IF NOT EXISTS base_url VARCHAR(500)",
+        "ALTER TABLE user_api_keys ADD COLUMN IF NOT EXISTS model_name VARCHAR(255)",
+        "ALTER TABLE user_api_keys ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()",
     ]
     try:
         with db.engine.connect() as conn:

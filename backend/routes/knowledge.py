@@ -1,5 +1,8 @@
 import secrets
+import logging
 from flask import Blueprint, request, jsonify
+
+logger = logging.getLogger(__name__)
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..models import db, User, Bot, Group, KnowledgeDocument
 from ..middleware.rate_limit import rate_limit
@@ -62,7 +65,11 @@ def upload_document(bot_id, group_id):
     from flask import current_app
     from ..bot_features.knowledge_base import KnowledgeBaseSystem
     kb = KnowledgeBaseSystem(current_app._get_current_object())
-    doc, error = kb.process_document(group.id, filename, ext, content_bytes)
+    try:
+        doc, error = kb.process_document(group.id, filename, ext, content_bytes)
+    except Exception as e:
+        logger.error(f"Knowledge base process_document error: {e}", exc_info=True)
+        return jsonify({"error": f"Processing failed: {str(e)}"}), 500
     if error:
         return jsonify({"error": error}), 400
 
