@@ -25,6 +25,15 @@ from .bot_features.knowledge_base import KnowledgeBaseSystem
 logger = logging.getLogger(__name__)
 
 
+async def _auto_delete(bot, chat_id, message_id, delay):
+    """Delete a message after `delay` seconds. Logs but does not raise on failure."""
+    await asyncio.sleep(delay)
+    try:
+        await bot.delete_message(chat_id=chat_id, message_id=message_id)
+    except Exception as e:
+        logger.debug(f"Auto-delete msg {message_id} in chat {chat_id}: {e}")
+
+
 class BotInstance:
 
     def __init__(self, bot_id, token, app_context):
@@ -247,11 +256,14 @@ class BotInstance:
 
         group = await self._get_or_create_group(update.effective_chat.id, update.effective_chat.title, context.bot)
 
+        auto_delete = group.settings.get("moderation", {}).get("auto_delete_action_seconds", 0)
         try:
             await context.bot.ban_chat_member(update.effective_chat.id, target.id)
-            await update.message.reply_text(
+            sent = await update.message.reply_text(
                 f"🚫 {target.first_name} has been banned.\nReason: {reason}"
             )
+            if auto_delete and sent:
+                asyncio.ensure_future(_auto_delete(context.bot, update.effective_chat.id, sent.message_id, auto_delete))
             with self.app_context.app_context():
                 from .database import DatabaseManager
                 DatabaseManager.log_action(
@@ -279,12 +291,15 @@ class BotInstance:
         reason = " ".join(context.args) if context.args else "No reason"
         group = await self._get_or_create_group(update.effective_chat.id, update.effective_chat.title, context.bot)
 
+        auto_delete = group.settings.get("moderation", {}).get("auto_delete_action_seconds", 0)
         try:
             await context.bot.ban_chat_member(update.effective_chat.id, target.id)
             await context.bot.unban_chat_member(update.effective_chat.id, target.id)
-            await update.message.reply_text(
+            sent = await update.message.reply_text(
                 f"👢 {target.first_name} has been kicked.\nReason: {reason}"
             )
+            if auto_delete and sent:
+                asyncio.ensure_future(_auto_delete(context.bot, update.effective_chat.id, sent.message_id, auto_delete))
             with self.app_context.app_context():
                 from .database import DatabaseManager
                 DatabaseManager.log_action(
@@ -321,6 +336,7 @@ class BotInstance:
         group = await self._get_or_create_group(update.effective_chat.id, update.effective_chat.title, context.bot)
         until_date = datetime.utcnow() + timedelta(minutes=duration)
 
+        auto_delete = group.settings.get("moderation", {}).get("auto_delete_action_seconds", 0)
         try:
             await context.bot.restrict_chat_member(
                 chat_id=update.effective_chat.id,
@@ -328,9 +344,11 @@ class BotInstance:
                 permissions=ChatPermissions(can_send_messages=False),
                 until_date=until_date,
             )
-            await update.message.reply_text(
+            sent = await update.message.reply_text(
                 f"🔇 {target.first_name} has been muted for {duration} minutes.\nReason: {reason}"
             )
+            if auto_delete and sent:
+                asyncio.ensure_future(_auto_delete(context.bot, update.effective_chat.id, sent.message_id, auto_delete))
             with self.app_context.app_context():
                 from .database import DatabaseManager
                 DatabaseManager.log_action(
@@ -358,6 +376,7 @@ class BotInstance:
 
         group = await self._get_or_create_group(update.effective_chat.id, update.effective_chat.title, context.bot)
 
+        auto_delete = group.settings.get("moderation", {}).get("auto_delete_action_seconds", 0)
         try:
             await context.bot.restrict_chat_member(
                 chat_id=update.effective_chat.id,
@@ -369,7 +388,9 @@ class BotInstance:
                     can_add_web_page_previews=True,
                 ),
             )
-            await update.message.reply_text(f"🔊 {target.first_name} has been unmuted.")
+            sent = await update.message.reply_text(f"🔊 {target.first_name} has been unmuted.")
+            if auto_delete and sent:
+                asyncio.ensure_future(_auto_delete(context.bot, update.effective_chat.id, sent.message_id, auto_delete))
             with self.app_context.app_context():
                 from .database import DatabaseManager
                 DatabaseManager.log_action(
@@ -402,15 +423,18 @@ class BotInstance:
         group = await self._get_or_create_group(update.effective_chat.id, update.effective_chat.title, context.bot)
         until_date = datetime.utcnow() + timedelta(hours=duration_hours)
 
+        auto_delete = group.settings.get("moderation", {}).get("auto_delete_action_seconds", 0)
         try:
             await context.bot.ban_chat_member(
                 chat_id=update.effective_chat.id,
                 user_id=target.id,
                 until_date=until_date,
             )
-            await update.message.reply_text(
+            sent = await update.message.reply_text(
                 f"⏳ {target.first_name} banned for {duration_hours}h.\nReason: {reason}"
             )
+            if auto_delete and sent:
+                asyncio.ensure_future(_auto_delete(context.bot, update.effective_chat.id, sent.message_id, auto_delete))
             with self.app_context.app_context():
                 from .database import DatabaseManager
                 DatabaseManager.log_action(

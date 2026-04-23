@@ -140,10 +140,12 @@ class ModerationSystem:
         await asyncio.sleep(delay_seconds)
         try:
             await bot.delete_message(chat_id=chat_id, message_id=message_id)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Auto-delete msg {message_id} in chat {chat_id}: {e}")
 
     async def check_automated_actions(self, bot, chat_id, user_id, username, group, action):
+        import asyncio as _asyncio
+        auto_delete = group.settings.get("moderation", {}).get("auto_delete_action_seconds", 0)
         try:
             if action == "ban":
                 days = group.settings.get("moderation", {}).get("ban_delete_days", 1)
@@ -152,10 +154,12 @@ class ModerationSystem:
                     user_id=user_id,
                     revoke_messages=days > 0,
                 )
-                await bot.send_message(
+                msg = await bot.send_message(
                     chat_id=chat_id,
                     text=f"🚫 {username or user_id} has been banned after reaching max warnings.",
                 )
+                if auto_delete and msg:
+                    _asyncio.ensure_future(self._delayed_delete(bot, chat_id, msg.message_id, auto_delete))
                 with self.app.app_context():
                     from ..database import DatabaseManager
                     DatabaseManager.log_action(
@@ -169,10 +173,12 @@ class ModerationSystem:
             elif action == "kick":
                 await bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
                 await bot.unban_chat_member(chat_id=chat_id, user_id=user_id)
-                await bot.send_message(
+                msg = await bot.send_message(
                     chat_id=chat_id,
                     text=f"👢 {username or user_id} has been kicked after reaching max warnings.",
                 )
+                if auto_delete and msg:
+                    _asyncio.ensure_future(self._delayed_delete(bot, chat_id, msg.message_id, auto_delete))
 
             elif action == "mute":
                 duration = group.settings.get("moderation", {}).get("mute_duration_minutes", 60)
@@ -183,10 +189,12 @@ class ModerationSystem:
                     permissions=ChatPermissions(can_send_messages=False),
                     until_date=until_date,
                 )
-                await bot.send_message(
+                msg = await bot.send_message(
                     chat_id=chat_id,
                     text=f"🔇 {username or user_id} has been muted for {duration} minutes after reaching max warnings.",
                 )
+                if auto_delete and msg:
+                    _asyncio.ensure_future(self._delayed_delete(bot, chat_id, msg.message_id, auto_delete))
 
         except Exception as e:
             logger.error(f"Automated action error: {e}")
@@ -587,6 +595,7 @@ class ModerationSystem:
 
     async def execute_automod_action(self, bot, message, group, action,
                                      reason="Automod", warn=False, mute_duration=10):
+        import asyncio as _asyncio
         chat_id = message.chat.id
         user_id = message.from_user.id if message.from_user else None
         username = message.from_user.username if message.from_user else None
@@ -598,6 +607,10 @@ class ModerationSystem:
 
         if not user_id:
             return
+
+        mod_settings = group.settings.get("moderation", {})
+        auto_delete_warn = mod_settings.get("auto_delete_warn_seconds", 0)
+        auto_delete_action = mod_settings.get("auto_delete_action_seconds", 0)
 
         with self.app.app_context():
             from ..database import DatabaseManager
@@ -612,12 +625,14 @@ class ModerationSystem:
                     reason=reason,
                 )
                 try:
-                    await bot.send_message(
+                    msg = await bot.send_message(
                         chat_id=chat_id,
                         text=f"⚠️ {username or user_id}: {reason} (Warning {total})",
                     )
-                except Exception:
-                    pass
+                    if auto_delete_warn and msg:
+                        _asyncio.ensure_future(self._delayed_delete(bot, chat_id, msg.message_id, auto_delete_warn))
+                except Exception as e:
+                    logger.error(f"AutoMod warn message error: {e}")
 
             elif action == "mute":
                 until_date = datetime.utcnow() + timedelta(minutes=mute_duration)
@@ -628,20 +643,24 @@ class ModerationSystem:
                         permissions=ChatPermissions(can_send_messages=False),
                         until_date=until_date,
                     )
-                    await bot.send_message(
+                    msg = await bot.send_message(
                         chat_id=chat_id,
                         text=f"🔇 {username or user_id} muted for {mute_duration}m: {reason}",
                     )
+                    if auto_delete_action and msg:
+                        _asyncio.ensure_future(self._delayed_delete(bot, chat_id, msg.message_id, auto_delete_action))
                 except Exception as e:
                     logger.error(f"Mute error: {e}")
 
             elif action == "ban":
                 try:
                     await bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
-                    await bot.send_message(
+                    msg = await bot.send_message(
                         chat_id=chat_id,
                         text=f"🚫 {username or user_id} banned: {reason}",
                     )
+                    if auto_delete_action and msg:
+                        _asyncio.ensure_future(self._delayed_delete(bot, chat_id, msg.message_id, auto_delete_action))
                 except Exception as e:
                     logger.error(f"Ban error: {e}")
 
