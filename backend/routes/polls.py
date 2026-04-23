@@ -58,7 +58,9 @@ def create_poll(bot_id, group_id):
     if is_quiz and (correct_idx is None or not (0 <= int(correct_idx) < len(options))):
         return jsonify({"error": "Quiz requires a valid correct_option_index"}), 400
 
-    tz_name = (data.get("timezone") or "UTC").strip()
+    # Use the group's saved default timezone when the caller doesn't specify one.
+    group_default_tz = (group.settings or {}).get("timezone", "UTC") if group.settings else "UTC"
+    tz_name = (data.get("timezone") or group_default_tz or "UTC").strip()
     scheduled_at = None
     if data.get("scheduled_at"):
         try:

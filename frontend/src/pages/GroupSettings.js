@@ -9,7 +9,7 @@ import {
   DialogContent, DialogActions, Tooltip, Alert,
 } from '@mui/material';
 import {
-  ArrowBack, Save, Add, ExpandMore, Delete, CheckCircle,
+  ArrowBack, Save, Add, ExpandMore, Delete, CheckCircle, Schedule,
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -24,6 +24,38 @@ import TimezoneSelect from '../components/TimezoneSelect';
 
 function TabPanel({ children, value, index }) {
   return value === index ? <Box sx={{ pt: 3 }}>{children}</Box> : null;
+}
+
+function DefaultTimezoneCard({ value, onChange }) {
+  return (
+    <Card sx={{ mb: 2 }}>
+      <CardContent>
+        <Typography variant="subtitle1" fontWeight={600} mb={0.5}>Group Default Timezone</Typography>
+        <Typography variant="body2" color="text.secondary" mb={2}>
+          Saved per this group. All new scheduled items in this group use it automatically.
+          You can still override the timezone per individual item.
+        </Typography>
+        <Grid container spacing={2} alignItems="center">
+          <Grid item xs={12} sm={6}>
+            <TimezoneSelect value={value} onChange={onChange} label="Default Timezone" size="medium" />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <Typography variant="caption" color="text.secondary">
+              Current time in this timezone:{' '}
+              <strong>
+                {new Date().toLocaleString('en-GB', {
+                  timeZone: value || 'UTC',
+                  year: 'numeric', month: '2-digit', day: '2-digit',
+                  hour: '2-digit', minute: '2-digit', second: '2-digit',
+                  hour12: false,
+                })}
+              </strong>
+            </Typography>
+          </Grid>
+        </Grid>
+      </CardContent>
+    </Card>
+  );
 }
 
 const ACTION_COLORS = {
@@ -245,6 +277,17 @@ export default function GroupSettings() {
           <Typography variant="h6" fontWeight={600} sx={{ flexGrow: 1 }}>
             {groupData?.group_name || 'Group Settings'}
           </Typography>
+          {settingsData && (
+            <Tooltip title="Group default timezone — change it in the Scheduled tab">
+              <Chip
+                icon={<Schedule sx={{ fontSize: 14 }} />}
+                label={settingsData.timezone || 'UTC'}
+                size="small"
+                variant="outlined"
+                sx={{ mr: 1.5, fontSize: 11, color: 'inherit', borderColor: 'rgba(255,255,255,0.4)', cursor: 'default' }}
+              />
+            </Tooltip>
+          )}
           <Button
             variant="contained"
             startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <Save />}
@@ -1055,35 +1098,10 @@ export default function GroupSettings() {
 
         {/* ── Scheduled Messages Tab ── */}
         <TabPanel value={tab} index={10}>
-          <Card sx={{ mb: 2 }}>
-            <CardContent>
-              <Typography variant="subtitle1" fontWeight={600} mb={1}>Default Timezone</Typography>
-              <Typography variant="body2" color="text.secondary" mb={2}>
-                Used as the default for all scheduled messages and polls in this group. You can override it per item.
-              </Typography>
-              <Grid container spacing={2} alignItems="center">
-                <Grid item xs={12} sm={6}>
-                  <TimezoneSelect
-                    value={settingsData?.timezone || 'UTC'}
-                    onChange={tz => updateSetting('timezone', tz)}
-                    label="Group Default Timezone"
-                    size="medium"
-                  />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="caption" color="text.secondary">
-                    Current time in this timezone:{' '}
-                    <strong>
-                      {new Date().toLocaleString('en-GB', {
-                        timeZone: settingsData?.timezone || 'UTC',
-                        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
-                      })}
-                    </strong>
-                  </Typography>
-                </Grid>
-              </Grid>
-            </CardContent>
-          </Card>
+          <DefaultTimezoneCard
+            value={settingsData?.timezone || 'UTC'}
+            onChange={tz => updateSetting('timezone', tz)}
+          />
           <ScheduledMessages botId={botId} groupId={groupId} defaultTimezone={settingsData?.timezone || 'UTC'} />
         </TabPanel>
 
@@ -1094,6 +1112,10 @@ export default function GroupSettings() {
 
         {/* ── Polls Tab ── */}
         <TabPanel value={tab} index={12}>
+          <DefaultTimezoneCard
+            value={settingsData?.timezone || 'UTC'}
+            onChange={tz => updateSetting('timezone', tz)}
+          />
           <PollCreator botId={botId} groupId={groupId} defaultTimezone={settingsData?.timezone || 'UTC'} />
         </TabPanel>
 

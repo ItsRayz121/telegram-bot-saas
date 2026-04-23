@@ -173,17 +173,32 @@ def _run_scheduled_messages():
         ScheduledMessage.is_sent == False,
     ).all()
 
+    if pending:
+        _scheduler_log.info(f"[SCHEDULER] {len(pending)} scheduled message(s) due at {now.strftime('%Y-%m-%d %H:%M:%S')} UTC")
+
     for msg in pending:
         group = Group.query.get(msg.group_id)
         if not group:
+            _scheduler_log.warning(f"[SCHEDULER] msg id={msg.id} skipped — group {msg.group_id} not found")
             continue
         bot = Bot.query.get(group.bot_id)
         if not bot or not bot.is_active:
+            _scheduler_log.warning(f"[SCHEDULER] msg id={msg.id} skipped — bot not active for group {group.id}")
             continue
         instance = bot_manager.active_bots.get(bot.id)
         if not instance or not instance.application:
-            _scheduler_log.warning(f"Bot {bot.id} not running — skipping scheduled msg {msg.id}")
+            _scheduler_log.warning(
+                f"[SCHEDULER] msg id={msg.id} title='{msg.title}' skipped — "
+                f"bot {bot.id} not running (active_bots={list(bot_manager.active_bots.keys())})"
+            )
             continue
+
+        # Effective timezone: per-item if set, otherwise group default
+        effective_tz = msg.timezone or (group.settings or {}).get("timezone", "UTC") or "UTC"
+        _scheduler_log.info(
+            f"[SCHEDULER] Sending msg id={msg.id} title='{msg.title}' "
+            f"tz={effective_tz} send_at_utc={msg.send_at} group={group.id}"
+        )
 
         async def _send(m=msg, g=group, b=instance):
             try:
@@ -238,7 +253,7 @@ def _run_scheduled_messages():
 
     if pending:
         db.session.commit()
-        _scheduler_log.info(f"Processed {len(pending)} scheduled messages")
+        _scheduler_log.info(f"[SCHEDULER] Finished processing {len(pending)} scheduled messages")
 
 
 def _run_scheduled_polls():
@@ -252,17 +267,31 @@ def _run_scheduled_polls():
         Poll.is_sent == False,
     ).all()
 
+    if pending:
+        _scheduler_log.info(f"[SCHEDULER] {len(pending)} scheduled poll(s) due at {now.strftime('%Y-%m-%d %H:%M:%S')} UTC")
+
     for poll in pending:
         group = Group.query.get(poll.group_id)
         if not group:
+            _scheduler_log.warning(f"[SCHEDULER] poll id={poll.id} skipped — group {poll.group_id} not found")
             continue
         bot = Bot.query.get(group.bot_id)
         if not bot or not bot.is_active:
+            _scheduler_log.warning(f"[SCHEDULER] poll id={poll.id} skipped — bot not active for group {group.id}")
             continue
         instance = bot_manager.active_bots.get(bot.id)
         if not instance or not instance.application:
-            _scheduler_log.warning(f"Bot {bot.id} not running — skipping scheduled poll {poll.id}")
+            _scheduler_log.warning(
+                f"[SCHEDULER] poll id={poll.id} skipped — "
+                f"bot {bot.id} not running (active_bots={list(bot_manager.active_bots.keys())})"
+            )
             continue
+
+        effective_tz = poll.timezone or (group.settings or {}).get("timezone", "UTC") or "UTC"
+        _scheduler_log.info(
+            f"[SCHEDULER] Sending poll id={poll.id} q='{poll.question[:40]}' "
+            f"tz={effective_tz} scheduled_at_utc={poll.scheduled_at} group={group.id}"
+        )
 
         async def _send(p=poll, g=group, b=instance):
             try:
@@ -291,7 +320,7 @@ def _run_scheduled_polls():
 
     if pending:
         db.session.commit()
-        _scheduler_log.info(f"Processed {len(pending)} scheduled polls")
+        _scheduler_log.info(f"[SCHEDULER] Finished processing {len(pending)} scheduled polls")
 
 
 app = create_app()

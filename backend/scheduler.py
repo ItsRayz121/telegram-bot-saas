@@ -53,7 +53,15 @@ celery = make_celery()
 
 @celery.task(name="backend.scheduler.send_scheduled_messages")
 def send_scheduled_messages():
-    try:
+    # NOTE: Delivery is handled by the in-process _scheduler_loop in app.py which
+    # has direct access to the running bot instances.  Celery workers run in a
+    # separate process where bot_manager.active_bots is always empty, so sending
+    # from here would silently skip every job.  This task is kept as a no-op so
+    # the beat schedule does not produce errors if a Celery worker is started.
+    logger.info("[celery:send_scheduled_messages] deferred to in-process scheduler")
+    return
+
+    try:  # pragma: no cover – unreachable; kept for reference
         from .app import create_app
         app = create_app()
 
@@ -146,7 +154,10 @@ def send_scheduled_messages():
 
 @celery.task(name="backend.scheduler.send_scheduled_polls")
 def send_scheduled_polls():
-    try:
+    logger.info("[celery:send_scheduled_polls] deferred to in-process scheduler")
+    return
+
+    try:  # pragma: no cover – unreachable; kept for reference
         from .app import create_app
         app = create_app()
         with app.app_context():

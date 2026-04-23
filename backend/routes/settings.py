@@ -181,7 +181,9 @@ def create_scheduled_message(bot_id, group_id):
         for field in required:
             if not data.get(field):
                 return jsonify({"error": f"{field} is required"}), 400
-        tz_name = (data.get("timezone") or "UTC").strip()
+        # Use the group's saved default timezone when the caller doesn't specify one.
+        group_default_tz = (group.settings or {}).get("timezone", "UTC") if group.settings else "UTC"
+        tz_name = (data.get("timezone") or group_default_tz or "UTC").strip()
 
         def _parse_dt_tz(s, tz=tz_name):
             """Convert a datetime string to a naive UTC datetime.
