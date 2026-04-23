@@ -120,6 +120,9 @@ def _run_migrations():
         # Wallet submission columns
         "ALTER TABLE members ADD COLUMN wallet_address VARCHAR(500)",
         "ALTER TABLE members ADD COLUMN wallet_submitted_at TIMESTAMP",
+        # Timezone support
+        "ALTER TABLE scheduled_messages ADD COLUMN timezone VARCHAR(50) DEFAULT 'UTC'",
+        "ALTER TABLE polls ADD COLUMN timezone VARCHAR(50) DEFAULT 'UTC'",
     ]
     try:
         with db.engine.connect() as conn:

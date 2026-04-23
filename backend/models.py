@@ -206,6 +206,7 @@ class ScheduledMessage(db.Model):
     auto_delete_after = db.Column(db.Integer, nullable=True)
     link_preview_enabled = db.Column(db.Boolean, default=True)
     topic_id = db.Column(db.BigInteger, nullable=True)
+    timezone = db.Column(db.String(50), nullable=False, default='UTC', server_default='UTC')
     is_sent = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
@@ -217,15 +218,16 @@ class ScheduledMessage(db.Model):
             "message_text": self.message_text,
             "media_url": self.media_url,
             "buttons": self.buttons,
-            "send_at": self.send_at.isoformat(),
+            "send_at": self.send_at.isoformat() + "Z",
             "repeat_interval": self.repeat_interval,
-            "stop_date": self.stop_date.isoformat() if self.stop_date else None,
+            "stop_date": (self.stop_date.isoformat() + "Z") if self.stop_date else None,
             "pin_message": self.pin_message,
             "auto_delete_after": self.auto_delete_after,
             "link_preview_enabled": self.link_preview_enabled,
             "topic_id": self.topic_id,
+            "timezone": self.timezone or "UTC",
             "is_sent": self.is_sent,
-            "created_at": self.created_at.isoformat(),
+            "created_at": self.created_at.isoformat() + "Z",
         }
 
 
@@ -322,6 +324,7 @@ class Poll(db.Model):
     allows_multiple = db.Column(db.Boolean, default=False)
     explanation = db.Column(db.String(200), nullable=True)
     scheduled_at = db.Column(db.DateTime, nullable=True)
+    timezone = db.Column(db.String(50), nullable=True, default='UTC', server_default='UTC')
     is_sent = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -336,9 +339,10 @@ class Poll(db.Model):
             "is_anonymous": self.is_anonymous,
             "allows_multiple": self.allows_multiple,
             "explanation": self.explanation,
-            "scheduled_at": self.scheduled_at.isoformat() if self.scheduled_at else None,
+            "scheduled_at": (self.scheduled_at.isoformat() + "Z") if self.scheduled_at else None,
+            "timezone": self.timezone or "UTC",
             "is_sent": self.is_sent,
-            "created_at": self.created_at.isoformat(),
+            "created_at": self.created_at.isoformat() + "Z",
         }
 
 

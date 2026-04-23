@@ -4,20 +4,26 @@ import {
   Switch, FormControlLabel, Dialog, DialogTitle, DialogContent,
   DialogActions, IconButton, Chip, Select, MenuItem, FormControl,
   InputLabel, Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, Paper,
+  TableHead, TableRow, Paper, Tooltip,
 } from '@mui/material';
-import { Add, Delete, HowToVote, Quiz, Close } from '@mui/icons-material';
+import { Add, Delete, HowToVote, Quiz, Close, AccessTime } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { polls } from '../services/api';
+import TimezoneSelect, { formatInTimezone } from './TimezoneSelect';
 
-export default function PollCreator({ botId, groupId }) {
+export default function PollCreator({ botId, groupId, defaultTimezone }) {
   const [pollList, setPollList] = useState([]);
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({
+
+  const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  const initialTz = defaultTimezone || browserTz;
+
+  const emptyForm = {
     question: '', options: ['', ''], is_quiz: false,
     correct_option_index: 0, is_anonymous: true, allows_multiple: false,
-    explanation: '', scheduled_at: '',
-  });
+    explanation: '', scheduled_at: '', timezone: initialTz,
+  };
+  const [form, setForm] = useState(emptyForm);
 
   const load = async () => {
     try {
@@ -27,6 +33,10 @@ export default function PollCreator({ botId, groupId }) {
   };
 
   useEffect(() => { load(); }, [botId, groupId]);
+
+  useEffect(() => {
+    setForm(prev => ({ ...prev, timezone: defaultTimezone || browserTz }));
+  }, [defaultTimezone]);
 
   const addOption = () => {
     if (form.options.length >= 10) return;
@@ -50,11 +60,12 @@ export default function PollCreator({ botId, groupId }) {
       await polls.create(botId, groupId, {
         ...form,
         options: filledOptions,
-        scheduled_at: form.scheduled_at ? new Date(form.scheduled_at).toISOString() : null,
+        scheduled_at: form.scheduled_at || null,     // raw local datetime
+        timezone: form.scheduled_at ? form.timezone : null,
       });
       toast.success(form.scheduled_at ? 'Poll scheduled' : 'Poll sent to group');
       setOpen(false);
-      setForm({ question: '', options: ['', ''], is_quiz: false, correct_option_index: 0, is_anonymous: true, allows_multiple: false, explanation: '', scheduled_at: '' });
+      setForm(emptyForm);
       load();
     } catch (e) { toast.error(e.response?.data?.error || 'Failed to create poll'); }
   };
@@ -98,10 +109,24 @@ export default function PollCreator({ botId, groupId }) {
                   </TableCell>
                   <TableCell><Typography variant="body2">{(p.options || []).length} options</Typography></TableCell>
                   <TableCell>
-                    <Typography variant="body2">{p.scheduled_at ? new Date(p.scheduled_at).toLocaleString() : '—'}</Typography>
+                    {p.scheduled_at ? (
+                      <Tooltip title={`UTC: ${p.scheduled_at}`}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <AccessTime sx={{ fontSize: 14, color: 'text.secondary' }} />
+                          <Typography variant="body2">
+                            {formatInTimezone(p.scheduled_at, p.timezone)}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>
+                            ({p.timezone || 'UTC'})
+                          </Typography>
+                        </Box>
+                      </Tooltip>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">Instant</Typography>
+                    )}
                   </TableCell>
                   <TableCell>
-                    <Chip label={p.is_sent ? 'Sent' : 'Pending'} size="small" color={p.is_sent ? 'success' : 'warning'} />
+                    <Chip label={p.is_sent ? 'Sent' : (p.scheduled_at ? 'Pending' : '—')} size="small" color={p.is_sent ? 'success' : 'warning'} />
                   </TableCell>
                   <TableCell>
                     <IconButton size="small" color="error" onClick={() => handleDelete(p.id)}><Delete fontSize="small" /></IconButton>
@@ -166,11 +191,20 @@ export default function PollCreator({ botId, groupId }) {
                 <FormControlLabel control={<Switch checked={form.allows_multiple} onChange={e => setForm(p => ({ ...p, allows_multiple: e.target.checked }))} />} label="Multiple answers" />
               </Grid>
             )}
-            <Grid item xs={12}>
+            <Grid item xs={12} sm={6}>
               <TextField fullWidth type="datetime-local" label="Schedule (leave blank to send now)"
                 InputLabelProps={{ shrink: true }} value={form.scheduled_at}
                 onChange={e => setForm(p => ({ ...p, scheduled_at: e.target.value }))} />
             </Grid>
+            {form.scheduled_at && (
+              <Grid item xs={12} sm={6}>
+                <TimezoneSelect
+                  value={form.timezone}
+                  onChange={tz => setForm(p => ({ ...p, timezone: tz }))}
+                  label="Timezone"
+                />
+              </Grid>
+            )}
           </Grid>
         </DialogContent>
         <DialogActions>

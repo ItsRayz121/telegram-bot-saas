@@ -20,6 +20,7 @@ import KnowledgeBase from '../components/KnowledgeBase';
 import PollCreator from '../components/PollCreator';
 import WebhookManager from '../components/WebhookManager';
 import InviteLinks from '../components/InviteLinks';
+import TimezoneSelect from '../components/TimezoneSelect';
 
 function TabPanel({ children, value, index }) {
   return value === index ? <Box sx={{ pt: 3 }}>{children}</Box> : null;
@@ -1054,7 +1055,36 @@ export default function GroupSettings() {
 
         {/* ── Scheduled Messages Tab ── */}
         <TabPanel value={tab} index={10}>
-          <ScheduledMessages botId={botId} groupId={groupId} />
+          <Card sx={{ mb: 2 }}>
+            <CardContent>
+              <Typography variant="subtitle1" fontWeight={600} mb={1}>Default Timezone</Typography>
+              <Typography variant="body2" color="text.secondary" mb={2}>
+                Used as the default for all scheduled messages and polls in this group. You can override it per item.
+              </Typography>
+              <Grid container spacing={2} alignItems="center">
+                <Grid item xs={12} sm={6}>
+                  <TimezoneSelect
+                    value={settingsData?.timezone || 'UTC'}
+                    onChange={tz => updateSetting('timezone', tz)}
+                    label="Group Default Timezone"
+                    size="medium"
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="caption" color="text.secondary">
+                    Current time in this timezone:{' '}
+                    <strong>
+                      {new Date().toLocaleString('en-GB', {
+                        timeZone: settingsData?.timezone || 'UTC',
+                        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+                      })}
+                    </strong>
+                  </Typography>
+                </Grid>
+              </Grid>
+            </CardContent>
+          </Card>
+          <ScheduledMessages botId={botId} groupId={groupId} defaultTimezone={settingsData?.timezone || 'UTC'} />
         </TabPanel>
 
         {/* ── Knowledge Base Tab ── */}
@@ -1064,7 +1094,7 @@ export default function GroupSettings() {
 
         {/* ── Polls Tab ── */}
         <TabPanel value={tab} index={12}>
-          <PollCreator botId={botId} groupId={groupId} />
+          <PollCreator botId={botId} groupId={groupId} defaultTimezone={settingsData?.timezone || 'UTC'} />
         </TabPanel>
 
         {/* ── Webhooks Tab ── */}

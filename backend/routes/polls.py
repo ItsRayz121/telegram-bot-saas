@@ -58,14 +58,33 @@ def create_poll(bot_id, group_id):
     if is_quiz and (correct_idx is None or not (0 <= int(correct_idx) < len(options))):
         return jsonify({"error": "Quiz requires a valid correct_option_index"}), 400
 
+    tz_name = (data.get("timezone") or "UTC").strip()
     scheduled_at = None
     if data.get("scheduled_at"):
         try:
-            dt = datetime.fromisoformat(data["scheduled_at"].replace("Z", "+00:00"))
-            if dt.tzinfo is not None:
-                from datetime import timezone
-                dt = dt.astimezone(timezone.utc)
-            scheduled_at = dt.replace(tzinfo=None)
+            from zoneinfo import ZoneInfo
+            s = data["scheduled_at"].strip()
+            has_tz_info = s.endswith("Z") or (
+                "T" in s and ("+" in s[10:] or s.count("-") > 2)
+            )
+            if has_tz_info:
+                s = s.replace("Z", "+00:00")
+                if len(s) == 16:
+                    s += ":00"
+                dt = datetime.fromisoformat(s)
+                if dt.tzinfo is not None:
+                    from datetime import timezone as _stdtz
+                    dt = dt.astimezone(_stdtz.utc)
+                scheduled_at = dt.replace(tzinfo=None)
+            else:
+                if len(s) == 16:
+                    s += ":00"
+                try:
+                    zone = ZoneInfo(tz_name)
+                except Exception:
+                    zone = ZoneInfo("UTC")
+                local_dt = datetime.fromisoformat(s).replace(tzinfo=zone)
+                scheduled_at = local_dt.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
         except Exception:
             return jsonify({"error": "Invalid scheduled_at format"}), 400
 
@@ -79,6 +98,7 @@ def create_poll(bot_id, group_id):
         allows_multiple=bool(data.get("allows_multiple", False)) and not is_quiz,
         explanation=(data.get("explanation") or "")[:200] or None,
         scheduled_at=scheduled_at,
+        timezone=tz_name if scheduled_at else None,
         is_sent=False,
     )
     db.session.add(poll)

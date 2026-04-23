@@ -4,6 +4,7 @@ from .models import db, Group, Member, AuditLog
 
 def get_default_settings():
     return {
+        "timezone": "UTC",
         "verification": {
             "enabled": False,
             "method": "button",

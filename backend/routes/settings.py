@@ -181,24 +181,47 @@ def create_scheduled_message(bot_id, group_id):
         for field in required:
             if not data.get(field):
                 return jsonify({"error": f"{field} is required"}), 400
-        def _parse_dt(s):
-            s = s.replace("Z", "+00:00")
+        tz_name = (data.get("timezone") or "UTC").strip()
+
+        def _parse_dt_tz(s, tz=tz_name):
+            """Convert a datetime string to a naive UTC datetime.
+
+            If the string already carries a UTC offset (ISO 8601 with Z or +HH:MM)
+            it is converted directly to UTC.  Otherwise the string is treated as
+            local time in *tz* and converted accordingly.
+            """
+            from zoneinfo import ZoneInfo
+            s = str(s).strip()
+            has_tz_info = s.endswith("Z") or (
+                "T" in s and ("+" in s[10:] or s.count("-") > 2)
+            )
+            if has_tz_info:
+                s = s.replace("Z", "+00:00")
+                if len(s) == 16:
+                    s += ":00"
+                dt = datetime.fromisoformat(s)
+                if dt.tzinfo is not None:
+                    from datetime import timezone as _stdtz
+                    dt = dt.astimezone(_stdtz.utc).replace(tzinfo=None)
+                return dt
+            # Plain local datetime — apply given timezone
             if len(s) == 16:
                 s += ":00"
-            dt = datetime.fromisoformat(s)
-            if dt.tzinfo is not None:
-                from datetime import timezone
-                dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
-            return dt
+            try:
+                zone = ZoneInfo(tz)
+            except Exception:
+                zone = ZoneInfo("UTC")
+            local_dt = datetime.fromisoformat(s).replace(tzinfo=zone)
+            return local_dt.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
 
         try:
-            send_at = _parse_dt(data["send_at"])
+            send_at = _parse_dt_tz(data["send_at"])
         except ValueError:
             return jsonify({"error": "Invalid send_at format"}), 400
         stop_date = None
         if data.get("stop_date"):
             try:
-                stop_date = _parse_dt(data["stop_date"])
+                stop_date = _parse_dt_tz(data["stop_date"])
             except ValueError:
                 return jsonify({"error": "Invalid stop_date format"}), 400
         msg = ScheduledMessage(
@@ -214,6 +237,7 @@ def create_scheduled_message(bot_id, group_id):
             auto_delete_after=data.get("auto_delete_after"),
             link_preview_enabled=data.get("link_preview_enabled", True),
             topic_id=data.get("topic_id"),
+            timezone=tz_name,
         )
         db.session.add(msg)
         db.session.commit()
