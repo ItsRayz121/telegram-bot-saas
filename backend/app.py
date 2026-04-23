@@ -1,5 +1,7 @@
 import os
 import threading
+import logging
+from datetime import datetime, timedelta
 from flask import Flask, jsonify
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
@@ -18,6 +20,8 @@ from .routes.webhooks import webhooks_bp
 from .routes.invites import invites_bp
 from .routes.api_keys import api_keys_bp
 from .bot_manager import BotManager
+
+_scheduler_log = logging.getLogger(__name__)
 
 bot_manager = BotManager()
 
@@ -84,6 +88,11 @@ def create_app():
 
     threading.Thread(target=_deferred_bot_start, daemon=True).start()
 
+    # In-process scheduler: runs every 60 s inside the web process so that
+    # scheduled messages and polls are delivered even when no separate Celery
+    # worker is running on Railway.
+    threading.Thread(target=_scheduler_loop, args=(app,), daemon=True).start()
+
     return app
 
 
@@ -136,6 +145,150 @@ def _restart_active_bots(app):
             bot_manager.start_bot(bot.id, bot.bot_token, app)
     except Exception:
         pass
+
+
+def _scheduler_loop(app):
+    import time
+    time.sleep(15)  # Wait for bots to fully start
+    while True:
+        try:
+            with app.app_context():
+                _run_scheduled_messages()
+                _run_scheduled_polls()
+        except Exception as exc:
+            _scheduler_log.error(f"Scheduler loop error: {exc}")
+        time.sleep(60)
+
+
+def _run_scheduled_messages():
+    import asyncio
+    from .models import db, ScheduledMessage, Group, Bot
+
+    now = datetime.utcnow()
+    pending = ScheduledMessage.query.filter(
+        ScheduledMessage.send_at <= now,
+        ScheduledMessage.is_sent == False,
+    ).all()
+
+    for msg in pending:
+        group = Group.query.get(msg.group_id)
+        if not group:
+            continue
+        bot = Bot.query.get(group.bot_id)
+        if not bot or not bot.is_active:
+            continue
+        instance = bot_manager.active_bots.get(bot.id)
+        if not instance or not instance.application:
+            _scheduler_log.warning(f"Bot {bot.id} not running — skipping scheduled msg {msg.id}")
+            continue
+
+        async def _send(m=msg, g=group, b=instance):
+            try:
+                from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+                keyboard = None
+                if m.buttons:
+                    rows = []
+                    for row in m.buttons:
+                        btn_row = []
+                        for btn in row:
+                            if btn.get("url"):
+                                btn_row.append(InlineKeyboardButton(btn["text"], url=btn["url"]))
+                            else:
+                                btn_row.append(InlineKeyboardButton(btn["text"], callback_data=btn.get("callback_data", "noop")))
+                        rows.append(btn_row)
+                    keyboard = InlineKeyboardMarkup(rows)
+                send_kwargs = {
+                    "chat_id": g.telegram_group_id,
+                    "text": m.message_text,
+                    "parse_mode": "Markdown",
+                    "reply_markup": keyboard,
+                    "disable_web_page_preview": not getattr(m, "link_preview_enabled", True),
+                }
+                if getattr(m, "topic_id", None):
+                    send_kwargs["message_thread_id"] = m.topic_id
+                sent = await b.application.bot.send_message(**send_kwargs)
+                if m.pin_message:
+                    await b.application.bot.pin_chat_message(
+                        chat_id=g.telegram_group_id,
+                        message_id=sent.message_id,
+                    )
+                if m.auto_delete_after:
+                    import asyncio as _as
+                    await _as.sleep(m.auto_delete_after)
+                    await b.application.bot.delete_message(
+                        chat_id=g.telegram_group_id,
+                        message_id=sent.message_id,
+                    )
+            except Exception as exc:
+                _scheduler_log.error(f"Scheduled message {m.id} send error: {exc}")
+
+        loop = instance.loop
+        if loop and loop.is_running():
+            asyncio.run_coroutine_threadsafe(_send(), loop)
+
+        if msg.repeat_interval:
+            msg.send_at = now + timedelta(minutes=msg.repeat_interval)
+            if msg.stop_date and msg.send_at > msg.stop_date:
+                msg.is_sent = True
+        else:
+            msg.is_sent = True
+
+    if pending:
+        db.session.commit()
+        _scheduler_log.info(f"Processed {len(pending)} scheduled messages")
+
+
+def _run_scheduled_polls():
+    import asyncio
+    from .models import db, Poll, Group, Bot
+
+    now = datetime.utcnow()
+    pending = Poll.query.filter(
+        Poll.scheduled_at <= now,
+        Poll.scheduled_at != None,
+        Poll.is_sent == False,
+    ).all()
+
+    for poll in pending:
+        group = Group.query.get(poll.group_id)
+        if not group:
+            continue
+        bot = Bot.query.get(group.bot_id)
+        if not bot or not bot.is_active:
+            continue
+        instance = bot_manager.active_bots.get(bot.id)
+        if not instance or not instance.application:
+            _scheduler_log.warning(f"Bot {bot.id} not running — skipping scheduled poll {poll.id}")
+            continue
+
+        async def _send(p=poll, g=group, b=instance):
+            try:
+                kwargs = {
+                    "chat_id": g.telegram_group_id,
+                    "question": p.question,
+                    "options": p.options,
+                    "is_anonymous": p.is_anonymous,
+                }
+                if p.is_quiz:
+                    kwargs["type"] = "quiz"
+                    kwargs["correct_option_id"] = p.correct_option_index
+                    if p.explanation:
+                        kwargs["explanation"] = p.explanation
+                else:
+                    kwargs["allows_multiple_answers"] = p.allows_multiple
+                await b.application.bot.send_poll(**kwargs)
+            except Exception as exc:
+                _scheduler_log.error(f"Scheduled poll {p.id} send error: {exc}")
+
+        loop = instance.loop
+        if loop and loop.is_running():
+            asyncio.run_coroutine_threadsafe(_send(), loop)
+
+        poll.is_sent = True
+
+    if pending:
+        db.session.commit()
+        _scheduler_log.info(f"Processed {len(pending)} scheduled polls")
 
 
 app = create_app()

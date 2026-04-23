@@ -61,7 +61,11 @@ def create_poll(bot_id, group_id):
     scheduled_at = None
     if data.get("scheduled_at"):
         try:
-            scheduled_at = datetime.fromisoformat(data["scheduled_at"].replace("Z", "+00:00")).replace(tzinfo=None)
+            dt = datetime.fromisoformat(data["scheduled_at"].replace("Z", "+00:00"))
+            if dt.tzinfo is not None:
+                from datetime import timezone
+                dt = dt.astimezone(timezone.utc)
+            scheduled_at = dt.replace(tzinfo=None)
         except Exception:
             return jsonify({"error": "Invalid scheduled_at format"}), 400
 

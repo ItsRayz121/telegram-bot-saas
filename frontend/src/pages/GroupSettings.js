@@ -661,6 +661,29 @@ export default function GroupSettings() {
               </Grid>
             </AccordionDetails>
           </Accordion>
+
+          <Card sx={{ mt: 2 }}>
+            <CardContent>
+              <Typography variant="subtitle1" fontWeight={600} mb={2}>Auto-Delete AutoMod Messages</Typography>
+              <Typography variant="body2" color="text.secondary" mb={2}>
+                How long to keep AutoMod notification messages before deleting them. 0 = never delete.
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <TextField fullWidth type="number" label="Delete Warn Messages After (seconds, 0=never)"
+                    inputProps={{ min: 0 }}
+                    value={mod.auto_delete_warn_seconds ?? 0}
+                    onChange={(e) => updateSetting('moderation.auto_delete_warn_seconds', parseInt(e.target.value) || 0)} />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField fullWidth type="number" label="Delete Action Messages After (seconds, 0=never)"
+                    inputProps={{ min: 0 }}
+                    value={mod.auto_delete_action_seconds ?? 0}
+                    onChange={(e) => updateSetting('moderation.auto_delete_action_seconds', parseInt(e.target.value) || 0)} />
+                </Grid>
+              </Grid>
+            </CardContent>
+          </Card>
         </TabPanel>
 
         {/* ── Moderation Tab ── */}

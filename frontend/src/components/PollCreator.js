@@ -50,7 +50,7 @@ export default function PollCreator({ botId, groupId }) {
       await polls.create(botId, groupId, {
         ...form,
         options: filledOptions,
-        scheduled_at: form.scheduled_at || null,
+        scheduled_at: form.scheduled_at ? new Date(form.scheduled_at).toISOString() : null,
       });
       toast.success(form.scheduled_at ? 'Poll scheduled' : 'Poll sent to group');
       setOpen(false);

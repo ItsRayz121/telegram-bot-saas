@@ -183,11 +183,13 @@ def create_scheduled_message(bot_id, group_id):
                 return jsonify({"error": f"{field} is required"}), 400
         def _parse_dt(s):
             s = s.replace("Z", "+00:00")
-            # datetime-local inputs omit seconds ("YYYY-MM-DDTHH:MM") which
-            # Python 3.10 and below do not support — normalise to HH:MM:SS.
             if len(s) == 16:
                 s += ":00"
-            return datetime.fromisoformat(s)
+            dt = datetime.fromisoformat(s)
+            if dt.tzinfo is not None:
+                from datetime import timezone
+                dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+            return dt
 
         try:
             send_at = _parse_dt(data["send_at"])

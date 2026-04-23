@@ -37,9 +37,10 @@ export default function ScheduledMessages({ botId, groupId }) {
     try {
       await settings.createScheduledMessage(botId, groupId, {
         ...form,
+        send_at: new Date(form.send_at).toISOString(),
+        stop_date: form.stop_date ? new Date(form.stop_date).toISOString() : null,
         repeat_interval: form.repeat_interval ? parseInt(form.repeat_interval) : null,
         auto_delete_after: form.auto_delete_after ? parseInt(form.auto_delete_after) : null,
-        stop_date: form.stop_date || null,
       });
       toast.success('Scheduled message created');
       setOpen(false);
