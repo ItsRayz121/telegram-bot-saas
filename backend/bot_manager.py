@@ -8,8 +8,13 @@ from telegram import (
 )
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, CallbackQueryHandler,
-    ChatMemberHandler, MessageReactionHandler, filters, ContextTypes,
+    ChatMemberHandler, filters, ContextTypes,
 )
+try:
+    from telegram.ext import MessageReactionHandler as _MessageReactionHandler
+    _REACTION_HANDLER_AVAILABLE = True
+except ImportError:
+    _REACTION_HANDLER_AVAILABLE = False
 
 from .bot_features.verification import VerificationSystem
 from .bot_features.welcome import WelcomeSystem
@@ -1226,7 +1231,8 @@ class BotInstance:
         app.add_handler(CommandHandler("groupinfo", self.handle_groupinfo))
         app.add_handler(CommandHandler("ask", self.handle_ask))
         app.add_handler(CommandHandler("invitelink", self.handle_invitelink))
-        app.add_handler(MessageReactionHandler(self.handle_reaction))
+        if _REACTION_HANDLER_AVAILABLE:
+            app.add_handler(_MessageReactionHandler(self.handle_reaction))
         app.add_handler(ChatMemberHandler(self.handle_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))
         app.add_handler(ChatMemberHandler(self.handle_chat_member, ChatMemberHandler.CHAT_MEMBER))
         app.add_handler(MessageHandler(filters.StatusUpdate.ALL, self.handle_service_message))
