@@ -1066,6 +1066,8 @@ export default function GroupSettings() {
                   <TableCell align="right">Warnings</TableCell>
                   <TableCell>Role</TableCell>
                   <TableCell>Status</TableCell>
+                  <TableCell>Wallet</TableCell>
+                  <TableCell>Wallet Address</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -1084,6 +1086,36 @@ export default function GroupSettings() {
                       {m.is_verified
                         ? <Chip label="Verified" color="success" size="small" />
                         : <Chip label="Unverified" color="default" size="small" />}
+                    </TableCell>
+                    <TableCell>
+                      {m.wallet_address
+                        ? <Chip label="Yes" color="success" size="small" />
+                        : <Chip label="No" color="default" size="small" />}
+                    </TableCell>
+                    <TableCell sx={{ maxWidth: 180 }}>
+                      {m.wallet_address ? (
+                        <Tooltip title={m.wallet_address} arrow>
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              fontFamily: 'monospace',
+                              fontSize: '0.75rem',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              cursor: 'pointer',
+                              color: 'primary.main',
+                            }}
+                            onClick={() => navigator.clipboard.writeText(m.wallet_address)}
+                          >
+                            {m.wallet_address.length > 16
+                              ? `${m.wallet_address.slice(0, 8)}…${m.wallet_address.slice(-6)}`
+                              : m.wallet_address}
+                          </Typography>
+                        </Tooltip>
+                      ) : (
+                        <Typography variant="body2" color="text.disabled">—</Typography>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

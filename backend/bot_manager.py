@@ -452,6 +452,7 @@ class BotInstance:
             await update.message.reply_text("No data found for this user.")
             return
 
+        wallet_line = f"Wallet: `{member.wallet_address}`" if member.wallet_address else "Wallet: Not submitted"
         await update.message.reply_text(
             f"👤 *User Info*\n"
             f"Name: {member.first_name or 'Unknown'}\n"
@@ -462,7 +463,8 @@ class BotInstance:
             f"Warnings: {member.warnings}\n"
             f"Verified: {'✅' if member.is_verified else '❌'}\n"
             f"Muted: {'🔇' if member.is_muted else '🔊'}\n"
-            f"Joined: {member.joined_at.strftime('%Y-%m-%d') if member.joined_at else 'Unknown'}",
+            f"Joined: {member.joined_at.strftime('%Y-%m-%d') if member.joined_at else 'Unknown'}\n"
+            f"{wallet_line}",
             parse_mode="Markdown",
         )
 
@@ -635,6 +637,7 @@ class BotInstance:
         if not member:
             await update.message.reply_text("No data found for this user.")
             return
+        wallet_line = f"Wallet: `{member.wallet_address}`" if member.wallet_address else "Wallet: Not submitted"
         await update.message.reply_text(
             f"🔍 *Whois: {member.first_name or 'Unknown'}*\n"
             f"Username: @{member.username or 'none'}\n"
@@ -644,7 +647,83 @@ class BotInstance:
             f"Warnings: {member.warnings}\n"
             f"Verified: {'✅' if member.is_verified else '❌'}\n"
             f"Muted: {'🔇' if member.is_muted else '🔊'}\n"
-            f"Joined: {member.joined_at.strftime('%Y-%m-%d') if member.joined_at else 'Unknown'}",
+            f"Joined: {member.joined_at.strftime('%Y-%m-%d') if member.joined_at else 'Unknown'}\n"
+            f"{wallet_line}",
+            parse_mode="Markdown",
+        )
+
+    async def handle_wallet(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if update.effective_chat.type == "private":
+            return
+
+        if not context.args:
+            await update.message.reply_text(
+                "💼 *Wallet Submission*\n"
+                "Usage: `/wallet <your_wallet_address>`\n"
+                "Example: `/wallet 0xAbC123...`",
+                parse_mode="Markdown",
+            )
+            return
+
+        wallet_address = context.args[0].strip()
+        if len(wallet_address) < 10:
+            await update.message.reply_text("❌ Invalid wallet address. Please provide a valid address.")
+            return
+        if len(wallet_address) > 500:
+            await update.message.reply_text("❌ Wallet address too long.")
+            return
+
+        group = await self._get_or_create_group(update.effective_chat.id, update.effective_chat.title, context.bot)
+        user = update.effective_user
+
+        with self.app_context.app_context():
+            from .models import Member, db
+            from datetime import datetime
+            member = Member.query.filter_by(
+                group_id=group.id,
+                telegram_user_id=str(user.id),
+            ).first()
+            if not member:
+                member = Member(
+                    group_id=group.id,
+                    telegram_user_id=str(user.id),
+                    username=user.username,
+                    first_name=user.first_name,
+                )
+                db.session.add(member)
+            member.wallet_address = wallet_address
+            member.wallet_submitted_at = datetime.utcnow()
+            db.session.commit()
+
+        await update.message.reply_text(
+            f"✅ *Wallet saved!*\n`{wallet_address}`",
+            parse_mode="Markdown",
+        )
+
+    async def handle_mywallet(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if update.effective_chat.type == "private":
+            return
+
+        group = await self._get_or_create_group(update.effective_chat.id, update.effective_chat.title, context.bot)
+        user = update.effective_user
+
+        with self.app_context.app_context():
+            from .models import Member
+            member = Member.query.filter_by(
+                group_id=group.id,
+                telegram_user_id=str(user.id),
+            ).first()
+
+        if not member or not member.wallet_address:
+            await update.message.reply_text(
+                "You haven't submitted a wallet yet.\nUse `/wallet <address>` to submit.",
+                parse_mode="Markdown",
+            )
+            return
+
+        submitted = member.wallet_submitted_at.strftime("%Y-%m-%d %H:%M UTC") if member.wallet_submitted_at else "Unknown"
+        await update.message.reply_text(
+            f"💼 *Your Wallet*\n`{member.wallet_address}`\nSubmitted: {submitted}",
             parse_mode="Markdown",
         )
 
@@ -1231,6 +1310,8 @@ class BotInstance:
         app.add_handler(CommandHandler("groupinfo", self.handle_groupinfo))
         app.add_handler(CommandHandler("ask", self.handle_ask))
         app.add_handler(CommandHandler("invitelink", self.handle_invitelink))
+        app.add_handler(CommandHandler("wallet", self.handle_wallet))
+        app.add_handler(CommandHandler("mywallet", self.handle_mywallet))
         if _REACTION_HANDLER_AVAILABLE:
             app.add_handler(_MessageReactionHandler(self.handle_reaction))
         app.add_handler(ChatMemberHandler(self.handle_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))

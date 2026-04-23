@@ -108,6 +108,9 @@ def _run_migrations():
         "ALTER TABLE user_api_keys ADD COLUMN updated_at TIMESTAMP",
         # Backfill NULL updated_at for rows added before the column existed
         "UPDATE user_api_keys SET updated_at = created_at WHERE updated_at IS NULL",
+        # Wallet submission columns
+        "ALTER TABLE members ADD COLUMN wallet_address VARCHAR(500)",
+        "ALTER TABLE members ADD COLUMN wallet_submitted_at TIMESTAMP",
     ]
     try:
         with db.engine.connect() as conn:

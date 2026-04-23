@@ -135,6 +135,8 @@ class Member(db.Model):
     joined_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_message_at = db.Column(db.DateTime, nullable=True)
     last_xp_at = db.Column(db.DateTime, nullable=True)
+    wallet_address = db.Column(db.String(500), nullable=True)
+    wallet_submitted_at = db.Column(db.DateTime, nullable=True)
 
     __table_args__ = (db.UniqueConstraint("group_id", "telegram_user_id", name="unique_group_member"),)
 
@@ -154,6 +156,8 @@ class Member(db.Model):
             "mute_until": self.mute_until.isoformat() if self.mute_until else None,
             "joined_at": self.joined_at.isoformat() if self.joined_at else None,
             "last_message_at": self.last_message_at.isoformat() if self.last_message_at else None,
+            "wallet_address": self.wallet_address,
+            "wallet_submitted_at": self.wallet_submitted_at.isoformat() if self.wallet_submitted_at else None,
         }
 
 
