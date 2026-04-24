@@ -24,11 +24,24 @@ class Config:
 
     REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 
+    # Stripe (kept for legacy/future use — not active)
     STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
     STRIPE_PUBLISHABLE_KEY = os.environ.get("STRIPE_PUBLISHABLE_KEY", "")
     STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
     STRIPE_PRO_PRICE_ID = os.environ.get("STRIPE_PRO_PRICE_ID", "")
     STRIPE_ENTERPRISE_PRICE_ID = os.environ.get("STRIPE_ENTERPRISE_PRICE_ID", "")
+
+    # Lemon Squeezy (card / bank payments)
+    LS_API_KEY = os.environ.get("LS_API_KEY", "")
+    LS_STORE_ID = os.environ.get("LS_STORE_ID", "")
+    LS_PRO_VARIANT_ID = os.environ.get("LS_PRO_VARIANT_ID", "")
+    LS_ENTERPRISE_VARIANT_ID = os.environ.get("LS_ENTERPRISE_VARIANT_ID", "")
+    LS_WEBHOOK_SECRET = os.environ.get("LS_WEBHOOK_SECRET", "")
+
+    # NOWPayments (crypto — USDT, BTC, ETH, etc.)
+    NOWPAYMENTS_API_KEY = os.environ.get("NOWPAYMENTS_API_KEY", "")
+    NOWPAYMENTS_IPN_SECRET = os.environ.get("NOWPAYMENTS_IPN_SECRET", "")
+    BACKEND_URL = os.environ.get("BACKEND_URL", "https://telegram-bot-saas-production.up.railway.app")
 
     SMTP_SERVER = os.environ.get("SMTP_SERVER", "smtp.gmail.com")
     SMTP_PORT = int(os.environ.get("SMTP_PORT", 587))

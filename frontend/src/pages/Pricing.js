@@ -2,9 +2,10 @@ import React, { useState } from 'react';
 import {
   Box, AppBar, Toolbar, Typography, Button, Card, CardContent,
   Grid, Chip, List, ListItem, ListItemIcon, ListItemText,
-  CircularProgress, IconButton,
+  CircularProgress, IconButton, Dialog, DialogTitle, DialogContent,
+  DialogActions, Stack,
 } from '@mui/material';
-import { Check, ArrowBack } from '@mui/icons-material';
+import { Check, ArrowBack, CreditCard, CurrencyBitcoin } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { billing } from '../services/api';
@@ -65,27 +66,50 @@ const PLANS = [
 export default function Pricing() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState('');
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedTier, setSelectedTier] = useState(null);
+  const [methodLoading, setMethodLoading] = useState('');
   const token = localStorage.getItem('token');
 
-  const handleUpgrade = async (tier) => {
+  const handleUpgrade = (tier) => {
     if (!token) {
       navigate('/register');
       return;
     }
     if (tier === 'free') return;
-    setLoading(tier);
+    setSelectedTier(tier);
+    setDialogOpen(true);
+  };
+
+  const handlePaymentMethod = async (method) => {
+    setMethodLoading(method);
     try {
-      const res = await billing.createCheckoutSession({ tier });
-      if (res.data.admin_upgrade) {
-        toast.success(res.data.message || `Plan switched to ${tier}`);
-        setTimeout(() => navigate('/dashboard'), 1200);
+      let res;
+      if (method === 'card') {
+        res = await billing.lemonCheckout({ tier: selectedTier });
       } else {
-        window.location.href = res.data.url;
+        res = await billing.cryptoCheckout({ tier: selectedTier });
       }
+
+      if (res.data.admin_upgrade) {
+        toast.success(res.data.message || `Plan switched to ${selectedTier}`);
+        setDialogOpen(false);
+        setTimeout(() => navigate('/dashboard'), 1200);
+        return;
+      }
+
+      window.location.href = res.data.url;
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to start checkout');
-      setLoading('');
+      toast.error(err.response?.data?.error || 'Failed to start checkout. Please try again.');
+    } finally {
+      setMethodLoading('');
     }
+  };
+
+  const handleCloseDialog = () => {
+    if (methodLoading) return;
+    setDialogOpen(false);
+    setSelectedTier(null);
   };
 
   return (
@@ -177,6 +201,59 @@ export default function Pricing() {
           All plans include 14-day money back guarantee. No hidden fees.
         </Typography>
       </Box>
+
+      {/* Payment method selection dialog */}
+      <Dialog open={dialogOpen} onClose={handleCloseDialog} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700, textAlign: 'center', pb: 1 }}>
+          Choose Payment Method
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" textAlign="center" mb={3}>
+            {selectedTier && `Upgrading to ${selectedTier.charAt(0).toUpperCase() + selectedTier.slice(1)} Plan`}
+          </Typography>
+          <Stack spacing={2}>
+            <Button
+              fullWidth
+              variant="outlined"
+              size="large"
+              startIcon={methodLoading === 'card' ? <CircularProgress size={18} /> : <CreditCard />}
+              onClick={() => handlePaymentMethod('card')}
+              disabled={!!methodLoading}
+              sx={{ py: 1.5, justifyContent: 'flex-start', px: 3 }}
+            >
+              <Box sx={{ textAlign: 'left', ml: 1 }}>
+                <Typography variant="body1" fontWeight={600}>Card / Bank Transfer</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Visa, Mastercard, PayPal via Lemon Squeezy
+                </Typography>
+              </Box>
+            </Button>
+
+            <Button
+              fullWidth
+              variant="outlined"
+              size="large"
+              color="warning"
+              startIcon={methodLoading === 'crypto' ? <CircularProgress size={18} color="inherit" /> : <CurrencyBitcoin />}
+              onClick={() => handlePaymentMethod('crypto')}
+              disabled={!!methodLoading}
+              sx={{ py: 1.5, justifyContent: 'flex-start', px: 3 }}
+            >
+              <Box sx={{ textAlign: 'left', ml: 1 }}>
+                <Typography variant="body1" fontWeight={600}>Crypto</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  USDT, BTC, ETH, BNB and 300+ coins via NOWPayments
+                </Typography>
+              </Box>
+            </Button>
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={handleCloseDialog} disabled={!!methodLoading} fullWidth>
+            Cancel
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

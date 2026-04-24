@@ -134,10 +134,11 @@ export const analytics = {
 
 export const billing = {
   getPlans: () => api.get('/api/billing/plans'),
-  createCheckoutSession: (data) => api.post('/api/billing/create-checkout-session', data),
   getSubscription: () => api.get('/api/billing/subscription'),
-  cancelSubscription: () => api.post('/api/billing/cancel-subscription'),
-  getBillingPortal: () => api.post('/api/billing/portal'),
+  // Lemon Squeezy — card / bank transfer
+  lemonCheckout: (data) => api.post('/api/billing/lemon/checkout', data),
+  // NOWPayments — crypto (USDT, BTC, ETH, etc.)
+  cryptoCheckout: (data) => api.post('/api/billing/crypto/checkout', data),
 };
 
 export const admin = {
