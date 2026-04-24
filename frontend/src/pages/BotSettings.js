@@ -61,7 +61,7 @@ export default function BotSettings() {
         </Toolbar>
       </AppBar>
 
-      <Box sx={{ maxWidth: 1200, mx: 'auto', p: 3 }}>
+      <Box sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 2, md: 3 } }}>
         <Typography variant="h6" fontWeight={600} mb={2}>
           Groups ({groups.length})
         </Typography>

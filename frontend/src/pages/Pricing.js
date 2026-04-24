@@ -160,11 +160,11 @@ export default function Pricing() {
         </Toolbar>
       </AppBar>
 
-      <Box sx={{ maxWidth: 1100, mx: 'auto', p: 3, textAlign: 'center' }}>
-        <Typography variant="h3" fontWeight={700} mb={1} mt={4}>
+      <Box sx={{ maxWidth: 1100, mx: 'auto', p: { xs: 2, md: 3 }, textAlign: 'center' }}>
+        <Typography variant="h3" fontWeight={700} mb={1} mt={4} sx={{ fontSize: { xs: '1.9rem', sm: '2.5rem', md: '3rem' } }}>
           Simple, Transparent Pricing
         </Typography>
-        <Typography variant="h6" color="text.secondary" mb={2}>
+        <Typography variant="h6" color="text.secondary" mb={2} sx={{ fontSize: { xs: '1rem', md: '1.25rem' } }}>
           Start free, scale as your communities grow
         </Typography>
 
@@ -222,10 +222,10 @@ export default function Pricing() {
                     borderColor: isCurrentPlan(plan.id) ? 'success.main' : plan.popular ? 'primary.main' : 'divider',
                   }}
                 >
-                <CardContent sx={{ flexGrow: 1, p: 3 }}>
+                <CardContent sx={{ flexGrow: 1, p: { xs: 2.5, md: 3 } }}>
                   <Typography variant="h5" fontWeight={700} mb={1}>{plan.name}</Typography>
                   <Box sx={{ mb: 3 }}>
-                    <Typography component="span" variant="h3" fontWeight={800}>{plan.price}</Typography>
+                    <Typography component="span" fontWeight={800} sx={{ fontSize: { xs: '2.2rem', md: '3rem' } }}>{plan.price}</Typography>
                     <Typography component="span" variant="body1" color="text.secondary">{plan.period}</Typography>
                   </Box>
                   <Button

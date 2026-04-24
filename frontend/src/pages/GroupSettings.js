@@ -407,7 +407,7 @@ export default function GroupSettings() {
         )}
       </AppBar>
 
-      <Box sx={{ maxWidth: 900, mx: 'auto', p: 3 }}>
+      <Box sx={{ maxWidth: 900, mx: 'auto', p: { xs: 2, md: 3 } }}>
 
         {/* ══════════════════════════════════════════════════════════
             MODERATION
@@ -1256,7 +1256,7 @@ export default function GroupSettings() {
         {/* ANALYTICS › Members */}
         {cat === 'analytics' && subTab === 0 && (
           <>
-            <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider' }}>
+            <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', overflowX: 'auto' }}>
               <Table size="small">
                 <TableHead>
                   <TableRow>
@@ -1334,7 +1334,7 @@ export default function GroupSettings() {
         {/* ANALYTICS › Audit Log */}
         {cat === 'analytics' && subTab === 1 && (
           <>
-            <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider' }}>
+            <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', overflowX: 'auto' }}>
               <Table size="small">
                 <TableHead>
                   <TableRow>

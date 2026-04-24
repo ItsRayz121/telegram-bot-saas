@@ -50,7 +50,7 @@ export default function Register() {
       }}
     >
       <Card sx={{ width: '100%', maxWidth: 420 }}>
-        <CardContent sx={{ p: 4 }}>
+        <CardContent sx={{ p: { xs: 3, sm: 4 } }}>
           <Typography variant="h4" fontWeight={700} mb={0.5} textAlign="center">
             BotForge
           </Typography>

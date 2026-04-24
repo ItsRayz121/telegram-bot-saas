@@ -1,0 +1,27 @@
+{
+  "short_name": "BotForge",
+  "name": "BotForge — Telegram Group Automation",
+  "description": "Automate your Telegram groups with AutoMod, scheduling, analytics, and AI.",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#1a1a2e",
+  "background_color": "#0d1117",
+  "categories": ["productivity", "utilities", "social"],
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "prefer_related_applications": false
+}

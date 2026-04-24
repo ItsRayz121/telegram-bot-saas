@@ -217,7 +217,8 @@ export default function Landing() {
         {/* Background glow */}
         <Box sx={{
           position: 'absolute', top: '20%', left: '50%', transform: 'translateX(-50%)',
-          width: 600, height: 300, borderRadius: '50%',
+          width: { xs: '90vw', sm: 500, md: 600 }, height: { xs: 180, sm: 240, md: 300 },
+          borderRadius: '50%',
           background: 'radial-gradient(ellipse, rgba(33,150,243,0.12) 0%, transparent 70%)',
           pointerEvents: 'none',
         }} />
@@ -290,8 +291,13 @@ export default function Landing() {
               { value: '24/7', label: 'Always Running' },
               { value: '5 min', label: 'Setup Time' },
             ].map((s, i) => (
-              <Grid item xs={6} sm={3} key={s.label} sx={{ textAlign: 'center', py: 1, borderLeft: i > 0 ? '1px solid' : 'none', borderColor: 'divider' }}>
-                <Typography variant="h4" fontWeight={800} color="primary.main">{s.value}</Typography>
+              <Grid item xs={6} sm={3} key={s.label} sx={{
+                textAlign: 'center', py: 1.5,
+                borderLeft: { xs: i % 2 !== 0 ? '1px solid' : 'none', sm: i > 0 ? '1px solid' : 'none' },
+                borderTop: { xs: i >= 2 ? '1px solid' : 'none', sm: 'none' },
+                borderColor: 'divider',
+              }}>
+                <Typography variant="h4" fontWeight={800} color="primary.main" sx={{ fontSize: { xs: '1.6rem', sm: '2rem', md: '2.125rem' } }}>{s.value}</Typography>
                 <Typography variant="caption" color="text.secondary">{s.label}</Typography>
               </Grid>
             ))}
@@ -360,26 +366,16 @@ export default function Landing() {
           {FEATURES.map((f) => (
             <Grid item xs={12} sm={6} md={4} key={f.title}>
               <Card sx={{ height: '100%', p: 1, position: 'relative' }}>
-                <Box sx={{ position: 'absolute', top: 12, right: 12, display: 'flex', gap: 0.5 }}>
-                  {f.badge && (
-                    <Chip
-                      label={f.badge}
-                      size="small"
-                      color={f.badgeColor || 'primary'}
-                      sx={{ fontSize: 10, height: 20 }}
-                    />
-                  )}
-                  {f.plan && !f.badge && (
-                    <Chip
-                      label={f.plan}
-                      size="small"
-                      color={f.planColor || 'default'}
-                      variant="outlined"
-                      sx={{ fontSize: 10, height: 20 }}
-                    />
-                  )}
-                </Box>
-                <CardContent>
+                {(f.badge || f.plan) && (
+                  <Box sx={{ position: 'absolute', top: 12, right: 12, display: 'flex', gap: 0.5 }}>
+                    {f.badge ? (
+                      <Chip label={f.badge} size="small" color={f.badgeColor || 'primary'} sx={{ fontSize: 10, height: 20 }} />
+                    ) : (
+                      <Chip label={f.plan} size="small" color={f.planColor || 'default'} variant="outlined" sx={{ fontSize: 10, height: 20 }} />
+                    )}
+                  </Box>
+                )}
+                <CardContent sx={{ pt: (f.badge || f.plan) ? 4.5 : 2 }}>
                   <Box sx={{ color: 'primary.main', mb: 1.5 }}>{f.icon}</Box>
                   <Typography variant="h6" fontWeight={700} mb={1}>{f.title}</Typography>
                   <Typography variant="body2" color="text.secondary" lineHeight={1.7}>{f.desc}</Typography>
@@ -443,7 +439,7 @@ export default function Landing() {
         </Box>
         <Grid container spacing={3}>
           {TESTIMONIALS.map((t) => (
-            <Grid item xs={12} md={4} key={t.name}>
+            <Grid item xs={12} sm={6} md={4} key={t.name}>
               <Card sx={{ height: '100%', p: 1 }}>
                 <CardContent>
                   <Typography variant="body1" color="text.primary" lineHeight={1.7} mb={2} sx={{ fontStyle: 'italic' }}>

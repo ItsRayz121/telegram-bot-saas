@@ -5,6 +5,14 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import PWAInstallBanner from './components/PWAInstallBanner';
+
+// Register service worker for PWA
+if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
 
 import Landing from './pages/Landing';
 import Login from './pages/Login';
@@ -130,14 +138,16 @@ export default function App() {
         </Routes>
       </BrowserRouter>
       <ToastContainer
-        position="bottom-right"
+        position="top-center"
         autoClose={4000}
         theme="dark"
         hideProgressBar={false}
         newestOnTop
         closeOnClick
         pauseOnHover
+        style={{ zIndex: 9999 }}
       />
+      <PWAInstallBanner />
     </ThemeProvider>
   );
 }

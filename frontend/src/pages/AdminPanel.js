@@ -166,7 +166,7 @@ export default function AdminPanel() {
         </Toolbar>
       </AppBar>
 
-      <Box sx={{ maxWidth: 1200, mx: 'auto', p: 3 }}>
+      <Box sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 2, md: 3 } }}>
         {stats && (
           <Grid container spacing={2} mb={4}>
             <Grid item xs={6} md={3}><StatCard label="Total Users" value={stats.total_users} /></Grid>
@@ -195,7 +195,7 @@ export default function AdminPanel() {
           </Box>
         ) : (
           <>
-            <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', mb: 2 }}>
+            <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', mb: 2, overflowX: 'auto' }}>
               <Table>
                 <TableHead>
                   <TableRow>

@@ -407,7 +407,7 @@ export default function Dashboard() {
         </Toolbar>
       </AppBar>
 
-      <Box sx={{ maxWidth: 1200, mx: 'auto', p: 3 }}>
+      <Box sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 2, md: 3 } }}>
 
         {/* ── Expired warning ── */}
         {subscription?.is_expired && (
@@ -447,7 +447,7 @@ export default function Dashboard() {
         )}
 
         {/* ── Header row ── */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1, gap: 1, flexWrap: 'wrap' }}>
           <Box>
             <Typography variant="h5" fontWeight={700}>My Bots</Typography>
             <Typography variant="caption" color="text.secondary">
@@ -459,6 +459,7 @@ export default function Dashboard() {
             startIcon={<Add />}
             onClick={() => setAddOpen(true)}
             disabled={atLimit}
+            sx={{ flexShrink: 0 }}
           >
             Add Bot
           </Button>
@@ -517,7 +518,7 @@ export default function Dashboard() {
                       {bot.group_count ?? 0} group{bot.group_count !== 1 ? 's' : ''}
                     </Typography>
                   </CardContent>
-                  <CardActions sx={{ px: 2, pb: 2, gap: 0.5 }}>
+                  <CardActions sx={{ px: 2, pb: 2, gap: 0.5, flexWrap: 'wrap' }}>
                     <Button size="small" startIcon={<Settings />} onClick={() => navigate(`/bot/${bot.id}`)}>
                       Groups
                     </Button>
@@ -526,12 +527,12 @@ export default function Dashboard() {
                     </Button>
                     <Box sx={{ flexGrow: 1 }} />
                     <Tooltip title={bot.is_active ? 'Stop bot' : 'Start bot'}>
-                      <IconButton size="small" onClick={() => handleToggle(bot)}>
+                      <IconButton onClick={() => handleToggle(bot)} sx={{ minWidth: 40, minHeight: 40 }}>
                         <PowerSettingsNew fontSize="small" color={bot.is_active ? 'success' : 'disabled'} />
                       </IconButton>
                     </Tooltip>
                     <Tooltip title="Delete bot">
-                      <IconButton size="small" onClick={() => { setSelectedBot(bot); setDeleteOpen(true); }}>
+                      <IconButton onClick={() => { setSelectedBot(bot); setDeleteOpen(true); }} sx={{ minWidth: 40, minHeight: 40 }}>
                         <Delete fontSize="small" color="error" />
                       </IconButton>
                     </Tooltip>
@@ -545,8 +546,8 @@ export default function Dashboard() {
         {/* ── Upgrade CTA for free users with bots ── */}
         {!loading && tier === 'free' && botList.length > 0 && (
           <Card sx={{ mt: 3, background: 'linear-gradient(135deg, #1565c0 0%, #7c4dff 100%)', border: 'none' }}>
-            <CardContent sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2, p: 3 }}>
-              <Box>
+            <CardContent sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2, p: { xs: 2.5, md: 3 } }}>
+              <Box sx={{ minWidth: 0 }}>
                 <Typography variant="subtitle1" fontWeight={700} color="white">
                   Unlock 5 bots, unlimited groups & scheduling
                 </Typography>
@@ -558,7 +559,8 @@ export default function Dashboard() {
                 variant="contained"
                 onClick={() => navigate('/pricing')}
                 endIcon={<ArrowForward />}
-                sx={{ bgcolor: 'white', color: 'primary.main', fontWeight: 700, '&:hover': { bgcolor: '#f0f0f0' } }}
+                fullWidth={false}
+                sx={{ bgcolor: 'white', color: 'primary.main', fontWeight: 700, '&:hover': { bgcolor: '#f0f0f0' }, width: { xs: '100%', sm: 'auto' } }}
               >
                 Upgrade to Pro
               </Button>

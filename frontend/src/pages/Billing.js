@@ -73,7 +73,7 @@ export default function Billing() {
         </Toolbar>
       </AppBar>
 
-      <Box sx={{ maxWidth: 800, mx: 'auto', p: 3 }}>
+      <Box sx={{ maxWidth: 800, mx: 'auto', p: { xs: 2, md: 3 } }}>
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}>
             <CircularProgress />
@@ -127,7 +127,7 @@ export default function Billing() {
                 {expires && (
                   <Box sx={{ mt: 2 }}>
                     <Divider sx={{ mb: 2 }} />
-                    <Stack direction="row" spacing={4} flexWrap="wrap">
+                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={{ xs: 1, sm: 4 }} flexWrap="wrap">
                       <Box>
                         <Typography variant="caption" color="text.secondary">Expiry Date</Typography>
                         <Typography variant="body2" fontWeight={600}>

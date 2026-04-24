@@ -71,7 +71,7 @@ export default function Analytics() {
           <Typography variant="h6" fontWeight={600} sx={{ flexGrow: 1 }}>
             Analytics — {bot?.bot_name}
           </Typography>
-          <FormControl size="small" sx={{ minWidth: 120 }}>
+          <FormControl size="small" sx={{ minWidth: { xs: 90, sm: 120 } }}>
             <InputLabel>Range</InputLabel>
             <Select value={days} label="Range" onChange={(e) => setDays(e.target.value)}>
               <MenuItem value={7}>7 days</MenuItem>
@@ -87,7 +87,7 @@ export default function Analytics() {
           <CircularProgress />
         </Box>
       ) : (
-        <Box sx={{ maxWidth: 1200, mx: 'auto', p: 3 }}>
+        <Box sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 2, md: 3 } }}>
           <Grid container spacing={2} mb={3}>
             <Grid item xs={6} md={3}>
               <StatCard icon={<Group />} label="Total Groups" value={data?.total_groups || 0} />
@@ -169,7 +169,7 @@ export default function Analytics() {
               <Card sx={{ height: '100%' }}>
                 <CardContent>
                   <Typography variant="h6" fontWeight={600} mb={2}>Top Members</Typography>
-                  <TableContainer>
+                  <TableContainer sx={{ overflowX: 'auto' }}>
                     <Table size="small">
                       <TableHead>
                         <TableRow>
