@@ -430,24 +430,32 @@ export default function Landing() {
           <Grid container spacing={3} justifyContent="center">
             {PLANS.map((plan) => (
               <Grid item xs={12} sm={6} md={4} key={plan.name}>
-                <Card
-                  sx={{
-                    height: '100%',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    position: 'relative',
-                    border: plan.popular ? '2px solid' : '1px solid',
-                    borderColor: plan.popular ? 'primary.main' : 'divider',
-                  }}
-                >
+                <Box sx={{ position: 'relative', pt: '14px', height: '100%' }}>
                   {plan.popular && (
                     <Chip
                       label="Most Popular"
                       color="primary"
                       size="small"
-                      sx={{ position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)', fontWeight: 700 }}
+                      sx={{
+                        position: 'absolute',
+                        top: 0,
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        zIndex: 1,
+                        fontWeight: 700,
+                        whiteSpace: 'nowrap',
+                      }}
                     />
                   )}
+                  <Card
+                    sx={{
+                      height: '100%',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      border: plan.popular ? '2px solid' : '1px solid',
+                      borderColor: plan.popular ? 'primary.main' : 'divider',
+                    }}
+                  >
                   <CardContent sx={{ flexGrow: 1, p: 3 }}>
                     <Typography variant="h5" fontWeight={800} mb={0.5}>{plan.name}</Typography>
                     <Box sx={{ mb: 0.5 }}>
@@ -478,7 +486,8 @@ export default function Landing() {
                       ))}
                     </Stack>
                   </CardContent>
-                </Card>
+                  </Card>
+                </Box>
               </Grid>
             ))}
           </Grid>

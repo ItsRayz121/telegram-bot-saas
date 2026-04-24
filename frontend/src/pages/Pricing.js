@@ -179,22 +179,22 @@ export default function Pricing() {
         <Grid container spacing={3} justifyContent="center" sx={{ mb: 2 }}>
           {PLANS.map((plan) => (
             <Grid item xs={12} sm={6} md={4} key={plan.id}>
-              <Card
-                sx={{
-                  height: '100%',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  position: 'relative',
-                  border: plan.popular ? '2px solid' : '1px solid',
-                  borderColor: isCurrentPlan(plan.id) ? 'success.main' : plan.popular ? 'primary.main' : 'divider',
-                }}
-              >
+              {/* Wrapper reserves badge space for ALL cards so they stay the same height */}
+              <Box sx={{ position: 'relative', pt: '14px', height: '100%' }}>
                 {plan.popular && !isCurrentPlan(plan.id) && (
                   <Chip
                     label="Most Popular"
                     color="primary"
                     size="small"
-                    sx={{ position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)' }}
+                    sx={{
+                      position: 'absolute',
+                      top: 0,
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      zIndex: 1,
+                      fontWeight: 700,
+                      whiteSpace: 'nowrap',
+                    }}
                   />
                 )}
                 {isCurrentPlan(plan.id) && (
@@ -202,9 +202,26 @@ export default function Pricing() {
                     label="Your Plan"
                     color="success"
                     size="small"
-                    sx={{ position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)' }}
+                    sx={{
+                      position: 'absolute',
+                      top: 0,
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      zIndex: 1,
+                      fontWeight: 700,
+                      whiteSpace: 'nowrap',
+                    }}
                   />
                 )}
+                <Card
+                  sx={{
+                    height: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    border: plan.popular ? '2px solid' : '1px solid',
+                    borderColor: isCurrentPlan(plan.id) ? 'success.main' : plan.popular ? 'primary.main' : 'divider',
+                  }}
+                >
                 <CardContent sx={{ flexGrow: 1, p: 3 }}>
                   <Typography variant="h5" fontWeight={700} mb={1}>{plan.name}</Typography>
                   <Box sx={{ mb: 3 }}>
@@ -235,6 +252,7 @@ export default function Pricing() {
                   </List>
                 </CardContent>
               </Card>
+              </Box>
             </Grid>
           ))}
         </Grid>
