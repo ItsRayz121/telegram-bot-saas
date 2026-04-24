@@ -1,10 +1,14 @@
 import bcrypt
+import logging
+import threading
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 
 from ..models import db, User, PasswordResetToken
 from ..middleware.rate_limit import rate_limit
 from ..config import Config
+
+logger = logging.getLogger(__name__)
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 
@@ -38,11 +42,24 @@ def register():
     db.session.add(user)
     db.session.commit()
 
+    # Send welcome email asynchronously — never block the response on SMTP.
+    # smtplib is synchronous and can hang if the mail server is unreachable,
+    # which previously caused gunicorn to time out AFTER the DB commit, making
+    # the frontend show "Registration failed" even though the account existed.
     try:
         from flask import current_app
         from ..notifications import send_welcome_email
-        with current_app.app_context():
-            send_welcome_email(email, full_name)
+        _app = current_app._get_current_object()
+        _email_copy, _name_copy = email, full_name
+
+        def _send_welcome():
+            try:
+                with _app.app_context():
+                    send_welcome_email(_email_copy, _name_copy)
+            except Exception as exc:
+                logger.warning("Welcome email failed for %s: %s", _email_copy, exc)
+
+        threading.Thread(target=_send_welcome, daemon=True).start()
     except Exception:
         pass
 
@@ -119,8 +136,17 @@ def forgot_password():
         try:
             from flask import current_app
             from ..notifications import send_password_reset_email
-            with current_app.app_context():
-                send_password_reset_email(user.email, user.full_name, reset_token.token)
+            _app = current_app._get_current_object()
+            _uemail, _uname, _tok = user.email, user.full_name, reset_token.token
+
+            def _send_reset():
+                try:
+                    with _app.app_context():
+                        send_password_reset_email(_uemail, _uname, _tok)
+                except Exception as exc:
+                    logger.warning("Password reset email failed for %s: %s", _uemail, exc)
+
+            threading.Thread(target=_send_reset, daemon=True).start()
         except Exception:
             pass
 

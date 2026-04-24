@@ -4,6 +4,23 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..models import db, User, Bot, Group, Poll
 from ..middleware.rate_limit import rate_limit
 
+_PAID_TIERS = {"pro", "enterprise"}
+
+
+def _require_paid(user, feature="This feature"):
+    """Return a 403 response tuple if user lacks a valid paid subscription, else None."""
+    if user.subscription_tier not in _PAID_TIERS:
+        return (
+            jsonify({"error": f"{feature} requires a Pro or Enterprise subscription. Upgrade at /pricing."}),
+            403,
+        )
+    if user.subscription_expires and datetime.utcnow() > user.subscription_expires:
+        return (
+            jsonify({"error": "Your subscription has expired. Please renew to continue using this feature."}),
+            403,
+        )
+    return None
+
 polls_bp = Blueprint("polls", __name__, url_prefix="/api")
 
 
@@ -44,7 +61,13 @@ def create_poll(bot_id, group_id):
     if not group:
         return jsonify({"error": "Group not found"}), 404
 
+    # Scheduled polls are a paid feature; enforce before touching the DB.
     data = request.get_json() or {}
+    if data.get("scheduled_at"):
+        sub_err = _require_paid(user, "Scheduled polls")
+        if sub_err:
+            return sub_err
+
     question = (data.get("question") or "").strip()
     options = data.get("options") or []
 
@@ -58,9 +81,13 @@ def create_poll(bot_id, group_id):
     if is_quiz and (correct_idx is None or not (0 <= int(correct_idx) < len(options))):
         return jsonify({"error": "Quiz requires a valid correct_option_index"}), 400
 
-    # Use the group's saved default timezone when the caller doesn't specify one.
-    group_default_tz = (group.settings or {}).get("timezone", "UTC") if group.settings else "UTC"
-    tz_name = (data.get("timezone") or group_default_tz or "UTC").strip()
+    # Authoritative timezone: groups.timezone column → settings JSON → UTC
+    group_default_tz = (
+        group.timezone
+        or (group.settings or {}).get("timezone", "UTC")
+        or "UTC"
+    )
+    tz_name = (data.get("timezone") or group_default_tz).strip() or "UTC"
     scheduled_at = None
     if data.get("scheduled_at"):
         try:

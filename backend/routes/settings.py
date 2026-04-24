@@ -5,6 +5,23 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..models import db, User, Bot, Group, Member, AuditLog, ScheduledMessage, Raid, AutoResponse, ReportedMessage
 from ..middleware.rate_limit import rate_limit
 
+_PAID_TIERS = {"pro", "enterprise"}
+
+
+def _require_paid(user, feature="This feature"):
+    """Return a 403 response tuple if user lacks a valid paid subscription, else None."""
+    if user.subscription_tier not in _PAID_TIERS:
+        return (
+            jsonify({"error": f"{feature} requires a Pro or Enterprise subscription. Upgrade at /pricing."}),
+            403,
+        )
+    if user.subscription_expires and datetime.utcnow() > user.subscription_expires:
+        return (
+            jsonify({"error": "Your subscription has expired. Please renew to continue using this feature."}),
+            403,
+        )
+    return None
+
 logger = logging.getLogger(__name__)
 settings_bp = Blueprint("settings", __name__, url_prefix="/api")
 
@@ -69,8 +86,11 @@ def update_group_settings(bot_id, group_id):
         group.settings = current
         from sqlalchemy.orm.attributes import flag_modified
         flag_modified(group, "settings")
+        # Keep the dedicated timezone column in sync so it's queryable directly.
+        if "timezone" in data and isinstance(data.get("timezone"), str):
+            group.timezone = data["timezone"].strip() or "UTC"
         db.session.commit()
-        return jsonify({"settings": group.settings, "message": "Settings updated"})
+        return jsonify({"settings": group.settings, "timezone": group.timezone or "UTC", "message": "Settings updated"})
     except Exception as e:
         logger.error(f"update_group_settings error: {e}", exc_info=True)
         try:
@@ -174,6 +194,9 @@ def create_scheduled_message(bot_id, group_id):
         bot, group, err = _get_bot_and_group(user, bot_id, group_id)
         if err:
             return err
+        sub_err = _require_paid(user, "Scheduled messages")
+        if sub_err:
+            return sub_err
         data = request.get_json()
         if not data:
             return jsonify({"error": "No data provided"}), 400
@@ -181,9 +204,13 @@ def create_scheduled_message(bot_id, group_id):
         for field in required:
             if not data.get(field):
                 return jsonify({"error": f"{field} is required"}), 400
-        # Use the group's saved default timezone when the caller doesn't specify one.
-        group_default_tz = (group.settings or {}).get("timezone", "UTC") if group.settings else "UTC"
-        tz_name = (data.get("timezone") or group_default_tz or "UTC").strip()
+        # Authoritative source: groups.timezone column, then settings JSON fallback.
+        group_default_tz = (
+            group.timezone
+            or (group.settings or {}).get("timezone", "UTC")
+            or "UTC"
+        )
+        tz_name = (data.get("timezone") or group_default_tz).strip() or "UTC"
 
         def _parse_dt_tz(s, tz=tz_name):
             """Convert a datetime string to a naive UTC datetime.

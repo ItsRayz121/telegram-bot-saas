@@ -123,6 +123,8 @@ def _run_migrations():
         # Timezone support
         "ALTER TABLE scheduled_messages ADD COLUMN timezone VARCHAR(50) DEFAULT 'UTC'",
         "ALTER TABLE polls ADD COLUMN timezone VARCHAR(50) DEFAULT 'UTC'",
+        # Dedicated timezone column on groups (previously only in settings JSON)
+        "ALTER TABLE groups ADD COLUMN timezone VARCHAR(50) DEFAULT 'UTC'",
     ]
     try:
         with db.engine.connect() as conn:
@@ -167,6 +169,22 @@ def _run_scheduled_messages():
     import asyncio
     from .models import db, ScheduledMessage, Group, Bot
 
+    # Acquire a PostgreSQL session-level advisory lock so that only one
+    # gunicorn worker (or Railway instance) processes scheduled messages at
+    # a time. This is a safety net — the Procfile already enforces --workers 1.
+    # pg_try_advisory_xact_lock holds for the duration of the current
+    # transaction; it is released automatically on commit/rollback.
+    # On SQLite or if the DB is unreachable, this is silently skipped.
+    try:
+        locked = db.session.execute(
+            text("SELECT pg_try_advisory_xact_lock(2001)")
+        ).scalar()
+        if not locked:
+            _scheduler_log.debug("[SCHEDULER] Skipping scheduled messages — another worker holds the lock")
+            return
+    except Exception:
+        pass  # Non-PostgreSQL DB (e.g. SQLite in dev) — proceed without lock
+
     now = datetime.utcnow()
     pending = ScheduledMessage.query.filter(
         ScheduledMessage.send_at <= now,
@@ -193,8 +211,13 @@ def _run_scheduled_messages():
             )
             continue
 
-        # Effective timezone: per-item if set, otherwise group default
-        effective_tz = msg.timezone or (group.settings or {}).get("timezone", "UTC") or "UTC"
+        # Effective timezone: per-item → group.timezone column → settings JSON → UTC
+        effective_tz = (
+            msg.timezone
+            or group.timezone
+            or (group.settings or {}).get("timezone", "UTC")
+            or "UTC"
+        )
         _scheduler_log.info(
             f"[SCHEDULER] Sending msg id={msg.id} title='{msg.title}' "
             f"tz={effective_tz} send_at_utc={msg.send_at} group={group.id}"
@@ -260,6 +283,17 @@ def _run_scheduled_polls():
     import asyncio
     from .models import db, Poll, Group, Bot
 
+    # Same advisory lock pattern as _run_scheduled_messages — different lock ID.
+    try:
+        locked = db.session.execute(
+            text("SELECT pg_try_advisory_xact_lock(2002)")
+        ).scalar()
+        if not locked:
+            _scheduler_log.debug("[SCHEDULER] Skipping scheduled polls — another worker holds the lock")
+            return
+    except Exception:
+        pass
+
     now = datetime.utcnow()
     pending = Poll.query.filter(
         Poll.scheduled_at <= now,
@@ -287,7 +321,12 @@ def _run_scheduled_polls():
             )
             continue
 
-        effective_tz = poll.timezone or (group.settings or {}).get("timezone", "UTC") or "UTC"
+        effective_tz = (
+            poll.timezone
+            or group.timezone
+            or (group.settings or {}).get("timezone", "UTC")
+            or "UTC"
+        )
         _scheduler_log.info(
             f"[SCHEDULER] Sending poll id={poll.id} q='{poll.question[:40]}' "
             f"tz={effective_tz} scheduled_at_utc={poll.scheduled_at} group={group.id}"

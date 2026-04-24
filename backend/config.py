@@ -1,4 +1,5 @@
 import os
+from datetime import timedelta
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -7,7 +8,9 @@ load_dotenv()
 class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY", "fallback-secret-key-change-in-production")
     JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "fallback-jwt-secret-change-in-production")
-    JWT_ACCESS_TOKEN_EXPIRES = False
+    # Tokens expire after 30 days. Stolen tokens from a previous session
+    # are invalid after this window without requiring a full revocation system.
+    JWT_ACCESS_TOKEN_EXPIRES = timedelta(days=30)
 
     raw_db_url = os.environ.get("DATABASE_URL", "sqlite:///telegram_saas.db")
     if raw_db_url.startswith("postgres://"):
