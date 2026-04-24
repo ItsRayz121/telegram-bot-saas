@@ -24,6 +24,18 @@ function StatCard({ label, value, color = '#2196f3' }) {
 
 export default function AdminPanel() {
   const navigate = useNavigate();
+
+  // Guard: redirect non-admins immediately (App.js AdminRoute also checks this,
+  // but keeping it here as a second layer so the component never renders for non-admins)
+  useEffect(() => {
+    try {
+      const u = JSON.parse(localStorage.getItem('user') || '{}');
+      if (!u.is_admin) navigate('/dashboard', { replace: true });
+    } catch {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [navigate]);
+
   const [stats, setStats] = useState(null);
   const [users, setUsers] = useState([]);
   const [usersTotal, setUsersTotal] = useState(0);

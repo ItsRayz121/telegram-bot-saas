@@ -9,7 +9,7 @@ import { Add, Delete, Edit, ContentCopy, ExpandMore, ExpandLess, Webhook } from 
 import { toast } from 'react-toastify';
 import { webhooks } from '../services/api';
 
-const API_BASE = process.env.REACT_APP_API_URL || window.location.origin;
+const API_BASE = process.env.REACT_APP_API_URL || '';
 
 export default function WebhookManager({ botId, groupId }) {
   const [hookList, setHookList] = useState([]);
@@ -22,7 +22,7 @@ export default function WebhookManager({ botId, groupId }) {
     try {
       const res = await webhooks.list(botId, groupId);
       setHookList(res.data.webhooks || []);
-    } catch { }
+    } catch { toast.error('Failed to load webhooks'); }
   };
 
   useEffect(() => { load(); }, [botId, groupId]);

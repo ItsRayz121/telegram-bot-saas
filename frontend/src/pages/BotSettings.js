@@ -98,7 +98,7 @@ export default function BotSettings() {
                             {group.group_name || 'Unknown Group'}
                           </Typography>
                           <Typography variant="body2" color="text.secondary">
-                            {group.member_count} members
+                            {group.member_count ?? 0} members
                           </Typography>
                         </Box>
                       </Box>

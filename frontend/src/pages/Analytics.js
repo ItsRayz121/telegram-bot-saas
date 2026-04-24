@@ -194,7 +194,7 @@ export default function Analytics() {
                               </Box>
                             </TableCell>
                             <TableCell align="right">
-                              <Typography variant="body2">{m.xp.toLocaleString()}</Typography>
+                              <Typography variant="body2">{(m.xp ?? 0).toLocaleString()}</Typography>
                             </TableCell>
                             <TableCell align="right">
                               <Typography variant="body2">{m.level}</Typography>

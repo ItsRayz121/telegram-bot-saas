@@ -5,6 +5,7 @@ import CssBaseline from '@mui/material/CssBaseline';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
+import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
@@ -15,6 +16,8 @@ import Analytics from './pages/Analytics';
 import AdminPanel from './pages/AdminPanel';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
+import PaymentSuccess from './pages/PaymentSuccess';
+import NotFound from './pages/NotFound';
 
 const darkTheme = createTheme({
   palette: {
@@ -54,38 +57,53 @@ function PrivateRoute({ children }) {
   return token ? children : <Navigate to="/login" replace />;
 }
 
+// Redirect already-authenticated users away from auth pages
+function PublicOnlyRoute({ children }) {
+  const token = localStorage.getItem('token');
+  return token ? <Navigate to="/dashboard" replace /> : children;
+}
+
+// Admin-only route: requires both auth token and is_admin flag
+function AdminRoute({ children }) {
+  const token = localStorage.getItem('token');
+  if (!token) return <Navigate to="/login" replace />;
+  try {
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    if (!user.is_admin) return <Navigate to="/dashboard" replace />;
+  } catch {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return children;
+}
+
 export default function App() {
   return (
     <ThemeProvider theme={darkTheme}>
       <CssBaseline />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
+          {/* Public */}
+          <Route path="/" element={<Landing />} />
+          <Route path="/pricing" element={<Pricing />} />
+          <Route path="/payment/success" element={<PaymentSuccess />} />
+
+          {/* Auth pages — redirect to dashboard if already logged in */}
+          <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
+          <Route path="/register" element={<PublicOnlyRoute><Register /></PublicOnlyRoute>} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/pricing" element={<Pricing />} />
-          <Route
-            path="/dashboard"
-            element={<PrivateRoute><Dashboard /></PrivateRoute>}
-          />
-          <Route
-            path="/bot/:id"
-            element={<PrivateRoute><BotSettings /></PrivateRoute>}
-          />
-          <Route
-            path="/bot/:id/group/:groupId"
-            element={<PrivateRoute><GroupSettings /></PrivateRoute>}
-          />
-          <Route
-            path="/analytics/:id"
-            element={<PrivateRoute><Analytics /></PrivateRoute>}
-          />
-          <Route
-            path="/admin"
-            element={<PrivateRoute><AdminPanel /></PrivateRoute>}
-          />
+
+          {/* Protected */}
+          <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+          <Route path="/bot/:id" element={<PrivateRoute><BotSettings /></PrivateRoute>} />
+          <Route path="/bot/:id/group/:groupId" element={<PrivateRoute><GroupSettings /></PrivateRoute>} />
+          <Route path="/analytics/:id" element={<PrivateRoute><Analytics /></PrivateRoute>} />
+
+          {/* Admin only */}
+          <Route path="/admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />
+
+          {/* 404 */}
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
       <ToastContainer

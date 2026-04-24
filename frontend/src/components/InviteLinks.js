@@ -26,7 +26,7 @@ export default function InviteLinks({ botId, groupId }) {
     try {
       const res = await invites.list(botId, groupId, { time_filter: timeFilter });
       setLinks(res.data.invite_links || []);
-    } catch { }
+    } catch { toast.error('Failed to load invite links'); }
   };
 
   useEffect(() => { load(); }, [botId, groupId, timeFilter]);

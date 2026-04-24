@@ -29,7 +29,7 @@ export default function PollCreator({ botId, groupId, defaultTimezone }) {
     try {
       const res = await polls.list(botId, groupId);
       setPollList(res.data.polls || []);
-    } catch { }
+    } catch { toast.error('Failed to load polls'); }
   };
 
   useEffect(() => { load(); }, [botId, groupId]);

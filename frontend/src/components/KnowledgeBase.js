@@ -48,7 +48,7 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
     try {
       const res = await knowledge.list(botId, groupId);
       setDocs(res.data.documents || []);
-    } catch { }
+    } catch { toast.error('Failed to load knowledge base documents'); }
   };
 
   const loadApiKey = async () => {

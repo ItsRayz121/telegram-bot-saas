@@ -115,7 +115,7 @@ def lemon_checkout():
                             "custom": {"user_id": str(user.id), "tier": tier},
                         },
                         "product_options": {
-                            "redirect_url": f"{Config.FRONTEND_URL}/dashboard?payment=success",
+                            "redirect_url": f"{Config.FRONTEND_URL}/payment/success",
                         },
                     },
                     "relationships": {
@@ -214,7 +214,7 @@ def crypto_checkout():
                 "price_currency": "usd",
                 "order_id": order_id,
                 "order_description": f"BotForge {tier.capitalize()} Plan - 1 Month",
-                "success_url": f"{Config.FRONTEND_URL}/dashboard?payment=success",
+                "success_url": f"{Config.FRONTEND_URL}/payment/success",
                 "cancel_url": f"{Config.FRONTEND_URL}/pricing",
                 "ipn_callback_url": f"{Config.BACKEND_URL}/api/billing/crypto/webhook",
                 "is_fixed_rate": True,

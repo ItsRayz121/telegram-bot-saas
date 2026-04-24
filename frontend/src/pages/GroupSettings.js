@@ -1016,7 +1016,7 @@ export default function GroupSettings() {
                                 color={r.status === 'open' ? 'warning' : 'success'} />
                             </TableCell>
                             <TableCell>
-                              <Typography variant="caption">{new Date(r.created_at).toLocaleDateString()}</Typography>
+                              <Typography variant="caption">{r.created_at ? new Date(r.created_at).toLocaleDateString() : '-'}</Typography>
                             </TableCell>
                             <TableCell>
                               {r.status === 'open' && (
@@ -1153,7 +1153,7 @@ export default function GroupSettings() {
                         {m.first_name}{m.username ? ` (@${m.username})` : ''}
                       </Typography>
                     </TableCell>
-                    <TableCell align="right">{m.xp.toLocaleString()}</TableCell>
+                    <TableCell align="right">{(m.xp ?? 0).toLocaleString()}</TableCell>
                     <TableCell align="right">{m.level}</TableCell>
                     <TableCell align="right">{m.warnings}</TableCell>
                     <TableCell><Chip label={m.role} size="small" variant="outlined" /></TableCell>
@@ -1229,7 +1229,7 @@ export default function GroupSettings() {
                     <TableCell><Typography variant="body2" color="text.secondary">{log.reason || '-'}</Typography></TableCell>
                     <TableCell>
                       <Typography variant="caption" color="text.secondary">
-                        {new Date(log.timestamp).toLocaleString()}
+                        {log.timestamp ? new Date(log.timestamp).toLocaleString() : '-'}
                       </Typography>
                     </TableCell>
                   </TableRow>
