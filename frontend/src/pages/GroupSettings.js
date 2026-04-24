@@ -6,14 +6,15 @@ import {
   TableContainer, TableHead, TableRow, Paper, Select, MenuItem,
   FormControl, InputLabel, Pagination, Divider, Accordion,
   AccordionSummary, AccordionDetails, Dialog, DialogTitle,
-  DialogContent, DialogActions, Tooltip, Alert,
+  DialogContent, DialogActions, Tooltip, Alert, Stack,
 } from '@mui/material';
 import {
   ArrowBack, Save, Add, ExpandMore, Delete, CheckCircle, Schedule,
+  Send, Assessment,
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { settings } from '../services/api';
+import { settings, digest as digestApi } from '../services/api';
 import RaidCreator from '../components/RaidCreator';
 import ScheduledMessages from '../components/ScheduledMessages';
 import KnowledgeBase from '../components/KnowledgeBase';
@@ -115,7 +116,12 @@ export default function GroupSettings() {
 
   const [raidOpen, setRaidOpen] = useState(false);
 
-  const READONLY_TABS = [15, 16]; // Members, Audit Logs
+  const [digestConfig, setDigestConfig] = useState({ daily: false, weekly: false, monthly: false });
+  const [digestLoading, setDigestLoading] = useState(false);
+  const [digestSaving, setDigestSaving] = useState(false);
+  const [digestSending, setDigestSending] = useState('');
+
+  const READONLY_TABS = [15, 16, 17]; // Members, Audit Logs, Digest (digest has its own save)
 
   const fetchSettings = useCallback(async () => {
     try {
@@ -171,11 +177,49 @@ export default function GroupSettings() {
     }
   }, [botId, groupId]);
 
+  const fetchDigest = useCallback(async () => {
+    setDigestLoading(true);
+    try {
+      const res = await digestApi.get(botId, groupId);
+      setDigestConfig(res.data.digest);
+    } catch {
+      // digest not yet configured — use defaults
+    } finally {
+      setDigestLoading(false);
+    }
+  }, [botId, groupId]);
+
+  const handleSaveDigest = async () => {
+    setDigestSaving(true);
+    try {
+      await digestApi.update(botId, groupId, digestConfig);
+      toast.success('Digest settings saved!');
+    } catch {
+      toast.error('Failed to save digest settings');
+    } finally {
+      setDigestSaving(false);
+    }
+  };
+
+  const handleSendNow = async (period) => {
+    setDigestSending(period);
+    try {
+      await digestApi.sendNow(botId, groupId, { period });
+      toast.success(`${period.charAt(0).toUpperCase() + period.slice(1)} report sent to the group!`);
+      fetchDigest();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to send report');
+    } finally {
+      setDigestSending('');
+    }
+  };
+
   useEffect(() => { fetchSettings(); }, [fetchSettings]);
   useEffect(() => { if (tab === 15) fetchMembers(membersPage); }, [tab, membersPage, fetchMembers]);
   useEffect(() => { if (tab === 16) fetchAuditLogs(auditPage); }, [tab, auditPage, fetchAuditLogs]);
   useEffect(() => { if (tab === 9) fetchAutoResponses(); }, [tab, fetchAutoResponses]);
   useEffect(() => { if (tab === 8) fetchReports(); }, [tab, fetchReports]);
+  useEffect(() => { if (tab === 17) fetchDigest(); }, [tab, fetchDigest]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -315,6 +359,7 @@ export default function GroupSettings() {
           <Tab label="Invite Links" />
           <Tab label="Members" />
           <Tab label="Audit Logs" />
+          <Tab label="Reports Digest" />
         </Tabs>
       </AppBar>
 
@@ -1242,6 +1287,116 @@ export default function GroupSettings() {
               <Pagination count={auditTotal} page={auditPage}
                 onChange={(_, p) => setAuditPage(p)} color="primary" />
             </Box>
+          )}
+        </TabPanel>
+
+        {/* ── Tab 17: Reports Digest ── */}
+        <TabPanel value={tab} index={17}>
+          {digestLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
+          ) : (
+            <>
+              <Card sx={{ mb: 2 }}>
+                <CardContent>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                    <Assessment color="primary" />
+                    <Typography variant="h6" fontWeight={600}>Telegram Report Digest</Typography>
+                  </Box>
+                  <Typography variant="body2" color="text.secondary" mb={3}>
+                    Automatically send a summary report to this Telegram group on your chosen schedule.
+                    The report includes spam removed, members warned/banned, scheduled posts sent, polls created, and growth stats.
+                  </Typography>
+
+                  <Grid container spacing={2} mb={3}>
+                    {[
+                      { key: 'daily',   label: 'Daily Report',   desc: 'Sent every ~24 hours' },
+                      { key: 'weekly',  label: 'Weekly Report',  desc: 'Sent every ~7 days' },
+                      { key: 'monthly', label: 'Monthly Report', desc: 'Sent every ~30 days' },
+                    ].map(({ key, label, desc }) => (
+                      <Grid item xs={12} sm={4} key={key}>
+                        <Card
+                          variant="outlined"
+                          sx={{
+                            p: 2,
+                            borderColor: digestConfig[key] ? 'primary.main' : 'divider',
+                            bgcolor: digestConfig[key] ? 'rgba(33,150,243,0.05)' : 'transparent',
+                            cursor: 'pointer',
+                          }}
+                          onClick={() => setDigestConfig((prev) => ({ ...prev, [key]: !prev[key] }))}
+                        >
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Box>
+                              <Typography variant="body2" fontWeight={700}>{label}</Typography>
+                              <Typography variant="caption" color="text.secondary">{desc}</Typography>
+                            </Box>
+                            <Switch
+                              checked={!!digestConfig[key]}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                setDigestConfig((prev) => ({ ...prev, [key]: e.target.checked }));
+                              }}
+                              size="small"
+                            />
+                          </Box>
+                          {digestConfig[`last_${key}`] && (
+                            <Typography variant="caption" color="text.disabled" display="block" mt={0.5}>
+                              Last sent: {new Date(digestConfig[`last_${key}`]).toLocaleString()}
+                            </Typography>
+                          )}
+                        </Card>
+                      </Grid>
+                    ))}
+                  </Grid>
+
+                  <Button
+                    variant="contained"
+                    startIcon={digestSaving ? <CircularProgress size={16} color="inherit" /> : <Save />}
+                    onClick={handleSaveDigest}
+                    disabled={digestSaving}
+                    sx={{ mr: 2 }}
+                  >
+                    Save Digest Settings
+                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* Send Now */}
+              <Card>
+                <CardContent>
+                  <Typography variant="subtitle1" fontWeight={600} mb={0.5}>Send Report Now</Typography>
+                  <Typography variant="body2" color="text.secondary" mb={2}>
+                    Immediately send a report summary to this group's Telegram chat.
+                    Useful for checking the setup or sharing a snapshot with your community.
+                  </Typography>
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                    {[
+                      { key: 'daily',   label: 'Send Daily Report',   icon: '24h' },
+                      { key: 'weekly',  label: 'Send Weekly Report',  icon: '7d' },
+                      { key: 'monthly', label: 'Send Monthly Report', icon: '30d' },
+                    ].map(({ key, label }) => (
+                      <Button
+                        key={key}
+                        variant="outlined"
+                        startIcon={digestSending === key
+                          ? <CircularProgress size={16} color="inherit" />
+                          : <Send fontSize="small" />
+                        }
+                        disabled={!!digestSending}
+                        onClick={() => handleSendNow(key)}
+                      >
+                        {label}
+                      </Button>
+                    ))}
+                  </Stack>
+
+                  <Alert severity="info" sx={{ mt: 2 }} icon={false}>
+                    <Typography variant="caption">
+                      The bot must be active and present in the group as an admin to send reports.
+                    </Typography>
+                  </Alert>
+                </CardContent>
+              </Card>
+            </>
           )}
         </TabPanel>
       </Box>

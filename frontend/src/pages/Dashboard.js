@@ -9,11 +9,11 @@ import {
 import {
   Add, Delete, Settings, BarChart, SmartToy, AccountCircle,
   PowerSettingsNew, Upgrade, CheckCircle, Close, ContentCopy,
-  ArrowForward, CreditCard, People,
+  ArrowForward, CreditCard, People, Home, AttachMoney,
 } from '@mui/icons-material';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { bots, auth, billing } from '../services/api';
+import { bots, auth, billing, referrals as referralsApi } from '../services/api';
 
 const MAX_BOTS = { free: 1, pro: 5, enterprise: 50 };
 
@@ -132,9 +132,19 @@ function OnboardingCard({ botList, onAddBot, navigate }) {
 }
 
 // ── Invite Card ────────────────────────────────────────────────────────────────
+const REFERRAL_MILESTONES = [
+  { count: 3,  days: 7,  label: '7 days Pro' },
+  { count: 10, days: 30, label: '1 month Pro' },
+];
+
 function InviteCard({ userId }) {
   const [copied, setCopied] = useState(false);
+  const [stats, setStats] = useState(null);
   const inviteLink = `${window.location.origin}/register?ref=${userId}`;
+
+  useEffect(() => {
+    referralsApi.getStats().then((r) => setStats(r.data)).catch(() => {});
+  }, []);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(inviteLink).then(() => {
@@ -143,22 +153,48 @@ function InviteCard({ userId }) {
     });
   };
 
+  const total = stats?.total_referrals ?? 0;
+  const nextMilestone = REFERRAL_MILESTONES.find((m) => total < m.count);
+  const lastMilestone = [...REFERRAL_MILESTONES].reverse().find((m) => total >= m.count);
+
   return (
     <Card sx={{ mt: 3 }}>
       <CardContent>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
           <People color="primary" />
-          <Typography variant="subtitle1" fontWeight={700}>Invite Friends</Typography>
+          <Typography variant="subtitle1" fontWeight={700}>Invite Friends — Earn Free Pro</Typography>
         </Box>
+
+        {/* Milestone progress */}
+        {nextMilestone && (
+          <Box sx={{ mb: 2, p: 1.5, bgcolor: 'rgba(33,150,243,0.07)', borderRadius: 2, border: '1px solid rgba(33,150,243,0.2)' }}>
+            <Typography variant="body2" fontWeight={600} color="primary.main">
+              {total}/{nextMilestone.count} referrals → {nextMilestone.label} free
+            </Typography>
+            <LinearProgress
+              variant="determinate"
+              value={(total / nextMilestone.count) * 100}
+              sx={{ mt: 1, borderRadius: 2, height: 6 }}
+            />
+          </Box>
+        )}
+        {lastMilestone && !nextMilestone && (
+          <Box sx={{ mb: 2, p: 1.5, bgcolor: 'rgba(46,125,50,0.07)', borderRadius: 2, border: '1px solid rgba(46,125,50,0.2)' }}>
+            <Typography variant="body2" fontWeight={600} color="success.main">
+              🎉 All milestones reached! {total} referrals total.
+            </Typography>
+          </Box>
+        )}
+
         <Typography variant="body2" color="text.secondary" mb={2}>
-          Share BotForge with other community admins. Referral rewards coming soon — invite early and get credited automatically.
+          Invite 3 → get 7 days Pro · Invite 10 → get 1 month Pro. Rewards apply automatically.
         </Typography>
+
         <Box
           sx={{
             display: 'flex', alignItems: 'center', gap: 1,
             p: 1.5, bgcolor: 'background.default', borderRadius: 2,
-            border: '1px solid', borderColor: 'divider',
-            overflowX: 'auto',
+            border: '1px solid', borderColor: 'divider', overflowX: 'auto',
           }}
         >
           <Typography variant="caption" color="text.secondary" sx={{ flexGrow: 1, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
@@ -171,6 +207,11 @@ function InviteCard({ userId }) {
         {copied && (
           <Typography variant="caption" color="success.main" mt={0.5} display="block">
             Link copied!
+          </Typography>
+        )}
+        {total > 0 && (
+          <Typography variant="caption" color="text.disabled" display="block" mt={1}>
+            {total} successful referral{total !== 1 ? 's' : ''} so far
           </Typography>
         )}
       </CardContent>
@@ -297,14 +338,34 @@ export default function Dashboard() {
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
       {/* ── AppBar ── */}
       <AppBar position="sticky" elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
-        <Toolbar>
-          <SmartToy sx={{ mr: 1, color: 'primary.main' }} />
-          <Typography variant="h6" fontWeight={700} sx={{ flexGrow: 1 }}>
-            BotForge
-          </Typography>
+        <Toolbar sx={{ gap: 0.5 }}>
+          {/* Clickable logo → /dashboard */}
+          <Box
+            onClick={() => navigate('/dashboard')}
+            sx={{ display: 'flex', alignItems: 'center', gap: 0.75, cursor: 'pointer', mr: 2, userSelect: 'none' }}
+          >
+            <SmartToy sx={{ color: 'primary.main' }} />
+            <Typography variant="h6" fontWeight={700}>BotForge</Typography>
+          </Box>
+
+          {/* Desktop nav links */}
+          <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 0.5, flexGrow: 1 }}>
+            <Button size="small" startIcon={<Home fontSize="small" />} onClick={() => navigate('/')} sx={{ color: 'text.secondary' }}>
+              Home
+            </Button>
+            <Button size="small" onClick={() => navigate('/pricing')} sx={{ color: 'text.secondary' }}>
+              Pricing
+            </Button>
+            <Button size="small" startIcon={<CreditCard fontSize="small" />} onClick={() => navigate('/billing')} sx={{ color: 'text.secondary' }}>
+              Billing
+            </Button>
+          </Box>
+
+          <Box sx={{ flexGrow: { xs: 1, md: 0 } }} />
+
           <Chip label={tier.toUpperCase()} color={tierColor} size="small" sx={{ mr: 1 }} />
           {tier === 'free' && (
-            <Button size="small" startIcon={<Upgrade />} onClick={() => navigate('/pricing')} sx={{ mr: 1 }}>
+            <Button size="small" startIcon={<Upgrade />} onClick={() => navigate('/pricing')} sx={{ mr: 1, display: { xs: 'none', sm: 'inline-flex' } }}>
               Upgrade
             </Button>
           )}
@@ -320,6 +381,13 @@ export default function Dashboard() {
                 {tier.charAt(0).toUpperCase() + tier.slice(1)} Plan
                 {subscription?.expires && ` · expires ${new Date(subscription.expires).toLocaleDateString()}`}
               </Typography>
+            </MenuItem>
+            {/* Mobile-only nav items */}
+            <MenuItem onClick={() => { setAnchorEl(null); navigate('/'); }} sx={{ display: { md: 'none' } }}>
+              <Home fontSize="small" sx={{ mr: 1 }} /> Home / Website
+            </MenuItem>
+            <MenuItem onClick={() => { setAnchorEl(null); navigate('/pricing'); }} sx={{ display: { md: 'none' } }}>
+              <AttachMoney fontSize="small" sx={{ mr: 1 }} /> Pricing
             </MenuItem>
             <MenuItem onClick={() => { setAnchorEl(null); navigate('/billing'); }}>
               <CreditCard fontSize="small" sx={{ mr: 1 }} /> Billing

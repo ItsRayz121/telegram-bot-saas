@@ -4,6 +4,9 @@ import secrets
 
 db = SQLAlchemy()
 
+# Referral milestones: (required_count, reward_days)
+REFERRAL_MILESTONES = [(3, 7), (10, 30)]
+
 
 class User(db.Model):
     __tablename__ = "users"
@@ -19,8 +22,15 @@ class User(db.Model):
     is_banned = db.Column(db.Boolean, default=False)
     ban_reason = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    # Unique referral code assigned at registration
+    referral_code = db.Column(db.String(16), unique=True, nullable=True, index=True)
 
     bots = db.relationship("Bot", backref="owner", lazy=True, cascade="all, delete-orphan")
+
+    def get_or_create_referral_code(self):
+        if not self.referral_code:
+            self.referral_code = secrets.token_urlsafe(8)[:10]
+        return self.referral_code
 
     def to_dict(self):
         return {
@@ -31,6 +41,7 @@ class User(db.Model):
             "subscription_expires": self.subscription_expires.isoformat() if self.subscription_expires else None,
             "is_banned": self.is_banned,
             "created_at": self.created_at.isoformat(),
+            "referral_code": self.referral_code,
         }
 
 
@@ -472,6 +483,33 @@ class InviteLinkJoin(db.Model):
             "joined_user_id": self.joined_user_id,
             "joined_username": self.joined_username,
             "joined_at": self.joined_at.isoformat(),
+        }
+
+
+class Referral(db.Model):
+    """Tracks BotForge platform referrals (one user inviting another to register)."""
+    __tablename__ = "referrals"
+
+    id = db.Column(db.Integer, primary_key=True)
+    referrer_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    referred_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, unique=True)
+    referral_code = db.Column(db.String(16), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    # Track which milestones have been awarded to the referrer (JSON list of counts)
+    rewards_given = db.Column(db.JSON, nullable=False, default=list)
+
+    __table_args__ = (
+        db.UniqueConstraint("referrer_user_id", "referred_user_id", name="unique_referral_pair"),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "referrer_user_id": self.referrer_user_id,
+            "referred_user_id": self.referred_user_id,
+            "referral_code": self.referral_code,
+            "created_at": self.created_at.isoformat(),
+            "rewards_given": self.rewards_given,
         }
 
 

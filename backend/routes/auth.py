@@ -4,7 +4,7 @@ import threading
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 
-from ..models import db, User, PasswordResetToken
+from ..models import db, User, PasswordResetToken, Referral
 from ..middleware.rate_limit import rate_limit
 from ..config import Config
 
@@ -23,6 +23,7 @@ def register():
     email = data.get("email", "").strip().lower()
     password = data.get("password", "")
     full_name = data.get("full_name", "").strip()
+    ref_code = data.get("ref", "").strip() or ""
 
     if not email or not password or not full_name:
         return jsonify({"error": "Email, password, and full_name are required"}), 400
@@ -38,8 +39,48 @@ def register():
         return jsonify({"error": "Email already registered"}), 409
 
     pw_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-    user = User(email=email, password_hash=pw_hash, full_name=full_name)
+    import secrets as _secrets
+    user = User(
+        email=email,
+        password_hash=pw_hash,
+        full_name=full_name,
+        referral_code=_secrets.token_urlsafe(8)[:10],
+    )
     db.session.add(user)
+    db.session.flush()  # get user.id before commit
+
+    # Handle referral — find referrer by code, prevent self-referral
+    if ref_code:
+        referrer = User.query.filter_by(referral_code=ref_code).first()
+        if referrer and referrer.id != user.id:
+            existing = Referral.query.filter_by(referred_user_id=user.id).first()
+            if not existing:
+                referral = Referral(
+                    referrer_user_id=referrer.id,
+                    referred_user_id=user.id,
+                    referral_code=ref_code,
+                )
+                db.session.add(referral)
+                # Check milestones for referrer in a background thread
+                try:
+                    from flask import current_app
+                    from ..routes.referrals import _apply_referral_rewards
+                    _app = current_app._get_current_object()
+                    _referrer_id = referrer.id
+
+                    def _reward():
+                        try:
+                            with _app.app_context():
+                                r = User.query.get(_referrer_id)
+                                if r:
+                                    _apply_referral_rewards(r)
+                        except Exception as exc:
+                            logger.warning("Referral reward check failed: %s", exc)
+
+                    threading.Thread(target=_reward, daemon=True).start()
+                except Exception:
+                    pass
+
     db.session.commit()
 
     # Send welcome email asynchronously — never block the response on SMTP.

@@ -19,6 +19,8 @@ from .routes.polls import polls_bp
 from .routes.webhooks import webhooks_bp
 from .routes.invites import invites_bp
 from .routes.api_keys import api_keys_bp
+from .routes.referrals import referrals_bp
+from .routes.digest import digest_bp, run_digest_scheduler
 from .bot_manager import BotManager
 
 _scheduler_log = logging.getLogger(__name__)
@@ -48,6 +50,8 @@ def create_app():
     app.register_blueprint(webhooks_bp)
     app.register_blueprint(invites_bp)
     app.register_blueprint(api_keys_bp)
+    app.register_blueprint(referrals_bp)
+    app.register_blueprint(digest_bp)
 
     app.bot_manager = bot_manager
 
@@ -76,6 +80,7 @@ def create_app():
     with app.app_context():
         db.create_all()
         _run_migrations()
+        _run_referral_migrations()
 
     # Start bots in a background thread after a short delay so Gunicorn can
     # pass its healthcheck before bot polling (which may contact Telegram and
@@ -94,6 +99,27 @@ def create_app():
     threading.Thread(target=_scheduler_loop, args=(app,), daemon=True).start()
 
     return app
+
+
+def _run_referral_migrations():
+    """Add referral_code column to users if it doesn't exist yet."""
+    migrations = [
+        "ALTER TABLE users ADD COLUMN referral_code VARCHAR(16)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_referral_code ON users (referral_code)",
+    ]
+    try:
+        with db.engine.connect() as conn:
+            for sql in migrations:
+                try:
+                    conn.execute(text(sql))
+                    conn.commit()
+                except Exception:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+    except Exception:
+        pass
 
 
 def _run_migrations():
@@ -160,6 +186,10 @@ def _scheduler_loop(app):
             with app.app_context():
                 _run_scheduled_messages()
                 _run_scheduled_polls()
+            try:
+                run_digest_scheduler(app)
+            except Exception as exc:
+                _scheduler_log.error(f"Digest scheduler error: {exc}")
         except Exception as exc:
             _scheduler_log.error(f"Scheduler loop error: {exc}")
         time.sleep(60)

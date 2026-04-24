@@ -3,12 +3,14 @@ import {
   Box, Card, CardContent, TextField, Button, Typography,
   Alert, CircularProgress, Link,
 } from '@mui/material';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { auth } from '../services/api';
 
 export default function Register() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const refCode = searchParams.get('ref') || '';
   const [form, setForm] = useState({ email: '', password: '', full_name: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -24,7 +26,7 @@ export default function Register() {
     }
     setLoading(true);
     try {
-      const res = await auth.register(form);
+      const res = await auth.register({ ...form, ref: refCode });
       localStorage.setItem('token', res.data.token);
       localStorage.setItem('user', JSON.stringify(res.data.user));
       toast.success('Account created! Welcome to BotForge.');

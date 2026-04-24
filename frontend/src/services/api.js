@@ -141,6 +141,20 @@ export const billing = {
   cryptoCheckout: (data) => api.post('/api/billing/crypto/checkout', data),
 };
 
+export const referrals = {
+  getStats: () => api.get('/api/referrals/stats'),
+  applyRewards: () => api.post('/api/referrals/apply-rewards'),
+};
+
+export const digest = {
+  get: (botId, groupId) =>
+    api.get(`/api/bots/${botId}/groups/${groupId}/digest`),
+  update: (botId, groupId, data) =>
+    api.put(`/api/bots/${botId}/groups/${groupId}/digest`, data),
+  sendNow: (botId, groupId, data) =>
+    api.post(`/api/bots/${botId}/groups/${groupId}/digest/send-now`, data),
+};
+
 export const admin = {
   getUsers: (params) => api.get('/api/admin/users', { params }),
   getUser: (id) => api.get(`/api/admin/users/${id}`),
