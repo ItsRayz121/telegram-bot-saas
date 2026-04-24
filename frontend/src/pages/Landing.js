@@ -1,44 +1,74 @@
 import React from 'react';
 import {
   Box, AppBar, Toolbar, Typography, Button, Card, CardContent,
-  Grid, Chip, Container, Stack, Divider,
+  Grid, Chip, Container, Stack, Divider, Avatar,
 } from '@mui/material';
 import {
   SmartToy, Shield, Schedule, BarChart, People, CheckCircle,
-  AutoAwesome, Security, Bolt,
+  AutoAwesome, Bolt, Warning, TrendingDown, AccessTime,
+  ArrowForward, CurrencyBitcoin, Lock,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+
+const PAIN_POINTS = [
+  {
+    icon: <Warning fontSize="large" />,
+    title: 'Spam is killing your group',
+    desc: 'Bots, scammers, and link-droppers flood your chat the moment you stop watching. Manual bans don\'t scale.',
+  },
+  {
+    icon: <TrendingDown fontSize="large" />,
+    title: 'Engagement is slowly dying',
+    desc: 'No consistent content, no interaction prompts, no reason to stay. Members ghost after the first week.',
+  },
+  {
+    icon: <AccessTime fontSize="large" />,
+    title: 'You\'re the bottleneck',
+    desc: 'Every welcome message, every pinned post, every moderation decision — manually done by you, every day.',
+  },
+  {
+    icon: <People fontSize="large" />,
+    title: 'You have no idea what\'s working',
+    desc: 'No growth metrics, no activity data, no way to know which content keeps people coming back.',
+  },
+];
 
 const FEATURES = [
   {
     icon: <Shield fontSize="large" />,
-    title: 'Advanced AutoMod',
-    desc: 'Automatically remove spam, links, and offensive content. Set custom rules for your community.',
+    title: 'AutoMod — Set it. Forget it.',
+    desc: 'Auto-remove spam, links, bad words, and media. Warn → mute → ban automatically. Your group stays clean 24/7.',
+    badge: 'Most Used',
   },
   {
     icon: <Schedule fontSize="large" />,
-    title: 'Scheduled Messages',
-    desc: 'Schedule announcements, polls, and posts at exactly the right time in any timezone.',
+    title: 'Scheduled Content',
+    desc: 'Write posts once, publish them forever. Daily updates, weekly recaps, polls — on autopilot in any timezone.',
+    badge: null,
   },
   {
     icon: <People fontSize="large" />,
-    title: 'Member Management',
-    desc: 'XP system, levels, warnings, verification challenges, and role-based permissions.',
+    title: 'Member System',
+    desc: 'XP, levels, warnings, verification challenges. Active members get rewarded. Bad actors get removed.',
+    badge: null,
   },
   {
     icon: <BarChart fontSize="large" />,
-    title: 'Analytics Dashboard',
-    desc: 'Track member growth, activity, moderation actions, and invite link performance.',
+    title: 'Growth Analytics',
+    desc: 'See exactly which invite links drive joins, peak activity hours, member retention, and moderation stats.',
+    badge: null,
   },
   {
     icon: <AutoAwesome fontSize="large" />,
     title: 'AI Knowledge Base',
-    desc: 'Let your bot answer questions automatically from your uploaded documents.',
+    desc: 'Upload your docs or FAQ. The bot answers questions automatically — no human needed.',
+    badge: 'Pro',
   },
   {
     icon: <Bolt fontSize="large" />,
-    title: 'Webhook Integrations',
-    desc: 'Connect GitHub, price feeds, or any service to send messages to your Telegram group.',
+    title: 'Webhooks & Integrations',
+    desc: 'Push GitHub releases, price alerts, or any API event straight to your Telegram group.',
+    badge: 'Pro',
   },
 ];
 
@@ -46,38 +76,63 @@ const PLANS = [
   {
     name: 'Free',
     price: '$0',
+    daily: null,
     period: 'forever',
     color: 'default',
-    features: ['1 bot', '1 group per bot', 'Basic moderation', 'Welcome messages'],
+    features: ['1 bot', '1 group per bot', 'Basic moderation', 'Welcome messages', 'XP system'],
     cta: 'Start Free',
     ctaVariant: 'outlined',
+    tier: null,
   },
   {
     name: 'Pro',
     price: '$9',
+    daily: '$0.30/day',
     period: '/month',
     color: 'primary',
     popular: true,
-    features: ['5 bots', 'Unlimited groups', 'Scheduled messages', 'Analytics', 'Priority support'],
+    features: ['5 bots', 'Unlimited groups', 'Advanced AutoMod', 'Scheduled messages', 'Analytics', 'AI Knowledge Base', 'Priority support'],
     cta: 'Get Pro',
     ctaVariant: 'contained',
+    tier: 'pro',
   },
   {
     name: 'Enterprise',
     price: '$49',
+    daily: '$1.63/day',
     period: '/month',
     color: 'secondary',
-    features: ['50 bots', 'All Pro features', 'API access', 'SLA guarantee', 'Dedicated support'],
+    features: ['50 bots', 'All Pro features', 'API access', 'Webhook integrations', 'SLA guarantee', 'Dedicated support'],
     cta: 'Get Enterprise',
     ctaVariant: 'outlined',
+    tier: 'enterprise',
   },
 ];
 
-const STATS = [
-  { value: '300+', label: 'Cryptocurrencies Accepted' },
-  { value: '17+', label: 'Bot Features' },
-  { value: '24/7', label: 'Bot Uptime' },
-  { value: '5 min', label: 'Setup Time' },
+const STEPS = [
+  { n: '1', title: 'Create your free account', desc: 'Email + password. Done in 30 seconds.' },
+  { n: '2', title: 'Get a bot token from @BotFather', desc: 'Open Telegram, message @BotFather, send /newbot.' },
+  { n: '3', title: 'Paste the token into BotForge', desc: 'We connect your bot instantly. No code required.' },
+  { n: '4', title: 'Add the bot to your group as admin', desc: 'Your group appears in the dashboard automatically.' },
+  { n: '5', title: 'Turn on automation', desc: 'Enable AutoMod, schedule posts, track growth — done.' },
+];
+
+const TESTIMONIALS = [
+  {
+    name: 'Alex K.',
+    role: 'Crypto community admin — 12,000 members',
+    text: 'AutoMod alone saved me 2 hours a day. Spam dropped by 90% in the first week.',
+  },
+  {
+    name: 'Maria S.',
+    role: 'NFT project founder — 3 groups',
+    text: 'Scheduling daily updates used to take me an hour every morning. Now it runs itself.',
+  },
+  {
+    name: 'James R.',
+    role: 'DeFi project — 5 communities',
+    text: 'The analytics finally showed me which invite links were actually bringing in real members.',
+  },
 ];
 
 export default function Landing() {
@@ -86,14 +141,15 @@ export default function Landing() {
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
-      {/* Nav */}
+
+      {/* ── Nav ── */}
       <AppBar position="sticky" elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.default' }}>
         <Toolbar sx={{ maxWidth: 1200, mx: 'auto', width: '100%', px: { xs: 2, md: 3 } }}>
           <SmartToy sx={{ mr: 1, color: 'primary.main' }} />
           <Typography variant="h6" fontWeight={700} sx={{ flexGrow: 1 }}>
             BotForge
           </Typography>
-          <Button onClick={() => navigate('/pricing')} sx={{ mr: 1, display: { xs: 'none', sm: 'inline-flex' } }}>
+          <Button onClick={() => navigate('/pricing')} sx={{ mr: 1, display: { xs: 'none', sm: 'inline-flex' }, color: 'text.secondary' }}>
             Pricing
           </Button>
           {token ? (
@@ -102,7 +158,7 @@ export default function Landing() {
             </Button>
           ) : (
             <Stack direction="row" spacing={1}>
-              <Button onClick={() => navigate('/login')}>Sign In</Button>
+              <Button onClick={() => navigate('/login')} sx={{ color: 'text.secondary' }}>Sign In</Button>
               <Button variant="contained" onClick={() => navigate('/register')}>
                 Start Free
               </Button>
@@ -111,95 +167,124 @@ export default function Landing() {
         </Toolbar>
       </AppBar>
 
-      {/* Hero */}
+      {/* ── Hero ── */}
       <Box
         sx={{
-          background: 'linear-gradient(135deg, #0d1117 0%, #161b22 50%, #0d1117 100%)',
-          pt: { xs: 8, md: 12 },
-          pb: { xs: 8, md: 12 },
+          background: 'linear-gradient(160deg, #0d1117 0%, #0d1b2e 50%, #0d1117 100%)',
+          pt: { xs: 8, md: 14 },
+          pb: { xs: 8, md: 14 },
           textAlign: 'center',
           px: 2,
+          position: 'relative',
+          overflow: 'hidden',
         }}
       >
-        <Container maxWidth="md">
+        {/* Background glow */}
+        <Box sx={{
+          position: 'absolute', top: '20%', left: '50%', transform: 'translateX(-50%)',
+          width: 600, height: 300, borderRadius: '50%',
+          background: 'radial-gradient(ellipse, rgba(33,150,243,0.12) 0%, transparent 70%)',
+          pointerEvents: 'none',
+        }} />
+        <Container maxWidth="md" sx={{ position: 'relative' }}>
           <Chip
-            label="Powered by AI — Built for Telegram Communities"
+            label="✦  Built for Telegram communities"
             size="small"
-            sx={{ mb: 3, bgcolor: 'primary.main', color: 'white', fontWeight: 600 }}
+            sx={{ mb: 3, bgcolor: 'rgba(33,150,243,0.12)', color: 'primary.light', fontWeight: 600, border: '1px solid rgba(33,150,243,0.3)' }}
           />
           <Typography
-            variant="h2"
-            fontWeight={800}
-            mb={3}
-            sx={{ fontSize: { xs: '2rem', sm: '2.75rem', md: '3.5rem' }, lineHeight: 1.15 }}
+            variant="h1"
+            fontWeight={900}
+            mb={2.5}
+            sx={{ fontSize: { xs: '2.2rem', sm: '3rem', md: '3.75rem' }, lineHeight: 1.1, letterSpacing: '-0.02em' }}
           >
-            Automate & Grow Your{' '}
+            Turn Your Telegram Group{' '}
             <Box component="span" sx={{ color: 'primary.main' }}>
-              Telegram Community
+              Into a Growth Machine
             </Box>
           </Typography>
           <Typography
-            variant="h6"
+            variant="h5"
             color="text.secondary"
-            mb={5}
-            sx={{ maxWidth: 580, mx: 'auto', fontWeight: 400, lineHeight: 1.6 }}
+            mb={1.5}
+            sx={{ fontWeight: 400, fontSize: { xs: '1.1rem', md: '1.3rem' } }}
           >
-            BotForge gives you one dashboard to manage moderation, scheduling, member tracking,
-            analytics, and AI responses — for every Telegram group you run.
+            No spam. No manual work. Just growth.
           </Typography>
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="center">
+          <Typography
+            variant="body1"
+            color="text.disabled"
+            mb={5}
+            sx={{ maxWidth: 520, mx: 'auto', lineHeight: 1.7 }}
+          >
+            BotForge automates moderation, scheduling, member management, and analytics
+            for every Telegram group you run — from one dashboard.
+          </Typography>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="center" mb={3}>
             <Button
               variant="contained"
               size="large"
               onClick={() => navigate('/register')}
-              sx={{ py: 1.5, px: 4, fontSize: '1rem' }}
+              endIcon={<ArrowForward />}
+              sx={{ py: 1.75, px: 4, fontSize: '1.05rem', fontWeight: 700 }}
             >
-              Start Free — No Credit Card
+              Start Free — Takes 60 Seconds
             </Button>
             <Button
               variant="outlined"
               size="large"
               onClick={() => navigate('/pricing')}
-              sx={{ py: 1.5, px: 4, fontSize: '1rem' }}
+              sx={{ py: 1.75, px: 4, fontSize: '1.05rem' }}
             >
               View Pricing
             </Button>
           </Stack>
+          <Typography variant="caption" color="text.disabled">
+            No credit card required · Free plan, forever · Upgrade anytime with crypto
+          </Typography>
         </Container>
       </Box>
 
-      {/* Stats */}
-      <Box sx={{ bgcolor: 'background.paper', borderTop: '1px solid', borderBottom: '1px solid', borderColor: 'divider', py: 4 }}>
+      {/* ── Stats Strip ── */}
+      <Box sx={{ bgcolor: 'background.paper', borderTop: '1px solid', borderBottom: '1px solid', borderColor: 'divider', py: 3 }}>
         <Container maxWidth="md">
-          <Grid container spacing={2} justifyContent="center">
-            {STATS.map((s) => (
-              <Grid item xs={6} sm={3} key={s.label} sx={{ textAlign: 'center' }}>
+          <Grid container justifyContent="center" spacing={0}>
+            {[
+              { value: '300+', label: 'Cryptos Accepted' },
+              { value: '17+', label: 'Bot Features' },
+              { value: '24/7', label: 'Always Running' },
+              { value: '5 min', label: 'Setup Time' },
+            ].map((s, i) => (
+              <Grid item xs={6} sm={3} key={s.label} sx={{ textAlign: 'center', py: 1, borderLeft: i > 0 ? '1px solid' : 'none', borderColor: 'divider' }}>
                 <Typography variant="h4" fontWeight={800} color="primary.main">{s.value}</Typography>
-                <Typography variant="body2" color="text.secondary">{s.label}</Typography>
+                <Typography variant="caption" color="text.secondary">{s.label}</Typography>
               </Grid>
             ))}
           </Grid>
         </Container>
       </Box>
 
-      {/* Features */}
+      {/* ── Pain ── */}
       <Container maxWidth="lg" sx={{ py: { xs: 8, md: 12 } }}>
-        <Typography variant="h4" fontWeight={700} textAlign="center" mb={1}>
-          Everything your community needs
-        </Typography>
-        <Typography variant="body1" color="text.secondary" textAlign="center" mb={6}>
-          One bot. One dashboard. Full control.
-        </Typography>
+        <Box sx={{ textAlign: 'center', mb: 6 }}>
+          <Typography variant="overline" color="error.main" fontWeight={700} letterSpacing={2}>
+            The Problem
+          </Typography>
+          <Typography variant="h4" fontWeight={800} mt={1} mb={1.5}>
+            Managing a Telegram group shouldn't feel like a full-time job
+          </Typography>
+          <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 560, mx: 'auto' }}>
+            If you're running a community without automation, here's what your day looks like:
+          </Typography>
+        </Box>
         <Grid container spacing={3}>
-          {FEATURES.map((f) => (
-            <Grid item xs={12} sm={6} md={4} key={f.title}>
-              <Card sx={{ height: '100%', p: 1 }}>
+          {PAIN_POINTS.map((p) => (
+            <Grid item xs={12} sm={6} key={p.title}>
+              <Card sx={{ height: '100%', p: 1, borderColor: 'rgba(211,47,47,0.2)', bgcolor: 'rgba(211,47,47,0.03)' }}>
                 <CardContent>
-                  <Box sx={{ color: 'primary.main', mb: 1.5 }}>{f.icon}</Box>
-                  <Typography variant="h6" fontWeight={700} mb={1}>{f.title}</Typography>
-                  <Typography variant="body2" color="text.secondary" lineHeight={1.6}>
-                    {f.desc}
-                  </Typography>
+                  <Box sx={{ color: 'error.main', mb: 1.5 }}>{p.icon}</Box>
+                  <Typography variant="h6" fontWeight={700} mb={1}>{p.title}</Typography>
+                  <Typography variant="body2" color="text.secondary" lineHeight={1.7}>{p.desc}</Typography>
                 </CardContent>
               </Card>
             </Grid>
@@ -207,149 +292,285 @@ export default function Landing() {
         </Grid>
       </Container>
 
-      {/* How it works */}
+      {/* ── Solution bridge ── */}
+      <Box sx={{ bgcolor: 'background.paper', borderTop: '1px solid', borderBottom: '1px solid', borderColor: 'divider', py: { xs: 6, md: 8 }, textAlign: 'center', px: 2 }}>
+        <Container maxWidth="sm">
+          <Typography variant="overline" color="success.main" fontWeight={700} letterSpacing={2}>
+            The Solution
+          </Typography>
+          <Typography variant="h4" fontWeight={800} mt={1} mb={2}>
+            BotForge handles everything you're doing manually — automatically
+          </Typography>
+          <Typography variant="body1" color="text.secondary" lineHeight={1.8}>
+            More automation → more consistent engagement → more trust → more members who stay.
+            That's the growth loop BotForge puts in motion the moment you connect your first bot.
+          </Typography>
+        </Container>
+      </Box>
+
+      {/* ── Features ── */}
+      <Container maxWidth="lg" sx={{ py: { xs: 8, md: 12 } }}>
+        <Box sx={{ textAlign: 'center', mb: 6 }}>
+          <Typography variant="overline" color="primary.main" fontWeight={700} letterSpacing={2}>
+            Features
+          </Typography>
+          <Typography variant="h4" fontWeight={800} mt={1} mb={1}>
+            One dashboard. Full control.
+          </Typography>
+          <Typography variant="body1" color="text.secondary">
+            Everything your community needs, built in — no plugins, no integrations required.
+          </Typography>
+        </Box>
+        <Grid container spacing={3}>
+          {FEATURES.map((f) => (
+            <Grid item xs={12} sm={6} md={4} key={f.title}>
+              <Card sx={{ height: '100%', p: 1, position: 'relative' }}>
+                {f.badge && (
+                  <Chip
+                    label={f.badge}
+                    size="small"
+                    color={f.badge === 'Pro' ? 'primary' : 'success'}
+                    sx={{ position: 'absolute', top: 12, right: 12, fontSize: 10 }}
+                  />
+                )}
+                <CardContent>
+                  <Box sx={{ color: 'primary.main', mb: 1.5 }}>{f.icon}</Box>
+                  <Typography variant="h6" fontWeight={700} mb={1}>{f.title}</Typography>
+                  <Typography variant="body2" color="text.secondary" lineHeight={1.7}>{f.desc}</Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+      </Container>
+
+      {/* ── How It Works ── */}
       <Box sx={{ bgcolor: 'background.paper', borderTop: '1px solid', borderColor: 'divider', py: { xs: 8, md: 10 } }}>
-        <Container maxWidth="md">
-          <Typography variant="h4" fontWeight={700} textAlign="center" mb={1}>
-            Up and running in 5 minutes
-          </Typography>
-          <Typography variant="body1" color="text.secondary" textAlign="center" mb={6}>
-            No coding required. Just connect your bot and start managing.
-          </Typography>
+        <Container maxWidth="sm">
+          <Box sx={{ textAlign: 'center', mb: 6 }}>
+            <Typography variant="overline" color="primary.main" fontWeight={700} letterSpacing={2}>
+              Setup
+            </Typography>
+            <Typography variant="h4" fontWeight={800} mt={1} mb={1}>
+              Up and running in 5 minutes
+            </Typography>
+            <Typography variant="body1" color="text.secondary">
+              No coding. No DevOps. Just connect and automate.
+            </Typography>
+          </Box>
           <Stack spacing={3}>
-            {[
-              { step: '1', title: 'Create a free account', desc: 'Sign up with your email in seconds.' },
-              { step: '2', title: 'Connect your Telegram bot', desc: 'Paste your BotFather token — we handle the rest.' },
-              { step: '3', title: 'Add bot to your group', desc: 'Add as admin and your group appears in the dashboard.' },
-              { step: '4', title: 'Configure & automate', desc: 'Turn on features, schedule posts, set up AutoMod, and grow.' },
-            ].map((item) => (
-              <Box key={item.step} sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
-                <Box
-                  sx={{
-                    width: 40, height: 40, borderRadius: '50%', bgcolor: 'primary.main',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    flexShrink: 0, fontWeight: 700, fontSize: '1rem',
-                  }}
-                >
-                  {item.step}
-                </Box>
+            {STEPS.map((s) => (
+              <Box key={s.n} sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+                <Avatar sx={{ bgcolor: 'primary.main', width: 36, height: 36, fontSize: '0.9rem', fontWeight: 800, flexShrink: 0 }}>
+                  {s.n}
+                </Avatar>
                 <Box>
-                  <Typography fontWeight={600} mb={0.25}>{item.title}</Typography>
-                  <Typography variant="body2" color="text.secondary">{item.desc}</Typography>
+                  <Typography fontWeight={700} mb={0.25}>{s.title}</Typography>
+                  <Typography variant="body2" color="text.secondary">{s.desc}</Typography>
                 </Box>
               </Box>
             ))}
           </Stack>
+          <Box sx={{ textAlign: 'center', mt: 5 }}>
+            <Button
+              variant="contained"
+              size="large"
+              onClick={() => navigate('/register')}
+              endIcon={<ArrowForward />}
+              sx={{ py: 1.5, px: 4 }}
+            >
+              Get Started Free
+            </Button>
+          </Box>
         </Container>
       </Box>
 
-      {/* Pricing preview */}
-      <Container maxWidth="lg" sx={{ py: { xs: 8, md: 12 } }}>
-        <Typography variant="h4" fontWeight={700} textAlign="center" mb={1}>
-          Simple, honest pricing
-        </Typography>
-        <Typography variant="body1" color="text.secondary" textAlign="center" mb={6}>
-          Pay with crypto (USDT, BTC, ETH) or card. Cancel anytime.
-        </Typography>
-        <Grid container spacing={3} justifyContent="center">
-          {PLANS.map((plan) => (
-            <Grid item xs={12} sm={6} md={4} key={plan.name}>
-              <Card
-                sx={{
-                  height: '100%',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  position: 'relative',
-                  border: plan.popular ? '2px solid' : '1px solid',
-                  borderColor: plan.popular ? 'primary.main' : 'divider',
-                }}
-              >
-                {plan.popular && (
-                  <Chip
-                    label="Most Popular"
-                    color="primary"
-                    size="small"
-                    sx={{ position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)' }}
-                  />
-                )}
-                <CardContent sx={{ flexGrow: 1, p: 3 }}>
-                  <Typography variant="h5" fontWeight={700} mb={1}>{plan.name}</Typography>
-                  <Box sx={{ mb: 3 }}>
-                    <Typography component="span" variant="h3" fontWeight={800}>{plan.price}</Typography>
-                    <Typography component="span" variant="body1" color="text.secondary">{plan.period}</Typography>
-                  </Box>
-                  <Button
-                    fullWidth
-                    variant={plan.ctaVariant}
-                    color={plan.color === 'default' ? 'inherit' : plan.color}
-                    size="large"
-                    sx={{ mb: 3 }}
-                    onClick={() => navigate(plan.name === 'Free' ? '/register' : '/pricing')}
-                  >
-                    {plan.cta}
-                  </Button>
-                  <Stack spacing={1}>
-                    {plan.features.map((f) => (
-                      <Box key={f} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <CheckCircle fontSize="small" color="success" />
-                        <Typography variant="body2">{f}</Typography>
-                      </Box>
-                    ))}
-                  </Stack>
+      {/* ── Social Proof ── */}
+      <Container maxWidth="lg" sx={{ py: { xs: 8, md: 10 } }}>
+        <Box sx={{ textAlign: 'center', mb: 6 }}>
+          <Typography variant="overline" color="primary.main" fontWeight={700} letterSpacing={2}>
+            Community Love
+          </Typography>
+          <Typography variant="h4" fontWeight={800} mt={1}>
+            What community admins say
+          </Typography>
+        </Box>
+        <Grid container spacing={3}>
+          {TESTIMONIALS.map((t) => (
+            <Grid item xs={12} md={4} key={t.name}>
+              <Card sx={{ height: '100%', p: 1 }}>
+                <CardContent>
+                  <Typography variant="body1" color="text.primary" lineHeight={1.7} mb={2} sx={{ fontStyle: 'italic' }}>
+                    "{t.text}"
+                  </Typography>
+                  <Divider sx={{ mb: 2 }} />
+                  <Typography variant="body2" fontWeight={700}>{t.name}</Typography>
+                  <Typography variant="caption" color="text.secondary">{t.role}</Typography>
                 </CardContent>
               </Card>
             </Grid>
           ))}
         </Grid>
-        <Typography variant="body2" color="text.secondary" textAlign="center" mt={4}>
-          Payments accepted via crypto (USDT, BTC, ETH, BNB, 300+ coins) and card (coming soon).
-        </Typography>
       </Container>
 
-      {/* CTA Banner */}
+      {/* ── Pricing ── */}
+      <Box sx={{ bgcolor: 'background.paper', borderTop: '1px solid', borderColor: 'divider', py: { xs: 8, md: 12 } }}>
+        <Container maxWidth="lg">
+          <Box sx={{ textAlign: 'center', mb: 6 }}>
+            <Typography variant="overline" color="primary.main" fontWeight={700} letterSpacing={2}>
+              Pricing
+            </Typography>
+            <Typography variant="h4" fontWeight={800} mt={1} mb={1}>
+              Simple, transparent pricing
+            </Typography>
+            <Typography variant="body1" color="text.secondary">
+              Start free. Upgrade when you need more. No surprises.
+            </Typography>
+          </Box>
+          <Grid container spacing={3} justifyContent="center">
+            {PLANS.map((plan) => (
+              <Grid item xs={12} sm={6} md={4} key={plan.name}>
+                <Card
+                  sx={{
+                    height: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    position: 'relative',
+                    border: plan.popular ? '2px solid' : '1px solid',
+                    borderColor: plan.popular ? 'primary.main' : 'divider',
+                  }}
+                >
+                  {plan.popular && (
+                    <Chip
+                      label="Most Popular"
+                      color="primary"
+                      size="small"
+                      sx={{ position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)', fontWeight: 700 }}
+                    />
+                  )}
+                  <CardContent sx={{ flexGrow: 1, p: 3 }}>
+                    <Typography variant="h5" fontWeight={800} mb={0.5}>{plan.name}</Typography>
+                    <Box sx={{ mb: 0.5 }}>
+                      <Typography component="span" variant="h3" fontWeight={900}>{plan.price}</Typography>
+                      <Typography component="span" variant="body1" color="text.secondary">{plan.period}</Typography>
+                    </Box>
+                    {plan.daily && (
+                      <Typography variant="caption" color="text.disabled" display="block" mb={2}>
+                        That's only {plan.daily}
+                      </Typography>
+                    )}
+                    <Button
+                      fullWidth
+                      variant={plan.ctaVariant}
+                      color={plan.color === 'default' ? 'inherit' : plan.color}
+                      size="large"
+                      sx={{ mb: 3, fontWeight: 700 }}
+                      onClick={() => plan.tier ? navigate('/pricing') : navigate('/register')}
+                    >
+                      {plan.cta}
+                    </Button>
+                    <Stack spacing={1}>
+                      {plan.features.map((f) => (
+                        <Box key={f} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <CheckCircle fontSize="small" color="success" />
+                          <Typography variant="body2">{f}</Typography>
+                        </Box>
+                      ))}
+                    </Stack>
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+          <Box sx={{ textAlign: 'center', mt: 4 }}>
+            <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 3, flexWrap: 'wrap', justifyContent: 'center' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                <CurrencyBitcoin fontSize="small" color="warning" />
+                <Typography variant="body2" color="text.secondary">300+ cryptos accepted</Typography>
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                <Lock fontSize="small" color="success" />
+                <Typography variant="body2" color="text.secondary">14-day money-back guarantee</Typography>
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                <CheckCircle fontSize="small" color="primary" />
+                <Typography variant="body2" color="text.secondary">No auto-renew</Typography>
+              </Box>
+            </Box>
+          </Box>
+        </Container>
+      </Box>
+
+      {/* ── Final CTA ── */}
       <Box
         sx={{
           background: 'linear-gradient(135deg, #1565c0 0%, #7c4dff 100%)',
-          py: { xs: 6, md: 8 },
+          py: { xs: 8, md: 10 },
           textAlign: 'center',
           px: 2,
         }}
       >
-        <Typography variant="h4" fontWeight={700} color="white" mb={2}>
-          Ready to take control of your community?
-        </Typography>
-        <Typography variant="body1" sx={{ color: 'rgba(255,255,255,0.85)', mb: 4, maxWidth: 480, mx: 'auto' }}>
-          Join now. Your first bot is completely free. No credit card required.
-        </Typography>
-        <Button
-          variant="contained"
-          size="large"
-          onClick={() => navigate('/register')}
-          sx={{ bgcolor: 'white', color: 'primary.main', py: 1.5, px: 5, fontSize: '1rem', '&:hover': { bgcolor: '#f0f0f0' } }}
-        >
-          Create Free Account
-        </Button>
-      </Box>
-
-      {/* Footer */}
-      <Box sx={{ bgcolor: 'background.paper', borderTop: '1px solid', borderColor: 'divider', py: 4 }}>
-        <Container maxWidth="lg">
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <SmartToy sx={{ color: 'primary.main' }} />
-              <Typography fontWeight={700}>BotForge</Typography>
-            </Box>
-            <Stack direction="row" spacing={3} flexWrap="wrap">
-              <Button size="small" onClick={() => navigate('/pricing')} sx={{ color: 'text.secondary' }}>Pricing</Button>
-              <Button size="small" onClick={() => navigate('/login')} sx={{ color: 'text.secondary' }}>Sign In</Button>
-              <Button size="small" onClick={() => navigate('/register')} sx={{ color: 'text.secondary' }}>Register</Button>
-            </Stack>
-            <Typography variant="caption" color="text.disabled">
-              © {new Date().getFullYear()} BotForge. All rights reserved.
-            </Typography>
-          </Box>
+        <Container maxWidth="sm">
+          <Typography variant="h4" fontWeight={800} color="white" mb={2}>
+            Your community deserves better than manual work
+          </Typography>
+          <Typography variant="body1" sx={{ color: 'rgba(255,255,255,0.85)', mb: 4, lineHeight: 1.7 }}>
+            Join community admins who stopped doing it all by hand.
+            Your first bot is free. No credit card. Takes 60 seconds.
+          </Typography>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="center">
+            <Button
+              variant="contained"
+              size="large"
+              onClick={() => navigate('/register')}
+              endIcon={<ArrowForward />}
+              sx={{ bgcolor: 'white', color: 'primary.main', py: 1.75, px: 4, fontWeight: 700, '&:hover': { bgcolor: '#f0f0f0' } }}
+            >
+              Create Free Account
+            </Button>
+            <Button
+              variant="outlined"
+              size="large"
+              onClick={() => navigate('/pricing')}
+              sx={{ borderColor: 'rgba(255,255,255,0.5)', color: 'white', py: 1.75, px: 4, '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}
+            >
+              See Pricing
+            </Button>
+          </Stack>
         </Container>
       </Box>
+
+      {/* ── Footer ── */}
+      <Box sx={{ bgcolor: 'background.paper', borderTop: '1px solid', borderColor: 'divider', py: 4 }}>
+        <Container maxWidth="lg">
+          <Grid container alignItems="center" spacing={2}>
+            <Grid item xs={12} sm="auto">
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <SmartToy sx={{ color: 'primary.main' }} />
+                <Typography fontWeight={700}>BotForge</Typography>
+              </Box>
+              <Typography variant="caption" color="text.disabled" display="block" mt={0.5}>
+                Automate your Telegram community
+              </Typography>
+            </Grid>
+            <Grid item xs={12} sm sx={{ textAlign: { xs: 'left', sm: 'center' } }}>
+              <Stack direction="row" spacing={1} flexWrap="wrap" justifyContent={{ xs: 'flex-start', sm: 'center' }}>
+                <Button size="small" onClick={() => navigate('/pricing')} sx={{ color: 'text.secondary' }}>Pricing</Button>
+                <Button size="small" onClick={() => navigate('/login')} sx={{ color: 'text.secondary' }}>Sign In</Button>
+                <Button size="small" onClick={() => navigate('/register')} sx={{ color: 'text.secondary' }}>Register</Button>
+                <Button size="small" onClick={() => navigate('/terms')} sx={{ color: 'text.secondary' }}>Terms</Button>
+                <Button size="small" onClick={() => navigate('/privacy')} sx={{ color: 'text.secondary' }}>Privacy</Button>
+              </Stack>
+            </Grid>
+            <Grid item xs={12} sm="auto" sx={{ textAlign: { xs: 'left', sm: 'right' } }}>
+              <Typography variant="caption" color="text.disabled">
+                © {new Date().getFullYear()} BotForge. All rights reserved.
+              </Typography>
+            </Grid>
+          </Grid>
+        </Container>
+      </Box>
+
     </Box>
   );
 }

@@ -1,20 +1,32 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
-  Box, Card, CardContent, Typography, Button, CircularProgress, Chip, Stack,
+  Box, Card, CardContent, Typography, Button, CircularProgress,
+  Chip, Stack, LinearProgress,
 } from '@mui/material';
-import { CheckCircle, HourglassTop, SmartToy } from '@mui/icons-material';
+import { CheckCircle, HourglassTop, ErrorOutline, SmartToy } from '@mui/icons-material';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { billing, auth } from '../services/api';
+
+const MAX_ATTEMPTS = 15;   // 15 × 4s = 60s total poll window
+const POLL_INTERVAL = 4000;
 
 export default function PaymentSuccess() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [status, setStatus] = useState('checking'); // checking | success | pending
+  const [status, setStatus] = useState('checking'); // checking | success | pending | failed
   const [tier, setTier] = useState('');
   const [attempts, setAttempts] = useState(0);
+  const intervalRef = useRef(null);
 
-  // Poll subscription until it upgrades (webhook may take a few seconds)
+  // URL param ?status=failed (e.g. if coming from a cancel/error redirect)
+  const urlStatus = searchParams.get('status');
+
   useEffect(() => {
+    if (urlStatus === 'failed' || urlStatus === 'cancelled') {
+      setStatus('failed');
+      return;
+    }
+
     const token = localStorage.getItem('token');
     if (!token) { navigate('/login'); return; }
 
@@ -23,7 +35,7 @@ export default function PaymentSuccess() {
         const res = await billing.getSubscription();
         const sub = res.data.subscription;
         if (sub.tier && sub.tier !== 'free') {
-          // Refresh user in localStorage too
+          // Refresh user cache
           try {
             const meRes = await auth.getMe();
             localStorage.setItem('user', JSON.stringify(meRes.data.user));
@@ -36,25 +48,32 @@ export default function PaymentSuccess() {
       return false;
     };
 
-    let interval;
+    // First check immediately
     check().then((done) => {
-      if (!done) {
-        // Poll every 3 seconds up to 10 times (~30s total)
-        let count = 0;
-        interval = setInterval(async () => {
-          count++;
-          setAttempts(count);
-          const done = await check();
-          if (done || count >= 10) {
-            clearInterval(interval);
-            if (!done) setStatus('pending');
-          }
-        }, 3000);
-      }
+      if (done) return;
+      let count = 0;
+      intervalRef.current = setInterval(async () => {
+        count++;
+        setAttempts(count);
+        const confirmed = await check();
+        if (confirmed || count >= MAX_ATTEMPTS) {
+          clearInterval(intervalRef.current);
+          if (!confirmed) setStatus('pending');
+        }
+      }, POLL_INTERVAL);
     });
 
-    return () => clearInterval(interval);
-  }, [navigate]);
+    return () => clearInterval(intervalRef.current);
+  }, [navigate, urlStatus]);
+
+  // Auto-redirect to dashboard 4 seconds after success
+  useEffect(() => {
+    if (status !== 'success') return;
+    const t = setTimeout(() => navigate('/dashboard'), 4000);
+    return () => clearTimeout(t);
+  }, [status, navigate]);
+
+  const progressPct = Math.min(100, (attempts / MAX_ATTEMPTS) * 100);
 
   return (
     <Box
@@ -68,38 +87,53 @@ export default function PaymentSuccess() {
       }}
     >
       <Card sx={{ maxWidth: 480, width: '100%' }}>
-        <CardContent sx={{ p: 5, textAlign: 'center' }}>
-          <SmartToy sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-          <Typography variant="h5" fontWeight={700} mb={1}>
-            BotForge
-          </Typography>
+        <CardContent sx={{ p: { xs: 3, sm: 5 }, textAlign: 'center' }}>
+          {/* Brand */}
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, mb: 3 }}>
+            <SmartToy sx={{ color: 'primary.main' }} />
+            <Typography variant="h6" fontWeight={700}>BotForge</Typography>
+          </Box>
 
+          {/* ── Checking ── */}
           {status === 'checking' && (
             <>
-              <CircularProgress sx={{ my: 3 }} />
-              <Typography color="text.secondary">
-                Confirming your payment{attempts > 0 ? ` (${attempts}/10)` : ''}…
+              <CircularProgress size={56} sx={{ mb: 3 }} />
+              <Typography variant="h6" fontWeight={700} mb={1}>
+                Confirming your payment
               </Typography>
-              <Typography variant="caption" color="text.disabled" display="block" mt={1}>
-                This usually takes a few seconds.
+              <Typography variant="body2" color="text.secondary" mb={2}>
+                Waiting for blockchain confirmation. This usually takes 1–3 minutes.
               </Typography>
+              {attempts > 0 && (
+                <>
+                  <LinearProgress
+                    variant="determinate"
+                    value={progressPct}
+                    sx={{ borderRadius: 2, mb: 1 }}
+                  />
+                  <Typography variant="caption" color="text.disabled">
+                    Check {attempts} of {MAX_ATTEMPTS} · refreshing automatically
+                  </Typography>
+                </>
+              )}
             </>
           )}
 
+          {/* ── Success ── */}
           {status === 'success' && (
             <>
-              <CheckCircle sx={{ fontSize: 64, color: 'success.main', my: 2 }} />
-              <Typography variant="h5" fontWeight={700} mb={1}>
+              <CheckCircle sx={{ fontSize: 72, color: 'success.main', mb: 2 }} />
+              <Typography variant="h5" fontWeight={800} mb={1}>
                 Payment Confirmed!
               </Typography>
               <Chip
                 label={`${tier.charAt(0).toUpperCase() + tier.slice(1)} Plan Active`}
                 color="success"
-                sx={{ mb: 2 }}
+                sx={{ mb: 2, fontWeight: 700 }}
               />
               <Typography color="text.secondary" mb={4}>
-                Your subscription is now active. You can start using all{' '}
-                {tier} features right away.
+                Your subscription is now active. All {tier} features are unlocked.
+                Taking you to your dashboard…
               </Typography>
               <Stack spacing={2}>
                 <Button
@@ -114,19 +148,20 @@ export default function PaymentSuccess() {
             </>
           )}
 
+          {/* ── Pending ── */}
           {status === 'pending' && (
             <>
-              <HourglassTop sx={{ fontSize: 64, color: 'warning.main', my: 2 }} />
-              <Typography variant="h5" fontWeight={700} mb={1}>
-                Payment Processing
+              <HourglassTop sx={{ fontSize: 72, color: 'warning.main', mb: 2 }} />
+              <Typography variant="h5" fontWeight={800} mb={1}>
+                Waiting for Confirmation
               </Typography>
               <Typography color="text.secondary" mb={1}>
-                Your payment is being processed. Crypto confirmations can take
-                a few minutes depending on network congestion.
+                Your payment is being processed on-chain. Depending on network congestion,
+                crypto confirmations can take up to 10–30 minutes.
               </Typography>
               <Typography variant="body2" color="text.secondary" mb={4}>
-                Your plan will be upgraded automatically once the payment is
-                confirmed. You'll see the updated tier in your dashboard.
+                Your plan will upgrade automatically once confirmed — you don't need to do
+                anything. Check your dashboard in a few minutes.
               </Typography>
               <Stack spacing={2}>
                 <Button variant="contained" fullWidth onClick={() => navigate('/dashboard')}>
@@ -134,6 +169,28 @@ export default function PaymentSuccess() {
                 </Button>
                 <Button variant="outlined" fullWidth onClick={() => window.location.reload()}>
                   Check Again
+                </Button>
+              </Stack>
+            </>
+          )}
+
+          {/* ── Failed / Cancelled ── */}
+          {status === 'failed' && (
+            <>
+              <ErrorOutline sx={{ fontSize: 72, color: 'error.main', mb: 2 }} />
+              <Typography variant="h5" fontWeight={800} mb={1}>
+                Payment Not Completed
+              </Typography>
+              <Typography color="text.secondary" mb={4}>
+                The payment was cancelled or could not be processed. No charge was made.
+                You can try again from the pricing page.
+              </Typography>
+              <Stack spacing={2}>
+                <Button variant="contained" fullWidth onClick={() => navigate('/pricing')}>
+                  Try Again
+                </Button>
+                <Button variant="outlined" fullWidth onClick={() => navigate('/dashboard')}>
+                  Back to Dashboard
                 </Button>
               </Stack>
             </>

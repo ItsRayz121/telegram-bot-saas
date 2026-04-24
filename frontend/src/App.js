@@ -17,6 +17,9 @@ import AdminPanel from './pages/AdminPanel';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import PaymentSuccess from './pages/PaymentSuccess';
+import Billing from './pages/Billing';
+import Terms from './pages/Terms';
+import Privacy from './pages/Privacy';
 import NotFound from './pages/NotFound';
 
 const darkTheme = createTheme({
@@ -86,6 +89,8 @@ export default function App() {
           <Route path="/" element={<Landing />} />
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/payment/success" element={<PaymentSuccess />} />
+          <Route path="/terms" element={<Terms />} />
+          <Route path="/privacy" element={<Privacy />} />
 
           {/* Auth pages — redirect to dashboard if already logged in */}
           <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
@@ -101,6 +106,9 @@ export default function App() {
 
           {/* Admin only */}
           <Route path="/admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />
+
+          {/* Billing — protected */}
+          <Route path="/billing" element={<PrivateRoute><Billing /></PrivateRoute>} />
 
           {/* 404 */}
           <Route path="*" element={<NotFound />} />

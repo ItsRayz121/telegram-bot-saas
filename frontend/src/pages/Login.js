@@ -98,14 +98,24 @@ export default function Login() {
               Forgot password?
             </Link>
           </Typography>
-          <Typography variant="body2" textAlign="center" color="text.secondary">
+          <Typography variant="body2" textAlign="center" color="text.secondary" mb={2}>
             Don't have an account?{' '}
             <Link
               component="button"
               onClick={() => navigate('/register')}
               sx={{ color: 'primary.main', cursor: 'pointer' }}
             >
-              Sign up
+              Sign up free
+            </Link>
+          </Typography>
+
+          <Typography variant="caption" textAlign="center" color="text.disabled" display="block">
+            <Link component="button" onClick={() => navigate('/terms')} sx={{ color: 'text.disabled', cursor: 'pointer', fontSize: 'inherit' }}>
+              Terms of Service
+            </Link>
+            {' · '}
+            <Link component="button" onClick={() => navigate('/privacy')} sx={{ color: 'text.disabled', cursor: 'pointer', fontSize: 'inherit' }}>
+              Privacy Policy
             </Link>
           </Typography>
         </CardContent>

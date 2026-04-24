@@ -104,7 +104,7 @@ export default function Register() {
             </Button>
           </form>
 
-          <Typography variant="body2" textAlign="center" color="text.secondary">
+          <Typography variant="body2" textAlign="center" color="text.secondary" mb={2}>
             Already have an account?{' '}
             <Link
               component="button"
@@ -112,6 +112,17 @@ export default function Register() {
               sx={{ color: 'primary.main', cursor: 'pointer' }}
             >
               Sign in
+            </Link>
+          </Typography>
+
+          <Typography variant="caption" textAlign="center" color="text.disabled" display="block">
+            By creating an account you agree to our{' '}
+            <Link component="button" onClick={() => navigate('/terms')} sx={{ color: 'text.secondary', cursor: 'pointer', fontSize: 'inherit' }}>
+              Terms of Service
+            </Link>
+            {' '}and{' '}
+            <Link component="button" onClick={() => navigate('/privacy')} sx={{ color: 'text.secondary', cursor: 'pointer', fontSize: 'inherit' }}>
+              Privacy Policy
             </Link>
           </Typography>
         </CardContent>
