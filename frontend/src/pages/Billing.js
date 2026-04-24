@@ -6,7 +6,7 @@ import {
 } from '@mui/material';
 import {
   SmartToy, ArrowBack, Upgrade, CheckCircle, HourglassTop,
-  CurrencyBitcoin, CreditCard, OpenInNew,
+  CurrencyBitcoin, CreditCard, OpenInNew, Refresh,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -26,6 +26,7 @@ export default function Billing() {
   const navigate = useNavigate();
   const [subscription, setSubscription] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const fetchSub = useCallback(async () => {
     try {
@@ -35,6 +36,19 @@ export default function Billing() {
       toast.error('Failed to load subscription info');
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const res = await billing.getSubscription();
+      setSubscription(res.data.subscription);
+      toast.success('Subscription refreshed');
+    } catch {
+      toast.error('Failed to refresh subscription');
+    } finally {
+      setRefreshing(false);
     }
   }, []);
 
@@ -71,7 +85,18 @@ export default function Billing() {
               <CardContent sx={{ p: 3 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 2 }}>
                   <Box>
-                    <Typography variant="overline" color="text.secondary">Current Plan</Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Typography variant="overline" color="text.secondary">Current Plan</Typography>
+                      <IconButton
+                        size="small"
+                        onClick={handleRefresh}
+                        disabled={refreshing}
+                        title="Refresh subscription status"
+                        sx={{ mt: -0.5 }}
+                      >
+                        <Refresh fontSize="small" sx={{ animation: refreshing ? 'spin 1s linear infinite' : 'none', '@keyframes spin': { '0%': { transform: 'rotate(0deg)' }, '100%': { transform: 'rotate(360deg)' } } }} />
+                      </IconButton>
+                    </Box>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 0.5 }}>
                       <Typography variant="h4" fontWeight={800}>
                         {tier.charAt(0).toUpperCase() + tier.slice(1)}

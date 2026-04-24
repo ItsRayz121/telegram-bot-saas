@@ -6,7 +6,7 @@ import requests
 from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from ..models import db, User
+from ..models import db, User, ProcessedPayment
 from ..config import Config
 from ..middleware.rate_limit import rate_limit
 from ..notifications import send_subscription_confirmation, send_subscription_cancelled
@@ -140,6 +140,9 @@ def lemon_webhook():
     sig = request.headers.get("X-Signature", "")
 
     if Config.LS_WEBHOOK_SECRET:
+        if not sig:
+            logger.warning("[LEMONSQUEEZY] Missing X-Signature header — rejecting webhook")
+            return jsonify({"error": "Missing signature"}), 400
         expected = hmac.new(
             Config.LS_WEBHOOK_SECRET.encode(), payload, hashlib.sha256
         ).hexdigest()
@@ -215,7 +218,7 @@ def crypto_checkout():
                 "order_id": order_id,
                 "order_description": f"BotForge {tier.capitalize()} Plan - 1 Month",
                 "success_url": f"{Config.FRONTEND_URL}/payment/success",
-                "cancel_url": f"{Config.FRONTEND_URL}/pricing",
+                "cancel_url": f"{Config.FRONTEND_URL}/payment/success?status=failed",
                 "ipn_callback_url": f"{Config.BACKEND_URL}/api/billing/crypto/webhook",
                 "is_fixed_rate": True,
                 "is_fee_paid_by_user": False,
@@ -239,7 +242,10 @@ def crypto_webhook():
     payload = request.get_data()
     sig = request.headers.get("x-nowpayments-sig", "")
 
-    if Config.NOWPAYMENTS_IPN_SECRET and sig:
+    if Config.NOWPAYMENTS_IPN_SECRET:
+        if not sig:
+            logger.warning("[NOWPAYMENTS] Missing x-nowpayments-sig header — rejecting webhook")
+            return jsonify({"error": "Missing signature"}), 400
         try:
             body = json.loads(payload)
             sorted_body = json.dumps(body, sort_keys=True, separators=(",", ":"))
@@ -262,11 +268,20 @@ def crypto_webhook():
 
     payment_status = data.get("payment_status", "")
     order_id = data.get("order_id", "")
+    payment_id = str(data.get("payment_id", ""))
 
     # Only activate on confirmed/finished payments
     if payment_status not in ("finished", "confirmed"):
         logger.info(f"[NOWPAYMENTS] Ignoring status '{payment_status}' for order {order_id}")
         return jsonify({"status": "ok"})
+
+    # Idempotency: reject duplicate webhook deliveries for the same payment
+    if payment_id:
+        if ProcessedPayment.query.filter_by(payment_id=payment_id).first():
+            logger.info(f"[NOWPAYMENTS] Duplicate webhook for payment_id={payment_id} — skipping")
+            return jsonify({"status": "ok"})
+        db.session.add(ProcessedPayment(payment_id=payment_id))
+        db.session.flush()
 
     # order_id format: user_{id}_{tier}_{timestamp}
     try:
@@ -277,11 +292,13 @@ def crypto_webhook():
             raise ValueError("Invalid tier")
     except Exception:
         logger.warning(f"[NOWPAYMENTS] Could not parse order_id: {order_id}")
+        db.session.rollback()
         return jsonify({"status": "ok"})
 
     user = User.query.get(user_id)
     if not user:
         logger.warning(f"[NOWPAYMENTS] User {user_id} not found for order {order_id}")
+        db.session.rollback()
         return jsonify({"status": "ok"})
 
     _activate_subscription(user, tier)

@@ -1,13 +1,30 @@
 import os
+import logging as _logging
 from datetime import timedelta
 from dotenv import load_dotenv
 
 load_dotenv()
 
+_log = _logging.getLogger(__name__)
+
 
 class Config:
-    SECRET_KEY = os.environ.get("SECRET_KEY", "fallback-secret-key-change-in-production")
-    JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "fallback-jwt-secret-change-in-production")
+    _secret_key = os.environ.get("SECRET_KEY")
+    if not _secret_key:
+        raise RuntimeError(
+            "SECRET_KEY environment variable is required and must not be empty. "
+            "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+        )
+    SECRET_KEY = _secret_key
+
+    _jwt_secret_key = os.environ.get("JWT_SECRET_KEY")
+    if not _jwt_secret_key:
+        raise RuntimeError(
+            "JWT_SECRET_KEY environment variable is required and must not be empty. "
+            "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+        )
+    JWT_SECRET_KEY = _jwt_secret_key
+
     # Tokens expire after 30 days. Stolen tokens from a previous session
     # are invalid after this window without requiring a full revocation system.
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(days=30)
@@ -52,8 +69,12 @@ class Config:
     FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
     OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
     _admin_env = os.environ.get("ADMIN_EMAILS", "")
-    _default_admins = ["fazalelahi5577@gmail.com"]
-    ADMIN_EMAILS = list({e.strip() for e in _admin_env.split(",") if e.strip()} | set(_default_admins))
+    ADMIN_EMAILS = [e.strip() for e in _admin_env.split(",") if e.strip()]
+    if not ADMIN_EMAILS:
+        _log.warning(
+            "ADMIN_EMAILS env var is not set — no accounts will have admin access. "
+            "Set ADMIN_EMAILS=you@example.com in your Railway environment."
+        )
 
     MAX_BOTS = {
         "free": 1,

@@ -12,7 +12,8 @@ def _get_redis():
         r = redis_lib.from_url(current_app.config.get("REDIS_URL", "redis://localhost:6379/0"))
         r.ping()
         return r
-    except Exception:
+    except Exception as e:
+        logger.warning(f"[RATE_LIMIT] Redis unavailable — rate limiting disabled for this request: {e}")
         return None
 
 

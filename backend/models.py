@@ -513,6 +513,15 @@ class Referral(db.Model):
         }
 
 
+class ProcessedPayment(db.Model):
+    """Tracks processed payment webhook IDs to prevent duplicate subscription upgrades."""
+    __tablename__ = "processed_payments"
+
+    id = db.Column(db.Integer, primary_key=True)
+    payment_id = db.Column(db.String(255), unique=True, nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+
 class ReportedMessage(db.Model):
     __tablename__ = "reported_messages"
 

@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Box, CircularProgress } from '@mui/material';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { ToastContainer } from 'react-toastify';
@@ -66,16 +67,30 @@ function PublicOnlyRoute({ children }) {
   return token ? <Navigate to="/dashboard" replace /> : children;
 }
 
-// Admin-only route: requires both auth token and is_admin flag
+// Admin-only route: validates is_admin from backend on each mount — never trusts localStorage
 function AdminRoute({ children }) {
-  const token = localStorage.getItem('token');
-  if (!token) return <Navigate to="/login" replace />;
-  try {
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
-    if (!user.is_admin) return <Navigate to="/dashboard" replace />;
-  } catch {
-    return <Navigate to="/dashboard" replace />;
+  const [status, setStatus] = useState('loading'); // loading | allowed | denied
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) { setStatus('denied'); return; }
+    const base = process.env.REACT_APP_API_URL || '';
+    fetch(`${base}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((data) => setStatus(data.user?.is_admin ? 'allowed' : 'denied'))
+      .catch(() => setStatus('denied'));
+  }, []);
+
+  if (status === 'loading') {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
+        <CircularProgress />
+      </Box>
+    );
   }
+  if (status === 'denied') return <Navigate to="/dashboard" replace />;
   return children;
 }
 
