@@ -39,36 +39,71 @@ const FEATURES = [
     title: 'AutoMod — Set it. Forget it.',
     desc: 'Auto-remove spam, links, bad words, and media. Warn → mute → ban automatically. Your group stays clean 24/7.',
     badge: 'Most Used',
+    badgeColor: 'warning',
+    plan: 'Free',
   },
   {
     icon: <Schedule fontSize="large" />,
     title: 'Scheduled Content',
     desc: 'Write posts once, publish them forever. Daily updates, weekly recaps, polls — on autopilot in any timezone.',
     badge: null,
+    plan: 'Free',
   },
   {
     icon: <People fontSize="large" />,
     title: 'Member System',
-    desc: 'XP, levels, warnings, verification challenges. Active members get rewarded. Bad actors get removed.',
+    desc: 'XP, levels, roles, and verification challenges. Active members get rewarded. Bad actors get removed.',
     badge: null,
+    plan: 'Free',
   },
   {
     icon: <BarChart fontSize="large" />,
     title: 'Growth Analytics',
     desc: 'See exactly which invite links drive joins, peak activity hours, member retention, and moderation stats.',
     badge: null,
+    plan: 'Pro',
+    planColor: 'primary',
   },
   {
     icon: <AutoAwesome fontSize="large" />,
     title: 'AI Knowledge Base',
-    desc: 'Upload your docs or FAQ. The bot answers questions automatically — no human needed.',
+    desc: 'Upload your docs or FAQ. The bot answers member questions automatically — no human needed.',
     badge: 'Pro',
+    badgeColor: 'primary',
+    plan: 'Pro',
+    planColor: 'primary',
   },
   {
     icon: <Bolt fontSize="large" />,
     title: 'Webhooks & Integrations',
     desc: 'Push GitHub releases, price alerts, or any API event straight to your Telegram group.',
+    badge: 'Enterprise',
+    badgeColor: 'secondary',
+    plan: 'Enterprise',
+    planColor: 'secondary',
+  },
+  {
+    icon: <SmartToy fontSize="large" />,
+    title: 'Auto Reply Triggers',
+    desc: 'Define keyword triggers and the bot replies instantly. Answer FAQs, share links, or run commands — hands-free.',
+    badge: null,
+    plan: 'Free',
+  },
+  {
+    icon: <Lock fontSize="large" />,
+    title: 'Raid Coordinator',
+    desc: 'Launch coordinated community raids on Twitter/X. Members earn XP for participating — gamified growth.',
     badge: 'Pro',
+    badgeColor: 'primary',
+    plan: 'Pro',
+    planColor: 'primary',
+  },
+  {
+    icon: <People fontSize="large" />,
+    title: 'Invite Link Tracking',
+    desc: 'Create trackable invite links and see exactly which source drives the most new members.',
+    badge: null,
+    plan: 'Free',
   },
 ];
 
@@ -325,14 +360,25 @@ export default function Landing() {
           {FEATURES.map((f) => (
             <Grid item xs={12} sm={6} md={4} key={f.title}>
               <Card sx={{ height: '100%', p: 1, position: 'relative' }}>
-                {f.badge && (
-                  <Chip
-                    label={f.badge}
-                    size="small"
-                    color={f.badge === 'Pro' ? 'primary' : 'success'}
-                    sx={{ position: 'absolute', top: 12, right: 12, fontSize: 10 }}
-                  />
-                )}
+                <Box sx={{ position: 'absolute', top: 12, right: 12, display: 'flex', gap: 0.5 }}>
+                  {f.badge && (
+                    <Chip
+                      label={f.badge}
+                      size="small"
+                      color={f.badgeColor || 'primary'}
+                      sx={{ fontSize: 10, height: 20 }}
+                    />
+                  )}
+                  {f.plan && !f.badge && (
+                    <Chip
+                      label={f.plan}
+                      size="small"
+                      color={f.planColor || 'default'}
+                      variant="outlined"
+                      sx={{ fontSize: 10, height: 20 }}
+                    />
+                  )}
+                </Box>
                 <CardContent>
                   <Box sx={{ color: 'primary.main', mb: 1.5 }}>{f.icon}</Box>
                   <Typography variant="h6" fontWeight={700} mb={1}>{f.title}</Typography>

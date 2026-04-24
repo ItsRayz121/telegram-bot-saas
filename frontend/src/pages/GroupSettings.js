@@ -10,7 +10,7 @@ import {
 } from '@mui/material';
 import {
   ArrowBack, Save, Add, ExpandMore, Delete, CheckCircle, Schedule,
-  Send, Assessment,
+  Send, Assessment, Shield, Group, AutoAwesome, BarChart, People, Bolt,
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -23,8 +23,21 @@ import WebhookManager from '../components/WebhookManager';
 import InviteLinks from '../components/InviteLinks';
 import TimezoneSelect from '../components/TimezoneSelect';
 
-function TabPanel({ children, value, index }) {
-  return value === index ? <Box sx={{ pt: 3 }}>{children}</Box> : null;
+const CATEGORIES = [
+  { id: 'moderation', label: 'Moderation', icon: Shield, subTabs: ['AutoMod', 'Behavior', 'Reports'] },
+  { id: 'members',    label: 'Members',    icon: Group,  subTabs: ['Verification', 'Welcome', 'XP & Roles'] },
+  { id: 'automation', label: 'Automation', icon: Bolt,   subTabs: ['Scheduler', 'Auto Reply', 'Polls'] },
+  { id: 'community',  label: 'Community',  icon: People, subTabs: ['Raids', 'Invite Links'] },
+  { id: 'ai',         label: 'AI & Integrations', icon: AutoAwesome, subTabs: ['Knowledge Base', 'Webhooks'] },
+  { id: 'analytics',  label: 'Analytics',  icon: BarChart, subTabs: ['Members', 'Audit Log', 'Digest'] },
+];
+
+function ProBadge() {
+  return <Chip label="Pro" color="primary" size="small" sx={{ ml: 1, height: 18, fontSize: '0.65rem', fontWeight: 700 }} />;
+}
+
+function EntBadge() {
+  return <Chip label="Enterprise" color="secondary" size="small" sx={{ ml: 1, height: 18, fontSize: '0.65rem', fontWeight: 700 }} />;
 }
 
 function DefaultTimezoneCard({ value, onChange }) {
@@ -92,7 +105,8 @@ const LANGUAGE_OPTIONS = [
 export default function GroupSettings() {
   const navigate = useNavigate();
   const { id: botId, groupId } = useParams();
-  const [tab, setTab] = useState(0);
+  const [cat, setCat] = useState('moderation');
+  const [subTab, setSubTab] = useState(0);
   const [groupData, setGroupData] = useState(null);
   const [settingsData, setSettingsData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -120,8 +134,6 @@ export default function GroupSettings() {
   const [digestLoading, setDigestLoading] = useState(false);
   const [digestSaving, setDigestSaving] = useState(false);
   const [digestSending, setDigestSending] = useState('');
-
-  const READONLY_TABS = [15, 16, 17]; // Members, Audit Logs, Digest (digest has its own save)
 
   const fetchSettings = useCallback(async () => {
     try {
@@ -215,11 +227,11 @@ export default function GroupSettings() {
   };
 
   useEffect(() => { fetchSettings(); }, [fetchSettings]);
-  useEffect(() => { if (tab === 15) fetchMembers(membersPage); }, [tab, membersPage, fetchMembers]);
-  useEffect(() => { if (tab === 16) fetchAuditLogs(auditPage); }, [tab, auditPage, fetchAuditLogs]);
-  useEffect(() => { if (tab === 9) fetchAutoResponses(); }, [tab, fetchAutoResponses]);
-  useEffect(() => { if (tab === 8) fetchReports(); }, [tab, fetchReports]);
-  useEffect(() => { if (tab === 17) fetchDigest(); }, [tab, fetchDigest]);
+  useEffect(() => { if (cat === 'analytics' && subTab === 0) fetchMembers(membersPage); }, [cat, subTab, membersPage, fetchMembers]);
+  useEffect(() => { if (cat === 'analytics' && subTab === 1) fetchAuditLogs(auditPage); }, [cat, subTab, auditPage, fetchAuditLogs]);
+  useEffect(() => { if (cat === 'automation' && subTab === 1) fetchAutoResponses(); }, [cat, subTab, fetchAutoResponses]);
+  useEffect(() => { if (cat === 'moderation' && subTab === 2) fetchReports(); }, [cat, subTab, fetchReports]);
+  useEffect(() => { if (cat === 'analytics' && subTab === 2) fetchDigest(); }, [cat, subTab, fetchDigest]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -295,6 +307,11 @@ export default function GroupSettings() {
     }
   };
 
+  const handleCatChange = (newCat) => {
+    setCat(newCat);
+    setSubTab(0);
+  };
+
   if (loading || !settingsData) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
@@ -311,6 +328,8 @@ export default function GroupSettings() {
   const ac = settingsData.auto_clean || {};
   const rep = settingsData.reports || {};
 
+  const currentCat = CATEGORIES.find((c) => c.id === cat);
+
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
       <AppBar position="sticky" elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
@@ -322,7 +341,7 @@ export default function GroupSettings() {
             {groupData?.group_name || 'Group Settings'}
           </Typography>
           {settingsData && (
-            <Tooltip title="Group default timezone — change it in the Scheduled tab">
+            <Tooltip title="Group default timezone — change it in Automation › Scheduler">
               <Chip
                 icon={<Schedule sx={{ fontSize: 14 }} />}
                 label={settingsData.timezone || 'UTC'}
@@ -336,37 +355,452 @@ export default function GroupSettings() {
             variant="contained"
             startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <Save />}
             onClick={handleSave}
-            disabled={saving || READONLY_TABS.includes(tab)}
+            disabled={saving || cat === 'analytics'}
           >
             Save
           </Button>
         </Toolbar>
-        <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons="auto" sx={{ px: 2 }}>
-          <Tab label="Verification" />
-          <Tab label="Welcome" />
-          <Tab label="Levels" />
-          <Tab label="AutoMod" />
-          <Tab label="Moderation" />
-          <Tab label="Raids" />
-          <Tab label="Auto Clean" />
-          <Tab label="Roles" />
-          <Tab label="Reports" />
-          <Tab label="Auto Response" />
-          <Tab label="Scheduled" />
-          <Tab label="Knowledge Base" />
-          <Tab label="Polls" />
-          <Tab label="Webhooks" />
-          <Tab label="Invite Links" />
-          <Tab label="Members" />
-          <Tab label="Audit Logs" />
-          <Tab label="Reports Digest" />
-        </Tabs>
+
+        {/* Category pill nav */}
+        <Box sx={{
+          display: 'flex', gap: 0.75, px: 2, py: 1.25, overflowX: 'auto',
+          '::-webkit-scrollbar': { display: 'none' },
+        }}>
+          {CATEGORIES.map(({ id, label, icon: Icon }) => {
+            const active = cat === id;
+            return (
+              <Box
+                key={id}
+                onClick={() => handleCatChange(id)}
+                sx={{
+                  display: 'flex', alignItems: 'center', gap: 0.75,
+                  px: 1.5, py: 0.6, borderRadius: 2, cursor: 'pointer',
+                  whiteSpace: 'nowrap', userSelect: 'none',
+                  bgcolor: active ? 'primary.main' : 'rgba(255,255,255,0.05)',
+                  color: active ? 'white' : 'text.secondary',
+                  border: '1px solid',
+                  borderColor: active ? 'primary.main' : 'rgba(255,255,255,0.12)',
+                  transition: 'all 0.15s ease',
+                  '&:hover': { bgcolor: active ? 'primary.dark' : 'rgba(255,255,255,0.09)' },
+                }}
+              >
+                <Icon sx={{ fontSize: 15 }} />
+                <Typography variant="body2" fontWeight={active ? 700 : 500} fontSize="0.78rem">{label}</Typography>
+              </Box>
+            );
+          })}
+        </Box>
+
+        {/* Sub-tab row */}
+        {currentCat && currentCat.subTabs.length > 1 && (
+          <Tabs
+            value={subTab}
+            onChange={(_, v) => setSubTab(v)}
+            variant="scrollable"
+            scrollButtons="auto"
+            sx={{ px: 2, minHeight: 38, '& .MuiTab-root': { minHeight: 38, py: 0 } }}
+          >
+            {currentCat.subTabs.map((label) => (
+              <Tab key={label} label={label} sx={{ fontSize: '0.8rem' }} />
+            ))}
+          </Tabs>
+        )}
       </AppBar>
 
       <Box sx={{ maxWidth: 900, mx: 'auto', p: 3 }}>
 
-        {/* ── Verification Tab ── */}
-        <TabPanel value={tab} index={0}>
+        {/* ══════════════════════════════════════════════════════════
+            MODERATION
+        ══════════════════════════════════════════════════════════ */}
+
+        {/* MODERATION › AutoMod */}
+        {cat === 'moderation' && subTab === 0 && (
+          <>
+            <Card sx={{ mb: 2 }}>
+              <CardContent>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                  <Typography variant="h6" fontWeight={600}>AutoMod</Typography>
+                </Box>
+                <FormControlLabel
+                  control={<Switch checked={!!am.enabled} onChange={(e) => updateSetting('automod.enabled', e.target.checked)} />}
+                  label="Enable AutoMod globally"
+                />
+                <Divider sx={{ my: 2 }} />
+                <Typography variant="subtitle2" fontWeight={600} mb={1}>Core Rules</Typography>
+                <Grid container spacing={1}>
+                  {[
+                    ['Spam Detection', 'automod.spam.enabled', !!(am.spam || {}).enabled],
+                    ['Bad Words Filter', 'automod.bad_words.enabled', !!(am.bad_words || {}).enabled],
+                    ['Block External Links', 'automod.external_links.enabled', !!(am.external_links || {}).enabled],
+                    ['Block Telegram Links', 'automod.telegram_links.enabled', !!(am.telegram_links || {}).enabled],
+                    ['Excessive Emojis', 'automod.excessive_emojis.enabled', !!(am.excessive_emojis || {}).enabled],
+                    ['Caps Lock Filter', 'automod.caps_lock.enabled', !!(am.caps_lock || {}).enabled],
+                    ['Block Forwarded Messages', 'automod.forwarded_messages.enabled', !!(am.forwarded_messages || {}).enabled],
+                    ['Homoglyph Normalization', 'automod.homoglyphs.enabled', !!(am.homoglyphs || {}).enabled],
+                  ].map(([label, path, checked]) => (
+                    <Grid item xs={12} sm={6} key={path}>
+                      <FormControlLabel
+                        control={<Switch checked={checked} onChange={(e) => updateSetting(path, e.target.checked)} />}
+                        label={label}
+                      />
+                    </Grid>
+                  ))}
+                </Grid>
+                <TextField fullWidth multiline rows={2} label="Banned Words (comma separated)" sx={{ mt: 2 }}
+                  value={(am.bad_words?.words || []).join(', ')}
+                  onChange={(e) => updateSetting('automod.bad_words.words', e.target.value.split(',').map(w => w.trim()).filter(Boolean))} />
+              </CardContent>
+            </Card>
+
+            <Accordion>
+              <AccordionSummary expandIcon={<ExpandMore />}>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <Typography fontWeight={600}>Extended Rules — Media & Content</Typography>
+                  <ProBadge />
+                </Box>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Grid container spacing={1}>
+                  {AUTOMOD_EXTENDED_RULES.map(({ key, label }) => {
+                    const rule = am[key] || {};
+                    return (
+                      <Grid item xs={12} key={key}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                          <FormControlLabel
+                            sx={{ minWidth: 280 }}
+                            control={<Switch checked={!!rule.enabled}
+                              onChange={(e) => updateSetting(`automod.${key}.enabled`, e.target.checked)} />}
+                            label={label}
+                          />
+                          <FormControl size="small" sx={{ minWidth: 120 }}>
+                            <InputLabel>Action</InputLabel>
+                            <Select value={rule.action || 'delete'} label="Action"
+                              onChange={(e) => updateSetting(`automod.${key}.action`, e.target.value)}>
+                              <MenuItem value="delete">Delete</MenuItem>
+                              <MenuItem value="warn">Warn</MenuItem>
+                              <MenuItem value="mute">Mute</MenuItem>
+                              <MenuItem value="ban">Ban</MenuItem>
+                            </Select>
+                          </FormControl>
+                          <FormControlLabel
+                            control={<Switch checked={!!rule.warn_user}
+                              onChange={(e) => updateSetting(`automod.${key}.warn_user`, e.target.checked)} />}
+                            label="Warn user"
+                          />
+                        </Box>
+                      </Grid>
+                    );
+                  })}
+                </Grid>
+              </AccordionDetails>
+            </Accordion>
+
+            <Accordion sx={{ mt: 1 }}>
+              <AccordionSummary expandIcon={<ExpandMore />}>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <Typography fontWeight={600}>Language Filter</Typography>
+                  <ProBadge />
+                </Box>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2, flexWrap: 'wrap' }}>
+                  <FormControlLabel
+                    control={<Switch checked={!!(am.language_filter || {}).enabled}
+                      onChange={(e) => updateSetting('automod.language_filter.enabled', e.target.checked)} />}
+                    label="Enable language filter"
+                  />
+                  <FormControl size="small" sx={{ minWidth: 120 }}>
+                    <InputLabel>Action</InputLabel>
+                    <Select value={(am.language_filter || {}).action || 'delete'} label="Action"
+                      onChange={(e) => updateSetting('automod.language_filter.action', e.target.value)}>
+                      <MenuItem value="delete">Delete</MenuItem>
+                      <MenuItem value="warn">Warn</MenuItem>
+                      <MenuItem value="mute">Mute</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Box>
+                <Typography variant="body2" color="text.secondary" mb={1}>Block messages containing these scripts:</Typography>
+                <Grid container spacing={1}>
+                  {LANGUAGE_OPTIONS.map(({ value, label }) => {
+                    const langs = (am.language_filter || {}).languages || [];
+                    const checked = langs.includes(value);
+                    return (
+                      <Grid item xs={12} sm={6} key={value}>
+                        <FormControlLabel
+                          control={<Switch checked={checked} onChange={(e) => {
+                            const newLangs = e.target.checked ? [...langs, value] : langs.filter(l => l !== value);
+                            updateSetting('automod.language_filter.languages', newLangs);
+                          }} />}
+                          label={label}
+                        />
+                      </Grid>
+                    );
+                  })}
+                </Grid>
+              </AccordionDetails>
+            </Accordion>
+          </>
+        )}
+
+        {/* MODERATION › Behavior */}
+        {cat === 'moderation' && subTab === 1 && (
+          <>
+            <Card sx={{ mb: 2 }}>
+              <CardContent>
+                <Typography variant="h6" fontWeight={600} mb={2}>Warning Thresholds</Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={4}>
+                    <TextField fullWidth type="number" label="Max Warnings"
+                      value={mod.max_warnings || 3}
+                      onChange={(e) => updateSetting('moderation.max_warnings', parseInt(e.target.value))} />
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <FormControl fullWidth>
+                      <InputLabel>Warning Action</InputLabel>
+                      <Select value={mod.warning_action || 'ban'} label="Warning Action"
+                        onChange={(e) => updateSetting('moderation.warning_action', e.target.value)}>
+                        <MenuItem value="ban">Ban</MenuItem>
+                        <MenuItem value="kick">Kick</MenuItem>
+                        <MenuItem value="mute">Mute</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <TextField fullWidth type="number" label="Mute Duration (minutes)"
+                      value={mod.mute_duration_minutes || 60}
+                      onChange={(e) => updateSetting('moderation.mute_duration_minutes', parseInt(e.target.value))} />
+                  </Grid>
+                </Grid>
+              </CardContent>
+            </Card>
+
+            <Accordion>
+              <AccordionSummary expandIcon={<ExpandMore />}>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <Typography fontWeight={600}>Escalation Chain</Typography>
+                  <ProBadge />
+                </Box>
+              </AccordionSummary>
+              <AccordionDetails>
+                <FormControlLabel
+                  control={<Switch checked={!!mod.escalation_enabled}
+                    onChange={(e) => updateSetting('moderation.escalation_enabled', e.target.checked)} />}
+                  label="Enable escalating punishments"
+                />
+                <Typography variant="body2" color="text.secondary" mb={2} mt={1}>
+                  Instead of a single action, apply progressive punishments as warning count increases.
+                </Typography>
+                {(mod.escalation_steps || []).map((step, idx) => (
+                  <Box key={idx} sx={{ display: 'flex', gap: 1, mb: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <TextField size="small" type="number" label="At warning #" sx={{ width: 110 }}
+                      value={step.at_warning}
+                      onChange={(e) => {
+                        const steps = [...(mod.escalation_steps || [])];
+                        steps[idx] = { ...steps[idx], at_warning: parseInt(e.target.value) };
+                        updateSetting('moderation.escalation_steps', steps);
+                      }} />
+                    <FormControl size="small" sx={{ width: 110 }}>
+                      <InputLabel>Action</InputLabel>
+                      <Select value={step.action || 'mute'} label="Action"
+                        onChange={(e) => {
+                          const steps = [...(mod.escalation_steps || [])];
+                          steps[idx] = { ...steps[idx], action: e.target.value };
+                          updateSetting('moderation.escalation_steps', steps);
+                        }}>
+                        <MenuItem value="mute">Mute</MenuItem>
+                        <MenuItem value="tempban">Temp Ban</MenuItem>
+                        <MenuItem value="ban">Ban</MenuItem>
+                      </Select>
+                    </FormControl>
+                    {step.action === 'mute' && (
+                      <TextField size="small" type="number" label="Minutes" sx={{ width: 90 }}
+                        value={step.duration_minutes || 60}
+                        onChange={(e) => {
+                          const steps = [...(mod.escalation_steps || [])];
+                          steps[idx] = { ...steps[idx], duration_minutes: parseInt(e.target.value) };
+                          updateSetting('moderation.escalation_steps', steps);
+                        }} />
+                    )}
+                    {step.action === 'tempban' && (
+                      <TextField size="small" type="number" label="Hours" sx={{ width: 90 }}
+                        value={step.duration_hours || 24}
+                        onChange={(e) => {
+                          const steps = [...(mod.escalation_steps || [])];
+                          steps[idx] = { ...steps[idx], duration_hours: parseInt(e.target.value) };
+                          updateSetting('moderation.escalation_steps', steps);
+                        }} />
+                    )}
+                    <TextField size="small" type="number" label="Time Window (hrs)" placeholder="Any" sx={{ width: 130 }}
+                      value={step.time_window_hours ?? ''}
+                      onChange={(e) => {
+                        const steps = [...(mod.escalation_steps || [])];
+                        const val = e.target.value === '' ? null : parseInt(e.target.value);
+                        steps[idx] = { ...steps[idx], time_window_hours: val };
+                        updateSetting('moderation.escalation_steps', steps);
+                      }} />
+                    <IconButton size="small" color="error" onClick={() => {
+                      const steps = (mod.escalation_steps || []).filter((_, i) => i !== idx);
+                      updateSetting('moderation.escalation_steps', steps);
+                    }}>
+                      <Delete fontSize="small" />
+                    </IconButton>
+                  </Box>
+                ))}
+                <Button size="small" startIcon={<Add />} onClick={() => {
+                  const steps = [...(mod.escalation_steps || [])];
+                  steps.push({ at_warning: (steps[steps.length - 1]?.at_warning || 1) + 1, action: 'mute', duration_minutes: 60 });
+                  updateSetting('moderation.escalation_steps', steps);
+                }} sx={{ mt: 1 }}>
+                  Add Step
+                </Button>
+              </AccordionDetails>
+            </Accordion>
+
+            <Card sx={{ mt: 2, mb: 2 }}>
+              <CardContent>
+                <Typography variant="subtitle1" fontWeight={600} mb={1}>Auto Clean System Messages</Typography>
+                <Typography variant="body2" color="text.secondary" mb={2}>
+                  Automatically delete Telegram system messages to keep your chat clean.
+                </Typography>
+                <FormControlLabel
+                  control={<Switch checked={!!ac.enabled} onChange={(e) => updateSetting('auto_clean.enabled', e.target.checked)} />}
+                  label="Enable Auto Clean"
+                />
+                <Divider sx={{ my: 2 }} />
+                <Grid container spacing={1}>
+                  {[
+                    ['Delete join notifications', 'auto_clean.delete_joins', ac.delete_joins],
+                    ['Delete leave notifications', 'auto_clean.delete_leaves', ac.delete_leaves],
+                    ['Delete profile photo changes', 'auto_clean.delete_photo_changes', ac.delete_photo_changes],
+                    ['Delete pinned message alerts', 'auto_clean.delete_pinned_messages', ac.delete_pinned_messages],
+                    ['Delete forum topic events', 'auto_clean.delete_forum_events', ac.delete_forum_events],
+                    ['Delete game score messages', 'auto_clean.delete_game_scores', ac.delete_game_scores],
+                    ['Delete voice/video chat events', 'auto_clean.delete_voice_chat_events', ac.delete_voice_chat_events],
+                    ['Delete bot command messages', 'auto_clean.delete_commands', ac.delete_commands],
+                  ].map(([label, path, checked]) => (
+                    <Grid item xs={12} sm={6} key={path}>
+                      <FormControlLabel
+                        control={<Switch checked={!!checked} onChange={(e) => updateSetting(path, e.target.checked)} />}
+                        label={label}
+                      />
+                    </Grid>
+                  ))}
+                </Grid>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent>
+                <Typography variant="subtitle1" fontWeight={600} mb={1}>Auto-Delete Notification Messages</Typography>
+                <Typography variant="body2" color="text.secondary" mb={2}>
+                  How long to keep AutoMod and moderation notification messages before deleting them. 0 = never delete.
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                    <TextField fullWidth type="number" label="Delete Warn Messages After (seconds, 0=never)"
+                      inputProps={{ min: 0 }}
+                      value={mod.auto_delete_warn_seconds ?? 0}
+                      onChange={(e) => updateSetting('moderation.auto_delete_warn_seconds', parseInt(e.target.value) || 0)} />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField fullWidth type="number" label="Delete Action Messages After (seconds, 0=never)"
+                      inputProps={{ min: 0 }}
+                      value={mod.auto_delete_action_seconds ?? 0}
+                      onChange={(e) => updateSetting('moderation.auto_delete_action_seconds', parseInt(e.target.value) || 0)} />
+                  </Grid>
+                </Grid>
+              </CardContent>
+            </Card>
+          </>
+        )}
+
+        {/* MODERATION › Reports */}
+        {cat === 'moderation' && subTab === 2 && (
+          <>
+            <Card sx={{ mb: 2 }}>
+              <CardContent>
+                <Typography variant="h6" fontWeight={600} mb={2}>Reports Settings</Typography>
+                <FormControlLabel
+                  control={<Switch checked={!!rep.enabled} onChange={(e) => updateSetting('reports.enabled', e.target.checked)} />}
+                  label="Enable /report command"
+                />
+                <Grid container spacing={2} sx={{ mt: 1 }}>
+                  <Grid item xs={12} sm={6}>
+                    <FormControl fullWidth>
+                      <InputLabel>Notify Admins</InputLabel>
+                      <Select value={rep.notify_admins || 'all'} label="Notify Admins"
+                        onChange={(e) => updateSetting('reports.notify_admins', e.target.value)}>
+                        <MenuItem value="all">All admins</MenuItem>
+                        <MenuItem value="selected">Selected admins only</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                </Grid>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                  <Typography variant="subtitle1" fontWeight={600}>Reported Messages</Typography>
+                  <Button size="small" onClick={fetchReports} disabled={reportsLoading}>Refresh</Button>
+                </Box>
+                {reportsLoading ? <CircularProgress size={24} /> : (
+                  reports.length === 0 ? (
+                    <Typography color="text.secondary">No reports yet.</Typography>
+                  ) : (
+                    <TableContainer>
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Reporter</TableCell>
+                            <TableCell>Reported User</TableCell>
+                            <TableCell>Reason</TableCell>
+                            <TableCell>Status</TableCell>
+                            <TableCell>Date</TableCell>
+                            <TableCell>Action</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {reports.map((r) => (
+                            <TableRow key={r.id} hover>
+                              <TableCell>@{r.reporter_username || r.reporter_user_id}</TableCell>
+                              <TableCell>@{r.reported_username || r.reported_user_id}</TableCell>
+                              <TableCell>{r.reason || '-'}</TableCell>
+                              <TableCell>
+                                <Chip label={r.status} size="small"
+                                  color={r.status === 'open' ? 'warning' : 'success'} />
+                              </TableCell>
+                              <TableCell>
+                                <Typography variant="caption">{r.created_at ? new Date(r.created_at).toLocaleDateString() : '-'}</Typography>
+                              </TableCell>
+                              <TableCell>
+                                {r.status === 'open' && (
+                                  <Tooltip title="Mark resolved">
+                                    <IconButton size="small" color="success"
+                                      onClick={() => handleResolveReport(r.id)}>
+                                      <CheckCircle fontSize="small" />
+                                    </IconButton>
+                                  </Tooltip>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  )
+                )}
+              </CardContent>
+            </Card>
+          </>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════
+            MEMBERS
+        ══════════════════════════════════════════════════════════ */}
+
+        {/* MEMBERS › Verification */}
+        {cat === 'members' && subTab === 0 && (
           <Card>
             <CardContent>
               <Typography variant="h6" fontWeight={600} mb={2}>Verification Settings</Typography>
@@ -433,659 +867,271 @@ export default function GroupSettings() {
               )}
             </CardContent>
           </Card>
-        </TabPanel>
+        )}
 
-        {/* ── Welcome Tab ── */}
-        <TabPanel value={tab} index={1}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" fontWeight={600} mb={2}>Welcome Message</Typography>
-              <FormControlLabel
-                control={<Switch checked={!!w.enabled} onChange={(e) => updateSetting('welcome.enabled', e.target.checked)} />}
-                label="Send welcome message to new members"
-              />
-              <Divider sx={{ my: 2 }} />
-              <FormControlLabel
-                control={<Switch checked={!!w.ai_welcome_enabled}
-                  onChange={(e) => updateSetting('welcome.ai_welcome_enabled', e.target.checked)} />}
-                label="AI-generated welcome messages (requires OpenAI API key)"
-              />
-              {!w.ai_welcome_enabled && (
-                <TextField fullWidth multiline rows={4} label="Welcome Message" sx={{ mt: 2, mb: 2 }}
-                  value={w.message || ''}
-                  onChange={(e) => updateSetting('welcome.message', e.target.value)}
-                  helperText="Placeholders: {first_name}, {group_name}, {member_count}, {username}" />
-              )}
-              {w.ai_welcome_enabled && (
-                <Alert severity="info" sx={{ mt: 2, mb: 2 }}>
-                  AI will generate a unique welcome message for each new member. Set OPENAI_API_KEY in your Railway environment.
-                </Alert>
-              )}
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
-                  <TextField fullWidth type="number" label="Auto-delete after (seconds, 0 = never)"
-                    value={w.delete_after_seconds || 0}
-                    onChange={(e) => updateSetting('welcome.delete_after_seconds', parseInt(e.target.value))} />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <TextField fullWidth type="number" label="Forum Topic ID (leave blank for main chat)"
-                    value={w.topic_id || ''}
-                    onChange={(e) => updateSetting('welcome.topic_id', e.target.value ? parseInt(e.target.value) : null)}
-                    helperText="Send welcome to a specific forum topic thread" />
-                </Grid>
-                <Grid item xs={12}>
-                  <FormControlLabel
-                    control={<Switch checked={!!w.show_rules} onChange={(e) => updateSetting('welcome.show_rules', e.target.checked)} />}
-                    label="Show rules in welcome message"
-                  />
-                </Grid>
-                {w.show_rules && (
-                  <Grid item xs={12}>
-                    <TextField fullWidth multiline rows={4} label="Rules Text"
-                      value={w.rules_text || ''}
-                      onChange={(e) => updateSetting('welcome.rules_text', e.target.value)} />
-                  </Grid>
-                )}
-              </Grid>
-            </CardContent>
-          </Card>
-
-          <Card sx={{ mt: 2 }}>
-            <CardContent>
-              <Typography variant="subtitle1" fontWeight={600} mb={1}>Private Welcome DM</Typography>
-              <Typography variant="body2" color="text.secondary" mb={2}>
-                Send a private message to each new member in addition to the group welcome.
-              </Typography>
-              <FormControlLabel
-                control={<Switch checked={!!w.dm_enabled} onChange={e => updateSetting('welcome.dm_enabled', e.target.checked)} />}
-                label="Send DM to new members"
-              />
-              {w.dm_enabled && (
-                <TextField fullWidth multiline rows={3} label="DM Message" sx={{ mt: 2 }}
-                  value={w.dm_message || ''}
-                  onChange={e => updateSetting('welcome.dm_message', e.target.value)}
-                  helperText="Placeholders: {first_name}, {group_name}, {username}" />
-              )}
-            </CardContent>
-          </Card>
-        </TabPanel>
-
-        {/* ── Levels Tab ── */}
-        <TabPanel value={tab} index={2}>
-          <Card sx={{ mb: 2 }}>
-            <CardContent>
-              <Typography variant="h6" fontWeight={600} mb={2}>XP & Level System</Typography>
-              <FormControlLabel
-                control={<Switch checked={!!l.enabled} onChange={(e) => updateSetting('levels.enabled', e.target.checked)} />}
-                label="Enable XP and leveling system"
-              />
-              <Divider sx={{ my: 2 }} />
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={4}>
-                  <TextField fullWidth type="number" label="XP per Message"
-                    value={l.xp_per_message || 10}
-                    onChange={(e) => updateSetting('levels.xp_per_message', parseInt(e.target.value))} />
-                </Grid>
-                <Grid item xs={12} sm={4}>
-                  <TextField fullWidth type="number" label="XP Cooldown (seconds)"
-                    value={l.xp_cooldown_seconds || 60}
-                    onChange={(e) => updateSetting('levels.xp_cooldown_seconds', parseInt(e.target.value))} />
-                </Grid>
-                <Grid item xs={12} sm={4}>
-                  <TextField fullWidth type="number" label="Level-up Topic ID (blank = main chat)"
-                    value={l.levelup_topic_id || ''}
-                    onChange={(e) => updateSetting('levels.levelup_topic_id', e.target.value ? parseInt(e.target.value) : null)} />
-                </Grid>
-                <Grid item xs={12} sm={8}>
-                  <TextField fullWidth label="Level-up Message"
-                    value={l.level_up_message || ''}
-                    onChange={(e) => updateSetting('levels.level_up_message', e.target.value)}
-                    helperText="Placeholders: {first_name}, {level}" />
-                </Grid>
-                <Grid item xs={12} sm={4}>
-                  <FormControlLabel
-                    control={<Switch checked={!!l.announce_level_up}
-                      onChange={(e) => updateSetting('levels.announce_level_up', e.target.checked)} />}
-                    label="Announce level-ups"
-                    sx={{ mt: 1 }}
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <FormControlLabel
-                    control={<Switch checked={!!l.ai_levelup_enabled}
-                      onChange={(e) => updateSetting('levels.ai_levelup_enabled', e.target.checked)} />}
-                    label="AI-generated level-up messages (requires OpenAI API key)"
-                  />
-                </Grid>
-                <Grid item xs={12} sm={4}>
-                  <TextField fullWidth type="number" label="XP per Reaction"
-                    value={l.xp_per_reaction ?? 10}
-                    onChange={(e) => updateSetting('levels.xp_per_reaction', parseInt(e.target.value))} />
-                </Grid>
-                <Grid item xs={12} sm={4}>
-                  <TextField fullWidth type="number" label="Reaction XP Cooldown (s)"
-                    value={l.xp_reaction_cooldown_seconds ?? 30}
-                    onChange={(e) => updateSetting('levels.xp_reaction_cooldown_seconds', parseInt(e.target.value))} />
-                </Grid>
-                <Grid item xs={12} sm={4}>
-                  <TextField fullWidth type="number" label="Delete Level-Up Message After (s, 0=never)"
-                    value={l.delete_levelup_after_seconds ?? 0}
-                    onChange={(e) => updateSetting('levels.delete_levelup_after_seconds', parseInt(e.target.value))} />
-                </Grid>
-              </Grid>
-            </CardContent>
-          </Card>
-          <Card sx={{ mb: 2 }}>
-            <CardContent>
-              <Typography variant="subtitle1" fontWeight={600} mb={1}>XP Penalties (Moderation Actions)</Typography>
-              <Typography variant="body2" color="text.secondary" mb={2}>XP deducted when a moderation action is applied to a member.</Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={6} sm={3}>
-                  <TextField fullWidth type="number" label="Warn Penalty"
-                    value={l.xp_penalty_warn ?? -10}
-                    onChange={(e) => updateSetting('levels.xp_penalty_warn', parseInt(e.target.value))} />
-                </Grid>
-                <Grid item xs={6} sm={3}>
-                  <TextField fullWidth type="number" label="Mute Penalty"
-                    value={l.xp_penalty_mute ?? -20}
-                    onChange={(e) => updateSetting('levels.xp_penalty_mute', parseInt(e.target.value))} />
-                </Grid>
-                <Grid item xs={6} sm={3}>
-                  <TextField fullWidth type="number" label="Kick Penalty"
-                    value={l.xp_penalty_kick ?? -30}
-                    onChange={(e) => updateSetting('levels.xp_penalty_kick', parseInt(e.target.value))} />
-                </Grid>
-                <Grid item xs={6} sm={3}>
-                  <TextField fullWidth type="number" label="Ban Penalty"
-                    value={l.xp_penalty_ban ?? -50}
-                    onChange={(e) => updateSetting('levels.xp_penalty_ban', parseInt(e.target.value))} />
-                </Grid>
-              </Grid>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent>
-              <Typography variant="subtitle1" fontWeight={600} mb={2}>Rank Card Style</Typography>
-              <Grid container spacing={2} alignItems="center">
-                <Grid item xs={12} sm={4}>
-                  <Typography variant="body2" color="text.secondary" mb={0.5}>Background Start</Typography>
-                  <input type="color"
-                    value={(l.rank_card || {}).bg_color_start || '#1a1a2e'}
-                    onChange={(e) => updateSetting('levels.rank_card.bg_color_start', e.target.value)}
-                    style={{ width: '100%', height: 40, borderRadius: 8, border: '1px solid #30363d', cursor: 'pointer' }} />
-                </Grid>
-                <Grid item xs={12} sm={4}>
-                  <Typography variant="body2" color="text.secondary" mb={0.5}>Background End</Typography>
-                  <input type="color"
-                    value={(l.rank_card || {}).bg_color_end || '#16213e'}
-                    onChange={(e) => updateSetting('levels.rank_card.bg_color_end', e.target.value)}
-                    style={{ width: '100%', height: 40, borderRadius: 8, border: '1px solid #30363d', cursor: 'pointer' }} />
-                </Grid>
-                <Grid item xs={12} sm={4}>
-                  <Typography variant="body2" color="text.secondary" mb={0.5}>Accent Color</Typography>
-                  <input type="color"
-                    value={(l.rank_card || {}).accent_color || '#2196f3'}
-                    onChange={(e) => updateSetting('levels.rank_card.accent_color', e.target.value)}
-                    style={{ width: '100%', height: 40, borderRadius: 8, border: '1px solid #30363d', cursor: 'pointer' }} />
-                </Grid>
-              </Grid>
-            </CardContent>
-          </Card>
-        </TabPanel>
-
-        {/* ── AutoMod Tab ── */}
-        <TabPanel value={tab} index={3}>
-          <Card sx={{ mb: 2 }}>
-            <CardContent>
-              <Typography variant="h6" fontWeight={600} mb={2}>AutoMod</Typography>
-              <FormControlLabel
-                control={<Switch checked={!!am.enabled} onChange={(e) => updateSetting('automod.enabled', e.target.checked)} />}
-                label="Enable AutoMod globally"
-              />
-              <Divider sx={{ my: 2 }} />
-              <Typography variant="subtitle2" fontWeight={600} mb={1}>Core Rules</Typography>
-              <Grid container spacing={1}>
-                {[
-                  ['Spam Detection', 'automod.spam.enabled', !!(am.spam || {}).enabled],
-                  ['Bad Words Filter', 'automod.bad_words.enabled', !!(am.bad_words || {}).enabled],
-                  ['Block External Links', 'automod.external_links.enabled', !!(am.external_links || {}).enabled],
-                  ['Block Telegram Links', 'automod.telegram_links.enabled', !!(am.telegram_links || {}).enabled],
-                  ['Excessive Emojis', 'automod.excessive_emojis.enabled', !!(am.excessive_emojis || {}).enabled],
-                  ['Caps Lock Filter', 'automod.caps_lock.enabled', !!(am.caps_lock || {}).enabled],
-                  ['Block Forwarded Messages', 'automod.forwarded_messages.enabled', !!(am.forwarded_messages || {}).enabled],
-                  ['Homoglyph Normalization', 'automod.homoglyphs.enabled', !!(am.homoglyphs || {}).enabled],
-                ].map(([label, path, checked]) => (
-                  <Grid item xs={12} sm={6} key={path}>
-                    <FormControlLabel
-                      control={<Switch checked={checked} onChange={(e) => updateSetting(path, e.target.checked)} />}
-                      label={label}
-                    />
-                  </Grid>
-                ))}
-              </Grid>
-              <TextField fullWidth multiline rows={2} label="Banned Words (comma separated)" sx={{ mt: 2 }}
-                value={(am.bad_words?.words || []).join(', ')}
-                onChange={(e) => updateSetting('automod.bad_words.words', e.target.value.split(',').map(w => w.trim()).filter(Boolean))} />
-            </CardContent>
-          </Card>
-
-          <Accordion>
-            <AccordionSummary expandIcon={<ExpandMore />}>
-              <Typography fontWeight={600}>Extended Rules — Media & Content</Typography>
-            </AccordionSummary>
-            <AccordionDetails>
-              <Grid container spacing={1}>
-                {AUTOMOD_EXTENDED_RULES.map(({ key, label }) => {
-                  const rule = am[key] || {};
-                  return (
-                    <Grid item xs={12} key={key}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-                        <FormControlLabel
-                          sx={{ minWidth: 280 }}
-                          control={<Switch checked={!!rule.enabled}
-                            onChange={(e) => updateSetting(`automod.${key}.enabled`, e.target.checked)} />}
-                          label={label}
-                        />
-                        <FormControl size="small" sx={{ minWidth: 120 }}>
-                          <InputLabel>Action</InputLabel>
-                          <Select value={rule.action || 'delete'} label="Action"
-                            onChange={(e) => updateSetting(`automod.${key}.action`, e.target.value)}>
-                            <MenuItem value="delete">Delete</MenuItem>
-                            <MenuItem value="warn">Warn</MenuItem>
-                            <MenuItem value="mute">Mute</MenuItem>
-                            <MenuItem value="ban">Ban</MenuItem>
-                          </Select>
-                        </FormControl>
-                        <FormControlLabel
-                          control={<Switch checked={!!rule.warn_user}
-                            onChange={(e) => updateSetting(`automod.${key}.warn_user`, e.target.checked)} />}
-                          label="Warn user"
-                        />
-                      </Box>
-                    </Grid>
-                  );
-                })}
-              </Grid>
-            </AccordionDetails>
-          </Accordion>
-
-          <Accordion sx={{ mt: 1 }}>
-            <AccordionSummary expandIcon={<ExpandMore />}>
-              <Typography fontWeight={600}>Language Filter</Typography>
-            </AccordionSummary>
-            <AccordionDetails>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2, flexWrap: 'wrap' }}>
+        {/* MEMBERS › Welcome */}
+        {cat === 'members' && subTab === 1 && (
+          <>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" fontWeight={600} mb={2}>Welcome Message</Typography>
                 <FormControlLabel
-                  control={<Switch checked={!!(am.language_filter || {}).enabled}
-                    onChange={(e) => updateSetting('automod.language_filter.enabled', e.target.checked)} />}
-                  label="Enable language filter"
+                  control={<Switch checked={!!w.enabled} onChange={(e) => updateSetting('welcome.enabled', e.target.checked)} />}
+                  label="Send welcome message to new members"
                 />
-                <FormControl size="small" sx={{ minWidth: 120 }}>
-                  <InputLabel>Action</InputLabel>
-                  <Select value={(am.language_filter || {}).action || 'delete'} label="Action"
-                    onChange={(e) => updateSetting('automod.language_filter.action', e.target.value)}>
-                    <MenuItem value="delete">Delete</MenuItem>
-                    <MenuItem value="warn">Warn</MenuItem>
-                    <MenuItem value="mute">Mute</MenuItem>
-                  </Select>
-                </FormControl>
-              </Box>
-              <Typography variant="body2" color="text.secondary" mb={1}>Block messages containing these scripts:</Typography>
-              <Grid container spacing={1}>
-                {LANGUAGE_OPTIONS.map(({ value, label }) => {
-                  const langs = (am.language_filter || {}).languages || [];
-                  const checked = langs.includes(value);
-                  return (
-                    <Grid item xs={12} sm={6} key={value}>
-                      <FormControlLabel
-                        control={<Switch checked={checked} onChange={(e) => {
-                          const newLangs = e.target.checked ? [...langs, value] : langs.filter(l => l !== value);
-                          updateSetting('automod.language_filter.languages', newLangs);
-                        }} />}
-                        label={label}
-                      />
-                    </Grid>
-                  );
-                })}
-              </Grid>
-            </AccordionDetails>
-          </Accordion>
-
-          <Card sx={{ mt: 2 }}>
-            <CardContent>
-              <Typography variant="subtitle1" fontWeight={600} mb={2}>Auto-Delete AutoMod Messages</Typography>
-              <Typography variant="body2" color="text.secondary" mb={2}>
-                How long to keep AutoMod notification messages before deleting them. 0 = never delete.
-              </Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
-                  <TextField fullWidth type="number" label="Delete Warn Messages After (seconds, 0=never)"
-                    inputProps={{ min: 0 }}
-                    value={mod.auto_delete_warn_seconds ?? 0}
-                    onChange={(e) => updateSetting('moderation.auto_delete_warn_seconds', parseInt(e.target.value) || 0)} />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <TextField fullWidth type="number" label="Delete Action Messages After (seconds, 0=never)"
-                    inputProps={{ min: 0 }}
-                    value={mod.auto_delete_action_seconds ?? 0}
-                    onChange={(e) => updateSetting('moderation.auto_delete_action_seconds', parseInt(e.target.value) || 0)} />
-                </Grid>
-              </Grid>
-            </CardContent>
-          </Card>
-        </TabPanel>
-
-        {/* ── Moderation Tab ── */}
-        <TabPanel value={tab} index={4}>
-          <Card sx={{ mb: 2 }}>
-            <CardContent>
-              <Typography variant="h6" fontWeight={600} mb={2}>Moderation Settings</Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={4}>
-                  <TextField fullWidth type="number" label="Max Warnings"
-                    value={mod.max_warnings || 3}
-                    onChange={(e) => updateSetting('moderation.max_warnings', parseInt(e.target.value))} />
-                </Grid>
-                <Grid item xs={12} sm={4}>
-                  <FormControl fullWidth>
-                    <InputLabel>Warning Action</InputLabel>
-                    <Select value={mod.warning_action || 'ban'} label="Warning Action"
-                      onChange={(e) => updateSetting('moderation.warning_action', e.target.value)}>
-                      <MenuItem value="ban">Ban</MenuItem>
-                      <MenuItem value="kick">Kick</MenuItem>
-                      <MenuItem value="mute">Mute</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Grid>
-                <Grid item xs={12} sm={4}>
-                  <TextField fullWidth type="number" label="Mute Duration (minutes)"
-                    value={mod.mute_duration_minutes || 60}
-                    onChange={(e) => updateSetting('moderation.mute_duration_minutes', parseInt(e.target.value))} />
-                </Grid>
-              </Grid>
-            </CardContent>
-          </Card>
-
-          <Accordion>
-            <AccordionSummary expandIcon={<ExpandMore />}>
-              <Typography fontWeight={600}>Escalation Chain</Typography>
-            </AccordionSummary>
-            <AccordionDetails>
-              <FormControlLabel
-                control={<Switch checked={!!mod.escalation_enabled}
-                  onChange={(e) => updateSetting('moderation.escalation_enabled', e.target.checked)} />}
-                label="Enable escalating punishments"
-              />
-              <Typography variant="body2" color="text.secondary" mb={2} mt={1}>
-                Instead of a single action, apply progressive punishments as warning count increases.
-              </Typography>
-              {(mod.escalation_steps || []).map((step, idx) => (
-                <Box key={idx} sx={{ display: 'flex', gap: 1, mb: 1, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <TextField size="small" type="number" label="At warning #" sx={{ width: 110 }}
-                    value={step.at_warning}
-                    onChange={(e) => {
-                      const steps = [...(mod.escalation_steps || [])];
-                      steps[idx] = { ...steps[idx], at_warning: parseInt(e.target.value) };
-                      updateSetting('moderation.escalation_steps', steps);
-                    }} />
-                  <FormControl size="small" sx={{ width: 110 }}>
-                    <InputLabel>Action</InputLabel>
-                    <Select value={step.action || 'mute'} label="Action"
-                      onChange={(e) => {
-                        const steps = [...(mod.escalation_steps || [])];
-                        steps[idx] = { ...steps[idx], action: e.target.value };
-                        updateSetting('moderation.escalation_steps', steps);
-                      }}>
-                      <MenuItem value="mute">Mute</MenuItem>
-                      <MenuItem value="tempban">Temp Ban</MenuItem>
-                      <MenuItem value="ban">Ban</MenuItem>
-                    </Select>
-                  </FormControl>
-                  {(step.action === 'mute') && (
-                    <TextField size="small" type="number" label="Minutes" sx={{ width: 90 }}
-                      value={step.duration_minutes || 60}
-                      onChange={(e) => {
-                        const steps = [...(mod.escalation_steps || [])];
-                        steps[idx] = { ...steps[idx], duration_minutes: parseInt(e.target.value) };
-                        updateSetting('moderation.escalation_steps', steps);
-                      }} />
-                  )}
-                  {(step.action === 'tempban') && (
-                    <TextField size="small" type="number" label="Hours" sx={{ width: 90 }}
-                      value={step.duration_hours || 24}
-                      onChange={(e) => {
-                        const steps = [...(mod.escalation_steps || [])];
-                        steps[idx] = { ...steps[idx], duration_hours: parseInt(e.target.value) };
-                        updateSetting('moderation.escalation_steps', steps);
-                      }} />
-                  )}
-                  <TextField size="small" type="number" label="Time Window (hrs)" placeholder="Any" sx={{ width: 130 }}
-                    value={step.time_window_hours ?? ''}
-                    onChange={(e) => {
-                      const steps = [...(mod.escalation_steps || [])];
-                      const val = e.target.value === '' ? null : parseInt(e.target.value);
-                      steps[idx] = { ...steps[idx], time_window_hours: val };
-                      updateSetting('moderation.escalation_steps', steps);
-                    }} />
-                  <IconButton size="small" color="error" onClick={() => {
-                    const steps = (mod.escalation_steps || []).filter((_, i) => i !== idx);
-                    updateSetting('moderation.escalation_steps', steps);
-                  }}>
-                    <Delete fontSize="small" />
-                  </IconButton>
-                </Box>
-              ))}
-              <Button size="small" startIcon={<Add />} onClick={() => {
-                const steps = [...(mod.escalation_steps || [])];
-                steps.push({ at_warning: (steps[steps.length - 1]?.at_warning || 1) + 1, action: 'mute', duration_minutes: 60 });
-                updateSetting('moderation.escalation_steps', steps);
-              }} sx={{ mt: 1 }}>
-                Add Step
-              </Button>
-            </AccordionDetails>
-          </Accordion>
-
-          <Card sx={{ mt: 2, mb: 2 }}>
-            <CardContent>
-              <Typography variant="subtitle1" fontWeight={600} mb={2}>Auto-Delete Moderation Messages</Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
-                  <TextField fullWidth type="number" label="Auto-Delete Warning Messages After (s, 0=never)"
-                    value={mod.auto_delete_warn_seconds ?? 0}
-                    onChange={(e) => updateSetting('moderation.auto_delete_warn_seconds', parseInt(e.target.value))} />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <TextField fullWidth type="number" label="Auto-Delete Action Messages After (s, 0=never)"
-                    value={mod.auto_delete_action_seconds ?? 0}
-                    onChange={(e) => updateSetting('moderation.auto_delete_action_seconds', parseInt(e.target.value))} />
-                </Grid>
-              </Grid>
-            </CardContent>
-          </Card>
-
-        </TabPanel>
-
-        {/* ── Raids Tab ── */}
-        <TabPanel value={tab} index={5}>
-          <Card>
-            <CardContent>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                <Box>
-                  <Typography variant="h6" fontWeight={600}>Raid Manager</Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Coordinate Twitter/X raids with your community. Members earn XP for participating.
-                  </Typography>
-                </Box>
-                <Button variant="contained" startIcon={<Add />} onClick={() => setRaidOpen(true)}>
-                  Create Raid
-                </Button>
-              </Box>
-            </CardContent>
-          </Card>
-        </TabPanel>
-
-        {/* ── Auto Clean Tab ── */}
-        <TabPanel value={tab} index={6}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" fontWeight={600} mb={1}>Auto Clean</Typography>
-              <Typography variant="body2" color="text.secondary" mb={2}>
-                Automatically delete Telegram system messages to keep your chat clean.
-              </Typography>
-              <FormControlLabel
-                control={<Switch checked={!!ac.enabled} onChange={(e) => updateSetting('auto_clean.enabled', e.target.checked)} />}
-                label="Enable Auto Clean"
-              />
-              <Divider sx={{ my: 2 }} />
-              <Grid container spacing={1}>
-                {[
-                  ['Delete join notifications', 'auto_clean.delete_joins', ac.delete_joins],
-                  ['Delete leave notifications', 'auto_clean.delete_leaves', ac.delete_leaves],
-                  ['Delete profile photo changes', 'auto_clean.delete_photo_changes', ac.delete_photo_changes],
-                  ['Delete pinned message alerts', 'auto_clean.delete_pinned_messages', ac.delete_pinned_messages],
-                  ['Delete forum topic events', 'auto_clean.delete_forum_events', ac.delete_forum_events],
-                  ['Delete game score messages', 'auto_clean.delete_game_scores', ac.delete_game_scores],
-                  ['Delete voice/video chat events', 'auto_clean.delete_voice_chat_events', ac.delete_voice_chat_events],
-                  ['Delete bot command messages', 'auto_clean.delete_commands', ac.delete_commands],
-                ].map(([label, path, checked]) => (
-                  <Grid item xs={12} sm={6} key={path}>
+                <Divider sx={{ my: 2 }} />
+                <FormControlLabel
+                  control={<Switch checked={!!w.ai_welcome_enabled}
+                    onChange={(e) => updateSetting('welcome.ai_welcome_enabled', e.target.checked)} />}
+                  label={<Box sx={{ display: 'flex', alignItems: 'center' }}>AI-generated welcome messages (requires OpenAI API key)<ProBadge /></Box>}
+                />
+                {!w.ai_welcome_enabled && (
+                  <TextField fullWidth multiline rows={4} label="Welcome Message" sx={{ mt: 2, mb: 2 }}
+                    value={w.message || ''}
+                    onChange={(e) => updateSetting('welcome.message', e.target.value)}
+                    helperText="Placeholders: {first_name}, {group_name}, {member_count}, {username}" />
+                )}
+                {w.ai_welcome_enabled && (
+                  <Alert severity="info" sx={{ mt: 2, mb: 2 }}>
+                    AI will generate a unique welcome message for each new member. Set OPENAI_API_KEY in your Railway environment.
+                  </Alert>
+                )}
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                    <TextField fullWidth type="number" label="Auto-delete after (seconds, 0 = never)"
+                      value={w.delete_after_seconds || 0}
+                      onChange={(e) => updateSetting('welcome.delete_after_seconds', parseInt(e.target.value))} />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField fullWidth type="number" label="Forum Topic ID (leave blank for main chat)"
+                      value={w.topic_id || ''}
+                      onChange={(e) => updateSetting('welcome.topic_id', e.target.value ? parseInt(e.target.value) : null)}
+                      helperText="Send welcome to a specific forum topic thread" />
+                  </Grid>
+                  <Grid item xs={12}>
                     <FormControlLabel
-                      control={<Switch checked={!!checked} onChange={(e) => updateSetting(path, e.target.checked)} />}
-                      label={label}
+                      control={<Switch checked={!!w.show_rules} onChange={(e) => updateSetting('welcome.show_rules', e.target.checked)} />}
+                      label="Show rules in welcome message"
                     />
                   </Grid>
-                ))}
-              </Grid>
-            </CardContent>
-          </Card>
-        </TabPanel>
-
-        {/* ── Roles Tab ── */}
-        <TabPanel value={tab} index={7}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" fontWeight={600} mb={1}>Roles</Typography>
-              <Typography variant="body2" color="text.secondary" mb={2}>
-                Members are automatically assigned a role when they reach the specified level. Use <code>/roles</code> in Telegram to display the list.
-              </Typography>
-              <Divider sx={{ mb: 2 }} />
-              {(l.roles || []).map((role, idx) => (
-                <Box key={idx} sx={{ display: 'flex', gap: 2, mb: 1.5, alignItems: 'center' }}>
-                  <TextField size="small" type="number" label="From Level" sx={{ width: 110 }}
-                    value={role.level}
-                    onChange={(e) => {
-                      const roles = [...(l.roles || [])];
-                      roles[idx] = { ...roles[idx], level: parseInt(e.target.value) };
-                      updateSetting('levels.roles', roles);
-                    }} />
-                  <TextField size="small" label="Role Name" sx={{ flexGrow: 1 }}
-                    value={role.name}
-                    onChange={(e) => {
-                      const roles = [...(l.roles || [])];
-                      roles[idx] = { ...roles[idx], name: e.target.value };
-                      updateSetting('levels.roles', roles);
-                    }} />
-                  <IconButton size="small" color="error" onClick={() => {
-                    const roles = (l.roles || []).filter((_, i) => i !== idx);
-                    updateSetting('levels.roles', roles);
-                  }}>
-                    <Delete fontSize="small" />
-                  </IconButton>
-                </Box>
-              ))}
-              <Button size="small" startIcon={<Add />} sx={{ mt: 1 }} onClick={() => {
-                const roles = [...(l.roles || [])];
-                const maxLevel = roles.reduce((m, r) => Math.max(m, r.level), 0);
-                roles.push({ level: maxLevel + 10, name: 'New Role' });
-                updateSetting('levels.roles', roles);
-              }}>
-                Add Role
-              </Button>
-            </CardContent>
-          </Card>
-        </TabPanel>
-
-        {/* ── Reports Tab ── */}
-        <TabPanel value={tab} index={8}>
-          <Card sx={{ mb: 2 }}>
-            <CardContent>
-              <Typography variant="h6" fontWeight={600} mb={2}>Reports Settings</Typography>
-              <FormControlLabel
-                control={<Switch checked={!!rep.enabled} onChange={(e) => updateSetting('reports.enabled', e.target.checked)} />}
-                label="Enable /report command"
-              />
-              <Grid container spacing={2} sx={{ mt: 1 }}>
-                <Grid item xs={12} sm={6}>
-                  <FormControl fullWidth>
-                    <InputLabel>Notify Admins</InputLabel>
-                    <Select value={rep.notify_admins || 'all'} label="Notify Admins"
-                      onChange={(e) => updateSetting('reports.notify_admins', e.target.value)}>
-                      <MenuItem value="all">All admins</MenuItem>
-                      <MenuItem value="selected">Selected admins only</MenuItem>
-                    </Select>
-                  </FormControl>
+                  {w.show_rules && (
+                    <Grid item xs={12}>
+                      <TextField fullWidth multiline rows={4} label="Rules Text"
+                        value={w.rules_text || ''}
+                        onChange={(e) => updateSetting('welcome.rules_text', e.target.value)} />
+                    </Grid>
+                  )}
                 </Grid>
-              </Grid>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                <Typography variant="subtitle1" fontWeight={600}>Reported Messages</Typography>
-                <Button size="small" onClick={fetchReports} disabled={reportsLoading}>Refresh</Button>
-              </Box>
-              {reportsLoading ? <CircularProgress size={24} /> : (
-                reports.length === 0 ? (
-                  <Typography color="text.secondary">No reports yet.</Typography>
-                ) : (
-                  <TableContainer>
-                    <Table size="small">
-                      <TableHead>
-                        <TableRow>
-                          <TableCell>Reporter</TableCell>
-                          <TableCell>Reported User</TableCell>
-                          <TableCell>Reason</TableCell>
-                          <TableCell>Status</TableCell>
-                          <TableCell>Date</TableCell>
-                          <TableCell>Action</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {reports.map((r) => (
-                          <TableRow key={r.id} hover>
-                            <TableCell>@{r.reporter_username || r.reporter_user_id}</TableCell>
-                            <TableCell>@{r.reported_username || r.reported_user_id}</TableCell>
-                            <TableCell>{r.reason || '-'}</TableCell>
-                            <TableCell>
-                              <Chip label={r.status} size="small"
-                                color={r.status === 'open' ? 'warning' : 'success'} />
-                            </TableCell>
-                            <TableCell>
-                              <Typography variant="caption">{r.created_at ? new Date(r.created_at).toLocaleDateString() : '-'}</Typography>
-                            </TableCell>
-                            <TableCell>
-                              {r.status === 'open' && (
-                                <Tooltip title="Mark resolved">
-                                  <IconButton size="small" color="success"
-                                    onClick={() => handleResolveReport(r.id)}>
-                                    <CheckCircle fontSize="small" />
-                                  </IconButton>
-                                </Tooltip>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                )
-              )}
-            </CardContent>
-          </Card>
-        </TabPanel>
+              </CardContent>
+            </Card>
 
-        {/* ── Auto Response Tab ── */}
-        <TabPanel value={tab} index={9}>
+            <Card sx={{ mt: 2 }}>
+              <CardContent>
+                <Typography variant="subtitle1" fontWeight={600} mb={1}>Private Welcome DM</Typography>
+                <Typography variant="body2" color="text.secondary" mb={2}>
+                  Send a private message to each new member in addition to the group welcome.
+                </Typography>
+                <FormControlLabel
+                  control={<Switch checked={!!w.dm_enabled} onChange={e => updateSetting('welcome.dm_enabled', e.target.checked)} />}
+                  label="Send DM to new members"
+                />
+                {w.dm_enabled && (
+                  <TextField fullWidth multiline rows={3} label="DM Message" sx={{ mt: 2 }}
+                    value={w.dm_message || ''}
+                    onChange={e => updateSetting('welcome.dm_message', e.target.value)}
+                    helperText="Placeholders: {first_name}, {group_name}, {username}" />
+                )}
+              </CardContent>
+            </Card>
+          </>
+        )}
+
+        {/* MEMBERS › XP & Roles */}
+        {cat === 'members' && subTab === 2 && (
+          <>
+            <Card sx={{ mb: 2 }}>
+              <CardContent>
+                <Typography variant="h6" fontWeight={600} mb={2}>XP & Level System</Typography>
+                <FormControlLabel
+                  control={<Switch checked={!!l.enabled} onChange={(e) => updateSetting('levels.enabled', e.target.checked)} />}
+                  label="Enable XP and leveling system"
+                />
+                <Divider sx={{ my: 2 }} />
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={4}>
+                    <TextField fullWidth type="number" label="XP per Message"
+                      value={l.xp_per_message || 10}
+                      onChange={(e) => updateSetting('levels.xp_per_message', parseInt(e.target.value))} />
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <TextField fullWidth type="number" label="XP Cooldown (seconds)"
+                      value={l.xp_cooldown_seconds || 60}
+                      onChange={(e) => updateSetting('levels.xp_cooldown_seconds', parseInt(e.target.value))} />
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <TextField fullWidth type="number" label="Level-up Topic ID (blank = main chat)"
+                      value={l.levelup_topic_id || ''}
+                      onChange={(e) => updateSetting('levels.levelup_topic_id', e.target.value ? parseInt(e.target.value) : null)} />
+                  </Grid>
+                  <Grid item xs={12} sm={8}>
+                    <TextField fullWidth label="Level-up Message"
+                      value={l.level_up_message || ''}
+                      onChange={(e) => updateSetting('levels.level_up_message', e.target.value)}
+                      helperText="Placeholders: {first_name}, {level}" />
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <FormControlLabel
+                      control={<Switch checked={!!l.announce_level_up}
+                        onChange={(e) => updateSetting('levels.announce_level_up', e.target.checked)} />}
+                      label="Announce level-ups"
+                      sx={{ mt: 1 }}
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <FormControlLabel
+                      control={<Switch checked={!!l.ai_levelup_enabled}
+                        onChange={(e) => updateSetting('levels.ai_levelup_enabled', e.target.checked)} />}
+                      label={<Box sx={{ display: 'flex', alignItems: 'center' }}>AI-generated level-up messages (requires OpenAI API key)<ProBadge /></Box>}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <TextField fullWidth type="number" label="XP per Reaction"
+                      value={l.xp_per_reaction ?? 10}
+                      onChange={(e) => updateSetting('levels.xp_per_reaction', parseInt(e.target.value))} />
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <TextField fullWidth type="number" label="Reaction XP Cooldown (s)"
+                      value={l.xp_reaction_cooldown_seconds ?? 30}
+                      onChange={(e) => updateSetting('levels.xp_reaction_cooldown_seconds', parseInt(e.target.value))} />
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <TextField fullWidth type="number" label="Delete Level-Up Message After (s, 0=never)"
+                      value={l.delete_levelup_after_seconds ?? 0}
+                      onChange={(e) => updateSetting('levels.delete_levelup_after_seconds', parseInt(e.target.value))} />
+                  </Grid>
+                </Grid>
+              </CardContent>
+            </Card>
+
+            <Card sx={{ mb: 2 }}>
+              <CardContent>
+                <Typography variant="subtitle1" fontWeight={600} mb={1}>XP Penalties (Moderation Actions)</Typography>
+                <Typography variant="body2" color="text.secondary" mb={2}>XP deducted when a moderation action is applied to a member.</Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={6} sm={3}>
+                    <TextField fullWidth type="number" label="Warn Penalty"
+                      value={l.xp_penalty_warn ?? -10}
+                      onChange={(e) => updateSetting('levels.xp_penalty_warn', parseInt(e.target.value))} />
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <TextField fullWidth type="number" label="Mute Penalty"
+                      value={l.xp_penalty_mute ?? -20}
+                      onChange={(e) => updateSetting('levels.xp_penalty_mute', parseInt(e.target.value))} />
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <TextField fullWidth type="number" label="Kick Penalty"
+                      value={l.xp_penalty_kick ?? -30}
+                      onChange={(e) => updateSetting('levels.xp_penalty_kick', parseInt(e.target.value))} />
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <TextField fullWidth type="number" label="Ban Penalty"
+                      value={l.xp_penalty_ban ?? -50}
+                      onChange={(e) => updateSetting('levels.xp_penalty_ban', parseInt(e.target.value))} />
+                  </Grid>
+                </Grid>
+              </CardContent>
+            </Card>
+
+            <Card sx={{ mb: 2 }}>
+              <CardContent>
+                <Typography variant="subtitle1" fontWeight={600} mb={2}>Rank Card Style</Typography>
+                <Grid container spacing={2} alignItems="center">
+                  <Grid item xs={12} sm={4}>
+                    <Typography variant="body2" color="text.secondary" mb={0.5}>Background Start</Typography>
+                    <input type="color"
+                      value={(l.rank_card || {}).bg_color_start || '#1a1a2e'}
+                      onChange={(e) => updateSetting('levels.rank_card.bg_color_start', e.target.value)}
+                      style={{ width: '100%', height: 40, borderRadius: 8, border: '1px solid #30363d', cursor: 'pointer' }} />
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <Typography variant="body2" color="text.secondary" mb={0.5}>Background End</Typography>
+                    <input type="color"
+                      value={(l.rank_card || {}).bg_color_end || '#16213e'}
+                      onChange={(e) => updateSetting('levels.rank_card.bg_color_end', e.target.value)}
+                      style={{ width: '100%', height: 40, borderRadius: 8, border: '1px solid #30363d', cursor: 'pointer' }} />
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <Typography variant="body2" color="text.secondary" mb={0.5}>Accent Color</Typography>
+                    <input type="color"
+                      value={(l.rank_card || {}).accent_color || '#2196f3'}
+                      onChange={(e) => updateSetting('levels.rank_card.accent_color', e.target.value)}
+                      style={{ width: '100%', height: 40, borderRadius: 8, border: '1px solid #30363d', cursor: 'pointer' }} />
+                  </Grid>
+                </Grid>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent>
+                <Typography variant="subtitle1" fontWeight={600} mb={1}>Roles</Typography>
+                <Typography variant="body2" color="text.secondary" mb={2}>
+                  Members are automatically assigned a role when they reach the specified level. Use <code>/roles</code> in Telegram to display the list.
+                </Typography>
+                <Divider sx={{ mb: 2 }} />
+                {(l.roles || []).map((role, idx) => (
+                  <Box key={idx} sx={{ display: 'flex', gap: 2, mb: 1.5, alignItems: 'center' }}>
+                    <TextField size="small" type="number" label="From Level" sx={{ width: 110 }}
+                      value={role.level}
+                      onChange={(e) => {
+                        const roles = [...(l.roles || [])];
+                        roles[idx] = { ...roles[idx], level: parseInt(e.target.value) };
+                        updateSetting('levels.roles', roles);
+                      }} />
+                    <TextField size="small" label="Role Name" sx={{ flexGrow: 1 }}
+                      value={role.name}
+                      onChange={(e) => {
+                        const roles = [...(l.roles || [])];
+                        roles[idx] = { ...roles[idx], name: e.target.value };
+                        updateSetting('levels.roles', roles);
+                      }} />
+                    <IconButton size="small" color="error" onClick={() => {
+                      const roles = (l.roles || []).filter((_, i) => i !== idx);
+                      updateSetting('levels.roles', roles);
+                    }}>
+                      <Delete fontSize="small" />
+                    </IconButton>
+                  </Box>
+                ))}
+                <Button size="small" startIcon={<Add />} sx={{ mt: 1 }} onClick={() => {
+                  const roles = [...(l.roles || [])];
+                  const maxLevel = roles.reduce((m, r) => Math.max(m, r.level), 0);
+                  roles.push({ level: maxLevel + 10, name: 'New Role' });
+                  updateSetting('levels.roles', roles);
+                }}>
+                  Add Role
+                </Button>
+              </CardContent>
+            </Card>
+          </>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════
+            AUTOMATION
+        ══════════════════════════════════════════════════════════ */}
+
+        {/* AUTOMATION › Scheduler */}
+        {cat === 'automation' && subTab === 0 && (
+          <>
+            <DefaultTimezoneCard
+              value={settingsData?.timezone || 'UTC'}
+              onChange={tz => updateSetting('timezone', tz)}
+            />
+            <ScheduledMessages botId={botId} groupId={groupId} defaultTimezone={settingsData?.timezone || 'UTC'} />
+          </>
+        )}
+
+        {/* AUTOMATION › Auto Reply */}
+        {cat === 'automation' && subTab === 1 && (
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
@@ -1139,160 +1185,197 @@ export default function GroupSettings() {
               )}
             </CardContent>
           </Card>
-        </TabPanel>
+        )}
 
-        {/* ── Scheduled Messages Tab ── */}
-        <TabPanel value={tab} index={10}>
-          <DefaultTimezoneCard
-            value={settingsData?.timezone || 'UTC'}
-            onChange={tz => updateSetting('timezone', tz)}
-          />
-          <ScheduledMessages botId={botId} groupId={groupId} defaultTimezone={settingsData?.timezone || 'UTC'} />
-        </TabPanel>
+        {/* AUTOMATION › Polls */}
+        {cat === 'automation' && subTab === 2 && (
+          <>
+            <DefaultTimezoneCard
+              value={settingsData?.timezone || 'UTC'}
+              onChange={tz => updateSetting('timezone', tz)}
+            />
+            <PollCreator botId={botId} groupId={groupId} defaultTimezone={settingsData?.timezone || 'UTC'} />
+          </>
+        )}
 
-        {/* ── Knowledge Base Tab ── */}
-        <TabPanel value={tab} index={11}>
-          <KnowledgeBase botId={botId} groupId={groupId} settings={settingsData} updateSetting={updateSetting} />
-        </TabPanel>
+        {/* ══════════════════════════════════════════════════════════
+            COMMUNITY
+        ══════════════════════════════════════════════════════════ */}
 
-        {/* ── Polls Tab ── */}
-        <TabPanel value={tab} index={12}>
-          <DefaultTimezoneCard
-            value={settingsData?.timezone || 'UTC'}
-            onChange={tz => updateSetting('timezone', tz)}
-          />
-          <PollCreator botId={botId} groupId={groupId} defaultTimezone={settingsData?.timezone || 'UTC'} />
-        </TabPanel>
+        {/* COMMUNITY › Raids */}
+        {cat === 'community' && subTab === 0 && (
+          <Card>
+            <CardContent>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Typography variant="h6" fontWeight={600}>Raid Manager</Typography>
+                    <ProBadge />
+                  </Box>
+                  <Typography variant="body2" color="text.secondary">
+                    Coordinate Twitter/X raids with your community. Members earn XP for participating.
+                  </Typography>
+                </Box>
+                <Button variant="contained" startIcon={<Add />} onClick={() => setRaidOpen(true)}>
+                  Create Raid
+                </Button>
+              </Box>
+            </CardContent>
+          </Card>
+        )}
 
-        {/* ── Webhooks Tab ── */}
-        <TabPanel value={tab} index={13}>
-          <WebhookManager botId={botId} groupId={groupId} />
-        </TabPanel>
-
-        {/* ── Invite Links Tab ── */}
-        <TabPanel value={tab} index={14}>
+        {/* COMMUNITY › Invite Links */}
+        {cat === 'community' && subTab === 1 && (
           <InviteLinks botId={botId} groupId={groupId} />
-        </TabPanel>
+        )}
 
-        {/* ── Members Tab ── */}
-        <TabPanel value={tab} index={15}>
-          <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider' }}>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>User</TableCell>
-                  <TableCell align="right">XP</TableCell>
-                  <TableCell align="right">Level</TableCell>
-                  <TableCell align="right">Warnings</TableCell>
-                  <TableCell>Role</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Wallet</TableCell>
-                  <TableCell>Wallet Address</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {members.map((m) => (
-                  <TableRow key={m.id} hover>
-                    <TableCell>
-                      <Typography variant="body2" fontWeight={500}>
-                        {m.first_name}{m.username ? ` (@${m.username})` : ''}
-                      </Typography>
-                    </TableCell>
-                    <TableCell align="right">{(m.xp ?? 0).toLocaleString()}</TableCell>
-                    <TableCell align="right">{m.level}</TableCell>
-                    <TableCell align="right">{m.warnings}</TableCell>
-                    <TableCell><Chip label={m.role} size="small" variant="outlined" /></TableCell>
-                    <TableCell>
-                      {m.is_verified
-                        ? <Chip label="Verified" color="success" size="small" />
-                        : <Chip label="Unverified" color="default" size="small" />}
-                    </TableCell>
-                    <TableCell>
-                      {m.wallet_address
-                        ? <Chip label="Yes" color="success" size="small" />
-                        : <Chip label="No" color="default" size="small" />}
-                    </TableCell>
-                    <TableCell sx={{ maxWidth: 180 }}>
-                      {m.wallet_address ? (
-                        <Tooltip title={m.wallet_address} arrow>
-                          <Typography
-                            variant="body2"
-                            sx={{
-                              fontFamily: 'monospace',
-                              fontSize: '0.75rem',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                              cursor: 'pointer',
-                              color: 'primary.main',
-                            }}
-                            onClick={() => navigator.clipboard.writeText(m.wallet_address)}
-                          >
-                            {m.wallet_address.length > 16
-                              ? `${m.wallet_address.slice(0, 8)}…${m.wallet_address.slice(-6)}`
-                              : m.wallet_address}
-                          </Typography>
-                        </Tooltip>
-                      ) : (
-                        <Typography variant="body2" color="text.disabled">—</Typography>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-          {membersTotal > 1 && (
-            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
-              <Pagination count={membersTotal} page={membersPage}
-                onChange={(_, p) => setMembersPage(p)} color="primary" />
+        {/* ══════════════════════════════════════════════════════════
+            AI & INTEGRATIONS
+        ══════════════════════════════════════════════════════════ */}
+
+        {/* AI › Knowledge Base */}
+        {cat === 'ai' && subTab === 0 && (
+          <KnowledgeBase botId={botId} groupId={groupId} settings={settingsData} updateSetting={updateSetting} />
+        )}
+
+        {/* AI › Webhooks */}
+        {cat === 'ai' && subTab === 1 && (
+          <>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+              <Typography variant="h6" fontWeight={600}>Webhooks</Typography>
+              <EntBadge />
             </Box>
-          )}
-        </TabPanel>
+            <WebhookManager botId={botId} groupId={groupId} />
+          </>
+        )}
 
-        {/* ── Audit Logs Tab ── */}
-        <TabPanel value={tab} index={16}>
-          <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider' }}>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Action</TableCell>
-                  <TableCell>Target</TableCell>
-                  <TableCell>Moderator</TableCell>
-                  <TableCell>Reason</TableCell>
-                  <TableCell>Time</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {auditLogs.map((log) => (
-                  <TableRow key={log.id} hover>
-                    <TableCell>
-                      <Chip label={log.action_type} color={ACTION_COLORS[log.action_type] || 'default'} size="small" />
-                    </TableCell>
-                    <TableCell><Typography variant="body2">{log.target_username || log.target_user_id}</Typography></TableCell>
-                    <TableCell><Typography variant="body2">{log.moderator_username || log.moderator_id}</Typography></TableCell>
-                    <TableCell><Typography variant="body2" color="text.secondary">{log.reason || '-'}</Typography></TableCell>
-                    <TableCell>
-                      <Typography variant="caption" color="text.secondary">
-                        {log.timestamp ? new Date(log.timestamp).toLocaleString() : '-'}
-                      </Typography>
-                    </TableCell>
+        {/* ══════════════════════════════════════════════════════════
+            ANALYTICS
+        ══════════════════════════════════════════════════════════ */}
+
+        {/* ANALYTICS › Members */}
+        {cat === 'analytics' && subTab === 0 && (
+          <>
+            <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider' }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>User</TableCell>
+                    <TableCell align="right">XP</TableCell>
+                    <TableCell align="right">Level</TableCell>
+                    <TableCell align="right">Warnings</TableCell>
+                    <TableCell>Role</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell>Wallet</TableCell>
+                    <TableCell>Wallet Address</TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-          {auditTotal > 1 && (
-            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
-              <Pagination count={auditTotal} page={auditPage}
-                onChange={(_, p) => setAuditPage(p)} color="primary" />
-            </Box>
-          )}
-        </TabPanel>
+                </TableHead>
+                <TableBody>
+                  {members.map((m) => (
+                    <TableRow key={m.id} hover>
+                      <TableCell>
+                        <Typography variant="body2" fontWeight={500}>
+                          {m.first_name}{m.username ? ` (@${m.username})` : ''}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">{(m.xp ?? 0).toLocaleString()}</TableCell>
+                      <TableCell align="right">{m.level}</TableCell>
+                      <TableCell align="right">{m.warnings}</TableCell>
+                      <TableCell><Chip label={m.role} size="small" variant="outlined" /></TableCell>
+                      <TableCell>
+                        {m.is_verified
+                          ? <Chip label="Verified" color="success" size="small" />
+                          : <Chip label="Unverified" color="default" size="small" />}
+                      </TableCell>
+                      <TableCell>
+                        {m.wallet_address
+                          ? <Chip label="Yes" color="success" size="small" />
+                          : <Chip label="No" color="default" size="small" />}
+                      </TableCell>
+                      <TableCell sx={{ maxWidth: 180 }}>
+                        {m.wallet_address ? (
+                          <Tooltip title={m.wallet_address} arrow>
+                            <Typography
+                              variant="body2"
+                              sx={{
+                                fontFamily: 'monospace',
+                                fontSize: '0.75rem',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                cursor: 'pointer',
+                                color: 'primary.main',
+                              }}
+                              onClick={() => navigator.clipboard.writeText(m.wallet_address)}
+                            >
+                              {m.wallet_address.length > 16
+                                ? `${m.wallet_address.slice(0, 8)}…${m.wallet_address.slice(-6)}`
+                                : m.wallet_address}
+                            </Typography>
+                          </Tooltip>
+                        ) : (
+                          <Typography variant="body2" color="text.disabled">—</Typography>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+            {membersTotal > 1 && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+                <Pagination count={membersTotal} page={membersPage}
+                  onChange={(_, p) => setMembersPage(p)} color="primary" />
+              </Box>
+            )}
+          </>
+        )}
 
-        {/* ── Tab 17: Reports Digest ── */}
-        <TabPanel value={tab} index={17}>
-          {digestLoading ? (
+        {/* ANALYTICS › Audit Log */}
+        {cat === 'analytics' && subTab === 1 && (
+          <>
+            <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider' }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Action</TableCell>
+                    <TableCell>Target</TableCell>
+                    <TableCell>Moderator</TableCell>
+                    <TableCell>Reason</TableCell>
+                    <TableCell>Time</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {auditLogs.map((log) => (
+                    <TableRow key={log.id} hover>
+                      <TableCell>
+                        <Chip label={log.action_type} color={ACTION_COLORS[log.action_type] || 'default'} size="small" />
+                      </TableCell>
+                      <TableCell><Typography variant="body2">{log.target_username || log.target_user_id}</Typography></TableCell>
+                      <TableCell><Typography variant="body2">{log.moderator_username || log.moderator_id}</Typography></TableCell>
+                      <TableCell><Typography variant="body2" color="text.secondary">{log.reason || '-'}</Typography></TableCell>
+                      <TableCell>
+                        <Typography variant="caption" color="text.secondary">
+                          {log.timestamp ? new Date(log.timestamp).toLocaleString() : '-'}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+            {auditTotal > 1 && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+                <Pagination count={auditTotal} page={auditPage}
+                  onChange={(_, p) => setAuditPage(p)} color="primary" />
+              </Box>
+            )}
+          </>
+        )}
+
+        {/* ANALYTICS › Digest */}
+        {cat === 'analytics' && subTab === 2 && (
+          digestLoading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
           ) : (
             <>
@@ -1360,7 +1443,6 @@ export default function GroupSettings() {
                 </CardContent>
               </Card>
 
-              {/* Send Now */}
               <Card>
                 <CardContent>
                   <Typography variant="subtitle1" fontWeight={600} mb={0.5}>Send Report Now</Typography>
@@ -1370,9 +1452,9 @@ export default function GroupSettings() {
                   </Typography>
                   <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                     {[
-                      { key: 'daily',   label: 'Send Daily Report',   icon: '24h' },
-                      { key: 'weekly',  label: 'Send Weekly Report',  icon: '7d' },
-                      { key: 'monthly', label: 'Send Monthly Report', icon: '30d' },
+                      { key: 'daily',   label: 'Send Daily Report' },
+                      { key: 'weekly',  label: 'Send Weekly Report' },
+                      { key: 'monthly', label: 'Send Monthly Report' },
                     ].map(({ key, label }) => (
                       <Button
                         key={key}
@@ -1397,8 +1479,9 @@ export default function GroupSettings() {
                 </CardContent>
               </Card>
             </>
-          )}
-        </TabPanel>
+          )
+        )}
+
       </Box>
 
       {/* ── Add Auto-Response Dialog ── */}
