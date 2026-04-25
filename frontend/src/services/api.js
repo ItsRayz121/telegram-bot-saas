@@ -153,6 +153,11 @@ export const billing = {
 export const referrals = {
   getStats: () => api.get('/api/referrals/stats'),
   applyRewards: () => api.post('/api/referrals/apply-rewards'),
+  getLeaderboard: () => api.get('/api/referrals/leaderboard'),
+};
+
+export const userSettings = {
+  deleteAccount: (data) => api.delete('/api/auth/account', { data }),
 };
 
 export const digest = {

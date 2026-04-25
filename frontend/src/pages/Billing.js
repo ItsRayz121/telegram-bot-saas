@@ -1,19 +1,18 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box, AppBar, Toolbar, Typography, Button, Card, CardContent,
-  Chip, CircularProgress, Stack, Divider, Alert, IconButton,
+  Chip, Stack, Divider, Alert, IconButton,
   Grid, Table, TableBody, TableCell, TableContainer, TableHead,
   TableRow, TablePagination,
 } from '@mui/material';
 import {
-  SmartToy, ArrowBack, Upgrade, CheckCircle, HourglassTop,
+  SmartToy, ArrowBack, Upgrade, CheckCircle,
   CurrencyBitcoin, CreditCard, Refresh, ReceiptLong,
 } from '@mui/icons-material';
+import Skeleton from '@mui/material/Skeleton';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { billing } from '../services/api';
-
-const TIER_COLORS = { free: 'default', pro: 'primary', enterprise: 'secondary' };
 
 const TIER_FEATURES = {
   free: ['1 bot', '1 group per bot', 'Basic moderation', 'Welcome messages', 'XP system'],
@@ -96,9 +95,26 @@ export default function Billing() {
 
       <Box sx={{ maxWidth: 800, mx: 'auto', p: { xs: 2, md: 3 } }}>
         {loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}>
-            <CircularProgress />
-          </Box>
+          <>
+            <Card sx={{ mb: 3 }}>
+              <CardContent sx={{ p: 3 }}>
+                <Skeleton width="30%" height={16} sx={{ mb: 1 }} />
+                <Skeleton width="50%" height={48} sx={{ mb: 1 }} />
+                <Skeleton width="20%" height={24} />
+              </CardContent>
+            </Card>
+            <Card sx={{ mb: 3 }}>
+              <CardContent sx={{ p: 3 }}>
+                <Skeleton width="40%" height={20} sx={{ mb: 2 }} />
+                {[1, 2, 3, 4].map((i) => (
+                  <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                    <Skeleton variant="circular" width={20} height={20} />
+                    <Skeleton width="60%" height={16} />
+                  </Box>
+                ))}
+              </CardContent>
+            </Card>
+          </>
         ) : (
           <>
             {/* Current Plan */}
@@ -241,9 +257,21 @@ export default function Billing() {
               <CardContent sx={{ p: 3 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                   <Typography variant="subtitle1" fontWeight={700}>Payment History</Typography>
-                  {historyLoading && <CircularProgress size={18} />}
                 </Box>
-                {!historyLoading && history.length === 0 ? (
+                {historyLoading ? (
+                  <Box>
+                    {[1, 2, 3].map((i) => (
+                      <Box key={i} sx={{ display: 'flex', gap: 2, mb: 1.5 }}>
+                        <Skeleton width="15%" height={20} />
+                        <Skeleton width="12%" height={20} />
+                        <Skeleton width="20%" height={20} />
+                        <Skeleton width="10%" height={20} />
+                        <Skeleton width="12%" height={20} />
+                        <Skeleton width="20%" height={20} />
+                      </Box>
+                    ))}
+                  </Box>
+                ) : history.length === 0 ? (
                   <Box sx={{ textAlign: 'center', py: 4 }}>
                     <ReceiptLong sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
                     <Typography variant="body2" color="text.secondary">
@@ -261,6 +289,7 @@ export default function Billing() {
                           <TableRow>
                             <TableCell>Date</TableCell>
                             <TableCell>Plan</TableCell>
+                            <TableCell>Billing</TableCell>
                             <TableCell>Provider</TableCell>
                             <TableCell align="right">Amount</TableCell>
                             <TableCell>Status</TableCell>
@@ -276,6 +305,9 @@ export default function Billing() {
                               <TableCell>
                                 <Chip label={row.plan.charAt(0).toUpperCase() + row.plan.slice(1)}
                                   size="small" color={row.plan === 'enterprise' ? 'secondary' : 'primary'} />
+                              </TableCell>
+                              <TableCell sx={{ fontSize: '0.75rem' }}>
+                                {(row.billing_period || 'monthly') === 'annual' ? 'Annual' : 'Monthly'}
                               </TableCell>
                               <TableCell sx={{ fontSize: '0.75rem' }}>
                                 {PROVIDER_LABELS[row.provider] || row.provider}

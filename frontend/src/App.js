@@ -6,14 +6,6 @@ import CssBaseline from '@mui/material/CssBaseline';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import PWAInstallBanner from './components/PWAInstallBanner';
-
-// Register service worker for PWA
-if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
-  });
-}
-
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -27,9 +19,17 @@ import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import PaymentSuccess from './pages/PaymentSuccess';
 import Billing from './pages/Billing';
+import Settings from './pages/Settings';
 import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
 import NotFound from './pages/NotFound';
+
+// Register service worker for PWA (must be after imports to satisfy ESLint import/first)
+if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
 
 const darkTheme = createTheme({
   palette: {
@@ -140,6 +140,9 @@ export default function App() {
 
           {/* Billing — protected */}
           <Route path="/billing" element={<PrivateRoute><Billing /></PrivateRoute>} />
+
+          {/* Settings — protected */}
+          <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
 
           {/* 404 */}
           <Route path="*" element={<NotFound />} />

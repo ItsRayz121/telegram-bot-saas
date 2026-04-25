@@ -15,8 +15,9 @@ logger = logging.getLogger(__name__)
 
 billing_bp = Blueprint("billing", __name__, url_prefix="/api/billing")
 
-_TIER_DURATION_DAYS = 30
-_TIER_PRICES_USD = {"pro": 9, "enterprise": 49}   # dollars; matches Config.PLANS price/100
+_TIER_DURATION_MONTHLY = 30
+_TIER_DURATION_ANNUAL = 365
+_TIER_PRICES_USD = {"pro": {"monthly": 9, "annual": 90}, "enterprise": {"monthly": 49, "annual": 470}}
 
 
 def _get_current_user():
@@ -31,16 +32,19 @@ def _admin_upgrade(user, tier):
 
 
 def _activate_subscription(user, tier, provider="unknown", payment_id=None,
-                           amount_usd=None, currency="USD"):
+                           amount_usd=None, currency="USD", billing_period="monthly"):
     user.subscription_tier = tier
     now = datetime.utcnow()
-    user.subscription_expires = now + timedelta(days=_TIER_DURATION_DAYS)
+    duration_days = _TIER_DURATION_ANNUAL if billing_period == "annual" else _TIER_DURATION_MONTHLY
+    user.subscription_expires = now + timedelta(days=duration_days)
+    default_amount = _TIER_PRICES_USD.get(tier, {}).get(billing_period, 0)
     record = PaymentHistory(
         user_id=user.id,
         provider=provider,
         payment_id=payment_id,
         plan=tier,
-        amount_usd=(amount_usd or _TIER_PRICES_USD.get(tier, 0)) * 100,
+        billing_period=billing_period,
+        amount_usd=(amount_usd or default_amount) * 100,
         currency=currency,
         status="confirmed",
         confirmed_at=now,
@@ -134,6 +138,8 @@ def lemon_checkout():
     if tier not in ("pro", "enterprise"):
         return jsonify({"error": "Invalid tier. Must be 'pro' or 'enterprise'"}), 400
 
+    billing_period = "annual" if data.get("annual") else "monthly"
+
     if user.email in Config.ADMIN_EMAILS:
         return _admin_upgrade(user, tier)
 
@@ -159,7 +165,7 @@ def lemon_checkout():
                         "checkout_data": {
                             "email": user.email,
                             "name": user.full_name,
-                            "custom": {"user_id": str(user.id), "tier": tier},
+                            "custom": {"user_id": str(user.id), "tier": tier, "billing_period": billing_period},
                         },
                         "product_options": {
                             "redirect_url": f"{Config.FRONTEND_URL}/payment/success",
@@ -211,8 +217,11 @@ def lemon_webhook():
         user = User.query.get(int(user_id))
         if user and tier in ("pro", "enterprise"):
             order_id = str(event.get("data", {}).get("id", ""))
+            bp = custom.get("billing_period", "monthly")
+            if bp not in ("monthly", "annual"):
+                bp = "monthly"
             _activate_subscription(user, tier, provider="lemonsqueezy",
-                                   payment_id=order_id, currency="USD")
+                                   payment_id=order_id, currency="USD", billing_period=bp)
             logger.info(f"[LEMONSQUEEZY] Upgraded user {user_id} to {tier}")
 
     elif event_name in ("subscription_expired", "subscription_cancelled") and user_id:
@@ -245,14 +254,17 @@ def crypto_checkout():
     if tier not in ("pro", "enterprise"):
         return jsonify({"error": "Invalid tier. Must be 'pro' or 'enterprise'"}), 400
 
+    billing_period = "annual" if data.get("annual") else "monthly"
+
     if user.email in Config.ADMIN_EMAILS:
         return _admin_upgrade(user, tier)
 
     if not Config.NOWPAYMENTS_API_KEY:
         return jsonify({"error": "Crypto payments are not configured yet."}), 503
 
-    amount = _TIER_PRICES_USD[tier]
-    order_id = f"user_{user.id}_{tier}_{int(datetime.utcnow().timestamp())}"
+    amount = _TIER_PRICES_USD[tier][billing_period]
+    period_label = "1 Year" if billing_period == "annual" else "1 Month"
+    order_id = f"user_{user.id}_{tier}_{billing_period}_{int(datetime.utcnow().timestamp())}"
 
     try:
         resp = requests.post(
@@ -265,7 +277,7 @@ def crypto_checkout():
                 "price_amount": amount,
                 "price_currency": "usd",
                 "order_id": order_id,
-                "order_description": f"BotForge {tier.capitalize()} Plan - 1 Month",
+                "order_description": f"BotForge {tier.capitalize()} Plan - {period_label}",
                 "success_url": f"{Config.FRONTEND_URL}/payment/success",
                 "cancel_url": f"{Config.FRONTEND_URL}/payment/success?status=failed",
                 "ipn_callback_url": f"{Config.BACKEND_URL}/api/billing/crypto/webhook",
@@ -332,13 +344,16 @@ def crypto_webhook():
         db.session.add(ProcessedPayment(payment_id=payment_id))
         db.session.flush()
 
-    # order_id format: user_{id}_{tier}_{timestamp}
+    # order_id formats:
+    #   legacy:  user_{id}_{tier}_{timestamp}            (4 parts)
+    #   current: user_{id}_{tier}_{billing_period}_{ts}  (5 parts)
     try:
         parts = order_id.split("_")
         user_id = int(parts[1])
         tier = parts[2]
         if tier not in ("pro", "enterprise"):
             raise ValueError("Invalid tier")
+        billing_period = parts[3] if len(parts) >= 5 and parts[3] in ("monthly", "annual") else "monthly"
     except Exception:
         logger.warning(f"[NOWPAYMENTS] Could not parse order_id: {order_id}")
         db.session.rollback()
@@ -359,6 +374,6 @@ def crypto_webhook():
         amount_usd_dollars = None
     _activate_subscription(user, tier, provider="nowpayments",
                            payment_id=payment_id, amount_usd=amount_usd_dollars,
-                           currency=pay_currency)
+                           currency=pay_currency, billing_period=billing_period)
     logger.info(f"[NOWPAYMENTS] Upgraded user {user_id} to {tier} (status={payment_status})")
     return jsonify({"status": "ok"})

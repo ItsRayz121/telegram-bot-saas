@@ -109,10 +109,11 @@ export default function Pricing() {
     setMethodLoading(method);
     try {
       let res;
+      const payload = { tier: selectedTier, annual };
       if (method === 'card') {
-        res = await billing.lemonCheckout({ tier: selectedTier });
+        res = await billing.lemonCheckout(payload);
       } else {
-        res = await billing.cryptoCheckout({ tier: selectedTier });
+        res = await billing.cryptoCheckout(payload);
       }
 
       if (res.data.admin_upgrade) {
@@ -316,7 +317,15 @@ export default function Pricing() {
         </DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" textAlign="center" mb={3}>
-            {selectedTier && `Upgrading to ${selectedTier.charAt(0).toUpperCase() + selectedTier.slice(1)} Plan`}
+            {selectedTier && (
+              <>
+                Upgrading to <strong>{selectedTier.charAt(0).toUpperCase() + selectedTier.slice(1)}</strong> Plan
+                {' '}— <strong>{annual ? 'Annual' : 'Monthly'}</strong> billing
+                {annual && (
+                  <> · <span style={{ color: '#66bb6a' }}>~2 months free</span></>
+                )}
+              </>
+            )}
           </Typography>
           <Stack spacing={2}>
             {/* Crypto — active */}

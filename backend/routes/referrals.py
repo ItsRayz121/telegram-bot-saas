@@ -2,6 +2,7 @@ import logging
 from datetime import datetime, timedelta
 from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from sqlalchemy import func
 from ..models import db, User, Referral, REFERRAL_MILESTONES
 from ..middleware.rate_limit import rate_limit
 
@@ -96,6 +97,59 @@ def get_stats():
         "referral_code": user.referral_code,
         "total_referrals": total,
         "milestones": milestones,
+    })
+
+
+@referrals_bp.route("/leaderboard", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=10)
+def leaderboard():
+    """Monthly top referrers leaderboard with current user rank."""
+    current_user_id = int(get_jwt_identity())
+    now = datetime.utcnow()
+    start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    rows = (
+        db.session.query(Referral.referrer_user_id, func.count(Referral.id).label("cnt"))
+        .filter(Referral.created_at >= start_of_month)
+        .group_by(Referral.referrer_user_id)
+        .order_by(func.count(Referral.id).desc())
+        .limit(10)
+        .all()
+    )
+
+    board = []
+    current_rank = None
+    for rank, (referrer_id, cnt) in enumerate(rows, start=1):
+        u = User.query.get(referrer_id)
+        if not u:
+            continue
+        name = u.full_name
+        if len(name) > 18:
+            name = name[:17] + "…"
+        entry = {
+            "rank": rank,
+            "name": name,
+            "referrals": cnt,
+            "is_current_user": referrer_id == current_user_id,
+        }
+        board.append(entry)
+        if referrer_id == current_user_id:
+            current_rank = rank
+
+    # Current user's monthly count (even if not in top 10)
+    current_user_count = (
+        db.session.query(func.count(Referral.id))
+        .filter(Referral.referrer_user_id == current_user_id,
+                Referral.created_at >= start_of_month)
+        .scalar() or 0
+    )
+
+    return jsonify({
+        "leaderboard": board,
+        "current_user_rank": current_rank,
+        "current_user_count": current_user_count,
+        "month": now.strftime("%B %Y"),
     })
 
 

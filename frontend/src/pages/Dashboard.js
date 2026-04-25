@@ -1,16 +1,17 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Box, AppBar, Toolbar, Typography, Button, Card, CardContent,
   CardActions, Grid, Dialog, DialogTitle, DialogContent, DialogActions,
   TextField, IconButton, Chip, CircularProgress, Tooltip, Menu, MenuItem,
   Avatar, LinearProgress, Alert, Stepper, Step, StepLabel, StepContent,
-  Snackbar, Collapse,
+  InputAdornment, Skeleton, Table, TableBody, TableCell, TableRow,
 } from '@mui/material';
 import {
   Add, Delete, Settings, BarChart, SmartToy, AccountCircle,
   PowerSettingsNew, Upgrade, CheckCircle, Close, ContentCopy,
   ArrowForward, CreditCard, People, Home, AttachMoney,
-  Notifications, NotificationsNone,
+  Notifications, NotificationsNone, Search, ManageAccounts,
+  EmojiEvents,
 } from '@mui/icons-material';
 import Badge from '@mui/material/Badge';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -19,8 +20,47 @@ import { bots, auth, billing, referrals as referralsApi, notifications as notifi
 
 const MAX_BOTS = { free: 1, pro: 5, enterprise: 50 };
 
+const HEALTH_COLORS = {
+  active: 'success',
+  warning: 'warning',
+  error: 'error',
+  stopped: 'default',
+  unknown: 'default',
+};
+
+const HEALTH_LABELS = {
+  active: 'Active',
+  warning: 'Idle',
+  error: 'Error',
+  stopped: 'Stopped',
+  unknown: 'Unknown',
+};
+
 function safeParseUser() {
   try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; }
+}
+
+// ── Bot card skeleton ──────────────────────────────────────────────────────────
+function BotCardSkeleton() {
+  return (
+    <Card>
+      <CardContent>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+          <Skeleton variant="circular" width={40} height={40} sx={{ mr: 1.5 }} />
+          <Box sx={{ flexGrow: 1 }}>
+            <Skeleton width="60%" height={20} />
+            <Skeleton width="40%" height={16} />
+          </Box>
+          <Skeleton width={56} height={24} sx={{ borderRadius: 4 }} />
+        </Box>
+        <Skeleton width="30%" height={16} />
+      </CardContent>
+      <Box sx={{ px: 2, pb: 2, display: 'flex', gap: 1 }}>
+        <Skeleton width={80} height={32} sx={{ borderRadius: 1 }} />
+        <Skeleton width={80} height={32} sx={{ borderRadius: 1 }} />
+      </Box>
+    </Card>
+  );
 }
 
 // ── Onboarding Card ────────────────────────────────────────────────────────────
@@ -85,9 +125,7 @@ function OnboardingCard({ botList, onAddBot, navigate }) {
       <CardContent sx={{ pb: 1 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <Box>
-            <Typography variant="subtitle1" fontWeight={700}>
-              Getting Started
-            </Typography>
+            <Typography variant="subtitle1" fontWeight={700}>Getting Started</Typography>
             <Typography variant="caption" color="text.secondary">
               {remaining} step{remaining !== 1 ? 's' : ''} away from full automation
             </Typography>
@@ -96,21 +134,15 @@ function OnboardingCard({ botList, onAddBot, navigate }) {
             <Close fontSize="small" />
           </IconButton>
         </Box>
-
         <LinearProgress
           variant="determinate"
           value={(completedCount / steps.length) * 100}
           sx={{ mt: 1.5, mb: 2, height: 6, borderRadius: 3 }}
         />
-
         <Stepper activeStep={activeStep} orientation="vertical" sx={{ '& .MuiStepLabel-label': { fontSize: '0.875rem' } }}>
           {steps.map((step, idx) => (
             <Step key={step.label} completed={step.done} expanded={idx === activeStep}>
-              <StepLabel
-                StepIconProps={{
-                  icon: step.done ? <CheckCircle color="success" /> : undefined,
-                }}
-              >
+              <StepLabel StepIconProps={{ icon: step.done ? <CheckCircle color="success" /> : undefined }}>
                 <Typography variant="body2" fontWeight={step.done ? 400 : 600} color={step.done ? 'text.disabled' : 'text.primary'}>
                   {step.label}
                 </Typography>
@@ -167,7 +199,6 @@ function InviteCard({ userId }) {
           <Typography variant="subtitle1" fontWeight={700}>Invite Friends — Earn Free Pro</Typography>
         </Box>
 
-        {/* Milestone progress */}
         {nextMilestone && (
           <Box sx={{ mb: 2, p: 1.5, bgcolor: 'rgba(33,150,243,0.07)', borderRadius: 2, border: '1px solid rgba(33,150,243,0.2)' }}>
             <Typography variant="body2" fontWeight={600} color="primary.main">
@@ -183,7 +214,7 @@ function InviteCard({ userId }) {
         {lastMilestone && !nextMilestone && (
           <Box sx={{ mb: 2, p: 1.5, bgcolor: 'rgba(46,125,50,0.07)', borderRadius: 2, border: '1px solid rgba(46,125,50,0.2)' }}>
             <Typography variant="body2" fontWeight={600} color="success.main">
-              🎉 All milestones reached! {total} referrals total.
+              All milestones reached! {total} referrals total.
             </Typography>
           </Box>
         )}
@@ -192,13 +223,11 @@ function InviteCard({ userId }) {
           Invite 3 → get 7 days Pro · Invite 10 → get 1 month Pro. Rewards apply automatically.
         </Typography>
 
-        <Box
-          sx={{
-            display: 'flex', alignItems: 'center', gap: 1,
-            p: 1.5, bgcolor: 'background.default', borderRadius: 2,
-            border: '1px solid', borderColor: 'divider', overflowX: 'auto',
-          }}
-        >
+        <Box sx={{
+          display: 'flex', alignItems: 'center', gap: 1,
+          p: 1.5, bgcolor: 'background.default', borderRadius: 2,
+          border: '1px solid', borderColor: 'divider', overflowX: 'auto',
+        }}>
           <Typography variant="caption" color="text.secondary" sx={{ flexGrow: 1, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
             {inviteLink}
           </Typography>
@@ -207,14 +236,90 @@ function InviteCard({ userId }) {
           </IconButton>
         </Box>
         {copied && (
-          <Typography variant="caption" color="success.main" mt={0.5} display="block">
-            Link copied!
-          </Typography>
+          <Typography variant="caption" color="success.main" mt={0.5} display="block">Link copied!</Typography>
         )}
         {total > 0 && (
           <Typography variant="caption" color="text.disabled" display="block" mt={1}>
             {total} successful referral{total !== 1 ? 's' : ''} so far
           </Typography>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Referral Leaderboard Card ──────────────────────────────────────────────────
+function LeaderboardCard() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    referralsApi.getLeaderboard()
+      .then((r) => setData(r.data))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (!loading && (!data || data.leaderboard.length === 0)) return null;
+
+  return (
+    <Card sx={{ mt: 3 }}>
+      <CardContent>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+          <EmojiEvents color="warning" />
+          <Typography variant="subtitle1" fontWeight={700}>
+            Top Referrers — {data?.month || ''}
+          </Typography>
+        </Box>
+
+        {loading ? (
+          <Box sx={{ display: 'flex', gap: 1, flexDirection: 'column' }}>
+            {[1, 2, 3].map((i) => (
+              <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Skeleton width={24} height={20} />
+                <Skeleton width={120} height={20} sx={{ flexGrow: 1 }} />
+                <Skeleton width={40} height={20} />
+              </Box>
+            ))}
+          </Box>
+        ) : (
+          <>
+            <Table size="small">
+              <TableBody>
+                {data.leaderboard.map((entry) => (
+                  <TableRow
+                    key={entry.rank}
+                    sx={{
+                      bgcolor: entry.is_current_user ? 'rgba(33,150,243,0.07)' : 'transparent',
+                    }}
+                  >
+                    <TableCell sx={{ width: 32, pr: 0, fontWeight: 700, color: entry.rank <= 3 ? 'warning.main' : 'text.secondary' }}>
+                      #{entry.rank}
+                    </TableCell>
+                    <TableCell sx={{ fontWeight: entry.is_current_user ? 700 : 400 }}>
+                      {entry.name} {entry.is_current_user && <Chip label="You" size="small" color="primary" sx={{ ml: 0.5, height: 18, fontSize: 10 }} />}
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 600 }}>
+                      {entry.referrals}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+
+            {data.current_user_rank === null && data.current_user_count > 0 && (
+              <Box sx={{ mt: 1.5, pt: 1.5, borderTop: '1px dashed', borderColor: 'divider' }}>
+                <Typography variant="caption" color="text.secondary">
+                  Your rank this month: unranked · {data.current_user_count} referral{data.current_user_count !== 1 ? 's' : ''}
+                </Typography>
+              </Box>
+            )}
+            {data.current_user_rank === null && data.current_user_count === 0 && (
+              <Typography variant="caption" color="text.disabled" display="block" mt={1}>
+                Refer friends to appear on the leaderboard
+              </Typography>
+            )}
+          </>
         )}
       </CardContent>
     </Card>
@@ -236,6 +341,7 @@ export default function Dashboard() {
   const [anchorEl, setAnchorEl] = useState(null);
   const [user, setUser] = useState(safeParseUser);
   const [subscription, setSubscription] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const fetchBots = useCallback(async () => {
     try {
@@ -281,6 +387,17 @@ export default function Dashboard() {
   const botCount = botList.length;
   const atLimit = botCount >= maxBots;
   const nearLimit = !atLimit && botCount / maxBots >= 0.8;
+
+  // Search / filter bots
+  const filteredBots = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return botList;
+    return botList.filter(
+      (b) =>
+        (b.bot_name || '').toLowerCase().includes(q) ||
+        (b.bot_username || '').toLowerCase().includes(q)
+    );
+  }, [botList, searchQuery]);
 
   const handleAddBot = async () => {
     if (!newToken.trim()) return;
@@ -367,7 +484,6 @@ export default function Dashboard() {
       {/* ── AppBar ── */}
       <AppBar position="sticky" elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
         <Toolbar sx={{ gap: 0.5 }}>
-          {/* Clickable logo → /dashboard */}
           <Box
             onClick={() => navigate('/dashboard')}
             sx={{ display: 'flex', alignItems: 'center', gap: 0.75, cursor: 'pointer', mr: 2, userSelect: 'none' }}
@@ -376,7 +492,6 @@ export default function Dashboard() {
             <Typography variant="h6" fontWeight={700}>BotForge</Typography>
           </Box>
 
-          {/* Desktop nav links */}
           <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 0.5, flexGrow: 1 }}>
             <Button size="small" startIcon={<Home fontSize="small" />} onClick={() => navigate('/')} sx={{ color: 'text.secondary' }}>
               Home
@@ -446,6 +561,9 @@ export default function Dashboard() {
             <MenuItem onClick={() => { setAnchorEl(null); navigate('/billing'); }}>
               <CreditCard fontSize="small" sx={{ mr: 1 }} /> Billing
             </MenuItem>
+            <MenuItem onClick={() => { setAnchorEl(null); navigate('/settings'); }}>
+              <ManageAccounts fontSize="small" sx={{ mr: 1 }} /> Account Settings
+            </MenuItem>
             {tier !== 'enterprise' && (
               <MenuItem onClick={() => { setAnchorEl(null); navigate('/pricing'); }}>
                 <Upgrade fontSize="small" sx={{ mr: 1 }} /> Upgrade Plan
@@ -500,7 +618,7 @@ export default function Dashboard() {
           <OnboardingCard botList={botList} onAddBot={() => setAddOpen(true)} navigate={navigate} />
         )}
 
-        {/* ── Header row ── */}
+        {/* ── Header row + search ── */}
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1, gap: 1, flexWrap: 'wrap' }}>
           <Box>
             <Typography variant="h5" fontWeight={700}>My Bots</Typography>
@@ -508,15 +626,40 @@ export default function Dashboard() {
               {botCount} / {maxBots} bots · {tier} plan
             </Typography>
           </Box>
-          <Button
-            variant="contained"
-            startIcon={<Add />}
-            onClick={() => setAddOpen(true)}
-            disabled={atLimit}
-            sx={{ flexShrink: 0 }}
-          >
-            Add Bot
-          </Button>
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+            {botList.length > 1 && (
+              <TextField
+                size="small"
+                placeholder="Search bots…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <Search fontSize="small" />
+                    </InputAdornment>
+                  ),
+                  endAdornment: searchQuery ? (
+                    <InputAdornment position="end">
+                      <IconButton size="small" onClick={() => setSearchQuery('')}>
+                        <Close fontSize="small" />
+                      </IconButton>
+                    </InputAdornment>
+                  ) : null,
+                }}
+                sx={{ width: { xs: '100%', sm: 220 } }}
+              />
+            )}
+            <Button
+              variant="contained"
+              startIcon={<Add />}
+              onClick={() => setAddOpen(true)}
+              disabled={atLimit}
+              sx={{ flexShrink: 0 }}
+            >
+              Add Bot
+            </Button>
+          </Box>
         </Box>
 
         {/* ── Bot limit bar ── */}
@@ -531,9 +674,13 @@ export default function Dashboard() {
 
         {/* ── Bot list ── */}
         {loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}>
-            <CircularProgress />
-          </Box>
+          <Grid container spacing={2}>
+            {[1, 2, 3].map((i) => (
+              <Grid item xs={12} sm={6} md={4} key={i}>
+                <BotCardSkeleton />
+              </Grid>
+            ))}
+          </Grid>
         ) : botList.length === 0 ? (
           <Card sx={{ textAlign: 'center', py: 8, px: 3 }}>
             <SmartToy sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
@@ -548,52 +695,64 @@ export default function Dashboard() {
               Add Your First Bot
             </Button>
           </Card>
+        ) : filteredBots.length === 0 ? (
+          <Box sx={{ textAlign: 'center', py: 6 }}>
+            <Typography color="text.secondary">No bots match "{searchQuery}"</Typography>
+          </Box>
         ) : (
           <Grid container spacing={2}>
-            {botList.map((bot) => (
-              <Grid item xs={12} sm={6} md={4} key={bot.id}>
-                <Card>
-                  <CardContent>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                      <Avatar sx={{ bgcolor: 'primary.main', mr: 1.5, width: 40, height: 40 }}>
-                        <SmartToy fontSize="small" />
-                      </Avatar>
-                      <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                        <Typography variant="subtitle1" fontWeight={600} noWrap>{bot.bot_name}</Typography>
-                        <Typography variant="body2" color="text.secondary" noWrap>@{bot.bot_username}</Typography>
+            {filteredBots.map((bot) => {
+              const health = bot.health_status || 'unknown';
+              return (
+                <Grid item xs={12} sm={6} md={4} key={bot.id}>
+                  <Card>
+                    <CardContent>
+                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                        <Avatar sx={{ bgcolor: 'primary.main', mr: 1.5, width: 40, height: 40 }}>
+                          <SmartToy fontSize="small" />
+                        </Avatar>
+                        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                          <Typography variant="subtitle1" fontWeight={600} noWrap>{bot.bot_name}</Typography>
+                          <Typography variant="body2" color="text.secondary" noWrap>@{bot.bot_username}</Typography>
+                        </Box>
+                        <Tooltip title={`Health: ${HEALTH_LABELS[health]}`}>
+                          <Chip
+                            label={HEALTH_LABELS[health]}
+                            color={HEALTH_COLORS[health]}
+                            size="small"
+                          />
+                        </Tooltip>
                       </Box>
-                      <Chip
-                        label={bot.is_active ? 'Active' : 'Stopped'}
-                        color={bot.is_active ? 'success' : 'default'}
-                        size="small"
-                      />
-                    </Box>
-                    <Typography variant="caption" color="text.disabled">
-                      {bot.group_count ?? 0} group{bot.group_count !== 1 ? 's' : ''}
-                    </Typography>
-                  </CardContent>
-                  <CardActions sx={{ px: 2, pb: 2, gap: 0.5, flexWrap: 'wrap' }}>
-                    <Button size="small" startIcon={<Settings />} onClick={() => navigate(`/bot/${bot.id}`)}>
-                      Groups
-                    </Button>
-                    <Button size="small" startIcon={<BarChart />} onClick={() => navigate(`/analytics/${bot.id}`)}>
-                      Analytics
-                    </Button>
-                    <Box sx={{ flexGrow: 1 }} />
-                    <Tooltip title={bot.is_active ? 'Stop bot' : 'Start bot'}>
-                      <IconButton onClick={() => handleToggle(bot)} sx={{ minWidth: 40, minHeight: 40 }}>
-                        <PowerSettingsNew fontSize="small" color={bot.is_active ? 'success' : 'disabled'} />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Delete bot">
-                      <IconButton onClick={() => { setSelectedBot(bot); setDeleteOpen(true); }} sx={{ minWidth: 40, minHeight: 40 }}>
-                        <Delete fontSize="small" color="error" />
-                      </IconButton>
-                    </Tooltip>
-                  </CardActions>
-                </Card>
-              </Grid>
-            ))}
+                      <Typography variant="caption" color="text.disabled">
+                        {bot.group_count ?? 0} group{bot.group_count !== 1 ? 's' : ''}
+                        {bot.last_active && (
+                          <> · last active {new Date(bot.last_active).toLocaleDateString()}</>
+                        )}
+                      </Typography>
+                    </CardContent>
+                    <CardActions sx={{ px: 2, pb: 2, gap: 0.5, flexWrap: 'wrap' }}>
+                      <Button size="small" startIcon={<Settings />} onClick={() => navigate(`/bot/${bot.id}`)}>
+                        Groups
+                      </Button>
+                      <Button size="small" startIcon={<BarChart />} onClick={() => navigate(`/analytics/${bot.id}`)}>
+                        Analytics
+                      </Button>
+                      <Box sx={{ flexGrow: 1 }} />
+                      <Tooltip title={bot.is_active ? 'Stop bot' : 'Start bot'}>
+                        <IconButton onClick={() => handleToggle(bot)} sx={{ minWidth: 40, minHeight: 40 }}>
+                          <PowerSettingsNew fontSize="small" color={bot.is_active ? 'success' : 'disabled'} />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Delete bot">
+                        <IconButton onClick={() => { setSelectedBot(bot); setDeleteOpen(true); }} sx={{ minWidth: 40, minHeight: 40 }}>
+                          <Delete fontSize="small" color="error" />
+                        </IconButton>
+                      </Tooltip>
+                    </CardActions>
+                  </Card>
+                </Grid>
+              );
+            })}
           </Grid>
         )}
 
@@ -613,7 +772,6 @@ export default function Dashboard() {
                 variant="contained"
                 onClick={() => navigate('/pricing')}
                 endIcon={<ArrowForward />}
-                fullWidth={false}
                 sx={{ bgcolor: 'white', color: 'primary.main', fontWeight: 700, '&:hover': { bgcolor: '#f0f0f0' }, width: { xs: '100%', sm: 'auto' } }}
               >
                 Upgrade to Pro
@@ -624,6 +782,9 @@ export default function Dashboard() {
 
         {/* ── Invite section ── */}
         {!loading && user.id && <InviteCard userId={user.id} />}
+
+        {/* ── Leaderboard ── */}
+        {!loading && <LeaderboardCard />}
 
       </Box>
 
@@ -670,7 +831,6 @@ export default function Dashboard() {
           </Button>
         </DialogActions>
       </Dialog>
-
     </Box>
   );
 }

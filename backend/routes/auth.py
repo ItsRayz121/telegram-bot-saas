@@ -249,6 +249,43 @@ def change_password():
     return jsonify({"message": "Password updated successfully"}), 200
 
 
+@auth_bp.route("/account", methods=["DELETE"])
+@jwt_required()
+@rate_limit(requests_per_minute=3)
+def delete_account():
+    user_id = get_jwt_identity()
+    user = User.query.get(int(user_id))
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    data = request.get_json() or {}
+    password = data.get("password", "")
+    if not password:
+        return jsonify({"error": "Password is required to delete account"}), 400
+
+    if not bcrypt.checkpw(password.encode("utf-8"), user.password_hash.encode("utf-8")):
+        return jsonify({"error": "Incorrect password"}), 401
+
+    # Prevent admins from self-deleting via API
+    if user.email in Config.ADMIN_EMAILS:
+        return jsonify({"error": "Admin accounts cannot be deleted via API"}), 403
+
+    # Stop all running bots before deletion
+    try:
+        from ..bot_manager import bot_manager
+        for bot in user.bots:
+            try:
+                bot_manager.stop_bot(bot.id)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    db.session.delete(user)
+    db.session.commit()
+    return jsonify({"message": "Account deleted successfully"}), 200
+
+
 def _get_redis():
     """Return a Redis client or None if unavailable."""
     try:

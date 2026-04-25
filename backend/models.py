@@ -95,6 +95,19 @@ class Bot(db.Model):
         self.bot_token = encrypt_value(plain_token) or plain_token
         self.bot_token_hash = hash_token(plain_token)
 
+    def get_health_status(self):
+        """Derive health from is_active + last_active age. No extra DB column needed."""
+        if not self.is_active:
+            return "stopped"
+        if self.last_active is None:
+            return "unknown"
+        age = datetime.utcnow() - self.last_active
+        if age < timedelta(hours=1):
+            return "active"
+        if age < timedelta(hours=24):
+            return "warning"
+        return "error"
+
     def to_dict(self, include_token=False):
         data = {
             "id": self.id,
@@ -105,6 +118,7 @@ class Bot(db.Model):
             "created_at": self.created_at.isoformat(),
             "last_active": self.last_active.isoformat() if self.last_active else None,
             "group_count": len(self.groups),
+            "health_status": self.get_health_status(),
         }
         if include_token:
             data["bot_token"] = self.get_token()
@@ -547,6 +561,7 @@ class PaymentHistory(db.Model):
     provider = db.Column(db.String(50), nullable=False)           # nowpayments | lemonsqueezy
     payment_id = db.Column(db.String(255), nullable=True)
     plan = db.Column(db.String(50), nullable=False)               # pro | enterprise
+    billing_period = db.Column(db.String(10), nullable=True, default="monthly")  # monthly | annual
     amount_usd = db.Column(db.Integer, nullable=True)             # cents
     currency = db.Column(db.String(10), nullable=True)            # USD / USDT / BTC / …
     status = db.Column(db.String(30), nullable=False, default="confirmed")
@@ -562,6 +577,7 @@ class PaymentHistory(db.Model):
             "provider": self.provider,
             "payment_id_masked": masked_id,
             "plan": self.plan,
+            "billing_period": self.billing_period or "monthly",
             "amount_usd": self.amount_usd,
             "currency": self.currency,
             "status": self.status,
