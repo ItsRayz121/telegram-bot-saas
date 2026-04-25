@@ -1,5 +1,5 @@
-/* BotForge Service Worker — cache-first for static assets, network-first for API */
-const CACHE_NAME = 'botforge-v1';
+﻿/* Telegizer Service Worker â€” cache-first for static assets, network-first for API */
+const CACHE_NAME = 'Telegizer-v1';
 const STATIC_ASSETS = ['/', '/index.html', '/manifest.json'];
 
 self.addEventListener('install', (event) => {

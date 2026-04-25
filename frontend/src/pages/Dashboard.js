@@ -565,7 +565,7 @@ export default function Dashboard() {
             sx={{ display: 'flex', alignItems: 'center', gap: 0.75, cursor: 'pointer', mr: 2, userSelect: 'none' }}
           >
             <SmartToy sx={{ color: 'primary.main' }} />
-            <Typography variant="h6" fontWeight={700}>BotForge</Typography>
+            <Typography variant="h6" fontWeight={700}>Telegizer</Typography>
           </Box>
 
           <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 0.5, flexGrow: 1 }}>

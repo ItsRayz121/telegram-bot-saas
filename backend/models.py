@@ -553,7 +553,7 @@ class InviteLinkJoin(db.Model):
 
 
 class Referral(db.Model):
-    """Tracks BotForge platform referrals (one user inviting another to register)."""
+    """Tracks Telegizer platform referrals (one user inviting another to register)."""
     __tablename__ = "referrals"
 
     id = db.Column(db.Integer, primary_key=True)

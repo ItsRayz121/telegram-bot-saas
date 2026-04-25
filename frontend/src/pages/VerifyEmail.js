@@ -140,7 +140,7 @@ export default function VerifyEmail() {
               <CheckCircle sx={{ fontSize: 56, color: 'success.main', mb: 2 }} />
               <Typography variant="h5" fontWeight={700} mb={1}>Email Verified!</Typography>
               <Typography variant="body2" color="text.secondary" mb={3}>
-                Your email address is confirmed. You now have full access to BotForge.
+                Your email address is confirmed. You now have full access to Telegizer.
               </Typography>
               <Button variant="contained" size="large" fullWidth onClick={() => navigate('/dashboard')}>
                 Go to Dashboard
@@ -184,7 +184,7 @@ export default function VerifyEmail() {
               <Typography variant="h5" fontWeight={700} mb={1}>Verify Your Email</Typography>
               <Typography variant="body2" color="text.secondary" mb={1}>
                 A verification link was sent to your email address when you signed up.
-                Click it to unlock full access to BotForge.
+                Click it to unlock full access to Telegizer.
               </Typography>
 
               {resendDone ? (

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import {
   Box, AppBar, Toolbar, Typography, Button, Card, CardContent,
   Grid, Chip, Container, Stack, Divider, Avatar,
@@ -26,7 +26,7 @@ const PAIN_POINTS = [
   {
     icon: <AccessTime fontSize="large" />,
     title: 'You\'re the bottleneck',
-    desc: 'Every welcome message, every pinned post, every moderation decision — manually done by you, every day.',
+    desc: 'Every welcome message, every pinned post, every moderation decision â€” manually done by you, every day.',
   },
   {
     icon: <People fontSize="large" />,
@@ -38,8 +38,8 @@ const PAIN_POINTS = [
 const FEATURES = [
   {
     icon: <Shield fontSize="large" />,
-    title: 'AutoMod — Set it. Forget it.',
-    desc: 'Auto-remove spam, links, bad words, and media. Warn → mute → ban automatically. Your group stays clean 24/7.',
+    title: 'AutoMod â€” Set it. Forget it.',
+    desc: 'Auto-remove spam, links, bad words, and media. Warn â†’ mute â†’ ban automatically. Your group stays clean 24/7.',
     badge: 'Most Used',
     badgeColor: 'warning',
     plan: 'Free',
@@ -47,7 +47,7 @@ const FEATURES = [
   {
     icon: <Schedule fontSize="large" />,
     title: 'Scheduled Content',
-    desc: 'Write posts once, publish them forever. Daily updates, weekly recaps, polls — on autopilot in any timezone.',
+    desc: 'Write posts once, publish them forever. Daily updates, weekly recaps, polls â€” on autopilot in any timezone.',
     badge: null,
     plan: 'Free',
   },
@@ -69,7 +69,7 @@ const FEATURES = [
   {
     icon: <AutoAwesome fontSize="large" />,
     title: 'AI Knowledge Base',
-    desc: 'Upload your docs or FAQ. The bot answers member questions automatically — no human needed.',
+    desc: 'Upload your docs or FAQ. The bot answers member questions automatically â€” no human needed.',
     badge: 'Pro',
     badgeColor: 'primary',
     plan: 'Pro',
@@ -87,14 +87,14 @@ const FEATURES = [
   {
     icon: <SmartToy fontSize="large" />,
     title: 'Auto Reply Triggers',
-    desc: 'Define keyword triggers and the bot replies instantly. Answer FAQs, share links, or run commands — hands-free.',
+    desc: 'Define keyword triggers and the bot replies instantly. Answer FAQs, share links, or run commands â€” hands-free.',
     badge: null,
     plan: 'Free',
   },
   {
     icon: <Lock fontSize="large" />,
     title: 'Raid Coordinator',
-    desc: 'Launch coordinated community raids on Twitter/X. Members earn XP for participating — gamified growth.',
+    desc: 'Launch coordinated community raids on Twitter/X. Members earn XP for participating â€” gamified growth.',
     badge: 'Pro',
     badgeColor: 'primary',
     plan: 'Pro',
@@ -149,25 +149,25 @@ const PLANS = [
 const STEPS = [
   { n: '1', title: 'Create your free account', desc: 'Email + password. Done in 30 seconds.' },
   { n: '2', title: 'Get a bot token from @BotFather', desc: 'Open Telegram, message @BotFather, send /newbot.' },
-  { n: '3', title: 'Paste the token into BotForge', desc: 'We connect your bot instantly. No code required.' },
+  { n: '3', title: 'Paste the token into Telegizer', desc: 'We connect your bot instantly. No code required.' },
   { n: '4', title: 'Add the bot to your group as admin', desc: 'Your group appears in the dashboard automatically.' },
-  { n: '5', title: 'Turn on automation', desc: 'Enable AutoMod, schedule posts, track growth — done.' },
+  { n: '5', title: 'Turn on automation', desc: 'Enable AutoMod, schedule posts, track growth â€” done.' },
 ];
 
 const TESTIMONIALS = [
   {
     name: 'Alex K.',
-    role: 'Crypto community admin — 12,000 members',
+    role: 'Crypto community admin â€” 12,000 members',
     text: 'AutoMod alone saved me 2 hours a day. Spam dropped by 90% in the first week.',
   },
   {
     name: 'Maria S.',
-    role: 'NFT project founder — 3 groups',
+    role: 'NFT project founder â€” 3 groups',
     text: 'Scheduling daily updates used to take me an hour every morning. Now it runs itself.',
   },
   {
     name: 'James R.',
-    role: 'DeFi project — 5 communities',
+    role: 'DeFi project â€” 5 communities',
     text: 'The analytics finally showed me which invite links were actually bringing in real members.',
   },
 ];
@@ -179,12 +179,12 @@ export default function Landing() {
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
 
-      {/* ── Nav ── */}
+      {/* â”€â”€ Nav â”€â”€ */}
       <AppBar position="sticky" elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.default' }}>
         <Toolbar sx={{ maxWidth: 1200, mx: 'auto', width: '100%', px: { xs: 2, md: 3 } }}>
           <SmartToy sx={{ mr: 1, color: 'primary.main' }} />
           <Typography variant="h6" fontWeight={700} sx={{ flexGrow: 1 }}>
-            BotForge
+            Telegizer
           </Typography>
           <Button onClick={() => navigate('/pricing')} sx={{ mr: 1, display: { xs: 'none', sm: 'inline-flex' }, color: 'text.secondary' }}>
             Pricing
@@ -204,7 +204,7 @@ export default function Landing() {
         </Toolbar>
       </AppBar>
 
-      {/* ── Hero ── */}
+      {/* â”€â”€ Hero â”€â”€ */}
       <Box
         sx={{
           background: 'linear-gradient(160deg, #0d1117 0%, #0d1b2e 50%, #0d1117 100%)',
@@ -226,7 +226,7 @@ export default function Landing() {
         }} />
         <Container maxWidth="md" sx={{ position: 'relative' }}>
           <Chip
-            label="✦  Built for Telegram communities"
+            label="âœ¦  Built for Telegram communities"
             size="small"
             sx={{ mb: 3, bgcolor: 'rgba(33,150,243,0.12)', color: 'primary.light', fontWeight: 600, border: '1px solid rgba(33,150,243,0.3)' }}
           />
@@ -255,8 +255,8 @@ export default function Landing() {
             mb={5}
             sx={{ maxWidth: 520, mx: 'auto', lineHeight: 1.7 }}
           >
-            BotForge automates moderation, scheduling, member management, and analytics
-            for every Telegram group you run — from one dashboard.
+            Telegizer automates moderation, scheduling, member management, and analytics
+            for every Telegram group you run â€” from one dashboard.
           </Typography>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="center" mb={3}>
             <Button
@@ -266,7 +266,7 @@ export default function Landing() {
               endIcon={<ArrowForward />}
               sx={{ py: 1.75, px: 4, fontSize: '1.05rem', fontWeight: 700 }}
             >
-              Start Free — Takes 60 Seconds
+              Start Free â€” Takes 60 Seconds
             </Button>
             <Button
               variant="outlined"
@@ -278,12 +278,12 @@ export default function Landing() {
             </Button>
           </Stack>
           <Typography variant="caption" color="text.disabled">
-            No credit card required · Free plan, forever · Upgrade anytime with crypto
+            No credit card required Â· Free plan, forever Â· Upgrade anytime with crypto
           </Typography>
         </Container>
       </Box>
 
-      {/* ── Stats Strip ── */}
+      {/* â”€â”€ Stats Strip â”€â”€ */}
       <Box sx={{ bgcolor: 'background.paper', borderTop: '1px solid', borderBottom: '1px solid', borderColor: 'divider', py: 3 }}>
         <Container maxWidth="md">
           <Grid container justifyContent="center" spacing={0}>
@@ -307,7 +307,7 @@ export default function Landing() {
         </Container>
       </Box>
 
-      {/* ── Pain ── */}
+      {/* â”€â”€ Pain â”€â”€ */}
       <Container maxWidth="lg" sx={{ py: { xs: 8, md: 12 } }}>
         <Box sx={{ textAlign: 'center', mb: 6 }}>
           <Typography variant="overline" color="error.main" fontWeight={700} letterSpacing={2}>
@@ -335,23 +335,23 @@ export default function Landing() {
         </Grid>
       </Container>
 
-      {/* ── Solution bridge ── */}
+      {/* â”€â”€ Solution bridge â”€â”€ */}
       <Box sx={{ bgcolor: 'background.paper', borderTop: '1px solid', borderBottom: '1px solid', borderColor: 'divider', py: { xs: 6, md: 8 }, textAlign: 'center', px: 2 }}>
         <Container maxWidth="sm">
           <Typography variant="overline" color="success.main" fontWeight={700} letterSpacing={2}>
             The Solution
           </Typography>
           <Typography variant="h4" fontWeight={800} mt={1} mb={2}>
-            BotForge handles everything you're doing manually — automatically
+            Telegizer handles everything you're doing manually â€” automatically
           </Typography>
           <Typography variant="body1" color="text.secondary" lineHeight={1.8}>
-            More automation → more consistent engagement → more trust → more members who stay.
-            That's the growth loop BotForge puts in motion the moment you connect your first bot.
+            More automation â†’ more consistent engagement â†’ more trust â†’ more members who stay.
+            That's the growth loop Telegizer puts in motion the moment you connect your first bot.
           </Typography>
         </Container>
       </Box>
 
-      {/* ── Features ── */}
+      {/* â”€â”€ Features â”€â”€ */}
       <Container maxWidth="lg" sx={{ py: { xs: 8, md: 12 } }}>
         <Box sx={{ textAlign: 'center', mb: 6 }}>
           <Typography variant="overline" color="primary.main" fontWeight={700} letterSpacing={2}>
@@ -361,7 +361,7 @@ export default function Landing() {
             One dashboard. Full control.
           </Typography>
           <Typography variant="body1" color="text.secondary">
-            Everything your community needs, built in — no plugins, no integrations required.
+            Everything your community needs, built in â€” no plugins, no integrations required.
           </Typography>
         </Box>
         <Grid container spacing={3}>
@@ -388,7 +388,7 @@ export default function Landing() {
         </Grid>
       </Container>
 
-      {/* ── How It Works ── */}
+      {/* â”€â”€ How It Works â”€â”€ */}
       <Box sx={{ bgcolor: 'background.paper', borderTop: '1px solid', borderColor: 'divider', py: { xs: 8, md: 10 } }}>
         <Container maxWidth="sm">
           <Box sx={{ textAlign: 'center', mb: 6 }}>
@@ -429,7 +429,7 @@ export default function Landing() {
         </Container>
       </Box>
 
-      {/* ── Social Proof ── */}
+      {/* â”€â”€ Social Proof â”€â”€ */}
       <Container maxWidth="lg" sx={{ py: { xs: 8, md: 10 } }}>
         <Box sx={{ textAlign: 'center', mb: 6 }}>
           <Typography variant="overline" color="primary.main" fontWeight={700} letterSpacing={2}>
@@ -457,7 +457,7 @@ export default function Landing() {
         </Grid>
       </Container>
 
-      {/* ── Pricing ── */}
+      {/* â”€â”€ Pricing â”€â”€ */}
       <Box sx={{ bgcolor: 'background.paper', borderTop: '1px solid', borderColor: 'divider', py: { xs: 8, md: 12 } }}>
         <Container maxWidth="lg">
           <Box sx={{ textAlign: 'center', mb: 6 }}>
@@ -554,7 +554,7 @@ export default function Landing() {
         </Container>
       </Box>
 
-      {/* ── FAQ ── */}
+      {/* â”€â”€ FAQ â”€â”€ */}
       <Box sx={{ py: { xs: 8, md: 10 }, bgcolor: 'background.default' }}>
         <Container maxWidth="md">
           <Typography variant="overline" color="primary.main" fontWeight={700} display="block" textAlign="center">
@@ -566,7 +566,7 @@ export default function Landing() {
           {[
             {
               q: 'Is it safe to add the bot as admin?',
-              a: 'Yes. BotForge only requests the Telegram permissions it needs: delete messages, ban/restrict users, pin messages, and invite links. We never read private messages or access group data outside the scope of bot commands.'
+              a: 'Yes. Telegizer only requests the Telegram permissions it needs: delete messages, ban/restrict users, pin messages, and invite links. We never read private messages or access group data outside the scope of bot commands.'
             },
             {
               q: 'Which Telegram permissions does the bot need?',
@@ -582,7 +582,7 @@ export default function Landing() {
             },
             {
               q: 'How long do crypto payment confirmations take?',
-              a: 'Most payments confirm in 1–10 minutes. Some networks (Bitcoin, Ethereum) may take 10–30+ minutes during congestion. Your plan activates automatically once the blockchain confirms the transaction.'
+              a: 'Most payments confirm in 1â€“10 minutes. Some networks (Bitcoin, Ethereum) may take 10â€“30+ minutes during congestion. Your plan activates automatically once the blockchain confirms the transaction.'
             },
             {
               q: 'Can I manage multiple groups with one bot?',
@@ -598,7 +598,7 @@ export default function Landing() {
             },
             {
               q: 'Can I change the timezone for scheduled posts?',
-              a: 'Yes. You can set a default timezone per group (under Automation › Scheduler). You can also override the timezone for each individual scheduled message or poll.'
+              a: 'Yes. You can set a default timezone per group (under Automation â€º Scheduler). You can also override the timezone for each individual scheduled message or poll.'
             },
           ].map(({ q, a }) => (
             <Accordion key={q} disableGutters elevation={0}
@@ -614,7 +614,7 @@ export default function Landing() {
         </Container>
       </Box>
 
-      {/* ── Final CTA ── */}
+      {/* â”€â”€ Final CTA â”€â”€ */}
       <Box
         sx={{
           background: 'linear-gradient(135deg, #1565c0 0%, #7c4dff 100%)',
@@ -653,14 +653,14 @@ export default function Landing() {
         </Container>
       </Box>
 
-      {/* ── Footer ── */}
+      {/* â”€â”€ Footer â”€â”€ */}
       <Box sx={{ bgcolor: 'background.paper', borderTop: '1px solid', borderColor: 'divider', py: 4 }}>
         <Container maxWidth="lg">
           <Grid container alignItems="center" spacing={2}>
             <Grid item xs={12} sm="auto">
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <SmartToy sx={{ color: 'primary.main' }} />
-                <Typography fontWeight={700}>BotForge</Typography>
+                <Typography fontWeight={700}>Telegizer</Typography>
               </Box>
               <Typography variant="caption" color="text.disabled" display="block" mt={0.5}>
                 Automate your Telegram community
@@ -677,7 +677,7 @@ export default function Landing() {
             </Grid>
             <Grid item xs={12} sm="auto" sx={{ textAlign: { xs: 'left', sm: 'right' } }}>
               <Typography variant="caption" color="text.disabled">
-                © {new Date().getFullYear()} BotForge. All rights reserved.
+                Â© {new Date().getFullYear()} Telegizer. All rights reserved.
               </Typography>
             </Grid>
           </Grid>

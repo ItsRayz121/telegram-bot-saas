@@ -287,7 +287,7 @@ def crypto_checkout():
                 "price_amount": amount,
                 "price_currency": "usd",
                 "order_id": order_id,
-                "order_description": f"BotForge {tier.capitalize()} Plan - {period_label}",
+                "order_description": f"Telegizer {tier.capitalize()} Plan - {period_label}",
                 "success_url": f"{Config.FRONTEND_URL}/payment/success",
                 "cancel_url": f"{Config.FRONTEND_URL}/payment/success?status=failed",
                 "ipn_callback_url": f"{Config.BACKEND_URL}/api/billing/crypto/webhook",

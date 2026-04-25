@@ -1,4 +1,4 @@
-# BotForge — Telegram Bot SaaS Platform
+# Telegizer — Telegram Bot SaaS Platform
 
 A production-ready SaaS platform for managing Telegram community bots with features including member verification, XP leveling, AutoMod, scheduled messages, and raid management.
 

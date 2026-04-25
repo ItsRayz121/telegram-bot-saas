@@ -135,12 +135,12 @@ def _base_template(content, title):
 <body>
   <div class="container">
     <div class="header">
-      <h1>🤖 BotForge</h1>
+      <h1>🤖 Telegizer</h1>
       <p>Your Telegram community management platform</p>
     </div>
     <div class="body">{content}</div>
     <div class="footer">
-      <p>© 2025 BotForge. All rights reserved.</p>
+      <p>© 2025 Telegizer. All rights reserved.</p>
       <p>You're receiving this because you have an account with us.</p>
     </div>
   </div>
@@ -154,7 +154,7 @@ def send_verification_email(to_email, full_name, verification_token):
     verify_url = f"{current_app.config['FRONTEND_URL']}/verify-email?token={verification_token}"
     content = f"""
     <p>Hi <strong>{full_name}</strong>,</p>
-    <p>Thanks for signing up for BotForge! Please verify your email address to unlock all features.</p>
+    <p>Thanks for signing up for Telegizer! Please verify your email address to unlock all features.</p>
     <p>Click the button below — this link expires in <strong>24 hours</strong>.</p>
     <a href="{verify_url}" class="btn">Verify My Email</a>
     <p style="margin-top:24px;font-size:12px;color:#606070;">
@@ -168,9 +168,9 @@ def send_verification_email(to_email, full_name, verification_token):
     """
     return send_email(
         to_email,
-        "Verify your BotForge email address",
+        "Verify your Telegizer email address",
         _base_template(content, "Verify Email"),
-        f"Verify your BotForge email: {verify_url}",
+        f"Verify your Telegizer email: {verify_url}",
     )
 
 
@@ -188,16 +188,16 @@ def send_password_reset_email(to_email, full_name, reset_token):
     """
     return send_email(
         to_email,
-        "Reset your BotForge password",
+        "Reset your Telegizer password",
         _base_template(content, "Reset Password"),
-        f"Reset your BotForge password: {reset_url}",
+        f"Reset your Telegizer password: {reset_url}",
     )
 
 
 def send_welcome_email(to_email, full_name):
     content = f"""
     <p>Hi <strong>{full_name}</strong>,</p>
-    <p>Welcome to BotForge! Your account has been created successfully.</p>
+    <p>Welcome to Telegizer! Your account has been created successfully.</p>
     <p>Here's what you can do with your free account:</p>
     <ul class="feature-list">
       <li>Add 1 Telegram bot</li>
@@ -210,9 +210,9 @@ def send_welcome_email(to_email, full_name):
     """
     return send_email(
         to_email,
-        "Welcome to BotForge!",
+        "Welcome to Telegizer!",
         _base_template(content, "Welcome"),
-        f"Hi {full_name}, welcome to BotForge! Visit {current_app.config['FRONTEND_URL']}/dashboard",
+        f"Hi {full_name}, welcome to Telegizer! Visit {current_app.config['FRONTEND_URL']}/dashboard",
     )
 
 
@@ -240,7 +240,7 @@ def send_subscription_cancelled(to_email, full_name):
     """
     return send_email(
         to_email,
-        "BotForge Subscription Cancelled",
+        "Telegizer Subscription Cancelled",
         _base_template(content, "Subscription Cancelled"),
     )
 
@@ -253,7 +253,7 @@ def send_payment_failed(to_email, full_name):
     """
     return send_email(
         to_email,
-        "BotForge Payment Failed — Action Required",
+        "Telegizer Payment Failed — Action Required",
         _base_template(content, "Payment Failed"),
     )
 
@@ -261,7 +261,7 @@ def send_payment_failed(to_email, full_name):
 def send_bot_added_notification(to_email, full_name, bot_name, bot_username):
     content = f"""
     <p>Hi <strong>{full_name}</strong>,</p>
-    <p>Your bot <strong>{bot_name}</strong> (@{bot_username}) has been added to BotForge!</p>
+    <p>Your bot <strong>{bot_name}</strong> (@{bot_username}) has been added to Telegizer!</p>
     <p>Add your bot to Telegram groups to start managing them.</p>
     <a href="{current_app.config['FRONTEND_URL']}/dashboard" class="btn">Manage Bots</a>
     """

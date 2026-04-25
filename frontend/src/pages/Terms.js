@@ -6,7 +6,7 @@ import { SmartToy } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 
 const LAST_UPDATED = 'April 24, 2026';
-const CONTACT_EMAIL = 'support@botforge.app';
+const CONTACT_EMAIL = 'support@Telegizer.app';
 
 function Section({ title, children }) {
   return (
@@ -39,7 +39,7 @@ export default function Terms() {
             sx={{ flexGrow: 1, cursor: 'pointer' }}
             onClick={() => navigate('/')}
           >
-            BotForge
+            Telegizer
           </Typography>
           <Button onClick={() => navigate('/register')}>Get Started</Button>
         </Toolbar>
@@ -53,18 +53,18 @@ export default function Terms() {
         <Divider sx={{ mb: 4 }} />
 
         <P>
-          By accessing or using BotForge ("the Service"), you agree to be bound by these Terms of
+          By accessing or using Telegizer ("the Service"), you agree to be bound by these Terms of
           Service. If you do not agree to these terms, please do not use the Service.
         </P>
 
         <Section title="1. Service Description">
           <P>
-            BotForge is a SaaS platform that allows you to connect, configure, and automate
+            Telegizer is a SaaS platform that allows you to connect, configure, and automate
             Telegram bots for community management. Features include automated moderation,
             scheduled messages, member analytics, polls, and more.
           </P>
           <P>
-            BotForge is not affiliated with Telegram Messenger. Your use of Telegram bots through
+            Telegizer is not affiliated with Telegram Messenger. Your use of Telegram bots through
             our platform is also subject to Telegram's own Terms of Service.
           </P>
         </Section>
@@ -93,7 +93,7 @@ export default function Terms() {
           </P>
           <P>
             Subscriptions are activated immediately upon confirmed payment. Crypto payments may
-            take 1–10 minutes to confirm depending on network congestion.
+            take 1â€“10 minutes to confirm depending on network congestion.
           </P>
           <P>
             We offer a 14-day money-back guarantee on your first subscription purchase. If you are
@@ -118,7 +118,7 @@ export default function Terms() {
           <P>You agree to use the Service only for lawful purposes. You must not:</P>
           <Box component="ul" sx={{ pl: 3, color: 'text.secondary' }}>
             {[
-              'Use BotForge to send spam, unsolicited messages, or harass users',
+              'Use Telegizer to send spam, unsolicited messages, or harass users',
               'Violate Telegram\'s Terms of Service through bots managed on our platform',
               'Use the Service to distribute malware, phishing content, or illegal material',
               'Attempt to reverse-engineer, hack, or disrupt the platform',
@@ -134,9 +134,9 @@ export default function Terms() {
 
         <Section title="6. Bot Token Security">
           <P>
-            You are responsible for keeping your Telegram bot tokens secure. BotForge stores
+            You are responsible for keeping your Telegram bot tokens secure. Telegizer stores
             tokens encrypted at rest. If you believe a token has been compromised, revoke it
-            immediately via @BotFather and update it in your BotForge dashboard.
+            immediately via @BotFather and update it in your Telegizer dashboard.
           </P>
         </Section>
 
@@ -170,7 +170,7 @@ export default function Terms() {
 
         <Section title="9. Intellectual Property">
           <P>
-            BotForge and its logos, design, and software are the property of BotForge. You retain
+            Telegizer and its logos, design, and software are the property of Telegizer. You retain
             ownership of any content you provide (messages, bot configurations) but grant us a
             limited license to process it to provide the Service.
           </P>
@@ -178,7 +178,7 @@ export default function Terms() {
 
         <Section title="10. Limitation of Liability">
           <P>
-            To the maximum extent permitted by law, BotForge is not liable for any indirect,
+            To the maximum extent permitted by law, Telegizer is not liable for any indirect,
             incidental, special, or consequential damages arising from your use of the Service,
             including but not limited to loss of data, revenue, or community engagement.
           </P>

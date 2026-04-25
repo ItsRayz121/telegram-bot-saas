@@ -6,7 +6,7 @@ import { SmartToy } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 
 const LAST_UPDATED = 'April 24, 2026';
-const CONTACT_EMAIL = 'support@botforge.app';
+const CONTACT_EMAIL = 'support@Telegizer.app';
 
 function Section({ title, children }) {
   return (
@@ -39,7 +39,7 @@ export default function Privacy() {
             sx={{ flexGrow: 1, cursor: 'pointer' }}
             onClick={() => navigate('/')}
           >
-            BotForge
+            Telegizer
           </Typography>
           <Button onClick={() => navigate('/register')}>Get Started</Button>
         </Toolbar>
@@ -53,9 +53,9 @@ export default function Privacy() {
         <Divider sx={{ mb: 4 }} />
 
         <P>
-          BotForge ("we", "us", "our") is committed to protecting your privacy. This Privacy Policy
+          Telegizer ("we", "us", "our") is committed to protecting your privacy. This Privacy Policy
           explains what information we collect, how we use it, and your rights regarding that data.
-          By using BotForge, you agree to the practices described here.
+          By using Telegizer, you agree to the practices described here.
         </P>
 
         <Section title="1. Information We Collect">
@@ -72,7 +72,7 @@ export default function Privacy() {
           </P>
           <Typography variant="subtitle2" fontWeight={600} mb={1}>Community Member Data</Typography>
           <P>
-            BotForge processes Telegram user IDs, usernames, and activity data (XP, warnings,
+            Telegizer processes Telegram user IDs, usernames, and activity data (XP, warnings,
             message counts) for members in the groups your bot manages. This data is used solely
             to deliver the features you configure (moderation, levels, analytics).
           </P>
@@ -92,7 +92,7 @@ export default function Privacy() {
         <Section title="2. How We Use Your Information">
           <Box component="ul" sx={{ pl: 3, color: 'text.secondary' }}>
             {[
-              'Provide, operate, and improve the BotForge platform',
+              'Provide, operate, and improve the Telegizer platform',
               'Authenticate your account and keep it secure',
               'Process payments and manage subscriptions',
               'Send transactional emails (welcome, password reset, subscription confirmation)',
@@ -124,14 +124,14 @@ export default function Privacy() {
         </Section>
 
         <Section title="4. Third-Party Services">
-          <P>BotForge integrates with the following third-party services:</P>
+          <P>Telegizer integrates with the following third-party services:</P>
           <Box component="ul" sx={{ pl: 3, color: 'text.secondary' }}>
             {[
-              'Telegram — to run your bots (subject to Telegram\'s Privacy Policy)',
-              'NOWPayments — for cryptocurrency payment processing',
-              'Lemon Squeezy — for card payment processing (when available)',
-              'Railway — for cloud hosting and database infrastructure',
-              'SendGrid / SMTP — for transactional email delivery',
+              'Telegram â€” to run your bots (subject to Telegram\'s Privacy Policy)',
+              'NOWPayments â€” for cryptocurrency payment processing',
+              'Lemon Squeezy â€” for card payment processing (when available)',
+              'Railway â€” for cloud hosting and database infrastructure',
+              'SendGrid / SMTP â€” for transactional email delivery',
             ].map((item) => (
               <Typography key={item} component="li" variant="body2" color="text.secondary" mb={0.5} lineHeight={1.8}>
                 {item}
@@ -159,7 +159,7 @@ export default function Privacy() {
 
         <Section title="6. Cookies">
           <P>
-            BotForge uses browser localStorage to store your authentication token. We do not use
+            Telegizer uses browser localStorage to store your authentication token. We do not use
             third-party advertising cookies or tracking pixels. We may use essential session
             cookies for security purposes.
           </P>
@@ -169,11 +169,11 @@ export default function Privacy() {
           <P>Depending on your location, you may have the following rights:</P>
           <Box component="ul" sx={{ pl: 3, color: 'text.secondary' }}>
             {[
-              'Access — request a copy of the personal data we hold about you',
-              'Correction — ask us to correct inaccurate data',
-              'Deletion — request deletion of your personal data ("right to be forgotten")',
-              'Portability — receive your data in a machine-readable format',
-              'Objection — object to certain processing of your data',
+              'Access â€” request a copy of the personal data we hold about you',
+              'Correction â€” ask us to correct inaccurate data',
+              'Deletion â€” request deletion of your personal data ("right to be forgotten")',
+              'Portability â€” receive your data in a machine-readable format',
+              'Objection â€” object to certain processing of your data',
             ].map((item) => (
               <Typography key={item} component="li" variant="body2" color="text.secondary" mb={0.5} lineHeight={1.8}>
                 {item}
@@ -188,7 +188,7 @@ export default function Privacy() {
 
         <Section title="8. Children's Privacy">
           <P>
-            BotForge is not intended for users under 16. We do not knowingly collect personal
+            Telegizer is not intended for users under 16. We do not knowingly collect personal
             data from children. If you believe we have collected data from a minor, please contact
             us immediately.
           </P>

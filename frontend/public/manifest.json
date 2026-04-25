@@ -1,6 +1,6 @@
 {
-  "short_name": "BotForge",
-  "name": "BotForge — Telegram Group Automation",
+  "short_name": "Telegizer",
+  "name": "Telegizer — Telegram Group Automation",
   "description": "Automate your Telegram groups with AutoMod, scheduling, analytics, and AI.",
   "start_url": "/dashboard",
   "scope": "/",

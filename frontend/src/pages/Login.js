@@ -153,7 +153,7 @@ export default function Login() {
       <Card sx={{ width: '100%', maxWidth: 420 }}>
         <CardContent sx={{ p: { xs: 3, sm: 4 } }}>
           <Typography variant="h4" fontWeight={700} mb={0.5} textAlign="center">
-            BotForge
+            Telegizer
           </Typography>
           <Typography variant="body2" color="text.secondary" textAlign="center" mb={3}>
             Sign in to manage your Telegram bots

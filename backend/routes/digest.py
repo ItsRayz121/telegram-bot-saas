@@ -121,7 +121,7 @@ def _format_report_message(group_name: str, period_label: str, data: dict) -> st
         f"  • Members now: {data['member_count']}",
         f"  • Joined via invite links: {data['invite_joins']}",
         "",
-        "⚡ Powered by BotForge",
+        "⚡ Powered by Telegizer",
     ]
     return "\n".join(lines)
 

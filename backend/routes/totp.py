@@ -68,7 +68,7 @@ def setup_totp():
         from ..utils.encryption import encrypt_value
         secret = pyotp.random_base32()
         totp = pyotp.TOTP(secret)
-        provisioning_uri = totp.provisioning_uri(name=user.email, issuer_name="BotForge")
+        provisioning_uri = totp.provisioning_uri(name=user.email, issuer_name="Telegizer")
 
         # Store encrypted secret temporarily (not enabled until confirmed)
         user.totp_secret = encrypt_value(secret)

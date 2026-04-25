@@ -73,7 +73,7 @@ export default function Register() {
       <Card sx={{ width: '100%', maxWidth: 420 }}>
         <CardContent sx={{ p: { xs: 3, sm: 4 } }}>
           <Typography variant="h4" fontWeight={700} mb={0.5} textAlign="center">
-            BotForge
+            Telegizer
           </Typography>
           <Typography variant="body2" color="text.secondary" textAlign="center" mb={refCode ? 2 : 3}>
             Create your account to get started
@@ -87,7 +87,7 @@ export default function Register() {
             >
               <Typography variant="body2" fontWeight={600}>You were invited!</Typography>
               <Typography variant="caption" color="text.secondary">
-                Sign up now — your friend referred you to BotForge.
+                Sign up now — your friend referred you to Telegizer.
                 They get a Pro trial reward when you join. Start free, no card needed.
               </Typography>
             </Alert>

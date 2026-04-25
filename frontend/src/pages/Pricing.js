@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import {
   Box, AppBar, Toolbar, Typography, Button, Card, CardContent,
   Grid, Chip, List, ListItem, ListItemIcon, ListItemText,
@@ -124,7 +124,7 @@ export default function Pricing() {
         return;
       }
 
-      // Redirect to external checkout — payment success page handles return
+      // Redirect to external checkout â€” payment success page handles return
       window.location.href = res.data.url;
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to start checkout. Please try again.');
@@ -155,7 +155,7 @@ export default function Pricing() {
             </IconButton>
           )}
           <Typography variant="h6" fontWeight={700} sx={{ flexGrow: 1 }}>
-            BotForge
+            Telegizer
           </Typography>
           {!token && (
             <Stack direction="row" spacing={1}>
@@ -194,7 +194,7 @@ export default function Pricing() {
 
         {subExpires && (
           <Chip
-            label={`${currentTier.charAt(0).toUpperCase() + currentTier.slice(1)} plan — expires ${new Date(subExpires).toLocaleDateString()}`}
+            label={`${currentTier.charAt(0).toUpperCase() + currentTier.slice(1)} plan â€” expires ${new Date(subExpires).toLocaleDateString()}`}
             color="primary"
             sx={{ mb: 3 }}
           />
@@ -261,7 +261,7 @@ export default function Pricing() {
                         </Typography>
                         <Typography component="span" variant="body1" color="text.secondary">/month</Typography>
                         <Typography variant="caption" display="block" color="success.main" fontWeight={600} mb={1}>
-                          ${plan.annualPrice}/year · ~2 months free
+                          ${plan.annualPrice}/year Â· ~2 months free
                         </Typography>
                       </>
                     ) : (
@@ -306,7 +306,7 @@ export default function Pricing() {
           All plans include a 14-day money-back guarantee. No hidden fees.
         </Typography>
         <Typography variant="caption" color="text.disabled">
-          Payments accepted via crypto (USDT, BTC, ETH, BNB, 300+ coins) · Card payments coming soon
+          Payments accepted via crypto (USDT, BTC, ETH, BNB, 300+ coins) Â· Card payments coming soon
         </Typography>
       </Box>
 
@@ -320,15 +320,15 @@ export default function Pricing() {
             {selectedTier && (
               <>
                 Upgrading to <strong>{selectedTier.charAt(0).toUpperCase() + selectedTier.slice(1)}</strong> Plan
-                {' '}— <strong>{annual ? 'Annual' : 'Monthly'}</strong> billing
+                {' '}â€” <strong>{annual ? 'Annual' : 'Monthly'}</strong> billing
                 {annual && (
-                  <> · <span style={{ color: '#66bb6a' }}>~2 months free</span></>
+                  <> Â· <span style={{ color: '#66bb6a' }}>~2 months free</span></>
                 )}
               </>
             )}
           </Typography>
           <Stack spacing={2}>
-            {/* Crypto — active */}
+            {/* Crypto â€” active */}
             <Button
               fullWidth
               variant="outlined"
@@ -350,7 +350,7 @@ export default function Pricing() {
               </Box>
             </Button>
 
-            {/* Card — coming soon */}
+            {/* Card â€” coming soon */}
             <Box sx={{ position: 'relative' }}>
               <Button
                 fullWidth
@@ -363,7 +363,7 @@ export default function Pricing() {
                 <Box sx={{ textAlign: 'left', ml: 1 }}>
                   <Typography variant="body1" fontWeight={600}>Card / Bank Transfer</Typography>
                   <Typography variant="caption" color="text.secondary">
-                    Visa, Mastercard — coming soon
+                    Visa, Mastercard â€” coming soon
                   </Typography>
                 </Box>
               </Button>
@@ -377,9 +377,9 @@ export default function Pricing() {
 
           <Alert severity="info" sx={{ mt: 2 }} icon={false}>
             <Typography variant="caption">
-              After payment, your plan upgrades automatically within 1–10 minutes.
+              After payment, your plan upgrades automatically within 1â€“10 minutes.
               Blockchain confirmations can take up to 30+ minutes during network congestion.
-              Your plan activates as soon as the transaction confirms — no manual steps needed.
+              Your plan activates as soon as the transaction confirms â€” no manual steps needed.
             </Typography>
           </Alert>
         </DialogContent>
