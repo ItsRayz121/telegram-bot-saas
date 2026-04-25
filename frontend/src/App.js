@@ -5,6 +5,7 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import ErrorBoundary from './components/ErrorBoundary';
 import PWAInstallBanner from './components/PWAInstallBanner';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
@@ -23,6 +24,20 @@ import Settings from './pages/Settings';
 import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
 import NotFound from './pages/NotFound';
+import VerifyEmail from './pages/VerifyEmail';
+
+// Initialize Sentry if DSN is configured
+const SENTRY_DSN = process.env.REACT_APP_SENTRY_DSN;
+if (SENTRY_DSN) {
+  import('@sentry/react').then(({ init, browserTracingIntegration }) => {
+    init({
+      dsn: SENTRY_DSN,
+      integrations: [browserTracingIntegration()],
+      tracesSampleRate: 0.1,
+      sendDefaultPii: false,
+    });
+  }).catch(() => {});
+}
 
 // Register service worker for PWA (must be after imports to satisfy ESLint import/first)
 if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
@@ -112,53 +127,58 @@ export default function App() {
   return (
     <ThemeProvider theme={darkTheme}>
       <CssBaseline />
-      <BrowserRouter>
-        <Routes>
-          {/* Public */}
-          <Route path="/" element={<Landing />} />
-          <Route path="/pricing" element={<Pricing />} />
-          <Route path="/payment/success" element={<PaymentSuccess />} />
-          <Route path="/terms" element={<Terms />} />
-          <Route path="/privacy" element={<Privacy />} />
-          {/* Referral short-link: /join?ref=CODE → /register?ref=CODE */}
-          <Route path="/join" element={<JoinRedirect />} />
+      <ErrorBoundary>
+        <BrowserRouter>
+          <Routes>
+            {/* Public */}
+            <Route path="/" element={<Landing />} />
+            <Route path="/pricing" element={<Pricing />} />
+            <Route path="/payment/success" element={<PaymentSuccess />} />
+            <Route path="/terms" element={<Terms />} />
+            <Route path="/privacy" element={<Privacy />} />
+            {/* Referral short-link: /join?ref=CODE → /register?ref=CODE */}
+            <Route path="/join" element={<JoinRedirect />} />
 
-          {/* Auth pages — redirect to dashboard if already logged in */}
-          <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
-          <Route path="/register" element={<PublicOnlyRoute><Register /></PublicOnlyRoute>} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
+            {/* Auth pages — redirect to dashboard if already logged in */}
+            <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
+            <Route path="/register" element={<PublicOnlyRoute><Register /></PublicOnlyRoute>} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
 
-          {/* Protected */}
-          <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
-          <Route path="/bot/:id" element={<PrivateRoute><BotSettings /></PrivateRoute>} />
-          <Route path="/bot/:id/group/:groupId" element={<PrivateRoute><GroupSettings /></PrivateRoute>} />
-          <Route path="/analytics/:id" element={<PrivateRoute><Analytics /></PrivateRoute>} />
+            {/* Email verification — accessible with or without auth */}
+            <Route path="/verify-email" element={<VerifyEmail />} />
 
-          {/* Admin only */}
-          <Route path="/admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />
+            {/* Protected */}
+            <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+            <Route path="/bot/:id" element={<PrivateRoute><BotSettings /></PrivateRoute>} />
+            <Route path="/bot/:id/group/:groupId" element={<PrivateRoute><GroupSettings /></PrivateRoute>} />
+            <Route path="/analytics/:id" element={<PrivateRoute><Analytics /></PrivateRoute>} />
 
-          {/* Billing — protected */}
-          <Route path="/billing" element={<PrivateRoute><Billing /></PrivateRoute>} />
+            {/* Admin only */}
+            <Route path="/admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />
 
-          {/* Settings — protected */}
-          <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
+            {/* Billing — protected */}
+            <Route path="/billing" element={<PrivateRoute><Billing /></PrivateRoute>} />
 
-          {/* 404 */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-      <ToastContainer
-        position="top-center"
-        autoClose={4000}
-        theme="dark"
-        hideProgressBar={false}
-        newestOnTop
-        closeOnClick
-        pauseOnHover
-        style={{ zIndex: 9999 }}
-      />
-      <PWAInstallBanner />
+            {/* Settings — protected */}
+            <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
+
+            {/* 404 */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+        <ToastContainer
+          position="top-center"
+          autoClose={4000}
+          theme="dark"
+          hideProgressBar={false}
+          newestOnTop
+          closeOnClick
+          pauseOnHover
+          style={{ zIndex: 9999 }}
+        />
+        <PWAInstallBanner />
+      </ErrorBoundary>
     </ThemeProvider>
   );
 }

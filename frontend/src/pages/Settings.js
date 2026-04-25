@@ -5,17 +5,19 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions, Stack,
   Chip,
 } from '@mui/material';
-import { ArrowBack, SmartToy, Person, Lock, DeleteForever, Schedule } from '@mui/icons-material';
+import {
+  ArrowBack, SmartToy, Person, Lock, DeleteForever, Schedule,
+  Security, CheckCircle, ContentCopy,
+} from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { auth, billing, userSettings } from '../services/api';
+import { auth, totp as totpApi, billing, userSettings } from '../services/api';
 import TimezoneSelect from '../components/TimezoneSelect';
 
 function safeParseUser() {
   try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; }
 }
 
-// ── Section wrapper ───────────────────────────────────────────────────────────
 function Section({ title, icon, children }) {
   return (
     <Card sx={{ mb: 3 }}>
@@ -30,22 +32,221 @@ function Section({ title, icon, children }) {
   );
 }
 
+// ── 2FA Section ────────────────────────────────────────────────────────────────
+function TwoFactorSection({ user, onUserRefresh }) {
+  const [step, setStep] = useState('idle'); // idle | setup | enable | backup_codes
+  const [loading, setLoading] = useState(false);
+  const [provUri, setProvUri] = useState('');
+  const [secret, setSecret] = useState('');
+  const [enableCode, setEnableCode] = useState('');
+  const [backupCodes, setBackupCodes] = useState([]);
+  const [backupCount, setBackupCount] = useState(null);
+  const [disableOpen, setDisableOpen] = useState(false);
+  const [disablePw, setDisablePw] = useState('');
+  const [disableCode, setDisableCode] = useState('');
+  const [disabling, setDisabling] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const isPaidOrAdmin = user.subscription_tier === 'pro' || user.subscription_tier === 'enterprise' || user.is_admin;
+
+  useEffect(() => {
+    if (user.totp_enabled) {
+      totpApi.getBackupCodeCount().then(r => setBackupCount(r.data.backup_codes_remaining)).catch(() => {});
+    }
+  }, [user.totp_enabled]);
+
+  const handleSetup = async () => {
+    setLoading(true);
+    try {
+      const r = await totpApi.setup();
+      setSecret(r.data.secret);
+      setProvUri(r.data.provisioning_uri);
+      setStep('setup');
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Failed to start 2FA setup');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEnable = async () => {
+    if (!enableCode.trim()) return;
+    setLoading(true);
+    try {
+      const r = await totpApi.enable({ totp_code: enableCode.trim() });
+      setBackupCodes(r.data.backup_codes || []);
+      setStep('backup_codes');
+      await onUserRefresh();
+      toast.success('2FA enabled successfully!');
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Invalid code. Check your authenticator app.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDisable = async () => {
+    if (!disablePw || !disableCode) return;
+    setDisabling(true);
+    try {
+      await totpApi.disable({ password: disablePw, totp_code: disableCode });
+      setDisableOpen(false);
+      setDisablePw('');
+      setDisableCode('');
+      await onUserRefresh();
+      toast.success('2FA disabled');
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Failed to disable 2FA');
+    } finally {
+      setDisabling(false);
+    }
+  };
+
+  const copySecret = () => {
+    navigator.clipboard.writeText(secret).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  if (!isPaidOrAdmin) {
+    return (
+      <Alert severity="info">
+        Two-factor authentication is available on <strong>Pro and Enterprise</strong> plans.{' '}
+        <Button size="small" href="/pricing">Upgrade</Button>
+      </Alert>
+    );
+  }
+
+  if (step === 'backup_codes') {
+    return (
+      <Box>
+        <Alert severity="success" sx={{ mb: 2 }}>2FA enabled! Save these backup codes somewhere safe — they won't be shown again.</Alert>
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1, mb: 2 }}>
+          {backupCodes.map((c, i) => (
+            <Typography key={i} variant="body2" sx={{ fontFamily: 'monospace', bgcolor: 'background.default', p: 1, borderRadius: 1 }}>
+              {c}
+            </Typography>
+          ))}
+        </Box>
+        <Button variant="contained" onClick={() => setStep('idle')}>Done</Button>
+      </Box>
+    );
+  }
+
+  if (step === 'setup') {
+    return (
+      <Box>
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Scan the QR code below in your authenticator app (Google Authenticator, Authy, etc.)
+        </Alert>
+
+        {/* QR Code via Google Charts API */}
+        <Box sx={{ textAlign: 'center', mb: 2 }}>
+          <img
+            src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(provUri)}`}
+            alt="TOTP QR Code"
+            style={{ borderRadius: 8, border: '4px solid #fff' }}
+          />
+        </Box>
+
+        <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>
+          Can't scan? Enter this code manually:
+        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, bgcolor: 'background.default', p: 1.5, borderRadius: 1 }}>
+          <Typography variant="body2" sx={{ fontFamily: 'monospace', flexGrow: 1, letterSpacing: 2 }}>{secret}</Typography>
+          <IconButton size="small" onClick={copySecret}>
+            {copied ? <CheckCircle fontSize="small" color="success" /> : <ContentCopy fontSize="small" />}
+          </IconButton>
+        </Box>
+
+        <TextField
+          fullWidth
+          label="Enter the 6-digit code from your app"
+          value={enableCode}
+          onChange={(e) => setEnableCode(e.target.value)}
+          size="small"
+          inputProps={{ maxLength: 8, inputMode: 'numeric' }}
+          sx={{ mb: 2 }}
+        />
+        <Stack direction="row" spacing={1}>
+          <Button variant="contained" onClick={handleEnable} disabled={loading || !enableCode.trim()}>
+            {loading ? <CircularProgress size={20} color="inherit" /> : 'Activate 2FA'}
+          </Button>
+          <Button variant="outlined" onClick={() => setStep('idle')}>Cancel</Button>
+        </Stack>
+      </Box>
+    );
+  }
+
+  // Idle state
+  return (
+    <Box>
+      {user.totp_enabled ? (
+        <>
+          <Alert severity="success" icon={<CheckCircle />} sx={{ mb: 2 }}>
+            Two-factor authentication is <strong>enabled</strong>.
+            {backupCount !== null && ` ${backupCount} backup code${backupCount !== 1 ? 's' : ''} remaining.`}
+          </Alert>
+          <Button variant="outlined" color="error" onClick={() => setDisableOpen(true)} sx={{ mr: 1 }}>
+            Disable 2FA
+          </Button>
+        </>
+      ) : (
+        <>
+          <Typography variant="body2" color="text.secondary" mb={2}>
+            Add an extra layer of security. You'll need your authenticator app when signing in.
+          </Typography>
+          <Button variant="contained" onClick={handleSetup} disabled={loading} startIcon={<Security />}>
+            {loading ? <CircularProgress size={20} color="inherit" /> : 'Set Up 2FA'}
+          </Button>
+        </>
+      )}
+
+      {/* Disable 2FA dialog */}
+      <Dialog open={disableOpen} onClose={() => setDisableOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle fontWeight={700}>Disable Two-Factor Auth</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" mb={2}>
+            Enter your password and current 2FA code to confirm.
+          </Typography>
+          <Stack spacing={2}>
+            <TextField
+              fullWidth type="password" label="Password" size="small"
+              value={disablePw} onChange={(e) => setDisablePw(e.target.value)}
+            />
+            <TextField
+              fullWidth label="2FA Code" size="small"
+              value={disableCode} onChange={(e) => setDisableCode(e.target.value)}
+              inputProps={{ maxLength: 8, inputMode: 'numeric' }}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDisableOpen(false)} disabled={disabling}>Cancel</Button>
+          <Button variant="contained" color="error" onClick={handleDisable} disabled={disabling || !disablePw || !disableCode}>
+            {disabling ? <CircularProgress size={20} color="inherit" /> : 'Disable 2FA'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+}
+
+// ── Main Settings Page ─────────────────────────────────────────────────────────
 export default function Settings() {
   const navigate = useNavigate();
   const [user, setUser] = useState(safeParseUser);
   const [subscription, setSubscription] = useState(null);
 
-  // Change password
   const [currentPw, setCurrentPw] = useState('');
   const [newPw, setNewPw] = useState('');
   const [confirmPw, setConfirmPw] = useState('');
   const [pwLoading, setPwLoading] = useState(false);
 
-  // Timezone
   const [timezone, setTimezone] = useState('');
   const [tzSaving, setTzSaving] = useState(false);
 
-  // Delete account
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletePw, setDeletePw] = useState('');
   const [deleting, setDeleting] = useState(false);
@@ -56,6 +257,7 @@ export default function Settings() {
       const fresh = res.data.user;
       localStorage.setItem('user', JSON.stringify(fresh));
       setUser(fresh);
+      return fresh;
     } catch { /* 401 handled by interceptor */ }
   }, []);
 
@@ -69,7 +271,6 @@ export default function Settings() {
   useEffect(() => {
     fetchUser();
     fetchSub();
-    // Load saved timezone preference
     const saved = localStorage.getItem('user_timezone') || '';
     setTimezone(saved);
   }, [fetchUser, fetchSub]);
@@ -160,7 +361,21 @@ export default function Settings() {
             <Divider />
             <Box>
               <Typography variant="caption" color="text.secondary">Email</Typography>
-              <Typography variant="body1">{user.email || '—'}</Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                <Typography variant="body1">{user.email || '—'}</Typography>
+                {user.email_verified === false && (
+                  <Chip
+                    label="Unverified"
+                    size="small"
+                    color="warning"
+                    onClick={() => navigate('/verify-email')}
+                    sx={{ cursor: 'pointer' }}
+                  />
+                )}
+                {user.email_verified === true && (
+                  <Chip label="Verified" size="small" color="success" icon={<CheckCircle />} />
+                )}
+              </Box>
             </Box>
             <Divider />
             <Box>
@@ -186,12 +401,7 @@ export default function Settings() {
             )}
           </Box>
           {tier !== 'enterprise' && (
-            <Button
-              variant="outlined"
-              size="small"
-              sx={{ mt: 2 }}
-              onClick={() => navigate('/pricing')}
-            >
+            <Button variant="outlined" size="small" sx={{ mt: 2 }} onClick={() => navigate('/pricing')}>
               Upgrade Plan
             </Button>
           )}
@@ -209,29 +419,17 @@ export default function Settings() {
         <Section title="Change Password" icon={<Lock color="primary" />}>
           <Stack spacing={2}>
             <TextField
-              fullWidth
-              type="password"
-              label="Current Password"
-              value={currentPw}
-              onChange={(e) => setCurrentPw(e.target.value)}
-              size="small"
+              fullWidth type="password" label="Current Password"
+              value={currentPw} onChange={(e) => setCurrentPw(e.target.value)} size="small"
             />
             <TextField
-              fullWidth
-              type="password"
-              label="New Password"
-              value={newPw}
-              onChange={(e) => setNewPw(e.target.value)}
-              size="small"
-              helperText="At least 8 characters"
+              fullWidth type="password" label="New Password"
+              value={newPw} onChange={(e) => setNewPw(e.target.value)}
+              size="small" helperText="At least 8 characters"
             />
             <TextField
-              fullWidth
-              type="password"
-              label="Confirm New Password"
-              value={confirmPw}
-              onChange={(e) => setConfirmPw(e.target.value)}
-              size="small"
+              fullWidth type="password" label="Confirm New Password"
+              value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} size="small"
               error={confirmPw.length > 0 && newPw !== confirmPw}
               helperText={confirmPw.length > 0 && newPw !== confirmPw ? 'Passwords do not match' : ''}
             />
@@ -247,7 +445,12 @@ export default function Settings() {
           </Stack>
         </Section>
 
-        {/* Timezone */}
+        {/* Two-Factor Authentication */}
+        <Section title="Two-Factor Authentication" icon={<Security color="primary" />}>
+          <TwoFactorSection user={user} onUserRefresh={fetchUser} />
+        </Section>
+
+        {/* Default Timezone */}
         <Section title="Default Timezone" icon={<Schedule color="primary" />}>
           <Typography variant="body2" color="text.secondary" mb={2}>
             Used as a default when creating scheduled messages.
@@ -256,12 +459,7 @@ export default function Settings() {
             <Box sx={{ flexGrow: 1, minWidth: 200 }}>
               <TimezoneSelect value={timezone} onChange={setTimezone} />
             </Box>
-            <Button
-              variant="outlined"
-              onClick={handleSaveTimezone}
-              disabled={tzSaving}
-              sx={{ mt: { xs: 1, sm: 0 } }}
-            >
+            <Button variant="outlined" onClick={handleSaveTimezone} disabled={tzSaving} sx={{ mt: { xs: 1, sm: 0 } }}>
               Save
             </Button>
           </Stack>
@@ -279,9 +477,7 @@ export default function Settings() {
               This action cannot be undone.
             </Alert>
             <Button
-              variant="outlined"
-              color="error"
-              startIcon={<DeleteForever />}
+              variant="outlined" color="error" startIcon={<DeleteForever />}
               onClick={() => setDeleteOpen(true)}
             >
               Delete My Account
@@ -291,20 +487,15 @@ export default function Settings() {
 
       </Box>
 
-      {/* Delete Account Dialog */}
       <Dialog open={deleteOpen} onClose={() => { setDeleteOpen(false); setDeletePw(''); }} maxWidth="xs" fullWidth>
         <DialogTitle sx={{ color: 'error.main', fontWeight: 700 }}>Delete Account</DialogTitle>
         <DialogContent>
           <Typography variant="body2" mb={2}>
-            This will permanently delete your account and all associated data.
-            Enter your password to confirm.
+            This will permanently delete your account and all associated data. Enter your password to confirm.
           </Typography>
           <TextField
-            fullWidth
-            type="password"
-            label="Your Password"
-            value={deletePw}
-            onChange={(e) => setDeletePw(e.target.value)}
+            fullWidth type="password" label="Your Password"
+            value={deletePw} onChange={(e) => setDeletePw(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleDeleteAccount()}
             autoFocus
           />

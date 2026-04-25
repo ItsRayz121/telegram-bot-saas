@@ -35,6 +35,19 @@ export const auth = {
   changePassword: (data) => api.post('/api/auth/change-password', data),
   forgotPassword: (data) => api.post('/api/auth/forgot-password', data),
   resetPassword: (data) => api.post('/api/auth/reset-password', data),
+  // Email verification
+  verifyEmail: (data) => api.post('/api/auth/verify-email', data),
+  resendVerification: () => api.post('/api/auth/resend-verification'),
+  // 2FA login completion
+  verifyTotpLogin: (data) => api.post('/api/auth/verify-totp-login', data),
+};
+
+export const totp = {
+  setup: () => api.post('/api/auth/2fa/setup'),
+  enable: (data) => api.post('/api/auth/2fa/enable', data),
+  disable: (data) => api.post('/api/auth/2fa/disable', data),
+  getBackupCodeCount: () => api.get('/api/auth/2fa/backup-codes'),
+  regenerateBackupCodes: (data) => api.post('/api/auth/2fa/regenerate-backup-codes', data),
 };
 
 export const notifications = {
