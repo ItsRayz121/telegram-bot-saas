@@ -641,7 +641,7 @@ class SuspiciousActivity(db.Model):
     ip_hash = db.Column(db.String(64), nullable=True)
     device_hash = db.Column(db.String(64), nullable=True)
     reason = db.Column(db.String(255), nullable=False)
-    metadata = db.Column(db.JSON, nullable=True)
+    event_metadata = db.Column(db.JSON, nullable=True)
     reviewed = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
 
@@ -654,7 +654,7 @@ class SuspiciousActivity(db.Model):
             "ip_hash_prefix": self.ip_hash[:12] if self.ip_hash else None,
             "device_hash_prefix": self.device_hash[:12] if self.device_hash else None,
             "reason": self.reason,
-            "metadata": self.metadata,
+            "event_metadata": self.event_metadata,
             "reviewed": self.reviewed,
             "created_at": self.created_at.isoformat(),
         }

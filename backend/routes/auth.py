@@ -152,7 +152,7 @@ def _log_suspicious(user_id, event_type: str, ip_hash, device_hash, reason: str,
             ip_hash=ip_hash,
             device_hash=device_hash,
             reason=reason,
-            metadata=metadata or {},
+            event_metadata=metadata or {},
         )
         db.session.add(event)
         db.session.flush()

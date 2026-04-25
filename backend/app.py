@@ -270,7 +270,7 @@ def _run_anti_abuse_migrations():
             ip_hash VARCHAR(64),
             device_hash VARCHAR(64),
             reason VARCHAR(255) NOT NULL,
-            metadata JSONB,
+            event_metadata JSONB,
             reviewed BOOLEAN NOT NULL DEFAULT FALSE,
             created_at TIMESTAMP NOT NULL DEFAULT NOW()
         )""",
