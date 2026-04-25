@@ -141,7 +141,7 @@ def create_app():
         return jsonify({
             "status": "ok",
             "db": "connected" if db_ok else "error",
-            "version": "2026-04-25-v6",
+            "version": "2026-04-25-v7",
         })
 
     @app.route("/ready")
@@ -226,6 +226,7 @@ def create_app():
         _run_payment_history_migration()
         _run_index_migrations()
         _run_security_migrations()
+        _run_anti_abuse_migrations()
 
     # Start bots in a background thread after a short delay so Gunicorn can
     # pass its healthcheck before bot polling (which may contact Telegram and
@@ -244,6 +245,52 @@ def create_app():
     threading.Thread(target=_scheduler_loop, args=(app,), daemon=True).start()
 
     return app
+
+
+def _run_anti_abuse_migrations():
+    """Add anti-abuse columns and tables introduced in v7."""
+    stmts = [
+        # New User columns: hashed identifiers + suspicious flag
+        "ALTER TABLE users ADD COLUMN signup_ip_hash VARCHAR(64)",
+        "ALTER TABLE users ADD COLUMN device_fingerprint_hash VARCHAR(64)",
+        "ALTER TABLE users ADD COLUMN is_suspicious BOOLEAN DEFAULT FALSE",
+        "CREATE INDEX IF NOT EXISTS ix_users_signup_ip_hash ON users (signup_ip_hash)",
+        "CREATE INDEX IF NOT EXISTS ix_users_device_fingerprint_hash ON users (device_fingerprint_hash)",
+        # New Referral columns: status lifecycle + overlap flags
+        "ALTER TABLE referrals ADD COLUMN status VARCHAR(20) DEFAULT 'pending'",
+        "ALTER TABLE referrals ADD COLUMN ip_match BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE referrals ADD COLUMN device_match BOOLEAN DEFAULT FALSE",
+        # Backfill existing referrals to 'approved' so pre-anti-abuse records still count for rewards
+        "UPDATE referrals SET status = 'approved' WHERE status IS NULL OR status = 'pending'",
+        # suspicious_activities table
+        """CREATE TABLE IF NOT EXISTS suspicious_activities (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            event_type VARCHAR(50) NOT NULL,
+            ip_hash VARCHAR(64),
+            device_hash VARCHAR(64),
+            reason VARCHAR(255) NOT NULL,
+            metadata JSONB,
+            reviewed BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )""",
+        "CREATE INDEX IF NOT EXISTS ix_suspicious_activities_created_at ON suspicious_activities (created_at DESC)",
+        "CREATE INDEX IF NOT EXISTS ix_suspicious_activities_event_type ON suspicious_activities (event_type)",
+        "CREATE INDEX IF NOT EXISTS ix_suspicious_activities_user_id ON suspicious_activities (user_id)",
+    ]
+    try:
+        with db.engine.connect() as conn:
+            for sql in stmts:
+                try:
+                    conn.execute(text(sql))
+                    conn.commit()
+                except Exception:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+    except Exception:
+        pass
 
 
 def _run_referral_migrations():

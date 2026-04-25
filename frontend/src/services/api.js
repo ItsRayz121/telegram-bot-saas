@@ -191,6 +191,11 @@ export const admin = {
   deleteUser: (id) => api.delete(`/api/admin/users/${id}`),
   getStats: () => api.get('/api/admin/stats'),
   getAllBots: (params) => api.get('/api/admin/bots', { params }),
+  // Anti-abuse review endpoints
+  getSuspicious: (params) => api.get('/api/admin/suspicious', { params }),
+  dismissSuspicious: (id) => api.post(`/api/admin/suspicious/${id}/dismiss`),
+  getReferrals: (params) => api.get('/api/admin/referrals', { params }),
+  updateReferralStatus: (id, data) => api.post(`/api/admin/referrals/${id}/status`, data),
 };
 
 export default api;

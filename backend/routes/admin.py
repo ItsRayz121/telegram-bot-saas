@@ -2,7 +2,7 @@ from datetime import datetime
 from functools import wraps
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from ..models import db, User, Bot, Group, Member
+from ..models import db, User, Bot, Group, Member, SuspiciousActivity, Referral
 from ..config import Config
 from ..middleware.rate_limit import rate_limit
 
@@ -173,6 +173,134 @@ def set_own_plan():
     user.subscription_expires = None
     db.session.commit()
     return jsonify({"user": user.to_dict(), "message": f"Plan switched to {tier}"}), 200
+
+
+@admin_bp.route("/suspicious", methods=["GET"])
+@admin_required
+@rate_limit(requests_per_minute=30)
+def list_suspicious():
+    """Return paginated suspicious activity events for admin review."""
+    page = request.args.get("page", 1, type=int)
+    per_page = min(request.args.get("per_page", 50, type=int), 100)
+    event_type = request.args.get("event_type", "")
+    reviewed = request.args.get("reviewed", "")
+
+    query = SuspiciousActivity.query.order_by(SuspiciousActivity.created_at.desc())
+    if event_type:
+        query = query.filter(SuspiciousActivity.event_type == event_type)
+    if reviewed == "true":
+        query = query.filter(SuspiciousActivity.reviewed == True)
+    elif reviewed == "false":
+        query = query.filter(SuspiciousActivity.reviewed == False)
+
+    paginated = query.paginate(page=page, per_page=per_page, error_out=False)
+
+    items = []
+    for evt in paginated.items:
+        d = evt.to_dict()
+        if evt.user_id:
+            u = User.query.get(evt.user_id)
+            d["user_email"] = u.email if u else None
+        else:
+            d["user_email"] = None
+        items.append(d)
+
+    return jsonify({
+        "events": items,
+        "total": paginated.total,
+        "pages": paginated.pages,
+        "page": page,
+    })
+
+
+@admin_bp.route("/suspicious/<int:event_id>/dismiss", methods=["POST"])
+@admin_required
+@rate_limit(requests_per_minute=30)
+def dismiss_suspicious(event_id):
+    """Mark a suspicious activity event as reviewed/dismissed."""
+    event = SuspiciousActivity.query.get(event_id)
+    if not event:
+        return jsonify({"error": "Event not found"}), 404
+    event.reviewed = True
+    db.session.commit()
+    return jsonify({"message": "Event dismissed", "event": event.to_dict()})
+
+
+@admin_bp.route("/referrals", methods=["GET"])
+@admin_required
+@rate_limit(requests_per_minute=30)
+def list_referrals():
+    """Return paginated referral records with status filter for abuse review."""
+    page = request.args.get("page", 1, type=int)
+    per_page = min(request.args.get("per_page", 50, type=int), 100)
+    status = request.args.get("status", "")  # pending|approved|suspicious|rejected
+
+    query = Referral.query.order_by(Referral.created_at.desc())
+    if status:
+        query = query.filter(Referral.status == status)
+
+    paginated = query.paginate(page=page, per_page=per_page, error_out=False)
+
+    items = []
+    for ref in paginated.items:
+        d = ref.to_dict()
+        referrer = User.query.get(ref.referrer_user_id)
+        referred = User.query.get(ref.referred_user_id)
+        d["referrer_email"] = referrer.email if referrer else None
+        d["referred_email"] = referred.email if referred else None
+        d["referred_email_verified"] = referred.email_verified if referred else None
+        items.append(d)
+
+    return jsonify({
+        "referrals": items,
+        "total": paginated.total,
+        "pages": paginated.pages,
+        "page": page,
+    })
+
+
+@admin_bp.route("/referrals/<int:referral_id>/status", methods=["POST"])
+@admin_required
+@rate_limit(requests_per_minute=30)
+def update_referral_status(referral_id):
+    """Manually approve or reject a referral."""
+    referral = Referral.query.get(referral_id)
+    if not referral:
+        return jsonify({"error": "Referral not found"}), 404
+
+    data = request.get_json() or {}
+    new_status = data.get("status", "")
+    if new_status not in ("approved", "rejected", "suspicious", "pending"):
+        return jsonify({"error": "status must be one of: approved, rejected, suspicious, pending"}), 400
+
+    old_status = referral.status
+    referral.status = new_status
+    db.session.commit()
+
+    # If approving a previously non-approved referral, trigger reward check
+    if new_status == "approved" and old_status != "approved":
+        try:
+            from flask import current_app
+            from ..routes.referrals import _apply_referral_rewards
+            _app = current_app._get_current_object()
+            _referrer_id = referral.referrer_user_id
+
+            import threading
+
+            def _reward():
+                try:
+                    with _app.app_context():
+                        r = User.query.get(_referrer_id)
+                        if r:
+                            _apply_referral_rewards(r)
+                except Exception:
+                    pass
+
+            threading.Thread(target=_reward, daemon=True).start()
+        except Exception:
+            pass
+
+    return jsonify({"message": f"Referral status updated to {new_status}", "referral": referral.to_dict()})
 
 
 @admin_bp.route("/bots", methods=["GET"])

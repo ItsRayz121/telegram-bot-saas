@@ -1,4 +1,5 @@
 import bcrypt
+import hashlib
 import logging
 import threading
 from datetime import datetime, timedelta
@@ -7,7 +8,7 @@ from flask_jwt_extended import (
     create_access_token, jwt_required, get_jwt_identity, get_jwt
 )
 
-from ..models import db, User, PasswordResetToken, Referral, RevokedToken
+from ..models import db, User, PasswordResetToken, Referral, RevokedToken, SuspiciousActivity
 from ..middleware.rate_limit import rate_limit
 from ..config import Config
 
@@ -17,6 +18,10 @@ auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 
 _MAX_FAILED_ATTEMPTS = 10
 _LOCKOUT_MINUTES = 15
+
+# Anti-abuse thresholds
+_IP_SIGNUP_LIMIT = 3    # max new accounts per IP in 24h before hard block
+_DEV_SIGNUP_LIMIT = 2   # max new accounts per device in 24h before flagging
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -104,6 +109,57 @@ def _send_verification_email_async(app, user_email, user_name, token):
     threading.Thread(target=_send, daemon=True).start()
 
 
+# ── Anti-abuse helpers ─────────────────────────────────────────────────────────
+
+def _hash_identifier(value: str) -> str:
+    """Return SHA-256 hex digest of the given string. Used for IP and device fingerprint storage."""
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _get_client_ip() -> str:
+    """Extract real client IP, honoring X-Forwarded-For from trusted reverse proxies."""
+    xff = request.headers.get("X-Forwarded-For", "")
+    if xff:
+        # Take the first (leftmost) address — the original client IP
+        return xff.split(",")[0].strip()
+    return request.remote_addr or "0.0.0.0"
+
+
+def _count_recent_signups_by_ip(ip_hash: str) -> int:
+    """Count users created with this IP hash in the past 24 hours."""
+    cutoff = datetime.utcnow() - timedelta(hours=24)
+    return User.query.filter(
+        User.signup_ip_hash == ip_hash,
+        User.created_at >= cutoff,
+    ).count()
+
+
+def _count_recent_signups_by_device(device_hash: str) -> int:
+    """Count users created with this device hash in the past 24 hours."""
+    cutoff = datetime.utcnow() - timedelta(hours=24)
+    return User.query.filter(
+        User.device_fingerprint_hash == device_hash,
+        User.created_at >= cutoff,
+    ).count()
+
+
+def _log_suspicious(user_id, event_type: str, ip_hash, device_hash, reason: str, metadata=None):
+    """Append a SuspiciousActivity record. Failures are logged but never raise."""
+    try:
+        event = SuspiciousActivity(
+            user_id=user_id,
+            event_type=event_type,
+            ip_hash=ip_hash,
+            device_hash=device_hash,
+            reason=reason,
+            metadata=metadata or {},
+        )
+        db.session.add(event)
+        db.session.flush()
+    except Exception as exc:
+        logger.warning("Failed to log suspicious activity: %s", exc)
+
+
 # ── Registration ───────────────────────────────────────────────────────────────
 
 @auth_bp.route("/register", methods=["POST"])
@@ -117,6 +173,8 @@ def register():
     password = data.get("password", "")
     full_name = data.get("full_name", "").strip()
     ref_code = data.get("ref", "").strip() or ""
+    # Device fingerprint pre-hashed by client — double-hash before storing
+    raw_fingerprint = data.get("device_fingerprint", "").strip()
 
     if not email or not password or not full_name:
         return jsonify({"error": "Email, password, and full_name are required"}), 400
@@ -138,6 +196,29 @@ def register():
     if User.query.filter_by(email=email).first():
         return jsonify({"error": "Email already registered"}), 409
 
+    # ── Anti-abuse: hash identifiers (never store raw values) ─────────────────
+    client_ip = _get_client_ip()
+    ip_hash = _hash_identifier(client_ip) if client_ip else None
+    # Client sends a pre-hashed fingerprint; we SHA-256 again for double-blind storage
+    device_hash = _hash_identifier(raw_fingerprint) if raw_fingerprint else None
+
+    # IP limit: more than _IP_SIGNUP_LIMIT accounts in 24h from same IP → block
+    if ip_hash:
+        ip_count = _count_recent_signups_by_ip(ip_hash)
+        if ip_count >= _IP_SIGNUP_LIMIT:
+            _log_suspicious(None, "ip_limit", ip_hash, device_hash,
+                            f"IP created {ip_count + 1} accounts in 24h (limit {_IP_SIGNUP_LIMIT})")
+            try:
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+            return jsonify({
+                "error": "Too many accounts were created from this network. "
+                         "Please try again later or contact support.",
+                "code": "IP_SIGNUP_LIMIT",
+            }), 429
+    # ──────────────────────────────────────────────────────────────────────────
+
     import secrets as _secrets
     pw_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
     user = User(
@@ -146,42 +227,58 @@ def register():
         full_name=full_name,
         referral_code=_secrets.token_urlsafe(8)[:10],
         email_verified=False,
+        signup_ip_hash=ip_hash,
+        device_fingerprint_hash=device_hash,
     )
     # Generate email verification token
     verification_token = user.generate_verification_token()
     db.session.add(user)
     db.session.flush()
 
-    # Handle referral
+    # Device limit: flag account as suspicious if >_DEV_SIGNUP_LIMIT accounts from same device in 24h
+    if device_hash:
+        dev_count = _count_recent_signups_by_device(device_hash)
+        if dev_count > _DEV_SIGNUP_LIMIT:
+            user.is_suspicious = True
+            _log_suspicious(user.id, "device_limit", ip_hash, device_hash,
+                            f"Device created {dev_count} accounts in 24h (limit {_DEV_SIGNUP_LIMIT})")
+
+    # ── Handle referral ────────────────────────────────────────────────────────
     if ref_code:
         referrer = User.query.filter_by(referral_code=ref_code).first()
         if referrer and referrer.id != user.id:
             existing = Referral.query.filter_by(referred_user_id=user.id).first()
             if not existing:
+                # Check for device/IP overlap with referrer
+                device_match = bool(device_hash and device_hash == referrer.device_fingerprint_hash)
+                ip_match = bool(ip_hash and ip_hash == referrer.signup_ip_hash)
+
+                if device_match:
+                    # Same device as referrer — block referral reward, flag suspicious
+                    referral_status = "suspicious"
+                    _log_suspicious(user.id, "referral_device_abuse", ip_hash, device_hash,
+                                    "Referred user shares device with referrer",
+                                    {"referrer_id": referrer.id})
+                elif ip_match:
+                    # Same IP — flag as suspicious but allow referral (shared network may be legit)
+                    referral_status = "suspicious"
+                    _log_suspicious(user.id, "referral_ip_abuse", ip_hash, device_hash,
+                                    "Referred user shares IP with referrer",
+                                    {"referrer_id": referrer.id})
+                else:
+                    # Looks clean — will be approved after email verification
+                    referral_status = "pending"
+
                 referral = Referral(
                     referrer_user_id=referrer.id,
                     referred_user_id=user.id,
                     referral_code=ref_code,
+                    status=referral_status,
+                    ip_match=ip_match,
+                    device_match=device_match,
                 )
                 db.session.add(referral)
-                try:
-                    from flask import current_app
-                    from ..routes.referrals import _apply_referral_rewards
-                    _app = current_app._get_current_object()
-                    _referrer_id = referrer.id
-
-                    def _reward():
-                        try:
-                            with _app.app_context():
-                                r = User.query.get(_referrer_id)
-                                if r:
-                                    _apply_referral_rewards(r)
-                        except Exception as exc:
-                            logger.warning("Referral reward check failed: %s", exc)
-
-                    threading.Thread(target=_reward, daemon=True).start()
-                except Exception:
-                    pass
+                # Rewards are NOT granted here — only after email verification
 
     db.session.commit()
 
@@ -392,7 +489,34 @@ def verify_email():
     user.email_verified = True
     user.email_verification_token = None
     user.email_verification_expires = None
+
+    # Approve any pending (non-suspicious) referral and trigger reward check
+    referral = Referral.query.filter_by(referred_user_id=user.id, status="pending").first()
+    if referral:
+        referral.status = "approved"
+
     db.session.commit()
+
+    # Trigger referral reward check for the referrer in a background thread
+    if referral:
+        try:
+            from flask import current_app
+            from ..routes.referrals import _apply_referral_rewards
+            _app = current_app._get_current_object()
+            _referrer_id = referral.referrer_user_id
+
+            def _reward():
+                try:
+                    with _app.app_context():
+                        r = User.query.get(_referrer_id)
+                        if r:
+                            _apply_referral_rewards(r)
+                except Exception as exc:
+                    logger.warning("Referral reward check failed: %s", exc)
+
+            threading.Thread(target=_reward, daemon=True).start()
+        except Exception:
+            pass
 
     logger.info("Email verified for user %s", user.id)
     return jsonify({"message": "Email verified successfully!", "email_verified": True}), 200

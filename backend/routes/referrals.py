@@ -16,8 +16,9 @@ def _get_user():
 
 
 def _apply_referral_rewards(referrer: User):
-    """Check referral milestones and award Pro days for any newly crossed thresholds."""
-    total = Referral.query.filter_by(referrer_user_id=referrer.id).count()
+    """Check referral milestones and award Pro days for any newly crossed thresholds.
+    Only approved referrals count — pending/suspicious/rejected are excluded."""
+    total = Referral.query.filter_by(referrer_user_id=referrer.id, status="approved").count()
 
     for required, reward_days in REFERRAL_MILESTONES:
         if total < required:
@@ -75,7 +76,9 @@ def get_stats():
     user.get_or_create_referral_code()
     db.session.commit()
 
-    total = Referral.query.filter_by(referrer_user_id=user.id).count()
+    total_all = Referral.query.filter_by(referrer_user_id=user.id).count()
+    # Only approved referrals count toward milestones
+    total_approved = Referral.query.filter_by(referrer_user_id=user.id, status="approved").count()
 
     # Milestone progress
     milestones = []
@@ -89,13 +92,14 @@ def get_stats():
         milestones.append({
             "required": required,
             "reward_days": reward_days,
-            "reached": total >= required,
+            "reached": total_approved >= required,
             "rewarded": bool(already_given),
         })
 
     return jsonify({
         "referral_code": user.referral_code,
-        "total_referrals": total,
+        "total_referrals": total_all,
+        "approved_referrals": total_approved,
         "milestones": milestones,
     })
 
@@ -111,7 +115,7 @@ def leaderboard():
 
     rows = (
         db.session.query(Referral.referrer_user_id, func.count(Referral.id).label("cnt"))
-        .filter(Referral.created_at >= start_of_month)
+        .filter(Referral.created_at >= start_of_month, Referral.status == "approved")
         .group_by(Referral.referrer_user_id)
         .order_by(func.count(Referral.id).desc())
         .limit(10)
@@ -137,11 +141,12 @@ def leaderboard():
         if referrer_id == current_user_id:
             current_rank = rank
 
-    # Current user's monthly count (even if not in top 10)
+    # Current user's approved monthly count (even if not in top 10)
     current_user_count = (
         db.session.query(func.count(Referral.id))
         .filter(Referral.referrer_user_id == current_user_id,
-                Referral.created_at >= start_of_month)
+                Referral.created_at >= start_of_month,
+                Referral.status == "approved")
         .scalar() or 0
     )
 

@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box, Card, CardContent, TextField, Button, Typography,
-  Alert, CircularProgress, Link, Chip,
+  Alert, CircularProgress, Link,
 } from '@mui/material';
 import { CardGiftcard } from '@mui/icons-material';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { auth } from '../services/api';
+import { generateFingerprint } from '../utils/fingerprint';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -15,6 +16,12 @@ export default function Register() {
   const [form, setForm] = useState({ email: '', password: '', full_name: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // Device fingerprint — generated once on mount, sent with registration payload
+  const fingerprintRef = useRef('');
+
+  useEffect(() => {
+    fingerprintRef.current = generateFingerprint();
+  }, []);
 
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
@@ -27,13 +34,26 @@ export default function Register() {
     }
     setLoading(true);
     try {
-      const res = await auth.register({ ...form, ref: refCode });
+      const res = await auth.register({
+        ...form,
+        ref: refCode,
+        device_fingerprint: fingerprintRef.current,
+      });
       localStorage.setItem('token', res.data.token);
       localStorage.setItem('user', JSON.stringify(res.data.user));
       toast.success('Account created! Welcome to BotForge.');
       navigate('/dashboard');
     } catch (err) {
-      setError(err.response?.data?.error || 'Registration failed. Please try again.');
+      const code = err.response?.data?.code;
+      const msg = err.response?.data?.error;
+      if (code === 'IP_SIGNUP_LIMIT') {
+        setError(
+          'Too many accounts were created from this network. ' +
+          'Please try again later or contact support.'
+        );
+      } else {
+        setError(msg || 'Registration failed. Please try again.');
+      }
     } finally {
       setLoading(false);
     }

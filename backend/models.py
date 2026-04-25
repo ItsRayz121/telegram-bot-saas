@@ -36,6 +36,10 @@ class User(db.Model):
     totp_secret = db.Column(db.String(255), nullable=True)
     totp_enabled = db.Column(db.Boolean, default=False, nullable=False)
     totp_backup_codes = db.Column(db.JSON, nullable=True)  # list of bcrypt-hashed backup codes
+    # Anti-abuse: hashed signup identifiers (SHA-256; never raw IP or fingerprint)
+    signup_ip_hash = db.Column(db.String(64), nullable=True, index=True)
+    device_fingerprint_hash = db.Column(db.String(64), nullable=True, index=True)
+    is_suspicious = db.Column(db.Boolean, default=False, nullable=False)
 
     bots = db.relationship("Bot", backref="owner", lazy=True, cascade="all, delete-orphan")
 
@@ -559,6 +563,11 @@ class Referral(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     # Track which milestones have been awarded to the referrer (JSON list of counts)
     rewards_given = db.Column(db.JSON, nullable=False, default=list)
+    # Anti-abuse: status lifecycle and overlap flags
+    # pending → approved (email verified) or → suspicious/rejected (abuse detected)
+    status = db.Column(db.String(20), nullable=False, default="pending")
+    ip_match = db.Column(db.Boolean, default=False, nullable=False)      # referrer/referred share IP
+    device_match = db.Column(db.Boolean, default=False, nullable=False)  # referrer/referred share device
 
     __table_args__ = (
         db.UniqueConstraint("referrer_user_id", "referred_user_id", name="unique_referral_pair"),
@@ -572,6 +581,9 @@ class Referral(db.Model):
             "referral_code": self.referral_code,
             "created_at": self.created_at.isoformat(),
             "rewards_given": self.rewards_given,
+            "status": self.status,
+            "ip_match": self.ip_match,
+            "device_match": self.device_match,
         }
 
 
@@ -615,6 +627,36 @@ class PaymentHistory(db.Model):
             "status": self.status,
             "created_at": self.created_at.isoformat(),
             "confirmed_at": self.confirmed_at.isoformat() if self.confirmed_at else None,
+        }
+
+
+class SuspiciousActivity(db.Model):
+    """Records suspicious signup and referral events for admin review.
+    All identifiers are SHA-256 hashes — no raw IPs or fingerprints stored."""
+    __tablename__ = "suspicious_activities"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    event_type = db.Column(db.String(50), nullable=False)   # ip_limit|device_limit|referral_ip|referral_device
+    ip_hash = db.Column(db.String(64), nullable=True)
+    device_hash = db.Column(db.String(64), nullable=True)
+    reason = db.Column(db.String(255), nullable=False)
+    metadata = db.Column(db.JSON, nullable=True)
+    reviewed = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "event_type": self.event_type,
+            # Partial hash shown to admin — enough to correlate, not enough to reverse
+            "ip_hash_prefix": self.ip_hash[:12] if self.ip_hash else None,
+            "device_hash_prefix": self.device_hash[:12] if self.device_hash else None,
+            "reason": self.reason,
+            "metadata": self.metadata,
+            "reviewed": self.reviewed,
+            "created_at": self.created_at.isoformat(),
         }
 
 
