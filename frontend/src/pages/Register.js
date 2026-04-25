@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import {
   Box, Card, CardContent, TextField, Button, Typography,
-  Alert, CircularProgress, Link,
+  Alert, CircularProgress, Link, Chip,
 } from '@mui/material';
+import { CardGiftcard } from '@mui/icons-material';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { auth } from '../services/api';
@@ -54,9 +55,23 @@ export default function Register() {
           <Typography variant="h4" fontWeight={700} mb={0.5} textAlign="center">
             BotForge
           </Typography>
-          <Typography variant="body2" color="text.secondary" textAlign="center" mb={3}>
+          <Typography variant="body2" color="text.secondary" textAlign="center" mb={refCode ? 2 : 3}>
             Create your account to get started
           </Typography>
+
+          {refCode && (
+            <Alert
+              severity="success"
+              icon={<CardGiftcard />}
+              sx={{ mb: 2, alignItems: 'center' }}
+            >
+              <Typography variant="body2" fontWeight={600}>You were invited!</Typography>
+              <Typography variant="caption" color="text.secondary">
+                Sign up now — your friend referred you to BotForge.
+                They get a Pro trial reward when you join. Start free, no card needed.
+              </Typography>
+            </Alert>
+          )}
 
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 

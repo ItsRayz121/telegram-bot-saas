@@ -31,9 +31,17 @@ export const auth = {
   register: (data) => api.post('/api/auth/register', data),
   login: (data) => api.post('/api/auth/login', data),
   getMe: () => api.get('/api/auth/me'),
+  logout: () => api.post('/api/auth/logout'),
   changePassword: (data) => api.post('/api/auth/change-password', data),
   forgotPassword: (data) => api.post('/api/auth/forgot-password', data),
   resetPassword: (data) => api.post('/api/auth/reset-password', data),
+};
+
+export const notifications = {
+  list: (params) => api.get('/api/notifications', { params }),
+  unreadCount: () => api.get('/api/notifications/unread-count'),
+  markRead: (id) => api.post(`/api/notifications/${id}/read`),
+  markAllRead: () => api.post('/api/notifications/read-all'),
 };
 
 export const bots = {
@@ -135,6 +143,7 @@ export const analytics = {
 export const billing = {
   getPlans: () => api.get('/api/billing/plans'),
   getSubscription: () => api.get('/api/billing/subscription'),
+  getHistory: (params) => api.get('/api/billing/history', { params }),
   // Lemon Squeezy — card / bank transfer
   lemonCheckout: (data) => api.post('/api/billing/lemon/checkout', data),
   // NOWPayments — crypto (USDT, BTC, ETH, etc.)

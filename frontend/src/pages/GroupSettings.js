@@ -233,13 +233,21 @@ export default function GroupSettings() {
   useEffect(() => { if (cat === 'moderation' && subTab === 2) fetchReports(); }, [cat, subTab, fetchReports]);
   useEffect(() => { if (cat === 'analytics' && subTab === 2) fetchDigest(); }, [cat, subTab, fetchDigest]);
 
+  const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
+  const [upgradeFeature, setUpgradeFeature] = useState('');
+
   const handleSave = async () => {
     setSaving(true);
     try {
       await settings.updateGroupSettings(botId, groupId, settingsData);
       toast.success('Settings saved!');
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to save settings');
+      if (err.response?.status === 403 && err.response?.data?.code === 'FEATURE_REQUIRES_PRO') {
+        setUpgradeFeature(err.response.data.feature || 'This feature');
+        setUpgradeModalOpen(true);
+      } else {
+        toast.error(err.response?.data?.error || 'Failed to save settings');
+      }
     } finally {
       setSaving(false);
     }
@@ -332,6 +340,26 @@ export default function GroupSettings() {
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
+
+      {/* Upgrade required modal */}
+      <Dialog open={upgradeModalOpen} onClose={() => setUpgradeModalOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>Pro Feature Required</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" gutterBottom>
+            <strong>{upgradeFeature}</strong> is available on the Pro and Enterprise plans.
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Upgrade to unlock advanced moderation, scheduled content, analytics, AI knowledge base, and more.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setUpgradeModalOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={() => { setUpgradeModalOpen(false); navigate('/pricing'); }}>
+            View Plans
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <AppBar position="sticky" elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
         <Toolbar>
           <IconButton edge="start" onClick={() => navigate(`/bot/${botId}`)} sx={{ mr: 1 }}>
@@ -361,10 +389,18 @@ export default function GroupSettings() {
           </Button>
         </Toolbar>
 
-        {/* Category pill nav */}
+        {/* Category pill nav — fade gradient on right edge signals horizontal scroll */}
+        <Box sx={{ position: 'relative' }}>
+          <Box sx={{
+            position: 'absolute', right: 0, top: 0, bottom: 0, width: 32, zIndex: 1, pointerEvents: 'none',
+            background: 'linear-gradient(to right, transparent, rgba(22,27,34,0.95))',
+            display: { xs: 'block', md: 'none' },
+          }} />
         <Box sx={{
           display: 'flex', gap: 0.75, px: 2, py: 1.25, overflowX: 'auto',
           '::-webkit-scrollbar': { display: 'none' },
+          scrollBehavior: 'smooth',
+          WebkitOverflowScrolling: 'touch',
         }}>
           {CATEGORIES.map(({ id, label, icon: Icon }) => {
             const active = cat === id;
@@ -389,6 +425,7 @@ export default function GroupSettings() {
               </Box>
             );
           })}
+        </Box>
         </Box>
 
         {/* Sub-tab row */}
@@ -1517,6 +1554,34 @@ export default function GroupSettings() {
       </Dialog>
 
       <RaidCreator open={raidOpen} onClose={() => setRaidOpen(false)} botId={botId} groupId={groupId} />
+
+      {/* Sticky mobile save button — only visible on xs/sm, analytics tab has no save */}
+      {cat !== 'analytics' && (
+        <Box
+          sx={{
+            display: { xs: 'block', md: 'none' },
+            position: 'fixed',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            zIndex: 1200,
+            p: 1.5,
+            bgcolor: 'background.paper',
+            borderTop: '1px solid',
+            borderColor: 'divider',
+          }}
+        >
+          <Button
+            fullWidth
+            variant="contained"
+            startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <Save />}
+            onClick={handleSave}
+            disabled={saving}
+          >
+            Save Settings
+          </Button>
+        </Box>
+      )}
     </Box>
   );
 }

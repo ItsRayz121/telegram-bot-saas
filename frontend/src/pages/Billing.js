@@ -2,11 +2,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box, AppBar, Toolbar, Typography, Button, Card, CardContent,
   Chip, CircularProgress, Stack, Divider, Alert, IconButton,
-  Grid,
+  Grid, Table, TableBody, TableCell, TableContainer, TableHead,
+  TableRow, TablePagination,
 } from '@mui/material';
 import {
   SmartToy, ArrowBack, Upgrade, CheckCircle, HourglassTop,
-  CurrencyBitcoin, CreditCard, OpenInNew, Refresh,
+  CurrencyBitcoin, CreditCard, Refresh, ReceiptLong,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -22,11 +23,18 @@ const TIER_FEATURES = {
 
 const TIER_PRICES = { free: '$0', pro: '$9/mo', enterprise: '$49/mo' };
 
+const PROVIDER_LABELS = { nowpayments: 'Crypto (NOWPayments)', lemonsqueezy: 'Card / Bank' };
+const STATUS_COLORS = { confirmed: 'success', pending: 'warning', failed: 'error' };
+
 export default function Billing() {
   const navigate = useNavigate();
   const [subscription, setSubscription] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [history, setHistory] = useState([]);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyPage, setHistoryPage] = useState(0);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const fetchSub = useCallback(async () => {
     try {
@@ -36,6 +44,19 @@ export default function Billing() {
       toast.error('Failed to load subscription info');
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  const fetchHistory = useCallback(async (page = 0) => {
+    setHistoryLoading(true);
+    try {
+      const res = await billing.getHistory({ page: page + 1, per_page: 10 });
+      setHistory(res.data.history || []);
+      setHistoryTotal(res.data.total || 0);
+    } catch {
+      // silent — empty state shown
+    } finally {
+      setHistoryLoading(false);
     }
   }, []);
 
@@ -52,7 +73,7 @@ export default function Billing() {
     }
   }, []);
 
-  useEffect(() => { fetchSub(); }, [fetchSub]);
+  useEffect(() => { fetchSub(); fetchHistory(0); }, [fetchSub, fetchHistory]);
 
   const tier = subscription?.tier || 'free';
   const expires = subscription?.expires ? new Date(subscription.expires) : null;
@@ -220,19 +241,70 @@ export default function Billing() {
               <CardContent sx={{ p: 3 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                   <Typography variant="subtitle1" fontWeight={700}>Payment History</Typography>
-                  <Chip label="NOWPayments Dashboard" icon={<OpenInNew fontSize="small" />} size="small" clickable
-                    component="a" href="https://nowpayments.io" target="_blank" rel="noopener noreferrer"
-                  />
+                  {historyLoading && <CircularProgress size={18} />}
                 </Box>
-                <Box sx={{ textAlign: 'center', py: 3 }}>
-                  <HourglassTop sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
-                  <Typography variant="body2" color="text.secondary">
-                    Detailed payment history is available in your NOWPayments dashboard.
-                  </Typography>
-                  <Typography variant="caption" color="text.disabled" display="block" mt={1}>
-                    Full transaction history coming soon to BotForge.
-                  </Typography>
-                </Box>
+                {!historyLoading && history.length === 0 ? (
+                  <Box sx={{ textAlign: 'center', py: 4 }}>
+                    <ReceiptLong sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
+                    <Typography variant="body2" color="text.secondary">
+                      No payments recorded yet.
+                    </Typography>
+                    <Typography variant="caption" color="text.disabled" display="block" mt={0.5}>
+                      Your transactions will appear here after your first payment.
+                    </Typography>
+                  </Box>
+                ) : (
+                  <>
+                    <TableContainer>
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Date</TableCell>
+                            <TableCell>Plan</TableCell>
+                            <TableCell>Provider</TableCell>
+                            <TableCell align="right">Amount</TableCell>
+                            <TableCell>Status</TableCell>
+                            <TableCell>Transaction ID</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {history.map((row) => (
+                            <TableRow key={row.id} hover>
+                              <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                                {new Date(row.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                              </TableCell>
+                              <TableCell>
+                                <Chip label={row.plan.charAt(0).toUpperCase() + row.plan.slice(1)}
+                                  size="small" color={row.plan === 'enterprise' ? 'secondary' : 'primary'} />
+                              </TableCell>
+                              <TableCell sx={{ fontSize: '0.75rem' }}>
+                                {PROVIDER_LABELS[row.provider] || row.provider}
+                              </TableCell>
+                              <TableCell align="right" sx={{ fontWeight: 600 }}>
+                                {row.amount_usd ? `$${(row.amount_usd / 100).toFixed(2)}` : '—'}
+                              </TableCell>
+                              <TableCell>
+                                <Chip label={row.status} size="small"
+                                  color={STATUS_COLORS[row.status] || 'default'} />
+                              </TableCell>
+                              <TableCell sx={{ fontSize: '0.72rem', color: 'text.secondary', fontFamily: 'monospace' }}>
+                                {row.payment_id_masked || '—'}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                    <TablePagination
+                      component="div"
+                      count={historyTotal}
+                      page={historyPage}
+                      onPageChange={(_, p) => { setHistoryPage(p); fetchHistory(p); }}
+                      rowsPerPage={10}
+                      rowsPerPageOptions={[10]}
+                    />
+                  </>
+                )}
               </CardContent>
             </Card>
 

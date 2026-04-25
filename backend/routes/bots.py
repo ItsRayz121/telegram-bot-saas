@@ -47,7 +47,9 @@ def create_bot():
     if not token:
         return jsonify({"error": "bot_token is required"}), 400
 
-    if Bot.query.filter_by(bot_token=token).first():
+    from ..utils.encryption import hash_token
+    token_hash = hash_token(token)
+    if Bot.query.filter_by(bot_token_hash=token_hash).first():
         return jsonify({"error": "This bot token is already registered"}), 409
 
     try:
@@ -70,11 +72,11 @@ def create_bot():
 
     bot = Bot(
         user_id=user.id,
-        bot_token=token,
         bot_username=bot_username,
         bot_name=bot_name,
         is_active=True,
     )
+    bot.set_token(token)
     db.session.add(bot)
     db.session.commit()
 
@@ -164,7 +166,7 @@ def toggle_bot(bot_id):
         msg = "Bot stopped"
     else:
         bot.is_active = True
-        bot_manager.start_bot(bot_id, bot.bot_token, current_app._get_current_object())
+        bot_manager.start_bot(bot_id, bot.get_token(), current_app._get_current_object())
         msg = "Bot started"
 
     db.session.commit()
@@ -187,7 +189,7 @@ def bot_status(bot_id):
 
     auto_restarted = False
     if not running and bot.is_active:
-        auto_restarted = bot_manager.start_bot(bot_id, bot.bot_token, current_app._get_current_object())
+        auto_restarted = bot_manager.start_bot(bot_id, bot.get_token(), current_app._get_current_object())
 
     return jsonify({
         "bot_id": bot_id,

@@ -5,7 +5,8 @@ import {
   CircularProgress, IconButton, Dialog, DialogTitle, DialogContent,
   DialogActions, Stack, Alert,
 } from '@mui/material';
-import { Check, ArrowBack, CurrencyBitcoin, CreditCard } from '@mui/icons-material';
+import { Check, ArrowBack, CurrencyBitcoin, CreditCard, LocalOffer } from '@mui/icons-material';
+import Switch from '@mui/material/Switch';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { billing } from '../services/api';
@@ -14,7 +15,8 @@ const PLANS = [
   {
     id: 'free',
     name: 'Free',
-    price: '$0',
+    monthlyPrice: 0,
+    annualPrice: 0,
     period: 'forever',
     color: 'default',
     features: [
@@ -29,7 +31,8 @@ const PLANS = [
   {
     id: 'pro',
     name: 'Pro',
-    price: '$9',
+    monthlyPrice: 9,
+    annualPrice: 90,
     period: '/month',
     color: 'primary',
     popular: true,
@@ -47,7 +50,8 @@ const PLANS = [
   {
     id: 'enterprise',
     name: 'Enterprise',
-    price: '$49',
+    monthlyPrice: 49,
+    annualPrice: 470,
     period: '/month',
     color: 'secondary',
     features: [
@@ -71,6 +75,7 @@ export default function Pricing() {
   const [methodLoading, setMethodLoading] = useState('');
   const [currentTier, setCurrentTier] = useState('free');
   const [subExpires, setSubExpires] = useState(null);
+  const [annual, setAnnual] = useState(false);
   const token = localStorage.getItem('token');
 
   // Load current subscription so we can show correct "Current Plan" state
@@ -164,9 +169,27 @@ export default function Pricing() {
         <Typography variant="h3" fontWeight={700} mb={1} mt={4} sx={{ fontSize: { xs: '1.9rem', sm: '2.5rem', md: '3rem' } }}>
           Simple, Transparent Pricing
         </Typography>
-        <Typography variant="h6" color="text.secondary" mb={2} sx={{ fontSize: { xs: '1rem', md: '1.25rem' } }}>
+        <Typography variant="h6" color="text.secondary" mb={3} sx={{ fontSize: { xs: '1rem', md: '1.25rem' } }}>
           Start free, scale as your communities grow
         </Typography>
+
+        {/* Annual / Monthly toggle */}
+        <Stack direction="row" spacing={1} alignItems="center" justifyContent="center" mb={4}>
+          <Typography variant="body2" color={annual ? 'text.secondary' : 'text.primary'} fontWeight={annual ? 400 : 600}>
+            Monthly
+          </Typography>
+          <Switch checked={annual} onChange={(e) => setAnnual(e.target.checked)} color="primary" />
+          <Typography variant="body2" color={annual ? 'text.primary' : 'text.secondary'} fontWeight={annual ? 600 : 400}>
+            Annual
+          </Typography>
+          <Chip
+            label="Save ~17%"
+            size="small"
+            color="success"
+            icon={<LocalOffer fontSize="small" />}
+            sx={{ fontWeight: 700 }}
+          />
+        </Stack>
 
         {subExpires && (
           <Chip
@@ -224,9 +247,30 @@ export default function Pricing() {
                 >
                 <CardContent sx={{ flexGrow: 1, p: { xs: 2.5, md: 3 } }}>
                   <Typography variant="h5" fontWeight={700} mb={1}>{plan.name}</Typography>
-                  <Box sx={{ mb: 3 }}>
-                    <Typography component="span" fontWeight={800} sx={{ fontSize: { xs: '2.2rem', md: '3rem' } }}>{plan.price}</Typography>
-                    <Typography component="span" variant="body1" color="text.secondary">{plan.period}</Typography>
+                  <Box sx={{ mb: 1 }}>
+                    {plan.id === 'free' ? (
+                      <>
+                        <Typography component="span" fontWeight={800} sx={{ fontSize: { xs: '2.2rem', md: '3rem' } }}>$0</Typography>
+                        <Typography component="span" variant="body1" color="text.secondary"> forever</Typography>
+                      </>
+                    ) : annual ? (
+                      <>
+                        <Typography component="span" fontWeight={800} sx={{ fontSize: { xs: '2.2rem', md: '3rem' } }}>
+                          ${Math.round(plan.annualPrice / 12)}
+                        </Typography>
+                        <Typography component="span" variant="body1" color="text.secondary">/month</Typography>
+                        <Typography variant="caption" display="block" color="success.main" fontWeight={600} mb={1}>
+                          ${plan.annualPrice}/year · ~2 months free
+                        </Typography>
+                      </>
+                    ) : (
+                      <>
+                        <Typography component="span" fontWeight={800} sx={{ fontSize: { xs: '2.2rem', md: '3rem' } }}>
+                          ${plan.monthlyPrice}
+                        </Typography>
+                        <Typography component="span" variant="body1" color="text.secondary">/month</Typography>
+                      </>
+                    )}
                   </Box>
                   <Button
                     fullWidth
@@ -288,8 +332,11 @@ export default function Pricing() {
             >
               <Box sx={{ textAlign: 'left', ml: 1 }}>
                 <Typography variant="body1" fontWeight={600}>Pay with Crypto</Typography>
-                <Typography variant="caption" color="text.secondary">
+                <Typography variant="caption" color="text.secondary" display="block">
                   USDT, BTC, ETH, BNB and 300+ coins via NOWPayments
+                </Typography>
+                <Typography variant="caption" color="warning.light" display="block">
+                  You'll be redirected to NOWPayments to complete payment
                 </Typography>
               </Box>
             </Button>
@@ -307,7 +354,7 @@ export default function Pricing() {
                 <Box sx={{ textAlign: 'left', ml: 1 }}>
                   <Typography variant="body1" fontWeight={600}>Card / Bank Transfer</Typography>
                   <Typography variant="caption" color="text.secondary">
-                    Visa, Mastercard — under review, coming soon
+                    Visa, Mastercard — coming soon
                   </Typography>
                 </Box>
               </Button>
@@ -321,8 +368,9 @@ export default function Pricing() {
 
           <Alert severity="info" sx={{ mt: 2 }} icon={false}>
             <Typography variant="caption">
-              After payment, your plan upgrades automatically within 1–3 minutes.
-              You'll be redirected to a confirmation page.
+              After payment, your plan upgrades automatically within 1–10 minutes.
+              Blockchain confirmations can take up to 30+ minutes during network congestion.
+              Your plan activates as soon as the transaction confirms — no manual steps needed.
             </Typography>
           </Alert>
         </DialogContent>

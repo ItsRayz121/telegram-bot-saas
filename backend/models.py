@@ -17,6 +17,8 @@ class User(db.Model):
     full_name = db.Column(db.String(255), nullable=False)
     subscription_tier = db.Column(db.String(50), default="free", nullable=False)
     subscription_expires = db.Column(db.DateTime, nullable=True)
+    # Legacy Stripe columns — kept to avoid dropping data; Stripe is not active.
+    # Remove in a future migration once confirmed safe.
     stripe_customer_id = db.Column(db.String(255), nullable=True)
     stripe_subscription_id = db.Column(db.String(255), nullable=True)
     is_banned = db.Column(db.Boolean, default=False)
@@ -70,7 +72,10 @@ class Bot(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
-    bot_token = db.Column(db.String(255), unique=True, nullable=False)
+    # Stores the Fernet-encrypted token; use get_token()/set_token() helpers.
+    bot_token = db.Column(db.Text, nullable=False)
+    # SHA-256 hash of the plain token used for fast uniqueness checks.
+    bot_token_hash = db.Column(db.String(64), unique=True, nullable=True, index=True)
     bot_username = db.Column(db.String(255), nullable=True)
     bot_name = db.Column(db.String(255), nullable=True)
     is_active = db.Column(db.Boolean, default=True)
@@ -78,6 +83,17 @@ class Bot(db.Model):
     last_active = db.Column(db.DateTime, nullable=True)
 
     groups = db.relationship("Group", backref="bot", lazy=True, cascade="all, delete-orphan")
+
+    def get_token(self) -> str:
+        """Return the decrypted plain-text bot token."""
+        from .utils.encryption import decrypt_value
+        return decrypt_value(self.bot_token)
+
+    def set_token(self, plain_token: str):
+        """Encrypt and store the bot token; update the hash column."""
+        from .utils.encryption import encrypt_value, hash_token
+        self.bot_token = encrypt_value(plain_token) or plain_token
+        self.bot_token_hash = hash_token(plain_token)
 
     def to_dict(self, include_token=False):
         data = {
@@ -91,7 +107,7 @@ class Bot(db.Model):
             "group_count": len(self.groups),
         }
         if include_token:
-            data["bot_token"] = self.bot_token
+            data["bot_token"] = self.get_token()
         return data
 
 
@@ -520,6 +536,62 @@ class ProcessedPayment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     payment_id = db.Column(db.String(255), unique=True, nullable=False, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+
+class PaymentHistory(db.Model):
+    """Full billing history record created on every successful payment webhook."""
+    __tablename__ = "payment_history"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    provider = db.Column(db.String(50), nullable=False)           # nowpayments | lemonsqueezy
+    payment_id = db.Column(db.String(255), nullable=True)
+    plan = db.Column(db.String(50), nullable=False)               # pro | enterprise
+    amount_usd = db.Column(db.Integer, nullable=True)             # cents
+    currency = db.Column(db.String(10), nullable=True)            # USD / USDT / BTC / …
+    status = db.Column(db.String(30), nullable=False, default="confirmed")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+    confirmed_at = db.Column(db.DateTime, nullable=True)
+    metadata_ = db.Column("metadata", db.JSON, nullable=True)
+
+    def to_dict(self):
+        pid = self.payment_id or ""
+        masked_id = (pid[:6] + "…" + pid[-4:]) if len(pid) > 12 else pid
+        return {
+            "id": self.id,
+            "provider": self.provider,
+            "payment_id_masked": masked_id,
+            "plan": self.plan,
+            "amount_usd": self.amount_usd,
+            "currency": self.currency,
+            "status": self.status,
+            "created_at": self.created_at.isoformat(),
+            "confirmed_at": self.confirmed_at.isoformat() if self.confirmed_at else None,
+        }
+
+
+class UserNotification(db.Model):
+    """In-app notifications delivered to the dashboard notification center."""
+    __tablename__ = "user_notifications"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    type = db.Column(db.String(50), nullable=False)   # payment_confirmed|plan_expiring|bot_error|referral|etc
+    title = db.Column(db.String(200), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    read = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+    metadata_ = db.Column("metadata", db.JSON, nullable=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "type": self.type,
+            "title": self.title,
+            "message": self.message,
+            "read": self.read,
+            "created_at": self.created_at.isoformat(),
+        }
 
 
 class ReportedMessage(db.Model):

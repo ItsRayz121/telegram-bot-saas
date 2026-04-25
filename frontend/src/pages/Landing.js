@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Box, AppBar, Toolbar, Typography, Button, Card, CardContent,
   Grid, Chip, Container, Stack, Divider, Avatar,
+  Accordion, AccordionSummary, AccordionDetails,
 } from '@mui/material';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import {
   SmartToy, Shield, Schedule, BarChart, People, CheckCircle,
   AutoAwesome, Bolt, Warning, TrendingDown, AccessTime,
@@ -549,6 +551,66 @@ export default function Landing() {
               </Box>
             </Box>
           </Box>
+        </Container>
+      </Box>
+
+      {/* ── FAQ ── */}
+      <Box sx={{ py: { xs: 8, md: 10 }, bgcolor: 'background.default' }}>
+        <Container maxWidth="md">
+          <Typography variant="overline" color="primary.main" fontWeight={700} display="block" textAlign="center">
+            FAQ
+          </Typography>
+          <Typography variant="h4" fontWeight={800} textAlign="center" mb={5}>
+            Frequently asked questions
+          </Typography>
+          {[
+            {
+              q: 'Is it safe to add the bot as admin?',
+              a: 'Yes. BotForge only requests the Telegram permissions it needs: delete messages, ban/restrict users, pin messages, and invite links. We never read private messages or access group data outside the scope of bot commands.'
+            },
+            {
+              q: 'Which Telegram permissions does the bot need?',
+              a: 'At minimum: Delete messages, Restrict members, Pin messages, and Add members. For invite link tracking you also need Invite users via link. You can see the exact prompt when you make the bot admin.'
+            },
+            {
+              q: 'What happens if I cancel or my plan expires?',
+              a: 'Your bots continue to run but paid features (scheduled messages, advanced moderation, analytics, etc.) become read-only. You keep your free plan features indefinitely. You can renew at any time and everything comes back immediately.'
+            },
+            {
+              q: 'What coins and payment methods are supported?',
+              a: 'Crypto payments accept USDT, BTC, ETH, BNB, TRX, SOL, and 300+ other coins via NOWPayments. Card / bank transfer via Lemon Squeezy is coming soon.'
+            },
+            {
+              q: 'How long do crypto payment confirmations take?',
+              a: 'Most payments confirm in 1–10 minutes. Some networks (Bitcoin, Ethereum) may take 10–30+ minutes during congestion. Your plan activates automatically once the blockchain confirms the transaction.'
+            },
+            {
+              q: 'Can I manage multiple groups with one bot?',
+              a: 'Yes. One bot can be added to unlimited Telegram groups. Each group has its own settings, moderation rules, XP system, and scheduled content. Pro plan supports up to 5 bots; Enterprise supports 50.'
+            },
+            {
+              q: 'What is included in Free vs Pro vs Enterprise?',
+              a: 'Free: 1 bot, basic moderation, welcome messages, XP system. Pro ($9/mo): 5 bots, unlimited groups, advanced AutoMod, scheduled messages, analytics, polls, AI knowledge base. Enterprise ($49/mo): 50 bots, all Pro features plus raid coordination, API access, dedicated support, SLA.'
+            },
+            {
+              q: 'Do you store my bot token securely?',
+              a: 'Yes. Bot tokens are encrypted at rest using AES-256 (Fernet) before being written to the database. Your token is never stored in plain text and is never exposed in API responses.'
+            },
+            {
+              q: 'Can I change the timezone for scheduled posts?',
+              a: 'Yes. You can set a default timezone per group (under Automation › Scheduler). You can also override the timezone for each individual scheduled message or poll.'
+            },
+          ].map(({ q, a }) => (
+            <Accordion key={q} disableGutters elevation={0}
+              sx={{ border: '1px solid', borderColor: 'divider', mb: 1, borderRadius: '8px !important', '&:before': { display: 'none' } }}>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography fontWeight={600}>{q}</Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Typography variant="body2" color="text.secondary" lineHeight={1.7}>{a}</Typography>
+              </AccordionDetails>
+            </Accordion>
+          ))}
         </Container>
       </Box>
 

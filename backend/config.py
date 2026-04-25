@@ -25,9 +25,11 @@ class Config:
         )
     JWT_SECRET_KEY = _jwt_secret_key
 
-    # Tokens expire after 30 days. Stolen tokens from a previous session
-    # are invalid after this window without requiring a full revocation system.
-    JWT_ACCESS_TOKEN_EXPIRES = timedelta(days=30)
+    # Access tokens expire after 7 days. Reduces compromise window vs 30-day default.
+    # Logout uses a Redis jti blocklist; see routes/auth.py /logout endpoint.
+    JWT_ACCESS_TOKEN_EXPIRES = timedelta(days=7)
+    JWT_BLACKLIST_ENABLED = True
+    JWT_BLACKLIST_TOKEN_CHECKS = ["access"]
 
     raw_db_url = os.environ.get("DATABASE_URL", "sqlite:///telegram_saas.db")
     if raw_db_url.startswith("postgres://"):
@@ -91,7 +93,8 @@ class Config:
         },
         "pro": {
             "name": "Pro",
-            "price": 1900,
+            "price": 900,
+            "price_annual": 9000,
             "max_bots": 5,
             "features": [
                 "5 bots",
@@ -106,7 +109,8 @@ class Config:
         },
         "enterprise": {
             "name": "Enterprise",
-            "price": 7900,
+            "price": 4900,
+            "price_annual": 47000,
             "max_bots": 50,
             "features": [
                 "50 bots",

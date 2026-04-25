@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
@@ -64,6 +64,12 @@ const darkTheme = createTheme({
   },
 });
 
+function JoinRedirect() {
+  const [searchParams] = useSearchParams();
+  const ref = searchParams.get('ref') || '';
+  return <Navigate to={`/register${ref ? `?ref=${ref}` : ''}`} replace />;
+}
+
 function PrivateRoute({ children }) {
   const token = localStorage.getItem('token');
   return token ? children : <Navigate to="/login" replace />;
@@ -114,6 +120,8 @@ export default function App() {
           <Route path="/payment/success" element={<PaymentSuccess />} />
           <Route path="/terms" element={<Terms />} />
           <Route path="/privacy" element={<Privacy />} />
+          {/* Referral short-link: /join?ref=CODE → /register?ref=CODE */}
+          <Route path="/join" element={<JoinRedirect />} />
 
           {/* Auth pages — redirect to dashboard if already logged in */}
           <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />

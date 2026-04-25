@@ -2,7 +2,9 @@ import bcrypt
 import logging
 import threading
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
+from flask_jwt_extended import (
+    create_access_token, jwt_required, get_jwt_identity, get_jwt
+)
 
 from ..models import db, User, PasswordResetToken, Referral
 from ..middleware.rate_limit import rate_limit
@@ -245,3 +247,48 @@ def change_password():
     db.session.commit()
 
     return jsonify({"message": "Password updated successfully"}), 200
+
+
+def _get_redis():
+    """Return a Redis client or None if unavailable."""
+    try:
+        import redis
+        r = redis.from_url(Config.REDIS_URL, decode_responses=True, socket_connect_timeout=2)
+        r.ping()
+        return r
+    except Exception:
+        return None
+
+
+def is_token_revoked(jwt_payload: dict) -> bool:
+    """Called by flask-jwt-extended token_in_blocklist_loader."""
+    jti = jwt_payload.get("jti")
+    if not jti:
+        return False
+    r = _get_redis()
+    if r is None:
+        return False
+    try:
+        return r.exists(f"jwt_blocklist:{jti}") == 1
+    except Exception:
+        return False
+
+
+@auth_bp.route("/logout", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=20)
+def logout():
+    """Revoke the current access token by adding its jti to the Redis blocklist."""
+    jwt_data = get_jwt()
+    jti = jwt_data.get("jti")
+    exp = jwt_data.get("exp")
+    if jti:
+        r = _get_redis()
+        if r:
+            try:
+                import time
+                ttl = max(int(exp - time.time()), 1) if exp else 7 * 24 * 3600
+                r.setex(f"jwt_blocklist:{jti}", ttl, "revoked")
+            except Exception as exc:
+                logger.warning("Could not add jti to blocklist: %s", exc)
+    return jsonify({"message": "Logged out successfully"}), 200

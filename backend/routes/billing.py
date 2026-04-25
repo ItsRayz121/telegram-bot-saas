@@ -6,7 +6,7 @@ import requests
 from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from ..models import db, User, ProcessedPayment
+from ..models import db, User, ProcessedPayment, PaymentHistory
 from ..config import Config
 from ..middleware.rate_limit import rate_limit
 from ..notifications import send_subscription_confirmation, send_subscription_cancelled
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 billing_bp = Blueprint("billing", __name__, url_prefix="/api/billing")
 
 _TIER_DURATION_DAYS = 30
-_TIER_PRICES_USD = {"pro": 9, "enterprise": 49}
+_TIER_PRICES_USD = {"pro": 9, "enterprise": 49}   # dollars; matches Config.PLANS price/100
 
 
 def _get_current_user():
@@ -30,10 +30,32 @@ def _admin_upgrade(user, tier):
     return jsonify({"admin_upgrade": True, "tier": tier, "message": f"Plan switched to {tier}"})
 
 
-def _activate_subscription(user, tier):
+def _activate_subscription(user, tier, provider="unknown", payment_id=None,
+                           amount_usd=None, currency="USD"):
     user.subscription_tier = tier
-    user.subscription_expires = datetime.utcnow() + timedelta(days=_TIER_DURATION_DAYS)
+    now = datetime.utcnow()
+    user.subscription_expires = now + timedelta(days=_TIER_DURATION_DAYS)
+    record = PaymentHistory(
+        user_id=user.id,
+        provider=provider,
+        payment_id=payment_id,
+        plan=tier,
+        amount_usd=(amount_usd or _TIER_PRICES_USD.get(tier, 0)) * 100,
+        currency=currency,
+        status="confirmed",
+        confirmed_at=now,
+    )
+    db.session.add(record)
     db.session.commit()
+    try:
+        from ..routes.notifications import create_notification
+        create_notification(
+            user.id, "payment_confirmed",
+            f"{tier.capitalize()} Plan Activated",
+            f"Your {tier.capitalize()} subscription is active until {user.subscription_expires.strftime('%Y-%m-%d')}.",
+        )
+    except Exception:
+        pass
     try:
         expires_str = user.subscription_expires.strftime("%Y-%m-%d")
         send_subscription_confirmation(user.email, user.full_name, tier, expires_str)
@@ -46,6 +68,31 @@ def _activate_subscription(user, tier):
 @billing_bp.route("/plans", methods=["GET"])
 def get_plans():
     return jsonify({"plans": Config.PLANS})
+
+
+# ─── Billing history ──────────────────────────────────────────────────────────
+
+@billing_bp.route("/history", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def billing_history():
+    user = _get_current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    page = max(1, int(request.args.get("page", 1)))
+    per_page = min(50, int(request.args.get("per_page", 20)))
+    q = PaymentHistory.query.filter_by(user_id=user.id).order_by(
+        PaymentHistory.created_at.desc()
+    )
+    total = q.count()
+    records = q.offset((page - 1) * per_page).limit(per_page).all()
+    return jsonify({
+        "history": [r.to_dict() for r in records],
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "pages": (total + per_page - 1) // per_page,
+    })
 
 
 # ─── Subscription status ──────────────────────────────────────────────────────
@@ -163,7 +210,9 @@ def lemon_webhook():
     if event_name == "order_created" and user_id and tier:
         user = User.query.get(int(user_id))
         if user and tier in ("pro", "enterprise"):
-            _activate_subscription(user, tier)
+            order_id = str(event.get("data", {}).get("id", ""))
+            _activate_subscription(user, tier, provider="lemonsqueezy",
+                                   payment_id=order_id, currency="USD")
             logger.info(f"[LEMONSQUEEZY] Upgraded user {user_id} to {tier}")
 
     elif event_name in ("subscription_expired", "subscription_cancelled") and user_id:
@@ -301,6 +350,15 @@ def crypto_webhook():
         db.session.rollback()
         return jsonify({"status": "ok"})
 
-    _activate_subscription(user, tier)
+    # price_amount is the requested USD amount; pay_currency is the crypto used
+    price_usd = data.get("price_amount")
+    pay_currency = str(data.get("pay_currency") or "USD").upper()
+    try:
+        amount_usd_dollars = int(float(price_usd)) if price_usd else None
+    except Exception:
+        amount_usd_dollars = None
+    _activate_subscription(user, tier, provider="nowpayments",
+                           payment_id=payment_id, amount_usd=amount_usd_dollars,
+                           currency=pay_currency)
     logger.info(f"[NOWPAYMENTS] Upgraded user {user_id} to {tier} (status={payment_status})")
     return jsonify({"status": "ok"})

@@ -181,9 +181,22 @@ export default function PaymentSuccess() {
               <Typography variant="h5" fontWeight={800} mb={1}>
                 Payment Not Completed
               </Typography>
-              <Typography color="text.secondary" mb={4}>
+              <Typography color="text.secondary" mb={2}>
                 The payment was cancelled or could not be processed. No charge was made.
                 You can try again from the pricing page.
+              </Typography>
+              <Typography variant="body2" color="text.secondary" mb={4}>
+                If you believe your payment was sent but your plan did not activate,{' '}
+                <Typography
+                  component="a"
+                  href="mailto:support@botforge.app"
+                  variant="body2"
+                  color="primary.main"
+                  sx={{ textDecoration: 'none' }}
+                >
+                  contact support
+                </Typography>
+                {' '}with your transaction ID and we'll resolve it within 24 hours.
               </Typography>
               <Stack spacing={2}>
                 <Button variant="contained" fullWidth onClick={() => navigate('/pricing')}>

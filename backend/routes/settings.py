@@ -12,14 +12,52 @@ def _require_paid(user, feature="This feature"):
     """Return a 403 response tuple if user lacks a valid paid subscription, else None."""
     if user.subscription_tier not in _PAID_TIERS:
         return (
-            jsonify({"error": f"{feature} requires a Pro or Enterprise subscription. Upgrade at /pricing."}),
+            jsonify({
+                "error": f"{feature} requires a Pro or Enterprise subscription.",
+                "code": "FEATURE_REQUIRES_PRO",
+                "upgrade_url": "/pricing",
+            }),
             403,
         )
     if user.subscription_expires and datetime.utcnow() > user.subscription_expires:
         return (
-            jsonify({"error": "Your subscription has expired. Please renew to continue using this feature."}),
+            jsonify({
+                "error": "Your subscription has expired. Please renew to continue using this feature.",
+                "code": "SUBSCRIPTION_EXPIRED",
+                "upgrade_url": "/pricing",
+            }),
             403,
         )
+    return None
+
+
+# Settings keys that require a paid subscription to enable.
+_GATED_SETTINGS_KEYS = {
+    # Top-level keys that must be pro/enterprise when set to truthy
+    "advanced_automod", "extended_automod", "analytics_enabled",
+    "raids_enabled", "ai_enabled", "knowledge_base_enabled",
+    "digest_enabled", "scheduled_messages_enabled",
+    "raids", "verification_enabled",
+}
+
+
+def _check_gated_settings(user, incoming_data: dict):
+    """Return 403 tuple if free user is trying to enable a gated feature."""
+    if user.subscription_tier in _PAID_TIERS:
+        if not (user.subscription_expires and datetime.utcnow() > user.subscription_expires):
+            return None
+    # Flat scan of the incoming payload for gated keys being set truthy
+    for key, value in incoming_data.items():
+        if key in _GATED_SETTINGS_KEYS and value:
+            return (
+                jsonify({
+                    "error": f"'{key}' requires a Pro or Enterprise subscription.",
+                    "code": "FEATURE_REQUIRES_PRO",
+                    "feature": key,
+                    "upgrade_url": "/pricing",
+                }),
+                403,
+            )
     return None
 
 logger = logging.getLogger(__name__)
@@ -81,6 +119,9 @@ def update_group_settings(bot_id, group_id):
         data = request.get_json()
         if not data:
             return jsonify({"error": "No data provided"}), 400
+        gated_err = _check_gated_settings(user, data)
+        if gated_err:
+            return gated_err
         current = dict(group.settings or {})
         _deep_merge(current, data)
         group.settings = current
