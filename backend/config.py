@@ -60,7 +60,7 @@ class Config:
     # NOWPayments (crypto — USDT, BTC, ETH, etc.)
     NOWPAYMENTS_API_KEY = os.environ.get("NOWPAYMENTS_API_KEY", "")
     NOWPAYMENTS_IPN_SECRET = os.environ.get("NOWPAYMENTS_IPN_SECRET", "")
-    BACKEND_URL = os.environ.get("BACKEND_URL", "https://telegram-bot-saas-production.up.railway.app")
+    BACKEND_URL = os.environ.get("BACKEND_URL", "https://api.telegizer.xyz")
 
     # Email provider: "resend" (preferred) or "smtp"
     EMAIL_PROVIDER = os.environ.get("EMAIL_PROVIDER", "")
