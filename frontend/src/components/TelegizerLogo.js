@@ -32,7 +32,7 @@ export default function TelegizerLogo({ variant = 'full', size = 'md', sx = {} }
     >
       <Box
         component="img"
-        src="/icons/telegizer-icon.png"
+        src="/icons/telegizer-icon-192.png"
         alt="Telegizer"
         aria-hidden={variant === 'full' ? 'true' : 'false'}
         sx={{
