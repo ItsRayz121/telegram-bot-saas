@@ -220,6 +220,16 @@ def lemon_webhook():
             bp = custom.get("billing_period", "monthly")
             if bp not in ("monthly", "annual"):
                 bp = "monthly"
+
+            # Idempotency: skip duplicate webhook deliveries for the same order
+            dedup_key = f"ls_{order_id}" if order_id else None
+            if dedup_key:
+                if ProcessedPayment.query.filter_by(payment_id=dedup_key).first():
+                    logger.info(f"[LEMONSQUEEZY] Duplicate webhook for order {order_id} — skipping")
+                    return jsonify({"status": "ok"})
+                db.session.add(ProcessedPayment(payment_id=dedup_key))
+                db.session.flush()
+
             _activate_subscription(user, tier, provider="lemonsqueezy",
                                    payment_id=order_id, currency="USD", billing_period=bp)
             logger.info(f"[LEMONSQUEEZY] Upgraded user {user_id} to {tier}")

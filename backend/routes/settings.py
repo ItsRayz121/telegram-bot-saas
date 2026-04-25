@@ -31,24 +31,58 @@ def _require_paid(user, feature="This feature"):
     return None
 
 
-# Settings keys that require a paid subscription to enable.
+# Settings keys that require a paid subscription when set to truthy.
+# The check is applied recursively, so nested payloads cannot bypass it.
 _GATED_SETTINGS_KEYS = {
-    # Top-level keys that must be pro/enterprise when set to truthy
     "advanced_automod", "extended_automod", "analytics_enabled",
     "raids_enabled", "ai_enabled", "knowledge_base_enabled",
     "digest_enabled", "scheduled_messages_enabled",
     "raids", "verification_enabled",
+    # nested AutoMod sub-keys that are premium-only
+    "ai_moderation", "smart_spam_detection", "link_analysis",
+    "content_classification", "advanced_filters",
+}
+
+# Enterprise-only feature keys
+_ENTERPRISE_ONLY_KEYS = {
+    "white_label", "custom_branding", "api_access", "priority_support",
 }
 
 
-def _check_gated_settings(user, incoming_data: dict):
-    """Return 403 tuple if free user is trying to enable a gated feature."""
-    if user.subscription_tier in _PAID_TIERS:
-        if not (user.subscription_expires and datetime.utcnow() > user.subscription_expires):
-            return None
-    # Flat scan of the incoming payload for gated keys being set truthy
+def _check_gated_settings(user, incoming_data: dict, _depth: int = 0):
+    """Recursively walk the settings payload and return 403 if a free/expired
+    user tries to enable any gated key. Depth-limited to 10 to prevent DoS."""
+    if _depth > 10:
+        return None
+
+    is_paid = user.subscription_tier in _PAID_TIERS
+    is_expired = is_paid and user.subscription_expires and datetime.utcnow() > user.subscription_expires
+    is_enterprise = user.subscription_tier == "enterprise" and not is_expired
+
+    if is_paid and not is_expired:
+        # Paid & active — only block enterprise-only keys for non-enterprise users
+        if not is_enterprise:
+            for key, value in incoming_data.items():
+                if key in _ENTERPRISE_ONLY_KEYS and value:
+                    return (
+                        jsonify({
+                            "error": f"'{key}' requires an Enterprise subscription.",
+                            "code": "FEATURE_REQUIRES_ENTERPRISE",
+                            "feature": key,
+                            "upgrade_url": "/pricing",
+                        }),
+                        403,
+                    )
+                if isinstance(value, dict):
+                    err = _check_gated_settings(user, value, _depth + 1)
+                    if err:
+                        return err
+        return None
+
+    # Free tier or expired subscription — block all gated keys
     for key, value in incoming_data.items():
-        if key in _GATED_SETTINGS_KEYS and value:
+        blocked = (key in _GATED_SETTINGS_KEYS or key in _ENTERPRISE_ONLY_KEYS) and value
+        if blocked:
             return (
                 jsonify({
                     "error": f"'{key}' requires a Pro or Enterprise subscription.",
@@ -58,6 +92,11 @@ def _check_gated_settings(user, incoming_data: dict):
                 }),
                 403,
             )
+        # Recurse into nested dicts (e.g. {"automod": {"ai_moderation": true}})
+        if isinstance(value, dict):
+            err = _check_gated_settings(user, value, _depth + 1)
+            if err:
+                return err
     return None
 
 logger = logging.getLogger(__name__)

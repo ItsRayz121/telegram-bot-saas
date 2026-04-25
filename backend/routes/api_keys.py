@@ -260,10 +260,12 @@ def _test_anthropic(api_key, base_url, model_name):
 def _test_gemini(api_key, model_name):
     import requests as req
     model = model_name or DEFAULT_MODELS["gemini"]
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+    # Key is passed via header, NOT query string, to prevent exposure in logs/proxies
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+    headers = {"x-goog-api-key": api_key, "Content-Type": "application/json"}
     payload = {"contents": [{"parts": [{"text": "Reply with OK"}]}]}
     try:
-        resp = req.post(url, json=payload, timeout=10)
+        resp = req.post(url, json=payload, headers=headers, timeout=10)
         if resp.status_code == 200:
             data = resp.json()
             reply = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")

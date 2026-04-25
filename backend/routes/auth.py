@@ -1,12 +1,13 @@
 import bcrypt
 import logging
 import threading
+from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import (
     create_access_token, jwt_required, get_jwt_identity, get_jwt
 )
 
-from ..models import db, User, PasswordResetToken, Referral
+from ..models import db, User, PasswordResetToken, Referral, RevokedToken
 from ..middleware.rate_limit import rate_limit
 from ..config import Config
 
@@ -14,6 +15,96 @@ logger = logging.getLogger(__name__)
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 
+_MAX_FAILED_ATTEMPTS = 10
+_LOCKOUT_MINUTES = 15
+
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
+def _get_redis():
+    """Return a Redis client or None if unavailable."""
+    try:
+        import redis
+        r = redis.from_url(Config.REDIS_URL, decode_responses=True, socket_connect_timeout=2)
+        r.ping()
+        return r
+    except Exception:
+        return None
+
+
+def is_token_revoked(jwt_payload: dict) -> bool:
+    """Called by flask-jwt-extended token_in_blocklist_loader.
+
+    Strategy:
+    1. Check Redis blocklist (fast path).
+    2. Fall back to the DB revoked_tokens table if Redis is unavailable.
+    This means logout always works even during a Redis outage.
+    """
+    jti = jwt_payload.get("jti")
+    if not jti:
+        return False
+
+    # Fast path: Redis
+    r = _get_redis()
+    if r is not None:
+        try:
+            return r.exists(f"jwt_blocklist:{jti}") == 1
+        except Exception:
+            pass
+
+    # Fallback: DB revoked_tokens table
+    try:
+        now = datetime.utcnow()
+        record = RevokedToken.query.filter_by(jti=jti).first()
+        if record and record.expires_at > now:
+            return True
+    except Exception as exc:
+        logger.warning("DB token blocklist check failed: %s", exc)
+    return False
+
+
+def _revoke_token(jti: str, exp: int):
+    """Add token to Redis blocklist AND DB revoked_tokens table."""
+    import time as _time
+
+    # Write to Redis
+    r = _get_redis()
+    if r:
+        try:
+            ttl = max(int(exp - _time.time()), 1) if exp else 7 * 24 * 3600
+            r.setex(f"jwt_blocklist:{jti}", ttl, "revoked")
+        except Exception as exc:
+            logger.warning("Could not write jti to Redis blocklist: %s", exc)
+
+    # Write to DB (fallback + audit trail)
+    try:
+        expires_at = datetime.utcfromtimestamp(exp) if exp else datetime.utcnow() + timedelta(days=7)
+        if not RevokedToken.query.filter_by(jti=jti).first():
+            db.session.add(RevokedToken(jti=jti, expires_at=expires_at))
+            db.session.commit()
+    except Exception as exc:
+        logger.warning("Could not write jti to DB revoked_tokens: %s", exc)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+
+
+def _send_verification_email_async(app, user_email, user_name, token):
+    """Send email verification link in a background thread."""
+    from ..notifications import send_verification_email
+
+    def _send():
+        try:
+            with app.app_context():
+                send_verification_email(user_email, user_name, token)
+        except Exception as exc:
+            logger.warning("Verification email failed for %s: %s", user_email, exc)
+
+    threading.Thread(target=_send, daemon=True).start()
+
+
+# ── Registration ───────────────────────────────────────────────────────────────
 
 @auth_bp.route("/register", methods=["POST"])
 @rate_limit(requests_per_minute=10)
@@ -30,28 +121,38 @@ def register():
     if not email or not password or not full_name:
         return jsonify({"error": "Email, password, and full_name are required"}), 400
 
+    # Input length limits
+    if len(email) > 255:
+        return jsonify({"error": "Email too long"}), 400
+    if len(full_name) > 255:
+        return jsonify({"error": "Name too long (max 255 characters)"}), 400
     if len(password) < 8:
         return jsonify({"error": "Password must be at least 8 characters"}), 400
+    if len(password) > 128:
+        return jsonify({"error": "Password too long (max 128 characters)"}), 400
 
     import re
-    if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
+    if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]{2,}$", email):
         return jsonify({"error": "Invalid email format"}), 400
 
     if User.query.filter_by(email=email).first():
         return jsonify({"error": "Email already registered"}), 409
 
-    pw_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
     import secrets as _secrets
+    pw_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
     user = User(
         email=email,
         password_hash=pw_hash,
         full_name=full_name,
         referral_code=_secrets.token_urlsafe(8)[:10],
+        email_verified=False,
     )
+    # Generate email verification token
+    verification_token = user.generate_verification_token()
     db.session.add(user)
-    db.session.flush()  # get user.id before commit
+    db.session.flush()
 
-    # Handle referral — find referrer by code, prevent self-referral
+    # Handle referral
     if ref_code:
         referrer = User.query.filter_by(referral_code=ref_code).first()
         if referrer and referrer.id != user.id:
@@ -63,7 +164,6 @@ def register():
                     referral_code=ref_code,
                 )
                 db.session.add(referral)
-                # Check milestones for referrer in a background thread
                 try:
                     from flask import current_app
                     from ..routes.referrals import _apply_referral_rewards
@@ -85,30 +185,20 @@ def register():
 
     db.session.commit()
 
-    # Send welcome email asynchronously — never block the response on SMTP.
-    # smtplib is synchronous and can hang if the mail server is unreachable,
-    # which previously caused gunicorn to time out AFTER the DB commit, making
-    # the frontend show "Registration failed" even though the account existed.
+    # Send verification email asynchronously
     try:
         from flask import current_app
-        from ..notifications import send_welcome_email
-        _app = current_app._get_current_object()
-        _email_copy, _name_copy = email, full_name
-
-        def _send_welcome():
-            try:
-                with _app.app_context():
-                    send_welcome_email(_email_copy, _name_copy)
-            except Exception as exc:
-                logger.warning("Welcome email failed for %s: %s", _email_copy, exc)
-
-        threading.Thread(target=_send_welcome, daemon=True).start()
+        _send_verification_email_async(
+            current_app._get_current_object(), email, full_name, verification_token
+        )
     except Exception:
         pass
 
     token = create_access_token(identity=str(user.id))
     return jsonify({"token": token, "user": user.to_dict()}), 201
 
+
+# ── Login ──────────────────────────────────────────────────────────────────────
 
 @auth_bp.route("/login", methods=["POST"])
 @rate_limit(requests_per_minute=20)
@@ -119,6 +209,7 @@ def login():
 
     email = data.get("email", "").strip().lower()
     password = data.get("password", "")
+    totp_code = data.get("totp_code", "").strip()
 
     if not email or not password:
         return jsonify({"error": "Email and password are required"}), 400
@@ -127,13 +218,105 @@ def login():
     if not user:
         return jsonify({"error": "Invalid credentials"}), 401
 
+    # Account lockout check
+    if user.is_locked:
+        remaining = int((user.locked_until - datetime.utcnow()).total_seconds() / 60) + 1
+        return jsonify({
+            "error": f"Account temporarily locked due to too many failed attempts. Try again in {remaining} minute(s).",
+            "code": "ACCOUNT_LOCKED",
+            "locked_until": user.locked_until.isoformat(),
+        }), 429
+
+    # Password check
     if not bcrypt.checkpw(password.encode("utf-8"), user.password_hash.encode("utf-8")):
+        # Increment failure counter
+        user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
+        if user.failed_login_attempts >= _MAX_FAILED_ATTEMPTS:
+            user.locked_until = datetime.utcnow() + timedelta(minutes=_LOCKOUT_MINUTES)
+            logger.warning("Account locked after %d failed attempts: %s", user.failed_login_attempts, email)
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
         return jsonify({"error": "Invalid credentials"}), 401
 
     if user.is_banned:
         return jsonify({"error": f"Account banned: {user.ban_reason or 'No reason provided'}"}), 403
 
-    # Developer/admin accounts always have enterprise access
+    # Reset failure counter on successful password check
+    if user.failed_login_attempts or user.locked_until:
+        user.failed_login_attempts = 0
+        user.locked_until = None
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+    # 2FA check
+    if user.totp_enabled and user.totp_secret:
+        if not totp_code:
+            # Return indicator that 2FA is required; do NOT issue full JWT yet
+            import secrets as _s
+            pending_token = create_access_token(
+                identity=str(user.id),
+                expires_delta=timedelta(minutes=5),
+                additional_claims={"scope": "totp_pending"},
+            )
+            return jsonify({
+                "requires_2fa": True,
+                "totp_pending_token": pending_token,
+            }), 200
+
+        # Validate TOTP code (and backup codes)
+        if not _verify_totp(user, totp_code):
+            return jsonify({"error": "Invalid 2FA code"}), 401
+
+    # Admin auto-promotion
+    if user.email in Config.ADMIN_EMAILS and user.subscription_tier != "enterprise":
+        user.subscription_tier = "enterprise"
+        user.subscription_expires = None
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+    token = create_access_token(identity=str(user.id))
+    user_data = user.to_dict()
+    user_data["is_admin"] = user.email in Config.ADMIN_EMAILS
+    return jsonify({"token": token, "user": user_data}), 200
+
+
+# ── 2FA login completion (submit code after receives requires_2fa) ─────────────
+
+@auth_bp.route("/verify-totp-login", methods=["POST"])
+@rate_limit(requests_per_minute=10)
+def verify_totp_login():
+    """Complete login when 2FA is required: validate pending token + TOTP code."""
+    from flask_jwt_extended import decode_token
+    data = request.get_json() or {}
+    pending_token = data.get("totp_pending_token", "").strip()
+    totp_code = data.get("totp_code", "").strip()
+
+    if not pending_token or not totp_code:
+        return jsonify({"error": "totp_pending_token and totp_code are required"}), 400
+
+    try:
+        decoded = decode_token(pending_token)
+    except Exception:
+        return jsonify({"error": "Invalid or expired session. Please log in again."}), 401
+
+    if decoded.get("scope") != "totp_pending":
+        return jsonify({"error": "Invalid token scope"}), 401
+
+    user_id = decoded.get("sub")
+    user = User.query.get(int(user_id))
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    if not _verify_totp(user, totp_code):
+        return jsonify({"error": "Invalid 2FA code"}), 401
+
+    # Admin auto-promotion
     if user.email in Config.ADMIN_EMAILS and user.subscription_tier != "enterprise":
         user.subscription_tier = "enterprise"
         user.subscription_expires = None
@@ -144,6 +327,110 @@ def login():
     user_data["is_admin"] = user.email in Config.ADMIN_EMAILS
     return jsonify({"token": token, "user": user_data}), 200
 
+
+def _verify_totp(user: User, code: str) -> bool:
+    """Verify a TOTP code or a backup code against the user's credentials."""
+    try:
+        import pyotp
+        from ..utils.encryption import decrypt_value
+        secret = decrypt_value(user.totp_secret)
+        if not secret:
+            return False
+        totp = pyotp.TOTP(secret)
+        # Allow 30-second window on each side
+        if totp.verify(code, valid_window=1):
+            return True
+    except Exception as exc:
+        logger.warning("TOTP verify error: %s", exc)
+
+    # Check backup codes
+    return _consume_backup_code(user, code)
+
+
+def _consume_backup_code(user: User, code: str) -> bool:
+    """Return True and remove the code if it matches a stored backup code."""
+    if not user.totp_backup_codes:
+        return False
+    code_clean = code.replace("-", "").strip().lower()
+    remaining = []
+    matched = False
+    for stored in user.totp_backup_codes:
+        if not matched:
+            try:
+                if bcrypt.checkpw(code_clean.encode(), stored.encode()):
+                    matched = True
+                    continue  # consume the code
+            except Exception:
+                pass
+        remaining.append(stored)
+    if matched:
+        user.totp_backup_codes = remaining
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+    return matched
+
+
+# ── Email verification ─────────────────────────────────────────────────────────
+
+@auth_bp.route("/verify-email", methods=["POST"])
+@rate_limit(requests_per_minute=10)
+def verify_email():
+    data = request.get_json() or {}
+    token = data.get("token", "").strip()
+    if not token:
+        return jsonify({"error": "Verification token is required"}), 400
+
+    user = User.query.filter_by(email_verification_token=token).first()
+    if not user:
+        return jsonify({"error": "Invalid or expired verification link"}), 400
+
+    if user.email_verification_expires and datetime.utcnow() > user.email_verification_expires:
+        return jsonify({"error": "Verification link has expired. Please request a new one."}), 400
+
+    user.email_verified = True
+    user.email_verification_token = None
+    user.email_verification_expires = None
+    db.session.commit()
+
+    logger.info("Email verified for user %s", user.id)
+    return jsonify({"message": "Email verified successfully!", "email_verified": True}), 200
+
+
+@auth_bp.route("/resend-verification", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=3)
+def resend_verification():
+    user_id = get_jwt_identity()
+    user = User.query.get(int(user_id))
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    if user.email_verified:
+        return jsonify({"message": "Email is already verified"}), 200
+
+    # Rate-limit resends: check if a token was recently sent
+    if user.email_verification_expires:
+        cooldown_end = user.email_verification_expires - timedelta(hours=23)
+        if datetime.utcnow() < cooldown_end:
+            return jsonify({"error": "A verification email was sent recently. Please wait before requesting another."}), 429
+
+    verification_token = user.generate_verification_token()
+    db.session.commit()
+
+    try:
+        from flask import current_app
+        _send_verification_email_async(
+            current_app._get_current_object(), user.email, user.full_name, verification_token
+        )
+    except Exception:
+        pass
+
+    return jsonify({"message": "Verification email sent! Check your inbox."}), 200
+
+
+# ── Standard auth routes ───────────────────────────────────────────────────────
 
 @auth_bp.route("/me", methods=["GET"])
 @jwt_required()
@@ -168,7 +455,6 @@ def forgot_password():
     user = User.query.filter_by(email=email).first()
     # Always return 200 to avoid leaking which emails exist
     if user and not user.is_banned:
-        # Invalidate any existing unused tokens
         PasswordResetToken.query.filter_by(user_id=user.id, used=False).update({"used": True})
         db.session.flush()
 
@@ -208,6 +494,8 @@ def reset_password():
 
     if len(new_password) < 8:
         return jsonify({"error": "Password must be at least 8 characters"}), 400
+    if len(new_password) > 128:
+        return jsonify({"error": "Password too long"}), 400
 
     reset_token = PasswordResetToken.query.filter_by(token=token_str).first()
     if not reset_token or not reset_token.is_valid:
@@ -218,6 +506,9 @@ def reset_password():
         return jsonify({"error": "User not found"}), 404
 
     user.password_hash = bcrypt.hashpw(new_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    # Reset brute-force counter on successful password reset
+    user.failed_login_attempts = 0
+    user.locked_until = None
     reset_token.used = True
     db.session.commit()
 
@@ -242,6 +533,8 @@ def change_password():
 
     if len(new_password) < 8:
         return jsonify({"error": "New password must be at least 8 characters"}), 400
+    if len(new_password) > 128:
+        return jsonify({"error": "Password too long"}), 400
 
     user.password_hash = bcrypt.hashpw(new_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
     db.session.commit()
@@ -266,11 +559,9 @@ def delete_account():
     if not bcrypt.checkpw(password.encode("utf-8"), user.password_hash.encode("utf-8")):
         return jsonify({"error": "Incorrect password"}), 401
 
-    # Prevent admins from self-deleting via API
     if user.email in Config.ADMIN_EMAILS:
         return jsonify({"error": "Admin accounts cannot be deleted via API"}), 403
 
-    # Stop all running bots before deletion
     try:
         from ..bot_manager import bot_manager
         for bot in user.bots:
@@ -286,46 +577,14 @@ def delete_account():
     return jsonify({"message": "Account deleted successfully"}), 200
 
 
-def _get_redis():
-    """Return a Redis client or None if unavailable."""
-    try:
-        import redis
-        r = redis.from_url(Config.REDIS_URL, decode_responses=True, socket_connect_timeout=2)
-        r.ping()
-        return r
-    except Exception:
-        return None
-
-
-def is_token_revoked(jwt_payload: dict) -> bool:
-    """Called by flask-jwt-extended token_in_blocklist_loader."""
-    jti = jwt_payload.get("jti")
-    if not jti:
-        return False
-    r = _get_redis()
-    if r is None:
-        return False
-    try:
-        return r.exists(f"jwt_blocklist:{jti}") == 1
-    except Exception:
-        return False
-
-
 @auth_bp.route("/logout", methods=["POST"])
 @jwt_required()
 @rate_limit(requests_per_minute=20)
 def logout():
-    """Revoke the current access token by adding its jti to the Redis blocklist."""
+    """Revoke the current access token in both Redis and DB."""
     jwt_data = get_jwt()
     jti = jwt_data.get("jti")
     exp = jwt_data.get("exp")
     if jti:
-        r = _get_redis()
-        if r:
-            try:
-                import time
-                ttl = max(int(exp - time.time()), 1) if exp else 7 * 24 * 3600
-                r.setex(f"jwt_blocklist:{jti}", ttl, "revoked")
-            except Exception as exc:
-                logger.warning("Could not add jti to blocklist: %s", exc)
+        _revoke_token(jti, exp)
     return jsonify({"message": "Logged out successfully"}), 200

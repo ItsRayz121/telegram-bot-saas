@@ -168,6 +168,24 @@ def send_password_reset_email(to_email, full_name, reset_token):
     )
 
 
+def send_verification_email(to_email, full_name, verification_token):
+    verify_url = f"{current_app.config['FRONTEND_URL']}/verify-email?token={verification_token}"
+    content = f"""
+    <p>Hi <strong>{full_name}</strong>,</p>
+    <p>Thanks for signing up for BotForge! Please verify your email address to unlock all features.</p>
+    <p>Click the button below — this link expires in <strong>24 hours</strong>.</p>
+    <a href="{verify_url}" class="btn">Verify My Email</a>
+    <p style="margin-top:24px;font-size:12px;color:#606070;">Or copy this link:<br>{verify_url}</p>
+    <p>If you didn't create an account, you can safely ignore this email.</p>
+    """
+    return send_email(
+        to_email,
+        "Verify your BotForge email address",
+        _base_template(content, "Verify Email"),
+        f"Verify your email: {verify_url}",
+    )
+
+
 def send_bot_added_notification(to_email, full_name, bot_name, bot_username):
     content = f"""
     <p>Hi <strong>{full_name}</strong>,</p>

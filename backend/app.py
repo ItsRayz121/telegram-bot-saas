@@ -47,11 +47,37 @@ from .routes.api_keys import api_keys_bp
 from .routes.referrals import referrals_bp
 from .routes.digest import digest_bp, run_digest_scheduler
 from .routes.notifications import notifications_bp
+from .routes.totp import totp_bp
 from .bot_manager import BotManager
 
 _scheduler_log = logging.getLogger(__name__)
 
 bot_manager = BotManager()
+
+
+def _init_sentry():
+    """Initialize Sentry error monitoring if SENTRY_DSN is configured."""
+    dsn = os.environ.get("SENTRY_DSN", "")
+    if not dsn:
+        return
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.flask import FlaskIntegration
+        from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+        sentry_sdk.init(
+            dsn=dsn,
+            integrations=[FlaskIntegration(), SqlalchemyIntegration()],
+            traces_sample_rate=0.1,
+            send_default_pii=False,
+        )
+        _scheduler_log.info("Sentry initialized")
+    except ImportError:
+        _scheduler_log.warning("sentry-sdk not installed; Sentry disabled")
+    except Exception as exc:
+        _scheduler_log.warning("Sentry init failed: %s", exc)
+
+
+_init_sentry()
 
 
 def create_app():
@@ -100,6 +126,7 @@ def create_app():
     app.register_blueprint(referrals_bp)
     app.register_blueprint(digest_bp)
     app.register_blueprint(notifications_bp)
+    app.register_blueprint(totp_bp)
 
     app.bot_manager = bot_manager
 
@@ -114,8 +141,35 @@ def create_app():
         return jsonify({
             "status": "ok",
             "db": "connected" if db_ok else "error",
-            "version": "2026-04-22-v5",
+            "version": "2026-04-25-v6",
         })
+
+    @app.route("/ready")
+    def ready():
+        """Kubernetes/Railway readiness probe — only 200 when all dependencies are up."""
+        checks = {}
+        ok = True
+
+        # DB check
+        try:
+            db.session.execute(text("SELECT 1"))
+            checks["db"] = "ok"
+        except Exception as exc:
+            checks["db"] = f"error: {exc}"
+            ok = False
+
+        # Redis check (non-fatal — app degrades gracefully without Redis)
+        try:
+            import redis as _redis
+            r = _redis.from_url(Config.REDIS_URL, socket_connect_timeout=1)
+            r.ping()
+            checks["redis"] = "ok"
+        except Exception:
+            checks["redis"] = "unavailable"
+            # Redis failure is a warning, not a fatal readiness failure
+
+        status_code = 200 if ok else 503
+        return jsonify({"ready": ok, "checks": checks}), status_code
 
     @app.before_request
     def _assign_request_id():
@@ -171,6 +225,7 @@ def create_app():
         _run_bot_token_encryption_migration()
         _run_payment_history_migration()
         _run_index_migrations()
+        _run_security_migrations()
 
     # Start bots in a background thread after a short delay so Gunicorn can
     # pass its healthcheck before bot polling (which may contact Telegram and
@@ -243,6 +298,26 @@ def _run_migrations():
         "ALTER TABLE groups ADD COLUMN timezone VARCHAR(50) DEFAULT 'UTC'",
         # Billing period for annual vs monthly subscriptions
         "ALTER TABLE payment_history ADD COLUMN billing_period VARCHAR(10) DEFAULT 'monthly'",
+        # Email verification
+        "ALTER TABLE users ADD COLUMN email_verified BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE users ADD COLUMN email_verification_token VARCHAR(64)",
+        "ALTER TABLE users ADD COLUMN email_verification_expires TIMESTAMP",
+        # Brute-force login protection
+        "ALTER TABLE users ADD COLUMN failed_login_attempts INTEGER DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN locked_until TIMESTAMP",
+        # 2FA / TOTP
+        "ALTER TABLE users ADD COLUMN totp_secret VARCHAR(255)",
+        "ALTER TABLE users ADD COLUMN totp_enabled BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE users ADD COLUMN totp_backup_codes JSONB",
+        # DB-backed JWT revocation fallback
+        """CREATE TABLE IF NOT EXISTS revoked_tokens (
+            id SERIAL PRIMARY KEY,
+            jti VARCHAR(64) UNIQUE NOT NULL,
+            expires_at TIMESTAMP NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )""",
+        "CREATE INDEX IF NOT EXISTS ix_revoked_tokens_jti ON revoked_tokens (jti)",
+        "CREATE INDEX IF NOT EXISTS ix_users_email_verification_token ON users (email_verification_token)",
     ]
     try:
         with db.engine.connect() as conn:
@@ -277,6 +352,35 @@ def _run_index_migrations():
     try:
         with db.engine.connect() as conn:
             for sql in indexes:
+                try:
+                    conn.execute(text(sql))
+                    conn.commit()
+                except Exception:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+
+
+def _run_security_migrations():
+    """Dedicated migration for security-related columns and tables added in v6."""
+    stmts = [
+        # revoked_tokens table (DB fallback JWT blocklist)
+        """CREATE TABLE IF NOT EXISTS revoked_tokens (
+            id SERIAL PRIMARY KEY,
+            jti VARCHAR(64) UNIQUE NOT NULL,
+            expires_at TIMESTAMP NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )""",
+        "CREATE INDEX IF NOT EXISTS ix_revoked_tokens_jti ON revoked_tokens (jti)",
+        # Purge expired revoked tokens to keep the table small
+        "DELETE FROM revoked_tokens WHERE expires_at < NOW()",
+    ]
+    try:
+        with db.engine.connect() as conn:
+            for sql in stmts:
                 try:
                     conn.execute(text(sql))
                     conn.commit()

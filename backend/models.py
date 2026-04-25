@@ -18,7 +18,6 @@ class User(db.Model):
     subscription_tier = db.Column(db.String(50), default="free", nullable=False)
     subscription_expires = db.Column(db.DateTime, nullable=True)
     # Legacy Stripe columns — kept to avoid dropping data; Stripe is not active.
-    # Remove in a future migration once confirmed safe.
     stripe_customer_id = db.Column(db.String(255), nullable=True)
     stripe_subscription_id = db.Column(db.String(255), nullable=True)
     is_banned = db.Column(db.Boolean, default=False)
@@ -26,6 +25,17 @@ class User(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     # Unique referral code assigned at registration
     referral_code = db.Column(db.String(16), unique=True, nullable=True, index=True)
+    # Email verification
+    email_verified = db.Column(db.Boolean, default=False, nullable=False)
+    email_verification_token = db.Column(db.String(64), nullable=True, index=True)
+    email_verification_expires = db.Column(db.DateTime, nullable=True)
+    # Brute-force login protection
+    failed_login_attempts = db.Column(db.Integer, default=0, nullable=False)
+    locked_until = db.Column(db.DateTime, nullable=True)
+    # 2FA / TOTP (secret stored encrypted)
+    totp_secret = db.Column(db.String(255), nullable=True)
+    totp_enabled = db.Column(db.Boolean, default=False, nullable=False)
+    totp_backup_codes = db.Column(db.JSON, nullable=True)  # list of bcrypt-hashed backup codes
 
     bots = db.relationship("Bot", backref="owner", lazy=True, cascade="all, delete-orphan")
 
@@ -33,6 +43,16 @@ class User(db.Model):
         if not self.referral_code:
             self.referral_code = secrets.token_urlsafe(8)[:10]
         return self.referral_code
+
+    @property
+    def is_locked(self):
+        return self.locked_until is not None and datetime.utcnow() < self.locked_until
+
+    def generate_verification_token(self):
+        token = secrets.token_urlsafe(32)
+        self.email_verification_token = token
+        self.email_verification_expires = datetime.utcnow() + timedelta(hours=24)
+        return token
 
     def to_dict(self):
         return {
@@ -44,6 +64,8 @@ class User(db.Model):
             "is_banned": self.is_banned,
             "created_at": self.created_at.isoformat(),
             "referral_code": self.referral_code,
+            "email_verified": self.email_verified,
+            "totp_enabled": self.totp_enabled,
         }
 
 
@@ -65,6 +87,16 @@ class PasswordResetToken(db.Model):
     @property
     def is_valid(self):
         return not self.used and datetime.utcnow() < self.expires_at
+
+
+class RevokedToken(db.Model):
+    """DB-backed JWT blocklist used as Redis fallback for logout/revocation."""
+    __tablename__ = "revoked_tokens"
+
+    id = db.Column(db.Integer, primary_key=True)
+    jti = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
 
 class Bot(db.Model):
