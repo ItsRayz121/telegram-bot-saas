@@ -669,6 +669,7 @@ export default function Dashboard() {
             }
           >
             Please verify your email address to ensure uninterrupted access.
+            Check your inbox (and spam folder) for the verification link.
           </Alert>
         )}
 

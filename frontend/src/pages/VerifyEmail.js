@@ -1,8 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Card, CardContent, Typography, Button, CircularProgress, Alert } from '@mui/material';
-import { CheckCircle, ErrorOutline, Email } from '@mui/icons-material';
+import { CheckCircle, ErrorOutline, Email, MarkEmailRead } from '@mui/icons-material';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { auth } from '../services/api';
+
+const SpamTip = () => (
+  <Alert severity="info" sx={{ mt: 2, textAlign: 'left', fontSize: '0.8rem' }}>
+    Don't see the email? Check your <strong>spam or junk folder</strong> and mark it as "Not Spam".
+  </Alert>
+);
 
 export default function VerifyEmail() {
   const navigate = useNavigate();
@@ -13,6 +19,7 @@ export default function VerifyEmail() {
   const [message, setMessage] = useState('');
   const [resending, setResending] = useState(false);
   const [resendDone, setResendDone] = useState(false);
+  const [resendError, setResendError] = useState('');
 
   useEffect(() => {
     if (!token) {
@@ -29,15 +36,29 @@ export default function VerifyEmail() {
 
   const handleResend = async () => {
     setResending(true);
+    setResendError('');
     try {
       await auth.resendVerification();
       setResendDone(true);
     } catch (err) {
-      setMessage(err.response?.data?.error || 'Could not resend. Please try again later.');
+      const msg = err.response?.data?.error || 'Could not send the email. Please try again later.';
+      setResendError(msg);
     } finally {
       setResending(false);
     }
   };
+
+  const ResendButton = () => (
+    <Button
+      variant="outlined"
+      startIcon={resending ? <CircularProgress size={16} /> : <MarkEmailRead />}
+      disabled={resending}
+      onClick={handleResend}
+      sx={{ mr: 1 }}
+    >
+      {resending ? 'Sending…' : 'Resend Verification Email'}
+    </Button>
+  );
 
   return (
     <Box
@@ -50,7 +71,7 @@ export default function VerifyEmail() {
         p: 2,
       }}
     >
-      <Card sx={{ maxWidth: 440, width: '100%' }}>
+      <Card sx={{ maxWidth: 460, width: '100%' }}>
         <CardContent sx={{ p: { xs: 3, sm: 4 }, textAlign: 'center' }}>
 
           {status === 'verifying' && (
@@ -78,20 +99,25 @@ export default function VerifyEmail() {
               <ErrorOutline sx={{ fontSize: 56, color: 'error.main', mb: 2 }} />
               <Typography variant="h5" fontWeight={700} mb={1}>Verification Failed</Typography>
               <Alert severity="error" sx={{ mb: 2, textAlign: 'left' }}>{message}</Alert>
-              {!resendDone ? (
-                <Button
-                  variant="outlined"
-                  startIcon={resending ? <CircularProgress size={16} /> : <Email />}
-                  disabled={resending}
-                  onClick={handleResend}
-                  sx={{ mr: 1 }}
-                >
-                  Resend Verification Email
-                </Button>
+
+              {resendDone ? (
+                <>
+                  <Alert severity="success" sx={{ mb: 1, textAlign: 'left' }}>
+                    Verification email sent! Check your inbox.
+                  </Alert>
+                  <SpamTip />
+                </>
               ) : (
-                <Alert severity="success" sx={{ mb: 2 }}>Verification email sent! Check your inbox.</Alert>
+                <>
+                  {resendError && (
+                    <Alert severity="error" sx={{ mb: 2, textAlign: 'left' }}>{resendError}</Alert>
+                  )}
+                  <ResendButton />
+                </>
               )}
-              <Button variant="text" onClick={() => navigate('/dashboard')}>Back to Dashboard</Button>
+              <Box mt={2}>
+                <Button variant="text" onClick={() => navigate('/dashboard')}>Back to Dashboard</Button>
+              </Box>
             </>
           )}
 
@@ -99,21 +125,34 @@ export default function VerifyEmail() {
             <>
               <Email sx={{ fontSize: 56, color: 'primary.main', mb: 2 }} />
               <Typography variant="h5" fontWeight={700} mb={1}>Check Your Email</Typography>
-              <Typography variant="body2" color="text.secondary" mb={3}>
-                We sent a verification link to your email address. Click the link in the email to verify your account.
+              <Typography variant="body2" color="text.secondary" mb={2}>
+                We sent a verification link to your email address. Click the link to verify your account.
               </Typography>
-              {!resendDone ? (
-                <Button
-                  variant="contained"
-                  startIcon={resending ? <CircularProgress size={16} color="inherit" /> : <Email />}
-                  disabled={resending}
-                  onClick={handleResend}
-                >
-                  Resend Verification Email
-                </Button>
+
+              {resendDone ? (
+                <>
+                  <Alert severity="success" sx={{ mb: 1, textAlign: 'left' }}>
+                    Verification email sent! Check your inbox.
+                  </Alert>
+                  <SpamTip />
+                </>
               ) : (
-                <Alert severity="success">Verification email sent! Check your inbox.</Alert>
+                <>
+                  {resendError && (
+                    <Alert severity="error" sx={{ mb: 2, textAlign: 'left' }}>{resendError}</Alert>
+                  )}
+                  <Button
+                    variant="contained"
+                    startIcon={resending ? <CircularProgress size={16} color="inherit" /> : <MarkEmailRead />}
+                    disabled={resending}
+                    onClick={handleResend}
+                  >
+                    {resending ? 'Sending…' : 'Resend Verification Email'}
+                  </Button>
+                  <SpamTip />
+                </>
               )}
+
               <Box mt={2}>
                 <Button variant="text" onClick={() => navigate('/dashboard')}>Back to Dashboard</Button>
               </Box>

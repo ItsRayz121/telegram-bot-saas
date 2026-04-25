@@ -62,11 +62,16 @@ class Config:
     NOWPAYMENTS_IPN_SECRET = os.environ.get("NOWPAYMENTS_IPN_SECRET", "")
     BACKEND_URL = os.environ.get("BACKEND_URL", "https://telegram-bot-saas-production.up.railway.app")
 
+    # Email provider: "resend" (preferred) or "smtp"
+    EMAIL_PROVIDER = os.environ.get("EMAIL_PROVIDER", "")
+    # Resend (https://resend.com) — set EMAIL_PROVIDER=resend
+    RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
+    FROM_EMAIL = os.environ.get("FROM_EMAIL", "noreply@example.com")
+    # SMTP fallback — set EMAIL_PROVIDER=smtp
     SMTP_SERVER = os.environ.get("SMTP_SERVER", "smtp.gmail.com")
     SMTP_PORT = int(os.environ.get("SMTP_PORT", 587))
     SMTP_USERNAME = os.environ.get("SMTP_USERNAME", "")
     SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
-    FROM_EMAIL = os.environ.get("FROM_EMAIL", "noreply@example.com")
 
     FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
     OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")

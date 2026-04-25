@@ -96,7 +96,8 @@ def _revoke_token(jti: str, exp: int):
 
 
 def _send_verification_email_async(app, user_email, user_name, token):
-    """Send email verification link in a background thread."""
+    """Send verification email in a background thread (used at registration — non-blocking).
+    Failures are logged to Sentry/logger; the user can resend via the dashboard."""
     from ..notifications import send_verification_email
 
     def _send():
@@ -104,7 +105,12 @@ def _send_verification_email_async(app, user_email, user_name, token):
             with app.app_context():
                 send_verification_email(user_email, user_name, token)
         except Exception as exc:
-            logger.warning("Verification email failed for %s: %s", user_email, exc)
+            logger.error("Verification email failed for %s: %s", user_email, exc)
+            try:
+                import sentry_sdk
+                sentry_sdk.capture_exception(exc)
+            except Exception:
+                pass
 
     threading.Thread(target=_send, daemon=True).start()
 
@@ -534,24 +540,38 @@ def resend_verification():
     if user.email_verified:
         return jsonify({"message": "Email is already verified"}), 200
 
-    # Rate-limit resends: check if a token was recently sent
+    # Cooldown: allow at most one resend per hour (token expires 24h from issue,
+    # so cooldown_end = issued_at + 1h = expires_at - 23h)
     if user.email_verification_expires:
         cooldown_end = user.email_verification_expires - timedelta(hours=23)
         if datetime.utcnow() < cooldown_end:
-            return jsonify({"error": "A verification email was sent recently. Please wait before requesting another."}), 429
+            return jsonify({
+                "error": "A verification email was sent recently. Please wait a few minutes before requesting another.",
+                "code": "RESEND_COOLDOWN",
+            }), 429
 
     verification_token = user.generate_verification_token()
     db.session.commit()
 
+    # Send synchronously so we can report actual delivery status to the frontend
     try:
-        from flask import current_app
-        _send_verification_email_async(
-            current_app._get_current_object(), user.email, user.full_name, verification_token
-        )
-    except Exception:
-        pass
+        from ..notifications import send_verification_email
+        send_verification_email(user.email, user.full_name, verification_token)
+    except Exception as exc:
+        logger.error("Verification resend failed for user %s: %s", user.id, exc)
+        try:
+            import sentry_sdk
+            sentry_sdk.capture_exception(exc)
+        except Exception:
+            pass
+        return jsonify({
+            "error": "Failed to send verification email. Please try again later or contact support.",
+            "code": "EMAIL_SEND_FAILED",
+        }), 502
 
-    return jsonify({"message": "Verification email sent! Check your inbox."}), 200
+    return jsonify({
+        "message": "Verification email sent! Check your inbox and spam folder.",
+    }), 200
 
 
 # ── Standard auth routes ───────────────────────────────────────────────────────
@@ -597,7 +617,12 @@ def forgot_password():
                     with _app.app_context():
                         send_password_reset_email(_uemail, _uname, _tok)
                 except Exception as exc:
-                    logger.warning("Password reset email failed for %s: %s", _uemail, exc)
+                    logger.error("Password reset email failed for %s: %s", _uemail, exc)
+                    try:
+                        import sentry_sdk
+                        sentry_sdk.capture_exception(exc)
+                    except Exception:
+                        pass
 
             threading.Thread(target=_send_reset, daemon=True).start()
         except Exception:
