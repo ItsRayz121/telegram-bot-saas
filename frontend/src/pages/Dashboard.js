@@ -4,14 +4,14 @@ import {
   CardActions, Grid, Dialog, DialogTitle, DialogContent, DialogActions,
   TextField, IconButton, Chip, CircularProgress, Tooltip, Menu, MenuItem,
   Avatar, LinearProgress, Alert, Stepper, Step, StepLabel, StepContent,
-  InputAdornment, Skeleton, Table, TableBody, TableCell, TableRow,
+  InputAdornment, Skeleton, Table, TableBody, TableCell, TableRow, Collapse,
 } from '@mui/material';
 import {
   Add, Delete, Settings, BarChart, SmartToy, AccountCircle,
   PowerSettingsNew, Upgrade, CheckCircle, Close, ContentCopy,
   ArrowForward, CreditCard, People, Home, AttachMoney,
   Notifications, NotificationsNone, Search, ManageAccounts,
-  EmojiEvents,
+  EmojiEvents, ExpandMore,
 } from '@mui/icons-material';
 import Badge from '@mui/material/Badge';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -68,6 +68,10 @@ function OnboardingCard({ botList, onAddBot, navigate }) {
   const [dismissed, setDismissed] = useState(
     () => localStorage.getItem('onboarding_dismissed') === '1'
   );
+  // Collapsed by default; remember user's preference
+  const [expanded, setExpanded] = useState(
+    () => localStorage.getItem('onboarding_expanded') === '1'
+  );
 
   const hasBots = botList.length > 0;
   const hasGroups = botList.some((b) => (b.group_count ?? 0) > 0);
@@ -114,53 +118,125 @@ function OnboardingCard({ botList, onAddBot, navigate }) {
   const completedCount = steps.filter((s) => s.done).length;
   const activeStep = steps.findIndex((s) => !s.done);
   const allDone = completedCount === steps.length;
+  const progressPct = (completedCount / steps.length) * 100;
 
-  if (dismissed && !allDone) return null;
-  if (allDone) return null;
+  // Auto-hide when dismissed or fully complete
+  if (dismissed || allDone) return null;
 
-  const remaining = steps.length - completedCount;
+  const toggleExpand = () => {
+    const next = !expanded;
+    setExpanded(next);
+    localStorage.setItem('onboarding_expanded', next ? '1' : '0');
+  };
+
+  const handleDismiss = (e) => {
+    e.stopPropagation();
+    setDismissed(true);
+    localStorage.setItem('onboarding_dismissed', '1');
+  };
 
   return (
-    <Card sx={{ mb: 3, border: '1px solid', borderColor: 'primary.main', bgcolor: 'rgba(33,150,243,0.04)' }}>
-      <CardContent sx={{ pb: 1 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <Box>
-            <Typography variant="subtitle1" fontWeight={700}>Getting Started</Typography>
-            <Typography variant="caption" color="text.secondary">
-              {remaining} step{remaining !== 1 ? 's' : ''} away from full automation
-            </Typography>
-          </Box>
-          <IconButton size="small" onClick={() => { setDismissed(true); localStorage.setItem('onboarding_dismissed', '1'); }}>
-            <Close fontSize="small" />
-          </IconButton>
+    <Card
+      sx={{
+        mb: 3,
+        border: '1px solid',
+        borderColor: expanded ? 'primary.main' : 'divider',
+        bgcolor: expanded ? 'rgba(33,150,243,0.04)' : 'background.paper',
+        transition: 'border-color 0.2s, background-color 0.2s',
+        overflow: 'hidden',
+      }}
+    >
+      {/* ── Compact summary bar (always visible) ── */}
+      <Box
+        onClick={toggleExpand}
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          px: 2,
+          py: 1.25,
+          gap: { xs: 1, sm: 1.5 },
+          cursor: 'pointer',
+          userSelect: 'none',
+          '&:hover': { bgcolor: 'action.hover' },
+          transition: 'background-color 0.15s',
+        }}
+      >
+        <CheckCircle sx={{ color: 'primary.main', fontSize: 17, flexShrink: 0 }} />
+
+        <Typography variant="body2" fontWeight={600} sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
+          Getting Started
+        </Typography>
+
+        {/* Inline progress bar — fills available space */}
+        <Box sx={{ flexGrow: 1, mx: { xs: 0.5, sm: 1 }, minWidth: 40 }}>
+          <LinearProgress
+            variant="determinate"
+            value={progressPct}
+            sx={{ height: 5, borderRadius: 3 }}
+          />
         </Box>
-        <LinearProgress
-          variant="determinate"
-          value={(completedCount / steps.length) * 100}
-          sx={{ mt: 1.5, mb: 2, height: 6, borderRadius: 3 }}
+
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ flexShrink: 0, whiteSpace: 'nowrap', display: { xs: 'none', sm: 'block' } }}
+        >
+          {completedCount}/{steps.length} completed
+        </Typography>
+
+        {/* Chevron */}
+        <ExpandMore
+          sx={{
+            flexShrink: 0,
+            fontSize: 20,
+            color: 'text.secondary',
+            transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+            transition: 'transform 0.25s ease',
+          }}
         />
-        <Stepper activeStep={activeStep} orientation="vertical" sx={{ '& .MuiStepLabel-label': { fontSize: '0.875rem' } }}>
-          {steps.map((step, idx) => (
-            <Step key={step.label} completed={step.done} expanded={idx === activeStep}>
-              <StepLabel StepIconProps={{ icon: step.done ? <CheckCircle color="success" /> : undefined }}>
-                <Typography variant="body2" fontWeight={step.done ? 400 : 600} color={step.done ? 'text.disabled' : 'text.primary'}>
-                  {step.label}
-                </Typography>
-              </StepLabel>
-              {!step.done && (
-                <StepContent>
-                  {step.hint && (
-                    <Typography variant="caption" color="text.secondary" display="block" mb={step.action ? 0 : 1}>
-                      {step.hint}
-                    </Typography>
-                  )}
-                  {step.action}
-                </StepContent>
-              )}
-            </Step>
-          ))}
-        </Stepper>
-      </CardContent>
+
+        {/* Dismiss */}
+        <Tooltip title="Dismiss">
+          <IconButton size="small" onClick={handleDismiss} sx={{ flexShrink: 0, p: 0.25 }}>
+            <Close sx={{ fontSize: 16 }} />
+          </IconButton>
+        </Tooltip>
+      </Box>
+
+      {/* ── Expanded checklist ── */}
+      <Collapse in={expanded} timeout={250}>
+        <Box sx={{ px: 2, pb: 2, pt: 0.5, borderTop: '1px solid', borderColor: 'divider' }}>
+          <Stepper
+            activeStep={activeStep}
+            orientation="vertical"
+            sx={{ '& .MuiStepLabel-label': { fontSize: '0.875rem' } }}
+          >
+            {steps.map((step, idx) => (
+              <Step key={step.label} completed={step.done} expanded={idx === activeStep}>
+                <StepLabel StepIconProps={{ icon: step.done ? <CheckCircle color="success" /> : undefined }}>
+                  <Typography
+                    variant="body2"
+                    fontWeight={step.done ? 400 : 600}
+                    color={step.done ? 'text.disabled' : 'text.primary'}
+                  >
+                    {step.label}
+                  </Typography>
+                </StepLabel>
+                {!step.done && (
+                  <StepContent>
+                    {step.hint && (
+                      <Typography variant="caption" color="text.secondary" display="block" mb={step.action ? 0 : 1}>
+                        {step.hint}
+                      </Typography>
+                    )}
+                    {step.action}
+                  </StepContent>
+                )}
+              </Step>
+            ))}
+          </Stepper>
+        </Box>
+      </Collapse>
     </Card>
   );
 }
