@@ -241,6 +241,8 @@ def _run_migrations():
         "ALTER TABLE polls ADD COLUMN timezone VARCHAR(50) DEFAULT 'UTC'",
         # Dedicated timezone column on groups (previously only in settings JSON)
         "ALTER TABLE groups ADD COLUMN timezone VARCHAR(50) DEFAULT 'UTC'",
+        # Billing period for annual vs monthly subscriptions
+        "ALTER TABLE payment_history ADD COLUMN billing_period VARCHAR(10) DEFAULT 'monthly'",
     ]
     try:
         with db.engine.connect() as conn:
