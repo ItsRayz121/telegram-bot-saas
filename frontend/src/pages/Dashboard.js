@@ -657,21 +657,8 @@ export default function Dashboard() {
 
       <Box sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 2, md: 3 } }}>
 
-        {/* ── Email verification banner ── */}
-        {!loading && user.id && user.email_verified === false && (
-          <Alert
-            severity="warning"
-            sx={{ mb: 2 }}
-            action={
-              <Button size="small" color="warning" onClick={() => navigate('/verify-email')}>
-                Verify Now
-              </Button>
-            }
-          >
-            Please verify your email address to ensure uninterrupted access.
-            Check your inbox (and spam folder) for the verification link.
-          </Alert>
-        )}
+        {/* Email verification is now enforced by VerifiedRoute in App.js —
+            unverified users never reach this page. No banner needed. */}
 
         {/* ── Expired warning ── */}
         {subscription?.is_expired && (

@@ -85,15 +85,29 @@ function JoinRedirect() {
   return <Navigate to={`/register${ref ? `?ref=${ref}` : ''}`} replace />;
 }
 
-function PrivateRoute({ children }) {
-  const token = localStorage.getItem('token');
-  return token ? children : <Navigate to="/login" replace />;
+// Read stored user object from localStorage (never trust for security, only for routing UX).
+function _storedUser() {
+  try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; }
 }
 
-// Redirect already-authenticated users away from auth pages
+// Requires auth + verified email. Unauth → /login. Auth but unverified → /verify-email.
+// Synchronous localStorage read means no flash-of-content before redirect.
+function VerifiedRoute({ children }) {
+  const token = localStorage.getItem('token');
+  if (!token) return <Navigate to="/login" replace />;
+  const user = _storedUser();
+  if (user.email_verified === false) return <Navigate to="/verify-email" replace />;
+  return children;
+}
+
+// Redirect already-authenticated users away from auth pages.
+// Unverified logged-in users go to /verify-email, not /dashboard.
 function PublicOnlyRoute({ children }) {
   const token = localStorage.getItem('token');
-  return token ? <Navigate to="/dashboard" replace /> : children;
+  if (!token) return children;
+  const user = _storedUser();
+  if (user.email_verified === false) return <Navigate to="/verify-email" replace />;
+  return <Navigate to="/dashboard" replace />;
 }
 
 // Admin-only route: validates is_admin from backend on each mount — never trusts localStorage
@@ -148,20 +162,20 @@ export default function App() {
             {/* Email verification — accessible with or without auth */}
             <Route path="/verify-email" element={<VerifyEmail />} />
 
-            {/* Protected */}
-            <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
-            <Route path="/bot/:id" element={<PrivateRoute><BotSettings /></PrivateRoute>} />
-            <Route path="/bot/:id/group/:groupId" element={<PrivateRoute><GroupSettings /></PrivateRoute>} />
-            <Route path="/analytics/:id" element={<PrivateRoute><Analytics /></PrivateRoute>} />
+            {/* Protected — requires auth AND verified email */}
+            <Route path="/dashboard" element={<VerifiedRoute><Dashboard /></VerifiedRoute>} />
+            <Route path="/bot/:id" element={<VerifiedRoute><BotSettings /></VerifiedRoute>} />
+            <Route path="/bot/:id/group/:groupId" element={<VerifiedRoute><GroupSettings /></VerifiedRoute>} />
+            <Route path="/analytics/:id" element={<VerifiedRoute><Analytics /></VerifiedRoute>} />
 
             {/* Admin only */}
             <Route path="/admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />
 
             {/* Billing — protected */}
-            <Route path="/billing" element={<PrivateRoute><Billing /></PrivateRoute>} />
+            <Route path="/billing" element={<VerifiedRoute><Billing /></VerifiedRoute>} />
 
             {/* Settings — protected */}
-            <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
+            <Route path="/settings" element={<VerifiedRoute><Settings /></VerifiedRoute>} />
 
             {/* 404 */}
             <Route path="*" element={<NotFound />} />

@@ -23,6 +23,13 @@ api.interceptors.response.use(
       localStorage.removeItem('user');
       window.location.href = '/login';
     }
+    // Hard redirect if backend rejects due to unverified email
+    if (
+      error.response?.status === 403 &&
+      error.response?.data?.code === 'EMAIL_NOT_VERIFIED'
+    ) {
+      window.location.href = '/verify-email';
+    }
     return Promise.reject(error);
   }
 );

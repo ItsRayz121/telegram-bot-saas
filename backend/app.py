@@ -171,6 +171,52 @@ def create_app():
         status_code = 200 if ok else 503
         return jsonify({"ready": ok, "checks": checks}), status_code
 
+    # ── Email verification gate ────────────────────────────────────────────────
+    # All /api/ routes require email_verified=True except the whitelist below.
+    # This is a server-side hard block — frontend routing is defence-in-depth.
+    _VERIFY_EXEMPT_EXACT = frozenset({
+        '/api/auth/login',
+        '/api/auth/register',
+        '/api/auth/logout',
+        '/api/auth/verify-email',
+        '/api/auth/resend-verification',
+        '/api/auth/forgot-password',
+        '/api/auth/reset-password',
+        '/api/auth/verify-totp-login',
+        '/api/auth/me',       # needed to fetch verification status on load
+        '/health',
+        '/ready',
+    })
+    _VERIFY_EXEMPT_PREFIX = ('/api/auth/2fa/',)  # 2FA setup (pre-verification OK)
+
+    @app.before_request
+    def _enforce_email_verification():
+        path = request.path
+        if path in _VERIFY_EXEMPT_EXACT:
+            return None
+        if path.startswith(_VERIFY_EXEMPT_PREFIX):
+            return None
+        if not path.startswith('/api/'):
+            return None
+        # Optionally parse JWT — does not raise if absent/invalid
+        try:
+            from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
+            verify_jwt_in_request(optional=True)
+            uid = get_jwt_identity()
+            if not uid:
+                return None  # Unauthenticated — let the route return its own 401
+            from .models import User as _User
+            user = _User.query.get(int(uid))
+            if user and not user.email_verified:
+                return jsonify({
+                    "error": "Please verify your email address before accessing this feature. "
+                             "Check your inbox for the verification link.",
+                    "code": "EMAIL_NOT_VERIFIED",
+                }), 403
+        except Exception:
+            pass  # Bad/missing token — route handles its own auth check
+        return None
+
     @app.before_request
     def _assign_request_id():
         g.request_id = str(uuid.uuid4())[:8]

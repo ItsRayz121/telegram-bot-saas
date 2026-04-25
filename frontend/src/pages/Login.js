@@ -36,8 +36,12 @@ export default function Login() {
       } else {
         localStorage.setItem('token', res.data.token);
         localStorage.setItem('user', JSON.stringify(res.data.user));
-        toast.success('Welcome back!');
-        navigate('/dashboard');
+        if (!res.data.user.email_verified) {
+          navigate('/verify-email');
+        } else {
+          toast.success('Welcome back!');
+          navigate('/dashboard');
+        }
       }
     } catch (err) {
       setError(err.response?.data?.error || 'Login failed. Please try again.');
@@ -58,8 +62,12 @@ export default function Login() {
       });
       localStorage.setItem('token', res.data.token);
       localStorage.setItem('user', JSON.stringify(res.data.user));
-      toast.success('Welcome back!');
-      navigate('/dashboard');
+      if (!res.data.user.email_verified) {
+        navigate('/verify-email');
+      } else {
+        toast.success('Welcome back!');
+        navigate('/dashboard');
+      }
     } catch (err) {
       setError(err.response?.data?.error || 'Invalid 2FA code. Try again.');
     } finally {

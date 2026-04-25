@@ -41,8 +41,8 @@ export default function Register() {
       });
       localStorage.setItem('token', res.data.token);
       localStorage.setItem('user', JSON.stringify(res.data.user));
-      toast.success('Account created! Welcome to BotForge.');
-      navigate('/dashboard');
+      toast.success('Account created! Please verify your email to continue.');
+      navigate('/verify-email');
     } catch (err) {
       const code = err.response?.data?.code;
       const msg = err.response?.data?.error;
