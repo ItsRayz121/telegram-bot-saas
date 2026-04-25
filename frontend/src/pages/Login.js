@@ -4,6 +4,7 @@ import {
   Alert, CircularProgress, Link, InputAdornment, IconButton,
 } from '@mui/material';
 import { Visibility, VisibilityOff, Lock } from '@mui/icons-material';
+import TelegizerLogo from '../components/TelegizerLogo';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { auth } from '../services/api';
@@ -152,9 +153,9 @@ export default function Login() {
     >
       <Card sx={{ width: '100%', maxWidth: 420 }}>
         <CardContent sx={{ p: { xs: 3, sm: 4 } }}>
-          <Typography variant="h4" fontWeight={700} mb={0.5} textAlign="center">
-            Telegizer
-          </Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'center', mb: 1.5 }}>
+            <TelegizerLogo size="lg" />
+          </Box>
           <Typography variant="body2" color="text.secondary" textAlign="center" mb={3}>
             Sign in to manage your Telegram bots
           </Typography>

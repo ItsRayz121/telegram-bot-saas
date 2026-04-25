@@ -3,11 +3,12 @@ import {
   Box, Card, CardContent, Typography, Button, CircularProgress,
   Chip, Stack, LinearProgress,
 } from '@mui/material';
-import { CheckCircle, HourglassTop, ErrorOutline, SmartToy } from '@mui/icons-material';
+import { CheckCircle, HourglassTop, ErrorOutline } from '@mui/icons-material';
+import TelegizerLogo from '../components/TelegizerLogo';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { billing, auth } from '../services/api';
 
-const MAX_ATTEMPTS = 15;   // 15 Ã— 4s = 60s total poll window
+const MAX_ATTEMPTS = 15;   // 15 × 4s = 60s total poll window
 const POLL_INTERVAL = 4000;
 
 export default function PaymentSuccess() {
@@ -89,12 +90,11 @@ export default function PaymentSuccess() {
       <Card sx={{ maxWidth: 480, width: '100%' }}>
         <CardContent sx={{ p: { xs: 3, sm: 5 }, textAlign: 'center' }}>
           {/* Brand */}
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, mb: 3 }}>
-            <SmartToy sx={{ color: 'primary.main' }} />
-            <Typography variant="h6" fontWeight={700}>Telegizer</Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}>
+            <TelegizerLogo size="md" />
           </Box>
 
-          {/* â”€â”€ Checking â”€â”€ */}
+          {/* â"€â"€ Checking â"€â"€ */}
           {status === 'checking' && (
             <>
               <CircularProgress size={56} sx={{ mb: 3 }} />
@@ -102,7 +102,7 @@ export default function PaymentSuccess() {
                 Confirming your payment
               </Typography>
               <Typography variant="body2" color="text.secondary" mb={2}>
-                Waiting for blockchain confirmation. This usually takes 1â€“3 minutes.
+                Waiting for blockchain confirmation. This usually takes 1—3 minutes.
               </Typography>
               {attempts > 0 && (
                 <>
@@ -112,14 +112,14 @@ export default function PaymentSuccess() {
                     sx={{ borderRadius: 2, mb: 1 }}
                   />
                   <Typography variant="caption" color="text.disabled">
-                    Check {attempts} of {MAX_ATTEMPTS} Â· refreshing automatically
+                    Check {attempts} of {MAX_ATTEMPTS} · refreshing automatically
                   </Typography>
                 </>
               )}
             </>
           )}
 
-          {/* â”€â”€ Success â”€â”€ */}
+          {/* â"€â"€ Success â"€â"€ */}
           {status === 'success' && (
             <>
               <CheckCircle sx={{ fontSize: 72, color: 'success.main', mb: 2 }} />
@@ -148,7 +148,7 @@ export default function PaymentSuccess() {
             </>
           )}
 
-          {/* â”€â”€ Pending â”€â”€ */}
+          {/* â"€â"€ Pending â"€â"€ */}
           {status === 'pending' && (
             <>
               <HourglassTop sx={{ fontSize: 72, color: 'warning.main', mb: 2 }} />
@@ -157,10 +157,10 @@ export default function PaymentSuccess() {
               </Typography>
               <Typography color="text.secondary" mb={1}>
                 Your payment is being processed on-chain. Depending on network congestion,
-                crypto confirmations can take up to 10â€“30 minutes.
+                crypto confirmations can take up to 10—30 minutes.
               </Typography>
               <Typography variant="body2" color="text.secondary" mb={4}>
-                Your plan will upgrade automatically once confirmed â€” you don't need to do
+                Your plan will upgrade automatically once confirmed — you don't need to do
                 anything. Check your dashboard in a few minutes.
               </Typography>
               <Stack spacing={2}>
@@ -174,7 +174,7 @@ export default function PaymentSuccess() {
             </>
           )}
 
-          {/* â”€â”€ Failed / Cancelled â”€â”€ */}
+          {/* â"€â"€ Failed / Cancelled â"€â"€ */}
           {status === 'failed' && (
             <>
               <ErrorOutline sx={{ fontSize: 72, color: 'error.main', mb: 2 }} />

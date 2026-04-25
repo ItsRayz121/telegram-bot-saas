@@ -13,6 +13,7 @@ import {
   Notifications, NotificationsNone, Search, ManageAccounts,
   EmojiEvents, ExpandMore,
 } from '@mui/icons-material';
+import TelegizerLogo from '../components/TelegizerLogo';
 import Badge from '@mui/material/Badge';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -564,8 +565,7 @@ export default function Dashboard() {
             onClick={() => navigate('/dashboard')}
             sx={{ display: 'flex', alignItems: 'center', gap: 0.75, cursor: 'pointer', mr: 2, userSelect: 'none' }}
           >
-            <SmartToy sx={{ color: 'primary.main' }} />
-            <Typography variant="h6" fontWeight={700}>Telegizer</Typography>
+            <TelegizerLogo size="sm" />
           </Box>
 
           <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 0.5, flexGrow: 1 }}>
@@ -762,7 +762,7 @@ export default function Dashboard() {
           </Grid>
         ) : botList.length === 0 ? (
           <Card sx={{ textAlign: 'center', py: 8, px: 3 }}>
-            <SmartToy sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
+            <TelegizerLogo variant="icon" size="xl" sx={{ mb: 2, opacity: 0.35 }} />
             <Typography variant="h6" fontWeight={700} mb={1}>Add your first bot</Typography>
             <Typography variant="body2" color="text.secondary" mb={0.5} sx={{ maxWidth: 400, mx: 'auto' }}>
               Get a token from <strong>@BotFather</strong> on Telegram, paste it here, and you're running in seconds.

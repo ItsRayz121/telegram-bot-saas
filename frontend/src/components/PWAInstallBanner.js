@@ -1,6 +1,6 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { Box, Button, Typography, IconButton } from '@mui/material';
-import { GetApp, Close, IosShare } from '@mui/icons-material';
+import { Close, IosShare } from '@mui/icons-material';
 
 export default function PWAInstallBanner() {
   const [deferredPrompt, setDeferredPrompt] = useState(null);
@@ -62,7 +62,12 @@ export default function PWAInstallBanner() {
     return (
       <Box sx={bannerSx}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <GetApp color="primary" sx={{ flexShrink: 0 }} />
+          <Box
+            component="img"
+            src="/icons/telegizer-icon.png"
+            alt="Telegizer"
+            sx={{ width: 36, height: 36, objectFit: 'contain', flexShrink: 0, borderRadius: 1.5 }}
+          />
           <Box sx={{ flexGrow: 1, minWidth: 0 }}>
             <Typography variant="body2" fontWeight={700}>Install Telegizer</Typography>
             <Typography variant="caption" color="text.secondary">

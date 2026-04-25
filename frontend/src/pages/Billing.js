@@ -6,11 +6,12 @@ import {
   TableRow, TablePagination,
 } from '@mui/material';
 import {
-  SmartToy, ArrowBack, Upgrade, CheckCircle,
+  ArrowBack, Upgrade, CheckCircle,
   CurrencyBitcoin, CreditCard, Refresh, ReceiptLong,
 } from '@mui/icons-material';
 import Skeleton from '@mui/material/Skeleton';
 import { useNavigate } from 'react-router-dom';
+import TelegizerLogo from '../components/TelegizerLogo';
 import { toast } from 'react-toastify';
 import { billing } from '../services/api';
 
@@ -53,7 +54,7 @@ export default function Billing() {
       setHistory(res.data.history || []);
       setHistoryTotal(res.data.total || 0);
     } catch {
-      // silent â€” empty state shown
+      // silent — empty state shown
     } finally {
       setHistoryLoading(false);
     }
@@ -86,10 +87,9 @@ export default function Billing() {
           <IconButton edge="start" onClick={() => navigate('/dashboard')} sx={{ mr: 1 }}>
             <ArrowBack />
           </IconButton>
-          <SmartToy sx={{ mr: 1, color: 'primary.main' }} />
-          <Typography variant="h6" fontWeight={700} sx={{ flexGrow: 1 }}>
-            Telegizer â€” Billing
-          </Typography>
+          <Box sx={{ flexGrow: 1 }}>
+            <TelegizerLogo size="sm" />
+          </Box>
         </Toolbar>
       </AppBar>
 
@@ -243,7 +243,7 @@ export default function Billing() {
                     <Box sx={{ flexGrow: 1 }}>
                       <Typography variant="body2" fontWeight={600}>Card / Bank Transfer</Typography>
                       <Typography variant="caption" color="text.secondary">
-                        Visa, Mastercard â€” under review by processor
+                        Visa, Mastercard — under review by processor
                       </Typography>
                     </Box>
                     <Chip label="Coming Soon" size="small" />
@@ -313,14 +313,14 @@ export default function Billing() {
                                 {PROVIDER_LABELS[row.provider] || row.provider}
                               </TableCell>
                               <TableCell align="right" sx={{ fontWeight: 600 }}>
-                                {row.amount_usd ? `$${(row.amount_usd / 100).toFixed(2)}` : 'â€”'}
+                                {row.amount_usd ? `$${(row.amount_usd / 100).toFixed(2)}` : '—'}
                               </TableCell>
                               <TableCell>
                                 <Chip label={row.status} size="small"
                                   color={STATUS_COLORS[row.status] || 'default'} />
                               </TableCell>
                               <TableCell sx={{ fontSize: '0.72rem', color: 'text.secondary', fontFamily: 'monospace' }}>
-                                {row.payment_id_masked || 'â€”'}
+                                {row.payment_id_masked || '—'}
                               </TableCell>
                             </TableRow>
                           ))}
@@ -352,7 +352,7 @@ export default function Billing() {
                   <Typography variant="h6" fontWeight={700} color="white" mb={1}>
                     {tier === 'free'
                       ? 'Unlock the full power of Telegizer'
-                      : 'Scale to Enterprise â€” 50 bots, dedicated support'}
+                      : 'Scale to Enterprise — 50 bots, dedicated support'}
                   </Typography>
                   <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.8)', mb: 2 }}>
                     {tier === 'free'
@@ -364,7 +364,7 @@ export default function Billing() {
                     onClick={() => navigate('/pricing')}
                     sx={{ bgcolor: 'white', color: 'primary.main', '&:hover': { bgcolor: '#f0f0f0' } }}
                   >
-                    {tier === 'free' ? 'Upgrade to Pro â€” $9/mo' : 'Upgrade to Enterprise â€” $49/mo'}
+                    {tier === 'free' ? 'Upgrade to Pro — $9/mo' : 'Upgrade to Enterprise — $49/mo'}
                   </Button>
                 </CardContent>
               </Card>
@@ -383,7 +383,7 @@ export default function Billing() {
                 >
                   Contact support
                 </Typography>
-                {' '}Â· 14-day money-back guarantee on first purchase
+                {' '}· 14-day money-back guarantee on first purchase
               </Typography>
             </Box>
           </>

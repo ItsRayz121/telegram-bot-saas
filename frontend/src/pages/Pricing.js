@@ -261,7 +261,7 @@ export default function Pricing() {
                         </Typography>
                         <Typography component="span" variant="body1" color="text.secondary">/month</Typography>
                         <Typography variant="caption" display="block" color="success.main" fontWeight={600} mb={1}>
-                          ${plan.annualPrice}/year Â· ~2 months free
+                          ${plan.annualPrice}/year · ~2 months free
                         </Typography>
                       </>
                     ) : (
@@ -306,7 +306,7 @@ export default function Pricing() {
           All plans include a 14-day money-back guarantee. No hidden fees.
         </Typography>
         <Typography variant="caption" color="text.disabled">
-          Payments accepted via crypto (USDT, BTC, ETH, BNB, 300+ coins) Â· Card payments coming soon
+          Payments accepted via crypto (USDT, BTC, ETH, BNB, 300+ coins) · Card payments coming soon
         </Typography>
       </Box>
 
@@ -322,7 +322,7 @@ export default function Pricing() {
                 Upgrading to <strong>{selectedTier.charAt(0).toUpperCase() + selectedTier.slice(1)}</strong> Plan
                 {' '}â€” <strong>{annual ? 'Annual' : 'Monthly'}</strong> billing
                 {annual && (
-                  <> Â· <span style={{ color: '#66bb6a' }}>~2 months free</span></>
+                  <> · <span style={{ color: '#66bb6a' }}>~2 months free</span></>
                 )}
               </>
             )}

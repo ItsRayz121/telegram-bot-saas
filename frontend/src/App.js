@@ -49,13 +49,14 @@ if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
 const darkTheme = createTheme({
   palette: {
     mode: 'dark',
-    primary: { main: '#2196f3' },
-    secondary: { main: '#7c4dff' },
+    primary: { main: '#2563EB', light: '#60a5fa', dark: '#1d4ed8' },
+    secondary: { main: '#7C3AED', light: '#a78bfa', dark: '#5b21b6' },
+    info: { main: '#06B6D4' },
     background: {
-      default: '#0d1117',
-      paper: '#161b22',
+      default: '#0f172a',
+      paper: '#1e293b',
     },
-    divider: '#30363d',
+    divider: '#334155',
   },
   typography: {
     fontFamily: "'Inter', -apple-system, sans-serif",
@@ -68,7 +69,7 @@ const darkTheme = createTheme({
     },
     MuiCard: {
       styleOverrides: {
-        root: { borderRadius: 12, border: '1px solid #30363d' },
+        root: { borderRadius: 12, border: '1px solid #334155' },
       },
     },
     MuiPaper: {
