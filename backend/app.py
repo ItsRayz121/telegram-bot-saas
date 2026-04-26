@@ -52,6 +52,7 @@ from .routes.telegram_groups import tg_groups_bp
 from .routes.custom_bots import custom_bots_bp
 from .routes.custom_commands import custom_commands_bp
 from .routes.telegram_account import telegram_account_bp
+from .routes.official_settings import official_settings_bp
 from .bot_manager import BotManager
 from .official_bot import start_official_bot
 
@@ -136,6 +137,7 @@ def create_app():
     app.register_blueprint(custom_bots_bp)
     app.register_blueprint(custom_commands_bp)
     app.register_blueprint(telegram_account_bp)
+    app.register_blueprint(official_settings_bp)
 
     app.bot_manager = bot_manager
 
@@ -548,6 +550,9 @@ def _run_migrations():
         )""",
         "CREATE INDEX IF NOT EXISTS ix_revoked_tokens_jti ON revoked_tokens (jti)",
         "CREATE INDEX IF NOT EXISTS ix_users_email_verification_token ON users (email_verification_token)",
+        # Full settings panel for official bot groups
+        "ALTER TABLE telegram_groups ADD COLUMN settings JSONB NOT NULL DEFAULT '{}'",
+        "ALTER TABLE telegram_groups ADD COLUMN timezone VARCHAR(50) DEFAULT 'UTC'",
     ]
     try:
         with db.engine.connect() as conn:

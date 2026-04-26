@@ -174,7 +174,7 @@ export default function App() {
 
             {/* Official bot ecosystem */}
             <Route path="/my-groups" element={<VerifiedRoute><MyGroups /></VerifiedRoute>} />
-            <Route path="/my-groups/:groupId" element={<VerifiedRoute><GroupManagement /></VerifiedRoute>} />
+            <Route path="/my-groups/:groupId" element={<VerifiedRoute><GroupSettings /></VerifiedRoute>} />
             <Route path="/add-group" element={<VerifiedRoute><MyGroups /></VerifiedRoute>} />
             <Route path="/my-bots" element={<VerifiedRoute><MyBots /></VerifiedRoute>} />
 

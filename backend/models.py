@@ -771,6 +771,8 @@ class TelegramGroup(db.Model):
     bot_status = db.Column(db.String(20), default="pending", nullable=False)
     # {delete_messages, ban_users, pin_messages, manage_topics}
     bot_permissions = db.Column(db.JSON, nullable=True)
+    settings = db.Column(db.JSON, nullable=False, default=dict)
+    timezone = db.Column(db.String(50), default="UTC", nullable=True)
     linked_at = db.Column(db.DateTime, nullable=True)
     last_activity = db.Column(db.DateTime, nullable=True)
     is_disabled = db.Column(db.Boolean, default=False, nullable=False)

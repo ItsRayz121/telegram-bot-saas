@@ -104,7 +104,9 @@ const LANGUAGE_OPTIONS = [
 
 export default function GroupSettings() {
   const navigate = useNavigate();
-  const { id: botId, groupId } = useParams();
+  const { id: rawBotId, groupId } = useParams();
+  const botId = rawBotId || 'official';
+  const isOfficial = !rawBotId;
   const [cat, setCat] = useState('moderation');
   const [subTab, setSubTab] = useState(0);
   const [groupData, setGroupData] = useState(null);
@@ -142,7 +144,7 @@ export default function GroupSettings() {
       setSettingsData(res.data.settings);
     } catch {
       toast.error('Failed to load settings');
-      navigate(`/bot/${botId}`);
+      navigate(isOfficial ? '/my-groups' : `/bot/${botId}`);
     } finally {
       setLoading(false);
     }
@@ -362,11 +364,11 @@ export default function GroupSettings() {
 
       <AppBar position="sticky" elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
         <Toolbar>
-          <IconButton edge="start" onClick={() => navigate(`/bot/${botId}`)} sx={{ mr: 1 }}>
+          <IconButton edge="start" onClick={() => navigate(isOfficial ? '/my-groups' : `/bot/${botId}`)} sx={{ mr: 1 }}>
             <ArrowBack />
           </IconButton>
           <Typography variant="h6" fontWeight={600} sx={{ flexGrow: 1 }}>
-            {groupData?.group_name || 'Group Settings'}
+            {groupData?.group_name || groupData?.title || 'Group Settings'}
           </Typography>
           {settingsData && (
             <Tooltip title="Group default timezone — change it in Automation › Scheduler">

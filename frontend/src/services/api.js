@@ -74,71 +74,136 @@ export const bots = {
   getStatus: (id) => api.get(`/api/bots/${id}/status`),
 };
 
+const _notAvailable = (msg) =>
+  Promise.reject({ response: { data: { error: msg } } });
+
 export const settings = {
   getGroupSettings: (botId, groupId) =>
-    api.get(`/api/bots/${botId}/groups/${groupId}/settings`),
+    botId === 'official'
+      ? api.get(`/api/official-groups/${groupId}/settings`)
+      : api.get(`/api/bots/${botId}/groups/${groupId}/settings`),
   updateGroupSettings: (botId, groupId, data) =>
-    api.put(`/api/bots/${botId}/groups/${groupId}/settings`, data),
+    botId === 'official'
+      ? api.put(`/api/official-groups/${groupId}/settings`, data)
+      : api.put(`/api/bots/${botId}/groups/${groupId}/settings`, data),
   getMembers: (botId, groupId, params) =>
-    api.get(`/api/bots/${botId}/groups/${groupId}/members`, { params }),
+    botId === 'official'
+      ? Promise.resolve({ data: { members: [], total: 0, pages: 0, page: 1, per_page: 20 } })
+      : api.get(`/api/bots/${botId}/groups/${groupId}/members`, { params }),
   getAuditLogs: (botId, groupId, params) =>
-    api.get(`/api/bots/${botId}/groups/${groupId}/audit-logs`, { params }),
+    botId === 'official'
+      ? Promise.resolve({ data: { logs: [], total: 0, pages: 0, page: 1 } })
+      : api.get(`/api/bots/${botId}/groups/${groupId}/audit-logs`, { params }),
   getScheduledMessages: (botId, groupId) =>
-    api.get(`/api/bots/${botId}/groups/${groupId}/scheduled-messages`),
+    botId === 'official'
+      ? Promise.resolve({ data: { messages: [] } })
+      : api.get(`/api/bots/${botId}/groups/${groupId}/scheduled-messages`),
   createScheduledMessage: (botId, groupId, data) =>
-    api.post(`/api/bots/${botId}/groups/${groupId}/scheduled-messages`, data),
+    botId === 'official'
+      ? _notAvailable('Scheduled messages are coming soon for official bot groups.')
+      : api.post(`/api/bots/${botId}/groups/${groupId}/scheduled-messages`, data),
   createRaid: (botId, groupId, data) =>
-    api.post(`/api/bots/${botId}/groups/${groupId}/raids`, data),
+    botId === 'official'
+      ? _notAvailable('Raids are coming soon for official bot groups.')
+      : api.post(`/api/bots/${botId}/groups/${groupId}/raids`, data),
   getAutoResponses: (botId, groupId) =>
-    api.get(`/api/bots/${botId}/groups/${groupId}/auto-responses`),
+    botId === 'official'
+      ? Promise.resolve({ data: { auto_responses: [] } })
+      : api.get(`/api/bots/${botId}/groups/${groupId}/auto-responses`),
   createAutoResponse: (botId, groupId, data) =>
-    api.post(`/api/bots/${botId}/groups/${groupId}/auto-responses`, data),
+    botId === 'official'
+      ? _notAvailable('Auto-responses are coming soon for official bot groups.')
+      : api.post(`/api/bots/${botId}/groups/${groupId}/auto-responses`, data),
   updateAutoResponse: (botId, groupId, arId, data) =>
-    api.put(`/api/bots/${botId}/groups/${groupId}/auto-responses/${arId}`, data),
+    botId === 'official'
+      ? _notAvailable('Auto-responses are coming soon for official bot groups.')
+      : api.put(`/api/bots/${botId}/groups/${groupId}/auto-responses/${arId}`, data),
   deleteAutoResponse: (botId, groupId, arId) =>
-    api.delete(`/api/bots/${botId}/groups/${groupId}/auto-responses/${arId}`),
+    botId === 'official'
+      ? _notAvailable('Auto-responses are coming soon for official bot groups.')
+      : api.delete(`/api/bots/${botId}/groups/${groupId}/auto-responses/${arId}`),
   getReports: (botId, groupId, params) =>
-    api.get(`/api/bots/${botId}/groups/${groupId}/reports`, { params }),
+    botId === 'official'
+      ? Promise.resolve({ data: { reports: [] } })
+      : api.get(`/api/bots/${botId}/groups/${groupId}/reports`, { params }),
   resolveReport: (botId, groupId, reportId) =>
-    api.post(`/api/bots/${botId}/groups/${groupId}/reports/${reportId}/resolve`),
+    botId === 'official'
+      ? Promise.resolve({ data: { message: 'OK' } })
+      : api.post(`/api/bots/${botId}/groups/${groupId}/reports/${reportId}/resolve`),
   deleteScheduledMessage: (botId, groupId, msgId) =>
-    api.delete(`/api/bots/${botId}/groups/${groupId}/scheduled-messages/${msgId}`),
+    botId === 'official'
+      ? Promise.resolve({ data: { message: 'OK' } })
+      : api.delete(`/api/bots/${botId}/groups/${groupId}/scheduled-messages/${msgId}`),
 };
 
 export const knowledge = {
-  list: (botId, groupId) => api.get(`/api/bots/${botId}/groups/${groupId}/knowledge`),
+  list: (botId, groupId) =>
+    botId === 'official'
+      ? Promise.resolve({ data: { documents: [] } })
+      : api.get(`/api/bots/${botId}/groups/${groupId}/knowledge`),
   upload: (botId, groupId, formData) =>
-    api.post(`/api/bots/${botId}/groups/${groupId}/knowledge`, formData, {
-      headers: { 'Content-Type': undefined }, // let Axios set multipart + boundary automatically
-    }),
+    botId === 'official'
+      ? _notAvailable('Knowledge base is coming soon for official bot groups.')
+      : api.post(`/api/bots/${botId}/groups/${groupId}/knowledge`, formData, {
+          headers: { 'Content-Type': undefined },
+        }),
   delete: (botId, groupId, docId) =>
-    api.delete(`/api/bots/${botId}/groups/${groupId}/knowledge/${docId}`),
+    botId === 'official'
+      ? Promise.resolve({ data: {} })
+      : api.delete(`/api/bots/${botId}/groups/${groupId}/knowledge/${docId}`),
 };
 
 export const polls = {
-  list: (botId, groupId) => api.get(`/api/bots/${botId}/groups/${groupId}/polls`),
-  create: (botId, groupId, data) => api.post(`/api/bots/${botId}/groups/${groupId}/polls`, data),
-  delete: (botId, groupId, pollId) => api.delete(`/api/bots/${botId}/groups/${groupId}/polls/${pollId}`),
+  list: (botId, groupId) =>
+    botId === 'official'
+      ? Promise.resolve({ data: { polls: [] } })
+      : api.get(`/api/bots/${botId}/groups/${groupId}/polls`),
+  create: (botId, groupId, data) =>
+    botId === 'official'
+      ? _notAvailable('Polls are coming soon for official bot groups.')
+      : api.post(`/api/bots/${botId}/groups/${groupId}/polls`, data),
+  delete: (botId, groupId, pollId) =>
+    botId === 'official'
+      ? Promise.resolve({ data: {} })
+      : api.delete(`/api/bots/${botId}/groups/${groupId}/polls/${pollId}`),
 };
 
 export const webhooks = {
-  list: (botId, groupId) => api.get(`/api/bots/${botId}/groups/${groupId}/webhooks`),
-  create: (botId, groupId, data) => api.post(`/api/bots/${botId}/groups/${groupId}/webhooks`, data),
+  list: (botId, groupId) =>
+    botId === 'official'
+      ? Promise.resolve({ data: { webhooks: [] } })
+      : api.get(`/api/bots/${botId}/groups/${groupId}/webhooks`),
+  create: (botId, groupId, data) =>
+    botId === 'official'
+      ? _notAvailable('Webhooks are coming soon for official bot groups.')
+      : api.post(`/api/bots/${botId}/groups/${groupId}/webhooks`, data),
   update: (botId, groupId, hookId, data) =>
-    api.put(`/api/bots/${botId}/groups/${groupId}/webhooks/${hookId}`, data),
+    botId === 'official'
+      ? _notAvailable('Webhooks are coming soon for official bot groups.')
+      : api.put(`/api/bots/${botId}/groups/${groupId}/webhooks/${hookId}`, data),
   delete: (botId, groupId, hookId) =>
-    api.delete(`/api/bots/${botId}/groups/${groupId}/webhooks/${hookId}`),
+    botId === 'official'
+      ? Promise.resolve({ data: {} })
+      : api.delete(`/api/bots/${botId}/groups/${groupId}/webhooks/${hookId}`),
 };
 
 export const invites = {
   list: (botId, groupId, params) =>
-    api.get(`/api/bots/${botId}/groups/${groupId}/invite-links`, { params }),
+    botId === 'official'
+      ? Promise.resolve({ data: { links: [] } })
+      : api.get(`/api/bots/${botId}/groups/${groupId}/invite-links`, { params }),
   create: (botId, groupId, data) =>
-    api.post(`/api/bots/${botId}/groups/${groupId}/invite-links`, data),
+    botId === 'official'
+      ? _notAvailable('Invite links are coming soon for official bot groups.')
+      : api.post(`/api/bots/${botId}/groups/${groupId}/invite-links`, data),
   delete: (botId, groupId, linkId) =>
-    api.delete(`/api/bots/${botId}/groups/${groupId}/invite-links/${linkId}`),
+    botId === 'official'
+      ? Promise.resolve({ data: {} })
+      : api.delete(`/api/bots/${botId}/groups/${groupId}/invite-links/${linkId}`),
   getLinkAnalytics: (botId, groupId, linkId, params) =>
-    api.get(`/api/bots/${botId}/groups/${groupId}/invite-links/${linkId}/analytics`, { params }),
+    botId === 'official'
+      ? Promise.resolve({ data: { clicks: [], total: 0 } })
+      : api.get(`/api/bots/${botId}/groups/${groupId}/invite-links/${linkId}/analytics`, { params }),
 };
 
 export const apiKeys = {
@@ -182,11 +247,17 @@ export const userSettings = {
 
 export const digest = {
   get: (botId, groupId) =>
-    api.get(`/api/bots/${botId}/groups/${groupId}/digest`),
+    botId === 'official'
+      ? Promise.resolve({ data: { digest: { daily: false, weekly: false, monthly: false } } })
+      : api.get(`/api/bots/${botId}/groups/${groupId}/digest`),
   update: (botId, groupId, data) =>
-    api.put(`/api/bots/${botId}/groups/${groupId}/digest`, data),
+    botId === 'official'
+      ? Promise.resolve({ data: { message: 'Saved' } })
+      : api.put(`/api/bots/${botId}/groups/${groupId}/digest`, data),
   sendNow: (botId, groupId, data) =>
-    api.post(`/api/bots/${botId}/groups/${groupId}/digest/send-now`, data),
+    botId === 'official'
+      ? _notAvailable('Digest reports are coming soon for official bot groups.')
+      : api.post(`/api/bots/${botId}/groups/${groupId}/digest/send-now`, data),
 };
 
 export const admin = {
