@@ -233,4 +233,10 @@ export const customBots = {
   delete: (id) => api.delete(`/api/custom-bots/${id}`),
 };
 
+export const telegramAccount = {
+  generateConnectCode: () => api.post('/api/telegram/generate-connect-code'),
+  connectionStatus: () => api.get('/api/telegram/connection-status'),
+  disconnect: () => api.delete('/api/telegram/disconnect'),
+};
+
 export default api;

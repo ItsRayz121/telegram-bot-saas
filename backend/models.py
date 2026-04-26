@@ -41,6 +41,10 @@ class User(db.Model):
     signup_ip_hash = db.Column(db.String(64), nullable=True, index=True)
     device_fingerprint_hash = db.Column(db.String(64), nullable=True, index=True)
     is_suspicious = db.Column(db.Boolean, default=False, nullable=False)
+    # Telegram account linkage
+    telegram_user_id = db.Column(db.String(255), nullable=True, unique=True, index=True)
+    telegram_username = db.Column(db.String(255), nullable=True)
+    telegram_connected_at = db.Column(db.DateTime, nullable=True)
 
     bots = db.relationship("Bot", backref="owner", lazy=True, cascade="all, delete-orphan")
 
@@ -71,6 +75,9 @@ class User(db.Model):
             "referral_code": self.referral_code,
             "email_verified": self.email_verified,
             "totp_enabled": self.totp_enabled,
+            "telegram_connected": bool(self.telegram_user_id),
+            "telegram_username": self.telegram_username,
+            "telegram_connected_at": self.telegram_connected_at.isoformat() if self.telegram_connected_at else None,
         }
 
 
@@ -712,6 +719,32 @@ class ReportedMessage(db.Model):
             "status": self.status,
             "created_at": self.created_at.isoformat(),
         }
+
+
+# ─── Telegram Account Connect Codes ──────────────────────────────────────────
+
+
+class TelegramConnectCode(db.Model):
+    """One-time codes that link a website user's account to their Telegram identity.
+    Generated on the website, consumed by the bot via /start connect_<code>."""
+    __tablename__ = "telegram_connect_codes"
+
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    used_at = db.Column(db.DateTime, nullable=True)
+    telegram_user_id = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    @staticmethod
+    def generate():
+        import secrets as _s
+        return _s.token_urlsafe(24)
+
+    @property
+    def is_valid(self):
+        return self.used_at is None and datetime.utcnow() < self.expires_at
 
 
 # ─── Official Bot Ecosystem Models ────────────────────────────────────────────

@@ -7,11 +7,11 @@ import {
 } from '@mui/material';
 import {
   ArrowBack, SmartToy, Person, Lock, DeleteForever, Schedule,
-  Security, CheckCircle, ContentCopy,
+  Security, CheckCircle, ContentCopy, Telegram, LinkOff, OpenInNew,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { auth, totp as totpApi, billing, userSettings } from '../services/api';
+import { auth, totp as totpApi, billing, userSettings, telegramAccount } from '../services/api';
 import TimezoneSelect from '../components/TimezoneSelect';
 
 function safeParseUser() {
@@ -233,6 +233,144 @@ function TwoFactorSection({ user, onUserRefresh }) {
   );
 }
 
+// ── Telegram Connect Section ───────────────────────────────────────────────────
+function TelegramConnectSection({ user, onUserRefresh }) {
+  const [status, setStatus] = React.useState({
+    connected: user.telegram_connected || false,
+    telegram_username: user.telegram_username || null,
+    connected_at: user.telegram_connected_at || null,
+  });
+  const [loading, setLoading] = React.useState(false);
+  const [connecting, setConnecting] = React.useState(false);
+  const [disconnectOpen, setDisconnectOpen] = React.useState(false);
+  const pollRef = React.useRef(null);
+
+  const stopPolling = () => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  };
+
+  React.useEffect(() => stopPolling, []);
+
+  const startPolling = () => {
+    let attempts = 0;
+    pollRef.current = setInterval(async () => {
+      attempts++;
+      try {
+        const r = await telegramAccount.connectionStatus();
+        if (r.data.connected) {
+          setStatus(r.data);
+          setConnecting(false);
+          stopPolling();
+          toast.success('Telegram account connected!');
+          await onUserRefresh();
+        }
+      } catch { /* ignore */ }
+      if (attempts >= 40) { // 2 minutes
+        stopPolling();
+        setConnecting(false);
+      }
+    }, 3000);
+  };
+
+  const handleConnect = async () => {
+    setLoading(true);
+    try {
+      const r = await telegramAccount.generateConnectCode();
+      const { url } = r.data;
+      window.open(url, '_blank', 'noopener,noreferrer');
+      setConnecting(true);
+      startPolling();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to generate connect code');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    try {
+      await telegramAccount.disconnect();
+      setStatus({ connected: false, telegram_username: null, connected_at: null });
+      setDisconnectOpen(false);
+      toast.success('Telegram disconnected');
+      await onUserRefresh();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to disconnect');
+    }
+  };
+
+  if (status.connected) {
+    return (
+      <Box>
+        <Alert severity="success" icon={<CheckCircle />} sx={{ mb: 2 }}>
+          Telegram account connected
+          {status.telegram_username && <strong> @{status.telegram_username}</strong>}.
+          {status.connected_at && (
+            <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+              Since {new Date(status.connected_at).toLocaleDateString()}
+            </Typography>
+          )}
+        </Alert>
+        <Typography variant="body2" color="text.secondary" mb={2}>
+          Groups you add via @telegizer_bot are automatically linked to your account.
+          Custom bots can be connected directly in the Telegram app.
+        </Typography>
+        <Button
+          variant="outlined"
+          color="error"
+          startIcon={<LinkOff />}
+          onClick={() => setDisconnectOpen(true)}
+          size="small"
+        >
+          Disconnect Telegram
+        </Button>
+
+        <Dialog open={disconnectOpen} onClose={() => setDisconnectOpen(false)} maxWidth="xs" fullWidth>
+          <DialogTitle fontWeight={700}>Disconnect Telegram?</DialogTitle>
+          <DialogContent>
+            <Typography variant="body2">
+              This will unlink your Telegram identity. Groups won't auto-link anymore and
+              you won't be able to submit bot tokens via the Telegram app until you reconnect.
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setDisconnectOpen(false)}>Cancel</Button>
+            <Button variant="contained" color="error" onClick={handleDisconnect}>Disconnect</Button>
+          </DialogActions>
+        </Dialog>
+      </Box>
+    );
+  }
+
+  return (
+    <Box>
+      <Typography variant="body2" color="text.secondary" mb={2}>
+        Link your Telegram account to Telegizer so groups and bots you manage via
+        @telegizer_bot appear in your dashboard automatically — no code entry needed.
+      </Typography>
+      {connecting ? (
+        <Alert severity="info" icon={<CircularProgress size={18} />} sx={{ mb: 2 }}>
+          Waiting for you to open the bot and confirm…{' '}
+          <Button size="small" onClick={() => { setConnecting(false); stopPolling(); }}>Cancel</Button>
+        </Alert>
+      ) : (
+        <Button
+          variant="contained"
+          startIcon={<Telegram />}
+          onClick={handleConnect}
+          disabled={loading}
+          endIcon={<OpenInNew fontSize="small" />}
+        >
+          {loading ? <CircularProgress size={20} color="inherit" /> : 'Connect Telegram'}
+        </Button>
+      )}
+    </Box>
+  );
+}
+
 // ── Main Settings Page ─────────────────────────────────────────────────────────
 export default function Settings() {
   const navigate = useNavigate();
@@ -443,6 +581,11 @@ export default function Settings() {
               </Button>
             </Box>
           </Stack>
+        </Section>
+
+        {/* Connect Telegram */}
+        <Section title="Connect Telegram Account" icon={<Telegram color="primary" />}>
+          <TelegramConnectSection user={user} onUserRefresh={fetchUser} />
         </Section>
 
         {/* Two-Factor Authentication */}

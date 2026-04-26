@@ -51,6 +51,7 @@ from .routes.totp import totp_bp
 from .routes.telegram_groups import tg_groups_bp
 from .routes.custom_bots import custom_bots_bp
 from .routes.custom_commands import custom_commands_bp
+from .routes.telegram_account import telegram_account_bp
 from .bot_manager import BotManager
 from .official_bot import start_official_bot
 
@@ -134,6 +135,7 @@ def create_app():
     app.register_blueprint(tg_groups_bp)
     app.register_blueprint(custom_bots_bp)
     app.register_blueprint(custom_commands_bp)
+    app.register_blueprint(telegram_account_bp)
 
     app.bot_manager = bot_manager
 
@@ -281,6 +283,7 @@ def create_app():
         _run_security_migrations()
         _run_anti_abuse_migrations()
         _run_official_bot_migrations()
+        _run_telegram_connect_migrations()
 
     # Start bots in a background thread after a short delay so Gunicorn can
     # pass its healthcheck before bot polling (which may contact Telegram and
@@ -374,6 +377,42 @@ def _run_official_bot_migrations():
         "CREATE INDEX IF NOT EXISTS ix_bot_events_created ON bot_events (created_at DESC)",
         # FK for telegram_groups.linked_bot_id (added after custom_bots table exists)
         "ALTER TABLE telegram_groups ADD CONSTRAINT fk_tg_linked_bot FOREIGN KEY (linked_bot_id) REFERENCES custom_bots(id) ON DELETE SET NULL",
+    ]
+    try:
+        with db.engine.connect() as conn:
+            for sql in stmts:
+                try:
+                    conn.execute(text(sql))
+                    conn.commit()
+                except Exception:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+
+
+def _run_telegram_connect_migrations():
+    """Add Telegram account linkage columns to users and create telegram_connect_codes table."""
+    stmts = [
+        # Telegram identity columns on users
+        "ALTER TABLE users ADD COLUMN telegram_user_id VARCHAR(255)",
+        "ALTER TABLE users ADD COLUMN telegram_username VARCHAR(255)",
+        "ALTER TABLE users ADD COLUMN telegram_connected_at TIMESTAMP",
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_telegram_user_id ON users (telegram_user_id)",
+        # One-time connect codes
+        """CREATE TABLE IF NOT EXISTS telegram_connect_codes (
+            id SERIAL PRIMARY KEY,
+            code VARCHAR(64) UNIQUE NOT NULL,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            expires_at TIMESTAMP NOT NULL,
+            used_at TIMESTAMP,
+            telegram_user_id VARCHAR(255),
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )""",
+        "CREATE INDEX IF NOT EXISTS ix_tg_connect_codes_code ON telegram_connect_codes (code)",
+        "CREATE INDEX IF NOT EXISTS ix_tg_connect_codes_user ON telegram_connect_codes (user_id)",
     ]
     try:
         with db.engine.connect() as conn:

@@ -198,6 +198,11 @@ export default function MyBots() {
         <DialogTitle>Connect Your Own Bot</DialogTitle>
         <DialogContent sx={{ pt: '16px !important' }}>
           <Alert severity="info" sx={{ mb: 2 }}>
+            <strong>Tip:</strong> If your Telegram account is linked (Settings → Connect Telegram),
+            you can paste your token directly in <strong>@telegizer_bot → Advanced Options → Connect Own Bot</strong>.
+            The token is deleted from chat immediately.
+          </Alert>
+          <Alert severity="success" sx={{ mb: 2 }}>
             Create a bot via <strong>@BotFather</strong> on Telegram, then paste the token below.
             Your token is encrypted and never exposed.
           </Alert>

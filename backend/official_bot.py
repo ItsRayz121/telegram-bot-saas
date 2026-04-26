@@ -4,17 +4,23 @@ Official Telegizer shared bot.
 Key design decisions:
 - flask_app (not app_context) stored in bot_data; every handler creates
   a FRESH with flask_app.app_context() per call.
-- /linkgroup does NOT post the verification code in the group.
-  It creates a pending record and attempts to DM the code to the
-  user privately. The code is NEVER visible to others in the group.
-- Private /start shows only the pending groups that the current
-  Telegram user initiated (via created_by_telegram_user_id).
+- /start connect_<code>: links Telegram user ID to website account, then
+  auto-links any pending groups created by this Telegram user.
+- /linkgroup: if the running user already has a linked website account,
+  the group is linked directly (no code exchange needed).  Otherwise
+  a TLG-XXXXXXXX code is generated and DMed privately.
+- on_private_text: accepts bot tokens from linked users when
+  context.user_data["awaiting_bot_token"] is True.  The token message
+  is deleted immediately and rate-limited to 3 attempts per 10 min.
+- Tokens and codes are never logged.
 """
 
 import asyncio
 import logging
 import threading
 from datetime import datetime, timedelta
+
+import requests as _http
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
 from telegram.constants import ChatType, ParseMode
@@ -28,14 +34,10 @@ from .config import Config
 
 _log = logging.getLogger(__name__)
 
+_MAX_CUSTOM_BOTS = {"free": 0, "pro": 2, "enterprise": 10}
+
 
 # ─── Tiny DB helpers ──────────────────────────────────────────────────────────
-
-def _with_app(flask_app, fn):
-    """Run fn(session) inside a fresh app context. Returns fn's return value."""
-    with flask_app.app_context():
-        return fn()
-
 
 def _log_event(flask_app, group_id, event_type, message=None, meta=None):
     try:
@@ -96,24 +98,48 @@ def _bot_username():
     return raw.strip().lstrip("@").split("/")[-1]
 
 
+def _frontend():
+    return Config.FRONTEND_URL or "https://telegizer.xyz"
+
+
 # ─── /start ───────────────────────────────────────────────────────────────────
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Private companion hub — show pending groups for this Telegram user."""
     if update.effective_chat.type != ChatType.PRIVATE:
         return
 
     flask_app = context.bot_data.get("flask_app")
     user = update.effective_user
     first = user.first_name or "there"
-    frontend = Config.FRONTEND_URL
+    frontend = _frontend()
+    bot_un = _bot_username()
+    args = context.args or []
 
-    # Find pending link codes created by this exact Telegram user
+    # ── Handle ?start=connect_<code> deep-link ────────────────────────────────
+    if args and args[0].startswith("connect_"):
+        code = args[0][len("connect_"):]
+        if flask_app:
+            await _handle_account_connect(update, context, user, flask_app, frontend, bot_un, code)
+        else:
+            await update.message.reply_text("⚠️ Service temporarily unavailable. Try again shortly.")
+        return
+
+    # ── Regular /start: companion hub ────────────────────────────────────────
     pending_groups = []
+    is_linked = False
+    tg_username_on_account = None
+
     if flask_app:
         try:
             with flask_app.app_context():
-                from .models import TelegramGroupLinkCode, TelegramGroup
+                from .models import TelegramConnectCode, TelegramGroup, User
+                website_user = User.query.filter_by(telegram_user_id=str(user.id)).first()
+                is_linked = website_user is not None
+                if website_user:
+                    tg_username_on_account = website_user.email
+
+                codes = TelegramConnectCode.query if False else None  # unused path below
+                from .models import TelegramGroupLinkCode
                 codes = TelegramGroupLinkCode.query.filter_by(
                     created_by_telegram_user_id=str(user.id),
                     used_at=None,
@@ -131,7 +157,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             "group_id": tg.telegram_group_id,
                         })
         except Exception as exc:
-            _log.debug("pending_groups fetch failed: %s", exc)
+            _log.debug("cmd_start context fetch failed: %s", exc)
 
     text = (
         f"👋 *Welcome to Telegizer, {first}!*\n\n"
@@ -141,6 +167,15 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     keyboard = []
+
+    if is_linked:
+        keyboard.append([
+            InlineKeyboardButton("✅ Account Connected", callback_data="menu:account_info"),
+        ])
+    else:
+        keyboard.append([
+            InlineKeyboardButton("🔗 Connect Website Account", url=f"{frontend}/settings"),
+        ])
 
     if pending_groups:
         keyboard.append([
@@ -169,18 +204,114 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def _handle_account_connect(update, context, user, flask_app, frontend, bot_un, code):
+    """Process /start connect_<code>: link Telegram identity to website account."""
+    linked_email = None
+    error_msg = None
+    auto_linked_groups = []
+
+    try:
+        with flask_app.app_context():
+            from .models import db, TelegramConnectCode, User, TelegramGroup, TelegramGroupLinkCode
+
+            tc = TelegramConnectCode.query.filter_by(code=code, used_at=None).filter(
+                TelegramConnectCode.expires_at > datetime.utcnow()
+            ).first()
+
+            if not tc:
+                error_msg = "❌ This link has expired or already been used.\n\nGenerate a new one from *Settings → Connect Telegram* on the website."
+            else:
+                # Check if this Telegram account is already linked to a different user
+                existing = User.query.filter_by(telegram_user_id=str(user.id)).first()
+                if existing and existing.id != tc.user_id:
+                    error_msg = "❌ This Telegram account is already linked to a different Telegizer account.\n\nDisconnect it first from Settings on the website."
+                else:
+                    website_user = User.query.get(tc.user_id)
+                    if not website_user:
+                        error_msg = "❌ Website account not found."
+                    else:
+                        website_user.telegram_user_id = str(user.id)
+                        website_user.telegram_username = user.username
+                        website_user.telegram_connected_at = datetime.utcnow()
+                        tc.used_at = datetime.utcnow()
+                        tc.telegram_user_id = str(user.id)
+                        linked_email = website_user.email
+
+                        # Auto-link any pending groups this Telegram user created
+                        pending_codes = TelegramGroupLinkCode.query.filter_by(
+                            created_by_telegram_user_id=str(user.id),
+                            used_at=None,
+                        ).filter(
+                            TelegramGroupLinkCode.expires_at > datetime.utcnow()
+                        ).all()
+                        for pc in pending_codes:
+                            tg = TelegramGroup.query.filter_by(
+                                telegram_group_id=pc.telegram_group_id,
+                                owner_user_id=None,
+                            ).first()
+                            if tg:
+                                tg.owner_user_id = website_user.id
+                                tg.bot_status = "active"
+                                tg.linked_at = datetime.utcnow()
+                                tg.linked_via_bot_type = "official"
+                                pc.used_at = datetime.utcnow()
+                                auto_linked_groups.append(tg.title)
+
+                        db.session.commit()
+    except Exception as exc:
+        _log.error("Account connect failed for tg user %s: %s", user.id, exc)
+        error_msg = "❌ An error occurred. Please try again."
+
+    if error_msg:
+        await update.message.reply_text(
+            error_msg,
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🖥️ Go to Settings", url=f"{frontend}/settings")],
+            ]),
+        )
+        return
+
+    lines = [
+        f"✅ *Telegram account connected!*\n\n"
+        f"Your Telegram is now linked to *{linked_email}*.\n\n"
+        f"Groups you add via @{bot_un} will appear in your dashboard automatically."
+    ]
+    if auto_linked_groups:
+        lines.append(f"\n\n🔗 *Auto-linked {len(auto_linked_groups)} group(s):*")
+        for title in auto_linked_groups[:5]:
+            lines.append(f"• {title}")
+
+    await update.message.reply_text(
+        "".join(lines),
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("📋 My Groups", url=f"{frontend}/my-groups")],
+            [InlineKeyboardButton("🖥️ Open Dashboard", url=frontend)],
+        ]),
+    )
+
+    _log_event(flask_app, None, "telegram_account_connected",
+               f"tg user {user.id} linked to {linked_email}",
+               {"telegram_user_id": str(user.id)})
+
+
 # ─── /help ────────────────────────────────────────────────────────────────────
 
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bot_un = _bot_username()
-    frontend = Config.FRONTEND_URL
+    frontend = _frontend()
     await update.message.reply_text(
         "*Telegizer Help*\n\n"
+        "*How to link your account:*\n"
+        f"1. Go to {frontend}/settings → Connect Telegram\n"
+        "2. Click the link to open this bot\n"
+        "3. Your Telegram is now linked!\n\n"
         "*How to link a group:*\n"
         f"1. Add @{bot_un} to your Telegram group as admin\n"
         "2. Run `/linkgroup` inside the group\n"
-        f"3. The bot will DM you the secure code here in @{bot_un}\n"
-        "4. Paste the code at the Dashboard → Add Group\n\n"
+        "3. If your account is linked, the group links automatically\n"
+        "4. Otherwise, paste the code at Dashboard → Add Group\n\n"
         "*Group commands:*\n"
         "`/linkgroup` — start the link flow (run in group)\n"
         "`/status` — check bot status & permissions\n\n"
@@ -195,14 +326,14 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def cmd_linkgroup(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Group-only. Creates a secure pending link request.
-    The verification code is sent PRIVATELY to the user — never posted in the group.
+    Group-only. If the running user has a linked website account the group is
+    linked directly.  Otherwise a private code is generated and DMed.
     """
     chat = update.effective_chat
     user = update.effective_user
     flask_app = context.bot_data.get("flask_app")
+    frontend = _frontend()
 
-    # Must be used in a group
     if chat.type == ChatType.PRIVATE:
         await update.message.reply_text(
             "⚠️ Use `/linkgroup` *inside your Telegram group*, not here.",
@@ -214,13 +345,10 @@ async def cmd_linkgroup(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ Service temporarily unavailable. Try again shortly.")
         return
 
-    # Only admins/creators may initiate
     try:
         cm = await context.bot.get_chat_member(chat.id, user.id)
         if cm.status not in ("creator", "administrator"):
-            await update.message.reply_text(
-                "❌ Only group admins can link this group."
-            )
+            await update.message.reply_text("❌ Only group admins can link this group.")
             return
     except Exception:
         pass
@@ -229,10 +357,14 @@ async def cmd_linkgroup(update: Update, context: ContextTypes.DEFAULT_TYPE):
     group_title = chat.title or "Untitled Group"
     bot_un = _bot_username()
 
-    with flask_app.app_context():
-        from .models import db, TelegramGroup, TelegramGroupLinkCode
+    # -- Gather everything needed inside one context block --------------------
+    already_linked = False
+    linked_user_id = None   # if Telegram account is already linked to website
+    code = None             # set when falling back to code flow
 
-        # Ensure group record exists
+    with flask_app.app_context():
+        from .models import db, TelegramGroup, TelegramGroupLinkCode, User
+
         tg = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
         if not tg:
             tg = TelegramGroup(
@@ -242,44 +374,91 @@ async def cmd_linkgroup(update: Update, context: ContextTypes.DEFAULT_TYPE):
             db.session.add(tg)
             db.session.flush()
 
-        # Already linked?
         if tg.owner_user_id and tg.bot_status == "active":
-            await update.message.reply_text(
-                "✅ This group is already linked to a Telegizer account.\n"
-                "Use `/status` to view details.",
-                parse_mode=ParseMode.MARKDOWN,
-            )
+            already_linked = True
             db.session.commit()
-            return
+        else:
+            # Check if this Telegram user has a linked website account
+            website_user = User.query.filter_by(telegram_user_id=str(user.id)).first()
 
-        # Invalidate any old unused codes for this group
-        TelegramGroupLinkCode.query.filter_by(
-            telegram_group_id=group_id,
-            used_at=None,
-        ).filter(
-            TelegramGroupLinkCode.expires_at > datetime.utcnow()
-        ).update({"expires_at": datetime.utcnow()})
+            if website_user:
+                # Auto-link: no code exchange needed
+                tg.owner_user_id = website_user.id
+                tg.bot_status = "active"
+                tg.linked_at = datetime.utcnow()
+                tg.linked_via_bot_type = "official"
+                # Expire any leftover codes for this group from this user
+                TelegramGroupLinkCode.query.filter_by(
+                    telegram_group_id=group_id,
+                    created_by_telegram_user_id=str(user.id),
+                    used_at=None,
+                ).update({"expires_at": datetime.utcnow()})
+                db.session.commit()
+                linked_user_id = website_user.id
+            else:
+                # Code flow
+                TelegramGroupLinkCode.query.filter_by(
+                    telegram_group_id=group_id,
+                    used_at=None,
+                ).filter(
+                    TelegramGroupLinkCode.expires_at > datetime.utcnow()
+                ).update({"expires_at": datetime.utcnow()})
 
-        # Generate unique code
-        code = TelegramGroupLinkCode.generate_code()
-        while TelegramGroupLinkCode.query.filter_by(code=code).first():
-            code = TelegramGroupLinkCode.generate_code()
+                code = TelegramGroupLinkCode.generate_code()
+                while TelegramGroupLinkCode.query.filter_by(code=code).first():
+                    code = TelegramGroupLinkCode.generate_code()
 
-        link_code = TelegramGroupLinkCode(
-            code=code,
-            telegram_group_id=group_id,
-            telegram_group_title=group_title,
-            created_by_telegram_user_id=str(user.id),
-            expires_at=datetime.utcnow() + timedelta(minutes=15),
+                link_code = TelegramGroupLinkCode(
+                    code=code,
+                    telegram_group_id=group_id,
+                    telegram_group_title=group_title,
+                    created_by_telegram_user_id=str(user.id),
+                    expires_at=datetime.utcnow() + timedelta(minutes=15),
+                )
+                db.session.add(link_code)
+                db.session.commit()
+
+    # -- Send Telegram messages outside the DB context -------------------------
+    if already_linked:
+        await update.message.reply_text(
+            "✅ This group is already linked to a Telegizer account.\n"
+            "Use `/status` to view details.",
+            parse_mode=ParseMode.MARKDOWN,
         )
-        db.session.add(link_code)
-        db.session.commit()
+        return
 
+    if linked_user_id:
+        # Auto-linked — minimal group message + DM confirmation
+        await update.message.reply_text(
+            f"✅ *{group_title}* has been linked to your Telegizer account.\n\n"
+            "View it in your dashboard.",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        try:
+            await context.bot.send_message(
+                chat_id=user.id,
+                text=(
+                    f"✅ *Group linked!*\n\n"
+                    f"*{group_title}* is now in your dashboard.\n"
+                    f"[Open My Groups]({frontend}/my-groups)"
+                ),
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📋 My Groups", url=f"{frontend}/my-groups")],
+                ]),
+            )
+        except Exception:
+            pass
+        _log_event(flask_app, group_id, "group_auto_linked",
+                   f"Auto-linked by tg user {user.id}",
+                   {"telegram_user_id": str(user.id), "website_user_id": linked_user_id})
+        return
+
+    # Code flow: post non-revealing group message + DM the code
     _log_event(flask_app, group_id, "link_code_generated",
                f"Code generated by tg user {user.id}",
                {"telegram_user_id": str(user.id)})
 
-    # ── Step 1: Post minimal non-revealing message in the group ──────────────
     await update.message.reply_text(
         f"✅ *Link request created.*\n\n"
         f"Open @{bot_un} privately to complete secure setup.\n"
@@ -287,8 +466,6 @@ async def cmd_linkgroup(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode=ParseMode.MARKDOWN,
     )
 
-    # ── Step 2: DM the code privately to the user ────────────────────────────
-    frontend = Config.FRONTEND_URL
     private_text = (
         f"🔐 *Your Group Link Code*\n\n"
         f"Group: *{group_title}*\n\n"
@@ -297,7 +474,7 @@ async def cmd_linkgroup(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"⏱ Expires in *15 minutes* — single use only.\n\n"
         f"Paste this code at:\n"
         f"{frontend}/my-groups\n\n"
-        f"_This code is private — do not share it._"
+        f"_Or connect your Telegram account at Settings to skip codes in future._"
     )
 
     try:
@@ -307,12 +484,11 @@ async def cmd_linkgroup(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode=ParseMode.MARKDOWN,
         )
     except (Forbidden, BadRequest):
-        # User hasn't started a private chat with the bot yet
         try:
             await context.bot.send_message(
                 chat_id=chat.id,
                 text=(
-                    f"⚠️ @{user.username or user.first_name}, I couldn't send you the code privately.\n\n"
+                    f"⚠️ @{user.username or user.first_name}, I couldn't DM you the code.\n\n"
                     f"Please start a private chat with @{bot_un} first, "
                     "then run `/linkgroup` again here."
                 ),
@@ -374,6 +550,170 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+# ─── Private message handler (bot token submission) ───────────────────────────
+
+async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handles free-text in private chat when user is submitting a bot token."""
+    if update.effective_chat.type != ChatType.PRIVATE:
+        return
+    if not context.user_data.get("awaiting_bot_token"):
+        return
+
+    flask_app = context.bot_data.get("flask_app")
+    user = update.effective_user
+    message = update.message
+    frontend = _frontend()
+
+    # Rate limit: 3 attempts per 10 minutes
+    now = datetime.utcnow()
+    attempts = [t for t in context.user_data.get("bot_token_attempts", [])
+                if (now - t).total_seconds() < 600]
+    if len(attempts) >= 3:
+        await message.reply_text(
+            "⚠️ Too many attempts. Please wait 10 minutes before trying again."
+        )
+        return
+    context.user_data["bot_token_attempts"] = attempts + [now]
+
+    token = (message.text or "").strip()
+
+    # Delete the token message immediately — security hygiene
+    try:
+        await message.delete()
+    except Exception:
+        pass
+
+    # Basic format check
+    if ":" not in token or len(token) < 30:
+        await context.bot.send_message(
+            chat_id=user.id,
+            text="❌ Invalid token format.\nExpected: `1234567890:AAAA...`",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("❌ Cancel", callback_data="cancel_bot_token")],
+            ]),
+        )
+        return
+
+    # Only users with linked website accounts may submit tokens
+    website_user_id = None
+    website_tier = "free"
+    if flask_app:
+        try:
+            with flask_app.app_context():
+                from .models import User
+                u = User.query.filter_by(telegram_user_id=str(user.id)).first()
+                if u:
+                    website_user_id = u.id
+                    website_tier = u.subscription_tier
+        except Exception:
+            pass
+
+    if not website_user_id:
+        await context.bot.send_message(
+            chat_id=user.id,
+            text=(
+                "❌ Your Telegram account is not linked to a Telegizer account.\n\n"
+                "Go to *Settings → Connect Telegram* on the website first."
+            ),
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🖥️ Go to Settings", url=f"{frontend}/settings")],
+            ]),
+        )
+        return
+
+    # Verify token with Telegram
+    bot_name = None
+    bot_username_verified = None
+    try:
+        resp = _http.get(
+            f"https://api.telegram.org/bot{token}/getMe",
+            timeout=10,
+        )
+        result = resp.json()
+        if not result.get("ok"):
+            await context.bot.send_message(
+                chat_id=user.id,
+                text="❌ Telegram rejected this token. Please check it is correct.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("❌ Cancel", callback_data="cancel_bot_token")],
+                ]),
+            )
+            return
+        tg_data = result.get("result", {})
+        bot_name = tg_data.get("first_name")
+        bot_username_verified = tg_data.get("username")
+    except Exception as exc:
+        await context.bot.send_message(
+            chat_id=user.id,
+            text=f"❌ Could not verify token with Telegram. Try again.",
+        )
+        return
+
+    # Save under the linked website account
+    save_error = None
+    if flask_app:
+        try:
+            with flask_app.app_context():
+                from .models import db, CustomBot, User
+
+                u = User.query.get(website_user_id)
+                max_bots = _MAX_CUSTOM_BOTS.get(u.subscription_tier, 0)
+                current_count = CustomBot.query.filter_by(owner_user_id=website_user_id).count()
+                if current_count >= max_bots:
+                    save_error = (
+                        f"❌ Your {u.subscription_tier} plan allows {max_bots} custom bot(s). "
+                        "Upgrade to connect more."
+                    )
+                else:
+                    dup = CustomBot.query.filter_by(bot_username=bot_username_verified).first()
+                    if dup:
+                        save_error = f"ℹ️ @{bot_username_verified} is already connected."
+                    else:
+                        cb = CustomBot(
+                            owner_user_id=website_user_id,
+                            bot_name=bot_name,
+                            bot_username=bot_username_verified,
+                            status="active",
+                        )
+                        cb.set_token(token)
+                        db.session.add(cb)
+                        db.session.commit()
+        except Exception as exc:
+            _log.error("Bot token save failed (tg user %s): %s", user.id, exc)
+            save_error = "❌ Failed to save bot. Please try again or use the website dashboard."
+
+    context.user_data["awaiting_bot_token"] = False
+
+    if save_error:
+        await context.bot.send_message(
+            chat_id=user.id,
+            text=save_error,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🖥️ Open Dashboard", url=f"{frontend}/my-bots")],
+                [InlineKeyboardButton("« Back to Menu", callback_data="menu:main")],
+            ]),
+        )
+        return
+
+    await context.bot.send_message(
+        chat_id=user.id,
+        text=(
+            f"✅ *@{bot_username_verified} connected!*\n\n"
+            f"*{bot_name}* is saved securely. View it in My Bots."
+        ),
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🤖 View My Bots", url=f"{frontend}/my-bots")],
+            [InlineKeyboardButton("« Back to Menu", callback_data="menu:main")],
+        ]),
+    )
+    _log_event(flask_app, None, "custom_bot_added_via_telegram",
+               f"@{bot_username_verified} added by tg user {user.id}",
+               {"telegram_user_id": str(user.id)})
+
+
 # ─── Inline keyboard callbacks ────────────────────────────────────────────────
 
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -381,9 +721,46 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     data = query.data
     flask_app = context.bot_data.get("flask_app")
-    frontend = Config.FRONTEND_URL
+    frontend = _frontend()
     user = update.effective_user
     bot_un = _bot_username()
+
+    # ── cancel bot token submission ───────────────────────────────────────────
+    if data == "cancel_bot_token":
+        context.user_data["awaiting_bot_token"] = False
+        await _render_main_menu(query, user, flask_app, frontend)
+        return
+
+    # ── account info ──────────────────────────────────────────────────────────
+    if data == "menu:account_info":
+        tg_email = None
+        if flask_app:
+            try:
+                with flask_app.app_context():
+                    from .models import User
+                    u = User.query.filter_by(telegram_user_id=str(user.id)).first()
+                    if u:
+                        tg_email = u.email
+            except Exception:
+                pass
+        text = (
+            f"✅ *Account Connected*\n\n"
+            f"Your Telegram is linked to: `{tg_email}`\n\n"
+            f"Groups you add will appear in your dashboard automatically."
+        ) if tg_email else (
+            "ℹ️ No Telegizer account linked.\n\n"
+            f"Visit {frontend}/settings to connect."
+        )
+        await query.edit_message_text(
+            text,
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🖥️ Open Dashboard", url=frontend)],
+                [InlineKeyboardButton("⚙️ Settings", url=f"{frontend}/settings")],
+                [InlineKeyboardButton("« Back", callback_data="menu:main")],
+            ]),
+        )
+        return
 
     # ── pending_groups ────────────────────────────────────────────────────────
     if data == "menu:pending_groups":
@@ -415,19 +792,15 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             keyboard = [[InlineKeyboardButton("« Back", callback_data="menu:main")]]
         else:
-            lines = ["*Groups Awaiting Setup*\n\n"
-                     "You have the following groups ready to link:\n"]
+            lines = ["*Groups Awaiting Setup*\n"]
             for p in pending:
                 lines.append(f"• *{p['title']}*")
-            lines.append(
-                "\nCopy the code shown below and paste it at the Dashboard → Add Group."
-            )
+            lines.append("\nTap a group to see its code.")
             text = "\n".join(lines)
 
-            # Show each code as a button users can copy-paste
             code_buttons = [
                 [InlineKeyboardButton(
-                    f"📋 {p['title']} — Code: {p['code']}",
+                    f"📋 {p['title']}",
                     callback_data=f"show_code:{p['code']}",
                 )]
                 for p in pending[:5]
@@ -446,7 +819,6 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ── show individual code ──────────────────────────────────────────────────
     elif data.startswith("show_code:"):
         code = data.split(":", 1)[1]
-        # Verify this code belongs to this user before showing it
         valid = False
         group_title = ""
         if flask_app:
@@ -491,8 +863,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ── my_groups ─────────────────────────────────────────────────────────────
     elif data == "menu:my_groups":
         await query.edit_message_text(
-            "📋 *My Groups*\n\n"
-            "View and manage all your linked groups on the dashboard.",
+            "📋 *My Groups*\n\nView and manage all your linked groups on the dashboard.",
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🖥️ Open My Groups", url=f"{frontend}/my-groups")],
@@ -507,8 +878,8 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "*Add Group to Telegizer*\n\n"
             "1️⃣ Add the bot to your group using the button below\n"
             "2️⃣ In the group, run `/linkgroup`\n"
-            "3️⃣ Come back here — you'll see the group in *Groups Awaiting Setup*\n"
-            "4️⃣ Copy the code and paste it in the Dashboard",
+            "3️⃣ If your account is connected, it links automatically\n"
+            "   Otherwise paste the code from here into the Dashboard",
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("➕ Add Bot to Group", url=add_url)],
@@ -546,14 +917,39 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     elif data == "menu:connect_bot":
+        # Check website account is linked before accepting a token
+        is_linked = False
+        if flask_app:
+            try:
+                with flask_app.app_context():
+                    from .models import User
+                    u = User.query.filter_by(telegram_user_id=str(user.id)).first()
+                    is_linked = u is not None
+            except Exception:
+                pass
+
+        if not is_linked:
+            await query.edit_message_text(
+                "*Connect Your Own Bot*\n\n"
+                "⚠️ You need to link your Telegram account to a Telegizer website account first.\n\n"
+                "Go to *Settings → Connect Telegram* on the website, then come back here.",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🖥️ Go to Settings", url=f"{frontend}/settings")],
+                    [InlineKeyboardButton("« Back", callback_data="menu:advanced")],
+                ]),
+            )
+            return
+
+        context.user_data["awaiting_bot_token"] = True
         await query.edit_message_text(
             "*Connect Your Own Bot*\n\n"
-            "Create a bot via @BotFather, copy the token, and add it in:\n"
-            "Dashboard → My Bots → Connect Own Bot",
+            "Paste your *BotFather token* in the next message.\n\n"
+            "⚠️ Your message will be deleted immediately after processing.\n"
+            "Format: `1234567890:AAAA...`",
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🖥️ Connect on Dashboard", url=f"{frontend}/my-bots")],
-                [InlineKeyboardButton("« Back", callback_data="menu:advanced")],
+                [InlineKeyboardButton("❌ Cancel", callback_data="cancel_bot_token")],
             ]),
         )
 
@@ -567,17 +963,19 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]),
         )
 
-    # ── back to main menu ─────────────────────────────────────────────────────
     elif data == "menu:main":
         await _render_main_menu(query, user, flask_app, frontend)
 
 
 async def _render_main_menu(query, user, flask_app, frontend):
     pending_count = 0
+    is_linked = False
     if flask_app:
         try:
             with flask_app.app_context():
-                from .models import TelegramGroupLinkCode, TelegramGroup
+                from .models import TelegramGroupLinkCode, TelegramGroup, User
+                wu = User.query.filter_by(telegram_user_id=str(user.id)).first()
+                is_linked = wu is not None
                 codes = TelegramGroupLinkCode.query.filter_by(
                     created_by_telegram_user_id=str(user.id),
                     used_at=None,
@@ -594,6 +992,11 @@ async def _render_main_menu(query, user, flask_app, frontend):
             pass
 
     keyboard = []
+    if is_linked:
+        keyboard.append([InlineKeyboardButton("✅ Account Connected", callback_data="menu:account_info")])
+    else:
+        keyboard.append([InlineKeyboardButton("🔗 Connect Website Account", url=f"{frontend}/settings")])
+
     if pending_count:
         keyboard.append([
             InlineKeyboardButton(
@@ -622,7 +1025,6 @@ async def _render_main_menu(query, user, flask_app, frontend):
 # ─── Group membership events ──────────────────────────────────────────────────
 
 async def on_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Track when the official bot is added to or removed from a group."""
     flask_app = context.bot_data.get("flask_app")
     chat = update.effective_chat
     if not chat or chat.type == ChatType.PRIVATE:
@@ -646,7 +1048,6 @@ async def on_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if flask_app:
             await _refresh_permissions(context.bot, group_id, flask_app)
 
-        # Minimal, non-spammy group message
         try:
             await chat.send_message(
                 f"✅ *Telegizer connected.*\n\n"
@@ -682,7 +1083,6 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     group_id = str(chat.id)
     text = (message.text or "").strip()
 
-    # Update last_activity
     try:
         with flask_app.app_context():
             from .models import db, TelegramGroup
@@ -693,7 +1093,6 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         pass
 
-    # Dispatch custom commands
     if text.startswith("/"):
         cmd_raw = text.split()[0].lstrip("/").split("@")[0].lower()
         cmd_data = None
@@ -789,6 +1188,13 @@ class OfficialBotRunner:
         a.add_handler(CommandHandler("status", cmd_status))
         a.add_handler(CallbackQueryHandler(callback_handler))
         a.add_handler(ChatMemberHandler(on_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))
+        # Private text: bot token submission (must come before group message handler)
+        a.add_handler(
+            MessageHandler(
+                filters.ChatType.PRIVATE & filters.TEXT & ~filters.COMMAND,
+                on_private_text,
+            )
+        )
         a.add_handler(
             MessageHandler(
                 filters.Chat(chat_type=[ChatType.GROUP, ChatType.SUPERGROUP]) & filters.TEXT,
