@@ -409,6 +409,7 @@ class ModerationSystem:
                 bot, message, group, cfg.get("action", "delete"),
                 reason="Email address detected",
                 warn=cfg.get("warn_user", False),
+                warn_delete_seconds=cfg.get("warn_delete_seconds"),
             )
             return True
         return False
@@ -424,6 +425,7 @@ class ModerationSystem:
                     bot, message, group, cfg.get("action", "delete"),
                     reason=f"Blocked language detected: {lang}",
                     warn=cfg.get("warn_user", False),
+                    warn_delete_seconds=cfg.get("warn_delete_seconds"),
                 )
                 return True
         return False
@@ -439,6 +441,7 @@ class ModerationSystem:
                     bot, message, group, cfg.get("action", "delete"),
                     reason="Spoiler content",
                     warn=cfg.get("warn_user", False),
+                    warn_delete_seconds=cfg.get("warn_delete_seconds"),
                 )
                 return True
         return False
@@ -459,6 +462,7 @@ class ModerationSystem:
                         bot, message, group, cfg.get("action", "delete"),
                         reason="Bot mention detected",
                         warn=cfg.get("warn_user", False),
+                        warn_delete_seconds=cfg.get("warn_delete_seconds"),
                     )
                     return True
         return False
@@ -472,6 +476,7 @@ class ModerationSystem:
                 bot, message, group, cfg.get("action", "delete"),
                 reason="Contact sharing blocked",
                 warn=cfg.get("warn_user", False),
+                warn_delete_seconds=cfg.get("warn_delete_seconds"),
             )
             return True
         return False
@@ -485,6 +490,7 @@ class ModerationSystem:
                 bot, message, group, cfg.get("action", "delete"),
                 reason="Location sharing blocked",
                 warn=cfg.get("warn_user", False),
+                warn_delete_seconds=cfg.get("warn_delete_seconds"),
             )
             return True
         return False
@@ -498,6 +504,7 @@ class ModerationSystem:
                 bot, message, group, cfg.get("action", "delete"),
                 reason="Voice notes blocked",
                 warn=cfg.get("warn_user", False),
+                warn_delete_seconds=cfg.get("warn_delete_seconds"),
             )
             return True
         return False
@@ -511,6 +518,7 @@ class ModerationSystem:
                 bot, message, group, cfg.get("action", "delete"),
                 reason="Video notes blocked",
                 warn=cfg.get("warn_user", False),
+                warn_delete_seconds=cfg.get("warn_delete_seconds"),
             )
             return True
         return False
@@ -524,6 +532,7 @@ class ModerationSystem:
                 bot, message, group, cfg.get("action", "delete"),
                 reason="File attachments blocked",
                 warn=cfg.get("warn_user", False),
+                warn_delete_seconds=cfg.get("warn_delete_seconds"),
             )
             return True
         return False
@@ -537,6 +546,7 @@ class ModerationSystem:
                 bot, message, group, cfg.get("action", "delete"),
                 reason="Photos blocked",
                 warn=cfg.get("warn_user", False),
+                warn_delete_seconds=cfg.get("warn_delete_seconds"),
             )
             return True
         return False
@@ -550,6 +560,7 @@ class ModerationSystem:
                 bot, message, group, cfg.get("action", "delete"),
                 reason="Videos blocked",
                 warn=cfg.get("warn_user", False),
+                warn_delete_seconds=cfg.get("warn_delete_seconds"),
             )
             return True
         return False
@@ -563,6 +574,7 @@ class ModerationSystem:
                 bot, message, group, cfg.get("action", "delete"),
                 reason="GIFs/animations blocked",
                 warn=cfg.get("warn_user", False),
+                warn_delete_seconds=cfg.get("warn_delete_seconds"),
             )
             return True
         return False
@@ -576,6 +588,7 @@ class ModerationSystem:
                 bot, message, group, cfg.get("action", "delete"),
                 reason="Stickers blocked",
                 warn=cfg.get("warn_user", False),
+                warn_delete_seconds=cfg.get("warn_delete_seconds"),
             )
             return True
         return False
@@ -589,12 +602,19 @@ class ModerationSystem:
                 bot, message, group, cfg.get("action", "delete"),
                 reason="Games blocked",
                 warn=cfg.get("warn_user", False),
+                warn_delete_seconds=cfg.get("warn_delete_seconds"),
             )
             return True
         return False
 
     async def execute_automod_action(self, bot, message, group, action,
-                                     reason="Automod", warn=False, mute_duration=10):
+                                     reason="Automod", warn=False, mute_duration=10,
+                                     warn_delete_seconds=None):
+        """
+        warn_delete_seconds: per-rule override for how long to keep the warning
+        message before auto-deleting it. None means fall back to the global
+        moderation.auto_delete_warn_seconds setting. 0 means never delete.
+        """
         import asyncio as _asyncio
         chat_id = message.chat.id
         user_id = message.from_user.id if message.from_user else None
@@ -609,7 +629,9 @@ class ModerationSystem:
             return
 
         mod_settings = group.settings.get("moderation", {})
-        auto_delete_warn = mod_settings.get("auto_delete_warn_seconds", 0)
+        global_delete_warn = mod_settings.get("auto_delete_warn_seconds", 0)
+        # Per-rule setting takes precedence when explicitly set; None means use global.
+        auto_delete_warn = warn_delete_seconds if warn_delete_seconds is not None else global_delete_warn
         auto_delete_action = mod_settings.get("auto_delete_action_seconds", 0)
 
         with self.app.app_context():

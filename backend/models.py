@@ -752,6 +752,30 @@ class TelegramConnectCode(db.Model):
 # ─── Official Bot Ecosystem Models ────────────────────────────────────────────
 
 
+class TelegramBotStarted(db.Model):
+    """Tracks Telegram users who have started @telegizer_bot at least once.
+    Used to verify whether a private DM can be sent to an admin."""
+    __tablename__ = "telegram_bot_started"
+
+    id = db.Column(db.Integer, primary_key=True)
+    telegram_user_id = db.Column(db.String(255), unique=True, nullable=False, index=True)
+    first_started_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    last_active_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    @staticmethod
+    def record(user_id: str):
+        """Insert or update the started record for a Telegram user ID."""
+        existing = TelegramBotStarted.query.filter_by(telegram_user_id=str(user_id)).first()
+        if existing:
+            existing.last_active_at = datetime.utcnow()
+        else:
+            db.session.add(TelegramBotStarted(telegram_user_id=str(user_id)))
+
+    @staticmethod
+    def has_started(user_id: str) -> bool:
+        return TelegramBotStarted.query.filter_by(telegram_user_id=str(user_id)).first() is not None
+
+
 class TelegramGroup(db.Model):
     """Groups linked to Telegizer via the official shared bot."""
     __tablename__ = "telegram_groups"

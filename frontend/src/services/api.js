@@ -134,6 +134,12 @@ export const settings = {
     botId === 'official'
       ? Promise.resolve({ data: { message: 'OK' } })
       : api.delete(`/api/bots/${botId}/groups/${groupId}/scheduled-messages/${msgId}`),
+  getGroupAdmins: (botId, groupId) =>
+    botId === 'official'
+      ? api.get(`/api/official-groups/${groupId}/admins`)
+      : api.get(`/api/bots/${botId}/groups/${groupId}/admins`),
+  getBotPermissions: (groupId) =>
+    api.get(`/api/official-groups/${groupId}/permissions`),
 };
 
 export const knowledge = {
@@ -248,7 +254,7 @@ export const userSettings = {
 export const digest = {
   get: (botId, groupId) =>
     botId === 'official'
-      ? Promise.resolve({ data: { digest: { daily: false, weekly: false, monthly: false } } })
+      ? Promise.resolve({ data: { digest: { daily: false, weekly: false, monthly: false, recipients: { owner_dm: false, selected_admin_ids: [], send_to_group: true, group_topic_id: null } } } })
       : api.get(`/api/bots/${botId}/groups/${groupId}/digest`),
   update: (botId, groupId, data) =>
     botId === 'official'
@@ -256,7 +262,7 @@ export const digest = {
       : api.put(`/api/bots/${botId}/groups/${groupId}/digest`, data),
   sendNow: (botId, groupId, data) =>
     botId === 'official'
-      ? _notAvailable('Digest reports are coming soon for official bot groups.')
+      ? _notAvailable('Digest reports are not yet available for official bot groups.')
       : api.post(`/api/bots/${botId}/groups/${groupId}/digest/send-now`, data),
 };
 

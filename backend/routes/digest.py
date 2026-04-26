@@ -8,8 +8,20 @@ Digest config is stored inside group.settings["digest"] JSON to avoid a schema c
   "monthly": false,
   "last_daily": "2026-04-24T08:00:00",
   "last_weekly": "2026-04-20T08:00:00",
-  "last_monthly": "2026-04-01T08:00:00"
+  "last_monthly": "2026-04-01T08:00:00",
+  "recipients": {
+    "owner_dm": false,
+    "selected_admin_ids": [],
+    "send_to_group": true,
+    "group_topic_id": null
+  }
 }
+
+Root-cause of previous digest error:
+  InviteLinkJoin has no ORM relationship named "invite_link".
+  The old .join(InviteLinkJoin.invite_link) raised AttributeError at runtime.
+  Fixed by explicit join(InviteLink, InviteLink.id == InviteLinkJoin.invite_link_id)
+  with a group_id filter so counts are scoped to the correct group.
 """
 import asyncio
 import logging
@@ -19,7 +31,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func
 
-from ..models import db, User, Bot, Group, AuditLog, ScheduledMessage, Poll, Member, InviteLinkJoin
+from ..models import db, User, Bot, Group, AuditLog, ScheduledMessage, Poll, Member, InviteLinkJoin, InviteLink
 from ..middleware.rate_limit import rate_limit
 
 logger = logging.getLogger(__name__)
@@ -73,15 +85,20 @@ def _build_report_data(group_id: int, since: datetime) -> dict:
     # Member count now
     member_count = Member.query.filter_by(group_id=group_id).count()
 
-    # New members joined via invite links in period
-    invite_joins = (
-        db.session.query(func.count(InviteLinkJoin.id))
-        .join(InviteLinkJoin.invite_link)
-        .filter(
-            InviteLinkJoin.joined_at >= since,
+    # New members joined via invite links in period — explicit join to filter by group
+    try:
+        invite_joins = (
+            db.session.query(func.count(InviteLinkJoin.id))
+            .join(InviteLink, InviteLink.id == InviteLinkJoin.invite_link_id)
+            .filter(
+                InviteLink.group_id == group_id,
+                InviteLinkJoin.joined_at >= since,
+            )
+            .scalar() or 0
         )
-        .scalar() or 0
-    )
+    except Exception as exc:
+        logger.warning(f"[DIGEST] invite_joins query failed group={group_id}: {exc}")
+        invite_joins = 0
 
     total_actions = sum(actions.values())
 
@@ -126,34 +143,84 @@ def _format_report_message(group_name: str, period_label: str, data: dict) -> st
     return "\n".join(lines)
 
 
-async def _send_telegram_report(bot_token: str, chat_id: str, text: str):
+async def _send_telegram_message(bot_token: str, chat_id: str, text: str, message_thread_id=None):
     import telegram
     bot = telegram.Bot(token=bot_token)
-    await bot.send_message(
+    kwargs = dict(
         chat_id=chat_id,
         text=text,
         parse_mode="Markdown",
         disable_web_page_preview=True,
     )
+    if message_thread_id:
+        kwargs["message_thread_id"] = int(message_thread_id)
+    await bot.send_message(**kwargs)
 
 
 def _do_send_report(group: Group, bot: Bot, period_label: str, since: datetime):
-    """Build and send a report to the Telegram group. Returns True on success."""
+    """Build and send a report to configured recipients. Returns True if at least one succeeded."""
     from ..bot_manager import bot_manager as _bm
     try:
         data = _build_report_data(group.id, since)
         text = _format_report_message(group.group_name or "Your Group", period_label, data)
         instance = _bm.active_bots.get(bot.id)
-        if instance and instance.loop and instance.loop.is_running():
-            future = asyncio.run_coroutine_threadsafe(
-                _send_telegram_report(bot.bot_token, group.telegram_group_id, text),
-                instance.loop,
-            )
-            future.result(timeout=15)
-        else:
-            # Bot not running in memory — send synchronously via a fresh event loop
-            asyncio.run(_send_telegram_report(bot.bot_token, group.telegram_group_id, text))
-        return True
+
+        def _run(coro):
+            if instance and instance.loop and instance.loop.is_running():
+                future = asyncio.run_coroutine_threadsafe(coro, instance.loop)
+                future.result(timeout=15)
+            else:
+                asyncio.run(coro)
+
+        recipients = (group.settings or {}).get("digest", {}).get("recipients", {})
+        send_to_group = recipients.get("send_to_group", True)  # default True (legacy behaviour)
+        topic_id = recipients.get("group_topic_id")
+        owner_dm = recipients.get("owner_dm", False)
+        admin_ids = recipients.get("selected_admin_ids") or []
+
+        sent_any = False
+
+        # ── Send to group (or topic) ──────────────────────────────────────────
+        if send_to_group:
+            try:
+                _run(_send_telegram_message(bot.bot_token, group.telegram_group_id, text, topic_id))
+                sent_any = True
+            except Exception as exc:
+                logger.error(f"[DIGEST] group send failed group={group.id}: {exc}")
+
+        # ── DM account owner ─────────────────────────────────────────────────
+        if owner_dm:
+            try:
+                with db.engine.connect():
+                    from ..models import User as _User
+                    bot_obj = Bot.query.get(bot.id)
+                    owner = _User.query.get(bot_obj.user_id) if bot_obj else None
+                    if owner and owner.telegram_user_id:
+                        from ..models import TelegramBotStarted
+                        if TelegramBotStarted.has_started(owner.telegram_user_id):
+                            _run(_send_telegram_message(bot.bot_token, owner.telegram_user_id, text))
+                            sent_any = True
+                        else:
+                            logger.info(f"[DIGEST] owner {owner.id} has not started bot — skipping DM")
+                    else:
+                        logger.info(f"[DIGEST] owner has no telegram linked — skipping DM")
+            except Exception as exc:
+                logger.error(f"[DIGEST] owner DM failed group={group.id}: {exc}")
+
+        # ── DM selected admins ────────────────────────────────────────────────
+        for admin_id in admin_ids:
+            try:
+                from ..models import TelegramBotStarted
+                if TelegramBotStarted.has_started(str(admin_id)):
+                    _run(_send_telegram_message(bot.bot_token, str(admin_id), text))
+                    sent_any = True
+                else:
+                    logger.info(f"[DIGEST] admin {admin_id} has not started bot — skipping DM")
+            except Exception as exc:
+                logger.error(f"[DIGEST] admin DM {admin_id} failed group={group.id}: {exc}")
+
+        return sent_any
+
     except Exception as exc:
         logger.error(f"[DIGEST] Send failed group={group.id}: {exc}")
         return False
@@ -170,6 +237,7 @@ def get_digest(bot_id, group_id):
         return jsonify({"error": "Group not found"}), 404
 
     digest = (group.settings or {}).get("digest", {})
+    recipients = digest.get("recipients", {})
     return jsonify({
         "digest": {
             "daily": bool(digest.get("daily")),
@@ -178,6 +246,12 @@ def get_digest(bot_id, group_id):
             "last_daily": digest.get("last_daily"),
             "last_weekly": digest.get("last_weekly"),
             "last_monthly": digest.get("last_monthly"),
+            "recipients": {
+                "owner_dm": bool(recipients.get("owner_dm", False)),
+                "selected_admin_ids": recipients.get("selected_admin_ids") or [],
+                "send_to_group": bool(recipients.get("send_to_group", True)),
+                "group_topic_id": recipients.get("group_topic_id"),
+            },
         }
     })
 
@@ -197,6 +271,20 @@ def update_digest(bot_id, group_id):
     for key in ("daily", "weekly", "monthly"):
         if key in data:
             digest[key] = bool(data[key])
+
+    # Update recipients sub-object
+    if "recipients" in data and isinstance(data["recipients"], dict):
+        rec = data["recipients"]
+        existing_rec = dict(digest.get("recipients", {}))
+        if "owner_dm" in rec:
+            existing_rec["owner_dm"] = bool(rec["owner_dm"])
+        if "selected_admin_ids" in rec:
+            existing_rec["selected_admin_ids"] = [str(x) for x in (rec["selected_admin_ids"] or [])]
+        if "send_to_group" in rec:
+            existing_rec["send_to_group"] = bool(rec["send_to_group"])
+        if "group_topic_id" in rec:
+            existing_rec["group_topic_id"] = int(rec["group_topic_id"]) if rec["group_topic_id"] else None
+        digest["recipients"] = existing_rec
 
     settings["digest"] = digest
     group.settings = settings
@@ -227,7 +315,7 @@ def send_now(bot_id, group_id):
 
     ok = _do_send_report(group, bot, f"{label} Report", since)
     if not ok:
-        return jsonify({"error": "Failed to send report — check that bot is active in the group"}), 502
+        return jsonify({"error": "Failed to send report — check that bot is active in the group and recipients have started @telegizer_bot"}), 502
 
     # Update last_sent timestamp
     settings = dict(group.settings or {})

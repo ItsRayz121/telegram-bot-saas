@@ -132,10 +132,17 @@ export default function GroupSettings() {
 
   const [raidOpen, setRaidOpen] = useState(false);
 
-  const [digestConfig, setDigestConfig] = useState({ daily: false, weekly: false, monthly: false });
+  const [digestConfig, setDigestConfig] = useState({
+    daily: false, weekly: false, monthly: false,
+    recipients: { owner_dm: false, selected_admin_ids: [], send_to_group: true, group_topic_id: null },
+  });
   const [digestLoading, setDigestLoading] = useState(false);
   const [digestSaving, setDigestSaving] = useState(false);
   const [digestSending, setDigestSending] = useState('');
+
+  // Admin list for reports / digest recipient selection
+  const [groupAdmins, setGroupAdmins] = useState([]);
+  const [adminsLoading, setAdminsLoading] = useState(false);
 
   const fetchSettings = useCallback(async () => {
     try {
@@ -195,7 +202,11 @@ export default function GroupSettings() {
     setDigestLoading(true);
     try {
       const res = await digestApi.get(botId, groupId);
-      setDigestConfig(res.data.digest);
+      setDigestConfig(prev => ({
+        ...prev,
+        ...res.data.digest,
+        recipients: { owner_dm: false, selected_admin_ids: [], send_to_group: true, group_topic_id: null, ...(res.data.digest?.recipients || {}) },
+      }));
     } catch {
       // digest not yet configured — use defaults
     } finally {
@@ -203,10 +214,27 @@ export default function GroupSettings() {
     }
   }, [botId, groupId]);
 
+  const fetchAdmins = useCallback(async () => {
+    setAdminsLoading(true);
+    try {
+      const res = await settings.getGroupAdmins(botId, groupId);
+      setGroupAdmins(res.data.admins || []);
+    } catch {
+      setGroupAdmins([]);
+    } finally {
+      setAdminsLoading(false);
+    }
+  }, [botId, groupId]);
+
   const handleSaveDigest = async () => {
     setDigestSaving(true);
     try {
-      await digestApi.update(botId, groupId, digestConfig);
+      await digestApi.update(botId, groupId, {
+        daily: digestConfig.daily,
+        weekly: digestConfig.weekly,
+        monthly: digestConfig.monthly,
+        recipients: digestConfig.recipients,
+      });
       toast.success('Digest settings saved!');
     } catch {
       toast.error('Failed to save digest settings');
@@ -234,6 +262,11 @@ export default function GroupSettings() {
   useEffect(() => { if (cat === 'automation' && subTab === 1) fetchAutoResponses(); }, [cat, subTab, fetchAutoResponses]);
   useEffect(() => { if (cat === 'moderation' && subTab === 2) fetchReports(); }, [cat, subTab, fetchReports]);
   useEffect(() => { if (cat === 'analytics' && subTab === 2) fetchDigest(); }, [cat, subTab, fetchDigest]);
+  useEffect(() => {
+    if ((cat === 'moderation' && subTab === 2) || (cat === 'analytics' && subTab === 2)) {
+      fetchAdmins();
+    }
+  }, [cat, subTab, fetchAdmins]);
 
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
   const [upgradeFeature, setUpgradeFeature] = useState('');
@@ -502,6 +535,7 @@ export default function GroupSettings() {
                 <Grid container spacing={1}>
                   {AUTOMOD_EXTENDED_RULES.map(({ key, label }) => {
                     const rule = am[key] || {};
+                    const showWarnTimer = rule.warn_user || rule.action === 'warn';
                     return (
                       <Grid item xs={12} key={key}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
@@ -526,6 +560,23 @@ export default function GroupSettings() {
                               onChange={(e) => updateSetting(`automod.${key}.warn_user`, e.target.checked)} />}
                             label="Warn user"
                           />
+                          {showWarnTimer && (
+                            <FormControl size="small" sx={{ minWidth: 160 }}>
+                              <InputLabel>Delete warning after</InputLabel>
+                              <Select
+                                value={rule.warn_delete_seconds ?? 0}
+                                label="Delete warning after"
+                                onChange={(e) => updateSetting(`automod.${key}.warn_delete_seconds`, e.target.value)}
+                              >
+                                <MenuItem value={0}>Never</MenuItem>
+                                <MenuItem value={5}>5 seconds</MenuItem>
+                                <MenuItem value={10}>10 seconds</MenuItem>
+                                <MenuItem value={30}>30 seconds</MenuItem>
+                                <MenuItem value={60}>1 minute</MenuItem>
+                                <MenuItem value={300}>5 minutes</MenuItem>
+                              </Select>
+                            </FormControl>
+                          )}
                         </Box>
                       </Grid>
                     );
@@ -775,6 +826,74 @@ export default function GroupSettings() {
                     </FormControl>
                   </Grid>
                 </Grid>
+
+                {rep.notify_admins === 'selected' && (
+                  <Box sx={{ mt: 3 }}>
+                    <Typography variant="subtitle2" fontWeight={600} mb={1}>
+                      Select admins to receive private report DMs
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" display="block" mb={2}>
+                      Selected admins receive reports via private DM from @telegizer_bot. They must have started the bot first.
+                    </Typography>
+                    {adminsLoading ? (
+                      <CircularProgress size={20} />
+                    ) : groupAdmins.length === 0 ? (
+                      <Alert severity="info" icon={false}>
+                        No admins found. Make sure @telegizer_bot is an admin in the group.
+                      </Alert>
+                    ) : (
+                      <Stack spacing={1}>
+                        {groupAdmins.map((admin) => {
+                          const selected = (rep.selected_admin_ids || []).includes(admin.user_id);
+                          return (
+                            <Box key={admin.user_id} sx={{
+                              display: 'flex', alignItems: 'center', gap: 1.5,
+                              p: 1.2, border: '1px solid', borderRadius: 1.5,
+                              borderColor: selected ? 'primary.main' : 'divider',
+                              bgcolor: selected ? 'rgba(33,150,243,0.05)' : 'transparent',
+                              cursor: admin.can_dm ? 'pointer' : 'default',
+                              opacity: admin.can_dm ? 1 : 0.7,
+                            }}
+                              onClick={() => {
+                                if (!admin.can_dm) return;
+                                const cur = rep.selected_admin_ids || [];
+                                updateSetting('reports.selected_admin_ids',
+                                  selected ? cur.filter(id => id !== admin.user_id) : [...cur, admin.user_id]);
+                              }}
+                            >
+                              <Switch size="small" checked={selected} disabled={!admin.can_dm}
+                                onChange={() => {}} />
+                              <Box sx={{ flexGrow: 1 }}>
+                                <Typography variant="body2" fontWeight={500}>
+                                  {admin.first_name}{admin.username ? ` (@${admin.username})` : ''}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  {admin.status === 'creator' ? 'Owner' : 'Admin'}
+                                </Typography>
+                              </Box>
+                              {admin.can_dm ? (
+                                <Chip label="✓ Can receive DM" color="success" size="small" />
+                              ) : (
+                                <Tooltip title="Ask this admin to open @telegizer_bot and press Start.">
+                                  <Chip label="⚠ Must start bot" color="warning" size="small" />
+                                </Tooltip>
+                              )}
+                            </Box>
+                          );
+                        })}
+                      </Stack>
+                    )}
+                  </Box>
+                )}
+
+                {rep.notify_admins === 'all' && (
+                  <Alert severity="info" icon={false} sx={{ mt: 2 }}>
+                    <Typography variant="caption">
+                      Reports are sent as private DMs to all admins who have started @telegizer_bot.
+                      Admins who have not started the bot are silently skipped.
+                    </Typography>
+                  </Alert>
+                )}
               </CardContent>
             </Card>
             <Card>
@@ -892,17 +1011,50 @@ export default function GroupSettings() {
                 </Grid>
               </Grid>
               <Divider sx={{ my: 2 }} />
-              <Typography variant="subtitle2" fontWeight={600} mb={1}>Channel Verification</Typography>
-              <FormControlLabel
-                control={<Switch checked={!!v.channel_verification_enabled}
-                  onChange={(e) => updateSetting('verification.channel_verification_enabled', e.target.checked)} />}
-                label="Use dedicated verification channel"
-              />
-              {v.channel_verification_enabled && (
-                <TextField fullWidth label="Verification Channel ID" sx={{ mt: 2 }}
-                  value={v.verification_channel_id || ''}
-                  onChange={(e) => updateSetting('verification.verification_channel_id', e.target.value)}
-                  helperText="Telegram channel ID where new members verify" />
+              <Typography variant="subtitle2" fontWeight={600} mb={1}>Verification Location</Typography>
+              <Typography variant="body2" color="text.secondary" mb={2}>
+                Where the bot sends the verification prompt when a new member joins.
+              </Typography>
+              <FormControl fullWidth sx={{ mb: 2 }}>
+                <InputLabel>Verification Location</InputLabel>
+                <Select
+                  value={v.destination || 'same_group'}
+                  label="Verification Location"
+                  onChange={(e) => updateSetting('verification.destination', e.target.value)}
+                >
+                  <MenuItem value="same_group">Same group — verification appears in the group chat</MenuItem>
+                  <MenuItem value="topic">Group topic / forum thread</MenuItem>
+                  <MenuItem value="dedicated_group">Dedicated verification group</MenuItem>
+                  <MenuItem value="channel">Verification channel</MenuItem>
+                </Select>
+              </FormControl>
+
+              {(v.destination === 'topic') && (
+                <TextField fullWidth label="Topic ID" sx={{ mb: 2 }}
+                  value={v.destination_topic_id || ''}
+                  onChange={(e) => updateSetting('verification.destination_topic_id', e.target.value ? parseInt(e.target.value) : null)}
+                  helperText="The forum thread / topic ID inside this group where the bot sends the verification prompt" />
+              )}
+
+              {(v.destination === 'dedicated_group' || v.destination === 'channel') && (
+                <TextField fullWidth
+                  label={v.destination === 'channel' ? 'Channel ID' : 'Group ID'}
+                  sx={{ mb: 2 }}
+                  value={v.destination_chat_id || ''}
+                  onChange={(e) => updateSetting('verification.destination_chat_id', e.target.value)}
+                  helperText={
+                    v.destination === 'channel'
+                      ? 'Telegram channel ID (e.g. -1001234567890). Bot must be an admin there.'
+                      : 'Telegram group ID (e.g. -1001234567890). Bot must be a member there.'
+                  } />
+              )}
+
+              {v.destination && v.destination !== 'same_group' && (
+                <Alert severity="info" icon={false}>
+                  <Typography variant="caption">
+                    Make sure @telegizer_bot is an admin (or at least a member) in the destination and has permission to send messages.
+                  </Typography>
+                </Alert>
               )}
             </CardContent>
           </Card>
@@ -1482,11 +1634,110 @@ export default function GroupSettings() {
                 </CardContent>
               </Card>
 
+              {/* Digest Recipients */}
+              {!isOfficial && (
+                <Card sx={{ mb: 2 }}>
+                  <CardContent>
+                    <Typography variant="subtitle1" fontWeight={600} mb={0.5}>Report Recipients</Typography>
+                    <Typography variant="body2" color="text.secondary" mb={2}>
+                      Choose who receives the digest report. Recipients marked ⚠ have not yet started @telegizer_bot and cannot receive private DMs.
+                    </Typography>
+
+                    <FormControlLabel
+                      control={<Switch checked={!!(digestConfig.recipients?.send_to_group ?? true)}
+                        onChange={(e) => setDigestConfig(prev => ({
+                          ...prev,
+                          recipients: { ...(prev.recipients || {}), send_to_group: e.target.checked },
+                        }))} />}
+                      label="Send report to the group"
+                    />
+
+                    {(digestConfig.recipients?.send_to_group ?? true) && (
+                      <TextField fullWidth size="small" label="Topic ID (blank = main chat)" sx={{ mt: 1, mb: 2 }}
+                        type="number"
+                        value={digestConfig.recipients?.group_topic_id || ''}
+                        onChange={(e) => setDigestConfig(prev => ({
+                          ...prev,
+                          recipients: { ...(prev.recipients || {}), group_topic_id: e.target.value ? parseInt(e.target.value) : null },
+                        }))}
+                        helperText="Send to a specific forum topic thread inside the group" />
+                    )}
+
+                    <Divider sx={{ my: 2 }} />
+
+                    <FormControlLabel
+                      control={<Switch checked={!!(digestConfig.recipients?.owner_dm)}
+                        onChange={(e) => setDigestConfig(prev => ({
+                          ...prev,
+                          recipients: { ...(prev.recipients || {}), owner_dm: e.target.checked },
+                        }))} />}
+                      label="Send private DM to account owner (must have started @telegizer_bot)"
+                    />
+
+                    <Divider sx={{ my: 2 }} />
+
+                    <Typography variant="subtitle2" fontWeight={600} mb={1}>Send private DM to selected admins</Typography>
+                    <Typography variant="caption" color="text.secondary" display="block" mb={1.5}>
+                      Only admins who have started @telegizer_bot can receive DMs.
+                    </Typography>
+
+                    {adminsLoading ? (
+                      <CircularProgress size={20} />
+                    ) : groupAdmins.length === 0 ? (
+                      <Typography variant="caption" color="text.secondary">No admins loaded. Switch to Reports tab to load them.</Typography>
+                    ) : (
+                      <Stack spacing={0.75}>
+                        {groupAdmins.map((admin) => {
+                          const selIds = digestConfig.recipients?.selected_admin_ids || [];
+                          const selected = selIds.includes(admin.user_id);
+                          return (
+                            <Box key={admin.user_id} sx={{
+                              display: 'flex', alignItems: 'center', gap: 1.5,
+                              p: 1, border: '1px solid', borderRadius: 1.5,
+                              borderColor: selected ? 'primary.main' : 'divider',
+                              opacity: admin.can_dm ? 1 : 0.65,
+                              cursor: admin.can_dm ? 'pointer' : 'default',
+                            }}
+                              onClick={() => {
+                                if (!admin.can_dm) return;
+                                setDigestConfig(prev => {
+                                  const cur = prev.recipients?.selected_admin_ids || [];
+                                  return {
+                                    ...prev,
+                                    recipients: {
+                                      ...(prev.recipients || {}),
+                                      selected_admin_ids: selected
+                                        ? cur.filter(id => id !== admin.user_id)
+                                        : [...cur, admin.user_id],
+                                    },
+                                  };
+                                });
+                              }}
+                            >
+                              <Switch size="small" checked={selected} disabled={!admin.can_dm} onChange={() => {}} />
+                              <Typography variant="body2" sx={{ flexGrow: 1 }}>
+                                {admin.first_name}{admin.username ? ` (@${admin.username})` : ''}
+                              </Typography>
+                              {admin.can_dm
+                                ? <Chip label="✓ Can receive DM" color="success" size="small" />
+                                : <Tooltip title="Ask this admin to open @telegizer_bot and press Start.">
+                                    <Chip label="⚠ Must start bot" color="warning" size="small" />
+                                  </Tooltip>
+                              }
+                            </Box>
+                          );
+                        })}
+                      </Stack>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
               <Card>
                 <CardContent>
                   <Typography variant="subtitle1" fontWeight={600} mb={0.5}>Send Report Now</Typography>
                   <Typography variant="body2" color="text.secondary" mb={2}>
-                    Immediately send a report summary to this group's Telegram chat.
+                    Immediately send a report to all configured recipients.
                     Useful for checking the setup or sharing a snapshot with your community.
                   </Typography>
                   <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
@@ -1513,6 +1764,7 @@ export default function GroupSettings() {
                   <Alert severity="info" sx={{ mt: 2 }} icon={false}>
                     <Typography variant="caption">
                       The bot must be active and present in the group as an admin to send reports.
+                      Admins who have not started @telegizer_bot will be silently skipped.
                     </Typography>
                   </Alert>
                 </CardContent>

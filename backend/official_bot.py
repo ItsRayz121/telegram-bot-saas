@@ -118,6 +118,16 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     _log.info("[OfficialBot] /start from tg_user=%s username=%s args=%s flask_app=%s",
               user.id, user.username, args, "ok" if flask_app else "MISSING")
 
+    # ── Record that this user has started the bot (enables private DMs) ───────
+    if flask_app:
+        try:
+            with flask_app.app_context():
+                from .models import db, TelegramBotStarted
+                TelegramBotStarted.record(user.id)
+                db.session.commit()
+        except Exception as _exc:
+            _log.debug("TelegramBotStarted.record failed: %s", _exc)
+
     # ── Handle ?start=connect_<code> deep-link ────────────────────────────────
     if args and args[0].startswith("connect_"):
         code = args[0][len("connect_"):]

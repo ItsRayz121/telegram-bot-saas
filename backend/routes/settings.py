@@ -1,8 +1,9 @@
 import logging
 from datetime import datetime
+import requests as _http
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from ..models import db, User, Bot, Group, Member, AuditLog, ScheduledMessage, Raid, AutoResponse, ReportedMessage
+from ..models import db, User, Bot, Group, Member, AuditLog, ScheduledMessage, Raid, AutoResponse, ReportedMessage, TelegramBotStarted
 from ..middleware.rate_limit import rate_limit
 
 _PAID_TIERS = {"pro", "enterprise"}
@@ -177,6 +178,52 @@ def update_group_settings(bot_id, group_id):
             db.session.rollback()
         except Exception:
             pass
+        return jsonify({"error": str(e)}), 500
+
+
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/admins", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=20)
+def get_group_admins(bot_id, group_id):
+    """Fetch current Telegram admins and annotate with @telegizer_bot DM ability."""
+    try:
+        user = _get_current_user()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        bot, group, err = _get_bot_and_group(user, bot_id, group_id)
+        if err:
+            return err
+
+        try:
+            token = bot.get_token()
+        except Exception:
+            return jsonify({"error": "Could not decrypt bot token"}), 500
+
+        resp = _http.get(
+            f"https://api.telegram.org/bot{token}/getChatAdministrators",
+            params={"chat_id": group.telegram_group_id},
+            timeout=10,
+        ).json()
+
+        if not resp.get("ok"):
+            return jsonify({"error": resp.get("description", "Telegram API error"), "admins": []}), 200
+
+        admins = []
+        for member in resp.get("result", []):
+            u = member.get("user", {})
+            uid = str(u.get("id", ""))
+            if u.get("is_bot"):
+                continue
+            admins.append({
+                "user_id": uid,
+                "username": u.get("username"),
+                "first_name": u.get("first_name", ""),
+                "status": member.get("status"),
+                "can_dm": TelegramBotStarted.has_started(uid) if uid else False,
+            })
+        return jsonify({"admins": admins})
+    except Exception as e:
+        logger.error(f"get_group_admins error: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 
