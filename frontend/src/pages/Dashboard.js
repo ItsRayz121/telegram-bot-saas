@@ -11,7 +11,7 @@ import {
   PowerSettingsNew, Upgrade, CheckCircle, Close, ContentCopy,
   ArrowForward, CreditCard, People, Home, AttachMoney,
   Notifications, NotificationsNone, Search, ManageAccounts,
-  EmojiEvents, ExpandMore,
+  EmojiEvents, ExpandMore, Groups, AddBox,
 } from '@mui/icons-material';
 import TelegizerLogo from '../components/TelegizerLogo';
 import Badge from '@mui/material/Badge';
@@ -572,8 +572,14 @@ export default function Dashboard() {
             <Button size="small" startIcon={<Home fontSize="small" />} onClick={() => navigate('/')} sx={{ color: 'text.secondary' }}>
               Home
             </Button>
-            <Button size="small" onClick={() => navigate('/pricing')} sx={{ color: 'text.secondary' }}>
-              Pricing
+            <Button size="small" startIcon={<Groups fontSize="small" />} onClick={() => navigate('/my-groups')} sx={{ color: 'text.secondary' }}>
+              My Groups
+            </Button>
+            <Button size="small" startIcon={<AddBox fontSize="small" />} onClick={() => navigate('/my-groups')} sx={{ color: 'text.secondary' }}>
+              Add Group
+            </Button>
+            <Button size="small" startIcon={<SmartToy fontSize="small" />} onClick={() => navigate('/my-bots')} sx={{ color: 'text.secondary' }}>
+              My Bots
             </Button>
             <Button size="small" startIcon={<CreditCard fontSize="small" />} onClick={() => navigate('/billing')} sx={{ color: 'text.secondary' }}>
               Billing
@@ -630,6 +636,15 @@ export default function Dashboard() {
             {/* Mobile-only nav items */}
             <MenuItem onClick={() => { setAnchorEl(null); navigate('/'); }} sx={{ display: { md: 'none' } }}>
               <Home fontSize="small" sx={{ mr: 1 }} /> Home / Website
+            </MenuItem>
+            <MenuItem onClick={() => { setAnchorEl(null); navigate('/my-groups'); }}>
+              <Groups fontSize="small" sx={{ mr: 1 }} /> My Groups
+            </MenuItem>
+            <MenuItem onClick={() => { setAnchorEl(null); navigate('/my-groups'); }}>
+              <AddBox fontSize="small" sx={{ mr: 1 }} /> Add Group
+            </MenuItem>
+            <MenuItem onClick={() => { setAnchorEl(null); navigate('/my-bots'); }}>
+              <SmartToy fontSize="small" sx={{ mr: 1 }} /> My Bots
             </MenuItem>
             <MenuItem onClick={() => { setAnchorEl(null); navigate('/pricing'); }} sx={{ display: { md: 'none' } }}>
               <AttachMoney fontSize="small" sx={{ mr: 1 }} /> Pricing
