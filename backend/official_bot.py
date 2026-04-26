@@ -1305,7 +1305,7 @@ class OfficialBotRunner:
         )
         a.add_handler(
             MessageHandler(
-                filters.Chat(chat_type=[ChatType.GROUP, ChatType.SUPERGROUP]) & filters.TEXT,
+                (filters.ChatType.GROUP | filters.ChatType.SUPERGROUP) & filters.TEXT,
                 on_message,
             )
         )
