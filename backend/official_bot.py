@@ -232,6 +232,7 @@ async def _handle_account_connect(update, context, user, flask_app, frontend, bo
                     else:
                         website_user.telegram_user_id = str(user.id)
                         website_user.telegram_username = user.username
+                        website_user.telegram_first_name = user.first_name
                         website_user.telegram_connected_at = datetime.utcnow()
                         tc.used_at = datetime.utcnow()
                         tc.telegram_user_id = str(user.id)
@@ -273,12 +274,14 @@ async def _handle_account_connect(update, context, user, flask_app, frontend, bo
         return
 
     lines = [
-        f"✅ *Telegram account connected!*\n\n"
-        f"Your Telegram is now linked to *{linked_email}*.\n\n"
-        f"Groups you add via @{bot_un} will appear in your dashboard automatically."
+        f"✅ *Telegram connected successfully.*\n\n"
+        f"Your Telegram is now linked with your Telegizer account ({linked_email}).\n\n"
+        f"• Groups added by you will belong to your account\n"
+        f"• Custom bot tokens sent here are saved under your account\n"
+        f"• My Groups / My Bots in this bot show only your data"
     ]
     if auto_linked_groups:
-        lines.append(f"\n\n🔗 *Auto-linked {len(auto_linked_groups)} group(s):*")
+        lines.append(f"\n\n🔗 *Auto-linked {len(auto_linked_groups)} pending group(s):*")
         for title in auto_linked_groups[:5]:
             lines.append(f"• {title}")
 
@@ -862,13 +865,65 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ── my_groups ─────────────────────────────────────────────────────────────
     elif data == "menu:my_groups":
-        await query.edit_message_text(
-            "📋 *My Groups*\n\nView and manage all your linked groups on the dashboard.",
-            parse_mode=ParseMode.MARKDOWN,
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🖥️ Open My Groups", url=f"{frontend}/my-groups")],
+        groups = []
+        is_linked = False
+        if flask_app:
+            try:
+                with flask_app.app_context():
+                    from .models import User, TelegramGroup
+                    wu = User.query.filter_by(telegram_user_id=str(user.id)).first()
+                    is_linked = wu is not None
+                    if wu:
+                        groups = TelegramGroup.query.filter_by(
+                            owner_user_id=wu.id, is_disabled=False,
+                        ).order_by(TelegramGroup.linked_at.desc()).limit(10).all()
+                        groups = [{"title": g.title, "status": g.bot_status,
+                                   "group_id": g.telegram_group_id,
+                                   "cmd_count": len(g.custom_commands)} for g in groups]
+            except Exception:
+                pass
+
+        if not is_linked:
+            await query.edit_message_text(
+                "📋 *My Groups*\n\n"
+                "Connect your Telegizer website account to see your groups here.",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔗 Connect Account", url=f"{frontend}/settings")],
+                    [InlineKeyboardButton("« Back", callback_data="menu:main")],
+                ]),
+            )
+            return
+
+        if not groups:
+            text = (
+                "📋 *My Groups*\n\n"
+                "You have no linked groups yet.\n"
+                "Add the bot to a group and run `/linkgroup` to get started."
+            )
+            keyboard = [
+                [InlineKeyboardButton("➕ Add Group", callback_data="menu:add_group")],
+                [InlineKeyboardButton("🖥️ Open Dashboard", url=f"{frontend}/my-groups")],
                 [InlineKeyboardButton("« Back", callback_data="menu:main")],
-            ]),
+            ]
+        else:
+            status_icon = {"active": "🟢", "pending": "🟡", "removed": "🔴", "disabled": "⛔"}
+            lines = ["📋 *My Linked Groups*\n"]
+            for g in groups:
+                icon = status_icon.get(g["status"], "⚪")
+                cmd_txt = f" · {g['cmd_count']} cmd" if g["cmd_count"] else ""
+                lines.append(f"{icon} *{g['title']}*{cmd_txt}")
+            text = "\n".join(lines)
+            keyboard = [
+                [InlineKeyboardButton("🖥️ Manage on Dashboard", url=f"{frontend}/my-groups")],
+                [InlineKeyboardButton("➕ Add Another Group", callback_data="menu:add_group")],
+                [InlineKeyboardButton("« Back", callback_data="menu:main")],
+            ]
+
+        await query.edit_message_text(
+            text,
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup(keyboard),
         )
 
     # ── add_group ─────────────────────────────────────────────────────────────
@@ -904,10 +959,52 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     elif data == "menu:my_bots":
+        custom_bots_list = []
+        is_linked = False
+        if flask_app:
+            try:
+                with flask_app.app_context():
+                    from .models import User, CustomBot
+                    wu = User.query.filter_by(telegram_user_id=str(user.id)).first()
+                    is_linked = wu is not None
+                    if wu:
+                        custom_bots_list = CustomBot.query.filter_by(
+                            owner_user_id=wu.id,
+                        ).order_by(CustomBot.created_at.desc()).limit(10).all()
+                        custom_bots_list = [{"username": b.bot_username, "name": b.bot_name,
+                                             "status": b.status,
+                                             "groups": len(b.linked_groups)} for b in custom_bots_list]
+            except Exception:
+                pass
+
+        if not is_linked:
+            await query.edit_message_text(
+                "🤖 *My Bots*\n\n"
+                "Connect your Telegizer website account to see your bots here.",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔗 Connect Account", url=f"{frontend}/settings")],
+                    [InlineKeyboardButton("« Back", callback_data="menu:advanced")],
+                ]),
+            )
+            return
+
+        status_icon = {"active": "🟢", "inactive": "🟡", "error": "🔴"}
+        lines = [
+            "🤖 *My Bots*\n",
+            "🟢 *Official Telegizer Bot* (shared · always active)",
+        ]
+        if custom_bots_list:
+            lines.append("\n*Custom Bots:*")
+            for b in custom_bots_list:
+                icon = status_icon.get(b["status"], "⚪")
+                grp_txt = f" · {b['groups']} group{'s' if b['groups'] != 1 else ''}" if b["groups"] else ""
+                lines.append(f"{icon} @{b['username']}{grp_txt}")
+        else:
+            lines.append("\n_No custom bots connected yet._")
+
         await query.edit_message_text(
-            "*My Bots*\n\n"
-            "1. 🟢 *Official Telegizer Bot* (shared — always active)\n\n"
-            "Connect and manage custom bots on the dashboard.",
+            "\n".join(lines),
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🖥️ Manage Bots", url=f"{frontend}/my-bots")],

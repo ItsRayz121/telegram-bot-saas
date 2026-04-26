@@ -44,6 +44,7 @@ class User(db.Model):
     # Telegram account linkage
     telegram_user_id = db.Column(db.String(255), nullable=True, unique=True, index=True)
     telegram_username = db.Column(db.String(255), nullable=True)
+    telegram_first_name = db.Column(db.String(255), nullable=True)
     telegram_connected_at = db.Column(db.DateTime, nullable=True)
 
     bots = db.relationship("Bot", backref="owner", lazy=True, cascade="all, delete-orphan")
@@ -77,6 +78,7 @@ class User(db.Model):
             "totp_enabled": self.totp_enabled,
             "telegram_connected": bool(self.telegram_user_id),
             "telegram_username": self.telegram_username,
+            "telegram_first_name": self.telegram_first_name,
             "telegram_connected_at": self.telegram_connected_at.isoformat() if self.telegram_connected_at else None,
         }
 

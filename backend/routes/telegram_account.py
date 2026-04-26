@@ -38,7 +38,11 @@ def generate_connect_code():
         return jsonify({"error": "Verify your email before connecting Telegram"}), 403
 
     if user.telegram_user_id:
-        return jsonify({"error": "Telegram already connected", "telegram_username": user.telegram_username}), 409
+        return jsonify({
+            "error": "Telegram already connected",
+            "telegram_username": user.telegram_username,
+            "telegram_first_name": user.telegram_first_name,
+        }), 409
 
     # Invalidate any existing unused codes for this user
     TelegramConnectCode.query.filter_by(user_id=user.id, used_at=None).update(
@@ -80,6 +84,7 @@ def connection_status():
     return jsonify({
         "connected": bool(user.telegram_user_id),
         "telegram_username": user.telegram_username,
+        "telegram_first_name": user.telegram_first_name,
         "connected_at": user.telegram_connected_at.isoformat() if user.telegram_connected_at else None,
     })
 

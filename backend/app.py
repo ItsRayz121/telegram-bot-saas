@@ -399,6 +399,7 @@ def _run_telegram_connect_migrations():
         # Telegram identity columns on users
         "ALTER TABLE users ADD COLUMN telegram_user_id VARCHAR(255)",
         "ALTER TABLE users ADD COLUMN telegram_username VARCHAR(255)",
+        "ALTER TABLE users ADD COLUMN telegram_first_name VARCHAR(255)",
         "ALTER TABLE users ADD COLUMN telegram_connected_at TIMESTAMP",
         "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_telegram_user_id ON users (telegram_user_id)",
         # One-time connect codes

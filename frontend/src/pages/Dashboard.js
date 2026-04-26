@@ -11,13 +11,13 @@ import {
   PowerSettingsNew, Upgrade, CheckCircle, Close, ContentCopy,
   ArrowForward, CreditCard, People, Home, AttachMoney,
   Notifications, NotificationsNone, Search, ManageAccounts,
-  EmojiEvents, ExpandMore, Groups, AddBox,
+  EmojiEvents, ExpandMore, Groups, AddBox, Telegram, OpenInNew,
 } from '@mui/icons-material';
 import TelegizerLogo from '../components/TelegizerLogo';
 import Badge from '@mui/material/Badge';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { bots, auth, billing, referrals as referralsApi, notifications as notificationsApi } from '../services/api';
+import { bots, auth, billing, referrals as referralsApi, notifications as notificationsApi, telegramAccount } from '../services/api';
 
 const MAX_BOTS = { free: 1, pro: 5, enterprise: 50 };
 
@@ -419,6 +419,9 @@ export default function Dashboard() {
   const [user, setUser] = useState(safeParseUser);
   const [subscription, setSubscription] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [tgConnecting, setTgConnecting] = useState(false);
+  const [tgConnectLoading, setTgConnectLoading] = useState(false);
+  const tgPollRef = React.useRef(null);
 
   const fetchBots = useCallback(async () => {
     try {
@@ -545,6 +548,37 @@ export default function Dashboard() {
       setUnreadNotifs(0);
       setNotifList(prev => prev.map(n => ({ ...n, read: true })));
     } catch {}
+  };
+
+  const stopTgPoll = () => {
+    if (tgPollRef.current) { clearInterval(tgPollRef.current); tgPollRef.current = null; }
+  };
+
+  const handleConnectTelegram = async () => {
+    setTgConnectLoading(true);
+    try {
+      const r = await telegramAccount.generateConnectCode();
+      window.open(r.data.url, '_blank', 'noopener,noreferrer');
+      setTgConnecting(true);
+      let attempts = 0;
+      tgPollRef.current = setInterval(async () => {
+        attempts++;
+        try {
+          const s = await telegramAccount.connectionStatus();
+          if (s.data.connected) {
+            stopTgPoll();
+            setTgConnecting(false);
+            toast.success('Telegram connected!');
+            await refreshUser();
+          }
+        } catch { /* ignore */ }
+        if (attempts >= 40) { stopTgPoll(); setTgConnecting(false); }
+      }, 3000);
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to generate connect link');
+    } finally {
+      setTgConnectLoading(false);
+    }
   };
 
   const handleLogout = async () => {
@@ -710,6 +744,49 @@ export default function Dashboard() {
         {/* ── Onboarding ── */}
         {!loading && (
           <OnboardingCard botList={botList} onAddBot={() => setAddOpen(true)} navigate={navigate} />
+        )}
+
+        {/* ── Connect Telegram banner (shown only when not yet connected) ── */}
+        {!user.telegram_connected && !tgConnecting && (
+          <Alert
+            severity="info"
+            icon={<Telegram />}
+            sx={{ mb: 2 }}
+            action={
+              <Button
+                size="small"
+                color="info"
+                variant="outlined"
+                endIcon={<OpenInNew fontSize="small" />}
+                onClick={handleConnectTelegram}
+                disabled={tgConnectLoading}
+              >
+                {tgConnectLoading ? 'Opening…' : 'Connect'}
+              </Button>
+            }
+          >
+            <strong>Connect your Telegram account</strong> — link groups and bots automatically
+            without entering codes. Go to{' '}
+            <Button size="small" sx={{ p: 0, minWidth: 0, textTransform: 'none', verticalAlign: 'baseline' }}
+              onClick={() => navigate('/settings')}>
+              Settings
+            </Button>{' '}
+            to connect.
+          </Alert>
+        )}
+        {tgConnecting && (
+          <Alert
+            severity="info"
+            icon={<CircularProgress size={18} />}
+            sx={{ mb: 2 }}
+            action={
+              <Button size="small" onClick={() => { stopTgPoll(); setTgConnecting(false); }}>
+                Cancel
+              </Button>
+            }
+          >
+            Waiting for you to confirm in @telegizer_bot…
+          </Alert>
         )}
 
         {/* ── Header row + search ── */}
