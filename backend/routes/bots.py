@@ -70,11 +70,13 @@ def create_bot():
     except Exception as e:
         return jsonify({"error": f"Failed to validate bot token: {str(e)}"}), 400
 
+    from datetime import datetime as _dt
     bot = Bot(
         user_id=user.id,
         bot_username=bot_username,
         bot_name=bot_name,
         is_active=True,
+        last_active=_dt.utcnow(),
     )
     bot.set_token(token)
     db.session.add(bot)

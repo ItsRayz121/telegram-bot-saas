@@ -17,7 +17,7 @@ import TelegizerLogo from '../components/TelegizerLogo';
 import Badge from '@mui/material/Badge';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { bots, auth, billing, referrals as referralsApi, notifications as notificationsApi, telegramAccount } from '../services/api';
+import { bots, auth, billing, referrals as referralsApi, notifications as notificationsApi, telegramAccount, telegramGroups as telegramGroupsApi } from '../services/api';
 
 const MAX_BOTS = { free: 1, pro: 5, enterprise: 50 };
 
@@ -65,7 +65,7 @@ function BotCardSkeleton() {
 }
 
 // ── Onboarding Card ────────────────────────────────────────────────────────────
-function OnboardingCard({ botList, onAddBot, navigate }) {
+function OnboardingCard({ botList, onAddBot, navigate, user, officialGroupCount }) {
   const [dismissed, setDismissed] = useState(
     () => localStorage.getItem('onboarding_dismissed') === '1'
   );
@@ -75,40 +75,48 @@ function OnboardingCard({ botList, onAddBot, navigate }) {
   );
 
   const hasBots = botList.length > 0;
-  const hasGroups = botList.some((b) => (b.group_count ?? 0) > 0);
+  const hasGroups = (officialGroupCount ?? 0) > 0 || botList.some((b) => (b.group_count ?? 0) > 0);
+  const isTgConnected = user?.telegram_connected;
+  const botUsername = 'telegizer_bot';
+  const addGroupUrl = `https://t.me/${botUsername}?startgroup=setup`;
 
   const steps = [
     { label: 'Create your account', done: true },
     {
-      label: 'Add your first bot',
-      done: hasBots,
-      action: !hasBots ? (
-        <Button size="small" variant="contained" startIcon={<Add />} onClick={onAddBot} sx={{ mt: 1 }}>
-          Add Bot
+      label: 'Connect your Telegram account',
+      done: isTgConnected,
+      action: !isTgConnected ? (
+        <Button size="small" variant="contained" startIcon={<Telegram />} onClick={() => navigate('/settings')} sx={{ mt: 1 }}>
+          Connect Telegram
         </Button>
       ) : null,
-      hint: 'Get a token from @BotFather on Telegram, then paste it here.',
+      hint: 'Go to Settings → Connect Telegram. This lets you link groups automatically without entering codes.',
     },
     {
-      label: 'Add bot to your Telegram group as admin',
+      label: 'Add @telegizer_bot to a Telegram group as admin',
       done: hasGroups,
-      hint: 'Open Telegram, add your bot to the group, and make it admin. The group appears here automatically.',
+      action: !hasGroups ? (
+        <Button size="small" variant="contained" startIcon={<Add />} href={addGroupUrl} target="_blank" rel="noopener noreferrer" sx={{ mt: 1 }}>
+          Add to Group
+        </Button>
+      ) : null,
+      hint: 'Open Telegram, add @telegizer_bot to your group, make it admin, then run /linkgroup in the group.',
     },
     {
       label: 'Enable AutoMod',
       done: false,
-      action: hasBots ? (
-        <Button size="small" variant="outlined" onClick={() => navigate(`/bot/${botList[0]?.id}`)} sx={{ mt: 1 }}>
+      action: hasGroups ? (
+        <Button size="small" variant="outlined" onClick={() => navigate('/my-groups')} sx={{ mt: 1 }}>
           Open Group Settings
         </Button>
       ) : null,
-      hint: 'Go to Group Settings → AutoMod to enable spam detection and link filtering.',
+      hint: 'Go to My Groups → Group Settings → AutoMod to enable spam detection and link filtering.',
     },
     {
       label: 'Schedule your first message',
       done: false,
-      action: hasBots ? (
-        <Button size="small" variant="outlined" onClick={() => navigate(`/bot/${botList[0]?.id}`)} sx={{ mt: 1 }}>
+      action: hasGroups ? (
+        <Button size="small" variant="outlined" onClick={() => navigate('/my-groups')} sx={{ mt: 1 }}>
           Open Scheduler
         </Button>
       ) : null,
@@ -403,6 +411,49 @@ function LeaderboardCard() {
   );
 }
 
+// ── Official Bot Section ───────────────────────────────────────────────────────
+function OfficialBotSection({ user, navigate, officialGroupCount }) {
+  const botUsername = 'telegizer_bot';
+  const addGroupUrl = `https://t.me/${botUsername}?startgroup=setup`;
+  return (
+    <Card sx={{ mb: 2, border: '1px solid', borderColor: 'primary.light', bgcolor: 'rgba(33,150,243,0.03)' }}>
+      <CardContent sx={{ pb: 0 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+          <Avatar sx={{ bgcolor: 'primary.main', mr: 1.5, width: 40, height: 40 }}>
+            <SmartToy fontSize="small" />
+          </Avatar>
+          <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+            <Typography variant="subtitle1" fontWeight={700}>Official Telegizer Bot</Typography>
+            <Typography variant="body2" color="text.secondary" noWrap>@{botUsername} · Shared · Always Active</Typography>
+          </Box>
+          <Chip label="Active" color="success" size="small" />
+        </Box>
+        {!user?.telegram_connected && (
+          <Alert severity="info" sx={{ mb: 1, py: 0.5 }} icon={<Telegram fontSize="small" />}>
+            <Typography variant="caption">
+              <Button size="small" sx={{ p: 0, minWidth: 0, verticalAlign: 'baseline', textTransform: 'none', fontWeight: 700 }}
+                onClick={() => navigate('/settings')}>Connect Telegram</Button>
+              {' '}to link groups automatically without codes.
+            </Typography>
+          </Alert>
+        )}
+        <Typography variant="caption" color="text.disabled">
+          {officialGroupCount} group{officialGroupCount !== 1 ? 's' : ''} linked · Free for all verified users
+        </Typography>
+      </CardContent>
+      <CardActions sx={{ px: 2, pb: 2, pt: 1, gap: 1 }}>
+        <Button size="small" variant="contained" component="a" href={addGroupUrl} target="_blank" rel="noopener noreferrer"
+          startIcon={<Add />}>
+          Add to Group
+        </Button>
+        <Button size="small" startIcon={<Groups />} onClick={() => navigate('/my-groups')}>
+          Manage Groups ({officialGroupCount})
+        </Button>
+      </CardActions>
+    </Card>
+  );
+}
+
 // ── Main Dashboard ─────────────────────────────────────────────────────────────
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -421,6 +472,8 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [tgConnecting, setTgConnecting] = useState(false);
   const [tgConnectLoading, setTgConnectLoading] = useState(false);
+  const [tgConnectTimedOut, setTgConnectTimedOut] = useState(false);
+  const [officialGroupCount, setOfficialGroupCount] = useState(0);
   const tgPollRef = React.useRef(null);
 
   const fetchBots = useCallback(async () => {
@@ -432,6 +485,13 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  const fetchOfficialGroups = useCallback(async () => {
+    try {
+      const res = await telegramGroupsApi.list();
+      setOfficialGroupCount(res.data.groups?.length ?? 0);
+    } catch { /* non-fatal */ }
   }, []);
 
   const refreshUser = useCallback(async () => {
@@ -454,7 +514,8 @@ export default function Dashboard() {
     refreshUser();
     fetchBots();
     fetchSubscription();
-  }, [refreshUser, fetchBots, fetchSubscription]);
+    fetchOfficialGroups();
+  }, [refreshUser, fetchBots, fetchSubscription, fetchOfficialGroups]);
 
   useEffect(() => {
     if (searchParams.get('payment') === 'success') {
@@ -554,8 +615,25 @@ export default function Dashboard() {
     if (tgPollRef.current) { clearInterval(tgPollRef.current); tgPollRef.current = null; }
   };
 
+  const checkTgStatus = async () => {
+    try {
+      const s = await telegramAccount.connectionStatus();
+      if (s.data.connected) {
+        stopTgPoll();
+        setTgConnecting(false);
+        setTgConnectTimedOut(false);
+        toast.success('Telegram connected!');
+        await refreshUser();
+        fetchOfficialGroups();
+        return true;
+      }
+    } catch { /* ignore */ }
+    return false;
+  };
+
   const handleConnectTelegram = async () => {
     setTgConnectLoading(true);
+    setTgConnectTimedOut(false);
     try {
       const r = await telegramAccount.generateConnectCode();
       window.open(r.data.url, '_blank', 'noopener,noreferrer');
@@ -563,16 +641,12 @@ export default function Dashboard() {
       let attempts = 0;
       tgPollRef.current = setInterval(async () => {
         attempts++;
-        try {
-          const s = await telegramAccount.connectionStatus();
-          if (s.data.connected) {
-            stopTgPoll();
-            setTgConnecting(false);
-            toast.success('Telegram connected!');
-            await refreshUser();
-          }
-        } catch { /* ignore */ }
-        if (attempts >= 40) { stopTgPoll(); setTgConnecting(false); }
+        const connected = await checkTgStatus();
+        if (!connected && attempts >= 40) {
+          stopTgPoll();
+          setTgConnecting(false);
+          setTgConnectTimedOut(true);
+        }
       }, 3000);
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to generate connect link');
@@ -743,58 +817,66 @@ export default function Dashboard() {
 
         {/* ── Onboarding ── */}
         {!loading && (
-          <OnboardingCard botList={botList} onAddBot={() => setAddOpen(true)} navigate={navigate} />
+          <OnboardingCard botList={botList} onAddBot={() => setAddOpen(true)} navigate={navigate}
+            user={user} officialGroupCount={officialGroupCount} />
         )}
 
-        {/* ── Connect Telegram banner (shown only when not yet connected) ── */}
-        {!user.telegram_connected && !tgConnecting && (
-          <Alert
-            severity="info"
-            icon={<Telegram />}
-            sx={{ mb: 2 }}
+        {/* ── Connect Telegram banner ── */}
+        {!user.telegram_connected && !tgConnecting && !tgConnectTimedOut && (
+          <Alert severity="info" icon={<Telegram />} sx={{ mb: 2 }}
             action={
-              <Button
-                size="small"
-                color="info"
-                variant="outlined"
-                endIcon={<OpenInNew fontSize="small" />}
-                onClick={handleConnectTelegram}
-                disabled={tgConnectLoading}
-              >
+              <Button size="small" color="info" variant="outlined" endIcon={<OpenInNew fontSize="small" />}
+                onClick={handleConnectTelegram} disabled={tgConnectLoading}>
                 {tgConnectLoading ? 'Opening…' : 'Connect'}
               </Button>
             }
           >
-            <strong>Connect your Telegram account</strong> — link groups and bots automatically
-            without entering codes. Go to{' '}
-            <Button size="small" sx={{ p: 0, minWidth: 0, textTransform: 'none', verticalAlign: 'baseline' }}
-              onClick={() => navigate('/settings')}>
-              Settings
-            </Button>{' '}
-            to connect.
+            <strong>Connect your Telegram account</strong> — link groups automatically without codes.
           </Alert>
         )}
-        {tgConnecting && (
-          <Alert
-            severity="info"
-            icon={<CircularProgress size={18} />}
-            sx={{ mb: 2 }}
+        {/* ── Timed-out banner ── */}
+        {tgConnectTimedOut && !user.telegram_connected && (
+          <Alert severity="warning" icon={<Telegram />} sx={{ mb: 2 }}
             action={
-              <Button size="small" onClick={() => { stopTgPoll(); setTgConnecting(false); }}>
-                Cancel
-              </Button>
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Button size="small" variant="outlined" color="warning" onClick={checkTgStatus}>
+                  Check Now
+                </Button>
+                <Button size="small" onClick={handleConnectTelegram} disabled={tgConnectLoading}>
+                  Retry
+                </Button>
+              </Box>
             }
           >
-            Waiting for you to confirm in @telegizer_bot…
+            <strong>Connection timed out.</strong> Open <strong>@telegizer_bot</strong> on Telegram and
+            send /start, then tap <em>Check Now</em> — or click <em>Retry</em> to generate a new link.
+          </Alert>
+        )}
+        {/* ── Waiting banner ── */}
+        {tgConnecting && (
+          <Alert severity="info" icon={<CircularProgress size={18} />} sx={{ mb: 2 }}
+            action={
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Button size="small" variant="outlined" onClick={checkTgStatus}>Check Now</Button>
+                <Button size="small" onClick={() => { stopTgPoll(); setTgConnecting(false); }}>Cancel</Button>
+              </Box>
+            }
+          >
+            Waiting for you to confirm in @telegizer_bot… Open the link that just opened in Telegram.
           </Alert>
         )}
 
-        {/* ── Header row + search ── */}
+        {/* ── Official Telegizer Bot ── */}
+        {!loading && (
+          <OfficialBotSection user={user} navigate={navigate} officialGroupCount={officialGroupCount} />
+        )}
+
+        {/* ── Custom Bots header + search ── */}
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1, gap: 1, flexWrap: 'wrap' }}>
           <Box>
-            <Typography variant="h5" fontWeight={700}>My Bots</Typography>
+            <Typography variant="h5" fontWeight={700}>Custom Bots</Typography>
             <Typography variant="caption" color="text.secondary">
-              {botCount} / {maxBots} bots · {tier} plan
+              {botCount} / {maxBots} custom bots · {tier} plan
             </Typography>
           </Box>
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>

@@ -115,6 +115,9 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bot_un = _bot_username()
     args = context.args or []
 
+    _log.info("[OfficialBot] /start from tg_user=%s username=%s args=%s flask_app=%s",
+              user.id, user.username, args, "ok" if flask_app else "MISSING")
+
     # ── Handle ?start=connect_<code> deep-link ────────────────────────────────
     if args and args[0].startswith("connect_"):
         code = args[0][len("connect_"):]
@@ -206,6 +209,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def _handle_account_connect(update, context, user, flask_app, frontend, bot_un, code):
     """Process /start connect_<code>: link Telegram identity to website account."""
+    _log.info("[OfficialBot] account_connect attempt tg_user=%s code_prefix=%s", user.id, code[:8])
     linked_email = None
     error_msg = None
     auto_linked_groups = []
@@ -237,6 +241,8 @@ async def _handle_account_connect(update, context, user, flask_app, frontend, bo
                         tc.used_at = datetime.utcnow()
                         tc.telegram_user_id = str(user.id)
                         linked_email = website_user.email
+                        _log.info("[OfficialBot] account_connect success tg_user=%s linked_to_user_id=%s email=%s",
+                                  user.id, website_user.id, linked_email)
 
                         # Auto-link any pending groups this Telegram user created
                         pending_codes = TelegramGroupLinkCode.query.filter_by(
@@ -359,6 +365,8 @@ async def cmd_linkgroup(update: Update, context: ContextTypes.DEFAULT_TYPE):
     group_id = str(chat.id)
     group_title = chat.title or "Untitled Group"
     bot_un = _bot_username()
+
+    _log.info("[OfficialBot] /linkgroup from tg_user=%s group=%s (%s)", user.id, group_id, group_title)
 
     # -- Gather everything needed inside one context block --------------------
     already_linked = False
@@ -1248,7 +1256,7 @@ class OfficialBotRunner:
         if not token:
             _log.warning(
                 "[OfficialBot] TELEGRAM_BOT_TOKEN not set — official bot disabled. "
-                "Add it in Railway → Variables."
+                "Set TELEGRAM_BOT_TOKEN in Railway → Variables."
             )
             return
         with self._lock:
@@ -1261,7 +1269,10 @@ class OfficialBotRunner:
             )
             self._thread.start()
             self._running = True
-            _log.info("[OfficialBot] Thread started (token prefix: %s…)", token[:12])
+            _log.info(
+                "[OfficialBot] Thread started. token_prefix=%s… username=%s",
+                token[:12], Config.TELEGRAM_BOT_USERNAME,
+            )
 
     def _run_loop(self, flask_app):
         self.loop = asyncio.new_event_loop()
@@ -1299,6 +1310,9 @@ class OfficialBotRunner:
             )
         )
 
+        _log.info("[OfficialBot] Initializing application...")
+        await a.initialize()
+        await a.start()
         try:
             await a.bot.set_my_commands([
                 BotCommand("start", "Open companion hub"),
@@ -1308,9 +1322,21 @@ class OfficialBotRunner:
             ])
         except Exception as exc:
             _log.warning("[OfficialBot] set_my_commands: %s", exc)
-
-        _log.info("[OfficialBot] Long-polling started")
-        await a.run_polling(drop_pending_updates=True)
+        await a.updater.start_polling(drop_pending_updates=True)
+        _log.info("[OfficialBot] Long-polling active — bot is live.")
+        # Keep the coroutine alive; process exit stops the daemon thread.
+        try:
+            while True:
+                await asyncio.sleep(3600)
+        except asyncio.CancelledError:
+            pass
+        finally:
+            _log.info("[OfficialBot] Shutting down polling...")
+            for _coro in (a.updater.stop(), a.stop(), a.shutdown()):
+                try:
+                    await _coro
+                except Exception:
+                    pass
 
 
 _runner = OfficialBotRunner()
