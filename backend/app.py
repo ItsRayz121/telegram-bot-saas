@@ -48,7 +48,11 @@ from .routes.referrals import referrals_bp
 from .routes.digest import digest_bp, run_digest_scheduler
 from .routes.notifications import notifications_bp
 from .routes.totp import totp_bp
+from .routes.telegram_groups import tg_groups_bp
+from .routes.custom_bots import custom_bots_bp
+from .routes.custom_commands import custom_commands_bp
 from .bot_manager import BotManager
+from .official_bot import start_official_bot
 
 _scheduler_log = logging.getLogger(__name__)
 
@@ -127,6 +131,9 @@ def create_app():
     app.register_blueprint(digest_bp)
     app.register_blueprint(notifications_bp)
     app.register_blueprint(totp_bp)
+    app.register_blueprint(tg_groups_bp)
+    app.register_blueprint(custom_bots_bp)
+    app.register_blueprint(custom_commands_bp)
 
     app.bot_manager = bot_manager
 
@@ -273,6 +280,7 @@ def create_app():
         _run_index_migrations()
         _run_security_migrations()
         _run_anti_abuse_migrations()
+        _run_official_bot_migrations()
 
     # Start bots in a background thread after a short delay so Gunicorn can
     # pass its healthcheck before bot polling (which may contact Telegram and
@@ -282,6 +290,8 @@ def create_app():
         time.sleep(5)
         with app.app_context():
             _restart_active_bots(app)
+        # Start official Telegizer shared bot
+        start_official_bot(app)
 
     threading.Thread(target=_deferred_bot_start, daemon=True).start()
 
@@ -291,6 +301,93 @@ def create_app():
     threading.Thread(target=_scheduler_loop, args=(app,), daemon=True).start()
 
     return app
+
+
+def _run_official_bot_migrations():
+    """Create tables for the official Telegizer shared bot ecosystem."""
+    stmts = [
+        """CREATE TABLE IF NOT EXISTS telegram_groups (
+            id SERIAL PRIMARY KEY,
+            telegram_group_id VARCHAR(255) UNIQUE NOT NULL,
+            title VARCHAR(255) NOT NULL,
+            username VARCHAR(255),
+            invite_link VARCHAR(500),
+            owner_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            linked_via_bot_type VARCHAR(20) NOT NULL DEFAULT 'official',
+            linked_bot_id INTEGER,
+            bot_status VARCHAR(20) NOT NULL DEFAULT 'pending',
+            bot_permissions JSONB,
+            linked_at TIMESTAMP,
+            last_activity TIMESTAMP,
+            is_disabled BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )""",
+        "CREATE INDEX IF NOT EXISTS ix_telegram_groups_tg_id ON telegram_groups (telegram_group_id)",
+        "CREATE INDEX IF NOT EXISTS ix_telegram_groups_owner ON telegram_groups (owner_user_id)",
+        """CREATE TABLE IF NOT EXISTS telegram_group_link_codes (
+            id SERIAL PRIMARY KEY,
+            code VARCHAR(16) UNIQUE NOT NULL,
+            telegram_group_id VARCHAR(255) NOT NULL REFERENCES telegram_groups(telegram_group_id) ON DELETE CASCADE,
+            telegram_group_title VARCHAR(255),
+            created_by_telegram_user_id VARCHAR(255) NOT NULL,
+            expires_at TIMESTAMP NOT NULL,
+            used_at TIMESTAMP,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )""",
+        "CREATE INDEX IF NOT EXISTS ix_tg_link_codes_code ON telegram_group_link_codes (code)",
+        """CREATE TABLE IF NOT EXISTS custom_bots (
+            id SERIAL PRIMARY KEY,
+            owner_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            bot_name VARCHAR(255),
+            bot_username VARCHAR(255) NOT NULL,
+            bot_token_encrypted TEXT NOT NULL,
+            status VARCHAR(20) NOT NULL DEFAULT 'active',
+            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )""",
+        "CREATE INDEX IF NOT EXISTS ix_custom_bots_owner ON custom_bots (owner_user_id)",
+        """CREATE TABLE IF NOT EXISTS custom_commands (
+            id SERIAL PRIMARY KEY,
+            telegram_group_id VARCHAR(255) NOT NULL REFERENCES telegram_groups(telegram_group_id) ON DELETE CASCADE,
+            command VARCHAR(64) NOT NULL,
+            response_type VARCHAR(20) NOT NULL DEFAULT 'text',
+            response_text TEXT NOT NULL,
+            action_type VARCHAR(50),
+            buttons JSONB,
+            enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            UNIQUE(telegram_group_id, command)
+        )""",
+        "CREATE INDEX IF NOT EXISTS ix_custom_commands_group ON custom_commands (telegram_group_id)",
+        """CREATE TABLE IF NOT EXISTS bot_events (
+            id SERIAL PRIMARY KEY,
+            telegram_group_id VARCHAR(255) REFERENCES telegram_groups(telegram_group_id) ON DELETE SET NULL,
+            event_type VARCHAR(50) NOT NULL,
+            message TEXT,
+            metadata JSONB,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )""",
+        "CREATE INDEX IF NOT EXISTS ix_bot_events_group ON bot_events (telegram_group_id)",
+        "CREATE INDEX IF NOT EXISTS ix_bot_events_type ON bot_events (event_type)",
+        "CREATE INDEX IF NOT EXISTS ix_bot_events_created ON bot_events (created_at DESC)",
+        # FK for telegram_groups.linked_bot_id (added after custom_bots table exists)
+        "ALTER TABLE telegram_groups ADD CONSTRAINT fk_tg_linked_bot FOREIGN KEY (linked_bot_id) REFERENCES custom_bots(id) ON DELETE SET NULL",
+    ]
+    try:
+        with db.engine.connect() as conn:
+            for sql in stmts:
+                try:
+                    conn.execute(text(sql))
+                    conn.commit()
+                except Exception:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+    except Exception:
+        pass
 
 
 def _run_anti_abuse_migrations():

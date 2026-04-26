@@ -2,7 +2,7 @@ from datetime import datetime
 from functools import wraps
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from ..models import db, User, Bot, Group, Member, SuspiciousActivity, Referral
+from ..models import db, User, Bot, Group, Member, SuspiciousActivity, Referral, TelegramGroup, CustomBot, BotEvent
 from ..config import Config
 from ..middleware.rate_limit import rate_limit
 
@@ -323,3 +323,166 @@ def list_all_bots():
         "page": page,
         "per_page": per_page,
     })
+
+
+# ── Official bot ecosystem admin endpoints ─────────────────────────────────────
+
+@admin_bp.route("/telegram-groups", methods=["GET"])
+@admin_required
+@rate_limit(requests_per_minute=30)
+def admin_list_telegram_groups():
+    """All linked Telegram groups across all users."""
+    page = request.args.get("page", 1, type=int)
+    per_page = min(request.args.get("per_page", 50, type=int), 200)
+    search = request.args.get("search", "")
+    status = request.args.get("status", "")
+
+    query = TelegramGroup.query
+    if search:
+        query = query.filter(
+            TelegramGroup.title.ilike(f"%{search}%") |
+            TelegramGroup.telegram_group_id.ilike(f"%{search}%")
+        )
+    if status:
+        query = query.filter(TelegramGroup.bot_status == status)
+    query = query.order_by(TelegramGroup.created_at.desc())
+    paginated = query.paginate(page=page, per_page=per_page, error_out=False)
+
+    result = []
+    for tg in paginated.items:
+        d = tg.to_dict()
+        if tg.owner_user_id:
+            owner = User.query.get(tg.owner_user_id)
+            d["owner_email"] = owner.email if owner else None
+            d["owner_name"] = owner.full_name if owner else None
+        else:
+            d["owner_email"] = None
+            d["owner_name"] = None
+        d["command_count"] = len(tg.custom_commands)
+        result.append(d)
+
+    return jsonify({
+        "groups": result,
+        "total": paginated.total,
+        "pages": paginated.pages,
+        "page": page,
+    })
+
+
+@admin_bp.route("/telegram-groups/stats", methods=["GET"])
+@admin_required
+@rate_limit(requests_per_minute=30)
+def admin_telegram_group_stats():
+    total = TelegramGroup.query.count()
+    active = TelegramGroup.query.filter_by(bot_status="active").count()
+    pending = TelegramGroup.query.filter_by(bot_status="pending").count()
+    removed = TelegramGroup.query.filter_by(bot_status="removed").count()
+    disabled = TelegramGroup.query.filter_by(is_disabled=True).count()
+    total_custom_bots = CustomBot.query.count()
+    total_users_with_groups = db.session.query(
+        TelegramGroup.owner_user_id
+    ).filter(
+        TelegramGroup.owner_user_id.isnot(None)
+    ).distinct().count()
+
+    return jsonify({
+        "stats": {
+            "total_linked_groups": total,
+            "active_groups": active,
+            "pending_groups": pending,
+            "removed_groups": removed,
+            "disabled_groups": disabled,
+            "total_custom_bots": total_custom_bots,
+            "users_using_bot": total_users_with_groups,
+        }
+    })
+
+
+@admin_bp.route("/telegram-groups/<group_id>/disable", methods=["POST"])
+@admin_required
+@rate_limit(requests_per_minute=10)
+def admin_disable_group(group_id):
+    tg = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+    tg.is_disabled = True
+    tg.bot_status = "disabled"
+    db.session.commit()
+    return jsonify({"message": "Group disabled", "group": tg.to_dict()})
+
+
+@admin_bp.route("/telegram-groups/<group_id>/unlink", methods=["POST"])
+@admin_required
+@rate_limit(requests_per_minute=10)
+def admin_unlink_group(group_id):
+    tg = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+    tg.owner_user_id = None
+    tg.bot_status = "pending"
+    tg.linked_at = None
+    db.session.commit()
+
+    ev = BotEvent(
+        telegram_group_id=tg.telegram_group_id,
+        event_type="admin_unlinked",
+        message="Admin force-unlinked group",
+    )
+    db.session.add(ev)
+    db.session.commit()
+
+    return jsonify({"message": "Group unlinked by admin", "group": tg.to_dict()})
+
+
+@admin_bp.route("/telegram-groups/<group_id>/events", methods=["GET"])
+@admin_required
+@rate_limit(requests_per_minute=30)
+def admin_group_events(group_id):
+    page = request.args.get("page", 1, type=int)
+    per_page = min(request.args.get("per_page", 50, type=int), 200)
+    paginated = BotEvent.query.filter_by(
+        telegram_group_id=group_id
+    ).order_by(BotEvent.created_at.desc()).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+    return jsonify({
+        "events": [e.to_dict() for e in paginated.items],
+        "total": paginated.total,
+        "pages": paginated.pages,
+        "page": page,
+    })
+
+
+@admin_bp.route("/custom-bots", methods=["GET"])
+@admin_required
+@rate_limit(requests_per_minute=30)
+def admin_list_custom_bots():
+    page = request.args.get("page", 1, type=int)
+    per_page = min(request.args.get("per_page", 50, type=int), 100)
+    paginated = CustomBot.query.order_by(CustomBot.created_at.desc()).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+    result = []
+    for bot in paginated.items:
+        d = bot.to_dict()
+        owner = User.query.get(bot.owner_user_id)
+        d["owner_email"] = owner.email if owner else None
+        result.append(d)
+    return jsonify({
+        "bots": result,
+        "total": paginated.total,
+        "pages": paginated.pages,
+        "page": page,
+    })
+
+
+@admin_bp.route("/custom-bots/<int:bot_id>/disable", methods=["POST"])
+@admin_required
+@rate_limit(requests_per_minute=10)
+def admin_disable_custom_bot(bot_id):
+    bot = CustomBot.query.get(bot_id)
+    if not bot:
+        return jsonify({"error": "Bot not found"}), 404
+    bot.status = "inactive"
+    db.session.commit()
+    return jsonify({"message": "Custom bot disabled", "bot": bot.to_dict()})

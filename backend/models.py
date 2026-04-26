@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from flask_sqlalchemy import SQLAlchemy
 import secrets
+import string
 
 db = SQLAlchemy()
 
@@ -709,5 +710,186 @@ class ReportedMessage(db.Model):
             "reported_username": self.reported_username,
             "reason": self.reason,
             "status": self.status,
+            "created_at": self.created_at.isoformat(),
+        }
+
+
+# ─── Official Bot Ecosystem Models ────────────────────────────────────────────
+
+
+class TelegramGroup(db.Model):
+    """Groups linked to Telegizer via the official shared bot."""
+    __tablename__ = "telegram_groups"
+
+    id = db.Column(db.Integer, primary_key=True)
+    telegram_group_id = db.Column(db.String(255), unique=True, nullable=False, index=True)
+    title = db.Column(db.String(255), nullable=False)
+    username = db.Column(db.String(255), nullable=True)
+    invite_link = db.Column(db.String(500), nullable=True)
+    # Website user who linked this group (NULL = added but not yet linked)
+    owner_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
+    # 'official' = Telegizer shared bot, 'custom' = user's own bot token
+    linked_via_bot_type = db.Column(db.String(20), default="official", nullable=False)
+    # FK to custom_bots if linked_via_bot_type='custom'
+    linked_bot_id = db.Column(db.Integer, db.ForeignKey("custom_bots.id"), nullable=True)
+    # active | pending | removed | disabled
+    bot_status = db.Column(db.String(20), default="pending", nullable=False)
+    # {delete_messages, ban_users, pin_messages, manage_topics}
+    bot_permissions = db.Column(db.JSON, nullable=True)
+    linked_at = db.Column(db.DateTime, nullable=True)
+    last_activity = db.Column(db.DateTime, nullable=True)
+    is_disabled = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    link_codes = db.relationship("TelegramGroupLinkCode", backref="telegram_group", lazy=True, cascade="all, delete-orphan")
+    custom_commands = db.relationship("CustomCommand", backref="telegram_group", lazy=True, cascade="all, delete-orphan")
+    bot_events = db.relationship("BotEvent", backref="telegram_group", lazy=True, cascade="all, delete-orphan")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "telegram_group_id": self.telegram_group_id,
+            "title": self.title,
+            "username": self.username,
+            "invite_link": self.invite_link,
+            "owner_user_id": self.owner_user_id,
+            "linked_via_bot_type": self.linked_via_bot_type,
+            "linked_bot_id": self.linked_bot_id,
+            "bot_status": self.bot_status,
+            "bot_permissions": self.bot_permissions,
+            "linked_at": self.linked_at.isoformat() if self.linked_at else None,
+            "last_activity": self.last_activity.isoformat() if self.last_activity else None,
+            "is_disabled": self.is_disabled,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class TelegramGroupLinkCode(db.Model):
+    """One-time secure codes used to link a Telegram group to a dashboard account."""
+    __tablename__ = "telegram_group_link_codes"
+
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(16), unique=True, nullable=False, index=True)
+    telegram_group_id = db.Column(db.String(255), db.ForeignKey("telegram_groups.telegram_group_id"), nullable=False)
+    telegram_group_title = db.Column(db.String(255), nullable=True)
+    created_by_telegram_user_id = db.Column(db.String(255), nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    used_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    @staticmethod
+    def generate_code():
+        alphabet = string.ascii_uppercase + string.digits
+        return "TLG-" + "".join(secrets.choice(alphabet) for _ in range(8))
+
+    @property
+    def is_valid(self):
+        return self.used_at is None and datetime.utcnow() < self.expires_at
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "code": self.code,
+            "telegram_group_id": self.telegram_group_id,
+            "telegram_group_title": self.telegram_group_title,
+            "expires_at": self.expires_at.isoformat(),
+            "used_at": self.used_at.isoformat() if self.used_at else None,
+            "created_at": self.created_at.isoformat(),
+            "is_valid": self.is_valid,
+        }
+
+
+class CustomBot(db.Model):
+    """Bring-your-own-bot tokens for premium/agency users."""
+    __tablename__ = "custom_bots"
+
+    id = db.Column(db.Integer, primary_key=True)
+    owner_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    bot_name = db.Column(db.String(255), nullable=True)
+    bot_username = db.Column(db.String(255), nullable=False)
+    bot_token_encrypted = db.Column(db.Text, nullable=False)
+    # active | inactive | error
+    status = db.Column(db.String(20), default="active", nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    linked_groups = db.relationship("TelegramGroup", backref="custom_bot", lazy=True)
+
+    def get_token(self) -> str:
+        from .utils.encryption import decrypt_value
+        return decrypt_value(self.bot_token_encrypted)
+
+    def set_token(self, plain_token: str):
+        from .utils.encryption import encrypt_value
+        self.bot_token_encrypted = encrypt_value(plain_token) or plain_token
+
+    def to_dict(self, include_token=False):
+        data = {
+            "id": self.id,
+            "owner_user_id": self.owner_user_id,
+            "bot_name": self.bot_name,
+            "bot_username": self.bot_username,
+            "status": self.status,
+            "linked_groups_count": len(self.linked_groups),
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+        if include_token:
+            data["bot_token"] = self.get_token()
+        return data
+
+
+class CustomCommand(db.Model):
+    """Per-group slash commands managed via dashboard."""
+    __tablename__ = "custom_commands"
+
+    id = db.Column(db.Integer, primary_key=True)
+    telegram_group_id = db.Column(db.String(255), db.ForeignKey("telegram_groups.telegram_group_id"), nullable=False, index=True)
+    command = db.Column(db.String(64), nullable=False)  # e.g. "rules", "support"
+    response_type = db.Column(db.String(20), default="text", nullable=False)  # text|markdown
+    response_text = db.Column(db.Text, nullable=False)
+    action_type = db.Column(db.String(50), nullable=True)  # delete_trigger|reply_only
+    buttons = db.Column(db.JSON, nullable=True)  # [[{text, url}]]
+    enabled = db.Column(db.Boolean, default=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    __table_args__ = (db.UniqueConstraint("telegram_group_id", "command", name="unique_group_command"),)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "telegram_group_id": self.telegram_group_id,
+            "command": self.command,
+            "response_type": self.response_type,
+            "response_text": self.response_text,
+            "action_type": self.action_type,
+            "buttons": self.buttons,
+            "enabled": self.enabled,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class BotEvent(db.Model):
+    """Audit log for all official bot activity."""
+    __tablename__ = "bot_events"
+
+    id = db.Column(db.Integer, primary_key=True)
+    telegram_group_id = db.Column(db.String(255), db.ForeignKey("telegram_groups.telegram_group_id"), nullable=True, index=True)
+    event_type = db.Column(db.String(50), nullable=False, index=True)
+    message = db.Column(db.Text, nullable=True)
+    metadata_ = db.Column("metadata", db.JSON, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "telegram_group_id": self.telegram_group_id,
+            "event_type": self.event_type,
+            "message": self.message,
+            "metadata": self.metadata_,
             "created_at": self.created_at.isoformat(),
         }

@@ -25,6 +25,9 @@ import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
 import NotFound from './pages/NotFound';
 import VerifyEmail from './pages/VerifyEmail';
+import MyGroups from './pages/MyGroups';
+import GroupManagement from './pages/GroupManagement';
+import MyBots from './pages/MyBots';
 
 // Initialize Sentry if DSN is configured
 const SENTRY_DSN = process.env.REACT_APP_SENTRY_DSN;
@@ -168,6 +171,12 @@ export default function App() {
             <Route path="/bot/:id" element={<VerifiedRoute><BotSettings /></VerifiedRoute>} />
             <Route path="/bot/:id/group/:groupId" element={<VerifiedRoute><GroupSettings /></VerifiedRoute>} />
             <Route path="/analytics/:id" element={<VerifiedRoute><Analytics /></VerifiedRoute>} />
+
+            {/* Official bot ecosystem */}
+            <Route path="/my-groups" element={<VerifiedRoute><MyGroups /></VerifiedRoute>} />
+            <Route path="/my-groups/:groupId" element={<VerifiedRoute><GroupManagement /></VerifiedRoute>} />
+            <Route path="/add-group" element={<VerifiedRoute><MyGroups /></VerifiedRoute>} />
+            <Route path="/my-bots" element={<VerifiedRoute><MyBots /></VerifiedRoute>} />
 
             {/* Admin only */}
             <Route path="/admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />

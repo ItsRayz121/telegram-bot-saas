@@ -4,9 +4,9 @@ import {
   Grid, CircularProgress, TextField, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Paper, Chip, Button, Dialog,
   DialogTitle, DialogContent, DialogActions, MenuItem, Select,
-  FormControl, InputLabel, Pagination, InputAdornment,
+  FormControl, InputLabel, Pagination, InputAdornment, Tabs, Tab, Divider,
 } from '@mui/material';
-import { ArrowBack, Search, Block, CheckCircle, Delete } from '@mui/icons-material';
+import { ArrowBack, Search, Block, CheckCircle, Delete, Groups, SmartToy, LinkOff } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { admin } from '../services/api';
@@ -36,7 +36,9 @@ export default function AdminPanel() {
     }
   }, [navigate]);
 
+  const [activeTab, setActiveTab] = useState(0);
   const [stats, setStats] = useState(null);
+  const [botStats, setBotStats] = useState(null);
   const [users, setUsers] = useState([]);
   const [usersTotal, setUsersTotal] = useState(0);
   const [usersPages, setUsersPages] = useState(1);
@@ -47,15 +49,60 @@ export default function AdminPanel() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [subTier, setSubTier] = useState('');
   const [actionLoading, setActionLoading] = useState('');
+  // Bot ecosystem state
+  const [tgGroups, setTgGroups] = useState([]);
+  const [tgGroupsTotal, setTgGroupsTotal] = useState(0);
+  const [tgGroupsPage, setTgGroupsPage] = useState(1);
+  const [tgGroupsLoading, setTgGroupsLoading] = useState(false);
+  const [tgSearch, setTgSearch] = useState('');
 
   const fetchStats = useCallback(async () => {
     try {
-      const res = await admin.getStats();
-      setStats(res.data.stats);
+      const [statsRes, botStatsRes] = await Promise.all([
+        admin.getStats(),
+        admin.getTelegramGroupStats().catch(() => ({ data: { stats: null } })),
+      ]);
+      setStats(statsRes.data.stats);
+      setBotStats(botStatsRes.data.stats);
     } catch {
       toast.error('Failed to load stats');
     }
   }, []);
+
+  const fetchTgGroups = useCallback(async (p = 1, s = '') => {
+    setTgGroupsLoading(true);
+    try {
+      const res = await admin.getTelegramGroups({ page: p, per_page: 20, search: s });
+      setTgGroups(res.data.groups || []);
+      setTgGroupsTotal(res.data.total || 0);
+    } catch {
+      toast.error('Failed to load groups');
+    } finally {
+      setTgGroupsLoading(false);
+    }
+  }, []);
+
+  const handleDisableGroup = async (groupId, title) => {
+    if (!window.confirm(`Disable group "${title}"?`)) return;
+    try {
+      await admin.disableTelegramGroup(groupId);
+      toast.success('Group disabled');
+      fetchTgGroups(tgGroupsPage, tgSearch);
+    } catch {
+      toast.error('Failed to disable group');
+    }
+  };
+
+  const handleAdminUnlinkGroup = async (groupId, title) => {
+    if (!window.confirm(`Unlink group "${title}" from its owner?`)) return;
+    try {
+      await admin.unlinkTelegramGroup(groupId);
+      toast.success('Group unlinked');
+      fetchTgGroups(tgGroupsPage, tgSearch);
+    } catch {
+      toast.error('Failed to unlink group');
+    }
+  };
 
   const fetchUsers = useCallback(async (p = 1, s = '') => {
     try {
@@ -74,6 +121,10 @@ export default function AdminPanel() {
     fetchStats();
     fetchUsers();
   }, [fetchStats, fetchUsers]);
+
+  useEffect(() => {
+    if (activeTab === 1) fetchTgGroups(1, '');
+  }, [activeTab, fetchTgGroups]);
 
   const handleSearch = (e) => {
     const val = e.target.value;
@@ -167,89 +218,235 @@ export default function AdminPanel() {
       </AppBar>
 
       <Box sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 2, md: 3 } }}>
+
+        {/* Platform stats */}
         {stats && (
-          <Grid container spacing={2} mb={4}>
+          <Grid container spacing={2} mb={2}>
             <Grid item xs={6} md={3}><StatCard label="Total Users" value={stats.total_users} /></Grid>
             <Grid item xs={6} md={3}><StatCard label="Pro Users" value={stats.pro_users} color="#7c4dff" /></Grid>
-            <Grid item xs={6} md={3}><StatCard label="Total Bots" value={stats.total_bots} color="#00bcd4" /></Grid>
-            <Grid item xs={6} md={3}><StatCard label="Total Groups" value={stats.total_groups} color="#4caf50" /></Grid>
+            <Grid item xs={6} md={3}><StatCard label="Custom Bots" value={stats.total_bots} color="#00bcd4" /></Grid>
+            <Grid item xs={6} md={3}><StatCard label="Old-Style Groups" value={stats.total_groups} color="#4caf50" /></Grid>
           </Grid>
         )}
 
-        <Typography variant="h6" fontWeight={600} mb={2}>User Management</Typography>
+        {/* Official bot ecosystem stats */}
+        {botStats && (
+          <Grid container spacing={2} mb={3}>
+            <Grid item xs={6} md={2}><StatCard label="Linked Groups" value={botStats.total_linked_groups} color="#22c55e" /></Grid>
+            <Grid item xs={6} md={2}><StatCard label="Active Groups" value={botStats.active_groups} color="#22c55e" /></Grid>
+            <Grid item xs={6} md={2}><StatCard label="Pending Groups" value={botStats.pending_groups} color="#f59e0b" /></Grid>
+            <Grid item xs={6} md={2}><StatCard label="Removed" value={botStats.removed_groups} color="#ef4444" /></Grid>
+            <Grid item xs={6} md={2}><StatCard label="Custom Bots" value={botStats.total_custom_bots} color="#8b5cf6" /></Grid>
+            <Grid item xs={6} md={2}><StatCard label="Users w/ Groups" value={botStats.users_using_bot} color="#06b6d4" /></Grid>
+          </Grid>
+        )}
 
-        <TextField
-          fullWidth
-          placeholder="Search by email or name..."
-          value={search}
-          onChange={handleSearch}
-          sx={{ mb: 2 }}
-          InputProps={{
-            startAdornment: <InputAdornment position="start"><Search /></InputAdornment>,
-          }}
-        />
+        {/* Tabs */}
+        <Paper sx={{ mb: 3 }}>
+          <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ borderBottom: 1, borderColor: 'divider' }}>
+            <Tab icon={<Search fontSize="small" />} iconPosition="start" label="User Management" />
+            <Tab icon={<Groups fontSize="small" />} iconPosition="start" label="Telegram Groups" />
+          </Tabs>
+        </Paper>
 
-        {loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-            <CircularProgress />
-          </Box>
-        ) : (
+        {/* ── Tab 0: User Management ─────────────────────────────────────── */}
+        {activeTab === 0 && (
           <>
-            <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', mb: 2, overflowX: 'auto' }}>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>User</TableCell>
-                    <TableCell>Plan</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell>Joined</TableCell>
-                    <TableCell align="right">Actions</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {users.map((u) => (
-                    <TableRow key={u.id} hover>
-                      <TableCell>
-                        <Typography variant="body2" fontWeight={500}>{u.full_name}</Typography>
-                        <Typography variant="caption" color="text.secondary">{u.email}</Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={u.subscription_tier?.toUpperCase()}
-                          size="small"
-                          color={u.subscription_tier === 'enterprise' ? 'secondary' : u.subscription_tier === 'pro' ? 'primary' : 'default'}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        {u.is_banned ? (
-                          <Chip label="Banned" color="error" size="small" />
-                        ) : (
-                          <Chip label="Active" color="success" size="small" />
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="caption" color="text.secondary">
-                          {new Date(u.created_at).toLocaleDateString()}
-                        </Typography>
-                      </TableCell>
-                      <TableCell align="right">
-                        <Button size="small" onClick={() => openDetail(u)}>Details</Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
+            <Typography variant="h6" fontWeight={600} mb={2}>User Management</Typography>
 
-            {usersPages > 1 && (
-              <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-                <Pagination count={usersPages} page={page} onChange={handlePageChange} color="primary" />
+            <TextField
+              fullWidth
+              placeholder="Search by email or name..."
+              value={search}
+              onChange={handleSearch}
+              sx={{ mb: 2 }}
+              InputProps={{
+                startAdornment: <InputAdornment position="start"><Search /></InputAdornment>,
+              }}
+            />
+
+            {loading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+                <CircularProgress />
               </Box>
+            ) : (
+              <>
+                <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', mb: 2, overflowX: 'auto' }}>
+                  <Table>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>User</TableCell>
+                        <TableCell>Plan</TableCell>
+                        <TableCell>Status</TableCell>
+                        <TableCell>Joined</TableCell>
+                        <TableCell align="right">Actions</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {users.map((u) => (
+                        <TableRow key={u.id} hover>
+                          <TableCell>
+                            <Typography variant="body2" fontWeight={500}>{u.full_name}</Typography>
+                            <Typography variant="caption" color="text.secondary">{u.email}</Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              label={u.subscription_tier?.toUpperCase()}
+                              size="small"
+                              color={u.subscription_tier === 'enterprise' ? 'secondary' : u.subscription_tier === 'pro' ? 'primary' : 'default'}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            {u.is_banned
+                              ? <Chip label="Banned" color="error" size="small" />
+                              : <Chip label="Active" color="success" size="small" />}
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="caption" color="text.secondary">
+                              {new Date(u.created_at).toLocaleDateString()}
+                            </Typography>
+                          </TableCell>
+                          <TableCell align="right">
+                            <Button size="small" onClick={() => openDetail(u)}>Details</Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+
+                {usersPages > 1 && (
+                  <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                    <Pagination count={usersPages} page={page} onChange={handlePageChange} color="primary" />
+                  </Box>
+                )}
+              </>
             )}
           </>
         )}
+
+        {/* ── Tab 1: Telegram Groups ─────────────────────────────────────── */}
+        {activeTab === 1 && (
+          <>
+            <Typography variant="h6" fontWeight={600} mb={2}>All Telegram Groups</Typography>
+
+            <TextField
+              fullWidth
+              placeholder="Search by title or group ID..."
+              value={tgSearch}
+              onChange={(e) => {
+                setTgSearch(e.target.value);
+                setTgGroupsPage(1);
+                fetchTgGroups(1, e.target.value);
+              }}
+              sx={{ mb: 2 }}
+              InputProps={{
+                startAdornment: <InputAdornment position="start"><Search /></InputAdornment>,
+              }}
+            />
+
+            {tgGroupsLoading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+                <CircularProgress />
+              </Box>
+            ) : (
+              <>
+                <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', mb: 2, overflowX: 'auto' }}>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Group</TableCell>
+                        <TableCell>Owner</TableCell>
+                        <TableCell>Bot Type</TableCell>
+                        <TableCell>Status</TableCell>
+                        <TableCell>Commands</TableCell>
+                        <TableCell>Last Activity</TableCell>
+                        <TableCell align="right">Actions</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {tgGroups.map((g) => (
+                        <TableRow key={g.telegram_group_id} hover>
+                          <TableCell>
+                            <Typography variant="body2" fontWeight={500}>{g.title}</Typography>
+                            <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
+                              {g.telegram_group_id}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">{g.owner_email || '—'}</Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              label={g.linked_via_bot_type}
+                              size="small"
+                              color={g.linked_via_bot_type === 'official' ? 'success' : 'primary'}
+                              variant="outlined"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              label={g.bot_status}
+                              size="small"
+                              color={g.bot_status === 'active' ? 'success' : g.bot_status === 'pending' ? 'warning' : 'error'}
+                            />
+                          </TableCell>
+                          <TableCell>{g.command_count}</TableCell>
+                          <TableCell>
+                            <Typography variant="caption" color="text.secondary">
+                              {g.last_activity ? new Date(g.last_activity).toLocaleDateString() : '—'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell align="right">
+                            <Button
+                              size="small"
+                              color="warning"
+                              startIcon={<LinkOff fontSize="small" />}
+                              onClick={() => handleAdminUnlinkGroup(g.telegram_group_id, g.title)}
+                              sx={{ mr: 0.5 }}
+                            >
+                              Unlink
+                            </Button>
+                            <Button
+                              size="small"
+                              color="error"
+                              startIcon={<Block fontSize="small" />}
+                              onClick={() => handleDisableGroup(g.telegram_group_id, g.title)}
+                            >
+                              Disable
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {tgGroups.length === 0 && (
+                        <TableRow>
+                          <TableCell colSpan={7} align="center">
+                            <Typography color="text.secondary" py={3}>No groups found</Typography>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+
+                {Math.ceil(tgGroupsTotal / 20) > 1 && (
+                  <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                    <Pagination
+                      count={Math.ceil(tgGroupsTotal / 20)}
+                      page={tgGroupsPage}
+                      onChange={(_, p) => { setTgGroupsPage(p); fetchTgGroups(p, tgSearch); }}
+                      color="primary"
+                    />
+                  </Box>
+                )}
+              </>
+            )}
+          </>
+        )}
+
       </Box>
 
+      {/* User detail dialog */}
       <Dialog open={detailOpen} onClose={() => setDetailOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>User: {selectedUser?.email}</DialogTitle>
         <DialogContent>
@@ -283,9 +480,7 @@ export default function AdminPanel() {
                 {selectedUser.is_banned ? (
                   <Grid item xs={6}>
                     <Button
-                      fullWidth
-                      variant="outlined"
-                      color="success"
+                      fullWidth variant="outlined" color="success"
                       startIcon={<CheckCircle />}
                       onClick={() => handleUnban(selectedUser)}
                       disabled={!!actionLoading}
@@ -296,9 +491,7 @@ export default function AdminPanel() {
                 ) : (
                   <Grid item xs={6}>
                     <Button
-                      fullWidth
-                      variant="outlined"
-                      color="warning"
+                      fullWidth variant="outlined" color="warning"
                       startIcon={<Block />}
                       onClick={() => handleBan(selectedUser)}
                       disabled={!!actionLoading}
@@ -309,9 +502,7 @@ export default function AdminPanel() {
                 )}
                 <Grid item xs={6}>
                   <Button
-                    fullWidth
-                    variant="outlined"
-                    color="error"
+                    fullWidth variant="outlined" color="error"
                     startIcon={<Delete />}
                     onClick={() => handleDelete(selectedUser)}
                     disabled={!!actionLoading}

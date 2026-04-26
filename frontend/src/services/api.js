@@ -198,11 +198,39 @@ export const admin = {
   deleteUser: (id) => api.delete(`/api/admin/users/${id}`),
   getStats: () => api.get('/api/admin/stats'),
   getAllBots: (params) => api.get('/api/admin/bots', { params }),
-  // Anti-abuse review endpoints
   getSuspicious: (params) => api.get('/api/admin/suspicious', { params }),
   dismissSuspicious: (id) => api.post(`/api/admin/suspicious/${id}/dismiss`),
   getReferrals: (params) => api.get('/api/admin/referrals', { params }),
   updateReferralStatus: (id, data) => api.post(`/api/admin/referrals/${id}/status`, data),
+  // Official bot ecosystem
+  getTelegramGroups: (params) => api.get('/api/admin/telegram-groups', { params }),
+  getTelegramGroupStats: () => api.get('/api/admin/telegram-groups/stats'),
+  disableTelegramGroup: (groupId) => api.post(`/api/admin/telegram-groups/${groupId}/disable`),
+  unlinkTelegramGroup: (groupId) => api.post(`/api/admin/telegram-groups/${groupId}/unlink`),
+  getGroupEvents: (groupId, params) => api.get(`/api/admin/telegram-groups/${groupId}/events`, { params }),
+  getCustomBots: (params) => api.get('/api/admin/custom-bots', { params }),
+  disableCustomBot: (id) => api.post(`/api/admin/custom-bots/${id}/disable`),
+};
+
+export const telegramGroups = {
+  list: () => api.get('/api/telegram-groups'),
+  link: (data) => api.post('/api/telegram-groups/link', data),
+  get: (groupId) => api.get(`/api/telegram-groups/${groupId}`),
+  update: (groupId, data) => api.put(`/api/telegram-groups/${groupId}`, data),
+  unlink: (groupId) => api.delete(`/api/telegram-groups/${groupId}`),
+  getEvents: (groupId, params) => api.get(`/api/telegram-groups/${groupId}/events`, { params }),
+  getPending: () => api.get('/api/telegram-groups/pending'),
+  listCommands: (groupId) => api.get(`/api/telegram-groups/${groupId}/commands`),
+  createCommand: (groupId, data) => api.post(`/api/telegram-groups/${groupId}/commands`, data),
+  updateCommand: (groupId, cmdId, data) => api.put(`/api/telegram-groups/${groupId}/commands/${cmdId}`, data),
+  deleteCommand: (groupId, cmdId) => api.delete(`/api/telegram-groups/${groupId}/commands/${cmdId}`),
+};
+
+export const customBots = {
+  list: () => api.get('/api/custom-bots'),
+  add: (data) => api.post('/api/custom-bots', data),
+  get: (id) => api.get(`/api/custom-bots/${id}`),
+  delete: (id) => api.delete(`/api/custom-bots/${id}`),
 };
 
 export default api;

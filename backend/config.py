@@ -75,6 +75,10 @@ class Config:
 
     FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
     OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+
+    # Official Telegizer shared bot (serves all users/groups)
+    TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    TELEGRAM_BOT_USERNAME = os.environ.get("TELEGRAM_BOT_USERNAME", "telegizer_bot")
     _admin_env = os.environ.get("ADMIN_EMAILS", "")
     ADMIN_EMAILS = [e.strip() for e in _admin_env.split(",") if e.strip()]
     if not ADMIN_EMAILS:
