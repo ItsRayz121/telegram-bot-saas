@@ -2,6 +2,7 @@ import asyncio
 import logging
 import threading
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 import re
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatPermissions
@@ -57,10 +58,18 @@ class BotInstance:
             bot = Bot.query.get(self.bot_id)
             if not bot:
                 return None
-            return Group.query.filter_by(
+            group = Group.query.filter_by(
                 bot_id=self.bot_id,
                 telegram_group_id=str(chat_id),
             ).first()
+            if not group:
+                return None
+            return SimpleNamespace(
+                id=group.id,
+                settings=dict(group.settings or {}),
+                telegram_member_count=group.telegram_member_count or 0,
+                bot_id=group.bot_id,
+            )
 
     async def _get_or_create_group(self, chat_id, chat_title=None, bot=None):
         member_count = None
@@ -71,7 +80,15 @@ class BotInstance:
                 pass
         with self.app_context.app_context():
             from .database import DatabaseManager
-            return DatabaseManager.get_or_create_group(self.bot_id, chat_id, chat_title, member_count)
+            group = DatabaseManager.get_or_create_group(self.bot_id, chat_id, chat_title, member_count)
+            if not group:
+                return None
+            return SimpleNamespace(
+                id=group.id,
+                settings=dict(group.settings or {}),
+                telegram_member_count=group.telegram_member_count or 0,
+                bot_id=group.bot_id,
+            )
 
     async def handle_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if update.effective_chat.type == "private":
@@ -102,21 +119,26 @@ class BotInstance:
             return
 
         with self.app_context.app_context():
-            from .app import create_app
-            cfg = self.app_context.config
-            frontend_url = cfg.get("FRONTEND_URL", "http://localhost:3000")
+            frontend_url = self.app_context.config.get("FRONTEND_URL", "http://localhost:3000")
 
-        group = await self._get_or_create_group(update.effective_chat.id, update.effective_chat.title, context.bot)
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton(
-                "⚙️ Open Dashboard",
-                url=f"{self.app_context.config['FRONTEND_URL']}/bot/{self.bot_id}/group/{group.id}",
-            )]
-        ])
-        await update.message.reply_text(
-            "⚙️ Manage this group from the dashboard:",
-            reply_markup=keyboard,
-        )
+        try:
+            group = await self._get_or_create_group(update.effective_chat.id, update.effective_chat.title, context.bot)
+            if not group:
+                await update.message.reply_text("❌ Could not load group data. Please try again.")
+                return
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton(
+                    "⚙️ Open Dashboard",
+                    url=f"{frontend_url}/bot/{self.bot_id}/group/{group.id}",
+                )]
+            ])
+            await update.message.reply_text(
+                "⚙️ Manage this group from the dashboard:",
+                reply_markup=keyboard,
+            )
+        except Exception as e:
+            logger.error(f"handle_settings error (bot={self.bot_id}, chat={update.effective_chat.id}): {e}", exc_info=True)
+            await update.message.reply_text("❌ An error occurred loading settings. Please try again.")
 
     async def handle_rank(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if update.effective_chat.type == "private":
@@ -830,6 +852,7 @@ class BotInstance:
                 await update.message.reply_text(f"{target.first_name} has no warnings to remove.")
                 return
             member.warnings -= 1
+            remaining_warnings = member.warnings  # capture before commit expires the attribute
             db.session.commit()
             DatabaseManager.log_action(
                 group_id=group.id,
@@ -839,11 +862,11 @@ class BotInstance:
                 moderator_id=str(caller.id),
                 moderator_username=caller.username,
                 reason="Warning removed by admin",
-                extra_data={"remaining_warnings": member.warnings},
+                extra_data={"remaining_warnings": remaining_warnings},
             )
         await update.message.reply_text(
             f"✅ Removed 1 warning from {target.first_name}.\n"
-            f"Remaining warnings: {member.warnings}"
+            f"Remaining warnings: {remaining_warnings}"
         )
 
     async def handle_groupinfo(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
