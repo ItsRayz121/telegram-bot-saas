@@ -663,13 +663,27 @@ def _run_bot_token_encryption_migration():
 
 
 def _restart_active_bots(app):
+    """Start all user-added bots EXCEPT the official Telegizer bot token.
+    The official token is managed exclusively by official_bot.py — if
+    bot_manager also starts it we get a Telegram Conflict (two pollers)
+    and official_bot.py loses, so the old /start handler takes over."""
     from .models import Bot
+    from .config import Config
+    from .utils.encryption import hash_token as _hash
+
+    official_hash = _hash(Config.TELEGRAM_BOT_TOKEN) if Config.TELEGRAM_BOT_TOKEN else None
     try:
         active_bots = Bot.query.filter_by(is_active=True).all()
         for bot in active_bots:
+            if official_hash and bot.bot_token_hash == official_hash:
+                _scheduler_log.info(
+                    "[BOT_MANAGER] Skipping bot id=%s — token matches TELEGRAM_BOT_TOKEN "
+                    "(handled by official_bot.py)", bot.id
+                )
+                continue
             bot_manager.start_bot(bot.id, bot.get_token(), app)
-    except Exception:
-        pass
+    except Exception as exc:
+        _scheduler_log.error("[BOT_MANAGER] _restart_active_bots error: %s", exc)
 
 
 def _scheduler_loop(app):
