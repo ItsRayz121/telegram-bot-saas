@@ -60,10 +60,18 @@ def list_groups():
     custom_bots = CustomBot.query.filter_by(owner_user_id=user.id).all()
     custom_bot_id_by_username = {cb.bot_username: cb.id for cb in custom_bots if cb.bot_username}
 
+    # Build lookup: custom_bot.id → display name
+    custom_bot_name_by_id = {
+        cb.id: (cb.bot_name or f"@{cb.bot_username}")
+        for cb in custom_bots
+    }
+    custom_bot_username_by_id = {cb.id: cb.bot_username for cb in custom_bots}
+
     for old_bot in old_bots:
         for grp in old_bot.groups:
             if grp.telegram_group_id in new_system_tg_ids:
                 continue  # already present in TelegramGroup
+            linked_bot_id = custom_bot_id_by_username.get(old_bot.bot_username)
             groups_data.append({
                 "id": None,
                 "telegram_group_id": grp.telegram_group_id,
@@ -72,7 +80,9 @@ def list_groups():
                 "invite_link": None,
                 "owner_user_id": user.id,
                 "linked_via_bot_type": "custom",
-                "linked_bot_id": custom_bot_id_by_username.get(old_bot.bot_username),
+                "linked_bot_id": linked_bot_id,
+                "linked_bot_name": custom_bot_name_by_id.get(linked_bot_id) if linked_bot_id else None,
+                "linked_bot_username": custom_bot_username_by_id.get(linked_bot_id) if linked_bot_id else None,
                 "bot_status": "active" if old_bot.is_active else "inactive",
                 "bot_permissions": None,
                 "linked_at": None,
@@ -84,6 +94,13 @@ def list_groups():
                 "description": None,
                 "source": "legacy",
             })
+
+    # Inject linked_bot_name into groups already in the TelegramGroup table
+    for g in groups_data:
+        if g.get("linked_bot_id") and "linked_bot_name" not in g:
+            bid = g["linked_bot_id"]
+            g["linked_bot_name"] = custom_bot_name_by_id.get(bid)
+            g["linked_bot_username"] = custom_bot_username_by_id.get(bid)
 
     return jsonify({"groups": groups_data})
 

@@ -63,7 +63,7 @@ export default function MyBots() {
       ]);
       setBots(botsRes.data.bots || []);
       setOfficialGroups((groupsRes.data.groups || []).filter(
-        (g) => g.linked_via_bot_type === 'official' || !g.linked_via_bot_type
+        (g) => (g.linked_via_bot_type === 'official' || !g.linked_via_bot_type) && !g.linked_bot_id
       ));
     } catch {
       toast.error('Failed to load bots');

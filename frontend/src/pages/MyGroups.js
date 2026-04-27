@@ -284,7 +284,9 @@ export default function MyGroups() {
                         <Box>
                           <Typography variant="caption" color="text.secondary">Bot Type</Typography>
                           <Typography variant="body2" fontWeight={500}>
-                            {g.linked_via_bot_type === 'official' ? '🟢 Official Telegizer' : '🔵 Custom Bot'}
+                            {g.linked_via_bot_type === 'official'
+                              ? '🟢 Official Telegizer'
+                              : `🔵 ${g.linked_bot_name || (g.linked_bot_username ? `@${g.linked_bot_username}` : 'Custom Bot')}`}
                           </Typography>
                         </Box>
                         <Box sx={{ textAlign: 'right' }}>

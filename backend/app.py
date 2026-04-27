@@ -300,6 +300,7 @@ def create_app():
         _run_official_bot_migrations()
         _run_telegram_connect_migrations()
         _run_stability_migrations()
+        _fix_custom_bot_group_types()
 
     # Start bots in a background thread after a short delay so Gunicorn can
     # pass its healthcheck before bot polling (which may contact Telegram and
@@ -448,6 +449,39 @@ def _run_stability_migrations():
                         pass
     except Exception:
         pass
+
+
+def _fix_custom_bot_group_types():
+    """One-time data fix: correct telegram_groups rows that were stored as
+    linked_via_bot_type='official' but actually belong to a user's custom bot.
+
+    Correlation: old Bot.bot_username matches CustomBot.bot_username (same owner).
+    For every Group in the old system whose telegram_group_id exists in
+    telegram_groups with the wrong type, update linked_via_bot_type and
+    linked_bot_id to the correct CustomBot row.
+    """
+    try:
+        with db.engine.connect() as conn:
+            conn.execute(text("""
+                UPDATE telegram_groups AS tg
+                SET linked_via_bot_type = 'custom',
+                    linked_bot_id       = cb.id
+                FROM custom_bots  cb
+                JOIN bots         b  ON LOWER(b.bot_username) = LOWER(cb.bot_username)
+                                    AND b.user_id = cb.owner_user_id
+                                    AND b.bot_username IS NOT NULL
+                JOIN groups       g  ON g.bot_id = b.id
+                                    AND g.telegram_group_id = tg.telegram_group_id
+                WHERE tg.linked_via_bot_type = 'official'
+                  AND tg.linked_bot_id       IS NULL
+            """))
+            conn.commit()
+    except Exception:
+        try:
+            with db.engine.connect() as conn:
+                conn.rollback()
+        except Exception:
+            pass
 
 
 def _run_telegram_connect_migrations():
