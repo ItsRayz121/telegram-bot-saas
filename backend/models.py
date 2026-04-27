@@ -815,6 +815,7 @@ class TelegramGroup(db.Model):
     custom_commands = db.relationship("CustomCommand", backref="telegram_group", lazy=True, cascade="all, delete-orphan")
     bot_events = db.relationship("BotEvent", backref="telegram_group", lazy=True, cascade="all, delete-orphan")
     official_warnings = db.relationship("OfficialWarning", backref="telegram_group", lazy=True, cascade="all, delete-orphan")
+    official_members = db.relationship("OfficialMember", backref="telegram_group", lazy=True, cascade="all, delete-orphan")
 
     def to_dict(self):
         return {
@@ -835,6 +836,45 @@ class TelegramGroup(db.Model):
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "member_count": self.member_count,
             "description": self.description,
+        }
+
+
+class OfficialMember(db.Model):
+    """Tracks members of official bot groups for XP/levels."""
+    __tablename__ = "official_members"
+
+    id = db.Column(db.Integer, primary_key=True)
+    telegram_group_id = db.Column(
+        db.String(255),
+        db.ForeignKey("telegram_groups.telegram_group_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    telegram_user_id = db.Column(db.String(255), nullable=False, index=True)
+    username = db.Column(db.String(255), nullable=True)
+    first_name = db.Column(db.String(255), nullable=True)
+    xp = db.Column(db.Integer, default=0, nullable=False)
+    level = db.Column(db.Integer, default=1, nullable=False)
+    message_count = db.Column(db.Integer, default=0, nullable=False)
+    last_message_at = db.Column(db.DateTime, nullable=True)
+    joined_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint("telegram_group_id", "telegram_user_id", name="uq_official_member"),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "telegram_group_id": self.telegram_group_id,
+            "telegram_user_id": self.telegram_user_id,
+            "username": self.username,
+            "first_name": self.first_name,
+            "xp": self.xp,
+            "level": self.level,
+            "message_count": self.message_count,
+            "last_message_at": self.last_message_at.isoformat() if self.last_message_at else None,
+            "joined_at": self.joined_at.isoformat(),
         }
 
 

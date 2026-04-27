@@ -15,7 +15,7 @@ Endpoints:
 from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from ..models import db, User, TelegramGroup, TelegramGroupLinkCode, BotEvent, OfficialWarning
+from ..models import db, User, TelegramGroup, TelegramGroupLinkCode, BotEvent, OfficialWarning, OfficialMember
 from ..middleware.rate_limit import rate_limit
 from ..config import Config
 
@@ -331,3 +331,102 @@ def get_mod_log(group_id):
         "page": page,
         "pages": paginated.pages,
     }), 200
+
+
+# ── XP Leaderboard ─────────────────────────────────────────────────────────────
+
+@tg_groups_bp.route("/<group_id>/leaderboard", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def get_leaderboard(group_id):
+    """Return top members by XP for a group."""
+    user = _current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    tg = _owns_group(user.id, group_id)
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+
+    limit = min(request.args.get("limit", 20, type=int), 100)
+    members = (
+        OfficialMember.query.filter_by(telegram_group_id=group_id)
+        .order_by(OfficialMember.xp.desc())
+        .limit(limit)
+        .all()
+    )
+    return jsonify({"members": [m.to_dict() for m in members]}), 200
+
+
+# ── Official-group Digest ──────────────────────────────────────────────────────
+
+@tg_groups_bp.route("/<group_id>/digest", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def get_digest_settings(group_id):
+    user = _current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    tg = _owns_group(user.id, group_id)
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+
+    digest = (tg.settings or {}).get("digest", {})
+    return jsonify({"digest": digest}), 200
+
+
+@tg_groups_bp.route("/<group_id>/digest", methods=["PUT"])
+@jwt_required()
+@rate_limit(requests_per_minute=20)
+def update_digest_settings(group_id):
+    user = _current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    tg = _owns_group(user.id, group_id)
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+
+    data = request.get_json() or {}
+    settings = dict(tg.settings or {})
+    settings["digest"] = {
+        "daily":   bool(data.get("daily", False)),
+        "weekly":  bool(data.get("weekly", False)),
+        "monthly": bool(data.get("monthly", False)),
+        "send_to_group": bool(data.get("send_to_group", True)),
+    }
+    tg.settings = settings
+    db.session.commit()
+    return jsonify({"digest": settings["digest"]}), 200
+
+
+@tg_groups_bp.route("/<group_id>/digest/send", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=5)
+def send_digest_now(group_id):
+    """Trigger an on-demand digest for this group."""
+    user = _current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    tg = _owns_group(user.id, group_id)
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+
+    from ..official_bot import _runner
+    try:
+        import asyncio
+        from ..official_bot import _build_official_digest, _send_official_digest
+        loop = _runner.loop
+        if not loop or not loop.is_running():
+            return jsonify({"error": "Official bot is not running"}), 503
+
+        future = asyncio.run_coroutine_threadsafe(
+            _send_official_digest(_runner.application.bot, tg, days=7),
+            loop,
+        )
+        future.result(timeout=30)
+        return jsonify({"message": "Digest sent"}), 200
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500

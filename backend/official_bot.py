@@ -744,45 +744,34 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Save under the linked website account
-    save_error = None
+    # Pre-flight: check bot limits before asking for confirmation
+    pre_error = None
     if flask_app:
         try:
             with flask_app.app_context():
-                from .models import db, CustomBot, User
-
-                u = User.query.get(website_user_id)
+                from .models import CustomBot, User as _User
+                u = _User.query.get(website_user_id)
                 max_bots = Config.MAX_CUSTOM_BOTS.get(u.subscription_tier, 0)
                 current_count = CustomBot.query.filter_by(owner_user_id=website_user_id).count()
                 if current_count >= max_bots:
-                    save_error = (
-                        f"❌ Your {u.subscription_tier} plan allows {max_bots} custom bot(s). "
+                    pre_error = (
+                        f"❌ Your *{u.subscription_tier}* plan allows {max_bots} bot(s). "
                         "Upgrade to connect more."
                     )
                 else:
                     dup = CustomBot.query.filter_by(bot_username=bot_username_verified).first()
                     if dup:
-                        save_error = f"ℹ️ @{bot_username_verified} is already connected."
-                    else:
-                        cb = CustomBot(
-                            owner_user_id=website_user_id,
-                            bot_name=bot_name,
-                            bot_username=bot_username_verified,
-                            status="active",
-                        )
-                        cb.set_token(token)
-                        db.session.add(cb)
-                        db.session.commit()
+                        pre_error = f"ℹ️ @{bot_username_verified} is already connected to a Telegizer account."
         except Exception as exc:
-            _log.error("Bot token save failed (tg user %s): %s", user.id, exc)
-            save_error = "❌ Failed to save bot. Please try again or use the website dashboard."
+            _log.error("Bot token pre-flight failed (tg user %s): %s", user.id, exc)
+            pre_error = "❌ Could not verify quota. Please try again."
 
-    context.user_data["awaiting_bot_token"] = False
-
-    if save_error:
+    if pre_error:
+        context.user_data["awaiting_bot_token"] = False
         await context.bot.send_message(
             chat_id=user.id,
-            text=save_error,
+            text=pre_error,
+            parse_mode=ParseMode.MARKDOWN,
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🖥️ Open Dashboard", url=f"{frontend}/my-bots")],
                 [InlineKeyboardButton("« Back to Menu", callback_data="menu:main")],
@@ -790,21 +779,28 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    # Store pending token and ask for confirmation — never log the raw token
+    context.user_data["pending_bot_token"] = token
+    context.user_data["pending_bot_name"] = bot_name
+    context.user_data["pending_bot_username"] = bot_username_verified
+    context.user_data["awaiting_bot_token"] = False  # stop re-reading plain text
+
     await context.bot.send_message(
         chat_id=user.id,
         text=(
-            f"✅ *@{bot_username_verified} connected!*\n\n"
-            f"*{bot_name}* is saved securely. View it in My Bots."
+            f"🤖 *Confirm bot connection*\n\n"
+            f"Name: *{bot_name}*\n"
+            f"Username: @{bot_username_verified}\n\n"
+            f"Connect this bot to your Telegizer account?"
         ),
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🤖 View My Bots", url=f"{frontend}/my-bots")],
-            [InlineKeyboardButton("« Back to Menu", callback_data="menu:main")],
+            [
+                InlineKeyboardButton("✅ Confirm", callback_data="confirm_bot_token"),
+                InlineKeyboardButton("❌ Cancel",  callback_data="cancel_bot_token"),
+            ]
         ]),
     )
-    _log_event(flask_app, None, "custom_bot_added_via_telegram",
-               f"@{bot_username_verified} added by tg user {user.id}",
-               {"telegram_user_id": str(user.id)})
 
 
 # ─── Inline keyboard callbacks ────────────────────────────────────────────────
@@ -827,7 +823,88 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ── cancel bot token submission ───────────────────────────────────────────
     if data == "cancel_bot_token":
         context.user_data["awaiting_bot_token"] = False
+        context.user_data.pop("pending_bot_token", None)
+        context.user_data.pop("pending_bot_username", None)
+        context.user_data.pop("pending_bot_name", None)
         await _render_main_menu(query, user, flask_app, frontend)
+        return
+
+    # ── confirm bot token (after confirmation prompt) ─────────────────────────
+    if data == "confirm_bot_token":
+        token = context.user_data.pop("pending_bot_token", None)
+        bot_name = context.user_data.pop("pending_bot_name", None)
+        bot_username_verified = context.user_data.pop("pending_bot_username", None)
+
+        if not token or not bot_username_verified:
+            await query.answer("Session expired. Please try again.", show_alert=True)
+            await _render_main_menu(query, user, flask_app, frontend)
+            return
+
+        website_user_id = None
+        if flask_app:
+            try:
+                with flask_app.app_context():
+                    from .models import User as _User
+                    u = _User.query.filter_by(telegram_user_id=str(user.id)).first()
+                    if u:
+                        website_user_id = u.id
+            except Exception:
+                pass
+
+        if not website_user_id:
+            await query.answer("Account not linked.", show_alert=True)
+            return
+
+        save_error = None
+        if flask_app:
+            try:
+                with flask_app.app_context():
+                    from .models import db, CustomBot, User as _User
+                    u = _User.query.get(website_user_id)
+                    max_bots = Config.MAX_CUSTOM_BOTS.get(u.subscription_tier, 0)
+                    current_count = CustomBot.query.filter_by(owner_user_id=website_user_id).count()
+                    if current_count >= max_bots:
+                        save_error = f"❌ Bot limit reached for your plan."
+                    else:
+                        dup = CustomBot.query.filter_by(bot_username=bot_username_verified).first()
+                        if dup:
+                            save_error = f"ℹ️ @{bot_username_verified} already connected."
+                        else:
+                            cb = CustomBot(
+                                owner_user_id=website_user_id,
+                                bot_name=bot_name,
+                                bot_username=bot_username_verified,
+                                status="active",
+                            )
+                            cb.set_token(token)
+                            db.session.add(cb)
+                            db.session.commit()
+                            _log_event(flask_app, None, "custom_bot_added_via_telegram",
+                                       f"@{bot_username_verified} confirmed by tg user {user.id}",
+                                       {"bot_username": bot_username_verified, "telegram_user_id": str(user.id)})
+            except Exception as exc:
+                _log.error("Bot confirm-save failed (tg user %s): %s", user.id, exc)
+                save_error = "❌ Failed to save. Please try the website dashboard."
+
+        if save_error:
+            await query.edit_message_text(
+                save_error,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🖥️ Open Dashboard", url=f"{frontend}/my-bots")],
+                    [InlineKeyboardButton("« Back", callback_data="menu:main")],
+                ]),
+            )
+            return
+
+        await query.edit_message_text(
+            f"✅ *@{bot_username_verified} connected!*\n\n"
+            f"*{bot_name}* is now powered by Telegizer. View it in My Bots.",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🤖 View My Bots", url=f"{frontend}/my-bots")],
+                [InlineKeyboardButton("« Back to Menu", callback_data="menu:main")],
+            ]),
+        )
         return
 
     # ── account info ──────────────────────────────────────────────────────────
@@ -1370,7 +1447,49 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
 
         if am_cfg.get("enabled"):
-            await _automod_check(context.bot, message, am_cfg, group_id, flask_app)
+            if await _automod_check(context.bot, message, am_cfg, group_id, flask_app):
+                return
+
+        # Award XP for non-command messages
+        if message.from_user and flask_app:
+            old_level = None
+            new_level = None
+            try:
+                with flask_app.app_context():
+                    from .models import OfficialMember, TelegramGroup
+                    tg_xp = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
+                    if tg_xp and (tg_xp.settings or {}).get("levels", {}).get("enabled"):
+                        m_xp = OfficialMember.query.filter_by(
+                            telegram_group_id=group_id,
+                            telegram_user_id=str(message.from_user.id),
+                        ).first()
+                        if m_xp:
+                            old_level = m_xp.level
+            except Exception:
+                pass
+
+            await _award_xp(flask_app, group_id, message.from_user)
+
+            if old_level is not None:
+                try:
+                    with flask_app.app_context():
+                        from .models import OfficialMember
+                        m_xp2 = OfficialMember.query.filter_by(
+                            telegram_group_id=group_id,
+                            telegram_user_id=str(message.from_user.id),
+                        ).first()
+                        if m_xp2 and m_xp2.level > old_level:
+                            lvl_up_msg = await context.bot.send_message(
+                                chat_id=chat.id,
+                                text=f"🎉 {message.from_user.first_name} reached level {m_xp2.level}!",
+                            )
+                            asyncio.get_event_loop().call_later(
+                                15, lambda: asyncio.ensure_future(
+                                    _safe_delete(context.bot, chat.id, lvl_up_msg.message_id)
+                                )
+                            )
+                except Exception:
+                    pass
 
 
 # ─── New member join handler ──────────────────────────────────────────────────
@@ -1766,19 +1885,19 @@ async def _automod_execute(bot, message, group_id: str, flask_app, rule: str, ac
                {"telegram_user_id": str(user_id), "rule": rule, "action": action})
 
 
-async def _automod_check(bot, message, am_cfg: dict, group_id: str, flask_app):
-    """Apply all configured automod rules to a group message."""
+async def _automod_check(bot, message, am_cfg: dict, group_id: str, flask_app) -> bool:
+    """Apply all configured automod rules. Returns True if message was blocked."""
     text = (message.text or message.caption or "").strip()
     chat_id = message.chat_id
     user_id = message.from_user.id if message.from_user else None
     if not user_id:
-        return
+        return False
 
     # Skip admins/creator
     try:
         member = await bot.get_chat_member(chat_id, user_id)
         if member.status in ("creator", "administrator"):
-            return
+            return False
     except Exception:
         pass
 
@@ -1791,7 +1910,7 @@ async def _automod_check(bot, message, am_cfg: dict, group_id: str, flask_app):
             if w.lower() in text_lower:
                 await _automod_execute(bot, message, group_id, flask_app,
                                        "bad_words", bw_cfg.get("action", "delete"))
-                return
+                return True
 
     # ── 2. Spam detection ────────────────────────────────────────────────────
     spam_cfg = am_cfg.get("spam", {})
@@ -1808,7 +1927,7 @@ async def _automod_check(bot, message, am_cfg: dict, group_id: str, flask_app):
             await _automod_execute(bot, message, group_id, flask_app,
                                    "spam", spam_cfg.get("action", "mute"),
                                    mute_minutes=spam_cfg.get("mute_duration_minutes", 10))
-            return
+            return True
 
     # ── 3. External links ────────────────────────────────────────────────────
     ext_cfg = am_cfg.get("external_links", {})
@@ -1819,14 +1938,14 @@ async def _automod_check(bot, message, am_cfg: dict, group_id: str, flask_app):
         if blocked:
             await _automod_execute(bot, message, group_id, flask_app,
                                    "external_links", ext_cfg.get("action", "delete"))
-            return
+            return True
 
     # ── 4. Telegram links ────────────────────────────────────────────────────
     tl_cfg = am_cfg.get("telegram_links", {})
     if tl_cfg.get("enabled") and text and _TELEGRAM_LINK_RE.search(text):
         await _automod_execute(bot, message, group_id, flask_app,
                                "telegram_links", tl_cfg.get("action", "delete"))
-        return
+        return True
 
     # ── 5. Caps lock ─────────────────────────────────────────────────────────
     caps_cfg = am_cfg.get("caps_lock", {})
@@ -1839,7 +1958,7 @@ async def _automod_check(bot, message, am_cfg: dict, group_id: str, flask_app):
             if ratio >= threshold:
                 await _automod_execute(bot, message, group_id, flask_app,
                                        "caps_lock", caps_cfg.get("action", "delete"))
-                return
+                return True
 
     # ── 6. Excessive emojis ──────────────────────────────────────────────────
     em_cfg = am_cfg.get("excessive_emojis", {})
@@ -1848,21 +1967,21 @@ async def _automod_check(bot, message, am_cfg: dict, group_id: str, flask_app):
         if count > em_cfg.get("max_emojis", 10):
             await _automod_execute(bot, message, group_id, flask_app,
                                    "excessive_emojis", em_cfg.get("action", "delete"))
-            return
+            return True
 
     # ── 7. Forwarded messages ────────────────────────────────────────────────
     fwd_cfg = am_cfg.get("forwarded_messages", {})
     if fwd_cfg.get("enabled") and (message.forward_date or message.forward_from or message.forward_from_chat):
         await _automod_execute(bot, message, group_id, flask_app,
                                "forwarded_messages", fwd_cfg.get("action", "delete"))
-        return
+        return True
 
     # ── 8. Email detection ───────────────────────────────────────────────────
     mail_cfg = am_cfg.get("email_detection", {})
     if mail_cfg.get("enabled") and text and _EMAIL_RE.search(text):
         await _automod_execute(bot, message, group_id, flask_app,
                                "email_detection", mail_cfg.get("action", "delete"))
-        return
+        return True
 
     # ── 9. Language filter ───────────────────────────────────────────────────
     lang_cfg = am_cfg.get("language_filter", {})
@@ -1872,7 +1991,7 @@ async def _automod_check(bot, message, am_cfg: dict, group_id: str, flask_app):
             if pattern and pattern.search(text):
                 await _automod_execute(bot, message, group_id, flask_app,
                                        "language_filter", lang_cfg.get("action", "delete"))
-                return
+                return True
 
     # ── 10. Bot mentions ─────────────────────────────────────────────────────
     bm_cfg = am_cfg.get("bot_mentions", {})
@@ -1884,7 +2003,7 @@ async def _automod_check(bot, message, am_cfg: dict, group_id: str, flask_app):
                 if mention.lower().endswith("bot"):
                     await _automod_execute(bot, message, group_id, flask_app,
                                            "bot_mentions", bm_cfg.get("action", "delete"))
-                    return
+                    return True
 
     # ── 11. Spoiler content ──────────────────────────────────────────────────
     sp_cfg = am_cfg.get("spoiler_content", {})
@@ -1894,7 +2013,7 @@ async def _automod_check(bot, message, am_cfg: dict, group_id: str, flask_app):
             if str(entity.type) in ("MessageEntityType.SPOILER", "spoiler"):
                 await _automod_execute(bot, message, group_id, flask_app,
                                        "spoiler_content", sp_cfg.get("action", "delete"))
-                return
+                return True
 
     # ── Media-type checks ────────────────────────────────────────────────────
     _media_checks = [
@@ -1912,7 +2031,9 @@ async def _automod_check(bot, message, am_cfg: dict, group_id: str, flask_app):
         if mc.get("enabled") and present:
             await _automod_execute(bot, message, group_id, flask_app,
                                    rule_key, mc.get("action", "delete"))
-            return
+            return True
+
+    return False
 
 
 # ─── Moderation commands ─────────────────────────────────────────────────────
@@ -2254,6 +2375,142 @@ async def cmd_purge(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pass
 
 
+def _xp_for_level(level: int) -> int:
+    """XP threshold to reach a given level (1-indexed, level 1 = 0 XP)."""
+    return max(0, (level - 1) * 100)
+
+
+def _level_from_xp(xp: int) -> int:
+    return max(1, xp // 100 + 1)
+
+
+async def _award_xp(flask_app, group_id: str, user, xp_gain: int = 5):
+    """Award XP to a user and update their level. Silently fails."""
+    try:
+        with flask_app.app_context():
+            from .models import db, OfficialMember, TelegramGroup
+            tg = TelegramGroup.query.filter_by(
+                telegram_group_id=group_id, is_disabled=False
+            ).first()
+            if not tg:
+                return
+            lvl_settings = (tg.settings or {}).get("levels", {})
+            if not lvl_settings.get("enabled", False):
+                return
+
+            m = OfficialMember.query.filter_by(
+                telegram_group_id=group_id,
+                telegram_user_id=str(user.id),
+            ).first()
+            if not m:
+                m = OfficialMember(
+                    telegram_group_id=group_id,
+                    telegram_user_id=str(user.id),
+                    username=user.username,
+                    first_name=user.first_name,
+                )
+                db.session.add(m)
+
+            old_level = m.level
+            m.xp = (m.xp or 0) + xp_gain
+            m.message_count = (m.message_count or 0) + 1
+            m.last_message_at = datetime.utcnow()
+            m.level = _level_from_xp(m.xp)
+            db.session.commit()
+
+            # Level-up notification
+            if m.level > old_level:
+                try:
+                    from telegram import Bot as _Bot
+                    pass  # bot is not available here; notification handled in on_message
+                except Exception:
+                    pass
+    except Exception as exc:
+        _log.debug("[OfficialBot] XP award failed: %s", exc)
+
+
+async def cmd_xp(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show XP and level for self or a mentioned user."""
+    if not _is_group_chat(update):
+        return
+
+    flask_app = context.bot_data.get("flask_app")
+    group_id = str(update.effective_chat.id)
+
+    target_id, _, target_name = await _resolve_target(update, context)
+    if not target_id:
+        target_id = update.effective_user.id
+        target_name = update.effective_user.first_name or "You"
+
+    xp = 0
+    level = 1
+    rank = None
+    if flask_app:
+        try:
+            with flask_app.app_context():
+                from .models import OfficialMember
+                m = OfficialMember.query.filter_by(
+                    telegram_group_id=group_id,
+                    telegram_user_id=str(target_id),
+                ).first()
+                if m:
+                    xp = m.xp
+                    level = m.level
+                    # Rank = position by XP desc
+                    rank = OfficialMember.query.filter_by(
+                        telegram_group_id=group_id,
+                    ).filter(OfficialMember.xp > xp).count() + 1
+        except Exception:
+            pass
+
+    next_level_xp = _xp_for_level(level + 1)
+    bar_filled = min(int((xp % 100) / 10), 10)
+    bar = "█" * bar_filled + "░" * (10 - bar_filled)
+
+    text = (
+        f"⭐ *{target_name}*\n"
+        f"Level: {level}  |  XP: {xp}\n"
+        f"[{bar}]\n"
+        f"Next level: {next_level_xp} XP"
+    )
+    if rank:
+        text += f"\nRank: #{rank} in this group"
+
+    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+
+async def cmd_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show top 10 members by XP in the group."""
+    if not _is_group_chat(update):
+        return
+
+    flask_app = context.bot_data.get("flask_app")
+    group_id = str(update.effective_chat.id)
+
+    leaders = []
+    if flask_app:
+        try:
+            with flask_app.app_context():
+                from .models import OfficialMember
+                leaders = OfficialMember.query.filter_by(
+                    telegram_group_id=group_id,
+                ).order_by(OfficialMember.xp.desc()).limit(10).all()
+        except Exception:
+            pass
+
+    if not leaders:
+        await update.message.reply_text("📊 No XP data yet — levels must be enabled in group settings.")
+        return
+
+    medals = ["🥇", "🥈", "🥉"] + ["🏅"] * 7
+    lines = ["*📊 Group Leaderboard*\n"]
+    for i, m in enumerate(leaders):
+        name = m.first_name or m.username or f"User {m.telegram_user_id}"
+        lines.append(f"{medals[i]} {name} — Lv.{m.level} ({m.xp} XP)")
+
+    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+
+
 async def cmd_warnings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show warning count for a user."""
     if not _is_group_chat(update):
@@ -2368,7 +2625,9 @@ class OfficialBotRunner:
         a.add_handler(CommandHandler("unmute",   cmd_unmute))
         a.add_handler(CommandHandler("tempban",  cmd_tempban))
         a.add_handler(CommandHandler("purge",    cmd_purge))
-        a.add_handler(CommandHandler("warnings", cmd_warnings))
+        a.add_handler(CommandHandler("warnings",    cmd_warnings))
+        a.add_handler(CommandHandler("xp",          cmd_xp))
+        a.add_handler(CommandHandler("leaderboard", cmd_leaderboard))
         a.add_handler(CallbackQueryHandler(callback_handler))
         # Bot's own membership changes (added/removed from groups)
         a.add_handler(ChatMemberHandler(on_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))
@@ -2404,7 +2663,9 @@ class OfficialBotRunner:
                 BotCommand("unmute",   "Unmute a user (admins only)"),
                 BotCommand("tempban",  "Temp-ban a user (admins only)"),
                 BotCommand("purge",    "Delete last N messages (admins only)"),
-                BotCommand("warnings", "Check a user's warnings"),
+                BotCommand("warnings",    "Check a user's warnings"),
+                BotCommand("xp",         "Check your XP and level"),
+                BotCommand("leaderboard","Top members by XP"),
             ])
         except Exception as exc:
             _log.warning("[OfficialBot] set_my_commands: %s", exc)
@@ -2423,6 +2684,69 @@ class OfficialBotRunner:
                     await _coro
                 except Exception:
                     pass
+
+
+async def _send_official_digest(bot, tg, days: int = 7):
+    """Send a stats digest to the group chat. Must be called with an active app context."""
+    group_id = tg.telegram_group_id
+    chat_id = int(group_id)
+    since = datetime.utcnow() - timedelta(days=days)
+
+    try:
+        from .models import BotEvent, OfficialWarning, OfficialMember
+
+        joins = BotEvent.query.filter(
+            BotEvent.telegram_group_id == group_id,
+            BotEvent.event_type == "member_joined",
+            BotEvent.created_at >= since,
+        ).count()
+
+        automod = BotEvent.query.filter(
+            BotEvent.telegram_group_id == group_id,
+            BotEvent.event_type == "automod_action",
+            BotEvent.created_at >= since,
+        ).count()
+
+        warns = OfficialWarning.query.filter(
+            OfficialWarning.telegram_group_id == group_id,
+            OfficialWarning.created_at >= since,
+        ).count()
+
+        commands = BotEvent.query.filter(
+            BotEvent.telegram_group_id == group_id,
+            BotEvent.event_type == "command_triggered",
+            BotEvent.created_at >= since,
+        ).count()
+
+        top_members = OfficialMember.query.filter_by(
+            telegram_group_id=group_id,
+        ).order_by(OfficialMember.xp.desc()).limit(3).all()
+
+        lines = [
+            f"📊 *{tg.title} — {days}-Day Digest*\n",
+            f"👥 New members: {joins}",
+            f"🛡️ AutoMod actions: {automod}",
+            f"⚠️ Warnings issued: {warns}",
+            f"💬 Custom commands used: {commands}",
+        ]
+
+        if top_members:
+            lines.append("\n🏆 *Top Members*")
+            medals = ["🥇", "🥈", "🥉"]
+            for i, m in enumerate(top_members):
+                name = m.first_name or m.username or f"User {m.telegram_user_id}"
+                lines.append(f"{medals[i]} {name} — Lv.{m.level} ({m.xp} XP)")
+
+        lines.append(f"\n_Generated {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC_")
+
+        await bot.send_message(
+            chat_id=chat_id,
+            text="\n".join(lines),
+            parse_mode=ParseMode.MARKDOWN,
+        )
+    except Exception as exc:
+        _log.error("[OfficialBot] Digest send failed for group %s: %s", group_id, exc)
+        raise
 
 
 _runner = OfficialBotRunner()

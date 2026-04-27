@@ -808,11 +808,71 @@ def _watchdog_bots(app):
                     _scheduler_log.error("[WATCHDOG] Failed to restart bot %s: %s", bot.id, exc)
 
 
+def _run_official_group_digests(app):
+    """Send daily/weekly digests for official bot groups whose interval has elapsed."""
+    import asyncio as _asyncio
+    from .models import TelegramGroup
+    from .official_bot import _runner, _send_official_digest
+
+    bot = None
+    loop = None
+    if _runner and _runner.application:
+        bot = _runner.application.bot
+        loop = _runner.loop
+    if not bot or not loop or not loop.is_running():
+        return
+
+    now = datetime.utcnow()
+    with app.app_context():
+        groups = TelegramGroup.query.filter(
+            TelegramGroup.owner_user_id.isnot(None),
+            TelegramGroup.is_disabled == False,
+            TelegramGroup.bot_status == "active",
+        ).all()
+        for tg in groups:
+            digest_cfg = (tg.settings or {}).get("digest", {})
+            if not digest_cfg:
+                continue
+            try:
+                if digest_cfg.get("daily"):
+                    last = digest_cfg.get("last_daily")
+                    last_dt = datetime.fromisoformat(last) if last else None
+                    if not last_dt or (now - last_dt).total_seconds() >= 86400:
+                        fut = _asyncio.run_coroutine_threadsafe(
+                            _send_official_digest(bot, tg, days=1), loop
+                        )
+                        fut.result(timeout=15)
+                        settings = dict(tg.settings)
+                        settings["digest"] = dict(digest_cfg)
+                        settings["digest"]["last_daily"] = now.isoformat()
+                        tg.settings = settings
+                        from .models import db
+                        db.session.commit()
+
+                if digest_cfg.get("weekly"):
+                    last = digest_cfg.get("last_weekly")
+                    last_dt = datetime.fromisoformat(last) if last else None
+                    if not last_dt or (now - last_dt).total_seconds() >= 604800:
+                        fut = _asyncio.run_coroutine_threadsafe(
+                            _send_official_digest(bot, tg, days=7), loop
+                        )
+                        fut.result(timeout=15)
+                        settings = dict(tg.settings)
+                        settings["digest"] = dict(digest_cfg)
+                        settings["digest"]["last_weekly"] = now.isoformat()
+                        tg.settings = settings
+                        from .models import db
+                        db.session.commit()
+            except Exception as exc:
+                _scheduler_log.debug("Official digest for group %s failed: %s", tg.telegram_group_id, exc)
+
+
 def _scheduler_loop(app):
     import time
     _last_expiry_check = [0]
     _last_heartbeat = [0]
     _last_watchdog = [0]
+    _last_official_digest = [0]
     time.sleep(15)  # Wait for bots to fully start
     while True:
         try:
@@ -842,6 +902,13 @@ def _scheduler_loop(app):
                 run_digest_scheduler(app)
             except Exception as exc:
                 _scheduler_log.error(f"Digest scheduler error: {exc}")
+            # Official group digest: check every 30 minutes
+            if now_ts - _last_official_digest[0] > 1800:
+                _last_official_digest[0] = now_ts
+                try:
+                    _run_official_group_digests(app)
+                except Exception as od_exc:
+                    _scheduler_log.error("Official digest error: %s", od_exc)
         except Exception as exc:
             _scheduler_log.error(f"Scheduler loop error: {exc}")
         time.sleep(60)
