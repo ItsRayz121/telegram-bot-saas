@@ -25,8 +25,18 @@ def init_db():
             print("Applying schema additions…")
             _run_alter(
                 conn,
-                "ALTER TABLE payment_history ADD COLUMN billing_period VARCHAR(10) DEFAULT 'monthly'",
+                "ALTER TABLE payment_history ADD COLUMN IF NOT EXISTS billing_period VARCHAR(10) DEFAULT 'monthly'",
                 "payment_history.billing_period",
+            )
+            _run_alter(
+                conn,
+                "ALTER TABLE telegram_groups ADD COLUMN IF NOT EXISTS member_count INTEGER NOT NULL DEFAULT 0",
+                "telegram_groups.member_count",
+            )
+            _run_alter(
+                conn,
+                "ALTER TABLE telegram_groups ADD COLUMN IF NOT EXISTS description TEXT",
+                "telegram_groups.description",
             )
         print("Migration complete.")
 
