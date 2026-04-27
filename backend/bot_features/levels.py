@@ -5,6 +5,18 @@ from datetime import datetime, timedelta
 logger = logging.getLogger(__name__)
 
 
+# ── Shared XP math — importable by both bot_manager.py and official_bot.py ───
+
+def level_from_xp(xp: int) -> int:
+    """Return the level that corresponds to a given total XP value."""
+    return max(1, xp // 100 + 1)
+
+
+def xp_for_level(level: int) -> int:
+    """Return the XP threshold required to reach `level`."""
+    return max(0, (level - 1) * 100)
+
+
 def _hex_to_rgb(hex_color):
     hex_color = hex_color.lstrip("#")
     try:

@@ -363,7 +363,8 @@ class AutoResponse(db.Model):
     __tablename__ = "auto_responses"
 
     id = db.Column(db.Integer, primary_key=True)
-    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False)
+    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=True)
+    telegram_group_id = db.Column(db.String(255), nullable=True, index=True)
     trigger_text = db.Column(db.String(500), nullable=False)
     response_text = db.Column(db.Text, nullable=False)
     match_type = db.Column(db.String(20), default="contains")  # exact|contains|starts_with
@@ -375,6 +376,7 @@ class AutoResponse(db.Model):
         return {
             "id": self.id,
             "group_id": self.group_id,
+            "telegram_group_id": self.telegram_group_id,
             "trigger_text": self.trigger_text,
             "response_text": self.response_text,
             "match_type": self.match_type,
@@ -388,7 +390,8 @@ class KnowledgeDocument(db.Model):
     __tablename__ = "knowledge_documents"
 
     id = db.Column(db.Integer, primary_key=True)
-    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False)
+    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=True)
+    telegram_group_id = db.Column(db.String(255), nullable=True, index=True)
     filename = db.Column(db.String(255), nullable=False)
     file_type = db.Column(db.String(20), nullable=False)
     content_text = db.Column(db.Text, nullable=False)
@@ -399,6 +402,7 @@ class KnowledgeDocument(db.Model):
         return {
             "id": self.id,
             "group_id": self.group_id,
+            "telegram_group_id": self.telegram_group_id,
             "filename": self.filename,
             "file_type": self.file_type,
             "chunk_count": len(self.chunks) if self.chunks else 0,
@@ -470,7 +474,8 @@ class InviteLink(db.Model):
     __tablename__ = "invite_links"
 
     id = db.Column(db.Integer, primary_key=True)
-    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False)
+    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=True)
+    telegram_group_id = db.Column(db.String(255), nullable=True, index=True)
     name = db.Column(db.String(100), nullable=False)
     telegram_invite_link = db.Column(db.String(255), nullable=True)
     uses_count = db.Column(db.Integer, default=0)
@@ -489,6 +494,7 @@ class InviteLink(db.Model):
         data = {
             "id": self.id,
             "group_id": self.group_id,
+            "telegram_group_id": self.telegram_group_id,
             "name": self.name,
             "telegram_invite_link": self.telegram_invite_link,
             "uses_count": self.uses_count,
@@ -519,7 +525,8 @@ class UserApiKey(db.Model):
     __tablename__ = "user_api_keys"
 
     id = db.Column(db.Integer, primary_key=True)
-    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False)
+    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=True)
+    telegram_group_id = db.Column(db.String(255), nullable=True, index=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     provider = db.Column(db.String(50), nullable=False)  # openai|openrouter|anthropic|gemini|custom
     api_key_encrypted = db.Column(db.Text, nullable=False)
@@ -536,6 +543,7 @@ class UserApiKey(db.Model):
         return {
             "id": self.id,
             "group_id": self.group_id,
+            "telegram_group_id": self.telegram_group_id,
             "user_id": self.user_id,
             "provider": self.provider,
             "base_url": self.base_url,
@@ -858,6 +866,18 @@ class OfficialMember(db.Model):
     message_count = db.Column(db.Integer, default=0, nullable=False)
     last_message_at = db.Column(db.DateTime, nullable=True)
     joined_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    # Phase 3 additions — mirrors Member model fields
+    last_xp_at = db.Column(db.DateTime, nullable=True)
+    role = db.Column(db.String(100), default="member", nullable=False)
+    warnings = db.Column(db.Integer, default=0, nullable=False)
+    is_verified = db.Column(db.Boolean, default=False, nullable=False)
+    is_muted = db.Column(db.Boolean, default=False, nullable=False)
+    mute_until = db.Column(db.DateTime, nullable=True)
+    wallet_address = db.Column(db.String(500), nullable=True)
+    wallet_submitted_at = db.Column(db.DateTime, nullable=True)
+    # Phase 3 item 21 — cached admin status to avoid per-message Telegram API calls
+    is_admin = db.Column(db.Boolean, default=False, nullable=False)
+    is_admin_cached_at = db.Column(db.DateTime, nullable=True)
 
     __table_args__ = (
         db.UniqueConstraint("telegram_group_id", "telegram_user_id", name="uq_official_member"),
@@ -875,7 +895,38 @@ class OfficialMember(db.Model):
             "message_count": self.message_count,
             "last_message_at": self.last_message_at.isoformat() if self.last_message_at else None,
             "joined_at": self.joined_at.isoformat(),
+            "last_xp_at": self.last_xp_at.isoformat() if self.last_xp_at else None,
+            "role": self.role,
+            "warnings": self.warnings,
+            "is_verified": self.is_verified,
+            "is_muted": self.is_muted,
+            "mute_until": self.mute_until.isoformat() if self.mute_until else None,
+            "wallet_address": self.wallet_address,
+            "wallet_submitted_at": self.wallet_submitted_at.isoformat() if self.wallet_submitted_at else None,
+            "is_admin": self.is_admin,
+            "is_admin_cached_at": self.is_admin_cached_at.isoformat() if self.is_admin_cached_at else None,
         }
+
+
+class PendingVerification(db.Model):
+    """In-flight member verifications — persisted so restarts don't lose state."""
+    __tablename__ = "pending_verifications"
+
+    id = db.Column(db.Integer, primary_key=True)
+    chat_id = db.Column(db.BigInteger, nullable=False)
+    user_id = db.Column(db.BigInteger, nullable=False)
+    method = db.Column(db.String(20), nullable=False)
+    msg_id = db.Column(db.Integer, nullable=True)
+    answer = db.Column(db.String(500), nullable=True)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    kick_on_fail = db.Column(db.Boolean, default=True)
+    max_attempts = db.Column(db.Integer, default=3)
+    attempts = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint("chat_id", "user_id", name="uq_pending_verification"),
+    )
 
 
 class OfficialWarning(db.Model):
@@ -908,6 +959,94 @@ class OfficialWarning(db.Model):
             "reason": self.reason,
             "active": self.active,
             "created_at": self.created_at.isoformat(),
+        }
+
+
+class OfficialScheduledMessage(db.Model):
+    """Scheduled messages for official-bot groups (mirrors ScheduledMessage for custom bots)."""
+    __tablename__ = "official_scheduled_messages"
+
+    id = db.Column(db.Integer, primary_key=True)
+    telegram_group_id = db.Column(
+        db.String(255),
+        db.ForeignKey("telegram_groups.telegram_group_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    title = db.Column(db.String(255), nullable=False)
+    message_text = db.Column(db.Text, nullable=False)
+    media_url = db.Column(db.String(500), nullable=True)
+    buttons = db.Column(db.JSON, nullable=True)
+    send_at = db.Column(db.DateTime, nullable=False)
+    repeat_interval = db.Column(db.Integer, nullable=True)
+    stop_date = db.Column(db.DateTime, nullable=True)
+    pin_message = db.Column(db.Boolean, default=False)
+    auto_delete_after = db.Column(db.Integer, nullable=True)
+    link_preview_enabled = db.Column(db.Boolean, default=True)
+    topic_id = db.Column(db.BigInteger, nullable=True)
+    timezone = db.Column(db.String(50), nullable=False, default="UTC", server_default="UTC")
+    is_sent = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "telegram_group_id": self.telegram_group_id,
+            "title": self.title,
+            "message_text": self.message_text,
+            "media_url": self.media_url,
+            "buttons": self.buttons,
+            "send_at": self.send_at.isoformat() + "Z",
+            "repeat_interval": self.repeat_interval,
+            "stop_date": (self.stop_date.isoformat() + "Z") if self.stop_date else None,
+            "pin_message": self.pin_message,
+            "auto_delete_after": self.auto_delete_after,
+            "link_preview_enabled": self.link_preview_enabled,
+            "topic_id": self.topic_id,
+            "timezone": self.timezone or "UTC",
+            "is_sent": self.is_sent,
+            "created_at": self.created_at.isoformat() + "Z",
+        }
+
+
+class OfficialPoll(db.Model):
+    """Scheduled polls for official-bot groups (mirrors Poll for custom bots)."""
+    __tablename__ = "official_polls"
+
+    id = db.Column(db.Integer, primary_key=True)
+    telegram_group_id = db.Column(
+        db.String(255),
+        db.ForeignKey("telegram_groups.telegram_group_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    question = db.Column(db.String(500), nullable=False)
+    options = db.Column(db.JSON, nullable=False)
+    correct_option_index = db.Column(db.Integer, nullable=True)
+    is_quiz = db.Column(db.Boolean, default=False)
+    is_anonymous = db.Column(db.Boolean, default=True)
+    allows_multiple = db.Column(db.Boolean, default=False)
+    explanation = db.Column(db.String(200), nullable=True)
+    scheduled_at = db.Column(db.DateTime, nullable=True)
+    timezone = db.Column(db.String(50), nullable=True, default="UTC", server_default="UTC")
+    is_sent = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "telegram_group_id": self.telegram_group_id,
+            "question": self.question,
+            "options": self.options,
+            "correct_option_index": self.correct_option_index,
+            "is_quiz": self.is_quiz,
+            "is_anonymous": self.is_anonymous,
+            "allows_multiple": self.allows_multiple,
+            "explanation": self.explanation,
+            "scheduled_at": self.scheduled_at.isoformat() + "Z" if self.scheduled_at else None,
+            "timezone": self.timezone or "UTC",
+            "is_sent": self.is_sent,
+            "created_at": self.created_at.isoformat() + "Z",
         }
 
 

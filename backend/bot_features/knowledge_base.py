@@ -60,15 +60,20 @@ class KnowledgeBaseSystem:
     def __init__(self, app):
         self.app = app
 
-    def _load_group_api_key(self, group_id):
+    def _load_group_api_key(self, group_id, telegram_group_id=None):
         """Load and decrypt the group's custom API key config. Returns dict or None."""
         try:
             with self.app.app_context():
                 from ..models import UserApiKey
                 from ..utils.encryption import decrypt_value
-                record = UserApiKey.query.filter_by(group_id=group_id, is_active=True).order_by(
-                    UserApiKey.created_at.desc()
-                ).first()
+                if telegram_group_id:
+                    record = UserApiKey.query.filter_by(
+                        telegram_group_id=str(telegram_group_id), is_active=True
+                    ).order_by(UserApiKey.created_at.desc()).first()
+                else:
+                    record = UserApiKey.query.filter_by(
+                        group_id=group_id, is_active=True
+                    ).order_by(UserApiKey.created_at.desc()).first()
                 if not record:
                     return None
                 return {
@@ -93,9 +98,9 @@ class KnowledgeBaseSystem:
             kwargs["base_url"] = base_url
         return OpenAI(**kwargs)
 
-    def _embed(self, texts, group_id=None):
+    def _embed(self, texts, group_id=None, telegram_group_id=None):
         """Embed texts using group's custom key if available, else env key."""
-        key_config = self._load_group_api_key(group_id) if group_id else None
+        key_config = self._load_group_api_key(group_id, telegram_group_id) if (group_id or telegram_group_id) else None
 
         if key_config and key_config["provider"] in ("openai", "openrouter", "custom"):
             client = self._get_openai_client(
@@ -119,7 +124,7 @@ class KnowledgeBaseSystem:
             logger.error(f"Embedding error: {e}")
             return [None] * len(texts)
 
-    def process_document(self, group_id, filename, file_type, content_bytes):
+    def process_document(self, group_id, filename, file_type, content_bytes, telegram_group_id=None):
         text = _extract_text(content_bytes, file_type)
         if not text.strip():
             return None, "Could not extract text from file"
@@ -128,7 +133,7 @@ class KnowledgeBaseSystem:
         if not chunks:
             return None, "File appears to be empty"
 
-        embeddings = self._embed(chunks, group_id=group_id)
+        embeddings = self._embed(chunks, group_id=group_id, telegram_group_id=telegram_group_id)
         if all(e is None for e in embeddings):
             return None, (
                 "Embeddings failed: no AI API key is configured. "
@@ -145,6 +150,7 @@ class KnowledgeBaseSystem:
             from ..models import KnowledgeDocument, db
             doc = KnowledgeDocument(
                 group_id=group_id,
+                telegram_group_id=str(telegram_group_id) if telegram_group_id else None,
                 filename=filename,
                 file_type=file_type,
                 content_text=text[:10000],
@@ -154,15 +160,20 @@ class KnowledgeBaseSystem:
             db.session.commit()
             return doc.to_dict(), None
 
-    async def answer_question(self, question, group_id):
+    async def answer_question(self, question, group_id, telegram_group_id=None):
         """Returns (answer: str|None, confidence: float)."""
         try:
-            key_config = self._load_group_api_key(group_id)
+            key_config = self._load_group_api_key(group_id, telegram_group_id)
             provider = key_config["provider"] if key_config else "openai"
 
             with self.app.app_context():
                 from ..models import KnowledgeDocument
-                docs = KnowledgeDocument.query.filter_by(group_id=group_id).all()
+                if telegram_group_id:
+                    docs = KnowledgeDocument.query.filter_by(
+                        telegram_group_id=str(telegram_group_id)
+                    ).all()
+                else:
+                    docs = KnowledgeDocument.query.filter_by(group_id=group_id).all()
                 all_chunks = []
                 for doc in docs:
                     for ch in (doc.chunks or []):
@@ -170,7 +181,7 @@ class KnowledgeBaseSystem:
                             all_chunks.append(ch)
 
             if not all_chunks:
-                logger.debug(f"KB: No chunks found for group {group_id}")
+                logger.debug(f"KB: No chunks found for group {group_id or telegram_group_id}")
                 return None, 0.0
 
             # Embed question with appropriate client
@@ -183,7 +194,7 @@ class KnowledgeBaseSystem:
                 embed_client = self._get_openai_client()
 
             if not embed_client:
-                logger.debug(f"KB: No embed client available for group {group_id}")
+                logger.debug(f"KB: No embed client available for group {group_id or telegram_group_id}")
                 return None, 0.0
 
             q_resp = embed_client.embeddings.create(model="text-embedding-3-small", input=question)

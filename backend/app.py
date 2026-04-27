@@ -301,6 +301,10 @@ def create_app():
         _run_telegram_connect_migrations()
         _run_stability_migrations()
         _fix_custom_bot_group_types()
+        _run_phase3_migrations()
+        _run_phase4_migrations()
+        _run_phase5_migrations()
+        _run_phase6_migrations()
 
     # Start bots in a background thread after a short delay so Gunicorn can
     # pass its healthcheck before bot polling (which may contact Telegram and
@@ -412,6 +416,7 @@ def _run_official_bot_migrations():
 
 def _run_stability_migrations():
     """Phase-2 stability fixes: unique group constraint and last_active backfill."""
+    _mig_log = logging.getLogger("migrations")
     stmts = [
         # UNIQUE(bot_id, telegram_group_id): remove duplicates first (keep lowest id),
         # then create the unique index.  Both steps are idempotent.
@@ -442,6 +447,34 @@ def _run_stability_migrations():
                 try:
                     conn.execute(text(sql))
                     conn.commit()
+                except Exception as exc:
+                    _mig_log.warning("stability migration stmt failed: %s", exc)
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+    except Exception as exc:
+        _mig_log.warning("stability migrations failed: %s", exc)
+
+
+def _run_phase3_migrations():
+    """Phase-3: add missing columns to official_members to match Member model."""
+    stmts = [
+        "ALTER TABLE official_members ADD COLUMN IF NOT EXISTS last_xp_at TIMESTAMP",
+        "ALTER TABLE official_members ADD COLUMN IF NOT EXISTS role VARCHAR(100) NOT NULL DEFAULT 'member'",
+        "ALTER TABLE official_members ADD COLUMN IF NOT EXISTS warnings INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE official_members ADD COLUMN IF NOT EXISTS is_verified BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE official_members ADD COLUMN IF NOT EXISTS is_muted BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE official_members ADD COLUMN IF NOT EXISTS mute_until TIMESTAMP",
+        "ALTER TABLE official_members ADD COLUMN IF NOT EXISTS wallet_address VARCHAR(500)",
+        "ALTER TABLE official_members ADD COLUMN IF NOT EXISTS wallet_submitted_at TIMESTAMP",
+    ]
+    try:
+        with db.engine.connect() as conn:
+            for sql in stmts:
+                try:
+                    conn.execute(text(sql))
+                    conn.commit()
                 except Exception:
                     try:
                         conn.rollback()
@@ -449,6 +482,132 @@ def _run_stability_migrations():
                         pass
     except Exception:
         pass
+
+
+def _run_phase4_migrations():
+    """Phase-4: create official_scheduled_messages and official_polls tables."""
+    stmts = [
+        """CREATE TABLE IF NOT EXISTS official_scheduled_messages (
+            id SERIAL PRIMARY KEY,
+            telegram_group_id VARCHAR(255) NOT NULL REFERENCES telegram_groups(telegram_group_id) ON DELETE CASCADE,
+            title VARCHAR(255) NOT NULL,
+            message_text TEXT NOT NULL,
+            media_url VARCHAR(500),
+            buttons JSONB,
+            send_at TIMESTAMP NOT NULL,
+            repeat_interval INTEGER,
+            stop_date TIMESTAMP,
+            pin_message BOOLEAN NOT NULL DEFAULT FALSE,
+            auto_delete_after INTEGER,
+            link_preview_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            topic_id BIGINT,
+            timezone VARCHAR(50) NOT NULL DEFAULT 'UTC',
+            is_sent BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )""",
+        "CREATE INDEX IF NOT EXISTS ix_official_scheduled_messages_group ON official_scheduled_messages (telegram_group_id)",
+        """CREATE TABLE IF NOT EXISTS official_polls (
+            id SERIAL PRIMARY KEY,
+            telegram_group_id VARCHAR(255) NOT NULL REFERENCES telegram_groups(telegram_group_id) ON DELETE CASCADE,
+            question VARCHAR(500) NOT NULL,
+            options JSONB NOT NULL,
+            correct_option_index INTEGER,
+            is_quiz BOOLEAN NOT NULL DEFAULT FALSE,
+            is_anonymous BOOLEAN NOT NULL DEFAULT TRUE,
+            allows_multiple BOOLEAN NOT NULL DEFAULT FALSE,
+            explanation VARCHAR(200),
+            scheduled_at TIMESTAMP,
+            timezone VARCHAR(50) DEFAULT 'UTC',
+            is_sent BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )""",
+        "CREATE INDEX IF NOT EXISTS ix_official_polls_group ON official_polls (telegram_group_id)",
+    ]
+    try:
+        with db.engine.connect() as conn:
+            for sql in stmts:
+                try:
+                    conn.execute(text(sql))
+                    conn.commit()
+                except Exception:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+
+
+def _run_phase5_migrations():
+    """Phase-5: add telegram_group_id to auto_responses, knowledge_documents, invite_links,
+    and user_api_keys. Also relax group_id NOT NULL on those tables so official-bot rows can omit it."""
+    stmts = [
+        "ALTER TABLE auto_responses ADD COLUMN IF NOT EXISTS telegram_group_id VARCHAR(255)",
+        "CREATE INDEX IF NOT EXISTS ix_auto_responses_tgid ON auto_responses (telegram_group_id)",
+        "ALTER TABLE auto_responses ALTER COLUMN group_id DROP NOT NULL",
+        "ALTER TABLE knowledge_documents ADD COLUMN IF NOT EXISTS telegram_group_id VARCHAR(255)",
+        "CREATE INDEX IF NOT EXISTS ix_knowledge_documents_tgid ON knowledge_documents (telegram_group_id)",
+        "ALTER TABLE knowledge_documents ALTER COLUMN group_id DROP NOT NULL",
+        "ALTER TABLE invite_links ADD COLUMN IF NOT EXISTS telegram_group_id VARCHAR(255)",
+        "CREATE INDEX IF NOT EXISTS ix_invite_links_tgid ON invite_links (telegram_group_id)",
+        "ALTER TABLE invite_links ALTER COLUMN group_id DROP NOT NULL",
+        "ALTER TABLE user_api_keys ADD COLUMN IF NOT EXISTS telegram_group_id VARCHAR(255)",
+        "CREATE INDEX IF NOT EXISTS ix_user_api_keys_tgid ON user_api_keys (telegram_group_id)",
+        "ALTER TABLE user_api_keys ALTER COLUMN group_id DROP NOT NULL",
+    ]
+    try:
+        with db.engine.connect() as conn:
+            for sql in stmts:
+                try:
+                    conn.execute(text(sql))
+                    conn.commit()
+                except Exception:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+
+
+def _run_phase6_migrations():
+    """Phase-6: add is_admin cache columns to official_members; create pending_verifications table."""
+    stmts = [
+        "ALTER TABLE official_members ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE official_members ADD COLUMN IF NOT EXISTS is_admin_cached_at TIMESTAMP",
+        """
+        CREATE TABLE IF NOT EXISTS pending_verifications (
+            id SERIAL PRIMARY KEY,
+            chat_id BIGINT NOT NULL,
+            user_id BIGINT NOT NULL,
+            method VARCHAR(20) NOT NULL,
+            msg_id INTEGER,
+            answer VARCHAR(500),
+            expires_at TIMESTAMP NOT NULL,
+            kick_on_fail BOOLEAN DEFAULT TRUE,
+            max_attempts INTEGER DEFAULT 3,
+            attempts INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT NOW(),
+            CONSTRAINT uq_pending_verification UNIQUE (chat_id, user_id)
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_pending_verif_expires ON pending_verifications (expires_at)",
+    ]
+    _mig_log = logging.getLogger("migrations")
+    try:
+        with db.engine.connect() as conn:
+            for sql in stmts:
+                try:
+                    conn.execute(text(sql))
+                    conn.commit()
+                except Exception as exc:
+                    _mig_log.warning("phase6 migration stmt failed: %s", exc)
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+    except Exception as exc:
+        _mig_log.warning("phase6 migrations failed: %s", exc)
 
 
 def _fix_custom_bot_group_types():
@@ -901,18 +1060,38 @@ def _run_official_group_digests(app):
                 _scheduler_log.debug("Official digest for group %s failed: %s", tg.telegram_group_id, exc)
 
 
+def _run_bot_event_cleanup(retention_days=90):
+    """Delete BotEvent rows older than retention_days to prevent unbounded table growth."""
+    try:
+        from .models import BotEvent
+        cutoff = datetime.utcnow() - timedelta(days=retention_days)
+        deleted = BotEvent.query.filter(BotEvent.created_at < cutoff).delete(synchronize_session=False)
+        db.session.commit()
+        if deleted:
+            logging.getLogger("scheduler").info("BotEvent retention: deleted %d rows older than %d days", deleted, retention_days)
+    except Exception as exc:
+        logging.getLogger("scheduler").error("BotEvent retention cleanup failed: %s", exc)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+
+
 def _scheduler_loop(app):
     import time
     _last_expiry_check = [0]
     _last_heartbeat = [0]
     _last_watchdog = [0]
     _last_official_digest = [0]
+    _last_event_cleanup = [0]
     time.sleep(15)  # Wait for bots to fully start
     while True:
         try:
             with app.app_context():
                 _run_scheduled_messages()
                 _run_scheduled_polls()
+                _run_official_scheduled_messages()
+                _run_official_scheduled_polls()
                 # Check subscription expiry warnings every 6 hours
                 now_ts = time.time()
                 if now_ts - _last_expiry_check[0] > 6 * 3600:
@@ -932,6 +1111,13 @@ def _scheduler_loop(app):
                         _watchdog_bots(app)
                     except Exception as wd_exc:
                         _scheduler_log.error("Bot watchdog error: %s", wd_exc)
+                # BotEvent retention: purge rows older than 90 days, once per day
+                if now_ts - _last_event_cleanup[0] > 86400:
+                    _last_event_cleanup[0] = now_ts
+                    try:
+                        _run_bot_event_cleanup()
+                    except Exception as ec_exc:
+                        _scheduler_log.error("BotEvent cleanup error: %s", ec_exc)
             try:
                 run_digest_scheduler(app)
             except Exception as exc:
@@ -983,6 +1169,144 @@ def _run_expiry_notifications():
             )
     except Exception as exc:
         _scheduler_log.error(f"Expiry notification error: {exc}")
+
+
+def _run_official_scheduled_messages():
+    """Deliver due OfficialScheduledMessage rows via the official bot."""
+    import asyncio
+    from .models import db, OfficialScheduledMessage
+
+    try:
+        locked = db.session.execute(
+            text("SELECT pg_try_advisory_xact_lock(2003)")
+        ).scalar()
+        if not locked:
+            return
+    except Exception:
+        pass
+
+    now = datetime.utcnow()
+    pending = OfficialScheduledMessage.query.filter(
+        OfficialScheduledMessage.send_at <= now,
+        OfficialScheduledMessage.is_sent == False,
+    ).all()
+
+    if not pending:
+        return
+
+    from .official_bot import get_official_bot_loop
+    bot_obj, loop = get_official_bot_loop()
+    if not bot_obj or not loop or not loop.is_running():
+        _scheduler_log.warning("[SCHEDULER] Official bot loop not running — skipping official scheduled messages")
+        return
+
+    _scheduler_log.info("[SCHEDULER] %d official scheduled message(s) due", len(pending))
+
+    for msg in pending:
+        async def _send(m=msg):
+            try:
+                from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+                keyboard = None
+                if m.buttons:
+                    rows = []
+                    for row in m.buttons:
+                        btn_row = []
+                        for btn in row:
+                            if btn.get("url"):
+                                btn_row.append(InlineKeyboardButton(btn["text"], url=btn["url"]))
+                            else:
+                                btn_row.append(InlineKeyboardButton(btn["text"], callback_data=btn.get("callback_data", "noop")))
+                        rows.append(btn_row)
+                    keyboard = InlineKeyboardMarkup(rows)
+                send_kwargs = {
+                    "chat_id": m.telegram_group_id,
+                    "text": m.message_text,
+                    "parse_mode": "Markdown",
+                    "reply_markup": keyboard,
+                    "disable_web_page_preview": not getattr(m, "link_preview_enabled", True),
+                }
+                if m.topic_id:
+                    send_kwargs["message_thread_id"] = m.topic_id
+                sent = await bot_obj.send_message(**send_kwargs)
+                if m.pin_message:
+                    await bot_obj.pin_chat_message(chat_id=m.telegram_group_id, message_id=sent.message_id)
+                if m.auto_delete_after:
+                    import asyncio as _as
+                    await _as.sleep(m.auto_delete_after)
+                    await bot_obj.delete_message(chat_id=m.telegram_group_id, message_id=sent.message_id)
+            except Exception as exc:
+                _scheduler_log.error("Official scheduled message %s send error: %s", m.id, exc)
+
+        asyncio.run_coroutine_threadsafe(_send(), loop)
+
+        if msg.repeat_interval:
+            msg.send_at = now + timedelta(minutes=msg.repeat_interval)
+            if msg.stop_date and msg.send_at > msg.stop_date:
+                msg.is_sent = True
+        else:
+            msg.is_sent = True
+
+    db.session.commit()
+    _scheduler_log.info("[SCHEDULER] Finished processing %d official scheduled messages", len(pending))
+
+
+def _run_official_scheduled_polls():
+    """Deliver due OfficialPoll rows via the official bot."""
+    import asyncio
+    from .models import db, OfficialPoll
+
+    try:
+        locked = db.session.execute(
+            text("SELECT pg_try_advisory_xact_lock(2004)")
+        ).scalar()
+        if not locked:
+            return
+    except Exception:
+        pass
+
+    now = datetime.utcnow()
+    pending = OfficialPoll.query.filter(
+        OfficialPoll.scheduled_at <= now,
+        OfficialPoll.scheduled_at != None,
+        OfficialPoll.is_sent == False,
+    ).all()
+
+    if not pending:
+        return
+
+    from .official_bot import get_official_bot_loop
+    bot_obj, loop = get_official_bot_loop()
+    if not bot_obj or not loop or not loop.is_running():
+        _scheduler_log.warning("[SCHEDULER] Official bot loop not running — skipping official scheduled polls")
+        return
+
+    _scheduler_log.info("[SCHEDULER] %d official poll(s) due", len(pending))
+
+    for poll in pending:
+        async def _send(p=poll):
+            try:
+                kwargs = {
+                    "chat_id": p.telegram_group_id,
+                    "question": p.question,
+                    "options": p.options,
+                    "is_anonymous": p.is_anonymous,
+                }
+                if p.is_quiz:
+                    kwargs["type"] = "quiz"
+                    kwargs["correct_option_id"] = p.correct_option_index
+                    if p.explanation:
+                        kwargs["explanation"] = p.explanation
+                else:
+                    kwargs["allows_multiple_answers"] = p.allows_multiple
+                await bot_obj.send_poll(**kwargs)
+            except Exception as exc:
+                _scheduler_log.error("Official poll %s send error: %s", p.id, exc)
+
+        asyncio.run_coroutine_threadsafe(_send(), loop)
+        poll.is_sent = True
+
+    db.session.commit()
+    _scheduler_log.info("[SCHEDULER] Finished processing %d official polls", len(pending))
 
 
 def _run_scheduled_messages():

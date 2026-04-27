@@ -82,10 +82,17 @@ def create_bot():
         return jsonify({"error": "This bot token is already registered"}), 409
 
     try:
-        resp = http_requests.get(
-            f"https://api.telegram.org/bot{token}/getMe",
-            timeout=10,
-        )
+        from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FutureTimeout
+        def _get_me():
+            return http_requests.get(
+                f"https://api.telegram.org/bot{token}/getMe",
+                timeout=8,
+            )
+        with ThreadPoolExecutor(max_workers=1) as _ex:
+            try:
+                resp = _ex.submit(_get_me).result(timeout=10)
+            except _FutureTimeout:
+                return jsonify({"error": "Telegram API timeout. Check your token."}), 400
         resp.raise_for_status()
         bot_info = resp.json()
         if not bot_info.get("ok"):

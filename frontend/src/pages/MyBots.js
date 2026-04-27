@@ -216,7 +216,7 @@ export default function MyBots() {
                     endIcon={<OpenInNew />}
                     href={`https://t.me/${BOT_USERNAME}`}
                     target="_blank"
-                    rel="noreferrer"
+                    rel="noopener noreferrer"
                   >
                     Open Bot
                   </Button>
@@ -372,7 +372,7 @@ export default function MyBots() {
                           endIcon={<OpenInNew />}
                           href={`https://t.me/${bot.bot_username}`}
                           target="_blank"
-                          rel="noreferrer"
+                          rel="noopener noreferrer"
                           sx={{ flex: 1 }}
                         >
                           Open

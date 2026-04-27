@@ -7,7 +7,7 @@ import {
 } from '@mui/material';
 import {
   ArrowBack, Upgrade, CheckCircle,
-  CurrencyBitcoin, CreditCard, Refresh, ReceiptLong,
+  CurrencyBitcoin, Refresh, ReceiptLong,
 } from '@mui/icons-material';
 import Skeleton from '@mui/material/Skeleton';
 import { useNavigate } from 'react-router-dom';
@@ -227,28 +227,16 @@ export default function Billing() {
                 <Typography variant="subtitle1" fontWeight={700} mb={2}>
                   Payment Methods
                 </Typography>
-                <Stack spacing={2}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
                     <CurrencyBitcoin color="warning" />
                     <Box sx={{ flexGrow: 1 }}>
-                      <Typography variant="body2" fontWeight={600}>Crypto (Active)</Typography>
+                      <Typography variant="body2" fontWeight={600}>Crypto</Typography>
                       <Typography variant="caption" color="text.secondary">
                         USDT, BTC, ETH, BNB and 300+ coins via NOWPayments
                       </Typography>
                     </Box>
                     <Chip label="Available" color="success" size="small" />
                   </Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2, opacity: 0.6 }}>
-                    <CreditCard />
-                    <Box sx={{ flexGrow: 1 }}>
-                      <Typography variant="body2" fontWeight={600}>Card / Bank Transfer</Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        Visa, Mastercard — under review by processor
-                      </Typography>
-                    </Box>
-                    <Chip label="Coming Soon" size="small" />
-                  </Box>
-                </Stack>
               </CardContent>
             </Card>
 

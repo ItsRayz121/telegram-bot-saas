@@ -518,10 +518,10 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    refreshUser();
-    fetchBots();
-    fetchSubscription();
-    fetchOfficialGroups();
+    Promise.all([refreshUser(), fetchBots(), fetchSubscription(), fetchOfficialGroups()]);
+    return () => {
+      if (tgPollRef.current) { clearInterval(tgPollRef.current); tgPollRef.current = null; }
+    };
   }, [refreshUser, fetchBots, fetchSubscription, fetchOfficialGroups]);
 
   useEffect(() => {
@@ -731,7 +731,9 @@ export default function Dashboard() {
           </IconButton>
           <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}>
             <MenuItem disabled>
-              <Typography variant="body2">{user.email}</Typography>
+              <Typography variant="body2">
+                {user.telegram_first_name ? `${user.telegram_first_name} · ` : ''}{user.email}
+              </Typography>
             </MenuItem>
             <MenuItem disabled>
               <Typography variant="caption" color="text.secondary">

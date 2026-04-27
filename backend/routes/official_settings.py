@@ -7,7 +7,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func
 from sqlalchemy.orm.attributes import flag_modified
 
-from ..models import db, User, TelegramGroup, TelegramBotStarted, BotEvent
+from ..models import db, User, TelegramGroup, TelegramBotStarted, BotEvent, OfficialMember, OfficialWarning, OfficialScheduledMessage, OfficialPoll
 from ..middleware.rate_limit import rate_limit
 from .settings import _check_gated_settings, _deep_merge
 from ..config import Config
@@ -100,6 +100,14 @@ def update_official_settings(group_id):
         data = request.get_json()
         if not data:
             return jsonify({"error": "No data provided"}), 400
+        _ALLOWED_SETTING_KEYS = {
+            "verification", "welcome", "levels", "automod", "moderation",
+            "auto_clean", "reports", "knowledge_base", "auto_responses",
+            "digest", "xp", "timezone",
+        }
+        unknown = set(data.keys()) - _ALLOWED_SETTING_KEYS
+        if unknown:
+            return jsonify({"error": f"Unknown settings keys: {sorted(unknown)}"}), 400
         gated_err = _check_gated_settings(user, data)
         if gated_err:
             return gated_err
@@ -478,6 +486,40 @@ def get_official_group_analytics(group_id):
             BotEvent.created_at >= cutoff,
         ).order_by(BotEvent.created_at.desc()).limit(20).all()
 
+        # Member stats
+        member_count = OfficialMember.query.filter_by(telegram_group_id=group_id).count()
+        top_members = (
+            OfficialMember.query.filter_by(telegram_group_id=group_id)
+            .order_by(OfficialMember.xp.desc())
+            .limit(10)
+            .all()
+        )
+        level_dist_raw = (
+            db.session.query(OfficialMember.level, func.count(OfficialMember.id))
+            .filter_by(telegram_group_id=group_id)
+            .group_by(OfficialMember.level)
+            .order_by(OfficialMember.level)
+            .all()
+        )
+
+        # Scheduled content counts
+        scheduled_sent = OfficialScheduledMessage.query.filter(
+            OfficialScheduledMessage.telegram_group_id == group_id,
+            OfficialScheduledMessage.is_sent == True,
+            OfficialScheduledMessage.send_at >= cutoff,
+        ).count()
+        polls_sent = OfficialPoll.query.filter(
+            OfficialPoll.telegram_group_id == group_id,
+            OfficialPoll.is_sent == True,
+            OfficialPoll.scheduled_at >= cutoff,
+        ).count()
+
+        # Mod stats — OfficialWarning is the authoritative source
+        warns_issued = OfficialWarning.query.filter(
+            OfficialWarning.telegram_group_id == group_id,
+            OfficialWarning.created_at >= cutoff,
+        ).count()
+
         return jsonify({
             "analytics": {
                 "days": days,
@@ -489,9 +531,28 @@ def get_official_group_analytics(group_id):
                     "automod_actions": events_by_type.get("automod_action", 0),
                     "commands_used": events_by_type.get("command_triggered", 0),
                     "messages_handled": events_by_type.get("message_processed", 0),
+                    "member_count": member_count,
+                    "warns_issued": warns_issued,
+                    "bans": events_by_type.get("mod_ban", 0) + events_by_type.get("mod_tempban", 0),
+                    "mutes": events_by_type.get("mod_mute", 0),
+                    "scheduled_sent": scheduled_sent,
+                    "polls_sent": polls_sent,
                 },
                 "events_by_type": events_by_type,
                 "daily_joins": daily_joins,
+                "top_members": [
+                    {
+                        "telegram_user_id": m.telegram_user_id,
+                        "username": m.username or m.first_name,
+                        "xp": m.xp,
+                        "level": m.level,
+                    }
+                    for m in top_members
+                ],
+                "level_distribution": [
+                    {"level": lvl, "count": cnt}
+                    for lvl, cnt in level_dist_raw
+                ],
                 "recent_events": [
                     {
                         "id": e.id,
@@ -567,6 +628,14 @@ def get_official_analytics_overview():
             for gid, cnt in top_group_rows
         ]
 
+        total_members = OfficialMember.query.filter(
+            OfficialMember.telegram_group_id.in_(group_ids)
+        ).count()
+        total_warns = OfficialWarning.query.filter(
+            OfficialWarning.telegram_group_id.in_(group_ids),
+            OfficialWarning.created_at >= cutoff,
+        ).count()
+
         return jsonify({
             "analytics": {
                 "days": days,
@@ -577,6 +646,9 @@ def get_official_analytics_overview():
                     "verifications_passed": events_by_type.get("verification_passed", 0),
                     "automod_actions": events_by_type.get("automod_action", 0),
                     "commands_used": events_by_type.get("command_triggered", 0),
+                    "total_members": total_members,
+                    "warns_issued": total_warns,
+                    "bans": events_by_type.get("mod_ban", 0) + events_by_type.get("mod_tempban", 0),
                 },
                 "events_by_type": events_by_type,
                 "top_groups": top_groups,

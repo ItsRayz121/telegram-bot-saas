@@ -200,7 +200,7 @@ export default function MyGroups() {
               startIcon={<OpenInNew />}
               href={addToGroupUrl}
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
             >
               Add Bot
             </Button>

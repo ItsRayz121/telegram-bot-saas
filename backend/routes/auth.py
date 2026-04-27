@@ -451,21 +451,46 @@ def _verify_totp(user: User, code: str) -> bool:
 
 
 def _consume_backup_code(user: User, code: str) -> bool:
-    """Return True and remove the code if it matches a stored backup code."""
+    """Return True and remove the code if it matches a stored backup code.
+
+    Supports two storage formats:
+    - New (indexed dict): {sha256_of_plain -> bcrypt_hash} — O(1) sha256 lookup, 1 bcrypt check.
+    - Old (list): [bcrypt_hash, ...] — O(n) fallback for pre-migration codes.
+    """
+    import hashlib
     if not user.totp_backup_codes:
         return False
     code_clean = code.replace("-", "").strip().lower()
-    remaining = []
+
+    stored = user.totp_backup_codes
     matched = False
-    for stored in user.totp_backup_codes:
-        if not matched:
+
+    if isinstance(stored, dict):
+        # New indexed format — O(1) lookup
+        sha = hashlib.sha256(code_clean.encode()).hexdigest()
+        bcrypt_hash = stored.get(sha)
+        if bcrypt_hash:
             try:
-                if bcrypt.checkpw(code_clean.encode(), stored.encode()):
+                if bcrypt.checkpw(code_clean.encode(), bcrypt_hash.encode()):
                     matched = True
-                    continue  # consume the code
+                    remaining = {k: v for k, v in stored.items() if k != sha}
             except Exception:
                 pass
-        remaining.append(stored)
+        if not matched:
+            return False
+    else:
+        # Old list format — O(n) fallback
+        remaining = []
+        for bcrypt_hash in stored:
+            if not matched:
+                try:
+                    if bcrypt.checkpw(code_clean.encode(), bcrypt_hash.encode()):
+                        matched = True
+                        continue
+                except Exception:
+                    pass
+            remaining.append(bcrypt_hash)
+
     if matched:
         user.totp_backup_codes = remaining
         try:

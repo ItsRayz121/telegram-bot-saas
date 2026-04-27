@@ -31,8 +31,25 @@ from telegram.ext import (
     Application, CommandHandler, MessageHandler,
     CallbackQueryHandler, ChatMemberHandler, ContextTypes, filters,
 )
+try:
+    from telegram.ext import MessageReactionHandler as _MsgReactionHandler
+    _REACTION_HANDLER_AVAILABLE = True
+except ImportError:
+    _REACTION_HANDLER_AVAILABLE = False
 
 from .config import Config
+from .group_defaults import apply_group_defaults
+from .bot_features.group_context import GroupContext
+from .bot_features.welcome import WelcomeSystem
+from .bot_features.moderation import (
+    normalize_homoglyphs,
+    URL_PATTERN as _URL_RE,
+    TELEGRAM_LINK_PATTERN as _TELEGRAM_LINK_RE,
+    EMAIL_PATTERN as _EMAIL_RE,
+    EMOJI_PATTERN as _EMOJI_RE,
+    LANGUAGE_RANGES as _LANG_RANGES,
+)
+from .bot_features.levels import level_from_xp as _level_from_xp, xp_for_level as _xp_for_level
 
 _log = logging.getLogger(__name__)
 
@@ -41,24 +58,74 @@ _log = logging.getLogger(__name__)
 # Phase 3 item 15: move to Redis/DB for persistence across restarts.
 _pending_verifications: dict = {}
 
-# ─── AutoMod patterns ────────────────────────────────────────────────────────
-_URL_RE = re.compile(r"https?://[^\s]+|t\.me/[^\s]+|www\.[^\s]+", re.IGNORECASE)
-_TELEGRAM_LINK_RE = re.compile(r"(t\.me/|telegram\.me/|@[a-zA-Z0-9_]{5,})", re.IGNORECASE)
-_EMAIL_RE = re.compile(r"\b[\w.+-]+@[\w-]+\.\w{2,}\b")
-_EMOJI_RE = re.compile(
-    "[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF"
-    "\U0001F680-\U0001F6FF\U0001F1E0-\U0001F1FF"
-    "\U00002702-\U000027B0\U000024C2-\U0001F251]+",
-    flags=re.UNICODE,
-)
-_LANG_RANGES = {
-    "cyrillic": re.compile(r"[Ѐ-ӿ]"),
-    "chinese":  re.compile(r"[一-鿿㐀-䶿]"),
-    "korean":   re.compile(r"[가-힯ᄀ-ᇿ]"),
-    "arabic":   re.compile(r"[؀-ۿ]"),
-    "hindi":    re.compile(r"[ऀ-ॿ]"),
-    "japanese": re.compile(r"[぀-ヿㇰ-ㇿ]"),
-}
+
+def _save_pending_verification(flask_app, chat_id: int, user_id: int, pending: dict):
+    """Write-through: persist a pending verification to the DB."""
+    if not flask_app:
+        return
+    try:
+        with flask_app.app_context():
+            from .models import db, PendingVerification
+            row = PendingVerification.query.filter_by(
+                chat_id=chat_id, user_id=user_id
+            ).first()
+            if not row:
+                row = PendingVerification(chat_id=chat_id, user_id=user_id)
+                db.session.add(row)
+            row.method = pending.get("method", "button")
+            row.msg_id = pending.get("msg_id")
+            row.answer = str(pending.get("answer", "")) if pending.get("answer") is not None else None
+            row.expires_at = pending["expires_at"]
+            row.kick_on_fail = bool(pending.get("kick_on_fail", True))
+            row.max_attempts = int(pending.get("max_attempts", 3))
+            row.attempts = int(pending.get("attempts", 0))
+            db.session.commit()
+    except Exception as exc:
+        _log.debug("_save_pending_verification failed: %s", exc)
+
+
+def _remove_pending_verification(flask_app, chat_id: int, user_id: int):
+    """Delete a pending verification from DB."""
+    if not flask_app:
+        return
+    try:
+        with flask_app.app_context():
+            from .models import db, PendingVerification
+            PendingVerification.query.filter_by(
+                chat_id=chat_id, user_id=user_id
+            ).delete()
+            db.session.commit()
+    except Exception as exc:
+        _log.debug("_remove_pending_verification failed: %s", exc)
+
+
+def _load_pending_verifications_from_db(flask_app):
+    """On startup: load non-expired verifications from DB into memory dict."""
+    if not flask_app:
+        return
+    try:
+        with flask_app.app_context():
+            from .models import PendingVerification
+            rows = PendingVerification.query.filter(
+                PendingVerification.expires_at > datetime.utcnow()
+            ).all()
+            for row in rows:
+                key = f"{row.chat_id}:{row.user_id}"
+                _pending_verifications[key] = {
+                    "method": row.method,
+                    "msg_id": row.msg_id,
+                    "answer": row.answer,
+                    "expires_at": row.expires_at,
+                    "kick_on_fail": row.kick_on_fail,
+                    "max_attempts": row.max_attempts,
+                    "attempts": row.attempts,
+                }
+            _log.info("[OfficialBot] Restored %d pending verifications from DB", len(rows))
+    except Exception as exc:
+        _log.warning("[OfficialBot] Failed to load pending verifications from DB: %s", exc)
+
+# ─── AutoMod patterns — imported from bot_features/moderation.py ─────────────
+# _URL_RE, _TELEGRAM_LINK_RE, _EMAIL_RE, _EMOJI_RE, _LANG_RANGES are imported above.
 # Spam rate tracker — {"{chat_id}:{user_id}": [datetime, ...]}
 _spam_tracker: dict = {}
 
@@ -99,6 +166,7 @@ def _upsert_group(flask_app, group_id: str, title: str, username=None):
                     telegram_group_id=group_id, title=title,
                     username=username, bot_status="pending",
                 )
+                apply_group_defaults(tg)
                 db.session.add(tg)
             else:
                 tg.title = title
@@ -436,6 +504,7 @@ async def cmd_linkgroup(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 telegram_group_id=group_id, title=group_title,
                 username=chat.username, bot_status="pending",
             )
+            apply_group_defaults(tg)
             db.session.add(tg)
             db.session.flush()
 
@@ -1318,6 +1387,38 @@ async def on_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if flask_app:
             await _refresh_permissions(context.bot, group_id, flask_app)
 
+        # Check if the user who added the bot is at their group quota; if so DM them a warning.
+        if flask_app and added_by:
+            try:
+                with flask_app.app_context():
+                    from .models import TelegramGroup, TelegramBotStarted, User as _User
+                    started = TelegramBotStarted.query.filter_by(telegram_user_id=str(added_by)).first()
+                    if started:
+                        owner = _User.query.filter_by(telegram_user_id=str(added_by)).first()
+                        if owner:
+                            max_groups = Config.MAX_OFFICIAL_GROUPS.get(owner.subscription_tier, 3)
+                            current_count = TelegramGroup.query.filter_by(
+                                owner_user_id=owner.id, is_disabled=False
+                            ).count()
+                            if max_groups != -1 and current_count >= max_groups:
+                                try:
+                                    await context.bot.send_message(
+                                        chat_id=int(added_by),
+                                        text=(
+                                            f"⚠️ *Group limit reached*\n\n"
+                                            f"You've added the bot to *{group_title}* but your "
+                                            f"{owner.subscription_tier.capitalize()} plan allows "
+                                            f"{max_groups} linked group(s).\n\n"
+                                            f"To link this group, upgrade your plan or unlink an "
+                                            f"existing group from the dashboard."
+                                        ),
+                                        parse_mode=ParseMode.MARKDOWN,
+                                    )
+                                except Exception:
+                                    pass
+            except Exception as exc:
+                _log.debug("Quota DM check failed: %s", exc)
+
         try:
             await chat.send_message(
                 f"✅ *Telegizer connected.*\n\n"
@@ -1418,7 +1519,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         await message.delete()
                     except Exception:
                         pass
-                    await _complete_verification(context.bot, None, int(group_id), sender_id, vpending, flask_app, word_mode=True)
+                    await _complete_verification(context.bot, None, int(group_id), sender_id, vpending, flask_app, word_mode=True, user=message.from_user)
                     return
                 else:
                     vpending["attempts"] = vpending.get("attempts", 0) + 1
@@ -1431,6 +1532,34 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     except Exception:
                         pass
                     return
+
+    # Auto-responses — check triggers for non-command messages
+    if not text.startswith("/") and flask_app:
+        try:
+            with flask_app.app_context():
+                from .models import AutoResponse
+                responses = AutoResponse.query.filter_by(
+                    telegram_group_id=group_id, is_enabled=True
+                ).all()
+                for ar in responses:
+                    t = ar.trigger_text
+                    check = text if ar.is_case_sensitive else text.lower()
+                    trigger = t if ar.is_case_sensitive else t.lower()
+                    matched = False
+                    if ar.match_type == "exact":
+                        matched = check == trigger
+                    elif ar.match_type == "starts_with":
+                        matched = check.startswith(trigger)
+                    else:
+                        matched = trigger in check
+                    if matched:
+                        try:
+                            await message.reply_text(ar.response_text)
+                        except Exception:
+                            pass
+                        break
+        except Exception as exc:
+            _log.debug("Auto-response check failed: %s", exc)
 
     # AutoMod — runs on every non-command group message
     if not text.startswith("/"):
@@ -1453,12 +1582,13 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Award XP for non-command messages
         if message.from_user and flask_app:
             old_level = None
-            new_level = None
+            lvl_cfg = {}
             try:
                 with flask_app.app_context():
                     from .models import OfficialMember, TelegramGroup
                     tg_xp = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
                     if tg_xp and (tg_xp.settings or {}).get("levels", {}).get("enabled"):
+                        lvl_cfg = (tg_xp.settings or {}).get("levels", {})
                         m_xp = OfficialMember.query.filter_by(
                             telegram_group_id=group_id,
                             telegram_user_id=str(message.from_user.id),
@@ -1479,9 +1609,17 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             telegram_user_id=str(message.from_user.id),
                         ).first()
                         if m_xp2 and m_xp2.level > old_level:
+                            tpl = lvl_cfg.get(
+                                "level_up_message",
+                                "🎉 {first_name} reached level {level}!",
+                            )
+                            lvl_up_text = tpl.format(
+                                first_name=message.from_user.first_name or "User",
+                                level=m_xp2.level,
+                            )
                             lvl_up_msg = await context.bot.send_message(
                                 chat_id=chat.id,
-                                text=f"🎉 {message.from_user.first_name} reached level {m_xp2.level}!",
+                                text=lvl_up_text,
                             )
                             asyncio.get_event_loop().call_later(
                                 15, lambda: asyncio.ensure_future(
@@ -1531,44 +1669,40 @@ async def on_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
                f"{user.first_name} (id={user.id}) joined",
                {"telegram_user_id": str(user.id)})
 
-    # Increment cached member count
-    if flask_app:
-        try:
-            with flask_app.app_context():
-                from .models import db, TelegramGroup
-                tg = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
-                if tg:
-                    tg.member_count = (tg.member_count or 0) + 1
-                    db.session.commit()
-        except Exception:
-            pass
-
     if not flask_app:
         return
 
-    # Load group settings
-    v_cfg = {}
+    # Single query: increment member count AND build GroupContext for feature dispatch.
+    group_ctx = None
     try:
         with flask_app.app_context():
-            from .models import TelegramGroup
-            tg_obj = TelegramGroup.query.filter_by(
-                telegram_group_id=group_id, is_disabled=False
-            ).first()
-            if tg_obj:
-                v_cfg = (tg_obj.settings or {}).get("verification", {})
+            from .models import db, TelegramGroup
+            tg = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
+            if tg:
+                tg.member_count = (tg.member_count or 0) + 1
+                db.session.commit()
+                if not tg.is_disabled:
+                    group_ctx = GroupContext.from_telegram_group(tg)
     except Exception as exc:
-        _log.error("[OfficialBot] Failed to load group settings for new member: %s", exc)
+        _log.error("[OfficialBot] Failed to load group on new member: %s", exc)
         return
 
+    if not group_ctx:
+        return
+
+    v_cfg = group_ctx.settings.get("verification", {})
     _log.info(
         "[OfficialBot] Group %s verification.enabled=%s method=%s",
         group_id, v_cfg.get("enabled", False), v_cfg.get("method", "button"),
     )
 
-    if not v_cfg.get("enabled", False):
-        return
-
-    await _start_verification(context.bot, chat, user, v_cfg, flask_app, group_id)
+    if v_cfg.get("enabled", False):
+        await _start_verification(context.bot, chat, user, v_cfg, flask_app, group_id)
+    elif group_ctx.settings.get("welcome", {}).get("enabled", True):
+        try:
+            await WelcomeSystem(flask_app).send_welcome(context.bot, chat.id, user, group_ctx)
+        except Exception as _we:
+            _log.debug("[OfficialBot] Welcome on join failed: %s", _we)
 
 
 # ─── Verification helpers ─────────────────────────────────────────────────────
@@ -1676,6 +1810,7 @@ async def _start_verification(bot, chat, user, v_cfg, flask_app, group_id):
         "max_attempts": int(v_cfg.get("max_attempts", 3)),
         "attempts": 0,
     }
+    _save_pending_verification(flask_app, chat_id, user_id, _pending_verifications[key])
 
     asyncio.get_event_loop().call_later(
         timeout,
@@ -1735,7 +1870,7 @@ async def _handle_verification_callback(update: Update, context: ContextTypes.DE
             verified = False
 
     if verified:
-        await _complete_verification(context.bot, query, chat_id, user_id_target, pending, flask_app)
+        await _complete_verification(context.bot, query, chat_id, user_id_target, pending, flask_app, user=query.from_user)
     else:
         pending["attempts"] += 1
         max_att = pending["max_attempts"]
@@ -1747,7 +1882,7 @@ async def _handle_verification_callback(update: Update, context: ContextTypes.DE
             await query.answer(f"❌ Wrong! {remaining} attempt(s) left.")
 
 
-async def _complete_verification(bot, query, chat_id, user_id, pending, flask_app, word_mode=False):
+async def _complete_verification(bot, query, chat_id, user_id, pending, flask_app, word_mode=False, user=None):
     key = f"{chat_id}:{user_id}"
     group_id = str(chat_id)
     try:
@@ -1787,10 +1922,39 @@ async def _complete_verification(bot, query, chat_id, user_id, pending, flask_ap
         _log_event(flask_app, group_id, "verification_passed",
                    f"User {user_id} passed verification",
                    {"telegram_user_id": str(user_id)})
+        if flask_app:
+            try:
+                with flask_app.app_context():
+                    from .models import db, OfficialMember
+                    m = OfficialMember.query.filter_by(
+                        telegram_group_id=group_id,
+                        telegram_user_id=str(user_id),
+                    ).first()
+                    if m:
+                        m.is_verified = True
+                        db.session.commit()
+            except Exception as _ve:
+                _log.debug("[OfficialBot] Failed to set is_verified: %s", _ve)
+        # Send welcome message now that the user is unrestricted
+        if flask_app and user is not None:
+            try:
+                grp_ctx = None
+                with flask_app.app_context():
+                    from .models import TelegramGroup
+                    _tg_w = TelegramGroup.query.filter_by(
+                        telegram_group_id=group_id, is_disabled=False
+                    ).first()
+                    if _tg_w and (_tg_w.settings or {}).get("welcome", {}).get("enabled", True):
+                        grp_ctx = GroupContext.from_telegram_group(_tg_w)
+                if grp_ctx:
+                    await WelcomeSystem(flask_app).send_welcome(bot, chat_id, user, grp_ctx)
+            except Exception as _we:
+                _log.debug("[OfficialBot] Post-verification welcome failed: %s", _we)
     except Exception as exc:
         _log.error("[OfficialBot] Complete verification error user=%s: %s", user_id, exc)
     finally:
         _pending_verifications.pop(key, None)
+        _remove_pending_verification(flask_app, chat_id, user_id)
 
 
 async def _fail_verification(bot, chat_id, user_id, pending, flask_app):
@@ -1813,6 +1977,7 @@ async def _fail_verification(bot, chat_id, user_id, pending, flask_app):
         _log.error("[OfficialBot] Fail verification error user=%s: %s", user_id, exc)
     finally:
         _pending_verifications.pop(key, None)
+        _remove_pending_verification(flask_app, chat_id, user_id)
 
 
 async def _verification_timeout(bot, chat_id, user_id):
@@ -1900,6 +2065,10 @@ async def _automod_check(bot, message, am_cfg: dict, group_id: str, flask_app) -
             return False
     except Exception:
         pass
+
+    # Normalize homoglyphs so all subsequent text checks use the normalized form
+    if am_cfg.get("homoglyphs", {}).get("enabled") and text:
+        text = normalize_homoglyphs(text)
 
     # ── 1. Bad words ─────────────────────────────────────────────────────────
     bw_cfg = am_cfg.get("bad_words", {})
@@ -2036,6 +2205,95 @@ async def _automod_check(bot, message, am_cfg: dict, group_id: str, flask_app) -
     return False
 
 
+# ─── Shared helpers for moderation ───────────────────────────────────────────
+
+async def _apply_xp_penalty(flask_app, group_id: str, user_id: int, action: str):
+    """Deduct XP per the group's levels.xp_penalty_<action> setting."""
+    penalty_key = f"xp_penalty_{action}"
+    try:
+        with flask_app.app_context():
+            from .models import TelegramGroup, OfficialMember, db
+            tg = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
+            if not tg:
+                return
+            penalty = (tg.settings or {}).get("levels", {}).get(penalty_key, 0)
+            if not penalty:
+                return
+            m = OfficialMember.query.filter_by(
+                telegram_group_id=group_id,
+                telegram_user_id=str(user_id),
+            ).first()
+            if m:
+                m.xp = max(0, (m.xp or 0) + penalty)  # penalty values are negative
+                db.session.commit()
+    except Exception as exc:
+        _log.debug("[OfficialBot] XP penalty (%s) failed: %s", action, exc)
+
+
+async def _check_warn_escalation(bot, chat_id: int, group_id: str,
+                                  target_id: int, target_name: str,
+                                  warn_count: int, flask_app):
+    """Apply escalation or max-warnings action when warn count crosses a threshold."""
+    mod = {}
+    try:
+        with flask_app.app_context():
+            from .models import TelegramGroup
+            tg = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
+            if tg:
+                mod = (tg.settings or {}).get("moderation", {})
+    except Exception as exc:
+        _log.debug("[OfficialBot] Warn escalation settings load failed: %s", exc)
+        return
+
+    max_warnings = mod.get("max_warnings", 3)
+    warning_action = mod.get("warning_action", "mute")
+    mute_duration = mod.get("mute_duration_minutes", 60)
+
+    async def _act(action, duration_min=mute_duration, label=""):
+        try:
+            if action == "mute":
+                until = datetime.utcnow() + timedelta(minutes=duration_min)
+                await bot.restrict_chat_member(
+                    chat_id=chat_id, user_id=target_id,
+                    permissions=ChatPermissions(can_send_messages=False),
+                    until_date=until,
+                )
+                notif = await bot.send_message(
+                    chat_id=chat_id,
+                    text=f"🔇 {target_name} muted {duration_min}min{label}.",
+                )
+            elif action in ("ban", "kick"):
+                await bot.ban_chat_member(chat_id=chat_id, user_id=target_id)
+                if action == "kick":
+                    await bot.unban_chat_member(chat_id=chat_id, user_id=target_id)
+                icon = "🚫" if action == "ban" else "👢"
+                notif = await bot.send_message(
+                    chat_id=chat_id,
+                    text=f"{icon} {target_name} {action}ned{label}.",
+                )
+            else:
+                return
+            asyncio.get_event_loop().call_later(
+                15, lambda: asyncio.ensure_future(_safe_delete(bot, chat_id, notif.message_id))
+            )
+        except Exception as exc:
+            _log.warning("[OfficialBot] Warn escalation action %s failed: %s", action, exc)
+
+    if mod.get("escalation_enabled"):
+        steps = sorted(mod.get("escalation_steps", []),
+                       key=lambda s: s.get("at_warning", 99), reverse=True)
+        for step in steps:
+            if warn_count >= step.get("at_warning", 99):
+                await _act(
+                    step.get("action", "mute"),
+                    step.get("duration_minutes", mute_duration),
+                    f" (escalation at {warn_count} warnings)",
+                )
+                return
+    elif warn_count >= max_warnings:
+        await _act(warning_action, mute_duration, f" (reached {max_warnings} warnings)")
+
+
 # ─── Moderation commands ─────────────────────────────────────────────────────
 
 def _is_group_chat(update: Update) -> bool:
@@ -2071,14 +2329,57 @@ async def _resolve_target(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def _require_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """Return True if the command sender is an admin or creator."""
+    """Return True if the command sender is a group admin or creator.
+
+    Uses a 5-minute DB cache on OfficialMember.is_admin to avoid a Telegram
+    API call on every moderation command.
+    """
+    flask_app = context.bot_data.get("flask_app")
+    chat_id = str(update.effective_chat.id)
+    user_id = str(update.effective_user.id)
+    _CACHE_TTL = 300  # seconds
+
+    if flask_app:
+        try:
+            with flask_app.app_context():
+                from .models import OfficialMember
+                member = OfficialMember.query.filter_by(
+                    telegram_group_id=chat_id,
+                    telegram_user_id=user_id,
+                ).first()
+                if member and member.is_admin_cached_at:
+                    age = (datetime.utcnow() - member.is_admin_cached_at).total_seconds()
+                    if age < _CACHE_TTL:
+                        return member.is_admin
+        except Exception:
+            pass
+
+    # Cache miss or stale — fetch from Telegram API
     try:
         me = await context.bot.get_chat_member(
             update.effective_chat.id, update.effective_user.id
         )
-        return me.status in ("creator", "administrator")
+        is_admin = me.status in ("creator", "administrator")
     except Exception:
         return False
+
+    # Update DB cache asynchronously (best-effort)
+    if flask_app:
+        try:
+            with flask_app.app_context():
+                from .models import db, OfficialMember
+                member = OfficialMember.query.filter_by(
+                    telegram_group_id=chat_id,
+                    telegram_user_id=user_id,
+                ).first()
+                if member:
+                    member.is_admin = is_admin
+                    member.is_admin_cached_at = datetime.utcnow()
+                    db.session.commit()
+        except Exception:
+            pass
+
+    return is_admin
 
 
 def _parse_duration(args: list, default_minutes: int = 60) -> int:
@@ -2125,7 +2426,7 @@ async def cmd_warn(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if flask_app:
         try:
             with flask_app.app_context():
-                from .models import db, OfficialWarning
+                from .models import db, OfficialMember, OfficialWarning
                 w = OfficialWarning(
                     telegram_group_id=group_id,
                     target_user_id=str(target_id),
@@ -2141,18 +2442,35 @@ async def cmd_warn(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     target_user_id=str(target_id),
                     active=True,
                 ).count()
+                m = OfficialMember.query.filter_by(
+                    telegram_group_id=group_id,
+                    telegram_user_id=str(target_id),
+                ).first()
+                if m:
+                    m.warnings = warn_count
+                    db.session.commit()
         except Exception as _e:
             _log.warning("[OfficialBot] Failed to save warning: %s", _e)
+
+    _log_event(flask_app, group_id, "mod_warn",
+               f"{target_name} warned by {update.effective_user.first_name}: {reason}",
+               {"target_user_id": str(target_id),
+                "moderator_id": str(update.effective_user.id), "reason": reason})
 
     warn_msg = await update.message.reply_text(
         f"⚠️ {target_name} has been warned.\n"
         f"Reason: {reason}\n"
         f"Warning #{warn_count}"
     )
-    # Auto-delete warn notice after 30s
     asyncio.get_event_loop().call_later(
         30, lambda: asyncio.ensure_future(_safe_delete(context.bot, update.effective_chat.id, warn_msg.message_id))
     )
+    if flask_app:
+        await _apply_xp_penalty(flask_app, group_id, target_id, "warn")
+        await _check_warn_escalation(
+            context.bot, update.effective_chat.id, group_id,
+            target_id, target_name, warn_count, flask_app,
+        )
 
 
 async def cmd_ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2182,6 +2500,8 @@ async def cmd_ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
         asyncio.get_event_loop().call_later(
             15, lambda: asyncio.ensure_future(_safe_delete(context.bot, chat_id, ban_msg.message_id))
         )
+        if flask_app:
+            await _apply_xp_penalty(flask_app, group_id, target_id, "ban")
     except Exception as exc:
         await update.message.reply_text(f"❌ Failed to ban: {exc}")
 
@@ -2214,6 +2534,8 @@ async def cmd_kick(update: Update, context: ContextTypes.DEFAULT_TYPE):
         asyncio.get_event_loop().call_later(
             15, lambda: asyncio.ensure_future(_safe_delete(context.bot, chat_id, kick_msg.message_id))
         )
+        if flask_app:
+            await _apply_xp_penalty(flask_app, group_id, target_id, "kick")
     except Exception as exc:
         await update.message.reply_text(f"❌ Failed to kick: {exc}")
 
@@ -2248,12 +2570,28 @@ async def cmd_mute(update: Update, context: ContextTypes.DEFAULT_TYPE):
                    f"{target_name} muted {duration_min}min by {update.effective_user.first_name}: {reason}",
                    {"target_user_id": str(target_id), "moderator_id": str(update.effective_user.id),
                     "duration_minutes": duration_min, "reason": reason})
+        if flask_app:
+            try:
+                with flask_app.app_context():
+                    from .models import db, OfficialMember
+                    m = OfficialMember.query.filter_by(
+                        telegram_group_id=group_id,
+                        telegram_user_id=str(target_id),
+                    ).first()
+                    if m:
+                        m.is_muted = True
+                        m.mute_until = until
+                        db.session.commit()
+            except Exception as _e:
+                _log.debug("[OfficialBot] Failed to set mute on member: %s", _e)
         mute_msg = await update.message.reply_text(
             f"🔇 {target_name} muted for {duration_min} min.\nReason: {reason}"
         )
         asyncio.get_event_loop().call_later(
             15, lambda: asyncio.ensure_future(_safe_delete(context.bot, chat_id, mute_msg.message_id))
         )
+        if flask_app:
+            await _apply_xp_penalty(flask_app, group_id, target_id, "mute")
     except Exception as exc:
         await update.message.reply_text(f"❌ Failed to mute: {exc}")
 
@@ -2286,6 +2624,20 @@ async def cmd_unmute(update: Update, context: ContextTypes.DEFAULT_TYPE):
         _log_event(flask_app, group_id, "mod_unmute",
                    f"{target_name} unmuted by {update.effective_user.first_name}",
                    {"target_user_id": str(target_id), "moderator_id": str(update.effective_user.id)})
+        if flask_app:
+            try:
+                with flask_app.app_context():
+                    from .models import db, OfficialMember
+                    m = OfficialMember.query.filter_by(
+                        telegram_group_id=group_id,
+                        telegram_user_id=str(target_id),
+                    ).first()
+                    if m:
+                        m.is_muted = False
+                        m.mute_until = None
+                        db.session.commit()
+            except Exception as _e:
+                _log.debug("[OfficialBot] Failed to clear mute on member: %s", _e)
         await update.message.reply_text(f"🔊 {target_name} has been unmuted.")
     except Exception as exc:
         await update.message.reply_text(f"❌ Failed to unmute: {exc}")
@@ -2375,16 +2727,7 @@ async def cmd_purge(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pass
 
 
-def _xp_for_level(level: int) -> int:
-    """XP threshold to reach a given level (1-indexed, level 1 = 0 XP)."""
-    return max(0, (level - 1) * 100)
-
-
-def _level_from_xp(xp: int) -> int:
-    return max(1, xp // 100 + 1)
-
-
-async def _award_xp(flask_app, group_id: str, user, xp_gain: int = 5):
+async def _award_xp(flask_app, group_id: str, user, xp_gain: int = None):
     """Award XP to a user and update their level. Silently fails."""
     try:
         with flask_app.app_context():
@@ -2397,6 +2740,10 @@ async def _award_xp(flask_app, group_id: str, user, xp_gain: int = 5):
             lvl_settings = (tg.settings or {}).get("levels", {})
             if not lvl_settings.get("enabled", False):
                 return
+
+            # Use per-group xp_per_message setting; fall back to 10.
+            if xp_gain is None:
+                xp_gain = int(lvl_settings.get("xp_per_message", 10))
 
             m = OfficialMember.query.filter_by(
                 telegram_group_id=group_id,
@@ -2411,10 +2758,20 @@ async def _award_xp(flask_app, group_id: str, user, xp_gain: int = 5):
                 )
                 db.session.add(m)
 
+            now = datetime.utcnow()
+            cooldown = int(lvl_settings.get("xp_cooldown_seconds", 60))
+            if m.last_xp_at and (now - m.last_xp_at).total_seconds() < cooldown:
+                # Still in cooldown — count message but skip XP
+                m.message_count = (m.message_count or 0) + 1
+                m.last_message_at = now
+                db.session.commit()
+                return
+
             old_level = m.level
             m.xp = (m.xp or 0) + xp_gain
             m.message_count = (m.message_count or 0) + 1
-            m.last_message_at = datetime.utcnow()
+            m.last_message_at = now
+            m.last_xp_at = now
             m.level = _level_from_xp(m.xp)
             db.session.commit()
 
@@ -2538,6 +2895,643 @@ async def cmd_warnings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"⚠️ {target_name} has {count} active warning(s) in this group.")
 
 
+# ─── Additional commands (Phase 2) ───────────────────────────────────────────
+
+async def cmd_tempmute(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Mute a user for a specified duration. Usage: /tempmute [@user] [30m|2h] [reason]"""
+    if not _is_group_chat(update):
+        return
+    if not await _require_admin(update, context):
+        await update.message.reply_text("⛔ Admins only.")
+        return
+    flask_app = context.bot_data.get("flask_app")
+    group_id = str(update.effective_chat.id)
+    chat_id = update.effective_chat.id
+    target_id, target_username, target_name = await _resolve_target(update, context)
+    if not target_id:
+        await update.message.reply_text("❌ Reply to or mention a user.")
+        return
+    args = context.args or []
+    duration_min = _parse_duration(args, default_minutes=30)
+    reason = _parse_reason(args)
+    until = datetime.utcnow() + timedelta(minutes=duration_min)
+    try:
+        await context.bot.restrict_chat_member(
+            chat_id=chat_id, user_id=target_id,
+            permissions=ChatPermissions(can_send_messages=False),
+            until_date=until,
+        )
+        _log_event(flask_app, group_id, "mod_tempmute",
+                   f"{target_name} temp-muted {duration_min}min: {reason}",
+                   {"target_user_id": str(target_id), "duration_minutes": duration_min})
+        msg = await update.message.reply_text(
+            f"🔇 {target_name} muted for {duration_min} min.\nReason: {reason}"
+        )
+        asyncio.get_event_loop().call_later(
+            15, lambda: asyncio.ensure_future(_safe_delete(context.bot, chat_id, msg.message_id))
+        )
+        if flask_app:
+            await _apply_xp_penalty(flask_app, group_id, target_id, "mute")
+    except Exception as exc:
+        await update.message.reply_text(f"❌ Failed to mute: {exc}")
+
+
+async def cmd_admins(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """List all current group admins."""
+    if not _is_group_chat(update):
+        return
+    try:
+        admins = await context.bot.get_chat_administrators(update.effective_chat.id)
+        lines = ["👮 *Group Admins*\n"]
+        for a in admins:
+            name = a.user.first_name or a.user.username or str(a.user.id)
+            title_str = f" ({a.custom_title})" if getattr(a, "custom_title", None) else ""
+            lines.append(f"• {name}{title_str}")
+        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+    except Exception as exc:
+        await update.message.reply_text(f"❌ Could not fetch admins: {exc}")
+
+
+async def cmd_roles(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show configured level-based roles for this group."""
+    if not _is_group_chat(update):
+        return
+    flask_app = context.bot_data.get("flask_app")
+    group_id = str(update.effective_chat.id)
+    roles = []
+    if flask_app:
+        try:
+            with flask_app.app_context():
+                from .models import TelegramGroup
+                tg = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
+                if tg:
+                    roles = (tg.settings or {}).get("levels", {}).get("roles", [])
+        except Exception:
+            pass
+    if not roles:
+        await update.message.reply_text("No level roles configured for this group.")
+        return
+    lines = ["🎖 *Level Roles*\n"]
+    for r in sorted(roles, key=lambda x: x.get("level", 0)):
+        lines.append(f"Level {r['level']}+ → {r['name']}")
+    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+
+
+async def _show_rank(update: Update, context: ContextTypes.DEFAULT_TYPE, target_id=None):
+    """Shared logic for /rank and /me."""
+    flask_app = context.bot_data.get("flask_app")
+    group_id = str(update.effective_chat.id)
+    target_name = update.effective_user.first_name or "You"
+    if target_id is None:
+        tgt_id, _, tgt_name = await _resolve_target(update, context)
+        if not tgt_id:
+            tgt_id = update.effective_user.id
+            tgt_name = target_name
+        target_id, target_name = tgt_id, tgt_name
+    xp, level, rank = 0, 1, None
+    role_name = ""
+    if flask_app:
+        try:
+            with flask_app.app_context():
+                from .models import OfficialMember, TelegramGroup
+                m = OfficialMember.query.filter_by(
+                    telegram_group_id=group_id,
+                    telegram_user_id=str(target_id),
+                ).first()
+                if m:
+                    xp, level = m.xp, m.level
+                    role_name = getattr(m, "role", "") or ""
+                    rank = OfficialMember.query.filter_by(
+                        telegram_group_id=group_id,
+                    ).filter(OfficialMember.xp > xp).count() + 1
+                tg = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
+                if tg:
+                    for r in sorted(
+                        (tg.settings or {}).get("levels", {}).get("roles", []),
+                        key=lambda x: x.get("level", 0),
+                        reverse=True,
+                    ):
+                        if level >= r.get("level", 0):
+                            role_name = r.get("name", role_name)
+                            break
+        except Exception:
+            pass
+    bar_filled = min(int((xp % 100) / 10), 10)
+    bar = "█" * bar_filled + "░" * (10 - bar_filled)
+    next_xp = max(xp + 1, ((xp // 100) + 1) * 100)
+    text = (
+        f"🏅 *{target_name}*\n"
+        f"Level: {level}{' — ' + role_name if role_name else ''}\n"
+        f"XP: {xp:,}  [{bar}]\n"
+        f"Next level: {next_xp:,} XP"
+    )
+    if rank:
+        text += f"\nRank: #{rank} in this group"
+    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+
+async def cmd_rank(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show rank and level for self or a mentioned user."""
+    if not _is_group_chat(update):
+        return
+    await _show_rank(update, context)
+
+
+async def cmd_me(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show your own rank and level."""
+    if not _is_group_chat(update):
+        return
+    await _show_rank(update, context, target_id=update.effective_user.id)
+
+
+async def cmd_whois(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show detailed info about a user (admins only)."""
+    if not _is_group_chat(update):
+        return
+    if not await _require_admin(update, context):
+        await update.message.reply_text("⛔ Admins only.")
+        return
+    flask_app = context.bot_data.get("flask_app")
+    group_id = str(update.effective_chat.id)
+    target_id, _, target_name = await _resolve_target(update, context)
+    if not target_id:
+        await update.message.reply_text("❌ Reply to a user or mention them.")
+        return
+    xp, level, warnings_count, first_name = 0, 1, 0, target_name
+    role, is_muted, mute_until, is_verified, wallet = "member", False, None, False, None
+    if flask_app:
+        try:
+            with flask_app.app_context():
+                from .models import OfficialMember, OfficialWarning
+                m = OfficialMember.query.filter_by(
+                    telegram_group_id=group_id,
+                    telegram_user_id=str(target_id),
+                ).first()
+                if m:
+                    xp, level = m.xp, m.level
+                    first_name = m.first_name or target_name
+                    role = getattr(m, "role", "member") or "member"
+                    is_muted = getattr(m, "is_muted", False)
+                    mute_until = getattr(m, "mute_until", None)
+                    is_verified = getattr(m, "is_verified", False)
+                    wallet = getattr(m, "wallet_address", None)
+                warnings_count = OfficialWarning.query.filter_by(
+                    telegram_group_id=group_id,
+                    target_user_id=str(target_id),
+                    active=True,
+                ).count()
+        except Exception:
+            pass
+    mute_str = ""
+    if is_muted:
+        mute_str = f"\nMuted: ✅" + (f" until {mute_until.strftime('%Y-%m-%d %H:%M')} UTC" if mute_until else "")
+    wallet_str = f"\nWallet: `{wallet}`" if wallet else ""
+    await update.message.reply_text(
+        f"🔍 *{first_name}*\n"
+        f"ID: `{target_id}`\n"
+        f"Role: {role} | Level: {level} | XP: {xp:,}\n"
+        f"Active warnings: {warnings_count}\n"
+        f"Verified: {'✅' if is_verified else '❌'}"
+        f"{mute_str}{wallet_str}",
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+
+async def cmd_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Set or view your wallet address. Usage: /wallet <address>"""
+    flask_app = context.bot_data.get("flask_app")
+    user = update.effective_user
+    args = context.args or []
+
+    if not flask_app:
+        await update.message.reply_text("❌ Service unavailable.")
+        return
+
+    if args:
+        # Set wallet
+        address = args[0].strip()
+        if len(address) > 500:
+            await update.message.reply_text("❌ Address too long (max 500 chars).")
+            return
+        group_id = str(update.effective_chat.id) if _is_group_chat(update) else None
+        try:
+            with flask_app.app_context():
+                from .models import db, OfficialMember
+                if group_id:
+                    m = OfficialMember.query.filter_by(
+                        telegram_group_id=group_id,
+                        telegram_user_id=str(user.id),
+                    ).first()
+                else:
+                    m = OfficialMember.query.filter_by(
+                        telegram_user_id=str(user.id),
+                    ).first()
+                if m:
+                    m.wallet_address = address
+                    m.wallet_submitted_at = datetime.utcnow()
+                    db.session.commit()
+                    await update.message.reply_text("✅ Wallet address saved.")
+                else:
+                    await update.message.reply_text("❌ No membership record found. Send a message in the group first.")
+        except Exception as _e:
+            _log.error("[OfficialBot] wallet save error: %s", _e)
+            await update.message.reply_text("❌ Failed to save wallet.")
+    else:
+        # View wallet
+        group_id = str(update.effective_chat.id) if _is_group_chat(update) else None
+        wallet = None
+        try:
+            with flask_app.app_context():
+                from .models import OfficialMember
+                if group_id:
+                    m = OfficialMember.query.filter_by(
+                        telegram_group_id=group_id,
+                        telegram_user_id=str(user.id),
+                    ).first()
+                else:
+                    m = OfficialMember.query.filter_by(
+                        telegram_user_id=str(user.id),
+                    ).first()
+                if m:
+                    wallet = getattr(m, "wallet_address", None)
+        except Exception:
+            pass
+        if wallet:
+            await update.message.reply_text(
+                f"💳 Your wallet address:\n`{wallet}`",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+        else:
+            await update.message.reply_text("No wallet address set. Use /wallet <address> to set one.")
+
+
+async def cmd_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Report a user to group admins."""
+    if not _is_group_chat(update):
+        return
+    flask_app = context.bot_data.get("flask_app")
+    group_id = str(update.effective_chat.id)
+    chat_id = update.effective_chat.id
+    reporter = update.effective_user
+    target_id, _, target_name = await _resolve_target(update, context)
+    if not target_id:
+        await update.message.reply_text("❌ Reply to a message to report the user.")
+        return
+    reason = " ".join(context.args) if context.args else "No reason given"
+    report_text = (
+        f"🚨 *User Reported*\n"
+        f"Reported: {target_name} (`{target_id}`)\n"
+        f"By: {reporter.first_name} (`{reporter.id}`)\n"
+        f"Reason: {reason}"
+    )
+    try:
+        notif = await update.message.reply_text(report_text, parse_mode=ParseMode.MARKDOWN)
+        asyncio.get_event_loop().call_later(
+            60, lambda: asyncio.ensure_future(_safe_delete(context.bot, chat_id, notif.message_id))
+        )
+    except Exception as exc:
+        _log.debug("[OfficialBot] Report send failed: %s", exc)
+    _log_event(flask_app, group_id, "user_reported",
+               f"{target_name} reported by {reporter.first_name}: {reason}",
+               {"target_user_id": str(target_id), "reporter_id": str(reporter.id)})
+
+
+async def cmd_removewarning(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Remove the most recent warning from a user."""
+    if not _is_group_chat(update):
+        return
+    if not await _require_admin(update, context):
+        await update.message.reply_text("⛔ Admins only.")
+        return
+    flask_app = context.bot_data.get("flask_app")
+    group_id = str(update.effective_chat.id)
+    target_id, _, target_name = await _resolve_target(update, context)
+    if not target_id:
+        await update.message.reply_text("❌ Reply to a user or mention them.")
+        return
+    removed = False
+    if flask_app:
+        try:
+            with flask_app.app_context():
+                from .models import db, OfficialWarning
+                last_warn = (
+                    OfficialWarning.query
+                    .filter_by(telegram_group_id=group_id,
+                               target_user_id=str(target_id), active=True)
+                    .order_by(OfficialWarning.created_at.desc())
+                    .first()
+                )
+                if last_warn:
+                    last_warn.active = False
+                    db.session.commit()
+                    removed = True
+                    # Sync warnings counter on OfficialMember
+                    from .models import OfficialMember
+                    m = OfficialMember.query.filter_by(
+                        telegram_group_id=group_id,
+                        telegram_user_id=str(target_id),
+                    ).first()
+                    if m:
+                        remaining = OfficialWarning.query.filter_by(
+                            telegram_group_id=group_id,
+                            target_user_id=str(target_id),
+                            active=True,
+                        ).count()
+                        m.warnings = remaining
+                        db.session.commit()
+        except Exception as _e:
+            _log.warning("[OfficialBot] removewarning error: %s", _e)
+    if removed:
+        await update.message.reply_text(f"✅ Removed last warning from {target_name}.")
+    else:
+        await update.message.reply_text(f"ℹ️ {target_name} has no active warnings.")
+
+
+async def cmd_groupinfo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show group statistics."""
+    if not _is_group_chat(update):
+        return
+    flask_app = context.bot_data.get("flask_app")
+    group_id = str(update.effective_chat.id)
+    chat = update.effective_chat
+    member_count, total_xp, warning_count = 0, 0, 0
+    if flask_app:
+        try:
+            with flask_app.app_context():
+                from .models import OfficialMember, OfficialWarning, db
+                from sqlalchemy import func
+                member_count = OfficialMember.query.filter_by(telegram_group_id=group_id).count()
+                total_xp = (
+                    db.session.query(func.sum(OfficialMember.xp))
+                    .filter(OfficialMember.telegram_group_id == group_id)
+                    .scalar() or 0
+                )
+                warning_count = OfficialWarning.query.filter_by(
+                    telegram_group_id=group_id, active=True
+                ).count()
+        except Exception:
+            pass
+    try:
+        tg_count = await context.bot.get_chat_member_count(chat.id)
+    except Exception:
+        tg_count = member_count
+    await update.message.reply_text(
+        f"ℹ️ *{chat.title}*\n"
+        f"Members: {tg_count:,}\n"
+        f"Tracked XP members: {member_count:,}\n"
+        f"Total XP awarded: {total_xp:,}\n"
+        f"Active warnings: {warning_count}\n"
+        f"Type: {chat.type}",
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+
+async def cmd_auditlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show recent moderation events (admins only)."""
+    if not _is_group_chat(update):
+        return
+    if not await _require_admin(update, context):
+        await update.message.reply_text("⛔ Admins only.")
+        return
+    flask_app = context.bot_data.get("flask_app")
+    group_id = str(update.effective_chat.id)
+    entries = []
+    if flask_app:
+        try:
+            with flask_app.app_context():
+                from .models import BotEvent
+                rows = (
+                    BotEvent.query
+                    .filter(
+                        BotEvent.telegram_group_id == group_id,
+                        BotEvent.event_type.in_([
+                            "mod_ban", "mod_kick", "mod_mute", "mod_tempmute",
+                            "mod_warn", "mod_tempban", "automod_action",
+                            "user_reported",
+                        ]),
+                    )
+                    .order_by(BotEvent.created_at.desc())
+                    .limit(10)
+                    .all()
+                )
+                entries = [
+                    {
+                        "ts": r.created_at.strftime("%m/%d %H:%M"),
+                        "type": r.event_type.replace("mod_", "").upper(),
+                        "msg": (r.message or "")[:80],
+                    }
+                    for r in rows
+                ]
+        except Exception:
+            pass
+    if not entries:
+        await update.message.reply_text("📋 No recent moderation events.")
+        return
+    lines = ["📋 *Recent Moderation Log*\n"]
+    for e in entries:
+        lines.append(f"[{e['ts']}] {e['type']}: {e['msg']}")
+    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+
+
+# ─── /ask — Knowledge Base Q&A ────────────────────────────────────────────────
+
+async def cmd_ask(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Answer a question from the group's knowledge base."""
+    if not _is_group_chat(update):
+        await update.message.reply_text("Use /ask in a group where the bot is active.")
+        return
+    flask_app = context.bot_data.get("flask_app")
+    group_id = str(update.effective_chat.id)
+    question = " ".join(context.args).strip() if context.args else ""
+    if not question:
+        await update.message.reply_text("Usage: /ask <your question>")
+        return
+
+    thinking_msg = await update.message.reply_text("🔍 Searching knowledge base…")
+    try:
+        from .bot_features.knowledge_base import KnowledgeBaseSystem
+        kb = KnowledgeBaseSystem(flask_app)
+        answer, confidence = await kb.answer_question(
+            question=question,
+            group_id=None,
+            telegram_group_id=group_id,
+        )
+    except Exception as exc:
+        _log.error("cmd_ask error: %s", exc)
+        answer, confidence = None, 0.0
+
+    try:
+        await thinking_msg.delete()
+    except Exception:
+        pass
+
+    CONFIDENCE_THRESHOLD = 0.35
+    if not answer or confidence < CONFIDENCE_THRESHOLD:
+        await update.message.reply_text(
+            "❓ I couldn't find a confident answer in the knowledge base. "
+            "Try rephrasing or ask an admin."
+        )
+        return
+
+    await update.message.reply_text(
+        f"💡 *Answer:*\n{answer}",
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+
+# ─── /invitelink — Create a Telegram invite link ──────────────────────────────
+
+async def cmd_invitelink(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Generate a Telegram invite link for this group (admins only)."""
+    if not _is_group_chat(update):
+        return
+    if not await _require_admin(update, context):
+        await update.message.reply_text("⛔ Admins only.")
+        return
+
+    flask_app = context.bot_data.get("flask_app")
+    group_id = str(update.effective_chat.id)
+    name = " ".join(context.args).strip()[:32] if context.args else "Bot invite"
+
+    try:
+        tg_link_obj = await context.bot.create_chat_invite_link(
+            chat_id=update.effective_chat.id,
+            name=name,
+        )
+        link_url = tg_link_obj.invite_link
+    except Exception as exc:
+        await update.message.reply_text(f"❌ Could not create invite link: {exc}")
+        return
+
+    # Persist to DB
+    if flask_app:
+        try:
+            with flask_app.app_context():
+                from .models import db, InviteLink
+                lnk = InviteLink(
+                    telegram_group_id=group_id,
+                    name=name,
+                    telegram_invite_link=link_url,
+                )
+                db.session.add(lnk)
+                db.session.commit()
+        except Exception as exc:
+            _log.warning("invitelink db persist failed: %s", exc)
+
+    await update.message.reply_text(
+        f"🔗 *Invite Link Created*\n\nName: _{name}_\nLink: {link_url}",
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+
+# ─── Service-message auto-clean ───────────────────────────────────────────────
+
+async def on_service_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Delete Telegram service messages (joins, leaves, etc.) per auto_clean settings."""
+    message = update.message
+    if not message:
+        return
+    flask_app = context.bot_data.get("flask_app")
+    if not flask_app:
+        return
+    chat = update.effective_chat
+    if not chat or chat.type == ChatType.PRIVATE:
+        return
+    group_id = str(chat.id)
+
+    auto_clean = {}
+    try:
+        with flask_app.app_context():
+            from .models import TelegramGroup
+            tg = TelegramGroup.query.filter_by(
+                telegram_group_id=group_id, is_disabled=False
+            ).first()
+            if tg:
+                auto_clean = (tg.settings or {}).get("auto_clean", {})
+    except Exception:
+        return
+
+    if not auto_clean.get("enabled", False):
+        return
+
+    should_delete = False
+    if auto_clean.get("delete_joins") and message.new_chat_members:
+        should_delete = True
+    elif auto_clean.get("delete_leaves") and message.left_chat_member:
+        should_delete = True
+    elif auto_clean.get("delete_photo_changes") and message.new_chat_photo:
+        should_delete = True
+    elif auto_clean.get("delete_pinned_messages") and message.pinned_message:
+        should_delete = True
+    elif auto_clean.get("delete_game_scores") and message.game_short_name:
+        should_delete = True
+    elif auto_clean.get("delete_voice_chat_events") and (
+        message.video_chat_started or message.video_chat_ended
+        or message.video_chat_scheduled or message.video_chat_participants_invited
+    ):
+        should_delete = True
+    elif auto_clean.get("delete_forum_events") and (
+        message.forum_topic_created or message.forum_topic_closed
+        or message.forum_topic_reopened or message.forum_topic_edited
+    ):
+        should_delete = True
+
+    if should_delete:
+        try:
+            await context.bot.delete_message(
+                chat_id=chat.id, message_id=message.message_id
+            )
+        except Exception:
+            pass
+
+
+# ─── Reaction XP handler ─────────────────────────────────────────────────────
+
+async def on_reaction(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Award XP when a member adds a reaction to a message."""
+    reaction = update.message_reaction
+    if not reaction or not reaction.new_reaction:
+        return
+    user = reaction.user
+    if not user or user.is_bot:
+        return
+    flask_app = context.bot_data.get("flask_app")
+    if not flask_app:
+        return
+    group_id = str(reaction.chat.id)
+    try:
+        with flask_app.app_context():
+            from .models import TelegramGroup, OfficialMember, db
+            tg = TelegramGroup.query.filter_by(
+                telegram_group_id=group_id, is_disabled=False
+            ).first()
+            if not tg:
+                return
+            lvl = (tg.settings or {}).get("levels", {})
+            if not lvl.get("enabled", False):
+                return
+            xp_amount = int(lvl.get("xp_per_reaction", 10))
+            if xp_amount <= 0:
+                return
+            m = OfficialMember.query.filter_by(
+                telegram_group_id=group_id,
+                telegram_user_id=str(user.id),
+            ).first()
+            if not m:
+                m = OfficialMember(
+                    telegram_group_id=group_id,
+                    telegram_user_id=str(user.id),
+                    username=user.username,
+                    first_name=user.first_name,
+                )
+                db.session.add(m)
+            m.xp = (m.xp or 0) + xp_amount
+            m.level = _level_from_xp(m.xp)
+            db.session.commit()
+    except Exception as exc:
+        _log.debug("[OfficialBot] Reaction XP failed: %s", exc)
+
+
 # ─── OfficialBotRunner ────────────────────────────────────────────────────────
 
 class OfficialBotRunner:
@@ -2609,6 +3603,7 @@ class OfficialBotRunner:
         _log.info("[OfficialBot] Thread exited")
 
     async def _poll(self, flask_app):
+        _load_pending_verifications_from_db(flask_app)
         self.application = Application.builder().token(Config.TELEGRAM_BOT_TOKEN).build()
         self.application.bot_data["flask_app"] = flask_app
 
@@ -2625,14 +3620,40 @@ class OfficialBotRunner:
         a.add_handler(CommandHandler("unmute",   cmd_unmute))
         a.add_handler(CommandHandler("tempban",  cmd_tempban))
         a.add_handler(CommandHandler("purge",    cmd_purge))
-        a.add_handler(CommandHandler("warnings",    cmd_warnings))
-        a.add_handler(CommandHandler("xp",          cmd_xp))
-        a.add_handler(CommandHandler("leaderboard", cmd_leaderboard))
+        a.add_handler(CommandHandler("warnings",       cmd_warnings))
+        a.add_handler(CommandHandler("xp",             cmd_xp))
+        a.add_handler(CommandHandler("leaderboard",    cmd_leaderboard))
+        # Phase 2 commands
+        a.add_handler(CommandHandler("tempmute",       cmd_tempmute))
+        a.add_handler(CommandHandler("admins",         cmd_admins))
+        a.add_handler(CommandHandler("roles",          cmd_roles))
+        a.add_handler(CommandHandler("rank",           cmd_rank))
+        a.add_handler(CommandHandler("me",             cmd_me))
+        a.add_handler(CommandHandler("whois",          cmd_whois))
+        a.add_handler(CommandHandler("report",         cmd_report))
+        a.add_handler(CommandHandler("removewarning",  cmd_removewarning))
+        a.add_handler(CommandHandler("unwarn",         cmd_removewarning))
+        a.add_handler(CommandHandler("groupinfo",      cmd_groupinfo))
+        a.add_handler(CommandHandler("auditlog",       cmd_auditlog))
+        a.add_handler(CommandHandler("wallet",         cmd_wallet))
+        a.add_handler(CommandHandler("mywallet",       cmd_wallet))
+        a.add_handler(CommandHandler("ask",            cmd_ask))
+        a.add_handler(CommandHandler("invitelink",     cmd_invitelink))
         a.add_handler(CallbackQueryHandler(callback_handler))
         # Bot's own membership changes (added/removed from groups)
         a.add_handler(ChatMemberHandler(on_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))
-        # Any member's status changes — used for new-member verification
+        # Any member's status changes — used for new-member join events
         a.add_handler(ChatMemberHandler(on_chat_member, ChatMemberHandler.CHAT_MEMBER))
+        # Service messages (joins/leaves/pins etc.) for auto-clean
+        a.add_handler(
+            MessageHandler(
+                (filters.ChatType.GROUP | filters.ChatType.SUPERGROUP) & filters.StatusUpdate.ALL,
+                on_service_message,
+            )
+        )
+        # Reaction XP
+        if _REACTION_HANDLER_AVAILABLE:
+            a.add_handler(_MsgReactionHandler(on_reaction))
         # Private text: bot token submission (must come before group message handler)
         a.add_handler(
             MessageHandler(
@@ -2695,6 +3716,8 @@ async def _send_official_digest(bot, tg, days: int = 7):
     try:
         from .models import BotEvent, OfficialWarning, OfficialMember
 
+        from .models import OfficialScheduledMessage, OfficialPoll
+
         joins = BotEvent.query.filter(
             BotEvent.telegram_group_id == group_id,
             BotEvent.event_type == "member_joined",
@@ -2712,23 +3735,48 @@ async def _send_official_digest(bot, tg, days: int = 7):
             OfficialWarning.created_at >= since,
         ).count()
 
+        bans = BotEvent.query.filter(
+            BotEvent.telegram_group_id == group_id,
+            BotEvent.event_type.in_(["mod_ban", "mod_tempban"]),
+            BotEvent.created_at >= since,
+        ).count()
+
         commands = BotEvent.query.filter(
             BotEvent.telegram_group_id == group_id,
             BotEvent.event_type == "command_triggered",
             BotEvent.created_at >= since,
         ).count()
 
+        scheduled_sent = OfficialScheduledMessage.query.filter(
+            OfficialScheduledMessage.telegram_group_id == group_id,
+            OfficialScheduledMessage.is_sent == True,
+            OfficialScheduledMessage.send_at >= since,
+        ).count()
+
+        polls_sent = OfficialPoll.query.filter(
+            OfficialPoll.telegram_group_id == group_id,
+            OfficialPoll.is_sent == True,
+            OfficialPoll.scheduled_at >= since,
+        ).count()
+
         top_members = OfficialMember.query.filter_by(
             telegram_group_id=group_id,
         ).order_by(OfficialMember.xp.desc()).limit(3).all()
 
+        member_count = OfficialMember.query.filter_by(telegram_group_id=group_id).count()
+
         lines = [
             f"📊 *{tg.title} — {days}-Day Digest*\n",
-            f"👥 New members: {joins}",
+            f"👥 Members tracked: {member_count} (+{joins} new)",
             f"🛡️ AutoMod actions: {automod}",
             f"⚠️ Warnings issued: {warns}",
-            f"💬 Custom commands used: {commands}",
+            f"🚫 Bans: {bans}",
+            f"💬 Commands used: {commands}",
         ]
+
+        if scheduled_sent or polls_sent:
+            lines.append(f"📅 Scheduled posts sent: {scheduled_sent}")
+            lines.append(f"📊 Polls sent: {polls_sent}")
 
         if top_members:
             lines.append("\n🏆 *Top Members*")
@@ -2754,3 +3802,10 @@ _runner = OfficialBotRunner()
 
 def start_official_bot(flask_app):
     _runner.start(flask_app)
+
+
+def get_official_bot_loop():
+    """Return (bot, loop) for use by the scheduler. Returns (None, None) if not running."""
+    if _runner.application and _runner.loop and _runner.loop.is_running():
+        return _runner.application.bot, _runner.loop
+    return None, None

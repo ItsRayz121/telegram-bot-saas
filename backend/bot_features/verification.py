@@ -99,7 +99,8 @@ class VerificationSystem:
             await self.captcha_button_verification(bot, chat_id, user_id, user, group, timeout, group_name)
 
     async def captcha_button_verification(self, bot, chat_id, user_id, user, group, timeout, group_name):
-        max_attempts = group.settings.get("verification", {}).get("max_attempts", 3)
+        v_cfg = group.settings.get("verification", {})
+        max_attempts = v_cfg.get("max_attempts", 3)
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton(
                 "✅ I am human — Click to verify",
@@ -121,8 +122,11 @@ class VerificationSystem:
             "message_id": msg.message_id,
             "expires_at": datetime.utcnow() + timedelta(seconds=timeout),
             "group_id": group.id,
+            "bot_type": getattr(group, "bot_type", "custom"),
+            "telegram_group_id": getattr(group, "telegram_chat_id", None),
             "attempts": 0,
             "max_attempts": max_attempts,
+            "kick_on_fail": v_cfg.get("kick_on_fail", True),
         }
         asyncio.get_event_loop().call_later(
             timeout,
@@ -130,7 +134,8 @@ class VerificationSystem:
         )
 
     async def math_verification(self, bot, chat_id, user_id, user, group, timeout, group_name):
-        max_attempts = group.settings.get("verification", {}).get("max_attempts", 3)
+        v_cfg = group.settings.get("verification", {})
+        max_attempts = v_cfg.get("max_attempts", 3)
         op_name, op_sym = random.choice(MATH_OPS)
         a = random.randint(1, 20)
         b = random.randint(1, 20)
@@ -175,9 +180,12 @@ class VerificationSystem:
             "answer": answer,
             "expires_at": datetime.utcnow() + timedelta(seconds=timeout),
             "group_id": group.id,
+            "bot_type": getattr(group, "bot_type", "custom"),
+            "telegram_group_id": getattr(group, "telegram_chat_id", None),
             "attempts": 0,
             "max_attempts": max_attempts,
             "a": a, "b": b, "op_sym": op_sym, "options": options,
+            "kick_on_fail": v_cfg.get("kick_on_fail", True),
         }
         asyncio.get_event_loop().call_later(
             timeout,
@@ -185,7 +193,8 @@ class VerificationSystem:
         )
 
     async def word_verification(self, bot, chat_id, user_id, user, group, settings, timeout, group_name):
-        max_attempts = group.settings.get("verification", {}).get("max_attempts", 3)
+        v_cfg = group.settings.get("verification", {})
+        max_attempts = v_cfg.get("max_attempts", 3)
         question = settings.get("verification", {}).get("custom_question", "What is the group's main topic?")
         msg = await bot.send_message(
             chat_id=chat_id,
@@ -202,8 +211,11 @@ class VerificationSystem:
             "answer": settings.get("verification", {}).get("custom_answer", "").lower().strip(),
             "expires_at": datetime.utcnow() + timedelta(seconds=timeout),
             "group_id": group.id,
+            "bot_type": getattr(group, "bot_type", "custom"),
+            "telegram_group_id": getattr(group, "telegram_chat_id", None),
             "attempts": 0,
             "max_attempts": max_attempts,
+            "kick_on_fail": v_cfg.get("kick_on_fail", True),
         }
         asyncio.get_event_loop().call_later(
             timeout,
@@ -318,11 +330,21 @@ class VerificationSystem:
             await query.answer("✅ Verified! Welcome to the group.")
 
             with self.app.app_context():
-                from ..models import Member, db
-                member = Member.query.filter_by(
-                    group_id=pending["group_id"],
-                    telegram_user_id=str(user_id),
-                ).first()
+                from ..models import db
+                bot_type = pending.get("bot_type", "custom")
+                if bot_type == "official":
+                    from ..models import OfficialMember
+                    tg_group_id = pending.get("telegram_group_id")
+                    member = OfficialMember.query.filter_by(
+                        telegram_group_id=tg_group_id,
+                        telegram_user_id=str(user_id),
+                    ).first() if tg_group_id else None
+                else:
+                    from ..models import Member
+                    member = Member.query.filter_by(
+                        group_id=pending["group_id"],
+                        telegram_user_id=str(user_id),
+                    ).first()
                 if member:
                     member.is_verified = True
                     db.session.commit()
@@ -332,14 +354,13 @@ class VerificationSystem:
             self.pending.pop(key, None)
 
     async def fail_verification(self, bot, chat_id, user_id, pending, group_id):
+        # kick_on_fail is stored in pending at challenge time so we avoid
+        # a hardcoded Group model query here (supports both official and custom bots).
         key = f"{chat_id}:{user_id}"
         try:
-            with self.app.app_context():
-                from ..models import Group
-                group = Group.query.get(group_id)
-                if group and group.settings.get("verification", {}).get("kick_on_fail", True):
-                    await bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
-                    await bot.unban_chat_member(chat_id=chat_id, user_id=user_id)
+            if pending.get("kick_on_fail", True):
+                await bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
+                await bot.unban_chat_member(chat_id=chat_id, user_id=user_id)
             try:
                 await bot.delete_message(chat_id=chat_id, message_id=pending["message_id"])
             except Exception:

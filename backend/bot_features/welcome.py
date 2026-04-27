@@ -28,8 +28,15 @@ class WelcomeSystem:
                 template = ai_text
 
         with self.app.app_context():
-            from ..models import Member
-            member_count = Member.query.filter_by(group_id=group.id).count()
+            if getattr(group, "bot_type", "custom") == "official":
+                from ..models import OfficialMember
+                member_count = (
+                    OfficialMember.query.filter_by(telegram_group_id=group.telegram_chat_id).count()
+                    or group.telegram_member_count
+                )
+            else:
+                from ..models import Member
+                member_count = Member.query.filter_by(group_id=group.id).count()
 
         message_text = template.format(
             first_name=new_user.first_name or "Unknown",

@@ -308,6 +308,28 @@ export const telegramGroups = {
   createCommand: (groupId, data) => api.post(`/api/telegram-groups/${groupId}/commands`, data),
   updateCommand: (groupId, cmdId, data) => api.put(`/api/telegram-groups/${groupId}/commands/${cmdId}`, data),
   deleteCommand: (groupId, cmdId) => api.delete(`/api/telegram-groups/${groupId}/commands/${cmdId}`),
+  // Knowledge base
+  listKnowledge: (groupId) => api.get(`/api/telegram-groups/${groupId}/knowledge`),
+  uploadKnowledge: (groupId, formData) => api.post(`/api/telegram-groups/${groupId}/knowledge`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  deleteKnowledge: (groupId, docId) => api.delete(`/api/telegram-groups/${groupId}/knowledge/${docId}`),
+  // Auto-responses
+  listAutoResponses: (groupId) => api.get(`/api/telegram-groups/${groupId}/auto-responses`),
+  createAutoResponse: (groupId, data) => api.post(`/api/telegram-groups/${groupId}/auto-responses`, data),
+  updateAutoResponse: (groupId, arId, data) => api.put(`/api/telegram-groups/${groupId}/auto-responses/${arId}`, data),
+  deleteAutoResponse: (groupId, arId) => api.delete(`/api/telegram-groups/${groupId}/auto-responses/${arId}`),
+  // Invite links
+  listInviteLinks: (groupId) => api.get(`/api/telegram-groups/${groupId}/invite-links`),
+  createInviteLink: (groupId, data) => api.post(`/api/telegram-groups/${groupId}/invite-links`, data),
+  deleteInviteLink: (groupId, linkId) => api.delete(`/api/telegram-groups/${groupId}/invite-links/${linkId}`),
+  // AI API key
+  getApiKey: (groupId) => api.get(`/api/telegram-groups/${groupId}/api-key`),
+  setApiKey: (groupId, data) => api.post(`/api/telegram-groups/${groupId}/api-key`, data),
+  deleteApiKey: (groupId) => api.delete(`/api/telegram-groups/${groupId}/api-key`),
+  // Warnings / mod-log
+  listWarnings: (groupId, params) => api.get(`/api/telegram-groups/${groupId}/warnings`, { params }),
+  removeWarning: (groupId, warningId) => api.delete(`/api/telegram-groups/${groupId}/warnings/${warningId}`),
+  getModLog: (groupId, params) => api.get(`/api/telegram-groups/${groupId}/mod-log`, { params }),
+  getLeaderboard: (groupId, params) => api.get(`/api/telegram-groups/${groupId}/leaderboard`, { params }),
 };
 
 export const customBots = {

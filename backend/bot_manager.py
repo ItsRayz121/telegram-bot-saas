@@ -2,7 +2,6 @@ import asyncio
 import logging
 import threading
 from datetime import datetime, timedelta
-from types import SimpleNamespace
 import re
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatPermissions
@@ -17,6 +16,7 @@ try:
 except ImportError:
     _REACTION_HANDLER_AVAILABLE = False
 
+from .bot_features.group_context import GroupContext
 from .bot_features.verification import VerificationSystem
 from .bot_features.welcome import WelcomeSystem
 from .bot_features.levels import LevelSystem
@@ -64,12 +64,7 @@ class BotInstance:
             ).first()
             if not group:
                 return None
-            return SimpleNamespace(
-                id=group.id,
-                settings=dict(group.settings or {}),
-                telegram_member_count=group.telegram_member_count or 0,
-                bot_id=group.bot_id,
-            )
+            return GroupContext.from_group(group)
 
     async def _get_or_create_group(self, chat_id, chat_title=None, bot=None):
         member_count = None
@@ -83,12 +78,7 @@ class BotInstance:
             group = DatabaseManager.get_or_create_group(self.bot_id, chat_id, chat_title, member_count)
             if not group:
                 return None
-            return SimpleNamespace(
-                id=group.id,
-                settings=dict(group.settings or {}),
-                telegram_member_count=group.telegram_member_count or 0,
-                bot_id=group.bot_id,
-            )
+            return GroupContext.from_group(group)
 
     async def handle_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if update.effective_chat.type == "private":

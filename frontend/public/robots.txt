@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /settings
+Disallow: /billing
+Disallow: /my-groups
+Disallow: /my-bots
+Disallow: /admin
+Disallow: /api/
+
+Sitemap: https://telegizer.xyz/sitemap.xml

@@ -238,6 +238,7 @@ function TelegramConnectSection({ user, onUserRefresh }) {
   const [status, setStatus] = React.useState({
     connected: user.telegram_connected || false,
     telegram_username: user.telegram_username || null,
+    telegram_first_name: user.telegram_first_name || null,
     connected_at: user.telegram_connected_at || null,
   });
   const [loading, setLoading] = React.useState(false);
@@ -293,7 +294,7 @@ function TelegramConnectSection({ user, onUserRefresh }) {
   const handleDisconnect = async () => {
     try {
       await telegramAccount.disconnect();
-      setStatus({ connected: false, telegram_username: null, connected_at: null });
+      setStatus({ connected: false, telegram_username: null, telegram_first_name: null, connected_at: null });
       setDisconnectOpen(false);
       toast.success('Telegram disconnected');
       await onUserRefresh();
@@ -307,7 +308,8 @@ function TelegramConnectSection({ user, onUserRefresh }) {
       <Box>
         <Alert severity="success" icon={<CheckCircle />} sx={{ mb: 2 }}>
           Telegram account connected
-          {status.telegram_username && <strong> @{status.telegram_username}</strong>}.
+          {status.telegram_first_name && <strong> {status.telegram_first_name}</strong>}
+          {status.telegram_username && <span style={{ color: 'inherit', opacity: 0.75 }}> (@{status.telegram_username})</span>}.
           {status.connected_at && (
             <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 1 }}>
               Since {new Date(status.connected_at).toLocaleDateString()}

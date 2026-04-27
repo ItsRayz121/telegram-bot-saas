@@ -122,12 +122,13 @@ def _build_report_data(group_id: int, since: datetime) -> dict:
 
 def _build_report_data_for_official(telegram_group_id: str, since: datetime) -> dict:
     """Like _build_report_data but uses telegram_group_id string (for official-bot groups)."""
-    from ..models import BotEvent
+    from ..models import BotEvent, OfficialMember, OfficialScheduledMessage, OfficialPoll
+    gid = str(telegram_group_id)
     try:
         events = (
             db.session.query(BotEvent.event_type, func.count(BotEvent.id))
             .filter(
-                BotEvent.telegram_group_id == str(telegram_group_id),
+                BotEvent.telegram_group_id == gid,
                 BotEvent.created_at >= since,
             )
             .group_by(BotEvent.event_type)
@@ -136,18 +137,50 @@ def _build_report_data_for_official(telegram_group_id: str, since: datetime) -> 
     except Exception:
         events = []
     counts = {e: c for e, c in events}
+
+    # Mod actions — official_bot.py logs with "mod_" prefix
+    spam_removed = counts.get("automod_action", 0) + counts.get("automod_delete", 0)
+    users_warned = counts.get("mod_warn", 0)
+    users_banned = counts.get("mod_ban", 0) + counts.get("mod_tempban", 0)
+    users_muted = counts.get("mod_mute", 0) + counts.get("mod_tempmute", 0)
+    users_kicked = counts.get("mod_kick", 0)
+    total_mod_actions = spam_removed + users_warned + users_banned + users_muted + users_kicked
+
+    try:
+        member_count = OfficialMember.query.filter_by(telegram_group_id=gid).count()
+    except Exception:
+        member_count = counts.get("member_joined", 0)
+
+    try:
+        scheduled_sent = OfficialScheduledMessage.query.filter(
+            OfficialScheduledMessage.telegram_group_id == gid,
+            OfficialScheduledMessage.is_sent == True,
+            OfficialScheduledMessage.send_at >= since,
+        ).count()
+    except Exception:
+        scheduled_sent = 0
+
+    try:
+        polls_sent = OfficialPoll.query.filter(
+            OfficialPoll.telegram_group_id == gid,
+            OfficialPoll.is_sent == True,
+            OfficialPoll.scheduled_at >= since,
+        ).count()
+    except Exception:
+        polls_sent = 0
+
     return {
         "period_start": since.strftime("%Y-%m-%d %H:%M UTC"),
-        "spam_removed": counts.get("automod_delete", 0) + counts.get("delete", 0),
-        "users_warned": counts.get("warn", 0),
-        "users_banned": counts.get("ban", 0) + counts.get("tempban", 0),
-        "users_muted": counts.get("mute", 0) + counts.get("tempmute", 0),
-        "users_kicked": counts.get("kick", 0),
-        "total_mod_actions": sum(counts.values()),
-        "scheduled_sent": 0,
-        "polls_sent": 0,
-        "member_count": counts.get("member_join", 0),
-        "invite_joins": 0,
+        "spam_removed": spam_removed,
+        "users_warned": users_warned,
+        "users_banned": users_banned,
+        "users_muted": users_muted,
+        "users_kicked": users_kicked,
+        "total_mod_actions": total_mod_actions,
+        "scheduled_sent": scheduled_sent,
+        "polls_sent": polls_sent,
+        "member_count": member_count,
+        "invite_joins": counts.get("member_joined", 0),
     }
 
 
