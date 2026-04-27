@@ -1316,7 +1316,6 @@ class OfficialBotRunner:
 
     def _run_loop(self, flask_app):
         """Polling loop with exponential-backoff auto-restart on crash."""
-        import time as _time
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
 
