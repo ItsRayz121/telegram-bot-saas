@@ -784,10 +784,33 @@ def _restart_active_bots(app):
         _scheduler_log.error("[BOT_MANAGER] _restart_active_bots error: %s", exc)
 
 
+def _watchdog_bots(app):
+    """Detect dead custom bot threads and restart them automatically."""
+    from .models import Bot
+    from .config import Config
+    from .utils.encryption import hash_token as _hash
+
+    official_hash = _hash(Config.TELEGRAM_BOT_TOKEN) if Config.TELEGRAM_BOT_TOKEN else None
+    with app.app_context():
+        active_bots = Bot.query.filter_by(is_active=True).all()
+        for bot in active_bots:
+            if official_hash and bot.bot_token_hash == official_hash:
+                continue  # managed by official_bot.py
+            if not bot_manager.is_running(bot.id):
+                _scheduler_log.warning(
+                    "[WATCHDOG] Bot %s (@%s) thread dead — restarting", bot.id, bot.bot_username
+                )
+                try:
+                    bot_manager.start_bot(bot.id, bot.get_token(), app)
+                except Exception as exc:
+                    _scheduler_log.error("[WATCHDOG] Failed to restart bot %s: %s", bot.id, exc)
+
+
 def _scheduler_loop(app):
     import time
     _last_expiry_check = [0]
     _last_heartbeat = [0]
+    _last_watchdog = [0]
     time.sleep(15)  # Wait for bots to fully start
     while True:
         try:
@@ -806,6 +829,13 @@ def _scheduler_loop(app):
                         bot_manager.heartbeat(app)
                     except Exception as hb_exc:
                         _scheduler_log.error("Bot heartbeat error: %s", hb_exc)
+                # Bot watchdog: restart dead threads every 2 minutes
+                if now_ts - _last_watchdog[0] > 120:
+                    _last_watchdog[0] = now_ts
+                    try:
+                        _watchdog_bots(app)
+                    except Exception as wd_exc:
+                        _scheduler_log.error("Bot watchdog error: %s", wd_exc)
             try:
                 run_digest_scheduler(app)
             except Exception as exc:

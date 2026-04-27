@@ -1306,29 +1306,46 @@ class BotInstance:
             await self._get_or_create_group(chat.id, chat.title, context.bot)
 
     def _run_bot(self):
+        import time
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
-        # Retry loop so a Conflict error (two instances) recovers automatically
-        max_retries = 5
+        max_retries = 10
         for attempt in range(max_retries):
             if self._stop_event.is_set():
                 break
             try:
                 self.loop.run_until_complete(self._start_polling())
-                break  # clean exit
+                break  # clean / stop-event exit
             except Exception as e:
-                from telegram.error import Conflict
-                if isinstance(e, Conflict):
+                try:
+                    from telegram.error import Conflict, Unauthorized, InvalidToken
+                    _invalid = (Unauthorized, InvalidToken)
+                except ImportError:
+                    _invalid = ()
+                    Conflict = type(None)
+
+                if _invalid and isinstance(e, _invalid):
+                    # Token is wrong — no point retrying, watchdog will surface this
+                    logger.error(
+                        f"Bot {self.bot_id}: invalid/unauthorized token — stopping permanently: {e}"
+                    )
+                    break
+                elif isinstance(e, Conflict):
                     wait = 15 * (attempt + 1)
                     logger.warning(
-                        f"Bot {self.bot_id}: Conflict error (another instance is polling). "
+                        f"Bot {self.bot_id}: Conflict (another instance polling). "
                         f"Retrying in {wait}s (attempt {attempt + 1}/{max_retries})"
                     )
-                    import time
                     time.sleep(wait)
                 else:
-                    logger.error(f"Bot {self.bot_id}: polling crashed: {e}", exc_info=True)
-                    break
+                    # Transient network / API error — retry with capped backoff
+                    wait = min(30 * (attempt + 1), 300)
+                    logger.error(
+                        f"Bot {self.bot_id}: polling crashed ({type(e).__name__}): {e}. "
+                        f"Retrying in {wait}s (attempt {attempt + 1}/{max_retries})",
+                        exc_info=True,
+                    )
+                    time.sleep(wait)
 
     async def _start_polling(self):
         # Consume the token, then immediately clear it from memory so it is not
@@ -1491,7 +1508,10 @@ class BotManager:
             from .models import Bot
             bots = Bot.query.filter_by(is_active=True).all()
             for bot in bots:
-                self.start_bot(bot.id, bot.bot_token, app_context)
+                try:
+                    self.start_bot(bot.id, bot.get_token(), app_context)
+                except Exception as e:
+                    logger.error(f"start_all: failed to start bot {bot.id}: {e}")
         with self._lock:
             count = len(self.active_bots)
         logger.info(f"Started {count} bots")

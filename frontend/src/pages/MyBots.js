@@ -18,11 +18,14 @@ const BOT_USERNAME = process.env.REACT_APP_BOT_USERNAME || 'telegizer_bot';
 
 function StatusChip({ status }) {
   const map = {
-    active:   { label: 'Active',   color: 'success' },
-    inactive: { label: 'Idle',     color: 'warning' },
-    error:    { label: 'Error',    color: 'error'   },
-    stopped:  { label: 'Stopped',  color: 'default' },
-    unknown:  { label: 'Unknown',  color: 'default' },
+    active:     { label: 'Active',      color: 'success' },
+    inactive:   { label: 'Inactive',    color: 'default' },
+    warning:    { label: 'Stale',       color: 'warning' },
+    error:      { label: 'Error',       color: 'error'   },
+    stopped:    { label: 'Stopped',     color: 'default' },
+    unknown:    { label: 'Unknown',     color: 'default' },
+    recovering: { label: 'Restarting', color: 'warning' },
+    starting:   { label: 'Starting',   color: 'info'    },
   };
   const { label, color } = map[status] || { label: status || 'Unknown', color: 'default' };
   return <Chip label={label} color={color} size="small" />;
@@ -336,9 +339,19 @@ export default function MyBots() {
                         </Grid>
                       </Grid>
 
+                      {healthStatus === 'recovering' && (
+                        <Alert severity="warning" sx={{ mb: 1.5, py: 0.5 }}>
+                          Thread crashed — auto-restarting. Refresh in 30 seconds.
+                        </Alert>
+                      )}
+                      {healthStatus === 'warning' && (
+                        <Alert severity="warning" sx={{ mb: 1.5, py: 0.5 }}>
+                          Heartbeat stale — bot may have restarted. Will recover automatically.
+                        </Alert>
+                      )}
                       {healthStatus === 'error' && (
                         <Alert severity="error" sx={{ mb: 1.5, py: 0.5 }}>
-                          Bot is unreachable. Check your token is still valid.
+                          Bot is unreachable. Check your token is still valid or reconnect.
                         </Alert>
                       )}
 

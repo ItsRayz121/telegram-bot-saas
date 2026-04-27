@@ -22,19 +22,23 @@ import { bots, auth, billing, referrals as referralsApi, notifications as notifi
 const MAX_BOTS = { free: 1, pro: 5, enterprise: 50 };
 
 const HEALTH_COLORS = {
-  active: 'success',
-  warning: 'warning',
-  error: 'error',
-  stopped: 'default',
-  unknown: 'default',
+  active:     'success',
+  warning:    'warning',
+  error:      'error',
+  stopped:    'default',
+  unknown:    'default',
+  recovering: 'warning',
+  starting:   'info',
 };
 
 const HEALTH_LABELS = {
-  active: 'Active',
-  warning: 'Idle',
-  error: 'Error',
-  stopped: 'Stopped',
-  unknown: 'Unknown',
+  active:     'Active',
+  warning:    'Stale',
+  error:      'Error',
+  stopped:    'Stopped',
+  unknown:    'Unknown',
+  recovering: 'Restarting',
+  starting:   'Starting',
 };
 
 function safeParseUser() {

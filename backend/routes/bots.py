@@ -13,6 +13,35 @@ def _get_current_user():
     return User.query.get(int(user_id))
 
 
+def _enrich_bot(bot) -> dict:
+    """Add thread_alive and recompute health_status using live BotManager state."""
+    from ..bot_manager import bot_manager
+    from datetime import datetime, timedelta
+
+    d = bot.to_dict()
+    thread_alive = bot_manager.is_running(bot.id)
+    d["thread_alive"] = thread_alive
+
+    # Compute richer status so frontend doesn't show generic "Idle"
+    if not bot.is_active:
+        d["health_status"] = "stopped"
+    elif not thread_alive:
+        # Thread is dead but DB says active — recovering/restarting
+        d["health_status"] = "recovering"
+    elif bot.last_active is None:
+        d["health_status"] = "starting"
+    else:
+        age = datetime.utcnow() - bot.last_active
+        if age < timedelta(minutes=10):
+            d["health_status"] = "active"
+        elif age < timedelta(hours=24):
+            d["health_status"] = "warning"
+        else:
+            d["health_status"] = "error"
+
+    return d
+
+
 @bots_bp.route("", methods=["GET"])
 @jwt_required()
 def get_bots():
@@ -21,7 +50,7 @@ def get_bots():
         return jsonify({"error": "User not found"}), 404
 
     bots = Bot.query.filter_by(user_id=user.id).all()
-    return jsonify({"bots": [b.to_dict() for b in bots]}), 200
+    return jsonify({"bots": [_enrich_bot(b) for b in bots]}), 200
 
 
 @bots_bp.route("", methods=["POST"])
@@ -131,7 +160,7 @@ def get_bot(bot_id):
     if not bot:
         return jsonify({"error": "Bot not found"}), 404
 
-    return jsonify({"bot": bot.to_dict()}), 200
+    return jsonify({"bot": _enrich_bot(bot)}), 200
 
 
 @bots_bp.route("/<int:bot_id>/groups", methods=["GET"])
