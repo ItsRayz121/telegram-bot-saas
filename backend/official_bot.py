@@ -41,8 +41,35 @@ _log = logging.getLogger(__name__)
 # Phase 3 item 15: move to Redis/DB for persistence across restarts.
 _pending_verifications: dict = {}
 
-# Simple link / URL detection for automod
+# ─── AutoMod patterns ────────────────────────────────────────────────────────
 _URL_RE = re.compile(r"https?://[^\s]+|t\.me/[^\s]+|www\.[^\s]+", re.IGNORECASE)
+_TELEGRAM_LINK_RE = re.compile(r"(t\.me/|telegram\.me/|@[a-zA-Z0-9_]{5,})", re.IGNORECASE)
+_EMAIL_RE = re.compile(r"\b[\w.+-]+@[\w-]+\.\w{2,}\b")
+_EMOJI_RE = re.compile(
+    "[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF"
+    "\U0001F680-\U0001F6FF\U0001F1E0-\U0001F1FF"
+    "\U00002702-\U000027B0\U000024C2-\U0001F251]+",
+    flags=re.UNICODE,
+)
+_LANG_RANGES = {
+    "cyrillic": re.compile(r"[Ѐ-ӿ]"),
+    "chinese":  re.compile(r"[一-鿿㐀-䶿]"),
+    "korean":   re.compile(r"[가-힯ᄀ-ᇿ]"),
+    "arabic":   re.compile(r"[؀-ۿ]"),
+    "hindi":    re.compile(r"[ऀ-ॿ]"),
+    "japanese": re.compile(r"[぀-ヿㇰ-ㇿ]"),
+}
+# Spam rate tracker — {"{chat_id}:{user_id}": [datetime, ...]}
+_spam_tracker: dict = {}
+
+# Default word list for word-method verification
+_DEFAULT_VERIFY_WORDS = [
+    ("python", "What programming language is named after a snake?"),
+    ("blue",   "What color is the sky on a clear day?"),
+    ("five",   "How many fingers are on one hand? (write the word)"),
+    ("moon",   "What orbits the Earth at night and reflects sunlight?"),
+    ("water",  "What liquid do humans drink to stay alive?"),
+]
 
 
 # ─── Tiny DB helpers ──────────────────────────────────────────────────────────
@@ -1301,6 +1328,33 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception as exc:
                 _log.debug("Custom command reply failed: %s", exc)
 
+    # Word-method verification: check if message is a verification answer
+    if not text.startswith("/"):
+        sender_id = message.from_user.id if message.from_user else None
+        if sender_id:
+            vkey = f"{group_id}:{sender_id}"
+            vpending = _pending_verifications.get(vkey)
+            if vpending and vpending.get("method") == "word":
+                expected = vpending.get("answer", "")
+                if text.strip().lower() == expected:
+                    try:
+                        await message.delete()
+                    except Exception:
+                        pass
+                    await _complete_verification(context.bot, None, int(group_id), sender_id, vpending, flask_app, word_mode=True)
+                    return
+                else:
+                    vpending["attempts"] = vpending.get("attempts", 0) + 1
+                    max_att = vpending.get("max_attempts", 3)
+                    if vpending["attempts"] >= max_att:
+                        await _fail_verification(context.bot, int(group_id), sender_id, vpending, flask_app)
+                    # Wrong answer — silently delete and wait
+                    try:
+                        await message.delete()
+                    except Exception:
+                        pass
+                    return
+
     # AutoMod — runs on every non-command group message
     if not text.startswith("/"):
         am_cfg = {}
@@ -1443,6 +1497,24 @@ async def _start_verification(bot, chat, user, v_cfg, flask_app, group_id):
                 reply_markup=keyboard,
                 parse_mode=ParseMode.MARKDOWN,
             )
+        elif method == "word":
+            word_list = v_cfg.get("word_list") or _DEFAULT_VERIFY_WORDS
+            if word_list and isinstance(word_list[0], (list, tuple)):
+                pair = random.choice(word_list)
+                answer = str(pair[0]).lower().strip()
+                question = str(pair[1])
+            else:
+                pair = random.choice(_DEFAULT_VERIFY_WORDS)
+                answer, question = pair[0], pair[1]
+            msg = await bot.send_message(
+                chat_id=chat_id,
+                text=(
+                    f"🔤 Welcome {user.first_name}!\n\n"
+                    f"Type the answer to verify: *{question}*\n"
+                    f"You have {timeout} seconds."
+                ),
+                parse_mode=ParseMode.MARKDOWN,
+            )
         else:
             # Default: button
             keyboard = InlineKeyboardMarkup([[
@@ -1544,7 +1616,7 @@ async def _handle_verification_callback(update: Update, context: ContextTypes.DE
             await query.answer(f"❌ Wrong! {remaining} attempt(s) left.")
 
 
-async def _complete_verification(bot, query, chat_id, user_id, pending, flask_app):
+async def _complete_verification(bot, query, chat_id, user_id, pending, flask_app, word_mode=False):
     key = f"{chat_id}:{user_id}"
     group_id = str(chat_id)
     try:
@@ -1563,11 +1635,17 @@ async def _complete_verification(bot, query, chat_id, user_id, pending, flask_ap
                 await bot.delete_message(chat_id=chat_id, message_id=pending["msg_id"])
             except Exception:
                 pass
-        await query.answer("✅ Verified! Welcome!")
+        if not word_mode and query is not None:
+            await query.answer("✅ Verified! Welcome!")
+        first_name = (
+            query.from_user.first_name
+            if (not word_mode and query is not None and query.from_user)
+            else f"User {user_id}"
+        )
         try:
             notif = await bot.send_message(
                 chat_id=chat_id,
-                text=f"✅ {query.from_user.first_name} verified and joined!",
+                text=f"✅ {first_name} verified and joined!",
             )
             asyncio.get_event_loop().call_later(
                 8, lambda: asyncio.ensure_future(_safe_delete(bot, chat_id, notif.message_id))
@@ -1623,79 +1701,39 @@ async def _safe_delete(bot, chat_id, message_id):
 
 # ─── AutoMod helper ───────────────────────────────────────────────────────────
 
-async def _automod_check(bot, message, am_cfg: dict, group_id: str, flask_app):
-    """Apply automod rules to a group message. Deletes and warns/mutes as configured."""
-    text = (message.text or message.caption or "").strip()
+async def _automod_execute(bot, message, group_id: str, flask_app, rule: str, action: str,
+                           mute_minutes: int = 5, notify_seconds: int = 10):
+    """Delete the offending message and apply the configured action."""
     chat_id = message.chat_id
-    user_id = message.from_user.id if message.from_user else None
-    if not user_id:
-        return
+    user_id = message.from_user.id
+    first_name = (message.from_user.first_name or "User") if message.from_user else "User"
+    rule_label = rule.replace("_", " ")
 
-    action_rule = None  # first matched rule key
-
-    # Link filter
-    link_cfg = am_cfg.get("link_filter", {})
-    if link_cfg.get("enabled") and text and _URL_RE.search(text):
-        action_rule = "link_filter"
-
-    # Caps filter
-    if not action_rule:
-        caps_cfg = am_cfg.get("caps_filter", {})
-        threshold = caps_cfg.get("threshold", 70)
-        if caps_cfg.get("enabled") and text:
-            letters = [c for c in text if c.isalpha()]
-            if len(letters) > 5 and sum(1 for c in letters if c.isupper()) / len(letters) * 100 > threshold:
-                action_rule = "caps_filter"
-
-    if not action_rule:
-        return
-
-    rule_cfg = am_cfg.get(action_rule, {})
-    action = rule_cfg.get("action", "delete")
-
-    _log.info(
-        "[OfficialBot] AutoMod: group=%s user=%s rule=%s action=%s",
-        group_id, user_id, action_rule, action,
-    )
-
-    # Always delete the offending message first
     try:
         await bot.delete_message(chat_id=chat_id, message_id=message.message_id)
     except Exception:
         pass
 
-    first_name = message.from_user.first_name or "User"
-    rule_label = action_rule.replace("_", " ")
-
-    if action in ("warn", "delete"):
+    async def _timed_notify(text):
         try:
-            warn_msg = await bot.send_message(
-                chat_id=chat_id,
-                text=f"⚠️ {first_name}, your message was removed: {rule_label}.",
-            )
+            nm = await bot.send_message(chat_id=chat_id, text=text)
             asyncio.get_event_loop().call_later(
-                10, lambda: asyncio.ensure_future(_safe_delete(bot, chat_id, warn_msg.message_id))
+                notify_seconds,
+                lambda: asyncio.ensure_future(_safe_delete(bot, chat_id, nm.message_id)),
             )
         except Exception:
             pass
+
+    if action in ("delete", "warn"):
+        await _timed_notify(f"⚠️ {first_name}, your message was removed: {rule_label}.")
     elif action == "mute":
         try:
             await bot.restrict_chat_member(
-                chat_id=chat_id,
-                user_id=user_id,
+                chat_id=chat_id, user_id=user_id,
                 permissions=ChatPermissions(can_send_messages=False),
-                until_date=datetime.utcnow() + timedelta(minutes=5),
+                until_date=datetime.utcnow() + timedelta(minutes=mute_minutes),
             )
-            try:
-                mute_msg = await bot.send_message(
-                    chat_id=chat_id,
-                    text=f"🔇 {first_name} muted 5 min: {rule_label}.",
-                )
-                asyncio.get_event_loop().call_later(
-                    10, lambda: asyncio.ensure_future(_safe_delete(bot, chat_id, mute_msg.message_id))
-                )
-            except Exception:
-                pass
+            await _timed_notify(f"🔇 {first_name} muted {mute_minutes}min: {rule_label}.")
         except Exception as exc:
             _log.warning("[OfficialBot] AutoMod mute failed: %s", exc)
     elif action == "ban":
@@ -1703,10 +1741,531 @@ async def _automod_check(bot, message, am_cfg: dict, group_id: str, flask_app):
             await bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
         except Exception as exc:
             _log.warning("[OfficialBot] AutoMod ban failed: %s", exc)
+    elif action == "kick":
+        try:
+            await bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
+            await bot.unban_chat_member(chat_id=chat_id, user_id=user_id)
+        except Exception as exc:
+            _log.warning("[OfficialBot] AutoMod kick failed: %s", exc)
 
+    _log.info("[OfficialBot] AutoMod: group=%s user=%s rule=%s action=%s", group_id, user_id, rule, action)
     _log_event(flask_app, group_id, "automod_action",
-               f"User {user_id}: {action_rule} → {action}",
-               {"telegram_user_id": str(user_id), "rule": action_rule, "action": action})
+               f"User {user_id}: {rule} → {action}",
+               {"telegram_user_id": str(user_id), "rule": rule, "action": action})
+
+
+async def _automod_check(bot, message, am_cfg: dict, group_id: str, flask_app):
+    """Apply all configured automod rules to a group message."""
+    text = (message.text or message.caption or "").strip()
+    chat_id = message.chat_id
+    user_id = message.from_user.id if message.from_user else None
+    if not user_id:
+        return
+
+    # Skip admins/creator
+    try:
+        member = await bot.get_chat_member(chat_id, user_id)
+        if member.status in ("creator", "administrator"):
+            return
+    except Exception:
+        pass
+
+    # ── 1. Bad words ─────────────────────────────────────────────────────────
+    bw_cfg = am_cfg.get("bad_words", {})
+    if bw_cfg.get("enabled") and text:
+        words = bw_cfg.get("words", [])
+        text_lower = text.lower()
+        for w in words:
+            if w.lower() in text_lower:
+                await _automod_execute(bot, message, group_id, flask_app,
+                                       "bad_words", bw_cfg.get("action", "delete"))
+                return
+
+    # ── 2. Spam detection ────────────────────────────────────────────────────
+    spam_cfg = am_cfg.get("spam", {})
+    if spam_cfg.get("enabled"):
+        skey = f"{chat_id}:{user_id}"
+        now = datetime.utcnow()
+        window = spam_cfg.get("time_window_seconds", 10)
+        max_msgs = spam_cfg.get("max_messages", 5)
+        _spam_tracker.setdefault(skey, [])
+        _spam_tracker[skey] = [t for t in _spam_tracker[skey] if (now - t).total_seconds() < window]
+        _spam_tracker[skey].append(now)
+        if len(_spam_tracker[skey]) > max_msgs:
+            _spam_tracker[skey] = []
+            await _automod_execute(bot, message, group_id, flask_app,
+                                   "spam", spam_cfg.get("action", "mute"),
+                                   mute_minutes=spam_cfg.get("mute_duration_minutes", 10))
+            return
+
+    # ── 3. External links ────────────────────────────────────────────────────
+    ext_cfg = am_cfg.get("external_links", {})
+    if ext_cfg.get("enabled") and text and _URL_RE.search(text):
+        whitelist = ext_cfg.get("whitelist", [])
+        urls = _URL_RE.findall(text)
+        blocked = any(not any(a in u for a in whitelist) for u in urls)
+        if blocked:
+            await _automod_execute(bot, message, group_id, flask_app,
+                                   "external_links", ext_cfg.get("action", "delete"))
+            return
+
+    # ── 4. Telegram links ────────────────────────────────────────────────────
+    tl_cfg = am_cfg.get("telegram_links", {})
+    if tl_cfg.get("enabled") and text and _TELEGRAM_LINK_RE.search(text):
+        await _automod_execute(bot, message, group_id, flask_app,
+                               "telegram_links", tl_cfg.get("action", "delete"))
+        return
+
+    # ── 5. Caps lock ─────────────────────────────────────────────────────────
+    caps_cfg = am_cfg.get("caps_lock", {})
+    if caps_cfg.get("enabled") and text:
+        min_len = caps_cfg.get("min_length", 10)
+        threshold = caps_cfg.get("threshold_percent", caps_cfg.get("threshold", 70))
+        letters = [c for c in text if c.isalpha()]
+        if len(letters) >= min_len:
+            ratio = sum(1 for c in letters if c.isupper()) / len(letters) * 100
+            if ratio >= threshold:
+                await _automod_execute(bot, message, group_id, flask_app,
+                                       "caps_lock", caps_cfg.get("action", "delete"))
+                return
+
+    # ── 6. Excessive emojis ──────────────────────────────────────────────────
+    em_cfg = am_cfg.get("excessive_emojis", {})
+    if em_cfg.get("enabled") and text:
+        count = len(_EMOJI_RE.findall(text))
+        if count > em_cfg.get("max_emojis", 10):
+            await _automod_execute(bot, message, group_id, flask_app,
+                                   "excessive_emojis", em_cfg.get("action", "delete"))
+            return
+
+    # ── 7. Forwarded messages ────────────────────────────────────────────────
+    fwd_cfg = am_cfg.get("forwarded_messages", {})
+    if fwd_cfg.get("enabled") and (message.forward_date or message.forward_from or message.forward_from_chat):
+        await _automod_execute(bot, message, group_id, flask_app,
+                               "forwarded_messages", fwd_cfg.get("action", "delete"))
+        return
+
+    # ── 8. Email detection ───────────────────────────────────────────────────
+    mail_cfg = am_cfg.get("email_detection", {})
+    if mail_cfg.get("enabled") and text and _EMAIL_RE.search(text):
+        await _automod_execute(bot, message, group_id, flask_app,
+                               "email_detection", mail_cfg.get("action", "delete"))
+        return
+
+    # ── 9. Language filter ───────────────────────────────────────────────────
+    lang_cfg = am_cfg.get("language_filter", {})
+    if lang_cfg.get("enabled") and text:
+        for lang in lang_cfg.get("languages", []):
+            pattern = _LANG_RANGES.get(lang)
+            if pattern and pattern.search(text):
+                await _automod_execute(bot, message, group_id, flask_app,
+                                       "language_filter", lang_cfg.get("action", "delete"))
+                return
+
+    # ── 10. Bot mentions ─────────────────────────────────────────────────────
+    bm_cfg = am_cfg.get("bot_mentions", {})
+    if bm_cfg.get("enabled"):
+        entities = message.entities or []
+        for entity in entities:
+            if str(entity.type) in ("MessageEntityType.MENTION", "mention"):
+                mention = text[entity.offset: entity.offset + entity.length].lstrip("@")
+                if mention.lower().endswith("bot"):
+                    await _automod_execute(bot, message, group_id, flask_app,
+                                           "bot_mentions", bm_cfg.get("action", "delete"))
+                    return
+
+    # ── 11. Spoiler content ──────────────────────────────────────────────────
+    sp_cfg = am_cfg.get("spoiler_content", {})
+    if sp_cfg.get("enabled"):
+        entities = message.entities or message.caption_entities or []
+        for entity in entities:
+            if str(entity.type) in ("MessageEntityType.SPOILER", "spoiler"):
+                await _automod_execute(bot, message, group_id, flask_app,
+                                       "spoiler_content", sp_cfg.get("action", "delete"))
+                return
+
+    # ── Media-type checks ────────────────────────────────────────────────────
+    _media_checks = [
+        ("contact_sharing",  message.contact is not None),
+        ("location_sharing", message.location is not None),
+        ("voice_notes",      message.voice is not None),
+        ("video_notes",      message.video_note is not None),
+        ("file_attachments", message.document is not None),
+        ("photos",           bool(message.photo)),
+        ("videos",           message.video is not None),
+        ("stickers",         message.sticker is not None),
+    ]
+    for rule_key, present in _media_checks:
+        mc = am_cfg.get(rule_key, {})
+        if mc.get("enabled") and present:
+            await _automod_execute(bot, message, group_id, flask_app,
+                                   rule_key, mc.get("action", "delete"))
+            return
+
+
+# ─── Moderation commands ─────────────────────────────────────────────────────
+
+def _is_group_chat(update: Update) -> bool:
+    return update.effective_chat and update.effective_chat.type in (ChatType.GROUP, ChatType.SUPERGROUP)
+
+
+async def _resolve_target(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Return (user_id, username, display_name) for the moderation target.
+    Priority: replied-to message > first @mention arg.
+    Returns (None, None, None) if no target found.
+    """
+    msg = update.message
+    if msg and msg.reply_to_message and msg.reply_to_message.from_user:
+        u = msg.reply_to_message.from_user
+        return u.id, u.username or "", u.first_name or str(u.id)
+
+    for entity in (msg.entities or []):
+        if str(entity.type) in ("MessageEntityType.MENTION", "mention"):
+            text = msg.text or ""
+            mention = text[entity.offset: entity.offset + entity.length].lstrip("@")
+            try:
+                chat = await context.bot.get_chat(f"@{mention}")
+                return chat.id, mention, chat.first_name or mention
+            except Exception:
+                pass
+        elif str(entity.type) in ("MessageEntityType.TEXT_MENTION", "text_mention"):
+            u = entity.user
+            if u:
+                return u.id, u.username or "", u.first_name or str(u.id)
+
+    return None, None, None
+
+
+async def _require_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """Return True if the command sender is an admin or creator."""
+    try:
+        me = await context.bot.get_chat_member(
+            update.effective_chat.id, update.effective_user.id
+        )
+        return me.status in ("creator", "administrator")
+    except Exception:
+        return False
+
+
+def _parse_duration(args: list, default_minutes: int = 60) -> int:
+    """Parse an optional duration like '30m', '2h', '1d' from command args. Returns minutes."""
+    for arg in args:
+        arg = arg.lower()
+        try:
+            if arg.endswith("d"):
+                return int(arg[:-1]) * 1440
+            elif arg.endswith("h"):
+                return int(arg[:-1]) * 60
+            elif arg.endswith("m"):
+                return int(arg[:-1])
+            elif arg.isdigit():
+                return int(arg)
+        except ValueError:
+            pass
+    return default_minutes
+
+
+def _parse_reason(args: list) -> str:
+    reason_parts = [a for a in args if not any(a.lower().endswith(s) for s in ("m", "h", "d")) and not a.isdigit() and not a.startswith("@")]
+    return " ".join(reason_parts) if reason_parts else "No reason given"
+
+
+async def cmd_warn(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_group_chat(update):
+        return
+    if not await _require_admin(update, context):
+        await update.message.reply_text("⛔ Admins only.")
+        return
+
+    flask_app = context.bot_data.get("flask_app")
+    group_id = str(update.effective_chat.id)
+    target_id, target_username, target_name = await _resolve_target(update, context)
+    if not target_id:
+        await update.message.reply_text("❌ Reply to a user or mention them to warn.")
+        return
+
+    args = context.args or []
+    reason = _parse_reason(args)
+
+    # Count existing warnings from BotEvent
+    warn_count = 1
+    if flask_app:
+        try:
+            with flask_app.app_context():
+                from .models import BotEvent
+                warn_count = BotEvent.query.filter_by(
+                    telegram_group_id=group_id,
+                    event_type="mod_warning",
+                ).filter(
+                    BotEvent.metadata_["target_user_id"].astext == str(target_id)
+                ).count() + 1
+        except Exception:
+            pass
+
+    _log_event(flask_app, group_id, "mod_warning",
+               f"{target_name} warned by {update.effective_user.first_name}: {reason}",
+               {"target_user_id": str(target_id), "target_username": target_username,
+                "moderator_id": str(update.effective_user.id), "reason": reason,
+                "warn_number": warn_count})
+
+    warn_msg = await update.message.reply_text(
+        f"⚠️ {target_name} has been warned.\n"
+        f"Reason: {reason}\n"
+        f"Warning #{warn_count}"
+    )
+    # Auto-delete warn notice after 30s
+    asyncio.get_event_loop().call_later(
+        30, lambda: asyncio.ensure_future(_safe_delete(context.bot, update.effective_chat.id, warn_msg.message_id))
+    )
+
+
+async def cmd_ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_group_chat(update):
+        return
+    if not await _require_admin(update, context):
+        await update.message.reply_text("⛔ Admins only.")
+        return
+
+    flask_app = context.bot_data.get("flask_app")
+    group_id = str(update.effective_chat.id)
+    chat_id = update.effective_chat.id
+    target_id, target_username, target_name = await _resolve_target(update, context)
+    if not target_id:
+        await update.message.reply_text("❌ Reply to a user or mention them to ban.")
+        return
+
+    args = context.args or []
+    reason = _parse_reason(args)
+
+    try:
+        await context.bot.ban_chat_member(chat_id=chat_id, user_id=target_id)
+        _log_event(flask_app, group_id, "mod_ban",
+                   f"{target_name} banned by {update.effective_user.first_name}: {reason}",
+                   {"target_user_id": str(target_id), "moderator_id": str(update.effective_user.id), "reason": reason})
+        ban_msg = await update.message.reply_text(f"🚫 {target_name} has been banned.\nReason: {reason}")
+        asyncio.get_event_loop().call_later(
+            15, lambda: asyncio.ensure_future(_safe_delete(context.bot, chat_id, ban_msg.message_id))
+        )
+    except Exception as exc:
+        await update.message.reply_text(f"❌ Failed to ban: {exc}")
+
+
+async def cmd_kick(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_group_chat(update):
+        return
+    if not await _require_admin(update, context):
+        await update.message.reply_text("⛔ Admins only.")
+        return
+
+    flask_app = context.bot_data.get("flask_app")
+    group_id = str(update.effective_chat.id)
+    chat_id = update.effective_chat.id
+    target_id, target_username, target_name = await _resolve_target(update, context)
+    if not target_id:
+        await update.message.reply_text("❌ Reply to a user or mention them to kick.")
+        return
+
+    args = context.args or []
+    reason = _parse_reason(args)
+
+    try:
+        await context.bot.ban_chat_member(chat_id=chat_id, user_id=target_id)
+        await context.bot.unban_chat_member(chat_id=chat_id, user_id=target_id)
+        _log_event(flask_app, group_id, "mod_kick",
+                   f"{target_name} kicked by {update.effective_user.first_name}: {reason}",
+                   {"target_user_id": str(target_id), "moderator_id": str(update.effective_user.id), "reason": reason})
+        kick_msg = await update.message.reply_text(f"👢 {target_name} has been kicked.\nReason: {reason}")
+        asyncio.get_event_loop().call_later(
+            15, lambda: asyncio.ensure_future(_safe_delete(context.bot, chat_id, kick_msg.message_id))
+        )
+    except Exception as exc:
+        await update.message.reply_text(f"❌ Failed to kick: {exc}")
+
+
+async def cmd_mute(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_group_chat(update):
+        return
+    if not await _require_admin(update, context):
+        await update.message.reply_text("⛔ Admins only.")
+        return
+
+    flask_app = context.bot_data.get("flask_app")
+    group_id = str(update.effective_chat.id)
+    chat_id = update.effective_chat.id
+    target_id, target_username, target_name = await _resolve_target(update, context)
+    if not target_id:
+        await update.message.reply_text("❌ Reply to a user or mention them to mute.")
+        return
+
+    args = context.args or []
+    duration_min = _parse_duration(args, default_minutes=60)
+    reason = _parse_reason(args)
+    until = datetime.utcnow() + timedelta(minutes=duration_min)
+
+    try:
+        await context.bot.restrict_chat_member(
+            chat_id=chat_id, user_id=target_id,
+            permissions=ChatPermissions(can_send_messages=False),
+            until_date=until,
+        )
+        _log_event(flask_app, group_id, "mod_mute",
+                   f"{target_name} muted {duration_min}min by {update.effective_user.first_name}: {reason}",
+                   {"target_user_id": str(target_id), "moderator_id": str(update.effective_user.id),
+                    "duration_minutes": duration_min, "reason": reason})
+        mute_msg = await update.message.reply_text(
+            f"🔇 {target_name} muted for {duration_min} min.\nReason: {reason}"
+        )
+        asyncio.get_event_loop().call_later(
+            15, lambda: asyncio.ensure_future(_safe_delete(context.bot, chat_id, mute_msg.message_id))
+        )
+    except Exception as exc:
+        await update.message.reply_text(f"❌ Failed to mute: {exc}")
+
+
+async def cmd_unmute(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_group_chat(update):
+        return
+    if not await _require_admin(update, context):
+        await update.message.reply_text("⛔ Admins only.")
+        return
+
+    flask_app = context.bot_data.get("flask_app")
+    group_id = str(update.effective_chat.id)
+    chat_id = update.effective_chat.id
+    target_id, target_username, target_name = await _resolve_target(update, context)
+    if not target_id:
+        await update.message.reply_text("❌ Reply to a user or mention them to unmute.")
+        return
+
+    try:
+        await context.bot.restrict_chat_member(
+            chat_id=chat_id, user_id=target_id,
+            permissions=ChatPermissions(
+                can_send_messages=True,
+                can_send_media_messages=True,
+                can_send_other_messages=True,
+                can_add_web_page_previews=True,
+            ),
+        )
+        _log_event(flask_app, group_id, "mod_unmute",
+                   f"{target_name} unmuted by {update.effective_user.first_name}",
+                   {"target_user_id": str(target_id), "moderator_id": str(update.effective_user.id)})
+        await update.message.reply_text(f"🔊 {target_name} has been unmuted.")
+    except Exception as exc:
+        await update.message.reply_text(f"❌ Failed to unmute: {exc}")
+
+
+async def cmd_tempban(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_group_chat(update):
+        return
+    if not await _require_admin(update, context):
+        await update.message.reply_text("⛔ Admins only.")
+        return
+
+    flask_app = context.bot_data.get("flask_app")
+    group_id = str(update.effective_chat.id)
+    chat_id = update.effective_chat.id
+    target_id, target_username, target_name = await _resolve_target(update, context)
+    if not target_id:
+        await update.message.reply_text("❌ Reply to a user or mention them to temp-ban.")
+        return
+
+    args = context.args or []
+    duration_min = _parse_duration(args, default_minutes=1440)
+    reason = _parse_reason(args)
+    until = datetime.utcnow() + timedelta(minutes=duration_min)
+
+    try:
+        await context.bot.ban_chat_member(chat_id=chat_id, user_id=target_id, until_date=until)
+        hours = duration_min // 60
+        label = f"{hours}h" if hours else f"{duration_min}m"
+        _log_event(flask_app, group_id, "mod_tempban",
+                   f"{target_name} temp-banned {label} by {update.effective_user.first_name}: {reason}",
+                   {"target_user_id": str(target_id), "moderator_id": str(update.effective_user.id),
+                    "duration_minutes": duration_min, "reason": reason})
+        tb_msg = await update.message.reply_text(
+            f"⛔ {target_name} temp-banned for {label}.\nReason: {reason}"
+        )
+        asyncio.get_event_loop().call_later(
+            15, lambda: asyncio.ensure_future(_safe_delete(context.bot, chat_id, tb_msg.message_id))
+        )
+    except Exception as exc:
+        await update.message.reply_text(f"❌ Failed to temp-ban: {exc}")
+
+
+async def cmd_purge(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Delete the last N messages in the group (max 100). Usage: /purge [N]"""
+    if not _is_group_chat(update):
+        return
+    if not await _require_admin(update, context):
+        await update.message.reply_text("⛔ Admins only.")
+        return
+
+    flask_app = context.bot_data.get("flask_app")
+    group_id = str(update.effective_chat.id)
+    chat_id = update.effective_chat.id
+    args = context.args or []
+    try:
+        n = min(int(args[0]), 100) if args else 10
+    except ValueError:
+        n = 10
+
+    # Delete the /purge command message itself
+    trigger_msg_id = update.message.message_id
+    try:
+        await context.bot.delete_message(chat_id=chat_id, message_id=trigger_msg_id)
+    except Exception:
+        pass
+
+    # Delete the N messages before the purge command
+    deleted = 0
+    for mid in range(trigger_msg_id - 1, max(trigger_msg_id - n - 1, 0), -1):
+        try:
+            await context.bot.delete_message(chat_id=chat_id, message_id=mid)
+            deleted += 1
+        except Exception:
+            pass
+
+    _log_event(flask_app, group_id, "mod_purge",
+               f"{deleted} messages purged by {update.effective_user.first_name}",
+               {"moderator_id": str(update.effective_user.id), "count": deleted})
+
+    try:
+        notif = await context.bot.send_message(chat_id=chat_id, text=f"🗑️ Purged {deleted} messages.")
+        asyncio.get_event_loop().call_later(
+            5, lambda: asyncio.ensure_future(_safe_delete(context.bot, chat_id, notif.message_id))
+        )
+    except Exception:
+        pass
+
+
+async def cmd_warnings(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show warning count for a user."""
+    if not _is_group_chat(update):
+        return
+    flask_app = context.bot_data.get("flask_app")
+    group_id = str(update.effective_chat.id)
+    target_id, _, target_name = await _resolve_target(update, context)
+    if not target_id:
+        await update.message.reply_text("❌ Reply to a user or mention them.")
+        return
+
+    count = 0
+    if flask_app:
+        try:
+            with flask_app.app_context():
+                from .models import BotEvent
+                count = BotEvent.query.filter_by(
+                    telegram_group_id=group_id,
+                    event_type="mod_warning",
+                ).filter(
+                    BotEvent.metadata_["target_user_id"].astext == str(target_id)
+                ).count()
+        except Exception:
+            pass
+
+    await update.message.reply_text(f"⚠️ {target_name} has {count} warning(s) in this group.")
 
 
 # ─── OfficialBotRunner ────────────────────────────────────────────────────────
@@ -1788,6 +2347,15 @@ class OfficialBotRunner:
         a.add_handler(CommandHandler("help", cmd_help))
         a.add_handler(CommandHandler("linkgroup", cmd_linkgroup))
         a.add_handler(CommandHandler("status", cmd_status))
+        # Moderation commands
+        a.add_handler(CommandHandler("warn",     cmd_warn))
+        a.add_handler(CommandHandler("ban",      cmd_ban))
+        a.add_handler(CommandHandler("kick",     cmd_kick))
+        a.add_handler(CommandHandler("mute",     cmd_mute))
+        a.add_handler(CommandHandler("unmute",   cmd_unmute))
+        a.add_handler(CommandHandler("tempban",  cmd_tempban))
+        a.add_handler(CommandHandler("purge",    cmd_purge))
+        a.add_handler(CommandHandler("warnings", cmd_warnings))
         a.add_handler(CallbackQueryHandler(callback_handler))
         # Bot's own membership changes (added/removed from groups)
         a.add_handler(ChatMemberHandler(on_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))
@@ -1802,7 +2370,7 @@ class OfficialBotRunner:
         )
         a.add_handler(
             MessageHandler(
-                (filters.ChatType.GROUP | filters.ChatType.SUPERGROUP) & filters.TEXT,
+                (filters.ChatType.GROUP | filters.ChatType.SUPERGROUP) & filters.ALL,
                 on_message,
             )
         )
@@ -1812,10 +2380,18 @@ class OfficialBotRunner:
         await a.start()
         try:
             await a.bot.set_my_commands([
-                BotCommand("start", "Open companion hub"),
-                BotCommand("help", "Setup guide"),
-                BotCommand("linkgroup", "Link this group (use in group)"),
-                BotCommand("status", "Check bot status (use in group)"),
+                BotCommand("start",    "Open companion hub"),
+                BotCommand("help",     "Setup guide"),
+                BotCommand("linkgroup","Link this group (use in group)"),
+                BotCommand("status",   "Check bot status (use in group)"),
+                BotCommand("warn",     "Warn a user (admins only)"),
+                BotCommand("ban",      "Ban a user (admins only)"),
+                BotCommand("kick",     "Kick a user (admins only)"),
+                BotCommand("mute",     "Mute a user (admins only)"),
+                BotCommand("unmute",   "Unmute a user (admins only)"),
+                BotCommand("tempban",  "Temp-ban a user (admins only)"),
+                BotCommand("purge",    "Delete last N messages (admins only)"),
+                BotCommand("warnings", "Check a user's warnings"),
             ])
         except Exception as exc:
             _log.warning("[OfficialBot] set_my_commands: %s", exc)

@@ -51,6 +51,7 @@ from .routes.totp import totp_bp
 from .routes.telegram_groups import tg_groups_bp
 from .routes.custom_bots import custom_bots_bp
 from .routes.custom_commands import custom_commands_bp
+from .routes.bot_group_commands import bot_group_commands_bp
 from .routes.telegram_account import telegram_account_bp
 from .routes.official_settings import official_settings_bp
 from .bot_manager import BotManager
@@ -147,6 +148,7 @@ def create_app():
     app.register_blueprint(tg_groups_bp)
     app.register_blueprint(custom_bots_bp)
     app.register_blueprint(custom_commands_bp)
+    app.register_blueprint(bot_group_commands_bp)
     app.register_blueprint(telegram_account_bp)
     app.register_blueprint(official_settings_bp)
 

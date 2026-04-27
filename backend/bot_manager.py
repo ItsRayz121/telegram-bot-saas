@@ -1070,8 +1070,52 @@ class BotInstance:
                 group.id, user.id, user.username, user.first_name
             )
 
+        # Custom command dispatch
+        msg_text = (update.message.text or "").strip()
+        if msg_text.startswith("/"):
+            cmd_raw = msg_text.split()[0].lstrip("/").split("@")[0].lower()
+            cmd_data = None
+            try:
+                with self.app_context.app_context():
+                    from .models import BotGroupCommand
+                    obj = BotGroupCommand.query.filter_by(
+                        group_id=group.id,
+                        command=cmd_raw,
+                        enabled=True,
+                    ).first()
+                    if obj:
+                        cmd_data = {
+                            "text": obj.response_text,
+                            "type": obj.response_type,
+                            "buttons": obj.buttons,
+                        }
+            except Exception:
+                pass
+
+            if cmd_data:
+                keyboard = None
+                if cmd_data["buttons"]:
+                    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+                    rows = [
+                        [InlineKeyboardButton(b["text"], url=b["url"])
+                         for b in row if b.get("url")]
+                        for row in cmd_data["buttons"]
+                    ]
+                    rows = [r for r in rows if r]
+                    if rows:
+                        keyboard = InlineKeyboardMarkup(rows)
+                try:
+                    from telegram.constants import ParseMode
+                    await update.message.reply_text(
+                        cmd_data["text"],
+                        parse_mode=ParseMode.MARKDOWN if cmd_data["type"] == "markdown" else None,
+                        reply_markup=keyboard,
+                    )
+                except Exception as e:
+                    logger.debug(f"Custom command reply failed: {e}")
+
         # Delete command messages if auto_clean.delete_commands is on
-        if (update.message.text or "").startswith("/"):
+        if msg_text.startswith("/"):
             auto_clean = group.settings.get("auto_clean", {})
             if auto_clean.get("enabled") and auto_clean.get("delete_commands"):
                 try:

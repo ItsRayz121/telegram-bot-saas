@@ -947,6 +947,36 @@ class CustomCommand(db.Model):
         }
 
 
+class BotGroupCommand(db.Model):
+    """Per-group slash commands for custom (user-supplied) bots."""
+    __tablename__ = "bot_group_commands"
+
+    id = db.Column(db.Integer, primary_key=True)
+    group_id = db.Column(db.Integer, db.ForeignKey("groups.id", ondelete="CASCADE"), nullable=False, index=True)
+    command = db.Column(db.String(64), nullable=False)
+    response_type = db.Column(db.String(20), default="text", nullable=False)
+    response_text = db.Column(db.Text, nullable=False)
+    buttons = db.Column(db.JSON, nullable=True)
+    enabled = db.Column(db.Boolean, default=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    __table_args__ = (db.UniqueConstraint("group_id", "command", name="uq_bot_group_command"),)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "group_id": self.group_id,
+            "command": self.command,
+            "response_type": self.response_type,
+            "response_text": self.response_text,
+            "buttons": self.buttons,
+            "enabled": self.enabled,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
 class BotEvent(db.Model):
     """Audit log for all official bot activity."""
     __tablename__ = "bot_events"
