@@ -28,6 +28,8 @@ import VerifyEmail from './pages/VerifyEmail';
 import MyGroups from './pages/MyGroups';
 import GroupManagement from './pages/GroupManagement';
 import MyBots from './pages/MyBots';
+import OfficialGroupAnalytics from './pages/OfficialGroupAnalytics';
+import OfficialAnalyticsOverview from './pages/OfficialAnalyticsOverview';
 
 // Initialize Sentry if DSN is configured
 const SENTRY_DSN = process.env.REACT_APP_SENTRY_DSN;
@@ -175,6 +177,8 @@ export default function App() {
             {/* Official bot ecosystem */}
             <Route path="/my-groups" element={<VerifiedRoute><MyGroups /></VerifiedRoute>} />
             <Route path="/my-groups/:groupId" element={<VerifiedRoute><GroupSettings /></VerifiedRoute>} />
+            <Route path="/my-groups/:groupId/analytics" element={<VerifiedRoute><OfficialGroupAnalytics /></VerifiedRoute>} />
+            <Route path="/official-analytics" element={<VerifiedRoute><OfficialAnalyticsOverview /></VerifiedRoute>} />
             <Route path="/add-group" element={<VerifiedRoute><MyGroups /></VerifiedRoute>} />
             <Route path="/my-bots" element={<VerifiedRoute><MyBots /></VerifiedRoute>} />
 

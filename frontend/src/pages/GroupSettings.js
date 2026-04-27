@@ -400,7 +400,18 @@ export default function GroupSettings() {
           <IconButton edge="start" onClick={() => navigate(isOfficial ? '/my-groups' : `/bot/${botId}`)} sx={{ mr: 1 }}>
             <ArrowBack />
           </IconButton>
-          <Typography variant="h6" fontWeight={600} sx={{ flexGrow: 1 }}>
+          {/* Breadcrumb nav links */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mr: 1 }}>
+            <Button size="small" variant="text" onClick={() => navigate('/dashboard')} sx={{ fontSize: '0.75rem', px: 1, py: 0.25, minWidth: 0, color: 'text.secondary' }}>
+              Dashboard
+            </Button>
+            <Box component="span" sx={{ color: 'text.disabled', fontSize: '0.75rem' }}>/</Box>
+            <Button size="small" variant="text" onClick={() => navigate(isOfficial ? '/my-groups' : `/bot/${botId}`)} sx={{ fontSize: '0.75rem', px: 1, py: 0.25, minWidth: 0, color: 'text.secondary' }}>
+              {isOfficial ? 'My Groups' : 'Bot Settings'}
+            </Button>
+            <Box component="span" sx={{ color: 'text.disabled', fontSize: '0.75rem' }}>/</Box>
+          </Box>
+          <Typography variant="h6" fontWeight={600} sx={{ flexGrow: 1 }} noWrap>
             {groupData?.group_name || groupData?.title || 'Group Settings'}
           </Typography>
           {settingsData && (

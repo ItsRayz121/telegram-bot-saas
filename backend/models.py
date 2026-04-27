@@ -890,6 +890,13 @@ class CustomBot(db.Model):
         from .utils.encryption import encrypt_value
         self.bot_token_encrypted = encrypt_value(plain_token) or plain_token
 
+    @property
+    def health_status(self) -> str:
+        """Derive health from status field. active/inactive/error map directly."""
+        if self.status in ("active", "inactive", "error"):
+            return self.status
+        return "unknown"
+
     def to_dict(self, include_token=False):
         data = {
             "id": self.id,
@@ -897,7 +904,9 @@ class CustomBot(db.Model):
             "bot_name": self.bot_name,
             "bot_username": self.bot_username,
             "status": self.status,
+            "health_status": self.health_status,
             "linked_groups_count": len(self.linked_groups),
+            "last_active": self.updated_at.isoformat() if self.updated_at else None,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

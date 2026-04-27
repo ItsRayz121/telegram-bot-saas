@@ -4,9 +4,10 @@ import requests as _http
 from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from sqlalchemy import func
 from sqlalchemy.orm.attributes import flag_modified
 
-from ..models import db, User, TelegramGroup, TelegramBotStarted
+from ..models import db, User, TelegramGroup, TelegramBotStarted, BotEvent
 from ..middleware.rate_limit import rate_limit
 from .settings import _check_gated_settings, _deep_merge
 from ..config import Config
@@ -16,18 +17,19 @@ official_settings_bp = Blueprint("official_settings", __name__, url_prefix="/api
 
 _TELEGRAM_API = "https://api.telegram.org/bot{token}/{method}"
 
-# All permissions the bot can hold with human labels and feature mappings
+# Permissions the bot can hold — only real Telegram Bot API fields from getChatMember.
+# Removed: can_ban_members (not a real field; restriction covers banning),
+#           is_anonymous (admin preference, not a grantable permission),
+#           can_manage_topics (only applies to Forum supergroups).
 _PERMISSION_DEFS = [
-    ("can_delete_messages",   "Delete messages",      "AutoMod deletion"),
-    ("can_restrict_members",  "Restrict / mute users","Mute & verification"),
-    ("can_ban_members",       "Ban users",             "Ban actions"),
-    ("can_pin_messages",      "Pin messages",          "Pinned announcements"),
-    ("can_manage_topics",     "Manage topics",         "Forum/topic verification"),
-    ("can_manage_chat",       "Manage chat",           "Admin rights management"),
-    ("can_invite_users",      "Invite users",          "Invite link tools"),
-    ("can_promote_members",   "Add admins",            "Grant admin rights"),
-    ("can_change_info",       "Change group info",     "Group info updates"),
-    ("is_anonymous",          "Anonymous admin",       "Anonymised actions"),
+    ("can_delete_messages",    "Delete messages",       "AutoMod deletion"),
+    ("can_restrict_members",   "Restrict / mute / ban", "Mute, kick & verification"),
+    ("can_pin_messages",       "Pin messages",           "Pinned announcements"),
+    ("can_manage_chat",        "Manage chat",            "Admin rights management"),
+    ("can_invite_users",       "Invite users",           "Invite link tools"),
+    ("can_promote_members",    "Add admins",             "Grant admin rights"),
+    ("can_change_info",        "Change group info",      "Group info updates"),
+    ("can_manage_video_chats", "Manage video chats",     "Voice chats & live streams"),
 ]
 
 
@@ -421,3 +423,165 @@ def _do_send_official_report(tg: TelegramGroup, bot_token: str, owner_user: User
     except Exception as exc:
         logger.error(f"[DIGEST-official] Send failed group={tg.id}: {exc}")
         return False
+
+
+# ── Official Group Analytics ───────────────────────────────────────────────────
+
+@official_settings_bp.route("/<group_id>/analytics", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def get_official_group_analytics(group_id):
+    """
+    Returns analytics for a single official-bot group based on BotEvents.
+    Days param: 7 | 14 | 30 (default 30, max 90).
+    """
+    try:
+        user = _get_current_user()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        tg, err = _get_official_group(user, group_id)
+        if err:
+            return err
+
+        days = min(request.args.get("days", 30, type=int), 90)
+        cutoff = datetime.utcnow() - timedelta(days=days)
+
+        # Event counts by type
+        event_rows = (
+            db.session.query(BotEvent.event_type, func.count(BotEvent.id))
+            .filter(
+                BotEvent.telegram_group_id == group_id,
+                BotEvent.created_at >= cutoff,
+            )
+            .group_by(BotEvent.event_type)
+            .all()
+        )
+        events_by_type = {et: cnt for et, cnt in event_rows}
+
+        # Daily join events
+        daily_joins = []
+        for i in range(min(days, 30)):
+            day = datetime.utcnow() - timedelta(days=days - i - 1)
+            day_start = day.replace(hour=0, minute=0, second=0, microsecond=0)
+            day_end = day.replace(hour=23, minute=59, second=59, microsecond=999999)
+            cnt = BotEvent.query.filter(
+                BotEvent.telegram_group_id == group_id,
+                BotEvent.event_type.in_(["member_joined", "verification_passed"]),
+                BotEvent.created_at >= day_start,
+                BotEvent.created_at <= day_end,
+            ).count()
+            daily_joins.append({"date": day_start.strftime("%Y-%m-%d"), "joins": cnt})
+
+        # Recent events (last 20)
+        recent_events = BotEvent.query.filter(
+            BotEvent.telegram_group_id == group_id,
+            BotEvent.created_at >= cutoff,
+        ).order_by(BotEvent.created_at.desc()).limit(20).all()
+
+        return jsonify({
+            "analytics": {
+                "days": days,
+                "summary": {
+                    "total_events": sum(events_by_type.values()),
+                    "member_joins": events_by_type.get("member_joined", 0),
+                    "verifications_passed": events_by_type.get("verification_passed", 0),
+                    "verifications_failed": events_by_type.get("verification_failed", 0),
+                    "automod_actions": events_by_type.get("automod_action", 0),
+                    "commands_used": events_by_type.get("command_triggered", 0),
+                    "messages_handled": events_by_type.get("message_processed", 0),
+                },
+                "events_by_type": events_by_type,
+                "daily_joins": daily_joins,
+                "recent_events": [
+                    {
+                        "id": e.id,
+                        "event_type": e.event_type,
+                        "message": e.message,
+                        "created_at": e.created_at.isoformat(),
+                    }
+                    for e in recent_events
+                ],
+            }
+        })
+    except Exception as e:
+        logger.error(f"get_official_group_analytics error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@official_settings_bp.route("/analytics/overview", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=20)
+def get_official_analytics_overview():
+    """
+    User-level aggregate analytics across ALL of this user's official-bot groups.
+    """
+    try:
+        user = _get_current_user()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        days = min(request.args.get("days", 30, type=int), 90)
+        cutoff = datetime.utcnow() - timedelta(days=days)
+
+        groups = TelegramGroup.query.filter_by(
+            owner_user_id=user.id, is_disabled=False
+        ).all()
+        group_ids = [g.telegram_group_id for g in groups]
+
+        if not group_ids:
+            return jsonify({
+                "analytics": {
+                    "total_groups": 0,
+                    "total_events": 0,
+                    "summary": {},
+                    "top_groups": [],
+                }
+            })
+
+        event_rows = (
+            db.session.query(BotEvent.event_type, func.count(BotEvent.id))
+            .filter(
+                BotEvent.telegram_group_id.in_(group_ids),
+                BotEvent.created_at >= cutoff,
+            )
+            .group_by(BotEvent.event_type)
+            .all()
+        )
+        events_by_type = {et: cnt for et, cnt in event_rows}
+
+        # Top groups by event count
+        top_group_rows = (
+            db.session.query(BotEvent.telegram_group_id, func.count(BotEvent.id).label("cnt"))
+            .filter(
+                BotEvent.telegram_group_id.in_(group_ids),
+                BotEvent.created_at >= cutoff,
+            )
+            .group_by(BotEvent.telegram_group_id)
+            .order_by(func.count(BotEvent.id).desc())
+            .limit(5)
+            .all()
+        )
+        group_title_map = {g.telegram_group_id: g.title for g in groups}
+        top_groups = [
+            {"group_id": gid, "title": group_title_map.get(gid, gid), "events": cnt}
+            for gid, cnt in top_group_rows
+        ]
+
+        return jsonify({
+            "analytics": {
+                "days": days,
+                "total_groups": len(groups),
+                "summary": {
+                    "total_events": sum(events_by_type.values()),
+                    "member_joins": events_by_type.get("member_joined", 0),
+                    "verifications_passed": events_by_type.get("verification_passed", 0),
+                    "automod_actions": events_by_type.get("automod_action", 0),
+                    "commands_used": events_by_type.get("command_triggered", 0),
+                },
+                "events_by_type": events_by_type,
+                "top_groups": top_groups,
+            }
+        })
+    except Exception as e:
+        logger.error(f"get_official_analytics_overview error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500

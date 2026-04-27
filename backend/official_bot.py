@@ -17,12 +17,14 @@ Key design decisions:
 
 import asyncio
 import logging
+import random
+import re
 import threading
 from datetime import datetime, timedelta
 
 import requests as _http
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand, ChatPermissions
 from telegram.constants import ChatType, ParseMode
 from telegram.error import Forbidden, BadRequest
 from telegram.ext import (
@@ -33,6 +35,14 @@ from telegram.ext import (
 from .config import Config
 
 _log = logging.getLogger(__name__)
+
+# ─── In-process verification state ───────────────────────────────────────────
+# Key: "{chat_id}:{user_id}" → {method, msg_id, answer, expires_at, ...}
+# Phase 3 item 15: move to Redis/DB for persistence across restarts.
+_pending_verifications: dict = {}
+
+# Simple link / URL detection for automod
+_URL_RE = re.compile(r"https?://[^\s]+|t\.me/[^\s]+|www\.[^\s]+", re.IGNORECASE)
 
 
 # ─── Tiny DB helpers ──────────────────────────────────────────────────────────
@@ -71,13 +81,19 @@ def _upsert_group(flask_app, group_id: str, title: str, username=None):
 
 
 async def _refresh_permissions(bot, group_id: str, flask_app):
+    """Fetch live bot permissions from Telegram and persist them to the DB cache."""
     try:
         me = await bot.get_chat_member(chat_id=int(group_id), user_id=bot.id)
+        # Mirror _PERMISSION_DEFS in official_settings.py — only real Telegram API fields.
         perms = {
-            "delete_messages": getattr(me, "can_delete_messages", False),
-            "ban_users": getattr(me, "can_restrict_members", False),
-            "pin_messages": getattr(me, "can_pin_messages", False),
-            "manage_topics": getattr(me, "can_manage_topics", False),
+            "can_delete_messages":    getattr(me, "can_delete_messages",    False) or False,
+            "can_restrict_members":   getattr(me, "can_restrict_members",   False) or False,
+            "can_pin_messages":       getattr(me, "can_pin_messages",       False) or False,
+            "can_manage_chat":        getattr(me, "can_manage_chat",        False) or False,
+            "can_invite_users":       getattr(me, "can_invite_users",       False) or False,
+            "can_promote_members":    getattr(me, "can_promote_members",    False) or False,
+            "can_change_info":        getattr(me, "can_change_info",        False) or False,
+            "can_manage_video_chats": getattr(me, "can_manage_video_chats", False) or False,
         }
         with flask_app.app_context():
             from .models import db, TelegramGroup
@@ -87,7 +103,8 @@ async def _refresh_permissions(bot, group_id: str, flask_app):
                 tg.bot_status = "active"
                 db.session.commit()
         return perms
-    except Exception:
+    except Exception as exc:
+        _log.debug("_refresh_permissions failed for group %s: %s", group_id, exc)
         return {}
 
 
@@ -767,12 +784,18 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
     data = query.data
     flask_app = context.bot_data.get("flask_app")
     frontend = _frontend()
     user = update.effective_user
     bot_un = _bot_username()
+
+    # ── official bot verification callbacks ───────────────────────────────────
+    if data.startswith("v:"):
+        await _handle_verification_callback(update, context)
+        return
+
+    await query.answer()
 
     # ── cancel bot token submission ───────────────────────────────────────────
     if data == "cancel_bot_token":
@@ -1278,6 +1301,413 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception as exc:
                 _log.debug("Custom command reply failed: %s", exc)
 
+    # AutoMod — runs on every non-command group message
+    if not text.startswith("/"):
+        am_cfg = {}
+        try:
+            with flask_app.app_context():
+                from .models import TelegramGroup
+                tg_obj = TelegramGroup.query.filter_by(
+                    telegram_group_id=group_id, is_disabled=False
+                ).first()
+                if tg_obj:
+                    am_cfg = (tg_obj.settings or {}).get("automod", {})
+        except Exception:
+            pass
+
+        if am_cfg.get("enabled"):
+            await _automod_check(context.bot, message, am_cfg, group_id, flask_app)
+
+
+# ─── New member join handler ──────────────────────────────────────────────────
+
+async def on_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Fires when any member's status changes in the group.
+    Handles new member joins: logs the event and triggers verification if enabled.
+    """
+    flask_app = context.bot_data.get("flask_app")
+    chat_member = update.chat_member
+    if not chat_member:
+        return
+
+    chat = update.effective_chat
+    if not chat or chat.type == ChatType.PRIVATE:
+        return
+
+    old_status = chat_member.old_chat_member.status if chat_member.old_chat_member else "left"
+    new_status = chat_member.new_chat_member.status
+
+    # Only handle new joins (left/kicked/banned → member/restricted)
+    is_new_join = (
+        old_status in ("left", "kicked", "banned")
+        and new_status in ("member", "restricted")
+    )
+    if not is_new_join:
+        return
+
+    user = chat_member.new_chat_member.user
+    group_id = str(chat.id)
+
+    _log.info(
+        "[OfficialBot] New member: user_id=%s name=%s group=%s (%s)",
+        user.id, user.first_name, group_id, chat.title,
+    )
+
+    _log_event(flask_app, group_id, "member_joined",
+               f"{user.first_name} (id={user.id}) joined",
+               {"telegram_user_id": str(user.id)})
+
+    if not flask_app:
+        return
+
+    # Load group settings
+    v_cfg = {}
+    try:
+        with flask_app.app_context():
+            from .models import TelegramGroup
+            tg_obj = TelegramGroup.query.filter_by(
+                telegram_group_id=group_id, is_disabled=False
+            ).first()
+            if tg_obj:
+                v_cfg = (tg_obj.settings or {}).get("verification", {})
+    except Exception as exc:
+        _log.error("[OfficialBot] Failed to load group settings for new member: %s", exc)
+        return
+
+    _log.info(
+        "[OfficialBot] Group %s verification.enabled=%s method=%s",
+        group_id, v_cfg.get("enabled", False), v_cfg.get("method", "button"),
+    )
+
+    if not v_cfg.get("enabled", False):
+        return
+
+    await _start_verification(context.bot, chat, user, v_cfg, flask_app, group_id)
+
+
+# ─── Verification helpers ─────────────────────────────────────────────────────
+
+async def _start_verification(bot, chat, user, v_cfg, flask_app, group_id):
+    """Restrict and challenge a newly joined user."""
+    chat_id = chat.id
+    user_id = user.id
+    key = f"{chat_id}:{user_id}"
+    method = v_cfg.get("method", "button")
+    timeout = int(v_cfg.get("timeout_seconds", 300))
+
+    # Restrict immediately
+    try:
+        await bot.restrict_chat_member(
+            chat_id=chat_id,
+            user_id=user_id,
+            permissions=ChatPermissions(can_send_messages=False),
+        )
+        _log.info("[OfficialBot] Restricted new member %s in group %s", user_id, chat_id)
+    except Exception as exc:
+        _log.warning("[OfficialBot] Cannot restrict member %s in %s: %s", user_id, chat_id, exc)
+        return
+
+    msg = None
+    answer = None
+
+    try:
+        if method == "math":
+            a = random.randint(1, 20)
+            b = random.randint(1, 20)
+            answer = a + b
+            wrong_set: set = set()
+            while len(wrong_set) < 3:
+                w = answer + random.randint(-5, 5)
+                if w != answer and w > 0:
+                    wrong_set.add(w)
+            options = [answer] + list(wrong_set)[:3]
+            random.shuffle(options)
+            keyboard = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton(str(o), callback_data=f"v:{chat_id}:{user_id}:m:{o}:{answer}")
+                    for o in options[:2]
+                ],
+                [
+                    InlineKeyboardButton(str(o), callback_data=f"v:{chat_id}:{user_id}:m:{o}:{answer}")
+                    for o in options[2:]
+                ],
+            ])
+            msg = await bot.send_message(
+                chat_id=chat_id,
+                text=(
+                    f"🔢 Welcome {user.first_name}!\n\n"
+                    f"Solve to verify: *{a} + {b} = ?*\n"
+                    f"You have {timeout}s."
+                ),
+                reply_markup=keyboard,
+                parse_mode=ParseMode.MARKDOWN,
+            )
+        else:
+            # Default: button
+            keyboard = InlineKeyboardMarkup([[
+                InlineKeyboardButton(
+                    "✅ I am human — Click to verify",
+                    callback_data=f"v:{chat_id}:{user_id}:b",
+                )
+            ]])
+            msg = await bot.send_message(
+                chat_id=chat_id,
+                text=(
+                    f"👋 Welcome {user.first_name}!\n\n"
+                    f"Click the button below to verify you're human.\n"
+                    f"You have {timeout} seconds."
+                ),
+                reply_markup=keyboard,
+            )
+    except Exception as exc:
+        _log.error("[OfficialBot] Failed to send verification challenge: %s", exc)
+        return
+
+    _pending_verifications[key] = {
+        "method": method,
+        "msg_id": msg.message_id if msg else None,
+        "answer": answer,
+        "expires_at": datetime.utcnow() + timedelta(seconds=timeout),
+        "kick_on_fail": bool(v_cfg.get("kick_on_fail", True)),
+        "max_attempts": int(v_cfg.get("max_attempts", 3)),
+        "attempts": 0,
+    }
+
+    asyncio.get_event_loop().call_later(
+        timeout,
+        lambda: asyncio.ensure_future(_verification_timeout(bot, chat_id, user_id)),
+    )
+
+    _log.info(
+        "[OfficialBot] Verification challenge sent: user=%s group=%s method=%s timeout=%ds",
+        user_id, chat_id, method, timeout,
+    )
+    _log_event(flask_app, group_id, "verification_started",
+               f"User {user_id} ({user.first_name}) challenged",
+               {"telegram_user_id": str(user_id), "method": method})
+
+
+async def _handle_verification_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle v: prefixed callback_data for official bot verification."""
+    query = update.callback_query
+    await query.answer()
+    data = query.data  # "v:{chat_id}:{user_id}:b" or "v:{chat_id}:{user_id}:m:{chosen}:{correct}"
+    flask_app = context.bot_data.get("flask_app")
+
+    parts = data.split(":")
+    try:
+        chat_id = int(parts[1])
+        user_id_target = int(parts[2])
+        vtype = parts[3]
+    except (IndexError, ValueError):
+        return
+
+    actual_user_id = update.effective_user.id
+    if actual_user_id != user_id_target:
+        await query.answer("This verification is not for you.", show_alert=True)
+        return
+
+    key = f"{chat_id}:{user_id_target}"
+    pending = _pending_verifications.get(key)
+
+    if not pending:
+        await query.answer("Verification already completed or expired.")
+        return
+
+    if datetime.utcnow() > pending["expires_at"]:
+        await query.answer("Verification expired!")
+        await _fail_verification(context.bot, chat_id, user_id_target, pending, flask_app)
+        return
+
+    verified = False
+    if vtype == "b":
+        verified = True
+    elif vtype == "m":
+        try:
+            chosen = int(parts[4])
+            correct = int(parts[5])
+            verified = (chosen == correct)
+        except (IndexError, ValueError):
+            verified = False
+
+    if verified:
+        await _complete_verification(context.bot, query, chat_id, user_id_target, pending, flask_app)
+    else:
+        pending["attempts"] += 1
+        max_att = pending["max_attempts"]
+        if pending["attempts"] >= max_att:
+            await query.answer(f"❌ Too many wrong answers. Removing you.", show_alert=True)
+            await _fail_verification(context.bot, chat_id, user_id_target, pending, flask_app)
+        else:
+            remaining = max_att - pending["attempts"]
+            await query.answer(f"❌ Wrong! {remaining} attempt(s) left.")
+
+
+async def _complete_verification(bot, query, chat_id, user_id, pending, flask_app):
+    key = f"{chat_id}:{user_id}"
+    group_id = str(chat_id)
+    try:
+        await bot.restrict_chat_member(
+            chat_id=chat_id,
+            user_id=user_id,
+            permissions=ChatPermissions(
+                can_send_messages=True,
+                can_send_media_messages=True,
+                can_send_other_messages=True,
+                can_add_web_page_previews=True,
+            ),
+        )
+        if pending.get("msg_id"):
+            try:
+                await bot.delete_message(chat_id=chat_id, message_id=pending["msg_id"])
+            except Exception:
+                pass
+        await query.answer("✅ Verified! Welcome!")
+        try:
+            notif = await bot.send_message(
+                chat_id=chat_id,
+                text=f"✅ {query.from_user.first_name} verified and joined!",
+            )
+            asyncio.get_event_loop().call_later(
+                8, lambda: asyncio.ensure_future(_safe_delete(bot, chat_id, notif.message_id))
+            )
+        except Exception:
+            pass
+        _log.info("[OfficialBot] User %s verified in group %s", user_id, chat_id)
+        _log_event(flask_app, group_id, "verification_passed",
+                   f"User {user_id} passed verification",
+                   {"telegram_user_id": str(user_id)})
+    except Exception as exc:
+        _log.error("[OfficialBot] Complete verification error user=%s: %s", user_id, exc)
+    finally:
+        _pending_verifications.pop(key, None)
+
+
+async def _fail_verification(bot, chat_id, user_id, pending, flask_app):
+    key = f"{chat_id}:{user_id}"
+    group_id = str(chat_id)
+    try:
+        if pending.get("kick_on_fail", True):
+            await bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
+            await bot.unban_chat_member(chat_id=chat_id, user_id=user_id)
+            _log.info("[OfficialBot] Kicked unverified user %s from group %s", user_id, chat_id)
+        if pending.get("msg_id"):
+            try:
+                await bot.delete_message(chat_id=chat_id, message_id=pending["msg_id"])
+            except Exception:
+                pass
+        _log_event(flask_app, group_id, "verification_failed",
+                   f"User {user_id} failed verification",
+                   {"telegram_user_id": str(user_id), "kick": pending.get("kick_on_fail", True)})
+    except Exception as exc:
+        _log.error("[OfficialBot] Fail verification error user=%s: %s", user_id, exc)
+    finally:
+        _pending_verifications.pop(key, None)
+
+
+async def _verification_timeout(bot, chat_id, user_id):
+    key = f"{chat_id}:{user_id}"
+    pending = _pending_verifications.get(key)
+    if pending and datetime.utcnow() > pending["expires_at"]:
+        _log.info("[OfficialBot] Verification timed out: user=%s group=%s", user_id, chat_id)
+        await _fail_verification(bot, chat_id, user_id, pending, None)
+
+
+async def _safe_delete(bot, chat_id, message_id):
+    try:
+        await bot.delete_message(chat_id=chat_id, message_id=message_id)
+    except Exception:
+        pass
+
+
+# ─── AutoMod helper ───────────────────────────────────────────────────────────
+
+async def _automod_check(bot, message, am_cfg: dict, group_id: str, flask_app):
+    """Apply automod rules to a group message. Deletes and warns/mutes as configured."""
+    text = (message.text or message.caption or "").strip()
+    chat_id = message.chat_id
+    user_id = message.from_user.id if message.from_user else None
+    if not user_id:
+        return
+
+    action_rule = None  # first matched rule key
+
+    # Link filter
+    link_cfg = am_cfg.get("link_filter", {})
+    if link_cfg.get("enabled") and text and _URL_RE.search(text):
+        action_rule = "link_filter"
+
+    # Caps filter
+    if not action_rule:
+        caps_cfg = am_cfg.get("caps_filter", {})
+        threshold = caps_cfg.get("threshold", 70)
+        if caps_cfg.get("enabled") and text:
+            letters = [c for c in text if c.isalpha()]
+            if len(letters) > 5 and sum(1 for c in letters if c.isupper()) / len(letters) * 100 > threshold:
+                action_rule = "caps_filter"
+
+    if not action_rule:
+        return
+
+    rule_cfg = am_cfg.get(action_rule, {})
+    action = rule_cfg.get("action", "delete")
+
+    _log.info(
+        "[OfficialBot] AutoMod: group=%s user=%s rule=%s action=%s",
+        group_id, user_id, action_rule, action,
+    )
+
+    # Always delete the offending message first
+    try:
+        await bot.delete_message(chat_id=chat_id, message_id=message.message_id)
+    except Exception:
+        pass
+
+    first_name = message.from_user.first_name or "User"
+    rule_label = action_rule.replace("_", " ")
+
+    if action in ("warn", "delete"):
+        try:
+            warn_msg = await bot.send_message(
+                chat_id=chat_id,
+                text=f"⚠️ {first_name}, your message was removed: {rule_label}.",
+            )
+            asyncio.get_event_loop().call_later(
+                10, lambda: asyncio.ensure_future(_safe_delete(bot, chat_id, warn_msg.message_id))
+            )
+        except Exception:
+            pass
+    elif action == "mute":
+        try:
+            await bot.restrict_chat_member(
+                chat_id=chat_id,
+                user_id=user_id,
+                permissions=ChatPermissions(can_send_messages=False),
+                until_date=datetime.utcnow() + timedelta(minutes=5),
+            )
+            try:
+                mute_msg = await bot.send_message(
+                    chat_id=chat_id,
+                    text=f"🔇 {first_name} muted 5 min: {rule_label}.",
+                )
+                asyncio.get_event_loop().call_later(
+                    10, lambda: asyncio.ensure_future(_safe_delete(bot, chat_id, mute_msg.message_id))
+                )
+            except Exception:
+                pass
+        except Exception as exc:
+            _log.warning("[OfficialBot] AutoMod mute failed: %s", exc)
+    elif action == "ban":
+        try:
+            await bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
+        except Exception as exc:
+            _log.warning("[OfficialBot] AutoMod ban failed: %s", exc)
+
+    _log_event(flask_app, group_id, "automod_action",
+               f"User {user_id}: {action_rule} → {action}",
+               {"telegram_user_id": str(user_id), "rule": action_rule, "action": action})
+
 
 # ─── OfficialBotRunner ────────────────────────────────────────────────────────
 
@@ -1359,7 +1789,10 @@ class OfficialBotRunner:
         a.add_handler(CommandHandler("linkgroup", cmd_linkgroup))
         a.add_handler(CommandHandler("status", cmd_status))
         a.add_handler(CallbackQueryHandler(callback_handler))
+        # Bot's own membership changes (added/removed from groups)
         a.add_handler(ChatMemberHandler(on_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))
+        # Any member's status changes — used for new-member verification
+        a.add_handler(ChatMemberHandler(on_chat_member, ChatMemberHandler.CHAT_MEMBER))
         # Private text: bot token submission (must come before group message handler)
         a.add_handler(
             MessageHandler(
