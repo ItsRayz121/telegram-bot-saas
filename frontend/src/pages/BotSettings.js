@@ -3,7 +3,7 @@ import {
   Box, AppBar, Toolbar, Typography, Button, Card, CardContent,
   CardActionArea, Grid, Chip, CircularProgress, IconButton,
 } from '@mui/material';
-import { ArrowBack, Group, Settings } from '@mui/icons-material';
+import { ArrowBack, BarChart, Group, Settings } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { bots } from '../services/api';
@@ -102,19 +102,33 @@ export default function BotSettings() {
                           </Typography>
                         </Box>
                       </Box>
-                      <Button
-                        size="small"
-                        startIcon={<Settings />}
-                        variant="outlined"
-                        fullWidth
-                        sx={{ mt: 1 }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigate(`/bot/${id}/group/${group.id}`);
-                        }}
-                      >
-                        Manage Settings
-                      </Button>
+                      <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                        <Button
+                          size="small"
+                          startIcon={<Settings />}
+                          variant="outlined"
+                          fullWidth
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/bot/${id}/group/${group.id}`);
+                          }}
+                        >
+                          Manage Settings
+                        </Button>
+                        <Button
+                          size="small"
+                          startIcon={<BarChart />}
+                          variant="outlined"
+                          color="secondary"
+                          fullWidth
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/bot/${id}/group/${group.id}/analytics`);
+                          }}
+                        >
+                          Analytics
+                        </Button>
+                      </Box>
                     </CardContent>
                   </CardActionArea>
                 </Card>
