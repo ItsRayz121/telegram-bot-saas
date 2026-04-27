@@ -105,6 +105,17 @@ def create_app():
                 "http://localhost:5000",
                 "http://127.0.0.1:3000",
             ]
+    # Production safety: warn loudly if allowed origins look like a local dev address
+    _is_prod_db = "postgres" in _os.environ.get("DATABASE_URL", "")
+    for _o in _allowed:
+        if _is_prod_db and ("localhost" in _o or "127.0.0.1" in _o):
+            import warnings as _w
+            _w.warn(
+                f"[CORS] Allowing localhost origin '{_o}' while DATABASE_URL points to PostgreSQL. "
+                "Set ALLOWED_ORIGINS or FRONTEND_URL to your production domain in Railway.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
     CORS(app,
          origins=_allowed,
          allow_headers=["Content-Type", "Authorization"],
@@ -152,7 +163,7 @@ def create_app():
         return jsonify({
             "status": "ok",
             "db": "connected" if db_ok else "error",
-            "version": "2026-04-25-v7",
+            "version": Config.VERSION,
         })
 
     @app.route("/ready")
@@ -286,6 +297,7 @@ def create_app():
         _run_anti_abuse_migrations()
         _run_official_bot_migrations()
         _run_telegram_connect_migrations()
+        _run_stability_migrations()
 
     # Start bots in a background thread after a short delay so Gunicorn can
     # pass its healthcheck before bot polling (which may contact Telegram and
@@ -379,6 +391,47 @@ def _run_official_bot_migrations():
         "CREATE INDEX IF NOT EXISTS ix_bot_events_created ON bot_events (created_at DESC)",
         # FK for telegram_groups.linked_bot_id (added after custom_bots table exists)
         "ALTER TABLE telegram_groups ADD CONSTRAINT fk_tg_linked_bot FOREIGN KEY (linked_bot_id) REFERENCES custom_bots(id) ON DELETE SET NULL",
+    ]
+    try:
+        with db.engine.connect() as conn:
+            for sql in stmts:
+                try:
+                    conn.execute(text(sql))
+                    conn.commit()
+                except Exception:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+
+
+def _run_stability_migrations():
+    """Phase-2 stability fixes: unique group constraint and last_active backfill."""
+    stmts = [
+        # UNIQUE(bot_id, telegram_group_id): remove duplicates first (keep lowest id),
+        # then create the unique index.  Both steps are idempotent.
+        """
+        DELETE FROM groups
+        WHERE id NOT IN (
+            SELECT MIN(id)
+            FROM groups
+            GROUP BY bot_id, telegram_group_id
+        )
+        """,
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_bot_telegram_group
+        ON groups (bot_id, telegram_group_id)
+        """,
+        # Backfill last_active for running bots that never had it set.
+        # Sets it to created_at so get_health_status() returns 'warning' or
+        # 'error' rather than 'unknown', giving admins a meaningful dashboard.
+        """
+        UPDATE bots
+        SET last_active = created_at
+        WHERE is_active = TRUE AND last_active IS NULL
+        """,
     ]
     try:
         with db.engine.connect() as conn:
@@ -734,6 +787,7 @@ def _restart_active_bots(app):
 def _scheduler_loop(app):
     import time
     _last_expiry_check = [0]
+    _last_heartbeat = [0]
     time.sleep(15)  # Wait for bots to fully start
     while True:
         try:
@@ -745,6 +799,13 @@ def _scheduler_loop(app):
                 if now_ts - _last_expiry_check[0] > 6 * 3600:
                     _last_expiry_check[0] = now_ts
                     _run_expiry_notifications()
+                # Bot health heartbeat every 5 minutes
+                if now_ts - _last_heartbeat[0] > 300:
+                    _last_heartbeat[0] = now_ts
+                    try:
+                        bot_manager.heartbeat(app)
+                    except Exception as hb_exc:
+                        _scheduler_log.error("Bot heartbeat error: %s", hb_exc)
             try:
                 run_digest_scheduler(app)
             except Exception as exc:
@@ -829,11 +890,12 @@ def _run_scheduled_messages():
         if not bot or not bot.is_active:
             _scheduler_log.warning(f"[SCHEDULER] msg id={msg.id} skipped — bot not active for group {group.id}")
             continue
-        instance = bot_manager.active_bots.get(bot.id)
+        with bot_manager._lock:
+            instance = bot_manager.active_bots.get(bot.id)
         if not instance or not instance.application:
             _scheduler_log.warning(
                 f"[SCHEDULER] msg id={msg.id} title='{msg.title}' skipped — "
-                f"bot {bot.id} not running (active_bots={list(bot_manager.active_bots.keys())})"
+                f"bot {bot.id} not running"
             )
             continue
 
@@ -939,7 +1001,8 @@ def _run_scheduled_polls():
         if not bot or not bot.is_active:
             _scheduler_log.warning(f"[SCHEDULER] poll id={poll.id} skipped — bot not active for group {group.id}")
             continue
-        instance = bot_manager.active_bots.get(bot.id)
+        with bot_manager._lock:
+            instance = bot_manager.active_bots.get(bot.id)
         if not instance or not instance.application:
             _scheduler_log.warning(
                 f"[SCHEDULER] poll id={poll.id} skipped — "

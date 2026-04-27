@@ -185,6 +185,10 @@ class Group(db.Model):
     timezone = db.Column(db.String(50), default="UTC", nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
+    __table_args__ = (
+        db.UniqueConstraint("bot_id", "telegram_group_id", name="uq_bot_telegram_group"),
+    )
+
     members = db.relationship("Member", backref="group", lazy=True, cascade="all, delete-orphan")
     audit_logs = db.relationship("AuditLog", backref="group", lazy=True, cascade="all, delete-orphan")
     scheduled_messages = db.relationship("ScheduledMessage", backref="group", lazy=True, cascade="all, delete-orphan")

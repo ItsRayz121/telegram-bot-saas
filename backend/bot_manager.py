@@ -875,9 +875,14 @@ class BotInstance:
         chat = update.effective_chat
         group = await self._get_or_create_group(chat.id, chat.title, context.bot)
         with self.app_context.app_context():
-            from .models import Member, AuditLog
+            from .models import Member, AuditLog, db as _db
+            from sqlalchemy import func as _func
             member_count = Member.query.filter_by(group_id=group.id).count()
-            total_warnings = sum(m.warnings for m in Member.query.filter_by(group_id=group.id).all())
+            total_warnings = (
+                _db.session.query(_func.sum(Member.warnings))
+                .filter(Member.group_id == group.id)
+                .scalar() or 0
+            )
             bans = AuditLog.query.filter_by(group_id=group.id, action_type="ban").count()
             mutes = AuditLog.query.filter_by(group_id=group.id, action_type="mute").count()
         try:
@@ -1326,11 +1331,16 @@ class BotInstance:
                     break
 
     async def _start_polling(self):
+        # Consume the token, then immediately clear it from memory so it is not
+        # held in a long-lived attribute after the Application object owns it.
+        _token = self.token
+        self.token = None
         self.application = (
             Application.builder()
-            .token(self.token)
+            .token(_token)
             .build()
         )
+        del _token
 
         app = self.application
         app.add_handler(CommandHandler("start", self.handle_start))
@@ -1363,8 +1373,18 @@ class BotInstance:
             app.add_handler(_MessageReactionHandler(self.handle_reaction))
         app.add_handler(ChatMemberHandler(self.handle_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))
         app.add_handler(ChatMemberHandler(self.handle_chat_member, ChatMemberHandler.CHAT_MEMBER))
-        app.add_handler(MessageHandler(filters.StatusUpdate.ALL, self.handle_service_message))
-        app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, self.handle_new_member))
+        # NEW_CHAT_MEMBERS must be in its own handler group so it runs even when
+        # StatusUpdate.ALL (below, in group 1) also matches the same update.
+        # python-telegram-bot runs ALL groups for each update; within a group only
+        # the first matching handler runs.
+        app.add_handler(
+            MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, self.handle_new_member),
+            group=0,
+        )
+        app.add_handler(
+            MessageHandler(filters.StatusUpdate.ALL, self.handle_service_message),
+            group=1,
+        )
         app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, self.handle_message))
         app.add_handler(CallbackQueryHandler(self.handle_callback))
 
@@ -1383,19 +1403,22 @@ class BotInstance:
 class BotManager:
 
     def __init__(self):
-        self.active_bots = {}
+        self.active_bots: dict = {}
+        self._lock = threading.Lock()  # guards all mutations of active_bots
 
     def start_bot(self, bot_id, token, app_context):
-        if bot_id in self.active_bots:
-            logger.info(f"Bot {bot_id} already running")
-            return True
+        with self._lock:
+            if bot_id in self.active_bots:
+                logger.info(f"Bot {bot_id} already running")
+                return True
 
         try:
             instance = BotInstance(bot_id, token, app_context)
             thread = threading.Thread(target=instance._run_bot, daemon=True)
             instance.thread = thread
             thread.start()
-            self.active_bots[bot_id] = instance
+            with self._lock:
+                self.active_bots[bot_id] = instance
             logger.info(f"Bot {bot_id} started")
             return True
         except Exception as e:
@@ -1403,7 +1426,8 @@ class BotManager:
             return False
 
     def stop_bot(self, bot_id):
-        instance = self.active_bots.get(bot_id)
+        with self._lock:
+            instance = self.active_bots.get(bot_id)
         if not instance:
             return False
 
@@ -1411,7 +1435,8 @@ class BotManager:
             instance._stop_event.set()
             if instance.thread:
                 instance.thread.join(timeout=10)
-            del self.active_bots[bot_id]
+            with self._lock:
+                self.active_bots.pop(bot_id, None)
             logger.info(f"Bot {bot_id} stopped")
             return True
         except Exception as e:
@@ -1423,21 +1448,43 @@ class BotManager:
         return self.start_bot(bot_id, token, app_context)
 
     def is_running(self, bot_id):
-        instance = self.active_bots.get(bot_id)
-        if not instance:
-            return False
-        if instance.thread and not instance.thread.is_alive():
-            logger.warning(f"Bot {bot_id} thread has died — removing from active_bots")
-            del self.active_bots[bot_id]
-            return False
+        with self._lock:
+            instance = self.active_bots.get(bot_id)
+            if not instance:
+                return False
+            if instance.thread and not instance.thread.is_alive():
+                logger.warning(f"Bot {bot_id} thread has died — removing from active_bots")
+                self.active_bots.pop(bot_id, None)
+                return False
         return True
 
     def get_knowledge_base(self):
-        # Return KB system from any active bot instance (they all share the same app context logic)
-        for instance in self.active_bots.values():
+        with self._lock:
+            instances = list(self.active_bots.values())
+        for instance in instances:
             return instance.knowledge_base
-        # Fallback: create one without app context (will fail gracefully)
         return None
+
+    def heartbeat(self, app_context):
+        """Update last_active for all running bots. Called by the scheduler loop."""
+        with self._lock:
+            running_ids = [
+                bid for bid, inst in self.active_bots.items()
+                if inst.thread and inst.thread.is_alive()
+            ]
+        if not running_ids:
+            return
+        try:
+            from datetime import datetime as _dt
+            with app_context.app_context():
+                from .models import db, Bot
+                Bot.query.filter(Bot.id.in_(running_ids)).update(
+                    {Bot.last_active: _dt.utcnow()},
+                    synchronize_session=False,
+                )
+                db.session.commit()
+        except Exception as e:
+            logger.error(f"Bot heartbeat failed: {e}")
 
     def start_all(self, app_context):
         with app_context.app_context():
@@ -1445,7 +1492,9 @@ class BotManager:
             bots = Bot.query.filter_by(is_active=True).all()
             for bot in bots:
                 self.start_bot(bot.id, bot.bot_token, app_context)
-        logger.info(f"Started {len(self.active_bots)} bots")
+        with self._lock:
+            count = len(self.active_bots)
+        logger.info(f"Started {count} bots")
 
 
 bot_manager = BotManager()
