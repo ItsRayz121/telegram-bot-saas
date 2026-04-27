@@ -25,6 +25,22 @@ class Config:
         )
     JWT_SECRET_KEY = _jwt_secret_key
 
+    # Dedicated encryption key for bot tokens and other sensitive field encryption.
+    # Must be separate from SECRET_KEY so Flask session security and field encryption
+    # can be rotated independently.
+    # Migration path: set ENCRYPTION_KEY_OLD to your current SECRET_KEY value,
+    # then set ENCRYPTION_KEY to a new dedicated secret.  Existing encrypted records
+    # decrypt via the old key and are re-encrypted on next save.
+    _enc_key = os.environ.get("ENCRYPTION_KEY")
+    if not _enc_key:
+        raise RuntimeError(
+            "ENCRYPTION_KEY environment variable is required for token encryption. "
+            "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\"\n"
+            "Set ENCRYPTION_KEY_OLD to your current SECRET_KEY value to keep existing "
+            "encrypted records working during the transition."
+        )
+    ENCRYPTION_KEY = _enc_key
+
     # Access tokens expire after 7 days. Reduces compromise window vs 30-day default.
     # Logout uses a Redis jti blocklist; see routes/auth.py /logout endpoint.
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(days=7)
@@ -87,11 +103,30 @@ class Config:
             "Set ADMIN_EMAILS=you@example.com in your Railway environment."
         )
 
+    # Max custom bots per user (Bot model — bring-your-own running bots)
     MAX_BOTS = {
         "free": 1,
         "pro": 5,
         "enterprise": 50,
     }
+
+    # Max bring-your-own-token custom bots (CustomBot model — token stored, not running)
+    MAX_CUSTOM_BOTS = {
+        "free": 0,
+        "pro": 2,
+        "enterprise": 10,
+    }
+
+    # Max official-bot linked groups per user (TelegramGroup model)
+    # -1 = unlimited
+    MAX_OFFICIAL_GROUPS = {
+        "free": 3,
+        "pro": -1,
+        "enterprise": -1,
+    }
+
+    # Version string surfaced by /health — update on each deploy to aid debugging
+    VERSION = os.environ.get("APP_VERSION", "2026-04-27-v1")
 
     PLANS = {
         "free": {

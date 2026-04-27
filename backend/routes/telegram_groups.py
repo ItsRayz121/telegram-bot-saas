@@ -17,6 +17,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..models import db, User, TelegramGroup, TelegramGroupLinkCode, BotEvent
 from ..middleware.rate_limit import rate_limit
+from ..config import Config
 
 tg_groups_bp = Blueprint("telegram_groups", __name__, url_prefix="/api/telegram-groups")
 
@@ -84,6 +85,22 @@ def link_group():
 
     if tg.owner_user_id and tg.owner_user_id != user.id:
         return jsonify({"error": "This group is already linked to another account"}), 409
+
+    # Enforce per-tier official group limit
+    max_groups = Config.MAX_OFFICIAL_GROUPS.get(user.subscription_tier, 3)
+    if max_groups != -1:
+        current_count = TelegramGroup.query.filter_by(
+            owner_user_id=user.id, is_disabled=False
+        ).count()
+        if tg.owner_user_id != user.id and current_count >= max_groups:
+            return jsonify({
+                "error": (
+                    f"Your {user.subscription_tier.capitalize()} plan allows {max_groups} "
+                    f"linked group(s). Upgrade to Pro to link unlimited groups."
+                ),
+                "code": "GROUP_LIMIT_REACHED",
+                "limit": max_groups,
+            }), 403
 
     # Mark code used and link the group
     link_code.used_at = datetime.utcnow()

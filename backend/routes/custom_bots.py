@@ -6,10 +6,9 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..models import db, User, CustomBot, TelegramGroup
 from ..middleware.rate_limit import rate_limit
+from ..config import Config
 
 custom_bots_bp = Blueprint("custom_bots", __name__, url_prefix="/api/custom-bots")
-
-_MAX_CUSTOM_BOTS = {"free": 0, "pro": 2, "enterprise": 10}
 
 
 def _current_user():
@@ -42,7 +41,7 @@ def add_custom_bot():
     if not user:
         return jsonify({"error": "User not found"}), 404
 
-    max_bots = _MAX_CUSTOM_BOTS.get(user.subscription_tier, 0)
+    max_bots = Config.MAX_CUSTOM_BOTS.get(user.subscription_tier, 0)
     current_count = CustomBot.query.filter_by(owner_user_id=user.id).count()
     if current_count >= max_bots:
         return jsonify({

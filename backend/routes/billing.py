@@ -6,6 +6,7 @@ import requests
 from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from sqlalchemy.exc import IntegrityError
 from ..models import db, User, ProcessedPayment, PaymentHistory
 from ..config import Config
 from ..middleware.rate_limit import rate_limit
@@ -65,6 +66,23 @@ def _activate_subscription(user, tier, provider="unknown", payment_id=None,
         send_subscription_confirmation(user.email, user.full_name, tier, expires_str)
     except Exception:
         pass
+
+
+def _claim_dedup(dedup_key: str) -> bool:
+    """Atomically claim a dedup key. Returns True if this call is the first to
+    claim it (i.e. the caller should proceed), False if it was already claimed
+    (duplicate — skip processing).
+
+    Uses the UNIQUE constraint on ProcessedPayment.payment_id so that concurrent
+    webhooks race at the DB level; the loser gets an IntegrityError and returns False.
+    """
+    try:
+        db.session.add(ProcessedPayment(payment_id=dedup_key))
+        db.session.flush()   # raises IntegrityError immediately if duplicate
+        return True
+    except IntegrityError:
+        db.session.rollback()
+        return False
 
 
 # ─── Plans ────────────────────────────────────────────────────────────────────
@@ -203,6 +221,7 @@ def lemon_webhook():
             logger.warning("[LEMONSQUEEZY] Invalid webhook signature")
             return jsonify({"error": "Invalid signature"}), 400
 
+    # Parse payload BEFORE writing any dedup record to prevent orphaned rows
     try:
         event = json.loads(payload)
     except Exception:
@@ -221,14 +240,13 @@ def lemon_webhook():
             if bp not in ("monthly", "annual"):
                 bp = "monthly"
 
-            # Idempotency: skip duplicate webhook deliveries for the same order
+            # Idempotency: atomic INSERT — second webhook for the same order gets
+            # IntegrityError from the UNIQUE constraint and is safely skipped.
             dedup_key = f"ls_{order_id}" if order_id else None
             if dedup_key:
-                if ProcessedPayment.query.filter_by(payment_id=dedup_key).first():
+                if not _claim_dedup(dedup_key):
                     logger.info(f"[LEMONSQUEEZY] Duplicate webhook for order {order_id} — skipping")
                     return jsonify({"status": "ok"})
-                db.session.add(ProcessedPayment(payment_id=dedup_key))
-                db.session.flush()
 
             _activate_subscription(user, tier, provider="lemonsqueezy",
                                    payment_id=order_id, currency="USD", billing_period=bp)
@@ -332,6 +350,7 @@ def crypto_webhook():
             logger.error(f"[NOWPAYMENTS] Webhook verify error: {e}")
             return jsonify({"error": "Verification error"}), 400
 
+    # Parse payload BEFORE writing any dedup record
     try:
         data = json.loads(payload)
     except Exception:
@@ -346,14 +365,10 @@ def crypto_webhook():
         logger.info(f"[NOWPAYMENTS] Ignoring status '{payment_status}' for order {order_id}")
         return jsonify({"status": "ok"})
 
-    # Idempotency: reject duplicate webhook deliveries for the same payment
-    if payment_id:
-        if ProcessedPayment.query.filter_by(payment_id=payment_id).first():
-            logger.info(f"[NOWPAYMENTS] Duplicate webhook for payment_id={payment_id} — skipping")
-            return jsonify({"status": "ok"})
-        db.session.add(ProcessedPayment(payment_id=payment_id))
-        db.session.flush()
-
+    # Parse and validate order_id BEFORE claiming the dedup slot.
+    # If parsing fails, we must not write a dedup record — otherwise a retry
+    # with a fixed order_id would be silently skipped.
+    #
     # order_id formats:
     #   legacy:  user_{id}_{tier}_{timestamp}            (4 parts)
     #   current: user_{id}_{tier}_{billing_period}_{ts}  (5 parts)
@@ -366,22 +381,27 @@ def crypto_webhook():
         billing_period = parts[3] if len(parts) >= 5 and parts[3] in ("monthly", "annual") else "monthly"
     except Exception:
         logger.warning(f"[NOWPAYMENTS] Could not parse order_id: {order_id}")
-        db.session.rollback()
         return jsonify({"status": "ok"})
 
     user = User.query.get(user_id)
     if not user:
         logger.warning(f"[NOWPAYMENTS] User {user_id} not found for order {order_id}")
-        db.session.rollback()
         return jsonify({"status": "ok"})
 
-    # price_amount is the requested USD amount; pay_currency is the crypto used
+    # Idempotency: atomic INSERT — second delivery for same payment_id gets
+    # IntegrityError from UNIQUE constraint and is safely skipped.
+    if payment_id:
+        if not _claim_dedup(payment_id):
+            logger.info(f"[NOWPAYMENTS] Duplicate webhook for payment_id={payment_id} — skipping")
+            return jsonify({"status": "ok"})
+
     price_usd = data.get("price_amount")
     pay_currency = str(data.get("pay_currency") or "USD").upper()
     try:
         amount_usd_dollars = int(float(price_usd)) if price_usd else None
     except Exception:
         amount_usd_dollars = None
+
     _activate_subscription(user, tier, provider="nowpayments",
                            payment_id=payment_id, amount_usd=amount_usd_dollars,
                            currency=pay_currency, billing_period=billing_period)

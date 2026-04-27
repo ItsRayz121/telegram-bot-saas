@@ -6,21 +6,50 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def _get_fernet():
+def _fernet_from_secret(secret: str):
     from cryptography.fernet import Fernet
-    # ENCRYPTION_KEY env var takes precedence; fall back to SECRET_KEY.
-    secret = os.environ.get("ENCRYPTION_KEY") or os.environ.get("SECRET_KEY", "fallback-secret-key-change-in-production")
     key_bytes = hashlib.sha256(secret.encode("utf-8")).digest()
-    fernet_key = base64.urlsafe_b64encode(key_bytes)
-    return Fernet(fernet_key)
+    return Fernet(base64.urlsafe_b64encode(key_bytes))
+
+
+def _get_fernet():
+    """Return Fernet instance keyed from ENCRYPTION_KEY (required)."""
+    secret = os.environ.get("ENCRYPTION_KEY")
+    if not secret:
+        raise RuntimeError(
+            "ENCRYPTION_KEY environment variable is required for token encryption. "
+            "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\"\n"
+            "Migration: set ENCRYPTION_KEY_OLD to your current SECRET_KEY value so existing "
+            "encrypted records continue to decrypt during the transition period."
+        )
+    return _fernet_from_secret(secret)
+
+
+def _get_legacy_fernets():
+    """Return Fernet instances for backward-compatible decryption during key rotation.
+
+    Priority order:
+      1. ENCRYPTION_KEY_OLD  — explicit old encryption key (set this when rotating)
+      2. SECRET_KEY          — original fallback used before ENCRYPTION_KEY existed
+
+    Once all encrypted records have been re-saved under ENCRYPTION_KEY these
+    env vars can be removed.
+    """
+    candidates = []
+    old = os.environ.get("ENCRYPTION_KEY_OLD") or os.environ.get("SECRET_KEY")
+    if old:
+        try:
+            candidates.append(_fernet_from_secret(old))
+        except Exception:
+            pass
+    return candidates
 
 
 def encrypt_value(plaintext: str) -> str:
     if not plaintext:
         return ""
     try:
-        f = _get_fernet()
-        return f.encrypt(plaintext.encode("utf-8")).decode("utf-8")
+        return _get_fernet().encrypt(plaintext.encode("utf-8")).decode("utf-8")
     except Exception as e:
         logger.error(f"Encryption error: {e}")
         return ""
@@ -29,20 +58,29 @@ def encrypt_value(plaintext: str) -> str:
 def decrypt_value(ciphertext: str) -> str:
     """Decrypt a Fernet-encrypted value.
 
-    Handles backwards compatibility: if the value looks like a plain-text
-    Telegram bot token (contains ':' and no '==') we return it as-is so
-    existing unencrypted rows continue to work until they are re-saved.
+    Tries ENCRYPTION_KEY first, then legacy keys (ENCRYPTION_KEY_OLD / SECRET_KEY)
+    for backward compatibility during key rotation.  Falls back to returning the
+    raw value unchanged so callers continue to work with any pre-encryption
+    plaintext rows still in the DB.
     """
     if not ciphertext:
         return ""
+
+    # Primary key
     try:
-        f = _get_fernet()
-        return f.decrypt(ciphertext.encode("utf-8")).decode("utf-8")
+        return _get_fernet().decrypt(ciphertext.encode("utf-8")).decode("utf-8")
     except Exception:
-        # Likely a plain-text value stored before encryption was introduced.
-        # Return it so the caller can still function; it will be re-encrypted
-        # next time the record is saved.
-        return ciphertext
+        pass
+
+    # Legacy keys (key rotation / first deployment after adding ENCRYPTION_KEY)
+    for f in _get_legacy_fernets():
+        try:
+            return f.decrypt(ciphertext.encode("utf-8")).decode("utf-8")
+        except Exception:
+            pass
+
+    # Final fallback: plaintext stored before encryption was introduced.
+    return ciphertext
 
 
 def hash_token(token: str) -> str:

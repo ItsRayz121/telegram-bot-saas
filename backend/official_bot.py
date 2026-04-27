@@ -34,8 +34,6 @@ from .config import Config
 
 _log = logging.getLogger(__name__)
 
-_MAX_CUSTOM_BOTS = {"free": 0, "pro": 2, "enterprise": 10}
-
 
 # ─── Tiny DB helpers ──────────────────────────────────────────────────────────
 
@@ -382,6 +380,8 @@ async def cmd_linkgroup(update: Update, context: ContextTypes.DEFAULT_TYPE):
     already_linked = False
     linked_user_id = None   # if Telegram account is already linked to website
     code = None             # set when falling back to code flow
+    _limit_hit = None       # set to (max_groups, tier) when group limit exceeded
+    _limit_tier = None
 
     with flask_app.app_context():
         from .models import db, TelegramGroup, TelegramGroupLinkCode, User
@@ -403,19 +403,39 @@ async def cmd_linkgroup(update: Update, context: ContextTypes.DEFAULT_TYPE):
             website_user = User.query.filter_by(telegram_user_id=str(user.id)).first()
 
             if website_user:
-                # Auto-link: no code exchange needed
-                tg.owner_user_id = website_user.id
-                tg.bot_status = "active"
-                tg.linked_at = datetime.utcnow()
-                tg.linked_via_bot_type = "official"
-                # Expire any leftover codes for this group from this user
-                TelegramGroupLinkCode.query.filter_by(
-                    telegram_group_id=group_id,
-                    created_by_telegram_user_id=str(user.id),
-                    used_at=None,
-                ).update({"expires_at": datetime.utcnow()})
-                db.session.commit()
-                linked_user_id = website_user.id
+                # Enforce per-tier official group limit before auto-linking
+                max_groups = Config.MAX_OFFICIAL_GROUPS.get(website_user.subscription_tier, 3)
+                if max_groups != -1:
+                    current_count = TelegramGroup.query.filter_by(
+                        owner_user_id=website_user.id, is_disabled=False
+                    ).count()
+                    if current_count >= max_groups:
+                        db.session.commit()
+                        # Respond outside the context block (set flag)
+                        linked_user_id = None
+                        _limit_hit = max_groups
+                        _limit_tier = website_user.subscription_tier
+                    else:
+                        _limit_hit = None
+                        _limit_tier = None
+                else:
+                    _limit_hit = None
+                    _limit_tier = None
+
+                if _limit_hit is None:
+                    # Auto-link: no code exchange needed
+                    tg.owner_user_id = website_user.id
+                    tg.bot_status = "active"
+                    tg.linked_at = datetime.utcnow()
+                    tg.linked_via_bot_type = "official"
+                    # Expire any leftover codes for this group from this user
+                    TelegramGroupLinkCode.query.filter_by(
+                        telegram_group_id=group_id,
+                        created_by_telegram_user_id=str(user.id),
+                        used_at=None,
+                    ).update({"expires_at": datetime.utcnow()})
+                    db.session.commit()
+                    linked_user_id = website_user.id
             else:
                 # Code flow
                 TelegramGroupLinkCode.query.filter_by(
@@ -440,6 +460,14 @@ async def cmd_linkgroup(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 db.session.commit()
 
     # -- Send Telegram messages outside the DB context -------------------------
+    if _limit_hit is not None:
+        await update.message.reply_text(
+            f"⚠️ Your {_limit_tier.capitalize()} plan allows {_limit_hit} linked group(s).\n\n"
+            f"Upgrade to Pro for unlimited groups at {_frontend()}/billing",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
     if already_linked:
         await update.message.reply_text(
             "✅ This group is already linked to a Telegizer account.\n"
@@ -680,7 +708,7 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 from .models import db, CustomBot, User
 
                 u = User.query.get(website_user_id)
-                max_bots = _MAX_CUSTOM_BOTS.get(u.subscription_tier, 0)
+                max_bots = Config.MAX_CUSTOM_BOTS.get(u.subscription_tier, 0)
                 current_count = CustomBot.query.filter_by(owner_user_id=website_user_id).count()
                 if current_count >= max_bots:
                     save_error = (
@@ -1259,6 +1287,7 @@ class OfficialBotRunner:
         self.loop = None
         self._thread = None
         self._running = False
+        self._stop_event = threading.Event()
         self._lock = threading.Lock()
 
     def start(self, flask_app):
@@ -1273,6 +1302,7 @@ class OfficialBotRunner:
             if self._running:
                 _log.info("[OfficialBot] Already running, skipping duplicate start.")
                 return
+            self._stop_event.clear()
             self._thread = threading.Thread(
                 target=self._run_loop, args=(flask_app,),
                 daemon=True, name="telegizer-official-bot",
@@ -1285,15 +1315,40 @@ class OfficialBotRunner:
             )
 
     def _run_loop(self, flask_app):
+        """Polling loop with exponential-backoff auto-restart on crash."""
+        import time as _time
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
-        try:
-            self.loop.run_until_complete(self._poll(flask_app))
-        except Exception as exc:
-            _log.error("[OfficialBot] Fatal error: %s", exc, exc_info=True)
-        finally:
+
+        base_delay = 5
+        max_delay = 300
+        attempt = 0
+
+        while not self._stop_event.is_set():
+            try:
+                _log.info("[OfficialBot] Starting polling (attempt %d)…", attempt)
+                self.loop.run_until_complete(self._poll(flask_app))
+                _log.info("[OfficialBot] Polling finished cleanly — exiting restart loop.")
+                break
+            except Exception as exc:
+                _log.error(
+                    "[OfficialBot] Crash on attempt %d: %s",
+                    attempt, exc, exc_info=True,
+                )
+
+            if self._stop_event.is_set():
+                break
+
+            delay = min(base_delay * (2 ** attempt), max_delay)
+            _log.info("[OfficialBot] Restarting in %ds…", delay)
+            # Use stop_event.wait so we can be interrupted cleanly
+            if self._stop_event.wait(timeout=delay):
+                break
+            attempt += 1
+
+        with self._lock:
             self._running = False
-            _log.info("[OfficialBot] Thread exited")
+        _log.info("[OfficialBot] Thread exited")
 
     async def _poll(self, flask_app):
         self.application = Application.builder().token(Config.TELEGRAM_BOT_TOKEN).build()
@@ -1334,10 +1389,10 @@ class OfficialBotRunner:
             _log.warning("[OfficialBot] set_my_commands: %s", exc)
         await a.updater.start_polling(drop_pending_updates=True)
         _log.info("[OfficialBot] Long-polling active — bot is live.")
-        # Keep the coroutine alive; process exit stops the daemon thread.
+        # Keep alive in 60-second ticks so the stop_event is checked regularly.
         try:
-            while True:
-                await asyncio.sleep(3600)
+            while not self._stop_event.is_set():
+                await asyncio.sleep(60)
         except asyncio.CancelledError:
             pass
         finally:
