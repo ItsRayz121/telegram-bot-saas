@@ -78,6 +78,7 @@ export default function MyGroups() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const botIdFilter = searchParams.get('bot_id') ? Number(searchParams.get('bot_id')) : null;
+  const botTypeFilter = searchParams.get('bot_type'); // 'official' | null
 
   const [allGroups, setAllGroups] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -108,9 +109,13 @@ export default function MyGroups() {
 
   // When bot_id is in the URL, show only that custom bot's groups
   const groups = useMemo(() => {
-    if (!botIdFilter) return allGroups;
-    return allGroups.filter((g) => g.linked_bot_id === botIdFilter);
-  }, [allGroups, botIdFilter]);
+    if (botIdFilter) return allGroups.filter((g) => g.linked_bot_id === botIdFilter);
+    if (botTypeFilter === 'official')
+      return allGroups.filter(
+        (g) => (g.linked_via_bot_type === 'official' || !g.linked_via_bot_type) && !g.linked_bot_id
+      );
+    return allGroups;
+  }, [allGroups, botIdFilter, botTypeFilter]);
 
   const handleLink = async () => {
     if (!linkCode.trim()) return;
@@ -216,11 +221,13 @@ export default function MyGroups() {
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
           <Box>
             <Typography variant="h4" fontWeight={700}>
-              {botIdFilter ? 'Bot Groups' : 'My Groups'}
+              {botIdFilter ? 'Bot Groups' : botTypeFilter === 'official' ? 'Official Bot Groups' : 'My Groups'}
             </Typography>
             <Typography variant="body2" color="text.secondary" mt={0.5}>
               {botIdFilter
                 ? 'Groups linked to this custom bot'
+                : botTypeFilter === 'official'
+                ? 'Groups linked via the Official Telegizer Bot'
                 : 'All Telegram groups linked to Telegizer'}
             </Typography>
           </Box>

@@ -450,7 +450,7 @@ function OfficialBotSection({ user, navigate, officialGroupCount }) {
           startIcon={<Add />}>
           Add to Group
         </Button>
-        <Button size="small" startIcon={<Groups />} onClick={() => navigate('/my-groups')}>
+        <Button size="small" startIcon={<Groups />} onClick={() => navigate('/my-groups?bot_type=official')}>
           Manage Groups ({officialGroupCount})
         </Button>
       </CardActions>
