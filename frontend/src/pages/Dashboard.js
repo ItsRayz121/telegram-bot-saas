@@ -494,7 +494,10 @@ export default function Dashboard() {
   const fetchOfficialGroups = useCallback(async () => {
     try {
       const res = await telegramGroupsApi.list();
-      setOfficialGroupCount(res.data.groups?.length ?? 0);
+      const officialOnly = (res.data.groups ?? []).filter(
+        (g) => (g.linked_via_bot_type === 'official' || !g.linked_via_bot_type) && !g.linked_bot_id
+      );
+      setOfficialGroupCount(officialOnly.length);
     } catch { /* non-fatal */ }
   }, []);
 
