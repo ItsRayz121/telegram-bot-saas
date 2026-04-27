@@ -1412,6 +1412,18 @@ async def on_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
                f"{user.first_name} (id={user.id}) joined",
                {"telegram_user_id": str(user.id)})
 
+    # Increment cached member count
+    if flask_app:
+        try:
+            with flask_app.app_context():
+                from .models import db, TelegramGroup
+                tg = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
+                if tg:
+                    tg.member_count = (tg.member_count or 0) + 1
+                    db.session.commit()
+        except Exception:
+            pass
+
     if not flask_app:
         return
 
@@ -1988,26 +2000,28 @@ async def cmd_warn(update: Update, context: ContextTypes.DEFAULT_TYPE):
     args = context.args or []
     reason = _parse_reason(args)
 
-    # Count existing warnings from BotEvent
     warn_count = 1
     if flask_app:
         try:
             with flask_app.app_context():
-                from .models import BotEvent
-                warn_count = BotEvent.query.filter_by(
+                from .models import db, OfficialWarning
+                w = OfficialWarning(
                     telegram_group_id=group_id,
-                    event_type="mod_warning",
-                ).filter(
-                    BotEvent.metadata_["target_user_id"].astext == str(target_id)
-                ).count() + 1
-        except Exception:
-            pass
-
-    _log_event(flask_app, group_id, "mod_warning",
-               f"{target_name} warned by {update.effective_user.first_name}: {reason}",
-               {"target_user_id": str(target_id), "target_username": target_username,
-                "moderator_id": str(update.effective_user.id), "reason": reason,
-                "warn_number": warn_count})
+                    target_user_id=str(target_id),
+                    target_username=target_username or "",
+                    moderator_user_id=str(update.effective_user.id),
+                    moderator_username=update.effective_user.username or "",
+                    reason=reason,
+                )
+                db.session.add(w)
+                db.session.commit()
+                warn_count = OfficialWarning.query.filter_by(
+                    telegram_group_id=group_id,
+                    target_user_id=str(target_id),
+                    active=True,
+                ).count()
+        except Exception as _e:
+            _log.warning("[OfficialBot] Failed to save warning: %s", _e)
 
     warn_msg = await update.message.reply_text(
         f"⚠️ {target_name} has been warned.\n"
@@ -2255,17 +2269,16 @@ async def cmd_warnings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if flask_app:
         try:
             with flask_app.app_context():
-                from .models import BotEvent
-                count = BotEvent.query.filter_by(
+                from .models import OfficialWarning
+                count = OfficialWarning.query.filter_by(
                     telegram_group_id=group_id,
-                    event_type="mod_warning",
-                ).filter(
-                    BotEvent.metadata_["target_user_id"].astext == str(target_id)
+                    target_user_id=str(target_id),
+                    active=True,
                 ).count()
         except Exception:
             pass
 
-    await update.message.reply_text(f"⚠️ {target_name} has {count} warning(s) in this group.")
+    await update.message.reply_text(f"⚠️ {target_name} has {count} active warning(s) in this group.")
 
 
 # ─── OfficialBotRunner ────────────────────────────────────────────────────────

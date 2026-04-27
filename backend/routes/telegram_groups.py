@@ -15,7 +15,7 @@ Endpoints:
 from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from ..models import db, User, TelegramGroup, TelegramGroupLinkCode, BotEvent
+from ..models import db, User, TelegramGroup, TelegramGroupLinkCode, BotEvent, OfficialWarning
 from ..middleware.rate_limit import rate_limit
 from ..config import Config
 
@@ -244,3 +244,90 @@ def get_pending_groups():
     ).order_by(TelegramGroup.created_at.desc()).limit(50).all()
 
     return jsonify({"groups": [g.to_dict() for g in pending]})
+
+
+# ── Warnings ───────────────────────────────────────────────────────────────────
+
+@tg_groups_bp.route("/<group_id>/warnings", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def list_warnings(group_id):
+    """List all active warnings in a group, optionally filtered by user."""
+    user = _current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    tg = _owns_group(user.id, group_id)
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+
+    target_user_id = request.args.get("user_id")
+    q = OfficialWarning.query.filter_by(telegram_group_id=group_id)
+    if target_user_id:
+        q = q.filter_by(target_user_id=str(target_user_id))
+
+    include_inactive = request.args.get("include_inactive", "false").lower() == "true"
+    if not include_inactive:
+        q = q.filter_by(active=True)
+
+    warnings = q.order_by(OfficialWarning.created_at.desc()).limit(200).all()
+    return jsonify({"warnings": [w.to_dict() for w in warnings]}), 200
+
+
+@tg_groups_bp.route("/<group_id>/warnings/<int:warning_id>", methods=["DELETE"])
+@jwt_required()
+@rate_limit(requests_per_minute=20)
+def remove_warning(group_id, warning_id):
+    """Deactivate (soft-delete) a specific warning."""
+    user = _current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    tg = _owns_group(user.id, group_id)
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+
+    w = OfficialWarning.query.filter_by(id=warning_id, telegram_group_id=group_id).first()
+    if not w:
+        return jsonify({"error": "Warning not found"}), 404
+
+    w.active = False
+    db.session.commit()
+    return jsonify({"message": "Warning removed"}), 200
+
+
+# ── Mod-log (BotEvent stream for mod actions) ──────────────────────────────────
+
+@tg_groups_bp.route("/<group_id>/mod-log", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def get_mod_log(group_id):
+    """Return moderation events (ban/kick/mute/warn/purge) for a group."""
+    user = _current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    tg = _owns_group(user.id, group_id)
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+
+    MOD_EVENT_TYPES = (
+        "mod_warning", "mod_ban", "mod_kick", "mod_mute", "mod_unmute",
+        "mod_tempban", "mod_purge", "automod_action",
+    )
+    page = request.args.get("page", 1, type=int)
+    per_page = min(request.args.get("per_page", 50, type=int), 100)
+
+    paginated = BotEvent.query.filter(
+        BotEvent.telegram_group_id == group_id,
+        BotEvent.event_type.in_(MOD_EVENT_TYPES),
+    ).order_by(BotEvent.created_at.desc()).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+
+    return jsonify({
+        "events": [e.to_dict() for e in paginated.items],
+        "total": paginated.total,
+        "page": page,
+        "pages": paginated.pages,
+    }), 200

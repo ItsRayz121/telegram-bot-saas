@@ -807,9 +807,14 @@ class TelegramGroup(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
+    # Cached counts — kept up to date by the bot on member join/leave events
+    member_count = db.Column(db.Integer, default=0, nullable=False)
+    description = db.Column(db.Text, nullable=True)
+
     link_codes = db.relationship("TelegramGroupLinkCode", backref="telegram_group", lazy=True, cascade="all, delete-orphan")
     custom_commands = db.relationship("CustomCommand", backref="telegram_group", lazy=True, cascade="all, delete-orphan")
     bot_events = db.relationship("BotEvent", backref="telegram_group", lazy=True, cascade="all, delete-orphan")
+    official_warnings = db.relationship("OfficialWarning", backref="telegram_group", lazy=True, cascade="all, delete-orphan")
 
     def to_dict(self):
         return {
@@ -828,6 +833,41 @@ class TelegramGroup(db.Model):
             "is_disabled": self.is_disabled,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "member_count": self.member_count,
+            "description": self.description,
+        }
+
+
+class OfficialWarning(db.Model):
+    """Per-user warnings issued by admins in official bot groups."""
+    __tablename__ = "official_warnings"
+
+    id = db.Column(db.Integer, primary_key=True)
+    telegram_group_id = db.Column(
+        db.String(255),
+        db.ForeignKey("telegram_groups.telegram_group_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    target_user_id = db.Column(db.String(255), nullable=False, index=True)
+    target_username = db.Column(db.String(255), nullable=True)
+    moderator_user_id = db.Column(db.String(255), nullable=False)
+    moderator_username = db.Column(db.String(255), nullable=True)
+    reason = db.Column(db.Text, nullable=True)
+    active = db.Column(db.Boolean, default=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "telegram_group_id": self.telegram_group_id,
+            "target_user_id": self.target_user_id,
+            "target_username": self.target_username,
+            "moderator_user_id": self.moderator_user_id,
+            "moderator_username": self.moderator_username,
+            "reason": self.reason,
+            "active": self.active,
+            "created_at": self.created_at.isoformat(),
         }
 
 
