@@ -1,5 +1,7 @@
+import asyncio
 import logging
 import requests as _http
+from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy.orm.attributes import flag_modified
@@ -238,3 +240,184 @@ def get_bot_permissions(group_id):
     except Exception as e:
         logger.error(f"get_bot_permissions error: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
+
+
+# ── Official Group Digest ──────────────────────────────────────────────────────
+
+@official_settings_bp.route("/<group_id>/digest", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def get_official_digest(group_id):
+    try:
+        user = _get_current_user()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        tg, err = _get_official_group(user, group_id)
+        if err:
+            return err
+        digest = (tg.settings or {}).get("digest", {})
+        recipients = digest.get("recipients", {})
+        return jsonify({
+            "digest": {
+                "daily": bool(digest.get("daily")),
+                "weekly": bool(digest.get("weekly")),
+                "monthly": bool(digest.get("monthly")),
+                "last_daily": digest.get("last_daily"),
+                "last_weekly": digest.get("last_weekly"),
+                "last_monthly": digest.get("last_monthly"),
+                "recipients": {
+                    "owner_dm": bool(recipients.get("owner_dm", False)),
+                    "selected_admin_ids": recipients.get("selected_admin_ids") or [],
+                    "send_to_group": bool(recipients.get("send_to_group", True)),
+                    "group_topic_id": recipients.get("group_topic_id"),
+                },
+            }
+        })
+    except Exception as e:
+        logger.error(f"get_official_digest error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@official_settings_bp.route("/<group_id>/digest", methods=["PUT"])
+@jwt_required()
+@rate_limit(requests_per_minute=20)
+def update_official_digest(group_id):
+    try:
+        user = _get_current_user()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        tg, err = _get_official_group(user, group_id)
+        if err:
+            return err
+        data = request.get_json() or {}
+        current = dict(tg.settings or {})
+        digest = dict(current.get("digest", {}))
+
+        for key in ("daily", "weekly", "monthly"):
+            if key in data:
+                digest[key] = bool(data[key])
+
+        if "recipients" in data and isinstance(data["recipients"], dict):
+            rec = data["recipients"]
+            existing_rec = dict(digest.get("recipients", {}))
+            if "owner_dm" in rec:
+                existing_rec["owner_dm"] = bool(rec["owner_dm"])
+            if "selected_admin_ids" in rec:
+                existing_rec["selected_admin_ids"] = [str(x) for x in (rec["selected_admin_ids"] or [])]
+            if "send_to_group" in rec:
+                existing_rec["send_to_group"] = bool(rec["send_to_group"])
+            if "group_topic_id" in rec:
+                existing_rec["group_topic_id"] = int(rec["group_topic_id"]) if rec["group_topic_id"] else None
+            digest["recipients"] = existing_rec
+
+        current["digest"] = digest
+        tg.settings = current
+        flag_modified(tg, "settings")
+        db.session.commit()
+        return jsonify({"digest": digest})
+    except Exception as e:
+        logger.error(f"update_official_digest error: {e}", exc_info=True)
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
+@official_settings_bp.route("/<group_id>/digest/send-now", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=5)
+def send_official_digest_now(group_id):
+    """Send a digest report now for an official-bot group using TELEGRAM_BOT_TOKEN."""
+    try:
+        user = _get_current_user()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        tg, err = _get_official_group(user, group_id)
+        if err:
+            return err
+
+        token = Config.TELEGRAM_BOT_TOKEN
+        if not token:
+            return jsonify({"error": "Official bot token not configured"}), 500
+
+        data = request.get_json() or {}
+        period = data.get("period", "weekly")
+        period_config = {
+            "daily":   ("Daily Report",   timedelta(days=1)),
+            "weekly":  ("Weekly Report",  timedelta(days=7)),
+            "monthly": ("Monthly Report", timedelta(days=30)),
+        }
+        label, delta = period_config.get(period, ("Weekly Report", timedelta(days=7)))
+        since = datetime.utcnow() - delta
+
+        ok = _do_send_official_report(tg, token, user, label, since)
+        if not ok:
+            return jsonify({"error": "Failed to send report — ensure bot is active in the group and recipients have started @telegizer_bot"}), 502
+
+        current = dict(tg.settings or {})
+        digest = dict(current.get("digest", {}))
+        digest[f"last_{period}"] = datetime.utcnow().isoformat()
+        current["digest"] = digest
+        tg.settings = current
+        flag_modified(tg, "settings")
+        db.session.commit()
+        return jsonify({"status": "sent"})
+    except Exception as e:
+        logger.error(f"send_official_digest_now error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+def _do_send_official_report(tg: TelegramGroup, bot_token: str, owner_user: User, period_label: str, since: datetime) -> bool:
+    """Build and send a digest report for an official-bot group."""
+    from ..routes.digest import _build_report_data_for_official, _format_report_message
+
+    try:
+        data = _build_report_data_for_official(tg.telegram_group_id, since)
+        text = _format_report_message(tg.title or "Your Group", period_label, data)
+        recipients = (tg.settings or {}).get("digest", {}).get("recipients", {})
+        send_to_group = recipients.get("send_to_group", True)
+        topic_id = recipients.get("group_topic_id")
+        owner_dm = recipients.get("owner_dm", False)
+        admin_ids = recipients.get("selected_admin_ids") or []
+        sent_any = False
+
+        async def _send(chat_id, thread_id=None):
+            import telegram
+            bot = telegram.Bot(token=bot_token)
+            kwargs = dict(chat_id=chat_id, text=text, parse_mode="Markdown", disable_web_page_preview=True)
+            if thread_id:
+                kwargs["message_thread_id"] = int(thread_id)
+            await bot.send_message(**kwargs)
+
+        def _run(coro):
+            asyncio.run(coro)
+
+        if send_to_group:
+            try:
+                _run(_send(tg.telegram_group_id, topic_id))
+                sent_any = True
+            except Exception as exc:
+                logger.error(f"[DIGEST-official] group send failed group={tg.id}: {exc}")
+
+        if owner_dm and owner_user.telegram_user_id:
+            try:
+                if TelegramBotStarted.has_started(owner_user.telegram_user_id):
+                    _run(_send(owner_user.telegram_user_id))
+                    sent_any = True
+                else:
+                    logger.info(f"[DIGEST-official] owner {owner_user.id} has not started bot — skipping DM")
+            except Exception as exc:
+                logger.error(f"[DIGEST-official] owner DM failed: {exc}")
+
+        for admin_id in admin_ids:
+            try:
+                if TelegramBotStarted.has_started(str(admin_id)):
+                    _run(_send(str(admin_id)))
+                    sent_any = True
+                else:
+                    logger.info(f"[DIGEST-official] admin {admin_id} has not started bot — skipping DM")
+            except Exception as exc:
+                logger.error(f"[DIGEST-official] admin DM {admin_id} failed: {exc}")
+
+        return sent_any
+    except Exception as exc:
+        logger.error(f"[DIGEST-official] Send failed group={tg.id}: {exc}")
+        return False

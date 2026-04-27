@@ -117,6 +117,39 @@ def _build_report_data(group_id: int, since: datetime) -> dict:
     }
 
 
+def _build_report_data_for_official(telegram_group_id: str, since: datetime) -> dict:
+    """Like _build_report_data but uses telegram_group_id string (for official-bot groups)."""
+    # Official-bot groups don't use the Group/Member/AuditLog ORM tables, so we
+    # return a lightweight summary based on BotEvent records only.
+    from ..models import BotEvent
+    try:
+        events = (
+            db.session.query(BotEvent.event_type, func.count(BotEvent.id))
+            .filter(
+                BotEvent.telegram_group_id == str(telegram_group_id),
+                BotEvent.created_at >= since,
+            )
+            .group_by(BotEvent.event_type)
+            .all()
+        )
+    except Exception:
+        events = []
+    counts = {e: c for e, c in events}
+    return {
+        "period_start": since.strftime("%Y-%m-%d %H:%M UTC"),
+        "spam_removed": counts.get("automod_delete", 0) + counts.get("delete", 0),
+        "users_warned": counts.get("warn", 0),
+        "users_banned": counts.get("ban", 0) + counts.get("tempban", 0),
+        "users_muted": counts.get("mute", 0) + counts.get("tempmute", 0),
+        "users_kicked": counts.get("kick", 0),
+        "total_mod_actions": sum(counts.values()),
+        "scheduled_sent": 0,
+        "polls_sent": 0,
+        "member_count": counts.get("member_join", 0),
+        "invite_joins": 0,
+    }
+
+
 def _format_report_message(group_name: str, period_label: str, data: dict) -> str:
     lines = [
         f"📊 *{group_name} — {period_label} Report*",

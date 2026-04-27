@@ -254,15 +254,15 @@ export const userSettings = {
 export const digest = {
   get: (botId, groupId) =>
     botId === 'official'
-      ? Promise.resolve({ data: { digest: { daily: false, weekly: false, monthly: false, recipients: { owner_dm: false, selected_admin_ids: [], send_to_group: true, group_topic_id: null } } } })
+      ? api.get(`/api/official-groups/${groupId}/digest`)
       : api.get(`/api/bots/${botId}/groups/${groupId}/digest`),
   update: (botId, groupId, data) =>
     botId === 'official'
-      ? Promise.resolve({ data: { message: 'Saved' } })
+      ? api.put(`/api/official-groups/${groupId}/digest`, data)
       : api.put(`/api/bots/${botId}/groups/${groupId}/digest`, data),
   sendNow: (botId, groupId, data) =>
     botId === 'official'
-      ? _notAvailable('Digest reports are not yet available for official bot groups.')
+      ? api.post(`/api/official-groups/${groupId}/digest/send-now`, data)
       : api.post(`/api/bots/${botId}/groups/${groupId}/digest/send-now`, data),
 };
 

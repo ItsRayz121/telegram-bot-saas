@@ -1634,9 +1634,8 @@ export default function GroupSettings() {
                 </CardContent>
               </Card>
 
-              {/* Digest Recipients */}
-              {!isOfficial && (
-                <Card sx={{ mb: 2 }}>
+              {/* Digest Recipients — shown for both official-bot and custom-bot groups */}
+              <Card sx={{ mb: 2 }}>
                   <CardContent>
                     <Typography variant="subtitle1" fontWeight={600} mb={0.5}>Report Recipients</Typography>
                     <Typography variant="body2" color="text.secondary" mb={2}>
@@ -1731,7 +1730,6 @@ export default function GroupSettings() {
                     )}
                   </CardContent>
                 </Card>
-              )}
 
               <Card>
                 <CardContent>
