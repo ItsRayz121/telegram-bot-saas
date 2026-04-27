@@ -361,7 +361,7 @@ export default function MyBots() {
                           size="small"
                           variant="contained"
                           startIcon={<Groups />}
-                          onClick={() => navigate('/my-groups')}
+                          onClick={() => navigate(`/my-groups?bot_id=${bot.id}`)}
                           sx={{ flex: 1 }}
                         >
                           Groups

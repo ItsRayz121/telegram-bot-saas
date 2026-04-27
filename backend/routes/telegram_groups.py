@@ -15,7 +15,7 @@ Endpoints:
 from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from ..models import db, User, TelegramGroup, TelegramGroupLinkCode, BotEvent, OfficialWarning, OfficialMember
+from ..models import db, User, TelegramGroup, TelegramGroupLinkCode, BotEvent, OfficialWarning, OfficialMember, Bot, CustomBot
 from ..middleware.rate_limit import rate_limit
 from ..config import Config
 
@@ -50,7 +50,42 @@ def list_groups():
         is_disabled=False,
     ).order_by(TelegramGroup.linked_at.desc()).all()
 
-    return jsonify({"groups": [g.to_dict() for g in groups]})
+    groups_data = [g.to_dict() for g in groups]
+
+    # Also surface groups that were linked via the legacy bot_manager runner
+    # (stored in the old Bot/Group tables, never migrated to TelegramGroup).
+    new_system_tg_ids = {g.telegram_group_id for g in groups}
+
+    old_bots = Bot.query.filter_by(user_id=user.id).all()
+    custom_bots = CustomBot.query.filter_by(owner_user_id=user.id).all()
+    custom_bot_id_by_username = {cb.bot_username: cb.id for cb in custom_bots if cb.bot_username}
+
+    for old_bot in old_bots:
+        for grp in old_bot.groups:
+            if grp.telegram_group_id in new_system_tg_ids:
+                continue  # already present in TelegramGroup
+            groups_data.append({
+                "id": None,
+                "telegram_group_id": grp.telegram_group_id,
+                "title": grp.group_name or "Unknown Group",
+                "username": None,
+                "invite_link": None,
+                "owner_user_id": user.id,
+                "linked_via_bot_type": "custom",
+                "linked_bot_id": custom_bot_id_by_username.get(old_bot.bot_username),
+                "bot_status": "active" if old_bot.is_active else "inactive",
+                "bot_permissions": None,
+                "linked_at": None,
+                "last_activity": old_bot.last_active.isoformat() if old_bot.last_active else None,
+                "is_disabled": False,
+                "created_at": None,
+                "updated_at": None,
+                "member_count": grp.telegram_member_count or 0,
+                "description": None,
+                "source": "legacy",
+            })
+
+    return jsonify({"groups": groups_data})
 
 
 # ── Link a group via code ──────────────────────────────────────────────────────

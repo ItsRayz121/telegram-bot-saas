@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Box, Container, Typography, Button, Card, CardContent,
   Chip, CircularProgress, Alert, Dialog, DialogTitle,
@@ -76,7 +76,10 @@ function PermScoreBadge({ perms, liveScore, liveTotal }) {
 
 export default function MyGroups() {
   const navigate = useNavigate();
-  const [groups, setGroups] = useState([]);
+  const [searchParams] = useSearchParams();
+  const botIdFilter = searchParams.get('bot_id') ? Number(searchParams.get('bot_id')) : null;
+
+  const [allGroups, setAllGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkCode, setLinkCode] = useState('');
@@ -93,7 +96,7 @@ export default function MyGroups() {
     try {
       setLoading(true);
       const res = await telegramGroups.list();
-      setGroups(res.data.groups || []);
+      setAllGroups(res.data.groups || []);
     } catch {
       toast.error('Failed to load groups');
     } finally {
@@ -102,6 +105,12 @@ export default function MyGroups() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // When bot_id is in the URL, show only that custom bot's groups
+  const groups = useMemo(() => {
+    if (!botIdFilter) return allGroups;
+    return allGroups.filter((g) => g.linked_bot_id === botIdFilter);
+  }, [allGroups, botIdFilter]);
 
   const handleLink = async () => {
     if (!linkCode.trim()) return;
@@ -206,9 +215,13 @@ export default function MyGroups() {
         {/* Header */}
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
           <Box>
-            <Typography variant="h4" fontWeight={700}>My Groups</Typography>
+            <Typography variant="h4" fontWeight={700}>
+              {botIdFilter ? 'Bot Groups' : 'My Groups'}
+            </Typography>
             <Typography variant="body2" color="text.secondary" mt={0.5}>
-              Telegram groups linked to Telegizer
+              {botIdFilter
+                ? 'Groups linked to this custom bot'
+                : 'All Telegram groups linked to Telegizer'}
             </Typography>
           </Box>
           <IconButton onClick={load} disabled={loading}><Refresh /></IconButton>
@@ -340,10 +353,17 @@ export default function MyGroups() {
                             <BarChart fontSize="small" />
                           </IconButton>
                         </Tooltip>
-                        <Tooltip title="Unlink group">
-                          <IconButton size="small" color="error" onClick={() => setUnlinkTarget(g)}>
-                            <LinkOff fontSize="small" />
-                          </IconButton>
+                        <Tooltip title={g.source === 'legacy' ? 'Managed via custom bot runner' : 'Unlink group'}>
+                          <span>
+                            <IconButton
+                              size="small"
+                              color="error"
+                              onClick={() => setUnlinkTarget(g)}
+                              disabled={g.source === 'legacy'}
+                            >
+                              <LinkOff fontSize="small" />
+                            </IconButton>
+                          </span>
                         </Tooltip>
                       </Box>
                     </CardContent>

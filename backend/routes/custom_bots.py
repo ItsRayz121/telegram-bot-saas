@@ -25,10 +25,30 @@ def list_custom_bots():
     if not user:
         return jsonify({"error": "User not found"}), 404
 
+    from ..models import Bot
+
     bots = CustomBot.query.filter_by(owner_user_id=user.id).order_by(
         CustomBot.created_at.desc()
     ).all()
-    return jsonify({"bots": [b.to_dict() for b in bots]})
+
+    # Build username → old group count map so bots linked via the legacy
+    # bot_manager runner (Bot/Group tables) show the correct count even when
+    # TelegramGroup.linked_bot_id has never been populated.
+    old_bots = Bot.query.filter_by(user_id=user.id).all()
+    old_group_counts = {
+        ob.bot_username: len(ob.groups)
+        for ob in old_bots
+        if ob.bot_username
+    }
+
+    result = []
+    for bot in bots:
+        d = bot.to_dict()
+        if d["linked_groups_count"] == 0 and bot.bot_username in old_group_counts:
+            d["linked_groups_count"] = old_group_counts[bot.bot_username]
+        result.append(d)
+
+    return jsonify({"bots": result})
 
 
 # ── Add a custom bot ───────────────────────────────────────────────────────────
