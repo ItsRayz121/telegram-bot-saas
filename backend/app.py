@@ -1127,6 +1127,21 @@ def _run_official_group_digests(app):
                         tg.settings = settings
                         from .models import db
                         db.session.commit()
+
+                if digest_cfg.get("monthly"):
+                    last = digest_cfg.get("last_monthly")
+                    last_dt = datetime.fromisoformat(last) if last else None
+                    if not last_dt or (now - last_dt).total_seconds() >= 2_592_000:  # 30 days
+                        fut = _asyncio.run_coroutine_threadsafe(
+                            _send_official_digest(bot, tg, days=30), loop
+                        )
+                        fut.result(timeout=15)
+                        settings = dict(tg.settings)
+                        settings["digest"] = dict(digest_cfg)
+                        settings["digest"]["last_monthly"] = now.isoformat()
+                        tg.settings = settings
+                        from .models import db
+                        db.session.commit()
             except Exception as exc:
                 _scheduler_log.debug("Official digest for group %s failed: %s", tg.telegram_group_id, exc)
 

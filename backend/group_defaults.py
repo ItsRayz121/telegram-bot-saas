@@ -97,7 +97,7 @@ _DEFAULTS: dict = {
     },
 
     # ── XP / Levelling ────────────────────────────────────────────────────────
-    # Level formula (levels.py _xp_for_level): cumulative, each tier * 1.5
+    # Level formula (levels.py): linear — level = xp // 100 + 1 (100 XP per level)
     # Level-up message placeholders: {first_name} {level}
     "levels": {
         "enabled": True,
