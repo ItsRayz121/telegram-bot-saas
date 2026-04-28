@@ -2,7 +2,9 @@
 Centralized default settings for all new TelegramGroup records.
 
 Applied automatically when a group is first linked via the official Telegizer bot
-or a custom bot token. Existing groups with non-empty settings are never touched.
+or a custom bot token. Existing groups with non-empty settings are never touched
+by apply_group_defaults(), but fill_missing_defaults() will add any top-level
+section that is absent — safe to call on every group creation / link event.
 
 Edit _DEFAULTS here to change what every future group starts with.
 """
@@ -21,11 +23,38 @@ def apply_group_defaults(tg) -> bool:
 
     Returns True if defaults were applied, False if the group already had settings
     (so existing customisations are never overwritten).
+    For groups that already have some settings, use fill_missing_defaults() instead.
     """
     if tg.settings:
         return False
     tg.settings = get_group_default_settings()
     return True
+
+
+def fill_missing_defaults(tg) -> bool:
+    """
+    Ensure every top-level section in _DEFAULTS exists on tg.settings.
+
+    - If settings is empty/None: writes the full defaults (same as apply_group_defaults).
+    - If settings already exist: adds only the top-level keys that are absent.
+      Existing values are NEVER overwritten.
+
+    Returns True if any change was made, False if nothing was missing.
+    """
+    if not tg.settings:
+        tg.settings = get_group_default_settings()
+        return True
+
+    defaults = get_group_default_settings()
+    changed = False
+    current = dict(tg.settings)
+    for key, value in defaults.items():
+        if key not in current:
+            current[key] = value
+            changed = True
+    if changed:
+        tg.settings = current
+    return changed
 
 
 # ── Canonical defaults ────────────────────────────────────────────────────────
@@ -76,6 +105,7 @@ _DEFAULTS: dict = {
         "xp_cooldown_seconds": 60,
         "xp_per_reaction": 10,
         "xp_reaction_cooldown_seconds": 30,
+        "xp_per_raid": 50,
         "announce_level_up": True,
         "level_up_message": (
             "🎉 Level Up! Congrats {first_name} — you've reached Level {level}"
@@ -111,7 +141,6 @@ _DEFAULTS: dict = {
     #                     excessive_emojis, caps_lock, homoglyphs
     # DISABLED by default: external_links, telegram_links, all media/contact rules
     #
-    # homoglyphs is only active in bot_manager.py (official-bot Phase-3 item).
     # bad_words requires a non-empty words list to have any effect.
     "automod": {
         "enabled": True,
@@ -178,7 +207,6 @@ _DEFAULTS: dict = {
 
     # ── Warning / moderation system ───────────────────────────────────────────
     # warning_action: "mute" | "ban" | "kick"
-    # auto_delete_*_seconds: 0 = don't auto-delete; only active in bot_manager.py
     "moderation": {
         "max_warnings": 3,
         "warning_action": "mute",
@@ -196,8 +224,6 @@ _DEFAULTS: dict = {
     },
 
     # ── Auto-clean service messages ───────────────────────────────────────────
-    # Currently only applied by bot_manager.py (custom bots).
-    # Official-bot support is a Phase-3 item.
     "auto_clean": {
         "enabled": True,
         "delete_joins": True,
@@ -210,7 +236,7 @@ _DEFAULTS: dict = {
         "delete_commands": False,
     },
 
-    # ── Reports / digest ──────────────────────────────────────────────────────
+    # ── Reports ───────────────────────────────────────────────────────────────
     "reports": {
         "enabled": False,
         "notify_admins": "all",
@@ -231,5 +257,33 @@ _DEFAULTS: dict = {
     # ── Auto-responses ────────────────────────────────────────────────────────
     "auto_responses": {
         "enabled": True,
+    },
+
+    # ── Raids (Twitter/X engagement campaigns) ────────────────────────────────
+    "raids": {
+        "enabled": True,
+        "default_duration_hours": 24,
+        "default_xp_reward": 100,
+        "pin_announcement": True,
+        "reminders_enabled": True,
+    },
+
+    # ── Digest / activity reports ─────────────────────────────────────────────
+    # All off by default; admins opt in from the dashboard.
+    "digest": {
+        "daily": False,
+        "weekly": False,
+        "monthly": False,
+        "send_to_group": True,
+    },
+
+    # ── Admin alerts ──────────────────────────────────────────────────────────
+    # DM the group owner when these events occur.
+    "admin_alerts": {
+        "enabled": False,
+        "on_ban": False,
+        "on_raid_start": False,
+        "on_report": True,
+        "on_spam_burst": False,
     },
 }

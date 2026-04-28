@@ -305,6 +305,7 @@ def create_app():
         _run_phase4_migrations()
         _run_phase5_migrations()
         _run_phase6_migrations()
+        _backfill_group_defaults()
 
     # Start bots in a background thread after a short delay so Gunicorn can
     # pass its healthcheck before bot polling (which may contact Telegram and
@@ -608,6 +609,35 @@ def _run_phase6_migrations():
                         pass
     except Exception as exc:
         _mig_log.warning("phase6 migrations failed: %s", exc)
+
+
+def _backfill_group_defaults():
+    """Idempotent backfill: ensure every TelegramGroup has all top-level default
+    sections introduced in group_defaults._DEFAULTS.  Groups created before a
+    new section was added will silently receive it; existing values are never
+    overwritten.  Safe to run on every startup."""
+    _mig_log = logging.getLogger("migrations")
+    try:
+        from .group_defaults import fill_missing_defaults
+        from .models import TelegramGroup
+        with db.engine.connect() as _conn:
+            # Quick check: does the settings column exist yet?
+            _conn.execute(text("SELECT settings FROM telegram_groups LIMIT 0"))
+        with db.session.begin_nested() if False else db.session.no_autoflush:
+            groups = TelegramGroup.query.all()
+            patched = 0
+            for tg in groups:
+                if fill_missing_defaults(tg):
+                    patched += 1
+            if patched:
+                db.session.commit()
+                _mig_log.info("backfill_group_defaults: patched %d group(s)", patched)
+    except Exception as exc:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        _mig_log.debug("backfill_group_defaults skipped: %s", exc)
 
 
 def _fix_custom_bot_group_types():

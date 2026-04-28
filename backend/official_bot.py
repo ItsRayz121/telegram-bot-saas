@@ -38,7 +38,7 @@ except ImportError:
     _REACTION_HANDLER_AVAILABLE = False
 
 from .config import Config
-from .group_defaults import apply_group_defaults
+from .group_defaults import apply_group_defaults, fill_missing_defaults
 from .bot_features.group_context import GroupContext
 from .bot_features.welcome import WelcomeSystem
 from .bot_features.moderation import (
@@ -166,10 +166,12 @@ def _upsert_group(flask_app, group_id: str, title: str, username=None):
                     telegram_group_id=group_id, title=title,
                     username=username, bot_status="pending",
                 )
-                apply_group_defaults(tg)
+                fill_missing_defaults(tg)
                 db.session.add(tg)
             else:
                 tg.title = title
+                # Fill in any setting sections added since this group was first seen.
+                fill_missing_defaults(tg)
             db.session.commit()
     except Exception as exc:
         _log.debug("_upsert_group failed: %s", exc)
@@ -504,9 +506,11 @@ async def cmd_linkgroup(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 telegram_group_id=group_id, title=group_title,
                 username=chat.username, bot_status="pending",
             )
-            apply_group_defaults(tg)
+            fill_missing_defaults(tg)
             db.session.add(tg)
             db.session.flush()
+        else:
+            fill_missing_defaults(tg)
 
         if tg.owner_user_id and tg.bot_status == "active":
             already_linked = True

@@ -25,7 +25,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..models import db, User, TelegramGroup, TelegramGroupLinkCode, BotEvent, OfficialWarning, OfficialMember, Bot, CustomBot, OfficialScheduledMessage, OfficialPoll, KnowledgeDocument, AutoResponse, InviteLink, InviteLinkJoin, UserApiKey, OfficialRaid, OfficialWebhookIntegration, OfficialReportedMessage
 from ..middleware.rate_limit import rate_limit
 from ..config import Config
-from ..group_defaults import apply_group_defaults
+from ..group_defaults import apply_group_defaults, fill_missing_defaults
 
 tg_groups_bp = Blueprint("telegram_groups", __name__, url_prefix="/api/telegram-groups")
 
@@ -168,8 +168,9 @@ def link_group():
     tg.bot_status = "active"
     tg.linked_at = datetime.utcnow()
     tg.linked_via_bot_type = "official"
-    # Safety net: apply defaults if the group was created before defaults existed.
-    apply_group_defaults(tg)
+    # Fill in any default sections the group may be missing (handles both
+    # brand-new groups and those created before a feature was added).
+    fill_missing_defaults(tg)
     db.session.commit()
 
     # Log event
