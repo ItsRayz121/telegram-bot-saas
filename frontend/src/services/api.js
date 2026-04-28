@@ -74,8 +74,14 @@ export const bots = {
   getStatus: (id) => api.get(`/api/bots/${id}/status`),
 };
 
-const _notAvailable = (msg) =>
-  Promise.reject({ response: { data: { error: msg } } });
+// Normalise official-group mod-log event_type → action_type used by the Audit Log UI
+const _modTypeMap = (t) => ({
+  mod_warn: 'warn', mod_warning: 'warn',
+  mod_ban: 'ban', mod_kick: 'kick',
+  mod_mute: 'mute', mod_unmute: 'unmute',
+  mod_tempban: 'tempban', mod_tempmute: 'tempmute',
+  mod_purge: 'purge', automod_action: 'purge',
+}[t] || t);
 
 export const settings = {
   getGroupSettings: (botId, groupId) =>
@@ -86,54 +92,83 @@ export const settings = {
     botId === 'official'
       ? api.put(`/api/official-groups/${groupId}/settings`, data)
       : api.put(`/api/bots/${botId}/groups/${groupId}/settings`, data),
+
+  // Official groups: real OfficialMember directory with pagination/search/filters
   getMembers: (botId, groupId, params) =>
     botId === 'official'
-      ? Promise.resolve({ data: { members: [], total: 0, pages: 0, page: 1, per_page: 20 } })
+      ? api.get(`/api/telegram-groups/${groupId}/members`, { params })
       : api.get(`/api/bots/${botId}/groups/${groupId}/members`, { params }),
+
+  // Official groups: use mod-log and normalise to the audit-log shape the UI expects
   getAuditLogs: (botId, groupId, params) =>
     botId === 'official'
-      ? Promise.resolve({ data: { logs: [], total: 0, pages: 0, page: 1 } })
+      ? api.get(`/api/telegram-groups/${groupId}/mod-log`, { params }).then(r => ({
+          data: {
+            logs: (r.data.events || []).map(e => ({
+              id: e.id,
+              action_type: _modTypeMap(e.event_type),
+              target_username: e.metadata?.target_username || e.metadata?.target_user_id || '',
+              target_user_id: e.metadata?.target_user_id || '',
+              moderator_username: e.metadata?.moderator_username || e.metadata?.moderator_id || '',
+              moderator_id: e.metadata?.moderator_id || '',
+              reason: e.metadata?.reason || e.message || '',
+              timestamp: e.created_at,
+            })),
+            total: r.data.total,
+            pages: r.data.pages,
+            page: r.data.page,
+          },
+        }))
       : api.get(`/api/bots/${botId}/groups/${groupId}/audit-logs`, { params }),
+
+  // Official groups: real scheduled-messages endpoints
   getScheduledMessages: (botId, groupId) =>
     botId === 'official'
-      ? Promise.resolve({ data: { messages: [] } })
+      ? api.get(`/api/telegram-groups/${groupId}/scheduled-messages`)
       : api.get(`/api/bots/${botId}/groups/${groupId}/scheduled-messages`),
   createScheduledMessage: (botId, groupId, data) =>
     botId === 'official'
-      ? _notAvailable('Scheduled messages are coming soon for official bot groups.')
+      ? api.post(`/api/telegram-groups/${groupId}/scheduled-messages`, data)
       : api.post(`/api/bots/${botId}/groups/${groupId}/scheduled-messages`, data),
+  deleteScheduledMessage: (botId, groupId, msgId) =>
+    botId === 'official'
+      ? api.delete(`/api/telegram-groups/${groupId}/scheduled-messages/${msgId}`)
+      : api.delete(`/api/bots/${botId}/groups/${groupId}/scheduled-messages/${msgId}`),
+
+  // Raids — official groups now have a real endpoint
   createRaid: (botId, groupId, data) =>
     botId === 'official'
-      ? _notAvailable('Raids are coming soon for official bot groups.')
+      ? api.post(`/api/telegram-groups/${groupId}/raids`, data)
       : api.post(`/api/bots/${botId}/groups/${groupId}/raids`, data),
+
+  // Official groups: real auto-response endpoints
   getAutoResponses: (botId, groupId) =>
     botId === 'official'
-      ? Promise.resolve({ data: { auto_responses: [] } })
+      ? api.get(`/api/telegram-groups/${groupId}/auto-responses`)
       : api.get(`/api/bots/${botId}/groups/${groupId}/auto-responses`),
   createAutoResponse: (botId, groupId, data) =>
     botId === 'official'
-      ? _notAvailable('Auto-responses are coming soon for official bot groups.')
+      ? api.post(`/api/telegram-groups/${groupId}/auto-responses`, data)
       : api.post(`/api/bots/${botId}/groups/${groupId}/auto-responses`, data),
   updateAutoResponse: (botId, groupId, arId, data) =>
     botId === 'official'
-      ? _notAvailable('Auto-responses are coming soon for official bot groups.')
+      ? api.put(`/api/telegram-groups/${groupId}/auto-responses/${arId}`, data)
       : api.put(`/api/bots/${botId}/groups/${groupId}/auto-responses/${arId}`, data),
   deleteAutoResponse: (botId, groupId, arId) =>
     botId === 'official'
-      ? _notAvailable('Auto-responses are coming soon for official bot groups.')
+      ? api.delete(`/api/telegram-groups/${groupId}/auto-responses/${arId}`)
       : api.delete(`/api/bots/${botId}/groups/${groupId}/auto-responses/${arId}`),
+
+  // Reports — official groups now have real endpoints
   getReports: (botId, groupId, params) =>
     botId === 'official'
-      ? Promise.resolve({ data: { reports: [] } })
+      ? api.get(`/api/telegram-groups/${groupId}/reports`, { params })
       : api.get(`/api/bots/${botId}/groups/${groupId}/reports`, { params }),
   resolveReport: (botId, groupId, reportId) =>
     botId === 'official'
-      ? Promise.resolve({ data: { message: 'OK' } })
+      ? api.post(`/api/telegram-groups/${groupId}/reports/${reportId}/resolve`)
       : api.post(`/api/bots/${botId}/groups/${groupId}/reports/${reportId}/resolve`),
-  deleteScheduledMessage: (botId, groupId, msgId) =>
-    botId === 'official'
-      ? Promise.resolve({ data: { message: 'OK' } })
-      : api.delete(`/api/bots/${botId}/groups/${groupId}/scheduled-messages/${msgId}`),
+
   getGroupAdmins: (botId, groupId) =>
     botId === 'official'
       ? api.get(`/api/official-groups/${groupId}/admins`)
@@ -142,85 +177,101 @@ export const settings = {
     api.get(`/api/official-groups/${groupId}/permissions`),
 };
 
+// Official groups: real knowledge-base endpoints via /api/telegram-groups
 export const knowledge = {
   list: (botId, groupId) =>
     botId === 'official'
-      ? Promise.resolve({ data: { documents: [] } })
+      ? api.get(`/api/telegram-groups/${groupId}/knowledge`)
       : api.get(`/api/bots/${botId}/groups/${groupId}/knowledge`),
   upload: (botId, groupId, formData) =>
     botId === 'official'
-      ? _notAvailable('Knowledge base is coming soon for official bot groups.')
+      ? api.post(`/api/telegram-groups/${groupId}/knowledge`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        })
       : api.post(`/api/bots/${botId}/groups/${groupId}/knowledge`, formData, {
           headers: { 'Content-Type': undefined },
         }),
   delete: (botId, groupId, docId) =>
     botId === 'official'
-      ? Promise.resolve({ data: {} })
+      ? api.delete(`/api/telegram-groups/${groupId}/knowledge/${docId}`)
       : api.delete(`/api/bots/${botId}/groups/${groupId}/knowledge/${docId}`),
 };
 
+// Official groups: real polls endpoints via /api/telegram-groups
+// Backend returns a raw array for GET; normalise to { polls: [] } for the PollCreator component
 export const polls = {
   list: (botId, groupId) =>
     botId === 'official'
-      ? Promise.resolve({ data: { polls: [] } })
+      ? api.get(`/api/telegram-groups/${groupId}/polls`)
+          .then(r => ({ data: { polls: Array.isArray(r.data) ? r.data : (r.data.polls || []) } }))
       : api.get(`/api/bots/${botId}/groups/${groupId}/polls`),
   create: (botId, groupId, data) =>
     botId === 'official'
-      ? _notAvailable('Polls are coming soon for official bot groups.')
+      ? api.post(`/api/telegram-groups/${groupId}/polls`, data)
       : api.post(`/api/bots/${botId}/groups/${groupId}/polls`, data),
   delete: (botId, groupId, pollId) =>
     botId === 'official'
-      ? Promise.resolve({ data: {} })
+      ? api.delete(`/api/telegram-groups/${groupId}/polls/${pollId}`)
       : api.delete(`/api/bots/${botId}/groups/${groupId}/polls/${pollId}`),
 };
 
 export const webhooks = {
   list: (botId, groupId) =>
     botId === 'official'
-      ? Promise.resolve({ data: { webhooks: [] } })
+      ? api.get(`/api/telegram-groups/${groupId}/webhooks`)
       : api.get(`/api/bots/${botId}/groups/${groupId}/webhooks`),
   create: (botId, groupId, data) =>
     botId === 'official'
-      ? _notAvailable('Webhooks are coming soon for official bot groups.')
+      ? api.post(`/api/telegram-groups/${groupId}/webhooks`, data)
       : api.post(`/api/bots/${botId}/groups/${groupId}/webhooks`, data),
   update: (botId, groupId, hookId, data) =>
     botId === 'official'
-      ? _notAvailable('Webhooks are coming soon for official bot groups.')
+      ? api.put(`/api/telegram-groups/${groupId}/webhooks/${hookId}`, data)
       : api.put(`/api/bots/${botId}/groups/${groupId}/webhooks/${hookId}`, data),
   delete: (botId, groupId, hookId) =>
     botId === 'official'
-      ? Promise.resolve({ data: {} })
+      ? api.delete(`/api/telegram-groups/${groupId}/webhooks/${hookId}`)
       : api.delete(`/api/bots/${botId}/groups/${groupId}/webhooks/${hookId}`),
 };
 
+// Official groups: real invite-link endpoints via /api/telegram-groups
 export const invites = {
   list: (botId, groupId, params) =>
     botId === 'official'
-      ? Promise.resolve({ data: { links: [] } })
+      ? api.get(`/api/telegram-groups/${groupId}/invite-links`, { params })
       : api.get(`/api/bots/${botId}/groups/${groupId}/invite-links`, { params }),
   create: (botId, groupId, data) =>
     botId === 'official'
-      ? _notAvailable('Invite links are coming soon for official bot groups.')
+      ? api.post(`/api/telegram-groups/${groupId}/invite-links`, data)
       : api.post(`/api/bots/${botId}/groups/${groupId}/invite-links`, data),
   delete: (botId, groupId, linkId) =>
     botId === 'official'
-      ? Promise.resolve({ data: {} })
+      ? api.delete(`/api/telegram-groups/${groupId}/invite-links/${linkId}`)
       : api.delete(`/api/bots/${botId}/groups/${groupId}/invite-links/${linkId}`),
   getLinkAnalytics: (botId, groupId, linkId, params) =>
     botId === 'official'
-      ? Promise.resolve({ data: { clicks: [], total: 0 } })
+      ? api.get(`/api/telegram-groups/${groupId}/invite-links/${linkId}/analytics`, { params })
       : api.get(`/api/bots/${botId}/groups/${groupId}/invite-links/${linkId}/analytics`, { params }),
 };
 
+// Official groups: real AI-key endpoints via /api/telegram-groups
 export const apiKeys = {
   get: (botId, groupId) =>
-    api.get(`/api/bots/${botId}/groups/${groupId}/api-keys`),
+    botId === 'official'
+      ? api.get(`/api/telegram-groups/${groupId}/api-key`)
+      : api.get(`/api/bots/${botId}/groups/${groupId}/api-keys`),
   save: (botId, groupId, data) =>
-    api.post(`/api/bots/${botId}/groups/${groupId}/api-keys`, data),
+    botId === 'official'
+      ? api.post(`/api/telegram-groups/${groupId}/api-key`, data)
+      : api.post(`/api/bots/${botId}/groups/${groupId}/api-keys`, data),
   delete: (botId, groupId) =>
-    api.delete(`/api/bots/${botId}/groups/${groupId}/api-keys`),
+    botId === 'official'
+      ? api.delete(`/api/telegram-groups/${groupId}/api-key`)
+      : api.delete(`/api/bots/${botId}/groups/${groupId}/api-keys`),
   test: (botId, groupId, data) =>
-    api.post(`/api/bots/${botId}/groups/${groupId}/api-keys/test`, data),
+    botId === 'official'
+      ? api.post(`/api/telegram-groups/${groupId}/api-key/test`, data)
+      : api.post(`/api/bots/${botId}/groups/${groupId}/api-keys/test`, data),
 };
 
 export const analytics = {
@@ -258,6 +309,7 @@ export const userSettings = {
   deleteAccount: (data) => api.delete('/api/auth/account', { data }),
 };
 
+// Digest: official groups use /api/official-groups/ (existing official_settings.py blueprint)
 export const digest = {
   get: (botId, groupId) =>
     botId === 'official'
@@ -325,11 +377,41 @@ export const telegramGroups = {
   getApiKey: (groupId) => api.get(`/api/telegram-groups/${groupId}/api-key`),
   setApiKey: (groupId, data) => api.post(`/api/telegram-groups/${groupId}/api-key`, data),
   deleteApiKey: (groupId) => api.delete(`/api/telegram-groups/${groupId}/api-key`),
-  // Warnings / mod-log
+  // Warnings / mod-log / leaderboard
   listWarnings: (groupId, params) => api.get(`/api/telegram-groups/${groupId}/warnings`, { params }),
   removeWarning: (groupId, warningId) => api.delete(`/api/telegram-groups/${groupId}/warnings/${warningId}`),
   getModLog: (groupId, params) => api.get(`/api/telegram-groups/${groupId}/mod-log`, { params }),
   getLeaderboard: (groupId, params) => api.get(`/api/telegram-groups/${groupId}/leaderboard`, { params }),
+  // Scheduled messages
+  listScheduledMessages: (groupId) => api.get(`/api/telegram-groups/${groupId}/scheduled-messages`),
+  createScheduledMessage: (groupId, data) => api.post(`/api/telegram-groups/${groupId}/scheduled-messages`, data),
+  updateScheduledMessage: (groupId, msgId, data) => api.put(`/api/telegram-groups/${groupId}/scheduled-messages/${msgId}`, data),
+  deleteScheduledMessage: (groupId, msgId) => api.delete(`/api/telegram-groups/${groupId}/scheduled-messages/${msgId}`),
+  // Polls
+  listPolls: (groupId) => api.get(`/api/telegram-groups/${groupId}/polls`),
+  createPoll: (groupId, data) => api.post(`/api/telegram-groups/${groupId}/polls`, data),
+  deletePoll: (groupId, pollId) => api.delete(`/api/telegram-groups/${groupId}/polls/${pollId}`),
+  // Digest (alternative to /api/official-groups/ route — both work)
+  getDigest: (groupId) => api.get(`/api/telegram-groups/${groupId}/digest`),
+  updateDigest: (groupId, data) => api.put(`/api/telegram-groups/${groupId}/digest`, data),
+  sendDigest: (groupId, data) => api.post(`/api/telegram-groups/${groupId}/digest/send`, data),
+  // Members directory
+  listMembers: (groupId, params) => api.get(`/api/telegram-groups/${groupId}/members`, { params }),
+  // Raids
+  listRaids: (groupId) => api.get(`/api/telegram-groups/${groupId}/raids`),
+  createRaid: (groupId, data) => api.post(`/api/telegram-groups/${groupId}/raids`, data),
+  // Webhooks
+  listWebhooks: (groupId) => api.get(`/api/telegram-groups/${groupId}/webhooks`),
+  createWebhook: (groupId, data) => api.post(`/api/telegram-groups/${groupId}/webhooks`, data),
+  updateWebhook: (groupId, hookId, data) => api.put(`/api/telegram-groups/${groupId}/webhooks/${hookId}`, data),
+  deleteWebhook: (groupId, hookId) => api.delete(`/api/telegram-groups/${groupId}/webhooks/${hookId}`),
+  // Invite link analytics
+  getLinkAnalytics: (groupId, linkId) => api.get(`/api/telegram-groups/${groupId}/invite-links/${linkId}/analytics`),
+  // API key test
+  testApiKey: (groupId, data) => api.post(`/api/telegram-groups/${groupId}/api-key/test`, data),
+  // Reports
+  listReports: (groupId, params) => api.get(`/api/telegram-groups/${groupId}/reports`, { params }),
+  resolveReport: (groupId, reportId) => api.post(`/api/telegram-groups/${groupId}/reports/${reportId}/resolve`),
 };
 
 export const customBots = {

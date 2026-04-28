@@ -1216,3 +1216,105 @@ class BotEvent(db.Model):
             "metadata": self.metadata_,
             "created_at": self.created_at.isoformat(),
         }
+
+
+# ── Official-group feature models (Phase 2 — full parity with custom bots) ──────
+
+class OfficialRaid(db.Model):
+    """Twitter/X raids for official-bot groups. Mirrors the custom-bot Raid model."""
+    __tablename__ = "official_raids"
+
+    id = db.Column(db.Integer, primary_key=True)
+    telegram_group_id = db.Column(
+        db.String(255),
+        db.ForeignKey("telegram_groups.telegram_group_id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    tweet_url = db.Column(db.String(500), nullable=False)
+    goals = db.Column(db.JSON, default=dict, nullable=False)
+    duration_hours = db.Column(db.Integer, default=24, nullable=False)
+    xp_reward = db.Column(db.Integer, default=100, nullable=False)
+    pin_message = db.Column(db.Boolean, default=True, nullable=False)
+    reminders_enabled = db.Column(db.Boolean, default=True, nullable=False)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    ends_at = db.Column(db.DateTime, nullable=False)
+    participants = db.Column(db.JSON, default=list, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "telegram_group_id": self.telegram_group_id,
+            "tweet_url": self.tweet_url,
+            "goals": self.goals or {},
+            "duration_hours": self.duration_hours,
+            "xp_reward": self.xp_reward,
+            "pin_message": self.pin_message,
+            "reminders_enabled": self.reminders_enabled,
+            "is_active": self.is_active,
+            "created_at": self.created_at.isoformat() + "Z",
+            "ends_at": self.ends_at.isoformat() + "Z",
+            "participants": self.participants or [],
+        }
+
+
+class OfficialWebhookIntegration(db.Model):
+    """Incoming webhook integrations for official-bot groups."""
+    __tablename__ = "official_webhook_integrations"
+
+    id = db.Column(db.Integer, primary_key=True)
+    telegram_group_id = db.Column(
+        db.String(255),
+        db.ForeignKey("telegram_groups.telegram_group_id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    name = db.Column(db.String(100), nullable=False)
+    webhook_token = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    description = db.Column(db.String(255), nullable=True)
+    message_template = db.Column(db.Text, default="📡 *{name}*\n\n{payload}", nullable=False)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "telegram_group_id": self.telegram_group_id,
+            "name": self.name,
+            "webhook_token": self.webhook_token,
+            "description": self.description,
+            "message_template": self.message_template,
+            "is_active": self.is_active,
+            "created_at": self.created_at.isoformat() + "Z",
+        }
+
+
+class OfficialReportedMessage(db.Model):
+    """User reports (/report command) for official-bot groups."""
+    __tablename__ = "official_reported_messages"
+
+    id = db.Column(db.Integer, primary_key=True)
+    telegram_group_id = db.Column(
+        db.String(255),
+        db.ForeignKey("telegram_groups.telegram_group_id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    reporter_user_id = db.Column(db.String(255), nullable=False)
+    reporter_username = db.Column(db.String(100), nullable=True)
+    reported_user_id = db.Column(db.String(255), nullable=True)
+    reported_username = db.Column(db.String(100), nullable=True)
+    reason = db.Column(db.String(500), nullable=True)
+    status = db.Column(db.String(20), default="open", nullable=False)  # open | resolved
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "telegram_group_id": self.telegram_group_id,
+            "reporter_user_id": self.reporter_user_id,
+            "reporter_username": self.reporter_username,
+            "reported_user_id": self.reported_user_id,
+            "reported_username": self.reported_username,
+            "reason": self.reason,
+            "status": self.status,
+            "created_at": self.created_at.isoformat(),
+        }

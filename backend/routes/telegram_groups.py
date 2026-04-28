@@ -18,10 +18,11 @@ Endpoints:
   GET/POST/DELETE /api/telegram-groups/<id>/api-key     — CRUD AI provider API key
 """
 
+import secrets as _secrets
 from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from ..models import db, User, TelegramGroup, TelegramGroupLinkCode, BotEvent, OfficialWarning, OfficialMember, Bot, CustomBot, OfficialScheduledMessage, OfficialPoll, KnowledgeDocument, AutoResponse, InviteLink, UserApiKey
+from ..models import db, User, TelegramGroup, TelegramGroupLinkCode, BotEvent, OfficialWarning, OfficialMember, Bot, CustomBot, OfficialScheduledMessage, OfficialPoll, KnowledgeDocument, AutoResponse, InviteLink, InviteLinkJoin, UserApiKey, OfficialRaid, OfficialWebhookIntegration, OfficialReportedMessage
 from ..middleware.rate_limit import rate_limit
 from ..config import Config
 from ..group_defaults import apply_group_defaults
@@ -1021,3 +1022,385 @@ def delete_official_api_key(group_id):
     UserApiKey.query.filter_by(telegram_group_id=group_id).update({"is_active": False})
     db.session.commit()
     return jsonify({"message": "API key deactivated"}), 200
+
+
+# ── AI Provider API Key Test ───────────────────────────────────────────────────
+
+@tg_groups_bp.route("/<group_id>/api-key/test", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=10)
+def test_official_api_key(group_id):
+    user = _current_user()
+    tg = _owns_group(user.id, group_id)
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+
+    record = UserApiKey.query.filter_by(
+        telegram_group_id=group_id, is_active=True
+    ).order_by(UserApiKey.created_at.desc()).first()
+    if not record:
+        return jsonify({"error": "No API key configured"}), 404
+
+    from ..utils.encryption import decrypt_value
+    raw_key = decrypt_value(record.api_key_encrypted)
+
+    try:
+        if record.provider == "openai":
+            import openai
+            client = openai.OpenAI(api_key=raw_key, base_url=record.base_url or None)
+            client.models.list()
+        elif record.provider == "anthropic":
+            import anthropic
+            client = anthropic.Anthropic(api_key=raw_key)
+            client.models.list()
+        elif record.provider in ("openrouter", "custom"):
+            import requests as req
+            base = record.base_url or "https://openrouter.ai/api/v1"
+            resp = req.get(f"{base}/models", headers={"Authorization": f"Bearer {raw_key}"}, timeout=10)
+            resp.raise_for_status()
+        elif record.provider == "gemini":
+            import requests as req
+            resp = req.get(
+                f"https://generativelanguage.googleapis.com/v1beta/models?key={raw_key}",
+                timeout=10,
+            )
+            resp.raise_for_status()
+        else:
+            return jsonify({"error": f"Test not supported for provider '{record.provider}'"}), 400
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 200
+
+    return jsonify({"ok": True, "provider": record.provider}), 200
+
+
+# ── Members Directory ──────────────────────────────────────────────────────────
+
+@tg_groups_bp.route("/<group_id>/members", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def list_official_members(group_id):
+    user = _current_user()
+    tg = _owns_group(user.id, group_id)
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+
+    page = max(1, int(request.args.get("page", 1)))
+    per_page = min(100, max(1, int(request.args.get("per_page", 50))))
+    q = (request.args.get("q") or "").strip().lower()
+    role_filter = request.args.get("role")
+    is_verified = request.args.get("is_verified")
+    is_muted = request.args.get("is_muted")
+    is_admin = request.args.get("is_admin")
+    sort_by = request.args.get("sort_by", "xp")
+    sort_dir = request.args.get("sort_dir", "desc")
+
+    query = OfficialMember.query.filter_by(telegram_group_id=group_id)
+
+    if q:
+        query = query.filter(
+            db.or_(
+                OfficialMember.username.ilike(f"%{q}%"),
+                OfficialMember.first_name.ilike(f"%{q}%"),
+            )
+        )
+    if role_filter:
+        query = query.filter(OfficialMember.role == role_filter)
+    if is_verified is not None:
+        query = query.filter(OfficialMember.is_verified == (is_verified.lower() == "true"))
+    if is_muted is not None:
+        query = query.filter(OfficialMember.is_muted == (is_muted.lower() == "true"))
+    if is_admin is not None:
+        query = query.filter(OfficialMember.is_admin == (is_admin.lower() == "true"))
+
+    col = getattr(OfficialMember, sort_by, OfficialMember.xp)
+    query = query.order_by(col.desc() if sort_dir == "desc" else col.asc())
+
+    total = query.count()
+    members = query.offset((page - 1) * per_page).limit(per_page).all()
+
+    return jsonify({
+        "members": [m.to_dict() for m in members],
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "pages": max(1, (total + per_page - 1) // per_page),
+    }), 200
+
+
+# ── Raids ──────────────────────────────────────────────────────────────────────
+
+@tg_groups_bp.route("/<group_id>/raids", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def list_official_raids(group_id):
+    user = _current_user()
+    tg = _owns_group(user.id, group_id)
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+
+    raids = OfficialRaid.query.filter_by(
+        telegram_group_id=group_id
+    ).order_by(OfficialRaid.created_at.desc()).all()
+    return jsonify({"raids": [r.to_dict() for r in raids]}), 200
+
+
+@tg_groups_bp.route("/<group_id>/raids", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=10)
+def create_official_raid(group_id):
+    user = _current_user()
+    tg = _owns_group(user.id, group_id)
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+
+    data = request.get_json() or {}
+    tweet_url = (data.get("tweet_url") or "").strip()
+    if not tweet_url:
+        return jsonify({"error": "tweet_url is required"}), 400
+
+    duration_hours = int(data.get("duration_hours", 24))
+    ends_at = datetime.utcnow() + timedelta(hours=duration_hours)
+
+    raid = OfficialRaid(
+        telegram_group_id=group_id,
+        tweet_url=tweet_url,
+        goals=data.get("goals") or {},
+        duration_hours=duration_hours,
+        xp_reward=int(data.get("xp_reward", 100)),
+        pin_message=bool(data.get("pin_message", True)),
+        reminders_enabled=bool(data.get("reminders_enabled", True)),
+        is_active=True,
+        ends_at=ends_at,
+        participants=[],
+    )
+    db.session.add(raid)
+    db.session.commit()
+
+    # Announce raid in the Telegram group
+    from ..official_bot import get_official_bot_loop
+    bot, loop = get_official_bot_loop()
+    if bot and loop:
+        import asyncio
+        goals_text = ""
+        if raid.goals:
+            goals_text = "\n".join(
+                f"  • {g.get('type', 'action').title()}: {g.get('target', 0)}"
+                for g in (raid.goals if isinstance(raid.goals, list) else [])
+            )
+        msg = (
+            f"🚀 *Raid Started!*\n\n"
+            f"Tweet: {tweet_url}\n"
+            f"Duration: {duration_hours}h  •  XP Reward: {raid.xp_reward}\n"
+            f"{goals_text}\n\n"
+            f"Use /raid to participate!"
+        )
+        try:
+            sent = asyncio.run_coroutine_threadsafe(
+                bot.send_message(chat_id=int(group_id), text=msg, parse_mode="Markdown"),
+                loop,
+            ).result(timeout=15)
+            if raid.pin_message:
+                asyncio.run_coroutine_threadsafe(
+                    bot.pin_chat_message(chat_id=int(group_id), message_id=sent.message_id),
+                    loop,
+                ).result(timeout=10)
+        except Exception:
+            pass
+
+    return jsonify({"raid": raid.to_dict()}), 201
+
+
+# ── Webhooks ───────────────────────────────────────────────────────────────────
+
+@tg_groups_bp.route("/<group_id>/webhooks", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def list_official_webhooks(group_id):
+    user = _current_user()
+    tg = _owns_group(user.id, group_id)
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+
+    hooks = OfficialWebhookIntegration.query.filter_by(
+        telegram_group_id=group_id
+    ).order_by(OfficialWebhookIntegration.created_at.desc()).all()
+    return jsonify({"webhooks": [h.to_dict() for h in hooks]}), 200
+
+
+@tg_groups_bp.route("/<group_id>/webhooks", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=10)
+def create_official_webhook(group_id):
+    user = _current_user()
+    tg = _owns_group(user.id, group_id)
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+
+    data = request.get_json() or {}
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "name is required"}), 400
+
+    hook = OfficialWebhookIntegration(
+        telegram_group_id=group_id,
+        name=name[:100],
+        webhook_token=_secrets.token_urlsafe(32),
+        description=data.get("description"),
+        message_template=data.get("message_template") or "📡 *{name}*\n\n{payload}",
+        is_active=bool(data.get("is_active", True)),
+    )
+    db.session.add(hook)
+    db.session.commit()
+    return jsonify({"webhook": hook.to_dict()}), 201
+
+
+@tg_groups_bp.route("/<group_id>/webhooks/<int:hook_id>", methods=["PUT"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def update_official_webhook(group_id, hook_id):
+    user = _current_user()
+    tg = _owns_group(user.id, group_id)
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+
+    hook = OfficialWebhookIntegration.query.filter_by(id=hook_id, telegram_group_id=group_id).first()
+    if not hook:
+        return jsonify({"error": "Webhook not found"}), 404
+
+    data = request.get_json() or {}
+    if "name" in data:
+        hook.name = data["name"][:100]
+    if "description" in data:
+        hook.description = data["description"]
+    if "message_template" in data:
+        hook.message_template = data["message_template"]
+    if "is_active" in data:
+        hook.is_active = bool(data["is_active"])
+
+    db.session.commit()
+    return jsonify({"webhook": hook.to_dict()}), 200
+
+
+@tg_groups_bp.route("/<group_id>/webhooks/<int:hook_id>", methods=["DELETE"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def delete_official_webhook(group_id, hook_id):
+    user = _current_user()
+    tg = _owns_group(user.id, group_id)
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+
+    hook = OfficialWebhookIntegration.query.filter_by(id=hook_id, telegram_group_id=group_id).first()
+    if not hook:
+        return jsonify({"error": "Webhook not found"}), 404
+
+    db.session.delete(hook)
+    db.session.commit()
+    return jsonify({"message": "Deleted"}), 200
+
+
+# ── Public Webhook Trigger ─────────────────────────────────────────────────────
+
+@tg_groups_bp.route("/webhook-trigger/<token>", methods=["POST"])
+@rate_limit(requests_per_minute=30)
+def trigger_official_webhook(token):
+    hook = OfficialWebhookIntegration.query.filter_by(webhook_token=token, is_active=True).first()
+    if not hook:
+        return jsonify({"error": "Invalid or inactive webhook token"}), 404
+
+    data = request.get_json() or {}
+    payload = data.get("payload") or ""
+    name = hook.name
+    msg = hook.message_template.replace("{name}", name).replace("{payload}", str(payload))
+    for k, v in (data.get("vars") or {}).items():
+        msg = msg.replace(f"{{{k}}}", str(v))
+
+    from ..official_bot import get_official_bot_loop
+    bot, loop = get_official_bot_loop()
+    if not bot or not loop:
+        return jsonify({"error": "Bot unavailable"}), 503
+
+    import asyncio
+    try:
+        asyncio.run_coroutine_threadsafe(
+            bot.send_message(
+                chat_id=int(hook.telegram_group_id),
+                text=msg,
+                parse_mode="Markdown",
+            ),
+            loop,
+        ).result(timeout=15)
+    except Exception as exc:
+        return jsonify({"error": f"Telegram delivery failed: {exc}"}), 502
+
+    return jsonify({"ok": True}), 200
+
+
+# ── Invite Link Analytics ──────────────────────────────────────────────────────
+
+@tg_groups_bp.route("/<group_id>/invite-links/<int:link_id>/analytics", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def get_invite_link_analytics(group_id, link_id):
+    user = _current_user()
+    tg = _owns_group(user.id, group_id)
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+
+    lnk = InviteLink.query.filter_by(id=link_id, telegram_group_id=group_id).first()
+    if not lnk:
+        return jsonify({"error": "Invite link not found"}), 404
+
+    joins = InviteLinkJoin.query.filter_by(invite_link_id=link_id).order_by(InviteLinkJoin.joined_at.desc()).all()
+    return jsonify({
+        "invite_link": lnk.to_dict(include_analytics=True),
+        "joins": [
+            {
+                "id": j.id,
+                "telegram_user_id": j.telegram_user_id,
+                "username": j.username,
+                "first_name": j.first_name,
+                "joined_at": j.joined_at.isoformat() + "Z",
+            }
+            for j in joins
+        ],
+        "total_joins": len(joins),
+    }), 200
+
+
+# ── Reports ────────────────────────────────────────────────────────────────────
+
+@tg_groups_bp.route("/<group_id>/reports", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def list_official_reports(group_id):
+    user = _current_user()
+    tg = _owns_group(user.id, group_id)
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+
+    status_filter = request.args.get("status")
+    query = OfficialReportedMessage.query.filter_by(telegram_group_id=group_id)
+    if status_filter in ("open", "resolved"):
+        query = query.filter_by(status=status_filter)
+
+    reports = query.order_by(OfficialReportedMessage.created_at.desc()).all()
+    return jsonify({"reports": [r.to_dict() for r in reports]}), 200
+
+
+@tg_groups_bp.route("/<group_id>/reports/<int:report_id>/resolve", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def resolve_official_report(group_id, report_id):
+    user = _current_user()
+    tg = _owns_group(user.id, group_id)
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+
+    report = OfficialReportedMessage.query.filter_by(id=report_id, telegram_group_id=group_id).first()
+    if not report:
+        return jsonify({"error": "Report not found"}), 404
+
+    report.status = "resolved"
+    db.session.commit()
+    return jsonify({"report": report.to_dict()}), 200

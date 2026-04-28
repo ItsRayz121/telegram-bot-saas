@@ -11,10 +11,11 @@ import {
 import {
   ArrowBack, Save, Add, ExpandMore, Delete, CheckCircle, Schedule,
   Send, Assessment, Shield, Group, AutoAwesome, BarChart, People, Bolt,
+  Warning as WarningIcon, EmojiEvents,
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { settings, digest as digestApi } from '../services/api';
+import { settings, digest as digestApi, telegramGroups as tgGroupsApi } from '../services/api';
 import RaidCreator from '../components/RaidCreator';
 import ScheduledMessages from '../components/ScheduledMessages';
 import KnowledgeBase from '../components/KnowledgeBase';
@@ -23,13 +24,19 @@ import WebhookManager from '../components/WebhookManager';
 import InviteLinks from '../components/InviteLinks';
 import TimezoneSelect from '../components/TimezoneSelect';
 
-const CATEGORIES = [
+// Built at render time so official-group extras can be injected
+const buildCategories = (isOfficial) => [
   { id: 'moderation', label: 'Moderation', icon: Shield, subTabs: ['AutoMod', 'Behavior', 'Reports'] },
   { id: 'members',    label: 'Members',    icon: Group,  subTabs: ['Verification', 'Welcome', 'XP & Roles'] },
   { id: 'automation', label: 'Automation', icon: Bolt,   subTabs: ['Scheduler', 'Auto Reply', 'Polls'] },
   { id: 'community',  label: 'Community',  icon: People, subTabs: ['Raids', 'Invite Links'] },
   { id: 'ai',         label: 'AI & Integrations', icon: AutoAwesome, subTabs: ['Knowledge Base', 'Webhooks'] },
-  { id: 'analytics',  label: 'Analytics',  icon: BarChart, subTabs: ['Members', 'Audit Log', 'Digest'] },
+  {
+    id: 'analytics', label: 'Analytics', icon: BarChart,
+    subTabs: isOfficial
+      ? ['Members', 'Leaderboard', 'Audit Log', 'Warnings', 'Digest']
+      : ['Members', 'Audit Log', 'Digest'],
+  },
 ];
 
 function ProBadge() {
@@ -107,6 +114,9 @@ export default function GroupSettings() {
   const { id: rawBotId, groupId } = useParams();
   const botId = rawBotId || 'official';
   const isOfficial = !rawBotId;
+
+  const CATEGORIES = buildCategories(isOfficial);
+
   const [cat, setCat] = useState('moderation');
   const [subTab, setSubTab] = useState(0);
   const [groupData, setGroupData] = useState(null);
@@ -117,6 +127,16 @@ export default function GroupSettings() {
   const [members, setMembers] = useState([]);
   const [membersTotal, setMembersTotal] = useState(0);
   const [membersPage, setMembersPage] = useState(1);
+  const [membersPages, setMembersPages] = useState(1);
+  const [membersSearch, setMembersSearch] = useState('');
+  const [membersRole, setMembersRole] = useState('');
+  const [membersVerified, setMembersVerified] = useState('');
+  const [membersMuted, setMembersMuted] = useState('');
+  const [membersSort, setMembersSort] = useState('xp');
+  const [membersSortDir, setMembersSortDir] = useState('desc');
+
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
 
   const [auditLogs, setAuditLogs] = useState([]);
   const [auditTotal, setAuditTotal] = useState(0);
@@ -129,6 +149,10 @@ export default function GroupSettings() {
 
   const [reports, setReports] = useState([]);
   const [reportsLoading, setReportsLoading] = useState(false);
+
+  // Warnings — official groups only
+  const [warnings, setWarnings] = useState([]);
+  const [warningsLoading, setWarningsLoading] = useState(false);
 
   const [raidOpen, setRaidOpen] = useState(false);
 
@@ -159,13 +183,36 @@ export default function GroupSettings() {
 
   const fetchMembers = useCallback(async (page = 1) => {
     try {
-      const res = await settings.getMembers(botId, groupId, { page, per_page: 20 });
+      const params = { page, per_page: 20 };
+      if (isOfficial) {
+        if (membersSearch) params.q = membersSearch;
+        if (membersRole) params.role = membersRole;
+        if (membersVerified) params.is_verified = membersVerified;
+        if (membersMuted) params.is_muted = membersMuted;
+        params.sort_by = membersSort;
+        params.sort_dir = membersSortDir;
+      }
+      const res = await settings.getMembers(botId, groupId, params);
       setMembers(res.data.members);
-      setMembersTotal(res.data.pages);
+      setMembersTotal(res.data.total || 0);
+      setMembersPages(res.data.pages || 1);
     } catch {
       toast.error('Failed to load members');
     }
-  }, [botId, groupId]);
+  }, [botId, groupId, isOfficial, membersSearch, membersRole, membersVerified, membersMuted, membersSort, membersSortDir]);
+
+  const fetchLeaderboard = useCallback(async () => {
+    if (!isOfficial) return;
+    setLeaderboardLoading(true);
+    try {
+      const res = await tgGroupsApi.getLeaderboard(groupId, { limit: 50 });
+      setLeaderboard(res.data.members || []);
+    } catch {
+      toast.error('Failed to load leaderboard');
+    } finally {
+      setLeaderboardLoading(false);
+    }
+  }, [isOfficial, groupId]);
 
   const fetchAuditLogs = useCallback(async (page = 1) => {
     try {
@@ -197,6 +244,29 @@ export default function GroupSettings() {
       setReportsLoading(false);
     }
   }, [botId, groupId]);
+
+  const fetchWarnings = useCallback(async () => {
+    if (!isOfficial) return;
+    setWarningsLoading(true);
+    try {
+      const res = await tgGroupsApi.listWarnings(groupId);
+      setWarnings(res.data.warnings || []);
+    } catch {
+      toast.error('Failed to load warnings');
+    } finally {
+      setWarningsLoading(false);
+    }
+  }, [isOfficial, groupId]);
+
+  const handleRemoveWarning = async (warningId) => {
+    try {
+      await tgGroupsApi.removeWarning(groupId, warningId);
+      toast.success('Warning removed');
+      setWarnings(prev => prev.filter(w => w.id !== warningId));
+    } catch {
+      toast.error('Failed to remove warning');
+    }
+  };
 
   const fetchDigest = useCallback(async () => {
     setDigestLoading(true);
@@ -256,17 +326,26 @@ export default function GroupSettings() {
     }
   };
 
+  // official: ['Members', 'Leaderboard', 'Audit Log', 'Warnings', 'Digest']
+  // custom:   ['Members', 'Audit Log', 'Digest']
+  const leaderboardSubTabIdx = isOfficial ? 1 : -1;
+  const auditLogSubTabIdx    = isOfficial ? 2 : 1;
+  const warningsSubTabIdx    = isOfficial ? 3 : -1;
+  const digestSubTabIdx      = isOfficial ? 4 : 2;
+
   useEffect(() => { fetchSettings(); }, [fetchSettings]);
   useEffect(() => { if (cat === 'analytics' && subTab === 0) fetchMembers(membersPage); }, [cat, subTab, membersPage, fetchMembers]);
-  useEffect(() => { if (cat === 'analytics' && subTab === 1) fetchAuditLogs(auditPage); }, [cat, subTab, auditPage, fetchAuditLogs]);
+  useEffect(() => { if (cat === 'analytics' && subTab === leaderboardSubTabIdx) fetchLeaderboard(); }, [cat, subTab, leaderboardSubTabIdx, fetchLeaderboard]);
+  useEffect(() => { if (cat === 'analytics' && subTab === auditLogSubTabIdx) fetchAuditLogs(auditPage); }, [cat, subTab, auditLogSubTabIdx, auditPage, fetchAuditLogs]);
   useEffect(() => { if (cat === 'automation' && subTab === 1) fetchAutoResponses(); }, [cat, subTab, fetchAutoResponses]);
   useEffect(() => { if (cat === 'moderation' && subTab === 2) fetchReports(); }, [cat, subTab, fetchReports]);
-  useEffect(() => { if (cat === 'analytics' && subTab === 2) fetchDigest(); }, [cat, subTab, fetchDigest]);
+  useEffect(() => { if (cat === 'analytics' && subTab === warningsSubTabIdx) fetchWarnings(); }, [cat, subTab, warningsSubTabIdx, fetchWarnings]);
+  useEffect(() => { if (cat === 'analytics' && subTab === digestSubTabIdx) fetchDigest(); }, [cat, subTab, digestSubTabIdx, fetchDigest]);
   useEffect(() => {
-    if ((cat === 'moderation' && subTab === 2) || (cat === 'analytics' && subTab === 2)) {
+    if ((cat === 'moderation' && subTab === 2) || (cat === 'analytics' && subTab === digestSubTabIdx)) {
       fetchAdmins();
     }
-  }, [cat, subTab, fetchAdmins]);
+  }, [cat, subTab, digestSubTabIdx, fetchAdmins]);
 
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
   const [upgradeFeature, setUpgradeFeature] = useState('');
@@ -1455,9 +1534,67 @@ export default function GroupSettings() {
             ANALYTICS
         ══════════════════════════════════════════════════════════ */}
 
-        {/* ANALYTICS › Members */}
+        {/* ANALYTICS › Members Directory */}
         {cat === 'analytics' && subTab === 0 && (
           <>
+            {isOfficial && (
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, mb: 2 }}>
+                <TextField
+                  size="small" placeholder="Search name or @username…" sx={{ flex: '1 1 200px' }}
+                  value={membersSearch}
+                  onChange={(e) => { setMembersSearch(e.target.value); setMembersPage(1); }}
+                />
+                <FormControl size="small" sx={{ minWidth: 110 }}>
+                  <InputLabel>Role</InputLabel>
+                  <Select value={membersRole} label="Role" onChange={(e) => { setMembersRole(e.target.value); setMembersPage(1); }}>
+                    <MenuItem value="">All</MenuItem>
+                    <MenuItem value="member">Member</MenuItem>
+                    <MenuItem value="mod">Mod</MenuItem>
+                    <MenuItem value="admin">Admin</MenuItem>
+                    <MenuItem value="owner">Owner</MenuItem>
+                    <MenuItem value="vip">VIP</MenuItem>
+                  </Select>
+                </FormControl>
+                <FormControl size="small" sx={{ minWidth: 120 }}>
+                  <InputLabel>Verified</InputLabel>
+                  <Select value={membersVerified} label="Verified" onChange={(e) => { setMembersVerified(e.target.value); setMembersPage(1); }}>
+                    <MenuItem value="">All</MenuItem>
+                    <MenuItem value="true">Verified</MenuItem>
+                    <MenuItem value="false">Unverified</MenuItem>
+                  </Select>
+                </FormControl>
+                <FormControl size="small" sx={{ minWidth: 110 }}>
+                  <InputLabel>Muted</InputLabel>
+                  <Select value={membersMuted} label="Muted" onChange={(e) => { setMembersMuted(e.target.value); setMembersPage(1); }}>
+                    <MenuItem value="">All</MenuItem>
+                    <MenuItem value="true">Muted</MenuItem>
+                    <MenuItem value="false">Active</MenuItem>
+                  </Select>
+                </FormControl>
+                <FormControl size="small" sx={{ minWidth: 120 }}>
+                  <InputLabel>Sort by</InputLabel>
+                  <Select value={membersSort} label="Sort by" onChange={(e) => { setMembersSort(e.target.value); setMembersPage(1); }}>
+                    <MenuItem value="xp">XP</MenuItem>
+                    <MenuItem value="level">Level</MenuItem>
+                    <MenuItem value="first_name">Name</MenuItem>
+                    <MenuItem value="joined_at">Joined</MenuItem>
+                    <MenuItem value="warnings">Warnings</MenuItem>
+                  </Select>
+                </FormControl>
+                <FormControl size="small" sx={{ minWidth: 100 }}>
+                  <InputLabel>Direction</InputLabel>
+                  <Select value={membersSortDir} label="Direction" onChange={(e) => { setMembersSortDir(e.target.value); setMembersPage(1); }}>
+                    <MenuItem value="desc">↓ Desc</MenuItem>
+                    <MenuItem value="asc">↑ Asc</MenuItem>
+                  </Select>
+                </FormControl>
+                {isOfficial && (
+                  <Typography variant="caption" color="text.secondary" sx={{ alignSelf: 'center' }}>
+                    {membersTotal} member{membersTotal !== 1 ? 's' : ''}
+                  </Typography>
+                )}
+              </Box>
+            )}
             <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', overflowX: 'auto' }}>
               <Table size="small">
                 <TableHead>
@@ -1500,13 +1637,9 @@ export default function GroupSettings() {
                             <Typography
                               variant="body2"
                               sx={{
-                                fontFamily: 'monospace',
-                                fontSize: '0.75rem',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
-                                cursor: 'pointer',
-                                color: 'primary.main',
+                                fontFamily: 'monospace', fontSize: '0.75rem',
+                                overflow: 'hidden', textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap', cursor: 'pointer', color: 'primary.main',
                               }}
                               onClick={() => navigator.clipboard.writeText(m.wallet_address)}
                             >
@@ -1524,18 +1657,92 @@ export default function GroupSettings() {
                 </TableBody>
               </Table>
             </TableContainer>
-            {membersTotal > 1 && (
+            {membersPages > 1 && (
               <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
-                <Pagination count={membersTotal} page={membersPage}
+                <Pagination count={membersPages} page={membersPage}
                   onChange={(_, p) => setMembersPage(p)} color="primary" />
               </Box>
             )}
           </>
         )}
 
-        {/* ANALYTICS › Audit Log */}
-        {cat === 'analytics' && subTab === 1 && (
+        {/* ANALYTICS › Leaderboard (official groups only) */}
+        {cat === 'analytics' && subTab === leaderboardSubTabIdx && isOfficial && (
           <>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+              <EmojiEvents color="primary" />
+              <Typography variant="h6" fontWeight={600}>XP Leaderboard</Typography>
+              <Typography variant="body2" color="text.secondary">— top members ranked by XP</Typography>
+            </Box>
+            {leaderboardLoading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
+            ) : (
+              <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', overflowX: 'auto' }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell align="center">#</TableCell>
+                      <TableCell>User</TableCell>
+                      <TableCell align="right">XP</TableCell>
+                      <TableCell align="right">Level</TableCell>
+                      <TableCell>Role</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {leaderboard.map((m, idx) => (
+                      <TableRow key={m.id} hover>
+                        <TableCell align="center">
+                          <Typography
+                            variant="body2"
+                            fontWeight={idx < 3 ? 800 : 400}
+                            color={idx === 0 ? '#FFD700' : idx === 1 ? '#C0C0C0' : idx === 2 ? '#CD7F32' : 'text.primary'}
+                          >
+                            {idx < 3 ? ['🥇', '🥈', '🥉'][idx] : idx + 1}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" fontWeight={idx < 3 ? 700 : 400}>
+                            {m.first_name}{m.username ? ` (@${m.username})` : ''}
+                          </Typography>
+                        </TableCell>
+                        <TableCell align="right">
+                          <Typography variant="body2" fontWeight={600} color="primary.main">
+                            {(m.xp ?? 0).toLocaleString()}
+                          </Typography>
+                        </TableCell>
+                        <TableCell align="right">{m.level}</TableCell>
+                        <TableCell><Chip label={m.role} size="small" variant="outlined" /></TableCell>
+                      </TableRow>
+                    ))}
+                    {leaderboard.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={5} align="center">
+                          <Typography variant="body2" color="text.secondary" py={2}>
+                            No members with XP yet. Members earn XP by sending messages and using commands.
+                          </Typography>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
+          </>
+        )}
+
+        {/* ANALYTICS › Audit Log / Mod Log */}
+        {cat === 'analytics' && subTab === auditLogSubTabIdx && (
+          <>
+            {isOfficial && (
+              <Typography variant="body2" color="text.secondary" mb={1.5}>
+                Moderation actions (bans, kicks, mutes, warns, purges) logged by @telegizer_bot in this group.
+              </Typography>
+            )}
+            {auditLogs.length === 0 ? (
+              <Alert severity="info" icon={false}>
+                No moderation events recorded yet. Events appear here after admins use commands like /ban, /kick, /mute, or /warn.
+              </Alert>
+            ) : (
             <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', overflowX: 'auto' }}>
               <Table size="small">
                 <TableHead>
@@ -1543,7 +1750,7 @@ export default function GroupSettings() {
                     <TableCell>Action</TableCell>
                     <TableCell>Target</TableCell>
                     <TableCell>Moderator</TableCell>
-                    <TableCell>Reason</TableCell>
+                    <TableCell>Reason / Description</TableCell>
                     <TableCell>Time</TableCell>
                   </TableRow>
                 </TableHead>
@@ -1553,8 +1760,16 @@ export default function GroupSettings() {
                       <TableCell>
                         <Chip label={log.action_type} color={ACTION_COLORS[log.action_type] || 'default'} size="small" />
                       </TableCell>
-                      <TableCell><Typography variant="body2">{log.target_username || log.target_user_id}</Typography></TableCell>
-                      <TableCell><Typography variant="body2">{log.moderator_username || log.moderator_id}</Typography></TableCell>
+                      <TableCell>
+                        <Typography variant="body2">
+                          {log.target_username ? `@${log.target_username}` : log.target_user_id || '—'}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2">
+                          {log.moderator_username ? `@${log.moderator_username}` : log.moderator_id || '—'}
+                        </Typography>
+                      </TableCell>
                       <TableCell><Typography variant="body2" color="text.secondary">{log.reason || '-'}</Typography></TableCell>
                       <TableCell>
                         <Typography variant="caption" color="text.secondary">
@@ -1566,6 +1781,7 @@ export default function GroupSettings() {
                 </TableBody>
               </Table>
             </TableContainer>
+            )}
             {auditTotal > 1 && (
               <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
                 <Pagination count={auditTotal} page={auditPage}
@@ -1575,8 +1791,79 @@ export default function GroupSettings() {
           </>
         )}
 
+        {/* ANALYTICS › Warnings (official groups only) */}
+        {cat === 'analytics' && subTab === warningsSubTabIdx && isOfficial && (
+          <Card>
+            <CardContent>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <WarningIcon color="warning" />
+                  <Typography variant="h6" fontWeight={600}>Active Warnings</Typography>
+                  <Chip label={warnings.length} size="small" color="warning" variant="outlined" />
+                </Box>
+                <Button size="small" onClick={fetchWarnings} disabled={warningsLoading}>Refresh</Button>
+              </Box>
+              <Typography variant="body2" color="text.secondary" mb={2}>
+                Active warnings issued by admins via <code>/warn</code>. Remove a warning to reduce a member's warning count.
+              </Typography>
+              {warningsLoading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}><CircularProgress size={24} /></Box>
+              ) : warnings.length === 0 ? (
+                <Alert severity="success" icon={<CheckCircle />}>No active warnings in this group.</Alert>
+              ) : (
+                <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider' }}>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Warned Member</TableCell>
+                        <TableCell>Reason</TableCell>
+                        <TableCell>Issued By</TableCell>
+                        <TableCell>Date</TableCell>
+                        <TableCell align="center">Remove</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {warnings.map((w) => (
+                        <TableRow key={w.id} hover>
+                          <TableCell>
+                            <Typography variant="body2" fontWeight={500}>
+                              {w.target_username ? `@${w.target_username}` : w.target_user_id}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2" color={w.reason ? 'text.primary' : 'text.disabled'}>
+                              {w.reason || '—'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {w.moderator_username ? `@${w.moderator_username}` : w.moderator_user_id}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="caption" color="text.secondary">
+                              {w.created_at ? new Date(w.created_at).toLocaleString() : '—'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell align="center">
+                            <Tooltip title="Remove this warning">
+                              <IconButton size="small" color="error" onClick={() => handleRemoveWarning(w.id)}>
+                                <Delete fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* ANALYTICS › Digest */}
-        {cat === 'analytics' && subTab === 2 && (
+        {cat === 'analytics' && subTab === digestSubTabIdx && (
           digestLoading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
           ) : (

@@ -3194,6 +3194,23 @@ async def cmd_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     _log_event(flask_app, group_id, "user_reported",
                f"{target_name} reported by {reporter.first_name}: {reason}",
                {"target_user_id": str(target_id), "reporter_id": str(reporter.id)})
+    if flask_app:
+        try:
+            with flask_app.app_context():
+                from .models import db, OfficialReportedMessage
+                rpt = OfficialReportedMessage(
+                    telegram_group_id=group_id,
+                    reporter_user_id=str(reporter.id),
+                    reporter_username=reporter.username,
+                    reported_user_id=str(target_id) if target_id else None,
+                    reported_username=target_name,
+                    reason=reason,
+                    status="open",
+                )
+                db.session.add(rpt)
+                db.session.commit()
+        except Exception as exc:
+            _log.debug("[OfficialBot] OfficialReportedMessage save failed: %s", exc)
 
 
 async def cmd_removewarning(update: Update, context: ContextTypes.DEFAULT_TYPE):

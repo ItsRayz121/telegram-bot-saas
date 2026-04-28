@@ -801,6 +801,47 @@ def _run_migrations():
         # Full settings panel for official bot groups
         "ALTER TABLE telegram_groups ADD COLUMN settings JSONB NOT NULL DEFAULT '{}'",
         "ALTER TABLE telegram_groups ADD COLUMN timezone VARCHAR(50) DEFAULT 'UTC'",
+        # Official-group feature tables (Phase 2 — full parity with custom bots)
+        """CREATE TABLE IF NOT EXISTS official_raids (
+            id SERIAL PRIMARY KEY,
+            telegram_group_id VARCHAR(255) NOT NULL REFERENCES telegram_groups(telegram_group_id) ON DELETE CASCADE,
+            tweet_url VARCHAR(500) NOT NULL,
+            goals JSONB NOT NULL DEFAULT '{}',
+            duration_hours INTEGER NOT NULL DEFAULT 24,
+            xp_reward INTEGER NOT NULL DEFAULT 100,
+            pin_message BOOLEAN NOT NULL DEFAULT TRUE,
+            reminders_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            ends_at TIMESTAMP NOT NULL,
+            participants JSONB NOT NULL DEFAULT '[]'
+        )""",
+        "CREATE INDEX IF NOT EXISTS ix_official_raids_telegram_group_id ON official_raids (telegram_group_id)",
+        """CREATE TABLE IF NOT EXISTS official_webhook_integrations (
+            id SERIAL PRIMARY KEY,
+            telegram_group_id VARCHAR(255) NOT NULL REFERENCES telegram_groups(telegram_group_id) ON DELETE CASCADE,
+            name VARCHAR(100) NOT NULL,
+            webhook_token VARCHAR(64) UNIQUE NOT NULL,
+            description VARCHAR(255),
+            message_template TEXT NOT NULL DEFAULT '📡 *{name}\n\n{payload}',
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )""",
+        "CREATE INDEX IF NOT EXISTS ix_official_webhook_integrations_group ON official_webhook_integrations (telegram_group_id)",
+        "CREATE INDEX IF NOT EXISTS ix_official_webhook_integrations_token ON official_webhook_integrations (webhook_token)",
+        """CREATE TABLE IF NOT EXISTS official_reported_messages (
+            id SERIAL PRIMARY KEY,
+            telegram_group_id VARCHAR(255) NOT NULL REFERENCES telegram_groups(telegram_group_id) ON DELETE CASCADE,
+            reporter_user_id VARCHAR(255) NOT NULL,
+            reporter_username VARCHAR(100),
+            reported_user_id VARCHAR(255),
+            reported_username VARCHAR(100),
+            reason VARCHAR(500),
+            status VARCHAR(20) NOT NULL DEFAULT 'open',
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )""",
+        "CREATE INDEX IF NOT EXISTS ix_official_reported_messages_group ON official_reported_messages (telegram_group_id)",
+        "CREATE INDEX IF NOT EXISTS ix_official_reported_messages_created ON official_reported_messages (created_at)",
     ]
     try:
         with db.engine.connect() as conn:
