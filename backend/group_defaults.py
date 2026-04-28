@@ -7,6 +7,14 @@ by apply_group_defaults(), but fill_missing_defaults() will add any top-level
 section that is absent — safe to call on every group creation / link event.
 
 Edit _DEFAULTS here to change what every future group starts with.
+
+Name placeholder convention
+────────────────────────────
+Use {name} in message templates wherever a user's display name is needed.
+The runtime resolves it as:
+  • both first + last name present  →  "First Last"
+  • only first name, has @username  →  "@username"
+  • only first name, no username    →  "First"
 """
 
 import copy
@@ -62,13 +70,14 @@ def fill_missing_defaults(tg) -> bool:
 _DEFAULTS: dict = {
 
     # ── Verification ──────────────────────────────────────────────────────────
-    # timeout_seconds=120 gives mobile users enough time to read and tap.
+    # Disabled by default — most new groups don't have a bot-join problem yet.
+    # Admins who need it enable it deliberately.
     "verification": {
-        "enabled": True,
+        "enabled": False,
         "method": "button",          # "button" | "math" | "word"
-        "timeout_seconds": 120,
+        "timeout_seconds": 180,      # 3 min — comfortable on mobile
         "max_attempts": 3,
-        "on_failure": "restrict",    # restrict until verified (matches official-bot behaviour)
+        "on_failure": "restrict",
         "kick_on_fail": True,
         "trigger": "join",
         "destination": "same_group",
@@ -77,18 +86,20 @@ _DEFAULTS: dict = {
     },
 
     # ── Welcome ───────────────────────────────────────────────────────────────
-    # Placeholders supported by WelcomeSystem: {first_name} {last_name}
-    # {username} {full_name} {group_name} {member_count} {user_id}
+    # {name} = full name if both names present, @username if available, else first name.
+    # Other placeholders: {first_name} {last_name} {username} {full_name}
+    #                     {group_name} {member_count} {user_id}
     "welcome": {
         "enabled": True,
         "message": (
-            "🎉 Welcome {first_name}!\n"
-            "Glad to have you in {group_name} 🚀"
+            "👋 Welcome, {name}! Great to have you in {group_name}.\n"
+            "Check the rules below and enjoy the community 🚀"
         ),
         "show_rules": True,
         "rules_text": (
             "1. Be respectful to all members\n"
-            "2. No spam, scams, or self-promotion without permission"
+            "2. No spam, scams, or self-promotion without permission\n"
+            "3. Follow admin instructions and keep content relevant to the group"
         ),
         "media_url": "",
         "delete_after_seconds": 0,
@@ -98,32 +109,33 @@ _DEFAULTS: dict = {
 
     # ── XP / Levelling ────────────────────────────────────────────────────────
     # Level formula (levels.py): linear — level = xp // 100 + 1 (100 XP per level)
-    # Level-up message placeholders: {first_name} {level}
+    # Level-up message placeholders: {name} {first_name} {username} {level} {user_id}
     "levels": {
         "enabled": True,
         "xp_per_message": 10,
         "xp_cooldown_seconds": 60,
-        "xp_per_reaction": 10,
-        "xp_reaction_cooldown_seconds": 30,
+        "xp_per_reaction": 5,        # reactions are single-tap; lower than message XP
+        "xp_reaction_cooldown_seconds": 60,
         "xp_per_raid": 50,
         "announce_level_up": True,
         "level_up_message": (
-            "🎉 Level Up! Congrats {first_name} — you've reached Level {level}"
+            "🎉 {name} just reached Level {level}! Keep it up 🚀"
         ),
         "xp_penalty_warn": -10,
         "xp_penalty_mute": -20,
         "xp_penalty_kick": -30,
         "xp_penalty_ban": -50,
+        # Rebalanced: early milestones are reachable, OG reserved for dedicated members.
         "roles": [
             {"level": 1,   "name": "Newcomer"},
-            {"level": 10,  "name": "Member"},
-            {"level": 20,  "name": "Active Member"},
-            {"level": 30,  "name": "Contributor"},
-            {"level": 40,  "name": "Regular"},
-            {"level": 50,  "name": "Core Member"},
-            {"level": 60,  "name": "Veteran"},
-            {"level": 70,  "name": "Elite"},
-            {"level": 80,  "name": "Legend"},
+            {"level": 5,   "name": "Member"},
+            {"level": 10,  "name": "Active Member"},
+            {"level": 20,  "name": "Contributor"},
+            {"level": 30,  "name": "Regular"},
+            {"level": 40,  "name": "Core Member"},
+            {"level": 50,  "name": "Veteran"},
+            {"level": 60,  "name": "Elite"},
+            {"level": 75,  "name": "Legend"},
             {"level": 100, "name": "OG"},
         ],
         "rank_card": {
@@ -137,25 +149,22 @@ _DEFAULTS: dict = {
     },
 
     # ── AutoMod ───────────────────────────────────────────────────────────────
-    # ENABLED by default: spam (7 msg / 15 s), bad_words (empty list = no-op),
-    #                     excessive_emojis, caps_lock, homoglyphs
-    # DISABLED by default: external_links, telegram_links, all media/contact rules
-    #
-    # bad_words requires a non-empty words list to have any effect.
+    # ENABLED: spam (5 msg / 10 s), bad_words (empty = no-op), excessive_emojis,
+    #          caps_lock, homoglyphs
+    # DISABLED: external_links, telegram_links, all media/contact rules
     "automod": {
         "enabled": True,
 
-        # Enabled
         "spam": {
             "enabled": True,
-            "max_messages": 7,
-            "time_window_seconds": 15,
+            "max_messages": 5,           # tightened from 7
+            "time_window_seconds": 10,   # tightened from 15
             "action": "mute",
             "mute_duration_minutes": 10,
         },
         "bad_words": {
             "enabled": True,
-            "words": [],           # add words in group settings; empty = no-op
+            "words": [],                 # no-op until admin adds words
             "action": "delete",
             "warn_user": True,
         },
@@ -171,18 +180,17 @@ _DEFAULTS: dict = {
         },
         "excessive_emojis": {
             "enabled": True,
-            "max_emojis": 10,
+            "max_emojis": 15,            # raised from 10 — allows normal enthusiasm
             "action": "delete",
         },
         "caps_lock": {
             "enabled": True,
-            "threshold_percent": 70,
-            "min_length": 10,
+            "threshold_percent": 80,     # raised from 70
+            "min_length": 15,            # raised from 10 — avoids short celebratory caps
             "action": "delete",
         },
         "homoglyphs": {"enabled": True},
 
-        # Disabled
         "forwarded_messages": {"enabled": False, "action": "delete"},
         "contact_sharing":    {"enabled": False, "action": "delete", "warn_user": False},
         "location_sharing":   {"enabled": False, "action": "delete", "warn_user": False},
@@ -206,32 +214,36 @@ _DEFAULTS: dict = {
     },
 
     # ── Warning / moderation system ───────────────────────────────────────────
-    # warning_action: "mute" | "ban" | "kick"
     "moderation": {
         "max_warnings": 3,
         "warning_action": "mute",
-        "mute_duration_minutes": 60,
+        "mute_duration_minutes": 30,     # reduced from 60 — less punitive default
         "ban_delete_days": 1,
         "notify_on_action": True,
         "log_to_channel": False,
         "log_channel_id": "",
         "escalation_enabled": False,
+        # Pre-configured 4-step ladder — activates when escalation_enabled = True.
         "escalation_steps": [
-            {"at_warning": 3, "time_window_hours": None, "action": "mute", "duration_minutes": 60},
+            {"at_warning": 3,  "time_window_hours": None, "action": "mute",    "duration_minutes": 30},
+            {"at_warning": 5,  "time_window_hours": None, "action": "mute",    "duration_minutes": 180},
+            {"at_warning": 7,  "time_window_hours": None, "action": "kick",    "duration_minutes": 0},
+            {"at_warning": 10, "time_window_hours": None, "action": "ban",     "duration_minutes": 0},
         ],
-        "auto_delete_warn_seconds": 10,
-        "auto_delete_action_seconds": 10,
+        "auto_delete_warn_seconds": 30,   # raised from 10 — visible for 30 s
+        "auto_delete_action_seconds": 30, # raised from 10
     },
 
     # ── Auto-clean service messages ───────────────────────────────────────────
+    # Disabled by default — admins should consciously opt in to silent joins/leaves.
     "auto_clean": {
-        "enabled": True,
-        "delete_joins": True,
-        "delete_leaves": True,
-        "delete_photo_changes": True,
-        "delete_pinned_messages": True,
-        "delete_forum_events": True,
-        "delete_voice_chat_events": True,
+        "enabled": False,
+        "delete_joins": False,
+        "delete_leaves": False,
+        "delete_photo_changes": False,
+        "delete_pinned_messages": True,  # pin notifications are almost always noise
+        "delete_forum_events": False,
+        "delete_voice_chat_events": False,
         "delete_game_scores": False,
         "delete_commands": False,
     },
@@ -247,9 +259,9 @@ _DEFAULTS: dict = {
     "knowledge_base": {
         "enabled": True,
         "auto_reply_enabled": False,
-        "auto_reply_mention_only": False,
+        "auto_reply_mention_only": True,  # require @mention — intentional interaction
         "auto_reply_in_groups": True,
-        "confidence_threshold": 0.35,
+        "confidence_threshold": 0.65,     # raised from 0.35 — only reply when confident
         "fallback_enabled": False,
         "min_message_words": 5,
     },
@@ -263,13 +275,12 @@ _DEFAULTS: dict = {
     "raids": {
         "enabled": True,
         "default_duration_hours": 24,
-        "default_xp_reward": 100,
+        "default_xp_reward": 50,         # reduced from 100 — keeps level system meaningful
         "pin_announcement": True,
         "reminders_enabled": True,
     },
 
     # ── Digest / activity reports ─────────────────────────────────────────────
-    # All off by default; admins opt in from the dashboard.
     "digest": {
         "daily": False,
         "weekly": False,
@@ -278,12 +289,11 @@ _DEFAULTS: dict = {
     },
 
     # ── Admin alerts ──────────────────────────────────────────────────────────
-    # DM the group owner when these events occur.
     "admin_alerts": {
         "enabled": False,
         "on_ban": False,
         "on_raid_start": False,
-        "on_report": True,
+        "on_report": True,    # pre-wired: fires when master switch enabled
         "on_spam_burst": False,
     },
 }

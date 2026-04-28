@@ -4,6 +4,24 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 logger = logging.getLogger(__name__)
 
 
+def _smart_name(user) -> str:
+    """
+    Best display name for a Telegram user, in priority order:
+      1. First + Last name  (if both are present)
+      2. @username          (if no last name but has a handle)
+      3. First name         (fallback)
+    """
+    first = (user.first_name or "").strip()
+    last = (user.last_name or "").strip()
+    username = (user.username or "").strip()
+
+    if first and last:
+        return f"{first} {last}"
+    if username:
+        return f"@{username}"
+    return first or "Unknown"
+
+
 class WelcomeSystem:
 
     def __init__(self, app):
@@ -39,6 +57,7 @@ class WelcomeSystem:
                 member_count = Member.query.filter_by(group_id=group.id).count()
 
         message_text = template.format(
+            name=_smart_name(new_user),
             first_name=new_user.first_name or "Unknown",
             last_name=new_user.last_name or "",
             username=f"@{new_user.username}" if new_user.username else new_user.first_name,
@@ -109,6 +128,7 @@ class WelcomeSystem:
         dm_settings = settings.get("welcome", {})
         if dm_settings.get("dm_enabled") and dm_settings.get("dm_message"):
             dm_text = dm_settings["dm_message"].format(
+                name=_smart_name(new_user),
                 first_name=new_user.first_name or "Unknown",
                 last_name=new_user.last_name or "",
                 username=f"@{new_user.username}" if new_user.username else new_user.first_name,

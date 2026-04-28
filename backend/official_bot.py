@@ -1615,11 +1615,24 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         if m_xp2 and m_xp2.level > old_level:
                             tpl = lvl_cfg.get(
                                 "level_up_message",
-                                "🎉 {first_name} reached level {level}!",
+                                "🎉 {name} just reached Level {level}! Keep it up 🚀",
                             )
+                            _u = message.from_user
+                            _first = _u.first_name or ""
+                            _last  = _u.last_name  or ""
+                            _uname = _u.username   or ""
+                            if _first and _last:
+                                _display = f"{_first} {_last}"
+                            elif _uname:
+                                _display = f"@{_uname}"
+                            else:
+                                _display = _first or "User"
                             lvl_up_text = tpl.format(
-                                first_name=message.from_user.first_name or "User",
+                                name=_display,
+                                first_name=_first or "User",
+                                username=f"@{_uname}" if _uname else _first,
                                 level=m_xp2.level,
+                                user_id=_u.id,
                             )
                             lvl_up_msg = await context.bot.send_message(
                                 chat_id=chat.id,

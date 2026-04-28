@@ -5,6 +5,20 @@ from datetime import datetime, timedelta
 logger = logging.getLogger(__name__)
 
 
+def _smart_name(first_name: str, username: str) -> str:
+    """
+    Best display name from the scalar fields stored on OfficialMember/Member.
+    LevelSystem only has first_name + username (no last_name), so:
+      1. @username  (if present — more identifiable than first name alone)
+      2. first_name (fallback)
+    Use the WelcomeSystem variant (which has access to the full User object and
+    can include the last name) for welcome messages.
+    """
+    if username:
+        return f"@{username}"
+    return (first_name or "User").strip()
+
+
 # ── Shared XP math — importable by both bot_manager.py and official_bot.py ───
 
 def level_from_xp(xp: int) -> int:
@@ -63,6 +77,7 @@ class LevelSystem:
                         level_up_msg = ai_text
 
                 text = level_up_msg.format(
+                    name=_smart_name(first_name, username),
                     first_name=first_name or "User",
                     username=f"@{username}" if username else first_name,
                     level=new_level,
