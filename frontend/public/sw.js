@@ -1,5 +1,5 @@
 ﻿/* Telegizer Service Worker â€” cache-first for static assets, network-first for API */
-const CACHE_NAME = 'Telegizer-v1';
+const CACHE_NAME = 'Telegizer-v2';
 const STATIC_ASSETS = ['/', '/index.html', '/manifest.json'];
 
 self.addEventListener('install', (event) => {
