@@ -28,7 +28,7 @@ const BOTFATHER_STEPS = [
   {
     label: 'Set the menu button URL',
     content: 'Enter this URL as the Mini App URL:',
-    code: 'https://telegizer.xyz/mini-app',
+    code: 'https://telegram-bot-saas.vercel.app/mini-app',
   },
   {
     label: 'Set the button title',
@@ -77,10 +77,10 @@ function CopyableCode({ value }) {
 function QuickLinks() {
   const { haptic } = useTelegram();
   const links = [
-    { label: 'Groups', icon: <Groups fontSize="small" />, url: 'https://telegizer.xyz/groups' },
-    { label: 'Workspace', icon: <Bolt fontSize="small" />, url: 'https://telegizer.xyz/workspace' },
-    { label: 'Billing', icon: <CardGiftcard fontSize="small" />, url: 'https://telegizer.xyz/billing' },
-    { label: 'Settings', icon: <Settings fontSize="small" />, url: 'https://telegizer.xyz/settings' },
+    { label: 'Groups', icon: <Groups fontSize="small" />, url: 'https://telegram-bot-saas.vercel.app/groups' },
+    { label: 'Workspace', icon: <Bolt fontSize="small" />, url: 'https://telegram-bot-saas.vercel.app/workspace' },
+    { label: 'Billing', icon: <CardGiftcard fontSize="small" />, url: 'https://telegram-bot-saas.vercel.app/billing' },
+    { label: 'Settings', icon: <Settings fontSize="small" />, url: 'https://telegram-bot-saas.vercel.app/settings' },
   ];
   return (
     <Card sx={{ mb: 2 }}>
@@ -197,7 +197,7 @@ export default function MiniAppSetup() {
           Telegizer Mini App · v1.0
         </Typography>
         <Typography variant="caption" color="text.disabled">
-          telegizer.xyz
+          telegram-bot-saas.vercel.app
         </Typography>
       </Box>
     </Box>
