@@ -4,6 +4,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..models import db, Channel, ChannelPost, ChannelDailyStat, User
 from ..official_bot import get_official_bot_loop
+from ..tcs_engine import compute_tcs
 import asyncio
 import logging
 
@@ -222,3 +223,32 @@ def refresh_channel(cid):
 
     db.session.commit()
     return jsonify(ch.to_dict())
+
+
+# ── TCS — Telegizer Community Score ──────────────────────────────────────────
+
+@channels_bp.route("/api/channels/<int:cid>/tcs", methods=["POST"])
+@jwt_required()
+def compute_channel_tcs(cid):
+    user = _get_user()
+    ch = Channel.query.filter_by(id=cid, user_id=user.id).first_or_404()
+
+    # Need at least member count to score
+    if not ch.member_count:
+        return jsonify({"error": "Refresh the channel first to fetch member count."}), 400
+
+    # Use last 30 posts for consistency signal
+    recent_posts = (ch.posts
+                      .order_by(ChannelPost.posted_at.desc())
+                      .limit(30)
+                      .all())
+
+    result = compute_tcs(ch, recent_posts)
+
+    ch.tcs_score = result["score"]
+    ch.tcs_grade = result["grade"]
+    ch.tcs_breakdown = result["breakdown"]
+    ch.tcs_computed_at = datetime.utcnow()
+    db.session.commit()
+
+    return jsonify(result)

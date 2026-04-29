@@ -8,8 +8,10 @@ import {
 import {
   ArrowBack, Refresh, People, Visibility, ThumbUp,
   Forward, Image, VideoLibrary, Poll, ArticleOutlined,
-  TrendingUp, TrendingDown, Remove,
+  TrendingUp, TrendingDown, Remove, Shield, CheckCircle,
+  Warning, Error as ErrorIcon, InfoOutlined,
 } from '@mui/icons-material';
+import LinearProgress from '@mui/material/LinearProgress';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { channels as chApi } from '../services/api';
@@ -105,6 +107,141 @@ function ViewsChart({ stats }) {
         </Box>
       ))}
     </Box>
+  );
+}
+
+// ── TCS Panel ─────────────────────────────────────────────────────────────────
+
+const GRADE_COLOR = { A: 'success', B: 'success', C: 'warning', D: 'warning', F: 'error' };
+const GRADE_MUI   = { A: 'success.main', B: 'success.main', C: 'warning.main', D: 'warning.main', F: 'error.main' };
+
+function SignalRow({ signal }) {
+  const pct = Math.round((signal.score / signal.max) * 100);
+  const color = pct >= 70 ? 'success' : pct >= 40 ? 'warning' : 'error';
+  return (
+    <Box sx={{ mb: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
+        <Typography variant="body2" fontWeight={600}>{signal.label}</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          {signal.value != null && (
+            <Typography variant="caption" color="text.secondary">
+              {signal.value}{signal.unit || ''}
+            </Typography>
+          )}
+          <Typography variant="caption" fontWeight={700} color={`${color}.main`}>
+            {signal.score}/{signal.max}
+          </Typography>
+        </Box>
+      </Box>
+      <LinearProgress
+        variant="determinate"
+        value={pct}
+        color={color}
+        sx={{ height: 6, borderRadius: 3, mb: 0.5 }}
+      />
+      <Typography variant="caption" color="text.disabled">{signal.note}</Typography>
+    </Box>
+  );
+}
+
+function TcsPanel({ channel, onComputed }) {
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(
+    channel.tcs_score != null
+      ? { score: channel.tcs_score, grade: channel.tcs_grade, breakdown: channel.tcs_breakdown, recommendations: [] }
+      : null
+  );
+
+  const handleCompute = async () => {
+    setLoading(true);
+    try {
+      const res = await chApi.computeTcs(channel.id);
+      setResult(res.data);
+      onComputed(res.data);
+      toast.success('TCS computed');
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Could not compute TCS');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const grade = result?.grade;
+  const score = result?.score;
+
+  return (
+    <Card sx={{ mb: 3 }}>
+      <CardContent sx={{ p: 2.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Shield sx={{ color: 'primary.main', fontSize: 20 }} />
+            <Typography variant="subtitle2" fontWeight={700}>Telegizer Community Score (TCS)</Typography>
+            <Chip label="Authenticity" size="small" sx={{ height: 18, fontSize: '0.6rem' }} />
+          </Box>
+          <Button
+            size="small" variant={result ? 'outlined' : 'contained'}
+            onClick={handleCompute} disabled={loading}
+            startIcon={loading ? <CircularProgress size={14} /> : <Shield fontSize="small" />}
+          >
+            {result ? 'Recompute' : 'Compute TCS'}
+          </Button>
+        </Box>
+
+        {!result ? (
+          <Alert severity="info" icon={<InfoOutlined fontSize="small" />} sx={{ fontSize: '0.75rem' }}>
+            TCS analyzes view rate, engagement, post consistency, and forward rate to detect
+            fake subscribers and bot inflation. Click "Compute TCS" to score this channel.
+          </Alert>
+        ) : (
+          <>
+            {/* Score display */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, mb: 3, p: 2, bgcolor: 'rgba(255,255,255,0.04)', borderRadius: 2 }}>
+              <Box sx={{ textAlign: 'center', minWidth: 80 }}>
+                <Typography variant="h2" fontWeight={900} color={GRADE_MUI[grade] || 'text.primary'} lineHeight={1}>
+                  {score}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">/ 100</Typography>
+              </Box>
+              <Box sx={{ flex: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                  <Chip
+                    label={`Grade ${grade}`}
+                    color={GRADE_COLOR[grade] || 'default'}
+                    sx={{ fontWeight: 800, fontSize: '0.9rem', height: 28 }}
+                  />
+                  <Typography variant="body2" color="text.secondary">
+                    {score >= 80 ? 'Highly Authentic' : score >= 65 ? 'Good' : score >= 50 ? 'Mixed Signals' : score >= 35 ? 'Suspicious' : 'High Bot Risk'}
+                  </Typography>
+                </Box>
+                {channel.tcs_computed_at && (
+                  <Typography variant="caption" color="text.disabled">
+                    Computed {new Date(channel.tcs_computed_at).toLocaleDateString()}
+                  </Typography>
+                )}
+              </Box>
+            </Box>
+
+            {/* Signal breakdown */}
+            {result.breakdown?.map(s => <SignalRow key={s.label} signal={s} />)}
+
+            {/* Recommendations */}
+            {result.recommendations?.length > 0 && (
+              <Box sx={{ mt: 2, p: 1.5, bgcolor: 'rgba(255,255,255,0.03)', borderRadius: 1.5 }}>
+                <Typography variant="caption" fontWeight={700} color="text.secondary" display="block" mb={1}>
+                  Recommendations
+                </Typography>
+                {result.recommendations.map((r, i) => (
+                  <Box key={i} sx={{ display: 'flex', gap: 1, mb: 0.75 }}>
+                    <InfoOutlined sx={{ fontSize: 14, color: 'primary.main', flexShrink: 0, mt: 0.2 }} />
+                    <Typography variant="caption" color="text.secondary">{r}</Typography>
+                  </Box>
+                ))}
+              </Box>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -257,6 +394,18 @@ export default function ChannelDetail() {
           </Card>
         </Grid>
       </Grid>
+
+      {/* TCS */}
+      <TcsPanel
+        channel={channel}
+        onComputed={(result) => setChannel(prev => ({
+          ...prev,
+          tcs_score: result.score,
+          tcs_grade: result.grade,
+          tcs_breakdown: result.breakdown,
+          tcs_computed_at: result.computed_at,
+        }))}
+      />
 
       {/* Top posts */}
       {channel.top_posts?.length > 0 && (

@@ -549,6 +549,7 @@ export const channels = {
   delete: (id) => api.delete(`/api/channels/${id}`),
   posts: (id, params) => api.get(`/api/channels/${id}/posts`, { params }),
   refresh: (id) => api.post(`/api/channels/${id}/refresh`),
+  computeTcs: (id) => api.post(`/api/channels/${id}/tcs`),
 };
 
 export default api;

@@ -1540,6 +1540,11 @@ class Channel(db.Model):
     bot_status = db.Column(db.String(32), default="pending", nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_refreshed_at = db.Column(db.DateTime, nullable=True)
+    # TCS — Telegizer Community Score
+    tcs_score = db.Column(db.Integer, nullable=True)         # 0–100
+    tcs_grade = db.Column(db.String(2), nullable=True)       # A/B/C/D/F
+    tcs_breakdown = db.Column(db.JSON, nullable=True)        # per-signal detail
+    tcs_computed_at = db.Column(db.DateTime, nullable=True)
 
     posts = db.relationship("ChannelPost", backref="channel", lazy="dynamic",
                             cascade="all, delete-orphan")
@@ -1562,6 +1567,10 @@ class Channel(db.Model):
             "post_count": self.posts.count(),
             "created_at": self.created_at.isoformat(),
             "last_refreshed_at": self.last_refreshed_at.isoformat() if self.last_refreshed_at else None,
+            "tcs_score": self.tcs_score,
+            "tcs_grade": self.tcs_grade,
+            "tcs_breakdown": self.tcs_breakdown,
+            "tcs_computed_at": self.tcs_computed_at.isoformat() if self.tcs_computed_at else None,
         }
 
 

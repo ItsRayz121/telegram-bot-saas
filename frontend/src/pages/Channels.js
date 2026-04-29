@@ -101,6 +101,17 @@ function ChannelCard({ channel, onDelete, onRefresh, onClick }) {
           ))}
         </Grid>
 
+        {channel.tcs_score != null && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1.5, pt: 1.5, borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+            <Typography variant="caption" color="text.secondary">TCS Score:</Typography>
+            <Chip
+              label={`${channel.tcs_score}/100 · ${channel.tcs_grade}`}
+              size="small"
+              color={channel.tcs_score >= 65 ? 'success' : channel.tcs_score >= 40 ? 'warning' : 'error'}
+              sx={{ height: 18, fontSize: '0.63rem', fontWeight: 700 }}
+            />
+          </Box>
+        )}
         {channel.bot_status === 'no_admin' && (
           <Alert severity="warning" icon={<Warning fontSize="small" />} sx={{ mt: 1.5, fontSize: '0.72rem', py: 0.5 }}>
             Add the bot as admin in your channel to capture posts automatically.
