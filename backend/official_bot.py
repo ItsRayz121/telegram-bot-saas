@@ -1537,28 +1537,51 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         pass
                     return
 
-    # Auto-responses — check triggers for non-command messages
+    # Auto-responses + Smart Links — check triggers for non-command messages
     if not text.startswith("/") and flask_app:
         try:
             with flask_app.app_context():
-                from .models import AutoResponse
+                from .models import AutoResponse, TelegramGroup
+                # Group-scoped auto-responses and smart links
                 responses = AutoResponse.query.filter_by(
                     telegram_group_id=group_id, is_enabled=True
                 ).all()
+                # User-scoped smart links (scope='user') for the group owner
+                tg_group = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
+                if tg_group:
+                    user_links = AutoResponse.query.filter_by(
+                        owner_user_id=tg_group.owner_user_id,
+                        scope="user",
+                        response_type="smart_link",
+                        is_enabled=True,
+                    ).all()
+                    # Merge, group-scoped first so they take priority
+                    seen_ids = {ar.id for ar in responses}
+                    responses = list(responses) + [ar for ar in user_links if ar.id not in seen_ids]
+
                 for ar in responses:
-                    t = ar.trigger_text
-                    check = text if ar.is_case_sensitive else text.lower()
-                    trigger = t if ar.is_case_sensitive else t.lower()
+                    # Smart links may have comma-separated trigger phrases
+                    trigger_phrases = [p.strip() for p in ar.trigger_text.split(",") if p.strip()] \
+                        if ar.response_type == "smart_link" else [ar.trigger_text]
+
                     matched = False
-                    if ar.match_type == "exact":
-                        matched = check == trigger
-                    elif ar.match_type == "starts_with":
-                        matched = check.startswith(trigger)
-                    else:
-                        matched = trigger in check
+                    for t in trigger_phrases:
+                        check = text if ar.is_case_sensitive else text.lower()
+                        trigger = t if ar.is_case_sensitive else t.lower()
+                        if ar.match_type == "exact":
+                            matched = check == trigger
+                        elif ar.match_type == "starts_with":
+                            matched = check.startswith(trigger)
+                        else:
+                            matched = trigger in check
+                        if matched:
+                            break
+
                     if matched:
+                        # Smart links reply with link_url if set, else response_text
+                        reply = (ar.link_url or ar.response_text) if ar.response_type == "smart_link" else ar.response_text
                         try:
-                            await message.reply_text(ar.response_text)
+                            await message.reply_text(reply)
                         except Exception:
                             pass
                         break

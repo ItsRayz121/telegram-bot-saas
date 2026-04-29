@@ -372,6 +372,15 @@ class AutoResponse(db.Model):
     is_enabled = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    # Smart Links extension (Workspace feature)
+    # response_type: 'auto_response' (default) | 'smart_link'
+    response_type = db.Column(db.String(20), default="auto_response", nullable=False)
+    link_label = db.Column(db.String(100), nullable=True)   # human name: "Calendly Link"
+    link_url = db.Column(db.String(2000), nullable=True)    # the URL (optional; else response_text used)
+    owner_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
+    # scope: 'group' = this group only | 'user' = all groups this user owns
+    scope = db.Column(db.String(20), default="group", nullable=False)
+
     def to_dict(self):
         return {
             "id": self.id,
@@ -383,6 +392,11 @@ class AutoResponse(db.Model):
             "is_case_sensitive": self.is_case_sensitive,
             "is_enabled": self.is_enabled,
             "created_at": self.created_at.isoformat(),
+            "response_type": self.response_type,
+            "link_label": self.link_label,
+            "link_url": self.link_url,
+            "owner_user_id": self.owner_user_id,
+            "scope": self.scope,
         }
 
 

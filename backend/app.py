@@ -54,6 +54,7 @@ from .routes.custom_commands import custom_commands_bp
 from .routes.bot_group_commands import bot_group_commands_bp
 from .routes.telegram_account import telegram_account_bp
 from .routes.official_settings import official_settings_bp
+from .routes.workspace import workspace_bp
 from .bot_manager import BotManager
 from .official_bot import start_official_bot
 
@@ -151,6 +152,7 @@ def create_app():
     app.register_blueprint(bot_group_commands_bp)
     app.register_blueprint(telegram_account_bp)
     app.register_blueprint(official_settings_bp)
+    app.register_blueprint(workspace_bp)
 
     app.bot_manager = bot_manager
 
@@ -305,6 +307,7 @@ def create_app():
         _run_phase4_migrations()
         _run_phase5_migrations()
         _run_phase6_migrations()
+        _run_smart_links_migration()
         _backfill_group_defaults()
 
     # Start bots in a background thread after a short delay so Gunicorn can
@@ -609,6 +612,34 @@ def _run_phase6_migrations():
                         pass
     except Exception as exc:
         _mig_log.warning("phase6 migrations failed: %s", exc)
+
+
+def _run_smart_links_migration():
+    """Add Smart Links columns to auto_responses table."""
+    _mig_log = logging.getLogger("migrations")
+    stmts = [
+        "ALTER TABLE auto_responses ADD COLUMN IF NOT EXISTS response_type VARCHAR(20) NOT NULL DEFAULT 'auto_response'",
+        "ALTER TABLE auto_responses ADD COLUMN IF NOT EXISTS link_label VARCHAR(100)",
+        "ALTER TABLE auto_responses ADD COLUMN IF NOT EXISTS link_url VARCHAR(2000)",
+        "ALTER TABLE auto_responses ADD COLUMN IF NOT EXISTS owner_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL",
+        "ALTER TABLE auto_responses ADD COLUMN IF NOT EXISTS scope VARCHAR(20) NOT NULL DEFAULT 'group'",
+        "CREATE INDEX IF NOT EXISTS ix_auto_responses_owner ON auto_responses (owner_user_id) WHERE owner_user_id IS NOT NULL",
+        "CREATE INDEX IF NOT EXISTS ix_auto_responses_scope ON auto_responses (scope, response_type) WHERE is_enabled = TRUE",
+    ]
+    try:
+        with db.engine.connect() as conn:
+            for sql in stmts:
+                try:
+                    conn.execute(text(sql))
+                    conn.commit()
+                except Exception as exc:
+                    _mig_log.warning("smart_links migration stmt failed: %s", exc)
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+    except Exception as exc:
+        _mig_log.warning("smart_links migrations failed: %s", exc)
 
 
 def _backfill_group_defaults():

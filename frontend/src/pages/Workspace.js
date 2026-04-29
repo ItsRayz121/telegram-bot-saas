@@ -9,7 +9,7 @@ const SECTIONS = [
     label: 'Smart Links',
     desc: 'Save your Calendly, pitch deck, website, and support links. The bot replies automatically when someone asks.',
     path: '/workspace/smart-links',
-    available: false,
+    available: true,
     color: '#2563EB',
   },
   {
@@ -49,7 +49,7 @@ export default function Workspace() {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
           <Bolt sx={{ fontSize: 28, color: 'primary.main' }} />
           <Typography variant="h5" fontWeight={700}>Workspace</Typography>
-          <Chip label="Coming Soon" size="small" color="primary" variant="outlined" />
+          <Chip label="Beta" size="small" color="primary" variant="outlined" />
         </Box>
         <Typography color="text.secondary" maxWidth={620}>
           Your personal command center across all groups and channels. Smart links, reminders,

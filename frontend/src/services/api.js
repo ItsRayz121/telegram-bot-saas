@@ -433,4 +433,13 @@ export const telegramAccount = {
   disconnect: () => api.delete('/api/telegram/disconnect'),
 };
 
+export const workspace = {
+  // Smart Links
+  listSmartLinks: () => api.get('/api/workspace/smart-links'),
+  createSmartLink: (data) => api.post('/api/workspace/smart-links', data),
+  updateSmartLink: (id, data) => api.put(`/api/workspace/smart-links/${id}`, data),
+  deleteSmartLink: (id) => api.delete(`/api/workspace/smart-links/${id}`),
+  toggleSmartLink: (id) => api.post(`/api/workspace/smart-links/${id}/toggle`),
+};
+
 export default api;
