@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from ..models import db, User, ProcessedPayment, PaymentHistory
 from ..config import Config
 from ..middleware.rate_limit import rate_limit
-from ..notifications import send_subscription_confirmation, send_subscription_cancelled
+from ..notifications import send_subscription_confirmation
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +101,7 @@ def billing_history():
     user = _get_current_user()
     if not user:
         return jsonify({"error": "User not found"}), 404
-    page = max(1, int(request.args.get("page", 1)))
+    page = max(1, min(int(request.args.get("page", 1)), 500))
     per_page = min(50, int(request.args.get("per_page", 20)))
     q = PaymentHistory.query.filter_by(user_id=user.id).order_by(
         PaymentHistory.created_at.desc()
@@ -141,130 +141,6 @@ def get_subscription():
     })
 
 
-# ─── Lemon Squeezy (card / bank) ─────────────────────────────────────────────
-
-@billing_bp.route("/lemon/checkout", methods=["POST"])
-@jwt_required()
-@rate_limit(requests_per_minute=10)
-def lemon_checkout():
-    user = _get_current_user()
-    if not user:
-        return jsonify({"error": "User not found"}), 404
-
-    data = request.get_json() or {}
-    tier = data.get("tier")
-    if tier not in ("pro", "enterprise"):
-        return jsonify({"error": "Invalid tier. Must be 'pro' or 'enterprise'"}), 400
-
-    billing_period = "annual" if data.get("annual") else "monthly"
-
-    if user.email in Config.ADMIN_EMAILS:
-        return _admin_upgrade(user, tier)
-
-    if not Config.LS_API_KEY or not Config.LS_STORE_ID:
-        return jsonify({"error": "Card payments are not configured yet. Please use crypto."}), 503
-
-    variant_id = Config.LS_PRO_VARIANT_ID if tier == "pro" else Config.LS_ENTERPRISE_VARIANT_ID
-    if not variant_id:
-        return jsonify({"error": f"Lemon Squeezy variant not configured for tier '{tier}'"}), 503
-
-    try:
-        resp = requests.post(
-            "https://api.lemonsqueezy.com/v1/checkouts",
-            headers={
-                "Authorization": f"Bearer {Config.LS_API_KEY}",
-                "Accept": "application/vnd.api+json",
-                "Content-Type": "application/vnd.api+json",
-            },
-            json={
-                "data": {
-                    "type": "checkouts",
-                    "attributes": {
-                        "checkout_data": {
-                            "email": user.email,
-                            "name": user.full_name,
-                            "custom": {"user_id": str(user.id), "tier": tier, "billing_period": billing_period},
-                        },
-                        "product_options": {
-                            "redirect_url": f"{Config.FRONTEND_URL}/payment/success",
-                        },
-                    },
-                    "relationships": {
-                        "store": {"data": {"type": "stores", "id": str(Config.LS_STORE_ID)}},
-                        "variant": {"data": {"type": "variants", "id": str(variant_id)}},
-                    },
-                }
-            },
-            timeout=15,
-        )
-        resp.raise_for_status()
-        checkout_url = resp.json()["data"]["attributes"]["url"]
-        return jsonify({"url": checkout_url})
-    except requests.RequestException as e:
-        logger.error(f"[LEMONSQUEEZY] Checkout error for user {user.id}: {e}")
-        return jsonify({"error": "Failed to create checkout. Please try again."}), 502
-
-
-@billing_bp.route("/lemon/webhook", methods=["POST"])
-def lemon_webhook():
-    payload = request.get_data()
-    sig = request.headers.get("X-Signature", "")
-
-    if Config.LS_WEBHOOK_SECRET:
-        if not sig:
-            logger.warning("[LEMONSQUEEZY] Missing X-Signature header — rejecting webhook")
-            return jsonify({"error": "Missing signature"}), 400
-        expected = hmac.new(
-            Config.LS_WEBHOOK_SECRET.encode(), payload, hashlib.sha256
-        ).hexdigest()
-        if not hmac.compare_digest(expected, sig):
-            logger.warning("[LEMONSQUEEZY] Invalid webhook signature")
-            return jsonify({"error": "Invalid signature"}), 400
-
-    # Parse payload BEFORE writing any dedup record to prevent orphaned rows
-    try:
-        event = json.loads(payload)
-    except Exception:
-        return jsonify({"error": "Invalid JSON"}), 400
-
-    event_name = event.get("meta", {}).get("event_name", "")
-    custom = event.get("meta", {}).get("custom_data", {})
-    user_id = custom.get("user_id")
-    tier = custom.get("tier")
-
-    if event_name == "order_created" and user_id and tier:
-        user = User.query.get(int(user_id))
-        if user and tier in ("pro", "enterprise"):
-            order_id = str(event.get("data", {}).get("id", ""))
-            bp = custom.get("billing_period", "monthly")
-            if bp not in ("monthly", "annual"):
-                bp = "monthly"
-
-            # Idempotency: atomic INSERT — second webhook for the same order gets
-            # IntegrityError from the UNIQUE constraint and is safely skipped.
-            dedup_key = f"ls_{order_id}" if order_id else None
-            if dedup_key:
-                if not _claim_dedup(dedup_key):
-                    logger.info(f"[LEMONSQUEEZY] Duplicate webhook for order {order_id} — skipping")
-                    return jsonify({"status": "ok"})
-
-            _activate_subscription(user, tier, provider="lemonsqueezy",
-                                   payment_id=order_id, currency="USD", billing_period=bp)
-            logger.info(f"[LEMONSQUEEZY] Upgraded user {user_id} to {tier}")
-
-    elif event_name in ("subscription_expired", "subscription_cancelled") and user_id:
-        user = User.query.get(int(user_id))
-        if user:
-            user.subscription_tier = "free"
-            user.subscription_expires = None
-            db.session.commit()
-            try:
-                send_subscription_cancelled(user.email, user.full_name)
-            except Exception:
-                pass
-            logger.info(f"[LEMONSQUEEZY] Downgraded user {user_id} to free ({event_name})")
-
-    return jsonify({"status": "ok"})
 
 
 # ─── NOWPayments (crypto) ─────────────────────────────────────────────────────
@@ -331,24 +207,27 @@ def crypto_webhook():
     payload = request.get_data()
     sig = request.headers.get("x-nowpayments-sig", "")
 
-    if Config.NOWPAYMENTS_IPN_SECRET:
-        if not sig:
-            logger.warning("[NOWPAYMENTS] Missing x-nowpayments-sig header — rejecting webhook")
-            return jsonify({"error": "Missing signature"}), 400
-        try:
-            body = json.loads(payload)
-            sorted_body = json.dumps(body, sort_keys=True, separators=(",", ":"))
-            expected = hmac.new(
-                Config.NOWPAYMENTS_IPN_SECRET.encode(),
-                sorted_body.encode(),
-                hashlib.sha512,
-            ).hexdigest()
-            if not hmac.compare_digest(expected, sig):
-                logger.warning("[NOWPAYMENTS] Invalid webhook signature")
-                return jsonify({"error": "Invalid signature"}), 400
-        except Exception as e:
-            logger.error(f"[NOWPAYMENTS] Webhook verify error: {e}")
-            return jsonify({"error": "Verification error"}), 400
+    if not Config.NOWPAYMENTS_IPN_SECRET:
+        logger.error("[NOWPAYMENTS] NOWPAYMENTS_IPN_SECRET is not configured — rejecting all webhooks")
+        return jsonify({"error": "Webhook not configured"}), 503
+
+    if not sig:
+        logger.warning("[NOWPAYMENTS] Missing x-nowpayments-sig header — rejecting webhook")
+        return jsonify({"error": "Missing signature"}), 400
+    try:
+        body = json.loads(payload)
+        sorted_body = json.dumps(body, sort_keys=True, separators=(",", ":"))
+        expected = hmac.new(
+            Config.NOWPAYMENTS_IPN_SECRET.encode(),
+            sorted_body.encode(),
+            hashlib.sha512,
+        ).hexdigest()
+        if not hmac.compare_digest(expected, sig):
+            logger.warning("[NOWPAYMENTS] Invalid webhook signature")
+            return jsonify({"error": "Invalid signature"}), 400
+    except Exception as e:
+        logger.error(f"[NOWPAYMENTS] Webhook verify error: {e}")
+        return jsonify({"error": "Verification error"}), 400
 
     # Parse payload BEFORE writing any dedup record
     try:

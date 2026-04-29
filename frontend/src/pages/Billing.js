@@ -23,7 +23,7 @@ const TIER_FEATURES = {
 
 const TIER_PRICES = { free: '$0', pro: '$9/mo', enterprise: '$49/mo' };
 
-const PROVIDER_LABELS = { nowpayments: 'Crypto (NOWPayments)', lemonsqueezy: 'Card / Bank' };
+const PROVIDER_LABELS = { nowpayments: 'Crypto (NOWPayments)' };
 const STATUS_COLORS = { confirmed: 'success', pending: 'warning', failed: 'error' };
 
 export default function Billing() {

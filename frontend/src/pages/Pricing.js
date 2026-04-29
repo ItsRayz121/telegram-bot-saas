@@ -5,7 +5,7 @@ import {
   CircularProgress, IconButton, Dialog, DialogTitle, DialogContent,
   DialogActions, Stack, Alert, Accordion, AccordionSummary, AccordionDetails, Divider,
 } from '@mui/material';
-import { Check, ArrowBack, CurrencyBitcoin, CreditCard, LocalOffer, ExpandMore } from '@mui/icons-material';
+import { Check, ArrowBack, CurrencyBitcoin, LocalOffer, ExpandMore } from '@mui/icons-material';
 import Switch from '@mui/material/Switch';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -105,16 +105,10 @@ export default function Pricing() {
     setDialogOpen(true);
   };
 
-  const handlePaymentMethod = async (method) => {
-    setMethodLoading(method);
+  const handlePaymentMethod = async () => {
+    setMethodLoading('crypto');
     try {
-      let res;
-      const payload = { tier: selectedTier, annual };
-      if (method === 'card') {
-        res = await billing.lemonCheckout(payload);
-      } else {
-        res = await billing.cryptoCheckout(payload);
-      }
+      const res = await billing.cryptoCheckout({ tier: selectedTier, annual });
 
       if (res.data.admin_upgrade) {
         toast.success(res.data.message || `Plan switched to ${selectedTier}`);
@@ -124,7 +118,6 @@ export default function Pricing() {
         return;
       }
 
-      // Redirect to external checkout â€” payment success page handles return
       window.location.href = res.data.url;
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to start checkout. Please try again.');
@@ -306,7 +299,7 @@ export default function Pricing() {
           All plans include a 14-day money-back guarantee. No hidden fees.
         </Typography>
         <Typography variant="caption" color="text.disabled">
-          Payments accepted via crypto (USDT, BTC, ETH, BNB, 300+ coins) · Card payments coming soon
+          Payments accepted via crypto — USDT, BTC, ETH, BNB, TRX, SOL and 300+ coins via NOWPayments
         </Typography>
 
         {/* FAQ */}
@@ -325,7 +318,7 @@ export default function Pricing() {
             },
             {
               q: 'What coins and payment methods are supported?',
-              a: 'Crypto payments accept USDT, BTC, ETH, BNB, TRX, SOL, and 300+ coins via NOWPayments. Card / bank transfer is coming soon.',
+              a: 'We accept USDT, BTC, ETH, BNB, TRX, SOL, and 300+ coins via NOWPayments. All payments are processed on-chain — no card or bank transfer required.',
             },
             {
               q: 'How long do crypto payments take to confirm?',
@@ -357,81 +350,48 @@ export default function Pricing() {
         </Box>
       </Box>
 
-      {/* Payment method dialog */}
-      <Dialog open={dialogOpen} onClose={handleCloseDialog} maxWidth="xs" fullWidth>
+      {/* Payment dialog — crypto only */}
+      <Dialog open={dialogOpen} onClose={handleCloseDialog} maxWidth=”xs” fullWidth>
         <DialogTitle sx={{ fontWeight: 700, textAlign: 'center', pb: 1 }}>
-          Choose Payment Method
+          Complete Your Upgrade
         </DialogTitle>
         <DialogContent>
-          <Typography variant="body2" color="text.secondary" textAlign="center" mb={3}>
+          <Typography variant=”body2” color=”text.secondary” textAlign=”center” mb={3}>
             {selectedTier && (
               <>
-                Upgrading to <strong>{selectedTier.charAt(0).toUpperCase() + selectedTier.slice(1)}</strong> Plan
-                {' '}â€” <strong>{annual ? 'Annual' : 'Monthly'}</strong> billing
-                {annual && (
-                  <> · <span style={{ color: '#66bb6a' }}>~2 months free</span></>
-                )}
+                <strong>{selectedTier.charAt(0).toUpperCase() + selectedTier.slice(1)}</strong> Plan
+                {' — '}<strong>{annual ? 'Annual' : 'Monthly'}</strong>
+                {annual && <> · <span style={{ color: '#66bb6a' }}>~2 months free</span></>}
               </>
             )}
           </Typography>
-          <Stack spacing={2}>
-            {/* Crypto â€” active */}
-            <Button
-              fullWidth
-              variant="outlined"
-              color="warning"
-              size="large"
-              startIcon={methodLoading === 'crypto' ? <CircularProgress size={18} color="inherit" /> : <CurrencyBitcoin />}
-              onClick={() => handlePaymentMethod('crypto')}
-              disabled={!!methodLoading}
-              sx={{ py: 1.5, justifyContent: 'flex-start', px: 3 }}
-            >
-              <Box sx={{ textAlign: 'left', ml: 1 }}>
-                <Typography variant="body1" fontWeight={600}>Pay with Crypto</Typography>
-                <Typography variant="caption" color="text.secondary" display="block">
-                  USDT, BTC, ETH, BNB and 300+ coins via NOWPayments
-                </Typography>
-                <Typography variant="caption" color="warning.light" display="block">
-                  You'll be redirected to NOWPayments to complete payment
-                </Typography>
-              </Box>
-            </Button>
 
-            {/* Card â€” coming soon */}
-            <Box sx={{ position: 'relative' }}>
-              <Button
-                fullWidth
-                variant="outlined"
-                size="large"
-                startIcon={<CreditCard />}
-                disabled
-                sx={{ py: 1.5, justifyContent: 'flex-start', px: 3, opacity: 0.5 }}
-              >
-                <Box sx={{ textAlign: 'left', ml: 1 }}>
-                  <Typography variant="body1" fontWeight={600}>Card / Bank Transfer</Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Visa, Mastercard â€” coming soon
-                  </Typography>
-                </Box>
-              </Button>
-              <Chip
-                label="Coming Soon"
-                size="small"
-                sx={{ position: 'absolute', top: 8, right: 12, fontSize: 10 }}
-              />
-            </Box>
-          </Stack>
+          <Button
+            fullWidth
+            variant=”contained”
+            color=”warning”
+            size=”large”
+            startIcon={methodLoading ? <CircularProgress size={18} color=”inherit” /> : <CurrencyBitcoin />}
+            onClick={handlePaymentMethod}
+            disabled={!!methodLoading}
+            sx={{ py: 1.8, mb: 2 }}
+          >
+            {methodLoading ? 'Redirecting…' : 'Pay with Crypto'}
+          </Button>
 
-          <Alert severity="info" sx={{ mt: 2 }} icon={false}>
-            <Typography variant="caption">
-              After payment, your plan upgrades automatically within 1â€“10 minutes.
-              Blockchain confirmations can take up to 30+ minutes during network congestion.
-              Your plan activates as soon as the transaction confirms â€” no manual steps needed.
+          <Typography variant=”caption” color=”text.disabled” display=”block” textAlign=”center” mb={1}>
+            USDT · BTC · ETH · BNB · TRX · SOL and 300+ coins via NOWPayments
+          </Typography>
+
+          <Alert severity=”info” sx={{ mt: 2 }} icon={false}>
+            <Typography variant=”caption”>
+              Your plan activates automatically within 1–10 minutes of blockchain confirmation.
+              No manual steps needed.
             </Typography>
           </Alert>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={handleCloseDialog} disabled={!!methodLoading} fullWidth variant="text">
+          <Button onClick={handleCloseDialog} disabled={!!methodLoading} fullWidth variant=”text”>
             Cancel
           </Button>
         </DialogActions>

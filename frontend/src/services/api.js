@@ -367,8 +367,6 @@ export const billing = {
   getPlans: () => api.get('/api/billing/plans'),
   getSubscription: () => api.get('/api/billing/subscription'),
   getHistory: (params) => api.get('/api/billing/history', { params }),
-  // Lemon Squeezy — card / bank transfer
-  lemonCheckout: (data) => api.post('/api/billing/lemon/checkout', data),
   // NOWPayments — crypto (USDT, BTC, ETH, etc.)
   cryptoCheckout: (data) => api.post('/api/billing/crypto/checkout', data),
 };

@@ -1,8 +1,15 @@
 """B2B Partnership Marketplace — deal flow between brands and community owners."""
+import hashlib
+import hmac
+import json
+import logging
 from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..models import db, PartnershipDeal, DealMessage, DirectoryListing, User
+from ..config import Config
+
+_log = logging.getLogger(__name__)
 
 marketplace_bp = Blueprint("marketplace", __name__)
 
@@ -142,8 +149,22 @@ def create_deal():
 
     if not title:
         return jsonify({"error": "title is required"}), 400
-    if not budget_usd or float(budget_usd) < 5:
-        return jsonify({"error": "Minimum budget is $5"}), 400
+
+    try:
+        budget_usd = float(budget_usd)
+    except (TypeError, ValueError):
+        return jsonify({"error": "budget_usd must be a number"}), 400
+    if not (5 <= budget_usd <= 50000):
+        return jsonify({"error": "Budget must be between $5 and $50,000"}), 400
+
+    try:
+        deadline_days = int(deadline_days)
+    except (TypeError, ValueError):
+        deadline_days = 7
+    if not (1 <= deadline_days <= 365):
+        return jsonify({"error": "deadline_days must be between 1 and 365"}), 400
+
+    net_seller = round(budget_usd * (1 - PLATFORM_FEE_PCT / 100), 2)
 
     deal = PartnershipDeal(
         buyer_user_id=user.id,
@@ -151,12 +172,13 @@ def create_deal():
         listing_id=listing.id,
         title=title,
         requirements=requirements or None,
-        budget_usd=float(budget_usd),
+        budget_usd=budget_usd,
         platform_fee_pct=PLATFORM_FEE_PCT,
+        net_seller_amount=net_seller,
         status="pending",
         payment_status="unpaid",
         payment_currency=currency,
-        deadline_at=datetime.utcnow() + timedelta(days=int(deadline_days)),
+        deadline_at=datetime.utcnow() + timedelta(days=deadline_days),
     )
     db.session.add(deal)
 
@@ -263,7 +285,8 @@ def initiate_payment(did):
         resp.raise_for_status()
         payment_data = resp.json()
     except Exception as e:
-        return jsonify({"error": f"Payment provider error: {e}"}), 502
+        _log.error("NOWPayments deal payment error for deal %s user %s: %s", deal.id, user.id, e)
+        return jsonify({"error": "Payment provider unavailable. Please try again."}), 502
 
     deal.payment_id = payment_data.get("payment_id")
     deal.payment_address = payment_data.get("pay_address")
@@ -283,7 +306,33 @@ def initiate_payment(did):
 @marketplace_bp.route("/api/marketplace/webhook", methods=["POST"])
 def payment_webhook():
     """NOWPayments IPN — mark deal as paid when payment confirmed."""
-    data = request.get_json() or {}
+    payload = request.get_data()
+    sig = request.headers.get("x-nowpayments-sig", "")
+
+    if not Config.NOWPAYMENTS_IPN_SECRET:
+        _log.error("[MARKETPLACE_WEBHOOK] NOWPAYMENTS_IPN_SECRET not configured — rejecting")
+        return jsonify({"error": "Webhook not configured"}), 503
+
+    if not sig:
+        _log.warning("[MARKETPLACE_WEBHOOK] Missing signature")
+        return jsonify({"error": "Missing signature"}), 400
+
+    try:
+        body_obj = json.loads(payload)
+        sorted_body = json.dumps(body_obj, sort_keys=True, separators=(",", ":"))
+        expected = hmac.new(
+            Config.NOWPAYMENTS_IPN_SECRET.encode(),
+            sorted_body.encode(),
+            hashlib.sha512,
+        ).hexdigest()
+        if not hmac.compare_digest(expected, sig):
+            _log.warning("[MARKETPLACE_WEBHOOK] Invalid signature")
+            return jsonify({"error": "Invalid signature"}), 400
+    except Exception as e:
+        _log.error("[MARKETPLACE_WEBHOOK] Signature verification error: %s", e)
+        return jsonify({"error": "Verification error"}), 400
+
+    data = body_obj
     order_id = data.get("order_id", "")
     payment_status = data.get("payment_status", "")
 

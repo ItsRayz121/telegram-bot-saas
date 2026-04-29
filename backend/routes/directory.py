@@ -62,7 +62,7 @@ def list_directory():
             DirectoryListing.member_count.desc(),
         )
 
-    page = request.args.get("page", 1, type=int)
+    page = max(1, min(request.args.get("page", 1, type=int), 500))
     total = q.count()
     listings = q.offset((page - 1) * PAGE_SIZE).limit(PAGE_SIZE).all()
 
@@ -125,6 +125,8 @@ def create_listing():
         return jsonify({"error": f"Invalid category. Choose from: {', '.join(DIRECTORY_CATEGORIES)}"}), 400
     if not telegram_link:
         return jsonify({"error": "telegram_link is required (e.g. https://t.me/yourcommunity)"}), 400
+    if not (telegram_link.startswith("https://t.me/") or telegram_link.startswith("https://telegram.me/")):
+        return jsonify({"error": "telegram_link must be a valid Telegram URL (https://t.me/...)"}), 400
 
     channel_id = None
     tg_group_id = None

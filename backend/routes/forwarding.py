@@ -257,9 +257,13 @@ def approve_pending(log_id):
         return jsonify({"ok": True})
     except Exception as exc:
         _log.warning("Approve forward failed: %s", exc)
-        log_entry.status = "approved"
-        db.session.commit()
-        return jsonify({"ok": True, "warning": "Bot unavailable; marked approved"})
+        try:
+            log_entry.status = "failed"
+            log_entry.error_msg = str(exc)[:500]
+            db.session.commit()
+        except Exception:
+            pass
+        return jsonify({"error": "Bot unavailable — could not forward message", "detail": str(exc)}), 502
 
 
 @forwarding_bp.route("/pending/<int:log_id>/reject", methods=["POST"])

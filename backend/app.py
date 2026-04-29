@@ -240,11 +240,22 @@ def create_app():
             return None
         # Optionally parse JWT — does not raise if absent/invalid
         try:
-            from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
+            from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity, get_jwt
             verify_jwt_in_request(optional=True)
             uid = get_jwt_identity()
             if not uid:
                 return None  # Unauthenticated — let the route return its own 401
+
+            # Block totp_pending tokens from reaching any endpoint except the
+            # 2FA completion route — prevents a stolen pending token from
+            # accessing real API resources before TOTP is verified.
+            claims = get_jwt()
+            if claims.get("scope") == "totp_pending" and path != "/api/auth/verify-totp-login":
+                return jsonify({
+                    "error": "Two-factor authentication is required to access this resource.",
+                    "code": "TOTP_REQUIRED",
+                }), 403
+
             from .models import User as _User
             user = _User.query.get(int(uid))
             if user and not user.email_verified:
