@@ -60,6 +60,7 @@ from .routes.telegram_webapp import miniapp_bp
 from .routes.automations import automations_bp
 from .routes.channels import channels_bp
 from .routes.directory import directory_bp
+from .routes.crm import crm_bp
 from .bot_manager import BotManager
 from .official_bot import start_official_bot
 
@@ -163,6 +164,7 @@ def create_app():
     app.register_blueprint(automations_bp)
     app.register_blueprint(channels_bp)
     app.register_blueprint(directory_bp)
+    app.register_blueprint(crm_bp)
 
     app.bot_manager = bot_manager
 

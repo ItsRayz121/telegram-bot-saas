@@ -49,6 +49,7 @@ import MiniApp from './pages/MiniApp';
 import MiniAppLayout from './layouts/MiniAppLayout';
 import Directory from './pages/Directory';
 import DirectorySubmit from './pages/DirectorySubmit';
+import GroupCRM from './pages/GroupCRM';
 import JoinReferral from './pages/JoinReferral';
 
 // Initialize Sentry if DSN is configured
@@ -176,6 +177,7 @@ export default function App() {
             <Route path="/groups/:groupId"                  element={<AppRoute><GroupSettings /></AppRoute>} />
             <Route path="/groups/:groupId/analytics"        element={<AppRoute><OfficialGroupAnalytics /></AppRoute>} />
             <Route path="/groups/:groupId/manage"           element={<AppRoute><GroupManagement /></AppRoute>} />
+            <Route path="/groups/:groupId/crm"             element={<AppRoute><GroupCRM /></AppRoute>} />
 
             {/* /my-groups/* → redirect to /groups/* (backward compat) */}
             <Route path="/my-groups"                        element={<Navigate to="/groups" replace />} />

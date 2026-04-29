@@ -542,6 +542,14 @@ export const forwarding = {
   rejectPending: (logId) => api.post(`/api/forwarding/pending/${logId}/reject`),
 };
 
+export const crm = {
+  overview: (gid) => api.get(`/api/crm/${gid}/overview`),
+  members: (gid, params) => api.get(`/api/crm/${gid}/members`, { params }),
+  getMember: (gid, uid) => api.get(`/api/crm/${gid}/members/${uid}`),
+  updateMember: (gid, uid, data) => api.patch(`/api/crm/${gid}/members/${uid}`, data),
+  computeScores: (gid) => api.post(`/api/crm/${gid}/compute-scores`),
+};
+
 export const directory = {
   list: (params) => api.get('/api/directory', { params }),
   mine: () => api.get('/api/directory/mine'),

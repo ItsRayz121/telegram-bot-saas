@@ -1567,6 +1567,15 @@ export default function GroupSettings() {
         {cat === 'analytics' && subTab === 0 && (
           <>
             {isOfficial && (
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1.5 }}>
+                <Button size="small" variant="outlined" startIcon={<People fontSize="small" />}
+                  onClick={() => navigate(`/groups/${groupId}/crm`)}
+                  sx={{ fontSize: '0.72rem' }}>
+                  Open CRM View
+                </Button>
+              </Box>
+            )}
+            {isOfficial && (
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, mb: 2 }}>
                 <TextField
                   size="small" placeholder="Search name or @username…" sx={{ flex: '1 1 200px' }}

@@ -892,10 +892,52 @@ class OfficialMember(db.Model):
     # Phase 3 item 21 — cached admin status to avoid per-message Telegram API calls
     is_admin = db.Column(db.Boolean, default=False, nullable=False)
     is_admin_cached_at = db.Column(db.DateTime, nullable=True)
+    # CRM fields
+    crm_tags = db.Column(db.JSON, nullable=True)          # list of tag strings
+    crm_notes = db.Column(db.Text, nullable=True)         # admin freetext notes
+    engagement_score = db.Column(db.Integer, nullable=True)  # 0–100, computed
 
     __table_args__ = (
         db.UniqueConstraint("telegram_group_id", "telegram_user_id", name="uq_official_member"),
     )
+
+    def compute_engagement_score(self):
+        """Compute 0–100 engagement score from existing member data."""
+        from datetime import datetime, timedelta
+        score = 0
+
+        # XP / level component (0–35 pts)
+        xp = self.xp or 0
+        # Normalize: level 10+ = full score
+        level = self.level or 1
+        score += min(35, int((level / 10) * 35))
+
+        # Message frequency (0–25 pts)
+        msgs = self.message_count or 0
+        days_since_join = max(1, (datetime.utcnow() - (self.joined_at or datetime.utcnow())).days)
+        daily_rate = msgs / days_since_join
+        score += min(25, int(daily_rate * 5))  # 5 msgs/day = full score
+
+        # Recency (0–20 pts) — last message within past 7 days
+        if self.last_message_at:
+            days_ago = (datetime.utcnow() - self.last_message_at).days
+            if days_ago <= 1:   score += 20
+            elif days_ago <= 3: score += 15
+            elif days_ago <= 7: score += 10
+            elif days_ago <= 14: score += 5
+
+        # Verification bonus (0–10 pts)
+        if self.is_verified:
+            score += 10
+
+        # Warning penalty (−10 per warning, min 0)
+        score -= min(score, (self.warnings or 0) * 10)
+
+        # Mute penalty
+        if self.is_muted:
+            score = max(0, score - 15)
+
+        return max(0, min(100, score))
 
     def to_dict(self):
         return {
@@ -919,6 +961,9 @@ class OfficialMember(db.Model):
             "wallet_submitted_at": self.wallet_submitted_at.isoformat() if self.wallet_submitted_at else None,
             "is_admin": self.is_admin,
             "is_admin_cached_at": self.is_admin_cached_at.isoformat() if self.is_admin_cached_at else None,
+            "crm_tags": self.crm_tags or [],
+            "crm_notes": self.crm_notes or "",
+            "engagement_score": self.engagement_score,
         }
 
 
