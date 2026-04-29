@@ -2029,6 +2029,50 @@ export default function GroupSettings() {
                   </CardContent>
                 </Card>
 
+              {/* AI Summary — official-bot groups only */}
+              {isOfficial && (
+                <Card sx={{ mb: 2, border: '1px solid', borderColor: settingsData?.assistant?.ai_digest_enabled ? 'secondary.main' : 'divider', bgcolor: settingsData?.assistant?.ai_digest_enabled ? 'rgba(124,58,237,0.06)' : 'transparent' }}>
+                  <CardContent>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                      <Box>
+                        <Typography variant="subtitle1" fontWeight={600}>🤖 AI Summary (Beta)</Typography>
+                        <Typography variant="body2" color="text.secondary" mt={0.5}>
+                          Append an AI-generated plain-English summary to your digest.
+                          Uses your group's AI API key — <strong>zero cost to you</strong>.
+                        </Typography>
+                      </Box>
+                      <Switch
+                        checked={!!(settingsData?.assistant?.ai_digest_enabled)}
+                        onChange={(e) => updateSetting('assistant.ai_digest_enabled', e.target.checked)}
+                      />
+                    </Box>
+
+                    {settingsData?.assistant?.ai_digest_enabled && (
+                      <Alert severity="info" sx={{ mt: 1.5, fontSize: '0.82rem' }}>
+                        <strong>Requirements:</strong> You must have an AI API key configured under{' '}
+                        <strong>AI &amp; Integrations → Knowledge Base</strong>. Messages in this group will be
+                        buffered for up to 48 hours for summarization. No message content is sent to our servers —
+                        only to your own API provider.
+                      </Alert>
+                    )}
+
+                    {settingsData?.assistant?.ai_digest_enabled && (
+                      <Box sx={{ mt: 2 }}>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          startIcon={saving ? <CircularProgress size={14} color="inherit" /> : null}
+                          onClick={handleSave}
+                          disabled={saving}
+                        >
+                          Save AI Setting
+                        </Button>
+                      </Box>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
               <Card>
                 <CardContent>
                   <Typography variant="subtitle1" fontWeight={600} mb={0.5}>Send Report Now</Typography>
