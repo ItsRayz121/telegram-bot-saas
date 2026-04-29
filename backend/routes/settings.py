@@ -16,6 +16,7 @@ def _require_paid(user, feature="This feature"):
             jsonify({
                 "error": f"{feature} requires a Pro or Enterprise subscription.",
                 "code": "FEATURE_REQUIRES_PRO",
+                "feature": feature,
                 "upgrade_url": "/pricing",
             }),
             403,
@@ -32,14 +33,23 @@ def _require_paid(user, feature="This feature"):
     return None
 
 
-# Settings keys that require a paid subscription when set to truthy.
-# The check is applied recursively, so nested payloads cannot bypass it.
-_GATED_SETTINGS_KEYS = {
+# Top-level section keys where {"enabled": true} inside triggers the gate.
+# These are the actual key names used in TelegramGroup.settings JSON.
+_GATED_SECTIONS = {
+    "verification",        # member join verification
+    "levels",              # XP / levelling system
+    "raids",               # Twitter/X raid coordinator
+    "knowledge_base",      # AI knowledge base + /ask command
+    "webhooks",            # incoming webhook integrations
+    "scheduled_messages",  # scheduler
+    "assistant",           # AI digest
+}
+
+# Direct boolean/flag keys — any truthy value means enabling.
+_GATED_KEYS = {
     "advanced_automod", "extended_automod", "analytics_enabled",
     "raids_enabled", "ai_enabled", "knowledge_base_enabled",
-    "digest_enabled", "scheduled_messages_enabled",
-    "raids", "verification_enabled",
-    # nested AutoMod sub-keys that are premium-only
+    "digest_enabled", "scheduled_messages_enabled", "verification_enabled",
     "ai_moderation", "smart_spam_detection", "link_analysis",
     "content_classification", "advanced_filters",
 }
@@ -49,10 +59,26 @@ _ENTERPRISE_ONLY_KEYS = {
     "white_label", "custom_branding", "api_access", "priority_support",
 }
 
+# Human-readable labels for gated feature names shown in upgrade prompts
+_FEATURE_LABELS = {
+    "verification": "Member Verification",
+    "levels": "XP & Levels System",
+    "raids": "Raid Coordinator",
+    "knowledge_base": "AI Knowledge Base",
+    "webhooks": "Webhook Integrations",
+    "scheduled_messages": "Scheduled Messages",
+    "assistant": "AI Assistant / Digest",
+}
+
 
 def _check_gated_settings(user, incoming_data: dict, _depth: int = 0):
-    """Recursively walk the settings payload and return 403 if a free/expired
-    user tries to enable any gated key. Depth-limited to 10 to prevent DoS."""
+    """Walk the settings payload and return 403 if a free/expired user tries
+    to enable any Pro-gated feature. Depth-limited to 10 to prevent DoS.
+
+    Two gate types:
+    - _GATED_SECTIONS: top-level section keys; gated when nested 'enabled' is True.
+    - _GATED_KEYS: flat boolean keys; gated when the value is truthy.
+    """
     if _depth > 10:
         return None
 
@@ -60,40 +86,56 @@ def _check_gated_settings(user, incoming_data: dict, _depth: int = 0):
     is_expired = is_paid and user.subscription_expires and datetime.utcnow() > user.subscription_expires
     is_enterprise = user.subscription_tier == "enterprise" and not is_expired
 
+    def _403_pro(key):
+        label = _FEATURE_LABELS.get(key, key)
+        return (
+            jsonify({
+                "error": f"{label} requires a Pro or Enterprise subscription.",
+                "code": "FEATURE_REQUIRES_PRO",
+                "feature": key,
+                "feature_label": label,
+                "upgrade_url": "/pricing",
+            }),
+            403,
+        )
+
+    def _403_enterprise(key):
+        label = _FEATURE_LABELS.get(key, key)
+        return (
+            jsonify({
+                "error": f"{label} requires an Enterprise subscription.",
+                "code": "FEATURE_REQUIRES_ENTERPRISE",
+                "feature": key,
+                "feature_label": label,
+                "upgrade_url": "/pricing",
+            }),
+            403,
+        )
+
     if is_paid and not is_expired:
-        # Paid & active — only block enterprise-only keys for non-enterprise users
+        # Active paid user — only block enterprise-only keys for non-enterprise
         if not is_enterprise:
             for key, value in incoming_data.items():
                 if key in _ENTERPRISE_ONLY_KEYS and value:
-                    return (
-                        jsonify({
-                            "error": f"'{key}' requires an Enterprise subscription.",
-                            "code": "FEATURE_REQUIRES_ENTERPRISE",
-                            "feature": key,
-                            "upgrade_url": "/pricing",
-                        }),
-                        403,
-                    )
+                    return _403_enterprise(key)
                 if isinstance(value, dict):
                     err = _check_gated_settings(user, value, _depth + 1)
                     if err:
                         return err
         return None
 
-    # Free tier or expired subscription — block all gated keys
+    # Free or expired — gate both section enablement and direct flag keys
     for key, value in incoming_data.items():
-        blocked = (key in _GATED_SETTINGS_KEYS or key in _ENTERPRISE_ONLY_KEYS) and value
-        if blocked:
-            return (
-                jsonify({
-                    "error": f"'{key}' requires a Pro or Enterprise subscription.",
-                    "code": "FEATURE_REQUIRES_PRO",
-                    "feature": key,
-                    "upgrade_url": "/pricing",
-                }),
-                403,
-            )
-        # Recurse into nested dicts (e.g. {"automod": {"ai_moderation": true}})
+        # Section gate: {"verification": {"enabled": true, ...}}
+        if key in _GATED_SECTIONS and isinstance(value, dict) and value.get("enabled"):
+            return _403_pro(key)
+        # Direct key gate: {"raids_enabled": true}
+        if key in _GATED_KEYS and value:
+            return _403_pro(key)
+        # Enterprise keys
+        if key in _ENTERPRISE_ONLY_KEYS and value:
+            return _403_enterprise(key)
+        # Recurse into nested dicts
         if isinstance(value, dict):
             err = _check_gated_settings(user, value, _depth + 1)
             if err:

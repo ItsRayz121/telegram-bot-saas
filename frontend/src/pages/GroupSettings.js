@@ -25,6 +25,22 @@ import InviteLinks from '../components/InviteLinks';
 import TimezoneSelect from '../components/TimezoneSelect';
 
 // Built at render time so official-group extras can be injected
+// Top-level settings keys that require Pro to enable.
+// Mirrors backend routes/settings.py _GATED_SECTIONS.
+const PRO_GATED_SECTIONS = new Set([
+  'verification', 'levels', 'raids', 'knowledge_base',
+  'webhooks', 'scheduled_messages', 'assistant',
+]);
+const PRO_GATED_LABELS = {
+  verification: 'Member Verification',
+  levels: 'XP & Levels System',
+  raids: 'Raid Coordinator',
+  knowledge_base: 'AI Knowledge Base',
+  webhooks: 'Webhook Integrations',
+  scheduled_messages: 'Scheduled Messages',
+  assistant: 'AI Assistant',
+};
+
 const buildCategories = (isOfficial) => [
   { id: 'moderation', label: 'Moderation', icon: Shield, subTabs: ['AutoMod', 'Behavior', 'Reports'] },
   { id: 'members',    label: 'Members',    icon: Group,  subTabs: ['Verification', 'Welcome', 'XP & Roles'] },
@@ -368,6 +384,19 @@ export default function GroupSettings() {
   };
 
   const updateSetting = (path, value) => {
+    // Proactively block free users from enabling Pro-gated sections
+    // (backend also enforces this on save, but intercepting early gives instant feedback)
+    if (value === true) {
+      const topKey = path.split('.')[0];
+      try {
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        if (user.subscription_tier === 'free' && PRO_GATED_SECTIONS.has(topKey)) {
+          setUpgradeFeature(PRO_GATED_LABELS[topKey] || topKey);
+          setUpgradeModalOpen(true);
+          return;
+        }
+      } catch { /* ignore */ }
+    }
     const keys = path.split('.');
     setSettingsData((prev) => {
       const updated = { ...prev };

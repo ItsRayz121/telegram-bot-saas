@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, timedelta
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func
 from ..models import db, User, Referral, REFERRAL_MILESTONES
@@ -156,6 +156,22 @@ def leaderboard():
         "current_user_count": current_user_count,
         "month": now.strftime("%B %Y"),
     })
+
+
+@referrals_bp.route("/lookup", methods=["GET"])
+@rate_limit(requests_per_minute=30)
+def lookup_referral():
+    """Public endpoint: return referrer's first name for a given referral code.
+    Never exposes email or other PII. Used by the /join referral landing page."""
+    code = (request.args.get("code") or "").strip()
+    if not code or len(code) > 32:
+        return jsonify({"valid": False}), 200
+    referrer = User.query.filter_by(referral_code=code).first()
+    if not referrer or referrer.is_banned:
+        return jsonify({"valid": False}), 200
+    # Return only first name — enough for social proof, no PII leak
+    first_name = (referrer.full_name or "").split()[0] if referrer.full_name else "A friend"
+    return jsonify({"valid": True, "referrer_first_name": first_name}), 200
 
 
 @referrals_bp.route("/apply-rewards", methods=["POST"])

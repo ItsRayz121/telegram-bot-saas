@@ -1,0 +1,139 @@
+import React, { useState, useEffect } from 'react';
+import {
+  Box, Typography, Button, Card, CardContent, Chip,
+  Container, CircularProgress, Avatar, Divider, Stack,
+} from '@mui/material';
+import {
+  SmartToy, Shield, BarChart, CheckCircle, ArrowForward,
+  CardGiftcard, People,
+} from '@mui/icons-material';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { referrals } from '../services/api';
+import TelegizerLogo from '../components/TelegizerLogo';
+
+const FEATURES = [
+  { icon: Shield,    label: 'AutoMod',           desc: 'Spam, links, caps — removed automatically' },
+  { icon: SmartToy,  label: 'AI Knowledge Base',  desc: 'Bot answers FAQs from your docs' },
+  { icon: BarChart,  label: 'Analytics',          desc: 'Growth, engagement, top members' },
+  { icon: People,    label: 'XP & Levels',        desc: 'Gamified community engagement' },
+];
+
+export default function JoinReferral() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const ref = searchParams.get('ref') || '';
+
+  const [referrerName, setReferrerName] = useState(null);
+  const [loading, setLoading] = useState(!!ref);
+
+  useEffect(() => {
+    if (!ref) return;
+    referrals.lookupCode(ref)
+      .then((res) => {
+        if (res.data.valid) setReferrerName(res.data.referrer_first_name);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [ref]);
+
+  const handleGetStarted = () => {
+    navigate(`/register${ref ? `?ref=${ref}` : ''}`);
+  };
+
+  return (
+    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default', display: 'flex', flexDirection: 'column' }}>
+      {/* Nav */}
+      <Box sx={{ px: { xs: 2, md: 4 }, py: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <TelegizerLogo size={28} />
+        <Button variant="outlined" size="small" onClick={() => navigate('/login')}>
+          Sign in
+        </Button>
+      </Box>
+
+      <Container maxWidth="sm" sx={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', py: 6 }}>
+
+        {/* Referral badge */}
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', mb: 4 }}>
+            <CircularProgress size={24} />
+          </Box>
+        ) : referrerName ? (
+          <Box sx={{ textAlign: 'center', mb: 4 }}>
+            <Avatar
+              sx={{ width: 56, height: 56, bgcolor: 'primary.main', fontSize: 24, mx: 'auto', mb: 1.5 }}
+            >
+              {referrerName[0].toUpperCase()}
+            </Avatar>
+            <Chip
+              icon={<CardGiftcard />}
+              label={`${referrerName} invited you to Telegizer`}
+              color="primary"
+              sx={{ fontWeight: 600, px: 1 }}
+            />
+          </Box>
+        ) : null}
+
+        {/* Hero */}
+        <Box sx={{ textAlign: 'center', mb: 5 }}>
+          <Typography variant="h4" fontWeight={800} gutterBottom>
+            Run your Telegram group on autopilot
+          </Typography>
+          <Typography variant="body1" color="text.secondary" maxWidth={420} mx="auto">
+            Telegizer handles moderation, welcome messages, scheduled posts, analytics,
+            and AI-powered responses — so you can focus on building your community.
+          </Typography>
+        </Box>
+
+        {/* Feature list */}
+        <Card sx={{ mb: 4 }}>
+          <CardContent sx={{ p: 3 }}>
+            <Stack spacing={2}>
+              {FEATURES.map(({ icon: Icon, label, desc }) => (
+                <Box key={label} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <Box sx={{ p: 1, borderRadius: 2, bgcolor: 'rgba(37,99,235,0.12)', flexShrink: 0 }}>
+                    <Icon sx={{ fontSize: 20, color: 'primary.main' }} />
+                  </Box>
+                  <Box>
+                    <Typography variant="body2" fontWeight={700}>{label}</Typography>
+                    <Typography variant="caption" color="text.secondary">{desc}</Typography>
+                  </Box>
+                  <CheckCircle sx={{ ml: 'auto', color: 'success.main', fontSize: 18, flexShrink: 0 }} />
+                </Box>
+              ))}
+            </Stack>
+          </CardContent>
+        </Card>
+
+        {/* CTA */}
+        <Button
+          variant="contained"
+          size="large"
+          fullWidth
+          endIcon={<ArrowForward />}
+          onClick={handleGetStarted}
+          sx={{ py: 1.5, fontSize: '1rem', fontWeight: 700, mb: 2 }}
+        >
+          Get Started Free
+        </Button>
+        <Typography variant="caption" color="text.secondary" textAlign="center" display="block">
+          No credit card required · Free plan forever · Setup in 2 minutes
+        </Typography>
+
+        <Divider sx={{ my: 3 }} />
+
+        <Typography variant="caption" color="text.secondary" textAlign="center" display="block">
+          Already have an account?{' '}
+          <Typography
+            component="span"
+            variant="caption"
+            color="primary.main"
+            sx={{ cursor: 'pointer', textDecoration: 'underline' }}
+            onClick={() => navigate('/login')}
+          >
+            Sign in
+          </Typography>
+        </Typography>
+      </Container>
+    </Box>
+  );
+}

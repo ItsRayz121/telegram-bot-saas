@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useSearchParams, useParams } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
@@ -43,6 +43,7 @@ import Workspace from './pages/Workspace';
 import WorkspaceSmartLinks from './pages/WorkspaceSmartLinks';
 import WorkspaceReminders from './pages/WorkspaceReminders';
 import Directory from './pages/Directory';
+import JoinReferral from './pages/JoinReferral';
 
 // Initialize Sentry if DSN is configured
 const SENTRY_DSN = process.env.REACT_APP_SENTRY_DSN;
@@ -92,11 +93,6 @@ const darkTheme = createTheme({
   },
 });
 
-function JoinRedirect() {
-  const [searchParams] = useSearchParams();
-  const ref = searchParams.get('ref') || '';
-  return <Navigate to={`/register${ref ? `?ref=${ref}` : ''}`} replace />;
-}
 
 function _storedUser() {
   try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; }
@@ -157,7 +153,7 @@ export default function App() {
             <Route path="/payment/success" element={<PaymentSuccess />} />
             <Route path="/terms" element={<Terms />} />
             <Route path="/privacy" element={<Privacy />} />
-            <Route path="/join" element={<JoinRedirect />} />
+            <Route path="/join" element={<JoinReferral />} />
 
             {/* ── Auth (no sidebar) ─────────────────────────────────────────── */}
             <Route path="/login"          element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />

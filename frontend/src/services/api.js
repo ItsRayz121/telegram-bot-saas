@@ -377,6 +377,7 @@ export const referrals = {
   getStats: () => api.get('/api/referrals/stats'),
   applyRewards: () => api.post('/api/referrals/apply-rewards'),
   getLeaderboard: () => api.get('/api/referrals/leaderboard'),
+  lookupCode: (code) => api.get('/api/referrals/lookup', { params: { code } }),
 };
 
 export const userSettings = {
