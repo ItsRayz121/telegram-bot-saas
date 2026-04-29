@@ -25,7 +25,7 @@ const SECTIONS = [
     label: 'Forwarding',
     desc: 'Forward messages from one channel to multiple groups automatically — with keyword filters, prefix/suffix templates, and approval queues.',
     path: '/workspace/forwarding',
-    available: false,
+    available: true,
     color: '#06B6D4',
   },
   {

@@ -281,6 +281,83 @@ export default function Landing() {
             No credit card required · Free plan, forever · Upgrade anytime with crypto
           </Typography>
         </Container>
+
+        {/* Dashboard preview mock */}
+        <Box sx={{ mt: 7, mx: 'auto', maxWidth: 860, px: { xs: 2, md: 0 }, position: 'relative' }}>
+          {/* Fade-out bottom overlay */}
+          <Box sx={{
+            position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, zIndex: 1,
+            background: 'linear-gradient(transparent, #0d1117)',
+            pointerEvents: 'none',
+          }} />
+          <Box sx={{
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: 3,
+            overflow: 'hidden',
+            bgcolor: '#0f172a',
+            boxShadow: '0 0 60px rgba(37,99,235,0.15)',
+          }}>
+            {/* Window chrome */}
+            <Box sx={{ bgcolor: '#1e293b', px: 2, py: 1.25, display: 'flex', alignItems: 'center', gap: 1, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+              {['#ef4444','#f59e0b','#22c55e'].map(c => (
+                <Box key={c} sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: c }} />
+              ))}
+              <Box sx={{ flexGrow: 1, mx: 2, bgcolor: 'rgba(255,255,255,0.04)', borderRadius: 1, height: 22, display: 'flex', alignItems: 'center', px: 1.5 }}>
+                <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.65rem' }}>telegizer.xyz/dashboard</Typography>
+              </Box>
+            </Box>
+            {/* Dashboard body */}
+            <Box sx={{ p: 2.5 }}>
+              {/* Stat cards row */}
+              <Grid container spacing={1.5} mb={2}>
+                {[
+                  { label: 'Members', value: '12,847', delta: '+214 today', color: 'primary.main' },
+                  { label: 'Spam Blocked', value: '1,392', delta: 'this month', color: 'success.main' },
+                  { label: 'Messages', value: '84,210', delta: 'last 30 days', color: 'info.main' },
+                  { label: 'Active Groups', value: '3', delta: 'all healthy', color: 'secondary.main' },
+                ].map(s => (
+                  <Grid item xs={6} sm={3} key={s.label}>
+                    <Box sx={{ bgcolor: '#1e293b', borderRadius: 2, p: 1.5, border: '1px solid rgba(255,255,255,0.06)' }}>
+                      <Typography variant="caption" color="text.secondary" display="block">{s.label}</Typography>
+                      <Typography fontWeight={800} sx={{ fontSize: '1.25rem', color: s.color }}>{s.value}</Typography>
+                      <Typography variant="caption" color="text.disabled">{s.delta}</Typography>
+                    </Box>
+                  </Grid>
+                ))}
+              </Grid>
+              {/* Chart + activity row */}
+              <Grid container spacing={1.5}>
+                <Grid item xs={12} sm={8}>
+                  <Box sx={{ bgcolor: '#1e293b', borderRadius: 2, p: 2, border: '1px solid rgba(255,255,255,0.06)', height: 120 }}>
+                    <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={1.5}>Member Growth</Typography>
+                    {/* Simulated bar chart */}
+                    <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: '4px', height: 72 }}>
+                      {[40, 55, 48, 70, 62, 85, 78, 95, 88, 100, 92, 110].map((h, i) => (
+                        <Box key={i} sx={{ flex: 1, bgcolor: i === 11 ? 'primary.main' : 'rgba(37,99,235,0.35)', borderRadius: '3px 3px 0 0', height: `${h}%`, transition: 'height 0.3s' }} />
+                      ))}
+                    </Box>
+                  </Box>
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <Box sx={{ bgcolor: '#1e293b', borderRadius: 2, p: 2, border: '1px solid rgba(255,255,255,0.06)', height: 120 }}>
+                    <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={1}>Recent Actions</Typography>
+                    {[
+                      { text: 'Spam removed', color: 'error.main' },
+                      { text: 'New member joined', color: 'success.main' },
+                      { text: 'Post scheduled', color: 'primary.main' },
+                      { text: 'Raid launched', color: 'warning.main' },
+                    ].map((item, i) => (
+                      <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                        <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: item.color, flexShrink: 0 }} />
+                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.68rem' }}>{item.text}</Typography>
+                      </Box>
+                    ))}
+                  </Box>
+                </Grid>
+              </Grid>
+            </Box>
+          </Box>
+        </Box>
       </Box>
 
       {/* â"€â"€ Stats Strip â"€â"€ */}

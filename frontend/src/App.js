@@ -42,6 +42,7 @@ import Channels from './pages/Channels';
 import Workspace from './pages/Workspace';
 import WorkspaceSmartLinks from './pages/WorkspaceSmartLinks';
 import WorkspaceReminders from './pages/WorkspaceReminders';
+import WorkspaceForwarding from './pages/WorkspaceForwarding';
 import Directory from './pages/Directory';
 import JoinReferral from './pages/JoinReferral';
 
@@ -185,7 +186,7 @@ export default function App() {
             <Route path="/workspace"               element={<AppRoute><Workspace /></AppRoute>} />
             <Route path="/workspace/smart-links"   element={<AppRoute><WorkspaceSmartLinks /></AppRoute>} />
             <Route path="/workspace/reminders"     element={<AppRoute><WorkspaceReminders /></AppRoute>} />
-            <Route path="/workspace/forwarding"    element={<AppRoute><Workspace /></AppRoute>} />
+            <Route path="/workspace/forwarding"    element={<AppRoute><WorkspaceForwarding /></AppRoute>} />
             <Route path="/workspace/automations"   element={<AppRoute><Workspace /></AppRoute>} />
 
             {/* ── Directory ─────────────────────────────────────────────────── */}

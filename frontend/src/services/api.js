@@ -515,4 +515,16 @@ export const workspace = {
   deleteReminder: (id) => api.delete(`/api/workspace/reminders/${id}`),
 };
 
+export const forwarding = {
+  listRules: () => api.get('/api/forwarding/rules'),
+  createRule: (data) => api.post('/api/forwarding/rules', data),
+  updateRule: (id, data) => api.put(`/api/forwarding/rules/${id}`, data),
+  deleteRule: (id) => api.delete(`/api/forwarding/rules/${id}`),
+  toggleRule: (id) => api.post(`/api/forwarding/rules/${id}/toggle`),
+  getRuleLogs: (id, params) => api.get(`/api/forwarding/rules/${id}/logs`, { params }),
+  listPending: () => api.get('/api/forwarding/pending'),
+  approvePending: (logId) => api.post(`/api/forwarding/pending/${logId}/approve`),
+  rejectPending: (logId) => api.post(`/api/forwarding/pending/${logId}/reject`),
+};
+
 export default api;

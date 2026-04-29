@@ -1350,6 +1350,75 @@ class MessageBuffer(db.Model):
         }
 
 
+class ForwardRule(db.Model):
+    """Message forwarding rules — cross-post from one group/channel to another."""
+    __tablename__ = "forward_rules"
+
+    id = db.Column(db.Integer, primary_key=True)
+    owner_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    rule_name = db.Column(db.String(200), nullable=False)
+    source_group_id = db.Column(db.String(255), nullable=False, index=True)
+    destination_id = db.Column(db.String(255), nullable=False)  # chat_id or @username
+    keyword_filter = db.Column(db.String(1000), nullable=True)  # comma-separated; None = all
+    match_type = db.Column(db.String(20), default="contains")   # contains / starts_with
+    prefix_text = db.Column(db.String(500), nullable=True)
+    suffix_text = db.Column(db.String(500), nullable=True)
+    require_approval = db.Column(db.Boolean, default=False, nullable=False)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    forward_count = db.Column(db.Integer, default=0, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    logs = db.relationship("ForwardLog", backref="rule", lazy="dynamic",
+                           cascade="all, delete-orphan")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "owner_user_id": self.owner_user_id,
+            "rule_name": self.rule_name,
+            "source_group_id": self.source_group_id,
+            "destination_id": self.destination_id,
+            "keyword_filter": self.keyword_filter,
+            "match_type": self.match_type,
+            "prefix_text": self.prefix_text,
+            "suffix_text": self.suffix_text,
+            "require_approval": self.require_approval,
+            "is_active": self.is_active,
+            "forward_count": self.forward_count,
+            "created_at": self.created_at.isoformat(),
+        }
+
+
+class ForwardLog(db.Model):
+    """Per-message forwarding audit log."""
+    __tablename__ = "forward_logs"
+
+    id = db.Column(db.Integer, primary_key=True)
+    rule_id = db.Column(db.Integer, db.ForeignKey("forward_rules.id", ondelete="CASCADE"),
+                        nullable=False, index=True)
+    source_chat_id = db.Column(db.String(255), nullable=False)
+    source_message_id = db.Column(db.Integer, nullable=True)
+    source_text = db.Column(db.String(500), nullable=True)
+    destination_id = db.Column(db.String(255), nullable=False)
+    # forwarded / pending_approval / approved / rejected / failed
+    status = db.Column(db.String(30), default="forwarded", nullable=False, index=True)
+    error_msg = db.Column(db.String(500), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "rule_id": self.rule_id,
+            "source_chat_id": self.source_chat_id,
+            "source_message_id": self.source_message_id,
+            "source_text": self.source_text,
+            "destination_id": self.destination_id,
+            "status": self.status,
+            "error_msg": self.error_msg,
+            "created_at": self.created_at.isoformat(),
+        }
+
+
 class OfficialReportedMessage(db.Model):
     """User reports (/report command) for official-bot groups."""
     __tablename__ = "official_reported_messages"

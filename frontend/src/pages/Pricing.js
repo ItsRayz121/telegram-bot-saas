@@ -3,9 +3,9 @@ import {
   Box, AppBar, Toolbar, Typography, Button, Card, CardContent,
   Grid, Chip, List, ListItem, ListItemIcon, ListItemText,
   CircularProgress, IconButton, Dialog, DialogTitle, DialogContent,
-  DialogActions, Stack, Alert,
+  DialogActions, Stack, Alert, Accordion, AccordionSummary, AccordionDetails, Divider,
 } from '@mui/material';
-import { Check, ArrowBack, CurrencyBitcoin, CreditCard, LocalOffer } from '@mui/icons-material';
+import { Check, ArrowBack, CurrencyBitcoin, CreditCard, LocalOffer, ExpandMore } from '@mui/icons-material';
 import Switch from '@mui/material/Switch';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -308,6 +308,53 @@ export default function Pricing() {
         <Typography variant="caption" color="text.disabled">
           Payments accepted via crypto (USDT, BTC, ETH, BNB, 300+ coins) · Card payments coming soon
         </Typography>
+
+        {/* FAQ */}
+        <Divider sx={{ my: 6 }} />
+        <Typography variant="overline" color="primary.main" fontWeight={700} display="block" mb={1}>
+          FAQ
+        </Typography>
+        <Typography variant="h5" fontWeight={800} mb={4}>
+          Frequently asked questions
+        </Typography>
+        <Box sx={{ textAlign: 'left', maxWidth: 720, mx: 'auto', mb: 4 }}>
+          {[
+            {
+              q: 'What happens if I cancel or my plan expires?',
+              a: 'Your bots keep running but paid features become read-only. Free plan features stay active indefinitely. Renew any time and everything restores instantly — no data loss.',
+            },
+            {
+              q: 'What coins and payment methods are supported?',
+              a: 'Crypto payments accept USDT, BTC, ETH, BNB, TRX, SOL, and 300+ coins via NOWPayments. Card / bank transfer is coming soon.',
+            },
+            {
+              q: 'How long do crypto payments take to confirm?',
+              a: 'Most payments confirm in 1–10 minutes. Bitcoin and Ethereum can take 10–30+ minutes during congestion. Your plan activates automatically once the blockchain confirms — no manual steps.',
+            },
+            {
+              q: 'Is my bot token stored securely?',
+              a: 'Yes. Bot tokens are encrypted at rest using AES-256 (Fernet) before being written to the database. They are never stored in plain text and never appear in API responses.',
+            },
+            {
+              q: 'Can I manage multiple groups with one bot?',
+              a: 'Yes. One bot can be added to unlimited Telegram groups. Each group has its own settings, moderation rules, XP system, and scheduled content.',
+            },
+            {
+              q: 'Can I get a refund?',
+              a: 'Yes, within 14 days of payment if the platform did not work as described. Contact support with your payment ID. Crypto refunds are processed back to the originating wallet.',
+            },
+          ].map(({ q, a }) => (
+            <Accordion key={q} disableGutters elevation={0}
+              sx={{ border: '1px solid', borderColor: 'divider', mb: 1, borderRadius: '8px !important', '&:before': { display: 'none' } }}>
+              <AccordionSummary expandIcon={<ExpandMore />}>
+                <Typography fontWeight={600}>{q}</Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Typography variant="body2" color="text.secondary" lineHeight={1.7}>{a}</Typography>
+              </AccordionDetails>
+            </Accordion>
+          ))}
+        </Box>
       </Box>
 
       {/* Payment method dialog */}

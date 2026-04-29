@@ -55,6 +55,7 @@ from .routes.bot_group_commands import bot_group_commands_bp
 from .routes.telegram_account import telegram_account_bp
 from .routes.official_settings import official_settings_bp
 from .routes.workspace import workspace_bp
+from .routes.forwarding import forwarding_bp
 from .bot_manager import BotManager
 from .official_bot import start_official_bot
 
@@ -153,6 +154,7 @@ def create_app():
     app.register_blueprint(telegram_account_bp)
     app.register_blueprint(official_settings_bp)
     app.register_blueprint(workspace_bp)
+    app.register_blueprint(forwarding_bp)
 
     app.bot_manager = bot_manager
 
