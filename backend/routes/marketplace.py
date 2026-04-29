@@ -8,6 +8,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..models import db, PartnershipDeal, DealMessage, DirectoryListing, User
 from ..config import Config
+from ..middleware.rate_limit import rate_limit
 
 _log = logging.getLogger(__name__)
 
@@ -247,6 +248,7 @@ def decline_deal(did):
 
 @marketplace_bp.route("/api/marketplace/deals/<int:did>/pay", methods=["POST"])
 @jwt_required()
+@rate_limit(requests_per_minute=5)
 def initiate_payment(did):
     """Create a NOWPayments invoice for the deal."""
     user = _get_user()
@@ -345,12 +347,27 @@ def payment_webhook():
         return jsonify({"ok": True})
 
     if payment_status in ("confirmed", "finished"):
+        webhook_payment_id = str(data.get("payment_id") or "")
         deal = PartnershipDeal.query.get(deal_id)
-        if deal and deal.payment_status == "awaiting":
+        if not deal:
+            return jsonify({"ok": True})
+
+        # Verify the payment_id in the webhook matches the one we stored when the
+        # buyer initiated payment.  Without this check, a correctly-signed but
+        # unrelated webhook could advance any deal in `awaiting` state.
+        if deal.payment_id and webhook_payment_id and deal.payment_id != webhook_payment_id:
+            _log.warning(
+                "[MARKETPLACE_WEBHOOK] payment_id mismatch for deal %s: stored=%s webhook=%s",
+                deal.id, deal.payment_id, webhook_payment_id,
+            )
+            return jsonify({"ok": True})
+
+        if deal.payment_status == "awaiting":
             deal.payment_status = "paid"
             deal.status = "in_progress"
             deal.paid_at = datetime.utcnow()
             db.session.commit()
+            _log.info("[MARKETPLACE_WEBHOOK] Deal %s marked paid (payment_id=%s)", deal.id, webhook_payment_id)
 
     return jsonify({"ok": True})
 

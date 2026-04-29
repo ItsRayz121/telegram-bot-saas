@@ -42,16 +42,9 @@ def _generate_backup_codes():
 
 
 def _require_paid_or_admin(user):
-    from datetime import datetime
     from ..config import Config
     is_admin = user.email in Config.ADMIN_EMAILS
-    is_paid = user.subscription_tier in ("pro", "enterprise")
-    is_expired = (
-        is_paid
-        and user.subscription_expires is not None
-        and datetime.utcnow() > user.subscription_expires
-    )
-    if not is_admin and (not is_paid or is_expired):
+    if not is_admin and not user.subscription_active:
         return jsonify({
             "error": "2FA is available for Pro and Enterprise subscribers.",
             "code": "FEATURE_REQUIRES_PRO",

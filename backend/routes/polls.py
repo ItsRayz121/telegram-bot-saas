@@ -14,7 +14,7 @@ def _require_paid(user, feature="This feature"):
             jsonify({"error": f"{feature} requires a Pro or Enterprise subscription. Upgrade at /pricing."}),
             403,
         )
-    if user.subscription_expires and datetime.utcnow() > user.subscription_expires:
+    if not user.subscription_active:
         return (
             jsonify({"error": "Your subscription has expired. Please renew to continue using this feature."}),
             403,

@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import hmac
 import os
 import logging
 
@@ -84,10 +85,12 @@ def decrypt_value(ciphertext: str) -> str:
 
 
 def hash_token(token: str) -> str:
-    """Return a stable SHA-256 hex digest of a token for uniqueness checks."""
+    """Return HMAC-SHA256 hex digest keyed with ENCRYPTION_KEY for uniqueness checks.
+    Prevents rainbow-table attacks on stored token hashes."""
     if not token:
         return ""
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+    key = os.environ.get("ENCRYPTION_KEY") or os.environ.get("SECRET_KEY", "")
+    return hmac.new(key.encode("utf-8"), token.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
 def mask_key(key: str) -> str:

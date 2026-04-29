@@ -1,5 +1,6 @@
 import bcrypt
 import hashlib
+import hmac
 import logging
 import threading
 from datetime import datetime, timedelta
@@ -119,8 +120,8 @@ def _send_verification_email_async(app, user_email, user_name, token):
 # ── Anti-abuse helpers ─────────────────────────────────────────────────────────
 
 def _hash_identifier(value: str) -> str:
-    """Return SHA-256 hex digest of the given string. Used for IP and device fingerprint storage."""
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+    """Return HMAC-SHA256 hex digest keyed with SECRET_KEY. Prevents rainbow-table attacks on stored IP/device hashes."""
+    return hmac.new(Config.SECRET_KEY.encode("utf-8"), value.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
 def _get_client_ip() -> str:

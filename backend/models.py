@@ -51,8 +51,20 @@ class User(db.Model):
 
     def get_or_create_referral_code(self):
         if not self.referral_code:
-            self.referral_code = secrets.token_urlsafe(8)[:10]
+            self.referral_code = secrets.token_urlsafe(16)
         return self.referral_code
+
+    _GRACE_DAYS = 3  # paid features remain accessible this many days after expiry
+
+    @property
+    def subscription_active(self) -> bool:
+        """True if the user has a paid plan that is current OR within the 3-day grace window."""
+        if self.subscription_tier == "free":
+            return False
+        if self.subscription_expires is None:
+            return True  # admin-granted, no expiry
+        grace_deadline = self.subscription_expires + timedelta(days=self._GRACE_DAYS)
+        return datetime.utcnow() <= grace_deadline
 
     @property
     def is_locked(self):

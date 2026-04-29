@@ -3,11 +3,12 @@ import {
   Box, AppBar, Toolbar, Typography, Button, Card, CardContent,
   Chip, Stack, Divider, Alert, IconButton,
   Grid, Table, TableBody, TableCell, TableContainer, TableHead,
-  TableRow, TablePagination,
+  TableRow, TablePagination, Dialog, DialogTitle, DialogContent,
+  DialogContentText, DialogActions,
 } from '@mui/material';
 import {
   ArrowBack, Upgrade, CheckCircle,
-  CurrencyBitcoin, Refresh, ReceiptLong,
+  CurrencyBitcoin, Refresh, ReceiptLong, Cancel,
 } from '@mui/icons-material';
 import Skeleton from '@mui/material/Skeleton';
 import { useNavigate } from 'react-router-dom';
@@ -35,6 +36,8 @@ export default function Billing() {
   const [historyTotal, setHistoryTotal] = useState(0);
   const [historyPage, setHistoryPage] = useState(0);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   const fetchSub = useCallback(async () => {
     try {
@@ -72,6 +75,20 @@ export default function Billing() {
       setRefreshing(false);
     }
   }, []);
+
+  const handleCancelConfirm = useCallback(async () => {
+    setCancelling(true);
+    try {
+      await billing.cancelSubscription();
+      toast.success('Subscription cancelled. You are now on the Free plan.');
+      setCancelDialogOpen(false);
+      await fetchSub();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Failed to cancel subscription');
+    } finally {
+      setCancelling(false);
+    }
+  }, [fetchSub]);
 
   useEffect(() => { fetchSub(); fetchHistory(0); }, [fetchSub, fetchHistory]);
 
@@ -149,16 +166,29 @@ export default function Billing() {
                     </Typography>
                   </Box>
 
-                  {tier !== 'enterprise' && (
-                    <Button
-                      variant="contained"
-                      startIcon={<Upgrade />}
-                      onClick={() => navigate('/pricing')}
-                      size="large"
-                    >
-                      {isExpired ? 'Renew Plan' : 'Upgrade Plan'}
-                    </Button>
-                  )}
+                  <Stack direction="row" spacing={1} flexWrap="wrap">
+                    {tier !== 'enterprise' && (
+                      <Button
+                        variant="contained"
+                        startIcon={<Upgrade />}
+                        onClick={() => navigate('/pricing')}
+                        size="large"
+                      >
+                        {isExpired ? 'Renew Plan' : 'Upgrade Plan'}
+                      </Button>
+                    )}
+                    {tier !== 'free' && !isExpired && (
+                      <Button
+                        variant="outlined"
+                        color="error"
+                        startIcon={<Cancel />}
+                        onClick={() => setCancelDialogOpen(true)}
+                        size="large"
+                      >
+                        Cancel Plan
+                      </Button>
+                    )}
+                  </Stack>
                 </Box>
 
                 {expires && (
@@ -376,6 +406,30 @@ export default function Billing() {
             </Box>
           </>
         )}
+
+        {/* Cancel confirmation dialog */}
+        <Dialog open={cancelDialogOpen} onClose={() => !cancelling && setCancelDialogOpen(false)}>
+          <DialogTitle>Cancel your subscription?</DialogTitle>
+          <DialogContent>
+            <DialogContentText>
+              Your plan will be immediately downgraded to <strong>Free</strong>. You will lose access
+              to paid features and any remaining days will not be refunded. This action cannot be undone.
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setCancelDialogOpen(false)} disabled={cancelling}>
+              Keep Plan
+            </Button>
+            <Button
+              onClick={handleCancelConfirm}
+              color="error"
+              variant="contained"
+              disabled={cancelling}
+            >
+              {cancelling ? 'Cancelling…' : 'Yes, Cancel Subscription'}
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Box>
     </Box>
   );

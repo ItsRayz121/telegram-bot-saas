@@ -319,6 +319,28 @@ def send_subscription_expiry_warning(to_email: str, full_name: str,
     )
 
 
+def send_subscription_expired(to_email: str, full_name: str, plan_name: str) -> bool:
+    """Day-of-expiry email — fires once when subscription lapses (3-day grace period begins)."""
+    billing_url = f"{current_app.config['FRONTEND_URL']}/billing"
+    content = f"""
+    <p>Hi <strong>{full_name}</strong>,</p>
+    <p>Your <strong>{plan_name.capitalize()} Plan</strong> has expired today.</p>
+    <p>You have a <strong>3-day grace period</strong> — all paid features remain active until then.
+    Renew now to stay uninterrupted.</p>
+    <a href="{billing_url}" class="btn">Renew Now</a>
+    <p style="margin-top:16px;font-size:13px;color:#909090;">
+      After the grace period your account reverts to Free. All your data is safe and restores
+      instantly when you renew.
+    </p>
+    """
+    return send_email(
+        to_email,
+        f"Your Telegizer {plan_name.capitalize()} Plan has expired",
+        _base_template(content, "Subscription Expired"),
+        f"Hi {full_name}, your {plan_name} plan expired. Renew within 3 days at {billing_url}.",
+    )
+
+
 def send_bot_added_notification(to_email, full_name, bot_name, bot_username):
     content = f"""
     <p>Hi <strong>{full_name}</strong>,</p>

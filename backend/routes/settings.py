@@ -21,7 +21,7 @@ def _require_paid(user, feature="This feature"):
             }),
             403,
         )
-    if user.subscription_expires and datetime.utcnow() > user.subscription_expires:
+    if not user.subscription_active:
         return (
             jsonify({
                 "error": "Your subscription has expired. Please renew to continue using this feature.",
@@ -83,7 +83,7 @@ def _check_gated_settings(user, incoming_data: dict, _depth: int = 0):
         return None
 
     is_paid = user.subscription_tier in _PAID_TIERS
-    is_expired = is_paid and user.subscription_expires and datetime.utcnow() > user.subscription_expires
+    is_expired = is_paid and not user.subscription_active
     is_enterprise = user.subscription_tier == "enterprise" and not is_expired
 
     def _403_pro(key):

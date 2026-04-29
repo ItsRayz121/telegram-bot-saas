@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from ..models import db, User, ProcessedPayment, PaymentHistory
 from ..config import Config
 from ..middleware.rate_limit import rate_limit
-from ..notifications import send_subscription_confirmation
+from ..notifications import send_subscription_confirmation, send_subscription_cancelled
 
 logger = logging.getLogger(__name__)
 
@@ -126,21 +126,60 @@ def get_subscription():
     user = _get_current_user()
     if not user:
         return jsonify({"error": "User not found"}), 404
-    is_expired = (
+    hard_expired = (
         user.subscription_expires is not None
         and datetime.utcnow() > user.subscription_expires
         and user.subscription_tier != "free"
     )
+    # Grace period: subscription_active includes 3-day window after hard expiry
+    in_grace = hard_expired and user.subscription_active
     return jsonify({
         "subscription": {
             "tier": user.subscription_tier,
             "expires": user.subscription_expires.isoformat() if user.subscription_expires else None,
-            "is_expired": is_expired,
-            "is_active": not is_expired,
+            "is_expired": hard_expired,
+            "in_grace_period": in_grace,
+            "is_active": user.subscription_active,
         }
     })
 
 
+
+
+# ─── Cancel subscription ──────────────────────────────────────────────────────
+
+@billing_bp.route("/subscription", methods=["DELETE"])
+@jwt_required()
+@rate_limit(requests_per_minute=5)
+def cancel_subscription():
+    user = _get_current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    if user.subscription_tier == "free":
+        return jsonify({"error": "No active paid subscription to cancel"}), 400
+
+    prev_tier = user.subscription_tier
+    user.subscription_tier = "free"
+    user.subscription_expires = None
+    record = PaymentHistory(
+        user_id=user.id,
+        provider="manual",
+        payment_id=None,
+        plan=prev_tier,
+        billing_period=None,
+        amount_usd=0,
+        currency="USD",
+        status="cancelled",
+        confirmed_at=datetime.utcnow(),
+    )
+    db.session.add(record)
+    db.session.commit()
+    try:
+        send_subscription_cancelled(user.email, user.full_name)
+    except Exception:
+        pass
+    logger.info("[BILLING] User %d cancelled %s subscription", user.id, prev_tier)
+    return jsonify({"message": "Subscription cancelled. You have been moved to the Free plan."})
 
 
 # ─── NOWPayments (crypto) ─────────────────────────────────────────────────────
@@ -255,6 +294,35 @@ def crypto_webhook():
         logger.warning("[NOWPAYMENTS] Webhook missing payment_id — rejecting to prevent duplicate activation")
         return jsonify({"error": "payment_id is required"}), 400
     payment_id = str(raw_payment_id)
+
+    # Handle refunds — downgrade user if NOWPayments reports a full refund
+    if payment_status in ("refunded", "partially_refunded"):
+        logger.warning("[NOWPAYMENTS] Refund received for payment_id=%s order=%s", payment_id, order_id)
+        try:
+            parts = order_id.split("_")
+            refund_user_id = int(parts[1])
+            refund_user = User.query.get(refund_user_id)
+            if refund_user and refund_user.subscription_tier != "free":
+                prev = refund_user.subscription_tier
+                refund_user.subscription_tier = "free"
+                refund_user.subscription_expires = None
+                refund_record = PaymentHistory(
+                    user_id=refund_user.id,
+                    provider="nowpayments",
+                    payment_id=payment_id,
+                    plan=prev,
+                    billing_period=None,
+                    amount_usd=0,
+                    currency="USD",
+                    status="refunded",
+                    confirmed_at=datetime.utcnow(),
+                )
+                db.session.add(refund_record)
+                db.session.commit()
+                logger.info("[NOWPAYMENTS] Downgraded user %d to free after refund", refund_user_id)
+        except Exception as exc:
+            logger.error("[NOWPAYMENTS] Refund handling error: %s", exc)
+        return jsonify({"status": "ok"})
 
     # Only activate on confirmed/finished payments
     if payment_status not in ("finished", "confirmed"):

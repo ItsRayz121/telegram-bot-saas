@@ -370,6 +370,7 @@ export const billing = {
   getHistory: (params) => api.get('/api/billing/history', { params }),
   // NOWPayments — crypto (USDT, BTC, ETH, etc.)
   cryptoCheckout: (data) => api.post('/api/billing/crypto/checkout', data),
+  cancelSubscription: () => api.delete('/api/billing/subscription'),
 };
 
 export const referrals = {

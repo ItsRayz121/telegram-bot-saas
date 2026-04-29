@@ -383,6 +383,7 @@ def create_app():
         _run_workspace_migrations()
         _run_marketplace_migrations()
         _backfill_group_defaults()
+        _run_token_hash_hmac_migration()
 
     # Start bots in a background thread after a short delay so Gunicorn can
     # pass its healthcheck before bot polling (which may contact Telegram and
@@ -1255,6 +1256,41 @@ def _run_payment_history_migration():
         pass
 
 
+def _run_token_hash_hmac_migration():
+    """Re-hash all bot_token_hash values from plain SHA-256 to HMAC-SHA256.
+
+    hash_token() now uses HMAC-SHA256 keyed with ENCRYPTION_KEY.  Any rows
+    hashed under the old plain SHA-256 scheme won't match lookups any more,
+    so on first startup after the upgrade we decrypt every token and re-hash it.
+    We detect old-scheme hashes by computing both values and checking for a
+    mismatch (idempotent — runs harmlessly on subsequent restarts).
+    """
+    from .models import Bot
+    from .utils.encryption import decrypt_value, hash_token as _hmac_hash
+    import hashlib as _hl
+
+    try:
+        bots = Bot.query.filter(Bot.bot_token_hash.isnot(None)).all()
+        changed = False
+        for bot in bots:
+            plain = decrypt_value(bot.bot_token)
+            if not plain:
+                continue
+            expected_hmac = _hmac_hash(plain)
+            if bot.bot_token_hash != expected_hmac:
+                bot.bot_token_hash = expected_hmac
+                changed = True
+        if changed:
+            db.session.commit()
+            _scheduler_log.info("[MIGRATION] Re-hashed bot tokens to HMAC-SHA256")
+    except Exception as exc:
+        _scheduler_log.error("[MIGRATION] token_hash HMAC migration failed: %s", exc)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+
+
 def _run_bot_token_encryption_migration():
     """Add bot_token_hash column and encrypt any plain-text bot tokens on startup."""
     from .utils.encryption import encrypt_value, hash_token, decrypt_value
@@ -1646,6 +1682,19 @@ def _cleanup_revoked_tokens():
             pass
 
 
+def _run_task_with_timeout(fn, *args, timeout=30, label="task"):
+    """Run *fn* in a worker thread; log a warning if it exceeds *timeout* seconds."""
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(fn, *args)
+        try:
+            future.result(timeout=timeout)
+        except concurrent.futures.TimeoutError:
+            _scheduler_log.warning("[SCHEDULER] %s timed out after %ss", label, timeout)
+        except Exception as exc:
+            _scheduler_log.error("[SCHEDULER] %s error: %s", label, exc)
+
+
 def _scheduler_loop(app):
     import time
     _last_expiry_check = [0]
@@ -1658,85 +1707,79 @@ def _scheduler_loop(app):
     time.sleep(15)  # Wait for bots to fully start
     while True:
         try:
+            now_ts = time.time()
             with app.app_context():
-                _run_scheduled_messages()
-                _run_scheduled_polls()
-                _run_official_scheduled_messages()
-                _run_official_scheduled_polls()
+                _run_task_with_timeout(_run_scheduled_messages, timeout=30, label="_run_scheduled_messages")
+                _run_task_with_timeout(_run_scheduled_polls, timeout=30, label="_run_scheduled_polls")
+                _run_task_with_timeout(_run_official_scheduled_messages, timeout=30, label="_run_official_scheduled_messages")
+                _run_task_with_timeout(_run_official_scheduled_polls, timeout=30, label="_run_official_scheduled_polls")
                 # Check subscription expiry warnings every 6 hours
-                now_ts = time.time()
                 if now_ts - _last_expiry_check[0] > 6 * 3600:
                     _last_expiry_check[0] = now_ts
-                    _run_expiry_notifications()
+                    _run_task_with_timeout(_run_expiry_notifications, timeout=30, label="_run_expiry_notifications")
                 # Bot health heartbeat every 5 minutes
                 if now_ts - _last_heartbeat[0] > 300:
                     _last_heartbeat[0] = now_ts
-                    try:
-                        bot_manager.heartbeat(app)
-                    except Exception as hb_exc:
-                        _scheduler_log.error("Bot heartbeat error: %s", hb_exc)
+                    _run_task_with_timeout(bot_manager.heartbeat, app, timeout=30, label="bot_heartbeat")
                 # Bot watchdog: restart dead threads every 2 minutes
                 if now_ts - _last_watchdog[0] > 120:
                     _last_watchdog[0] = now_ts
-                    try:
-                        _watchdog_bots(app)
-                    except Exception as wd_exc:
-                        _scheduler_log.error("Bot watchdog error: %s", wd_exc)
+                    _run_task_with_timeout(_watchdog_bots, app, timeout=30, label="_watchdog_bots")
                 # BotEvent retention: purge rows older than 90 days, once per day
                 if now_ts - _last_event_cleanup[0] > 86400:
                     _last_event_cleanup[0] = now_ts
-                    try:
-                        _run_bot_event_cleanup()
-                    except Exception as ec_exc:
-                        _scheduler_log.error("BotEvent cleanup error: %s", ec_exc)
+                    _run_task_with_timeout(_run_bot_event_cleanup, timeout=30, label="_run_bot_event_cleanup")
                 # Revoked token TTL cleanup: once per day
                 if now_ts - _last_token_cleanup[0] > 86400:
                     _last_token_cleanup[0] = now_ts
-                    try:
-                        _cleanup_revoked_tokens()
-                    except Exception as rt_exc:
-                        _scheduler_log.warning("revoked_tokens cleanup error: %s", rt_exc)
-            try:
-                run_digest_scheduler(app)
-            except Exception as exc:
-                _scheduler_log.error(f"Digest scheduler error: {exc}")
+                    _run_task_with_timeout(_cleanup_revoked_tokens, timeout=30, label="_cleanup_revoked_tokens")
+                    _run_task_with_timeout(_cleanup_pending_verifications, timeout=30, label="_cleanup_pending_verifications")
+            _run_task_with_timeout(run_digest_scheduler, app, timeout=30, label="run_digest_scheduler")
             # Official group digest: check every 30 minutes
             if now_ts - _last_official_digest[0] > 1800:
                 _last_official_digest[0] = now_ts
-                try:
-                    _run_official_group_digests(app)
-                except Exception as od_exc:
-                    _scheduler_log.error("Official digest error: %s", od_exc)
+                _run_task_with_timeout(_run_official_group_digests, app, timeout=30, label="_run_official_group_digests")
             # Workspace reminder delivery: every 60s (already in loop)
-            try:
-                _deliver_reminders(app)
-            except Exception as rem_exc:
-                _scheduler_log.debug("Reminder delivery error: %s", rem_exc)
+            _run_task_with_timeout(_deliver_reminders, app, timeout=30, label="_deliver_reminders")
             # Scheduled automations: check every 60s
-            try:
-                _run_scheduled_automations(app)
-            except Exception as sa_exc:
-                _scheduler_log.debug("Scheduled automations error: %s", sa_exc)
+            _run_task_with_timeout(_run_scheduled_automations, app, timeout=30, label="_run_scheduled_automations")
             # Message buffer cleanup: every 6 hours
             if now_ts - _last_buffer_cleanup[0] > 21600:
                 _last_buffer_cleanup[0] = now_ts
-                try:
-                    _cleanup_message_buffers(app)
-                except Exception as buf_exc:
-                    _scheduler_log.debug("Buffer cleanup error: %s", buf_exc)
+                _run_task_with_timeout(_cleanup_message_buffers, app, timeout=30, label="_cleanup_message_buffers")
         except Exception as exc:
             _scheduler_log.error(f"Scheduler loop error: {exc}")
         time.sleep(60)
 
 
+def _cleanup_pending_verifications():
+    """Delete expired pending_verifications rows (stale CAPTCHA/quiz prompts)."""
+    from .models import PendingVerification
+    try:
+        deleted = PendingVerification.query.filter(
+            PendingVerification.expires_at < datetime.utcnow()
+        ).delete(synchronize_session=False)
+        if deleted:
+            db.session.commit()
+            _scheduler_log.info("[CLEANUP] Deleted %d expired pending_verifications", deleted)
+    except Exception as exc:
+        _scheduler_log.error("[CLEANUP] pending_verifications cleanup error: %s", exc)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+
+
 def _run_expiry_notifications():
-    """Send in-app + email expiry warning notifications at 5-day and 1-day marks."""
+    """Send in-app + email expiry warning notifications at 5-day, 1-day, and day-of marks."""
     from .models import User, UserNotification
     from .routes.notifications import create_notification
-    from .notifications import send_subscription_expiry_warning
+    from .notifications import send_subscription_expiry_warning, send_subscription_expired
     now = datetime.utcnow()
     five_days = now + timedelta(days=5)
+    grace_end = now - timedelta(days=3)  # subscriptions expired up to 3 days ago (grace period)
     try:
+        # Warn: expiring in next 5 days
         expiring_soon = User.query.filter(
             User.subscription_expires.isnot(None),
             User.subscription_tier != "free",
@@ -1746,7 +1789,6 @@ def _run_expiry_notifications():
         for user in expiring_soon:
             days_left = max(0, (user.subscription_expires - now).days)
             notif_type = "plan_expiring_1d" if days_left <= 1 else "plan_expiring_5d"
-            # Avoid duplicate notifications within 12 hours
             recent = UserNotification.query.filter(
                 UserNotification.user_id == user.id,
                 UserNotification.type == notif_type,
@@ -1756,8 +1798,6 @@ def _run_expiry_notifications():
                 continue
             label = "tomorrow" if days_left <= 1 else f"in {days_left} days"
             expires_str = user.subscription_expires.strftime("%Y-%m-%d")
-
-            # In-app notification
             create_notification(
                 user.id, notif_type,
                 "Subscription Expiring Soon",
@@ -1765,25 +1805,45 @@ def _run_expiry_notifications():
                 f"({expires_str}). Renew now to avoid interruption.",
                 {"expires": user.subscription_expires.isoformat(), "days_left": days_left},
             )
-
-            # Email warning
             try:
                 send_subscription_expiry_warning(
-                    user.email,
-                    user.full_name,
-                    user.subscription_tier,
-                    expires_str,
-                    max(1, days_left),
+                    user.email, user.full_name, user.subscription_tier,
+                    expires_str, max(1, days_left),
                 )
                 _scheduler_log.info(
                     "Sent expiry warning email to user %d (%s) — %d days left",
                     user.id, user.email, days_left,
                 )
             except Exception as email_exc:
-                _scheduler_log.error(
-                    "Failed to send expiry warning email to user %d: %s",
-                    user.id, email_exc,
-                )
+                _scheduler_log.error("Failed to send expiry warning email to user %d: %s", user.id, email_exc)
+
+        # Day-of-expiry: send once when subscription has just lapsed (within 3-day grace window)
+        just_expired = User.query.filter(
+            User.subscription_expires.isnot(None),
+            User.subscription_tier != "free",
+            User.subscription_expires <= now,
+            User.subscription_expires > grace_end,
+        ).all()
+        for user in just_expired:
+            recent = UserNotification.query.filter(
+                UserNotification.user_id == user.id,
+                UserNotification.type == "plan_expired",
+                UserNotification.created_at >= now - timedelta(hours=12),
+            ).first()
+            if recent:
+                continue
+            create_notification(
+                user.id, "plan_expired",
+                "Subscription Expired",
+                f"Your {user.subscription_tier.capitalize()} plan has expired. "
+                f"You have a 3-day grace period. Renew to avoid service interruption.",
+                {},
+            )
+            try:
+                send_subscription_expired(user.email, user.full_name, user.subscription_tier)
+                _scheduler_log.info("Sent expired email to user %d", user.id)
+            except Exception as email_exc:
+                _scheduler_log.error("Failed to send expired email to user %d: %s", user.id, email_exc)
     except Exception as exc:
         _scheduler_log.error("Expiry notification error: %s", exc, exc_info=True)
 
