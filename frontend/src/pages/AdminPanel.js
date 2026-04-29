@@ -25,15 +25,20 @@ function StatCard({ label, value, color = '#2196f3' }) {
 export default function AdminPanel() {
   const navigate = useNavigate();
 
-  // Guard: redirect non-admins immediately (App.js AdminRoute also checks this,
-  // but keeping it here as a second layer so the component never renders for non-admins)
+  // Guard: verify admin status from server — localStorage can be spoofed.
+  // App.js AdminRoute already does a server check; this is a second gate at
+  // the component level so stale localStorage never grants phantom access.
   useEffect(() => {
-    try {
-      const u = JSON.parse(localStorage.getItem('user') || '{}');
-      if (!u.is_admin) navigate('/dashboard', { replace: true });
-    } catch {
-      navigate('/dashboard', { replace: true });
-    }
+    import('../services/api').then(({ auth: authApi }) => {
+      authApi.getMe()
+        .then(r => {
+          const u = r.data?.user || {};
+          if (!u.is_admin) navigate('/dashboard', { replace: true });
+          // Keep localStorage fresh
+          localStorage.setItem('user', JSON.stringify({ ...u }));
+        })
+        .catch(() => navigate('/dashboard', { replace: true }));
+    });
   }, [navigate]);
 
   const [activeTab, setActiveTab] = useState(0);

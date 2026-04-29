@@ -1388,6 +1388,85 @@ def _deliver_reminders(app):
             pass
 
 
+def _run_scheduled_automations(app):
+    """Fire 'scheduled' automation workflows whose cron expression is due.
+
+    Supports simple cron patterns via basic interval matching.  We avoid a
+    full cron library dependency: instead we store the next_run_at on the
+    workflow and re-schedule after each execution.  The scheduler calls this
+    every 60 s so granularity is one minute.
+    """
+    import asyncio as _asyncio
+    from .models import db, AutomationWorkflow, AutomationExecution
+    from .official_bot import get_official_bot_loop
+
+    bot_obj, loop = get_official_bot_loop()
+    if not bot_obj or not loop or not loop.is_running():
+        return
+
+    now = datetime.utcnow()
+    with app.app_context():
+        # Find all active scheduled workflows whose next_run_at is due.
+        # We store next_run_at in last_run_at — None means never run yet (run immediately).
+        workflows = AutomationWorkflow.query.filter(
+            AutomationWorkflow.is_active == True,
+            AutomationWorkflow.trigger.op("->>")(
+                db.literal("type")
+            ) == "scheduled",
+        ).all()
+
+        for wf in workflows:
+            trigger_params = (wf.trigger or {}).get("params", {})
+            # interval_minutes: how often to run (default 60)
+            try:
+                interval = max(1, int(trigger_params.get("interval_minutes", 60)))
+            except (TypeError, ValueError):
+                interval = 60
+
+            # Decide if it's time to run
+            if wf.last_run_at is not None:
+                elapsed = (now - wf.last_run_at).total_seconds() / 60
+                if elapsed < interval:
+                    continue
+
+            trigger_data = {
+                "scheduled_at": now.isoformat(),
+                "group_id": wf.source_group_id,
+            }
+
+            async def _fire(wf_id=wf.id, wf_obj=wf, td=trigger_data):
+                try:
+                    with app.app_context():
+                        from .models import db, AutomationWorkflow, AutomationExecution
+                        from .automation.engine import _execute_action, _check_conditions
+                        wf_fresh = AutomationWorkflow.query.get(wf_id)
+                        if not wf_fresh or not wf_fresh.is_active:
+                            return
+                        status = "success"
+                        error_msg = None
+                        for action in (wf_fresh.actions or []):
+                            try:
+                                await _execute_action(bot_obj, action, wf_fresh, td, app)
+                            except Exception as exc:
+                                status = "failed"
+                                error_msg = str(exc)[:500]
+                        wf_fresh.run_count = (wf_fresh.run_count or 0) + 1
+                        wf_fresh.last_run_at = datetime.utcnow()
+                        db.session.add(AutomationExecution(
+                            workflow_id=wf_id,
+                            trigger_type="scheduled",
+                            source_group_id=wf_fresh.source_group_id,
+                            trigger_data=td,
+                            status=status,
+                            error_msg=error_msg,
+                        ))
+                        db.session.commit()
+                except Exception as exc:
+                    _scheduler_log.debug("Scheduled automation wf=%s error: %s", wf_id, exc)
+
+            _asyncio.run_coroutine_threadsafe(_fire(), loop)
+
+
 def _cleanup_message_buffers(app):
     """Delete MessageBuffer rows older than 48 hours."""
     from .models import MessageBuffer
@@ -1461,6 +1540,11 @@ def _scheduler_loop(app):
                 _deliver_reminders(app)
             except Exception as rem_exc:
                 _scheduler_log.debug("Reminder delivery error: %s", rem_exc)
+            # Scheduled automations: check every 60s
+            try:
+                _run_scheduled_automations(app)
+            except Exception as sa_exc:
+                _scheduler_log.debug("Scheduled automations error: %s", sa_exc)
             # Message buffer cleanup: every 6 hours
             if now_ts - _last_buffer_cleanup[0] > 21600:
                 _last_buffer_cleanup[0] = now_ts

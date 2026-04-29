@@ -55,8 +55,8 @@ BUILT_IN_TEMPLATES = [
     {
         "id": "scheduled_announcement",
         "name": "Scheduled Announcement",
-        "description": "Send a message to a group at a fixed time every day.",
-        "trigger": {"type": "scheduled", "params": {"cron": "0 9 * * *"}},
+        "description": "Send a message to a group every N minutes.",
+        "trigger": {"type": "scheduled", "params": {"interval_minutes": 1440}},
         "conditions": [],
         "actions": [{"type": "send_group_message", "params": {"message": "Good morning! 🌅"}}],
     },

@@ -17,14 +17,27 @@ def _get_user():
 
 def _apply_referral_rewards(referrer: User):
     """Check referral milestones and award Pro days for any newly crossed thresholds.
-    Only approved referrals count — pending/suspicious/rejected are excluded."""
+    Only approved referrals count — pending/suspicious/rejected are excluded.
+
+    A PostgreSQL advisory lock keyed to the referrer's user ID serialises
+    concurrent calls so two simultaneous webhooks can never double-award
+    the same milestone.
+    """
+    # Acquire a session-level advisory lock for this referrer.
+    # The lock is automatically released at commit/rollback so there is no
+    # risk of starving other users.
+    try:
+        from sqlalchemy import text as _text
+        db.session.execute(_text("SELECT pg_advisory_xact_lock(:uid)"), {"uid": referrer.id})
+    except Exception:
+        pass  # SQLite / unavailable — best-effort, proceeds without lock
+
     total = Referral.query.filter_by(referrer_user_id=referrer.id, status="approved").count()
 
     for required, reward_days in REFERRAL_MILESTONES:
         if total < required:
             break
 
-        # Check if this milestone was already rewarded by looking at any referral row
         already_given = db.session.query(
             db.exists().where(
                 Referral.referrer_user_id == referrer.id,
@@ -41,24 +54,25 @@ def _apply_referral_rewards(referrer: User):
             referrer.subscription_tier = "pro"
             referrer.subscription_expires = now + timedelta(days=reward_days)
         else:
-            # Extend existing subscription
             base = max(referrer.subscription_expires, now)
             referrer.subscription_expires = base + timedelta(days=reward_days)
             if referrer.subscription_tier == "free":
                 referrer.subscription_tier = "pro"
 
-        # Mark this milestone as rewarded on the most-recent referral row
-        last_ref = Referral.query.filter_by(referrer_user_id=referrer.id).order_by(
-            Referral.created_at.desc()
+        # Mark this milestone as rewarded — store on the earliest (first) referral
+        # row for this referrer, so the marker survives row deletions of later refs.
+        first_ref = Referral.query.filter_by(referrer_user_id=referrer.id).order_by(
+            Referral.created_at.asc()
         ).first()
-        if last_ref:
-            given = list(last_ref.rewards_given or [])
-            given.append(required)
-            last_ref.rewards_given = given
+        if first_ref:
+            given = list(first_ref.rewards_given or [])
+            if required not in given:
+                given.append(required)
+                first_ref.rewards_given = given
 
         logger.info(
-            f"[REFERRAL] Milestone {required} reached for user {referrer.id} "
-            f"— awarded {reward_days} days Pro"
+            "[REFERRAL] Milestone %d reached for user %d — awarded %d days Pro",
+            required, referrer.id, reward_days,
         )
 
     db.session.commit()
