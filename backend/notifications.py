@@ -258,6 +258,33 @@ def send_payment_failed(to_email, full_name):
     )
 
 
+def send_referral_conversion_email(to_email, referrer_name, referred_first_name, total_referrals):
+    dashboard_url = f"{current_app.config['FRONTEND_URL']}/settings"
+    content = f"""
+    <p>Hi <strong>{referrer_name}</strong>,</p>
+    <p>Great news — <strong>{referred_first_name}</strong> just joined Telegizer using your referral link and verified their email!</p>
+    <p>You now have <strong>{total_referrals} verified referral{"s" if total_referrals != 1 else ""}</strong> in total.</p>
+    <p>Keep sharing your link to unlock more rewards:</p>
+    <ul class="feature-list">
+      <li>3 referrals — 1 month Pro free</li>
+      <li>10 referrals — 3 months Pro free</li>
+      <li>25 referrals — lifetime Pro discount</li>
+    </ul>
+    <a href="{dashboard_url}" class="btn">View My Referrals</a>
+    <div class="tip">
+      💡 Share your referral link with community managers, Telegram group owners,
+      or anyone who could benefit from automated moderation and analytics.
+    </div>
+    """
+    return send_email(
+        to_email,
+        f"{referred_first_name} joined Telegizer with your referral link!",
+        _base_template(content, "Referral Conversion"),
+        f"Hi {referrer_name}, {referred_first_name} just joined Telegizer using your referral link! "
+        f"You now have {total_referrals} verified referral{'s' if total_referrals != 1 else ''}.",
+    )
+
+
 def send_bot_added_notification(to_email, full_name, bot_name, bot_username):
     content = f"""
     <p>Hi <strong>{full_name}</strong>,</p>

@@ -539,13 +539,28 @@ def verify_email():
             from ..routes.referrals import _apply_referral_rewards
             _app = current_app._get_current_object()
             _referrer_id = referral.referrer_user_id
+            _referred_first_name = user.full_name.split()[0] if user.full_name else "Someone"
 
             def _reward():
                 try:
                     with _app.app_context():
+                        from ..notifications import send_referral_conversion_email
                         r = User.query.get(_referrer_id)
                         if r:
                             _apply_referral_rewards(r)
+                            from ..models import Referral as _Referral
+                            total = _Referral.query.filter_by(
+                                referrer_user_id=r.id, status="approved"
+                            ).count()
+                            try:
+                                send_referral_conversion_email(
+                                    r.email,
+                                    r.full_name.split()[0] if r.full_name else r.email,
+                                    _referred_first_name,
+                                    total,
+                                )
+                            except Exception as mail_exc:
+                                logger.warning("Referral conversion email failed: %s", mail_exc)
                 except Exception as exc:
                     logger.warning("Referral reward check failed: %s", exc)
 
