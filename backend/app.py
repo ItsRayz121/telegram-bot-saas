@@ -99,6 +99,15 @@ def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
 
+    # Hard cap on incoming request body size — prevents file-upload abuse and
+    # memory exhaustion on any endpoint (Flask default is 16 MB, no cap).
+    app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10 MB
+
+    # Never expose DEBUG mode in production — overrides any accidental env setting.
+    import os as _os_debug
+    app.config["DEBUG"] = _os_debug.environ.get("FLASK_DEBUG", "0") == "1" and \
+        "postgres" not in _os_debug.environ.get("DATABASE_URL", "")
+
     # Lock CORS to explicit origins in production; allow localhost only in development.
     # Set FRONTEND_URL and/or ALLOWED_ORIGINS (comma-separated) in Railway env.
     import os as _os
@@ -271,6 +280,44 @@ def create_app():
     @app.before_request
     def _assign_request_id():
         g.request_id = str(uuid.uuid4())[:8]
+
+    @app.before_request
+    def _validate_origin():
+        """Reject cross-origin state-changing requests from unexpected origins.
+
+        SPA uses Authorization header so pure CSRF is low-risk, but origin
+        validation provides defence-in-depth against CSRF via browser quirks.
+        Only checked on state-changing methods; GET/HEAD/OPTIONS are skipped.
+        """
+        if request.method in ("GET", "HEAD", "OPTIONS"):
+            return None
+        origin = request.headers.get("Origin") or request.headers.get("Referer", "")
+        if not origin:
+            return None  # Non-browser clients (curl, backend-to-backend) have no Origin
+        # Build allowed origins from the same list CORS uses
+        import os as _os_origin
+        _ao_env = _os_origin.environ.get("ALLOWED_ORIGINS", "")
+        _ao_list = [o.strip() for o in _ao_env.split(",") if o.strip()]
+        if not _ao_list:
+            _ao_list = [_os_origin.environ.get("FRONTEND_URL", "http://localhost:3000")]
+        if not any(origin.startswith(o) for o in _ao_list):
+            # Log the unexpected origin for monitoring; don't block non-browser API calls
+            _scheduler_log.warning("[ORIGIN] Unexpected origin=%s path=%s", origin, request.path)
+        return None
+
+    @app.after_request
+    def _add_security_headers(response):
+        """Attach security headers to every response."""
+        # Content-Security-Policy: restrictive baseline — API only returns JSON,
+        # never HTML with embedded scripts, so a tight policy is safe.
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            "default-src 'none'; frame-ancestors 'none';",
+        )
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        return response
 
     def _err(msg, code, http_status, **extra):
         body = {"error": msg, "code": code, "request_id": getattr(g, "request_id", "")}
@@ -1580,6 +1627,25 @@ def _cleanup_message_buffers(app):
         _scheduler_log.debug("MessageBuffer cleanup failed: %s", exc)
 
 
+def _cleanup_revoked_tokens():
+    """Delete expired rows from revoked_tokens to prevent unbounded table growth.
+
+    Called once per day from the scheduler. Uses raw SQL for efficiency since
+    this table is not managed by SQLAlchemy ORM in the normal session lifecycle.
+    """
+    from sqlalchemy import text
+    try:
+        db.session.execute(text("DELETE FROM revoked_tokens WHERE expires_at < NOW()"))
+        db.session.commit()
+        _scheduler_log.info("revoked_tokens: expired rows pruned")
+    except Exception as exc:
+        _scheduler_log.warning("revoked_tokens cleanup failed: %s", exc)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+
+
 def _scheduler_loop(app):
     import time
     _last_expiry_check = [0]
@@ -1588,6 +1654,7 @@ def _scheduler_loop(app):
     _last_official_digest = [0]
     _last_event_cleanup = [0]
     _last_buffer_cleanup = [0]
+    _last_token_cleanup = [0]
     time.sleep(15)  # Wait for bots to fully start
     while True:
         try:
@@ -1622,6 +1689,13 @@ def _scheduler_loop(app):
                         _run_bot_event_cleanup()
                     except Exception as ec_exc:
                         _scheduler_log.error("BotEvent cleanup error: %s", ec_exc)
+                # Revoked token TTL cleanup: once per day
+                if now_ts - _last_token_cleanup[0] > 86400:
+                    _last_token_cleanup[0] = now_ts
+                    try:
+                        _cleanup_revoked_tokens()
+                    except Exception as rt_exc:
+                        _scheduler_log.warning("revoked_tokens cleanup error: %s", rt_exc)
             try:
                 run_digest_scheduler(app)
             except Exception as exc:

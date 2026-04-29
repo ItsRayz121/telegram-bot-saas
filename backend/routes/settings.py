@@ -422,6 +422,16 @@ def create_scheduled_message(bot_id, group_id):
                 stop_date = _parse_dt_tz(data["stop_date"])
             except ValueError:
                 return jsonify({"error": "Invalid stop_date format"}), 400
+        _repeat = data.get("repeat_interval")
+        if _repeat is not None:
+            try:
+                _repeat = int(_repeat)
+                if _repeat < 60:
+                    return jsonify({"error": "repeat_interval must be at least 60 minutes"}), 400
+                if _repeat > 525600:
+                    return jsonify({"error": "repeat_interval must be at most 525600 minutes (1 year)"}), 400
+            except (TypeError, ValueError):
+                return jsonify({"error": "repeat_interval must be an integer (minutes)"}), 400
         msg = ScheduledMessage(
             group_id=group.id,
             title=data["title"],
@@ -429,7 +439,7 @@ def create_scheduled_message(bot_id, group_id):
             media_url=data.get("media_url"),
             buttons=data.get("buttons"),
             send_at=send_at,
-            repeat_interval=data.get("repeat_interval"),
+            repeat_interval=_repeat,
             stop_date=stop_date,
             pin_message=data.get("pin_message", False),
             auto_delete_after=data.get("auto_delete_after"),

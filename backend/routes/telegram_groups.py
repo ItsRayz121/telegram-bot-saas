@@ -532,6 +532,17 @@ def create_official_scheduled_message(group_id):
     except (ValueError, AttributeError):
         return jsonify({"error": "Invalid send_at format — use ISO 8601"}), 400
 
+    repeat_interval = data.get("repeat_interval")
+    if repeat_interval is not None:
+        try:
+            repeat_interval = int(repeat_interval)
+            if repeat_interval < 60:
+                return jsonify({"error": "repeat_interval must be at least 60 minutes"}), 400
+            if repeat_interval > 525600:  # 1 year in minutes
+                return jsonify({"error": "repeat_interval must be at most 525600 minutes (1 year)"}), 400
+        except (TypeError, ValueError):
+            return jsonify({"error": "repeat_interval must be an integer (minutes)"}), 400
+
     msg = OfficialScheduledMessage(
         telegram_group_id=group_id,
         title=title,
@@ -539,7 +550,7 @@ def create_official_scheduled_message(group_id):
         media_url=data.get("media_url"),
         buttons=data.get("buttons"),
         send_at=send_at,
-        repeat_interval=data.get("repeat_interval"),
+        repeat_interval=repeat_interval,
         stop_date=datetime.fromisoformat(data["stop_date"].replace("Z", "+00:00")).replace(tzinfo=None) if data.get("stop_date") else None,
         pin_message=bool(data.get("pin_message", False)),
         auto_delete_after=data.get("auto_delete_after"),

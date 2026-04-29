@@ -58,13 +58,34 @@ def upload_document(bot_id, group_id):
     filename = f.filename or "document"
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "txt"
 
-    allowed = {"pdf", "txt", "md", "docx"}
-    if ext not in allowed:
-        return jsonify({"error": f"File type .{ext} not supported. Use: {', '.join(allowed)}"}), 400
+    allowed_ext = {"pdf", "txt", "md", "docx"}
+    if ext not in allowed_ext:
+        return jsonify({"error": f"File type .{ext} not supported. Use: {', '.join(sorted(allowed_ext))}"}), 400
 
     content_bytes = f.read()
     if len(content_bytes) > 5 * 1024 * 1024:
         return jsonify({"error": "File too large (max 5MB)"}), 400
+
+    # Validate actual MIME type via magic bytes — extension alone is spoofable.
+    _MAGIC_SIGNATURES = {
+        b"%PDF": "pdf",
+        b"PK\x03\x04": "docx",  # ZIP container (docx is a ZIP)
+    }
+    detected = None
+    for magic, ftype in _MAGIC_SIGNATURES.items():
+        if content_bytes[:len(magic)] == magic:
+            detected = ftype
+            break
+    if detected is None and ext in ("txt", "md"):
+        # txt/md have no magic bytes — accept if extension claims it
+        try:
+            content_bytes.decode("utf-8")
+        except UnicodeDecodeError:
+            return jsonify({"error": "File does not appear to be valid UTF-8 text"}), 400
+    elif detected is not None and detected != ext:
+        return jsonify({"error": f"File content does not match its extension (.{ext})"}), 400
+    elif detected is None and ext in ("pdf", "docx"):
+        return jsonify({"error": f"File does not appear to be a valid {ext.upper()}"}), 400
 
     from flask import current_app
     from ..bot_features.knowledge_base import KnowledgeBaseSystem

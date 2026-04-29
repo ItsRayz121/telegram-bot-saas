@@ -186,6 +186,9 @@ export default function Landing() {
           <Box sx={{ flexGrow: 1 }}>
             <TelegizerLogo size="md" />
           </Box>
+          <Button onClick={() => navigate('/directory')} sx={{ mr: 1, display: { xs: 'none', md: 'inline-flex' }, color: 'text.secondary' }}>
+            Directory
+          </Button>
           <Button onClick={() => navigate('/pricing')} sx={{ mr: 1, display: { xs: 'none', sm: 'inline-flex' }, color: 'text.secondary' }}>
             Pricing
           </Button>
@@ -691,7 +694,29 @@ export default function Landing() {
         </Container>
       </Box>
 
-      {/* â"€â"€ Final CTA â"€â"€ */}
+      {/* ── Community Directory callout ── */}
+      <Box sx={{ py: { xs: 6, md: 8 }, px: 2, textAlign: 'center', bgcolor: 'background.paper', borderTop: '1px solid', borderColor: 'divider' }}>
+        <Container maxWidth="sm">
+          <Chip label="Community Directory" size="small" sx={{ mb: 2, bgcolor: 'rgba(33,150,243,0.1)', color: 'primary.light', fontWeight: 600, border: '1px solid rgba(33,150,243,0.25)' }} />
+          <Typography variant="h5" fontWeight={800} mb={1.5}>
+            Discover Telegram Communities
+          </Typography>
+          <Typography variant="body1" color="text.secondary" mb={3} lineHeight={1.7}>
+            Browse thousands of verified Telegram groups and channels — filtered by category, country, and size.
+            List your community for free and reach new members organically.
+          </Typography>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="center">
+            <Button variant="contained" size="large" onClick={() => navigate('/directory')} endIcon={<ArrowForward />} sx={{ py: 1.5, px: 3 }}>
+              Browse Directory
+            </Button>
+            <Button variant="outlined" size="large" onClick={() => navigate('/register')} sx={{ py: 1.5, px: 3 }}>
+              List Your Community
+            </Button>
+          </Stack>
+        </Container>
+      </Box>
+
+      {/* ── Final CTA ── */}
       <Box
         sx={{
           background: 'linear-gradient(135deg, #1565c0 0%, #7c4dff 100%)',
@@ -744,6 +769,7 @@ export default function Landing() {
             </Grid>
             <Grid item xs={12} sm sx={{ textAlign: { xs: 'left', sm: 'center' } }}>
               <Stack direction="row" spacing={1} flexWrap="wrap" justifyContent={{ xs: 'flex-start', sm: 'center' }}>
+                <Button size="small" onClick={() => navigate('/directory')} sx={{ color: 'text.secondary' }}>Directory</Button>
                 <Button size="small" onClick={() => navigate('/pricing')} sx={{ color: 'text.secondary' }}>Pricing</Button>
                 <Button size="small" onClick={() => navigate('/login')} sx={{ color: 'text.secondary' }}>Sign In</Button>
                 <Button size="small" onClick={() => navigate('/register')} sx={{ color: 'text.secondary' }}>Register</Button>

@@ -73,9 +73,9 @@ function OnboardingCard({ botList, onAddBot, navigate, user, officialGroupCount 
   const [dismissed, setDismissed] = useState(
     () => localStorage.getItem('onboarding_dismissed') === '1'
   );
-  // Collapsed by default; remember user's preference
+  // Expanded by default for new users (no stored preference); remembers choice after that
   const [expanded, setExpanded] = useState(
-    () => localStorage.getItem('onboarding_expanded') === '1'
+    () => localStorage.getItem('onboarding_expanded') !== '0'
   );
 
   const hasBots = botList.length > 0;
@@ -100,31 +100,45 @@ function OnboardingCard({ botList, onAddBot, navigate, user, officialGroupCount 
       label: 'Add @telegizer_bot to a Telegram group as admin',
       done: hasGroups,
       action: !hasGroups ? (
-        <Button size="small" variant="contained" startIcon={<Add />} href={addGroupUrl} target="_blank" rel="noopener noreferrer" sx={{ mt: 1 }}>
-          Add to Group
-        </Button>
+        <Box sx={{ mt: 1, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+          <Button size="small" variant="contained" startIcon={<Telegram />} href={addGroupUrl} target="_blank" rel="noopener noreferrer">
+            Open Telegram to Add Bot
+          </Button>
+        </Box>
       ) : null,
-      hint: 'Open Telegram, add @telegizer_bot to your group, make it admin, then run /linkgroup in the group.',
+      hint: (
+        <Box>
+          <Typography variant="caption" color="text.secondary" display="block">
+            1. Click "Open Telegram to Add Bot" → pick your group → tap Add.
+          </Typography>
+          <Typography variant="caption" color="text.secondary" display="block">
+            2. In Telegram, make @telegizer_bot an <strong>admin</strong> (Settings → Administrators).
+          </Typography>
+          <Typography variant="caption" color="text.secondary" display="block">
+            3. Type <code>/linkgroup</code> in the group chat. The bot will confirm and the group appears here.
+          </Typography>
+        </Box>
+      ),
     },
     {
-      label: 'Enable AutoMod',
+      label: 'Enable AutoMod to protect your group',
       done: false,
       action: hasGroups ? (
         <Button size="small" variant="outlined" onClick={() => navigate('/my-groups')} sx={{ mt: 1 }}>
           Open Group Settings
         </Button>
       ) : null,
-      hint: 'Go to My Groups → Group Settings → AutoMod to enable spam detection and link filtering.',
+      hint: 'Go to My Groups → select your group → AutoMod tab → turn on spam detection and link filtering.',
     },
     {
-      label: 'Schedule your first message',
+      label: 'Schedule your first automated post',
       done: false,
       action: hasGroups ? (
         <Button size="small" variant="outlined" onClick={() => navigate('/my-groups')} sx={{ mt: 1 }}>
           Open Scheduler
         </Button>
       ) : null,
-      hint: 'Set up a daily or weekly post so your group always has fresh content.',
+      hint: 'My Groups → Scheduled Messages → create a daily or weekly post so your group always has fresh content.',
     },
   ];
 
@@ -133,8 +147,30 @@ function OnboardingCard({ botList, onAddBot, navigate, user, officialGroupCount 
   const allDone = completedCount === steps.length;
   const progressPct = (completedCount / steps.length) * 100;
 
-  // Auto-hide when dismissed or fully complete
-  if (dismissed || allDone) return null;
+  if (dismissed) return null;
+
+  // Success state — show celebration card instead of hiding silently
+  if (allDone) {
+    return (
+      <Card sx={{ mb: 3, border: '1px solid', borderColor: 'success.main', bgcolor: 'rgba(102,187,106,0.06)' }}>
+        <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, py: '12px !important' }}>
+          <CheckCircle sx={{ color: 'success.main', fontSize: 28, flexShrink: 0 }} />
+          <Box sx={{ flexGrow: 1 }}>
+            <Typography fontWeight={700} variant="body1">You're all set! 🎉</Typography>
+            <Typography variant="body2" color="text.secondary">
+              Your bot is live. Send a message in your group and watch AutoMod in action.
+            </Typography>
+          </Box>
+          <Button size="small" variant="outlined" color="success" onClick={() => navigate('/my-groups')}>
+            Open Groups
+          </Button>
+          <IconButton size="small" onClick={handleDismiss} sx={{ ml: 1 }}>
+            <Close fontSize="small" />
+          </IconButton>
+        </CardContent>
+      </Card>
+    );
+  }
 
   const toggleExpand = () => {
     const next = !expanded;
