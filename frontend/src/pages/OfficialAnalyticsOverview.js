@@ -110,7 +110,7 @@ export default function OfficialAnalyticsOverview() {
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
-      <TopNav
+      <TopNav hasSidebar
         breadcrumb={[
           { label: 'Dashboard', path: '/dashboard' },
           { label: 'My Bots', path: '/my-bots' },

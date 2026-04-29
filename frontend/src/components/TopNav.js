@@ -16,7 +16,9 @@ const NAV_ITEMS = [
   { label: 'Billing',    path: '/billing',   icon: CreditCard },
 ];
 
-export default function TopNav({ title, subtitle, actions, breadcrumb }) {
+// hasSidebar: pass true when this TopNav renders inside AppLayout so the
+// global nav links are hidden (the sidebar already provides navigation).
+export default function TopNav({ title, subtitle, actions, breadcrumb, hasSidebar = false }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
@@ -38,29 +40,32 @@ export default function TopNav({ title, subtitle, actions, breadcrumb }) {
           <TelegizerLogo size="sm" variant="icon" />
         </Box>
 
-        {/* Nav links */}
-        <Box sx={{ display: 'flex', gap: 0.5, flex: 1, flexWrap: 'wrap' }}>
-          {NAV_ITEMS.map(({ label, path, icon: Icon, exact }) => (
-            <Button
-              key={path}
-              size="small"
-              startIcon={<Icon sx={{ fontSize: '16px !important' }} />}
-              onClick={() => navigate(path)}
-              color={isActive(path, exact) ? 'primary' : 'inherit'}
-              variant={isActive(path, exact) ? 'contained' : 'text'}
-              sx={{
-                px: 1.5,
-                py: 0.5,
-                fontSize: '0.8rem',
-                minWidth: 0,
-                opacity: isActive(path, exact) ? 1 : 0.75,
-                '&:hover': { opacity: 1 },
-              }}
-            >
-              {label}
-            </Button>
-          ))}
-        </Box>
+        {/* Nav links — hidden when sidebar is present (sidebar handles navigation) */}
+        {!hasSidebar && (
+          <Box sx={{ display: 'flex', gap: 0.5, flex: 1, flexWrap: 'wrap' }}>
+            {NAV_ITEMS.map(({ label, path, icon: Icon, exact }) => (
+              <Button
+                key={path}
+                size="small"
+                startIcon={<Icon sx={{ fontSize: '16px !important' }} />}
+                onClick={() => navigate(path)}
+                color={isActive(path, exact) ? 'primary' : 'inherit'}
+                variant={isActive(path, exact) ? 'contained' : 'text'}
+                sx={{
+                  px: 1.5,
+                  py: 0.5,
+                  fontSize: '0.8rem',
+                  minWidth: 0,
+                  opacity: isActive(path, exact) ? 1 : 0.75,
+                  '&:hover': { opacity: 1 },
+                }}
+              >
+                {label}
+              </Button>
+            ))}
+          </Box>
+        )}
+        {hasSidebar && <Box sx={{ flex: 1 }} />}
 
         {/* Right side: optional actions */}
         {actions && (

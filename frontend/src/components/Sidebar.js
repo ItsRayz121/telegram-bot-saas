@@ -1,0 +1,369 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import {
+  Box, List, ListItem, ListItemButton, ListItemIcon, ListItemText,
+  Typography, Avatar, Chip, Divider, Tooltip, Badge, Skeleton,
+  Menu, MenuItem, IconButton,
+} from '@mui/material';
+import {
+  Home, Groups, Campaign, Bolt, Link, AccessTime, Send, AutoMode,
+  Explore, BarChart, SmartToy, CreditCard, Settings, Add, Circle,
+  AccountCircle, Logout, AdminPanelSettings, ExpandMore,
+} from '@mui/icons-material';
+import TelegizerLogo from './TelegizerLogo';
+import { telegramGroups as tgApi, auth as authApi } from '../services/api';
+
+const SIDEBAR_WIDTH = 240;
+
+// ── Status dot ────────────────────────────────────────────────────────────────
+
+function StatusDot({ status, permissions }) {
+  const hasPerm = permissions && Object.values(permissions).some(Boolean);
+  const color =
+    status === 'active' && hasPerm ? '#22c55e'
+    : status === 'active' && !hasPerm ? '#f59e0b'
+    : '#ef4444';
+  return (
+    <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: color, flexShrink: 0, ml: 0.5 }} />
+  );
+}
+
+// ── Section label ─────────────────────────────────────────────────────────────
+
+function SectionLabel({ label }) {
+  return (
+    <Typography
+      variant="caption"
+      fontWeight={700}
+      color="text.disabled"
+      sx={{ px: 2, pt: 1.5, pb: 0.25, display: 'block', textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.65rem' }}
+    >
+      {label}
+    </Typography>
+  );
+}
+
+// ── Single nav item ───────────────────────────────────────────────────────────
+
+function NavItem({ label, path, icon: Icon, badge, badgeCount, active, onClick, indent, dimmed }) {
+  const navigate = useNavigate();
+  const handleClick = onClick || (() => navigate(path));
+
+  return (
+    <ListItem disablePadding sx={{ display: 'block' }}>
+      <ListItemButton
+        onClick={handleClick}
+        sx={{
+          pl: indent ? 3.5 : 1.5,
+          pr: 1.5,
+          py: 0.6,
+          borderRadius: 1.5,
+          mx: 0.75,
+          mb: 0.15,
+          minHeight: 34,
+          bgcolor: active ? 'primary.main' : 'transparent',
+          color: active ? '#fff' : dimmed ? 'text.disabled' : 'text.secondary',
+          '&:hover': {
+            bgcolor: active ? 'primary.dark' : 'rgba(255,255,255,0.05)',
+            color: active ? '#fff' : 'text.primary',
+          },
+          transition: 'background 0.12s, color 0.12s',
+        }}
+      >
+        {Icon && (
+          <ListItemIcon sx={{ minWidth: 30, color: 'inherit' }}>
+            <Icon sx={{ fontSize: 17 }} />
+          </ListItemIcon>
+        )}
+        <ListItemText
+          primary={label}
+          primaryTypographyProps={{
+            fontSize: '0.82rem',
+            fontWeight: active ? 600 : 400,
+            noWrap: true,
+            lineHeight: 1.3,
+          }}
+        />
+        {badgeCount > 0 && (
+          <Chip
+            label={badgeCount}
+            size="small"
+            sx={{ height: 17, fontSize: '0.62rem', bgcolor: active ? 'rgba(255,255,255,0.25)' : 'error.main', color: '#fff', ml: 0.5 }}
+          />
+        )}
+        {badge && !badgeCount && (
+          <Chip
+            label={badge}
+            size="small"
+            sx={{ height: 17, fontSize: '0.62rem', bgcolor: active ? 'rgba(255,255,255,0.25)' : 'primary.main', color: '#fff', ml: 0.5 }}
+          />
+        )}
+      </ListItemButton>
+    </ListItem>
+  );
+}
+
+// ── Sidebar content ───────────────────────────────────────────────────────────
+
+export default function Sidebar({ onClose }) {
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+
+  const [groups, setGroups] = useState([]);
+  const [groupsLoading, setGroupsLoading] = useState(true);
+  const [user, setUser] = useState(null);
+  const [anchorEl, setAnchorEl] = useState(null);
+  const [showAllGroups, setShowAllGroups] = useState(false);
+
+  const isActive = useCallback(
+    (path, exact = false) =>
+      exact ? pathname === path : pathname === path || pathname.startsWith(path + '/'),
+    [pathname]
+  );
+
+  // ── Load user and groups ───────────────────────────────────────────────────
+
+  useEffect(() => {
+    const stored = localStorage.getItem('user');
+    if (stored) {
+      try { setUser(JSON.parse(stored)); } catch {}
+    }
+    authApi.getMe().then(r => {
+      setUser(r.data.user);
+      localStorage.setItem('user', JSON.stringify(r.data.user));
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    tgApi.list().then(r => {
+      setGroups(r.data.groups || []);
+    }).catch(() => {}).finally(() => setGroupsLoading(false));
+  }, []);
+
+  // ── Derived state ─────────────────────────────────────────────────────────
+
+  const plan = user?.subscription_tier || 'free';
+  const planLabel = plan === 'enterprise' ? 'Enterprise' : plan === 'pro' ? 'Pro' : 'Free';
+  const planColor = plan === 'enterprise' ? 'secondary' : plan === 'pro' ? 'primary' : 'default';
+
+  const isAdmin = user?.is_admin;
+  const visibleGroups = showAllGroups ? groups : groups.slice(0, 8);
+  const hasMoreGroups = groups.length > 8;
+
+  const handleLogout = () => {
+    authApi.logout?.().catch(() => {});
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    navigate('/login');
+  };
+
+  const nav = (path) => {
+    if (onClose) onClose();
+    navigate(path);
+  };
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+
+  return (
+    <Box
+      sx={{
+        width: SIDEBAR_WIDTH,
+        height: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        bgcolor: 'background.paper',
+        borderRight: '1px solid',
+        borderColor: 'divider',
+        overflowY: 'auto',
+        overflowX: 'hidden',
+        flexShrink: 0,
+        '&::-webkit-scrollbar': { width: 4 },
+        '&::-webkit-scrollbar-thumb': { bgcolor: 'divider', borderRadius: 2 },
+      }}
+    >
+      {/* ── Logo ── */}
+      <Box
+        sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer' }}
+        onClick={() => nav('/dashboard')}
+      >
+        <TelegizerLogo size="sm" variant="icon" />
+        <Typography fontWeight={700} fontSize="0.95rem" color="text.primary">Telegizer</Typography>
+      </Box>
+
+      <Divider />
+
+      {/* ── User card ── */}
+      <Box
+        sx={{ px: 1.5, py: 1, display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer' }}
+        onClick={e => setAnchorEl(e.currentTarget)}
+      >
+        <Avatar sx={{ width: 28, height: 28, bgcolor: 'primary.main', fontSize: '0.75rem' }}>
+          {user?.full_name?.[0]?.toUpperCase() || 'U'}
+        </Avatar>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography fontSize="0.78rem" fontWeight={600} noWrap>{user?.full_name || 'Loading...'}</Typography>
+          <Typography fontSize="0.65rem" color="text.disabled" noWrap>{user?.email || ''}</Typography>
+        </Box>
+        <Chip
+          label={planLabel}
+          size="small"
+          color={planColor}
+          sx={{ height: 16, fontSize: '0.6rem', flexShrink: 0 }}
+        />
+        <ExpandMore sx={{ fontSize: 14, color: 'text.disabled', flexShrink: 0 }} />
+      </Box>
+
+      {/* ── User menu ── */}
+      <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}
+        PaperProps={{ sx: { minWidth: 160 } }}>
+        <MenuItem onClick={() => { setAnchorEl(null); nav('/settings'); }} dense>
+          <ListItemIcon><AccountCircle fontSize="small" /></ListItemIcon>
+          Account Settings
+        </MenuItem>
+        <MenuItem onClick={() => { setAnchorEl(null); nav('/billing'); }} dense>
+          <ListItemIcon><CreditCard fontSize="small" /></ListItemIcon>
+          Billing & Plan
+        </MenuItem>
+        {isAdmin && (
+          <MenuItem onClick={() => { setAnchorEl(null); nav('/admin'); }} dense>
+            <ListItemIcon><AdminPanelSettings fontSize="small" /></ListItemIcon>
+            Admin Panel
+          </MenuItem>
+        )}
+        <Divider />
+        <MenuItem onClick={handleLogout} dense sx={{ color: 'error.main' }}>
+          <ListItemIcon><Logout fontSize="small" sx={{ color: 'error.main' }} /></ListItemIcon>
+          Logout
+        </MenuItem>
+      </Menu>
+
+      <Divider />
+
+      {/* ── Nav list ── */}
+      <List dense disablePadding sx={{ flex: 1, py: 0.5 }}>
+
+        {/* Overview */}
+        <NavItem label="Dashboard" path="/dashboard" icon={Home} active={isActive('/dashboard', true)} onClick={() => nav('/dashboard')} />
+
+        {/* Communities */}
+        <SectionLabel label="Communities" />
+
+        {/* Groups */}
+        <NavItem
+          label="Groups"
+          path="/groups"
+          icon={Groups}
+          active={isActive('/groups') && !groups.some(g => isActive(`/groups/${g.id}`))}
+          onClick={() => nav('/groups')}
+        />
+
+        {/* Inline group list */}
+        {groupsLoading ? (
+          [1, 2].map(i => (
+            <ListItem key={i} sx={{ pl: 4, py: 0.3 }}>
+              <Skeleton width={140} height={14} />
+            </ListItem>
+          ))
+        ) : (
+          visibleGroups.map(group => {
+            const gPath = `/groups/${group.id}`;
+            const gActive = isActive(gPath);
+            return (
+              <ListItem key={group.id} disablePadding>
+                <ListItemButton
+                  onClick={() => nav(gPath)}
+                  sx={{
+                    pl: 3.5, pr: 1.5, py: 0.4, mx: 0.75, mb: 0.1, borderRadius: 1.5,
+                    bgcolor: gActive ? 'rgba(37,99,235,0.15)' : 'transparent',
+                    '&:hover': { bgcolor: 'rgba(255,255,255,0.05)' },
+                  }}
+                >
+                  <ListItemText
+                    primary={group.name}
+                    primaryTypographyProps={{
+                      fontSize: '0.78rem',
+                      fontWeight: gActive ? 600 : 400,
+                      noWrap: true,
+                      color: gActive ? 'primary.light' : 'text.secondary',
+                    }}
+                  />
+                  <StatusDot status={group.bot_status} permissions={group.bot_permissions} />
+                </ListItemButton>
+              </ListItem>
+            );
+          })
+        )}
+
+        {hasMoreGroups && !showAllGroups && (
+          <ListItem disablePadding>
+            <ListItemButton
+              onClick={() => setShowAllGroups(true)}
+              sx={{ pl: 3.5, py: 0.3, mx: 0.75, borderRadius: 1.5, '&:hover': { bgcolor: 'rgba(255,255,255,0.04)' } }}
+            >
+              <ListItemText
+                primary={`+${groups.length - 8} more`}
+                primaryTypographyProps={{ fontSize: '0.73rem', color: 'text.disabled' }}
+              />
+            </ListItemButton>
+          </ListItem>
+        )}
+
+        {/* Add Group shortcut */}
+        <ListItem disablePadding>
+          <ListItemButton
+            onClick={() => nav('/groups')}
+            sx={{ pl: 3.5, py: 0.4, mx: 0.75, mb: 0.5, borderRadius: 1.5, '&:hover': { bgcolor: 'rgba(255,255,255,0.04)' } }}
+          >
+            <ListItemIcon sx={{ minWidth: 22 }}>
+              <Add sx={{ fontSize: 14, color: 'text.disabled' }} />
+            </ListItemIcon>
+            <ListItemText
+              primary="Add Group"
+              primaryTypographyProps={{ fontSize: '0.75rem', color: 'text.disabled' }}
+            />
+          </ListItemButton>
+        </ListItem>
+
+        <NavItem label="Channels" path="/channels" icon={Campaign} badge="Soon" active={isActive('/channels')} onClick={() => nav('/channels')} />
+
+        {/* Workspace */}
+        <SectionLabel label="Workspace" />
+        <NavItem label="Overview"    path="/workspace"             icon={Bolt}     active={isActive('/workspace', true)}              onClick={() => nav('/workspace')} />
+        <NavItem label="Smart Links" path="/workspace/smart-links" icon={Link}     active={isActive('/workspace/smart-links')}        onClick={() => nav('/workspace/smart-links')} indent />
+        <NavItem label="Reminders"   path="/workspace/reminders"   icon={AccessTime} active={isActive('/workspace/reminders')}       onClick={() => nav('/workspace/reminders')} indent />
+        <NavItem label="Forwarding"  path="/workspace/forwarding"  icon={Send}     active={isActive('/workspace/forwarding')}        onClick={() => nav('/workspace/forwarding')} indent />
+        <NavItem label="Automations" path="/workspace/automations" icon={AutoMode} active={isActive('/workspace/automations')}       onClick={() => nav('/workspace/automations')} indent />
+
+        {/* Grow */}
+        <SectionLabel label="Grow" />
+        <NavItem label="Directory"   path="/directory"  icon={Explore}  badge="Soon" active={isActive('/directory')}  onClick={() => nav('/directory')} />
+        <NavItem label="Analytics"   path="/analytics"  icon={BarChart}              active={isActive('/analytics')}  onClick={() => nav('/analytics')} />
+
+        {/* Account */}
+        <SectionLabel label="Account" />
+        <NavItem label="Custom Bots" path="/custom-bots" icon={SmartToy}  active={isActive('/custom-bots')} onClick={() => nav('/custom-bots')} />
+        <NavItem label="Billing"     path="/billing"     icon={CreditCard} active={isActive('/billing')}    onClick={() => nav('/billing')} />
+        <NavItem label="Settings"    path="/settings"    icon={Settings}   active={isActive('/settings')}   onClick={() => nav('/settings')} />
+
+      </List>
+
+      {/* ── Plan banner at bottom ── */}
+      {plan === 'free' && (
+        <Box
+          sx={{
+            m: 1, p: 1.5, borderRadius: 2, bgcolor: 'rgba(37,99,235,0.1)',
+            border: '1px solid rgba(37,99,235,0.3)', cursor: 'pointer',
+          }}
+          onClick={() => nav('/billing')}
+        >
+          <Typography fontSize="0.75rem" fontWeight={600} color="primary.light">Upgrade to Pro</Typography>
+          <Typography fontSize="0.68rem" color="text.disabled" mt={0.25}>
+            5 groups · 3 channels · AI digest
+          </Typography>
+        </Box>
+      )}
+    </Box>
+  );
+}
+
+export { SIDEBAR_WIDTH };
