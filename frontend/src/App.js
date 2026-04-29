@@ -43,6 +43,7 @@ import Workspace from './pages/Workspace';
 import WorkspaceSmartLinks from './pages/WorkspaceSmartLinks';
 import WorkspaceReminders from './pages/WorkspaceReminders';
 import WorkspaceForwarding from './pages/WorkspaceForwarding';
+import WorkspaceAutomations from './pages/WorkspaceAutomations';
 import MiniApp from './pages/MiniApp';
 import MiniAppLayout from './layouts/MiniAppLayout';
 import Directory from './pages/Directory';
@@ -189,7 +190,7 @@ export default function App() {
             <Route path="/workspace/smart-links"   element={<AppRoute><WorkspaceSmartLinks /></AppRoute>} />
             <Route path="/workspace/reminders"     element={<AppRoute><WorkspaceReminders /></AppRoute>} />
             <Route path="/workspace/forwarding"    element={<AppRoute><WorkspaceForwarding /></AppRoute>} />
-            <Route path="/workspace/automations"   element={<AppRoute><Workspace /></AppRoute>} />
+            <Route path="/workspace/automations"   element={<AppRoute><WorkspaceAutomations /></AppRoute>} />
 
             {/* ── Telegram Mini App ─────────────────────────────────────────── */}
             <Route path="/mini-app" element={<MiniAppLayout><MiniApp /></MiniAppLayout>} />

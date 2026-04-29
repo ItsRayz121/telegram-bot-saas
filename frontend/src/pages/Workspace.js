@@ -33,7 +33,7 @@ const SECTIONS = [
     label: 'Automations',
     desc: 'Build workflows: When a message contains "urgent" → notify me via DM. When member joins → send welcome DM. Trigger → Condition → Action.',
     path: '/workspace/automations',
-    available: false,
+    available: true,
     color: '#10b981',
   },
 ];

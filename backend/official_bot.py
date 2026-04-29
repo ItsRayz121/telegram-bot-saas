@@ -1668,6 +1668,25 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception as exc:
                 _log.debug("Auto-reminder detection failed: %s", exc)
 
+    # Automation workflows — message_received trigger
+    if text and flask_app:
+        try:
+            from .automation.engine import fire_trigger as _fire_trigger
+            await _fire_trigger(
+                flask_app=flask_app,
+                bot=context.bot,
+                trigger_type="message_received",
+                group_id=group_id,
+                trigger_data={
+                    "text": text,
+                    "user_id": str(message.from_user.id) if message.from_user else None,
+                    "chat_id": group_id,
+                    "message_id": message.message_id,
+                },
+            )
+        except Exception as _ae:
+            _log.debug("Automation fire_trigger failed: %s", _ae)
+
     # Message forwarding rules — copy matching messages to destination chats
     if text and flask_app:
         try:
@@ -1845,16 +1864,36 @@ async def on_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
     old_status = chat_member.old_chat_member.status if chat_member.old_chat_member else "left"
     new_status = chat_member.new_chat_member.status
 
+    # Handle bans/kicks separately for automation
+    is_banned = (
+        new_status in ("kicked", "banned")
+        and old_status not in ("kicked", "banned")
+    )
+
     # Only handle new joins (left/kicked/banned → member/restricted)
     is_new_join = (
         old_status in ("left", "kicked", "banned")
         and new_status in ("member", "restricted")
     )
-    if not is_new_join:
-        return
 
     user = chat_member.new_chat_member.user
     group_id = str(chat.id)
+
+    if is_banned and flask_app:
+        try:
+            from .automation.engine import fire_trigger as _fire_trigger_ban
+            await _fire_trigger_ban(
+                flask_app=flask_app,
+                bot=context.bot,
+                trigger_type="member_banned",
+                group_id=group_id,
+                trigger_data={"user_id": str(user.id), "username": user.username},
+            )
+        except Exception:
+            pass
+
+    if not is_new_join:
+        return
 
     _log.info(
         "[OfficialBot] New member: user_id=%s name=%s group=%s (%s)",
@@ -1867,6 +1906,19 @@ async def on_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not flask_app:
         return
+
+    # Automation workflows — member_joined trigger
+    try:
+        from .automation.engine import fire_trigger as _fire_trigger_join
+        await _fire_trigger_join(
+            flask_app=flask_app,
+            bot=context.bot,
+            trigger_type="member_joined",
+            group_id=group_id,
+            trigger_data={"user_id": str(user.id), "first_name": user.first_name, "username": user.username},
+        )
+    except Exception:
+        pass
 
     # Single query: increment member count AND build GroupContext for feature dispatch.
     group_ctx = None

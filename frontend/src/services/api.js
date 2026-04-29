@@ -515,6 +515,16 @@ export const workspace = {
   deleteReminder: (id) => api.delete(`/api/workspace/reminders/${id}`),
 };
 
+export const automations = {
+  listWorkflows: () => api.get('/api/automations/workflows'),
+  createWorkflow: (data) => api.post('/api/automations/workflows', data),
+  updateWorkflow: (id, data) => api.put(`/api/automations/workflows/${id}`, data),
+  deleteWorkflow: (id) => api.delete(`/api/automations/workflows/${id}`),
+  toggleWorkflow: (id) => api.post(`/api/automations/workflows/${id}/toggle`),
+  getExecutions: (id, params) => api.get(`/api/automations/workflows/${id}/executions`, { params }),
+  listTemplates: () => api.get('/api/automations/templates'),
+};
+
 export const miniapp = {
   auth: (initData) => api.post('/api/miniapp/auth', { init_data: initData }),
   me: () => api.get('/api/miniapp/me'),

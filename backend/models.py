@@ -1350,6 +1350,72 @@ class MessageBuffer(db.Model):
         }
 
 
+class AutomationWorkflow(db.Model):
+    """User-defined trigger → condition → action automation workflows."""
+    __tablename__ = "automation_workflows"
+
+    id = db.Column(db.Integer, primary_key=True)
+    owner_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    name = db.Column(db.String(200), nullable=False)
+    source_group_id = db.Column(db.String(255), nullable=True, index=True)
+    # JSON: {"type": "message_received"|"member_joined"|"member_banned"|"scheduled", "params":{}}
+    trigger = db.Column(db.JSON, nullable=False)
+    # JSON: [{"type": "message_contains", "params": {"keyword": "..."}}]
+    conditions = db.Column(db.JSON, nullable=False, default=list)
+    # JSON: [{"type": "send_dm"|"notify_admin_dm"|"forward_message"|..., "params":{}}]
+    actions = db.Column(db.JSON, nullable=False, default=list)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    run_count = db.Column(db.Integer, default=0, nullable=False)
+    last_run_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    executions = db.relationship("AutomationExecution", backref="workflow", lazy="dynamic",
+                                 cascade="all, delete-orphan")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "owner_user_id": self.owner_user_id,
+            "name": self.name,
+            "source_group_id": self.source_group_id,
+            "trigger": self.trigger,
+            "conditions": self.conditions,
+            "actions": self.actions,
+            "is_active": self.is_active,
+            "run_count": self.run_count,
+            "last_run_at": self.last_run_at.isoformat() if self.last_run_at else None,
+            "created_at": self.created_at.isoformat(),
+        }
+
+
+class AutomationExecution(db.Model):
+    """Per-run execution log for automation workflows."""
+    __tablename__ = "automation_executions"
+
+    id = db.Column(db.Integer, primary_key=True)
+    workflow_id = db.Column(db.Integer, db.ForeignKey("automation_workflows.id", ondelete="CASCADE"),
+                            nullable=False, index=True)
+    trigger_type = db.Column(db.String(50), nullable=False)
+    source_group_id = db.Column(db.String(255), nullable=True)
+    trigger_data = db.Column(db.JSON, nullable=True)   # snapshot of the event that fired
+    # success / failed / skipped (conditions not met)
+    status = db.Column(db.String(20), default="success", nullable=False)
+    error_msg = db.Column(db.String(500), nullable=True)
+    executed_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "workflow_id": self.workflow_id,
+            "trigger_type": self.trigger_type,
+            "source_group_id": self.source_group_id,
+            "trigger_data": self.trigger_data,
+            "status": self.status,
+            "error_msg": self.error_msg,
+            "executed_at": self.executed_at.isoformat(),
+        }
+
+
 class ForwardRule(db.Model):
     """Message forwarding rules — cross-post from one group/channel to another."""
     __tablename__ = "forward_rules"
