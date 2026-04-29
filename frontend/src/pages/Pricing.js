@@ -187,7 +187,7 @@ export default function Pricing() {
 
         {subExpires && (
           <Chip
-            label={`${currentTier.charAt(0).toUpperCase() + currentTier.slice(1)} plan â€” expires ${new Date(subExpires).toLocaleDateString()}`}
+            label={`${currentTier.charAt(0).toUpperCase() + currentTier.slice(1)} plan â€" expires ${new Date(subExpires).toLocaleDateString()}`}
             color="primary"
             sx={{ mb: 3 }}
           />
@@ -351,12 +351,12 @@ export default function Pricing() {
       </Box>
 
       {/* Payment dialog — crypto only */}
-      <Dialog open={dialogOpen} onClose={handleCloseDialog} maxWidth=”xs” fullWidth>
+      <Dialog open={dialogOpen} onClose={handleCloseDialog} maxWidth="xs" fullWidth>
         <DialogTitle sx={{ fontWeight: 700, textAlign: 'center', pb: 1 }}>
           Complete Your Upgrade
         </DialogTitle>
         <DialogContent>
-          <Typography variant=”body2” color=”text.secondary” textAlign=”center” mb={3}>
+          <Typography variant="body2" color="text.secondary" textAlign="center" mb={3}>
             {selectedTier && (
               <>
                 <strong>{selectedTier.charAt(0).toUpperCase() + selectedTier.slice(1)}</strong> Plan
@@ -368,10 +368,10 @@ export default function Pricing() {
 
           <Button
             fullWidth
-            variant=”contained”
-            color=”warning”
-            size=”large”
-            startIcon={methodLoading ? <CircularProgress size={18} color=”inherit” /> : <CurrencyBitcoin />}
+            variant="contained"
+            color="warning"
+            size="large"
+            startIcon={methodLoading ? <CircularProgress size={18} color="inherit" /> : <CurrencyBitcoin />}
             onClick={handlePaymentMethod}
             disabled={!!methodLoading}
             sx={{ py: 1.8, mb: 2 }}
@@ -379,19 +379,19 @@ export default function Pricing() {
             {methodLoading ? 'Redirecting…' : 'Pay with Crypto'}
           </Button>
 
-          <Typography variant=”caption” color=”text.disabled” display=”block” textAlign=”center” mb={1}>
+          <Typography variant="caption" color="text.disabled" display="block" textAlign="center" mb={1}>
             USDT · BTC · ETH · BNB · TRX · SOL and 300+ coins via NOWPayments
           </Typography>
 
-          <Alert severity=”info” sx={{ mt: 2 }} icon={false}>
-            <Typography variant=”caption”>
+          <Alert severity="info" sx={{ mt: 2 }} icon={false}>
+            <Typography variant="caption">
               Your plan activates automatically within 1–10 minutes of blockchain confirmation.
               No manual steps needed.
             </Typography>
           </Alert>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={handleCloseDialog} disabled={!!methodLoading} fullWidth variant=”text”>
+          <Button onClick={handleCloseDialog} disabled={!!methodLoading} fullWidth variant="text">
             Cancel
           </Button>
         </DialogActions>
