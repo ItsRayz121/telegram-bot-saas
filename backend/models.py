@@ -1731,6 +1731,12 @@ class DirectoryListing(db.Model):
     is_featured = db.Column(db.Boolean, default=False, nullable=False, index=True)
     is_verified = db.Column(db.Boolean, default=False, nullable=False)
 
+    # Partnership / marketplace pricing
+    accepts_partnerships = db.Column(db.Boolean, default=False, nullable=False, index=True)
+    price_per_post  = db.Column(db.Float, nullable=True)   # USD
+    price_per_week  = db.Column(db.Float, nullable=True)   # USD
+    pricing_notes   = db.Column(db.String(512), nullable=True)
+
     # Engagement metrics
     view_count = db.Column(db.Integer, default=0)
     contact_count = db.Column(db.Integer, default=0)
@@ -1755,6 +1761,10 @@ class DirectoryListing(db.Model):
             "is_verified": self.is_verified,
             "view_count": self.view_count,
             "contact_count": self.contact_count,
+            "accepts_partnerships": self.accepts_partnerships,
+            "price_per_post": self.price_per_post,
+            "price_per_week": self.price_per_week,
+            "pricing_notes": self.pricing_notes,
             "created_at": self.created_at.isoformat(),
         }
         if include_contact:
@@ -1762,3 +1772,91 @@ class DirectoryListing(db.Model):
             d["channel_id"] = self.channel_id
             d["telegram_group_id"] = self.telegram_group_id
         return d
+
+
+# ── B2B Partnership Marketplace ───────────────────────────────────────────────
+
+class PartnershipDeal(db.Model):
+    """A sponsored-post / partnership deal between a brand and a community owner."""
+    __tablename__ = "partnership_deals"
+
+    id = db.Column(db.Integer, primary_key=True)
+    buyer_user_id  = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"),
+                               nullable=False, index=True)
+    seller_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"),
+                               nullable=False, index=True)
+    listing_id = db.Column(db.Integer, db.ForeignKey("directory_listings.id", ondelete="SET NULL"),
+                           nullable=True, index=True)
+
+    title        = db.Column(db.String(256), nullable=False)
+    requirements = db.Column(db.Text, nullable=True)   # buyer's brief
+    deliverable  = db.Column(db.Text, nullable=True)   # seller fills on delivery
+
+    budget_usd = db.Column(db.Float, nullable=False)   # agreed price in USD
+    platform_fee_pct = db.Column(db.Float, default=10.0)  # 10% platform fee
+
+    # pending | accepted | declined | in_progress | delivered | completed | disputed | cancelled
+    status = db.Column(db.String(32), default="pending", nullable=False, index=True)
+    # unpaid | awaiting | paid | released | refunded
+    payment_status = db.Column(db.String(32), default="unpaid", nullable=False)
+    payment_id = db.Column(db.String(128), nullable=True)   # NOWPayments payment id
+    payment_address = db.Column(db.String(256), nullable=True)
+    payment_currency = db.Column(db.String(16), default="USDT")
+
+    created_at   = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    accepted_at  = db.Column(db.DateTime, nullable=True)
+    paid_at      = db.Column(db.DateTime, nullable=True)
+    delivered_at = db.Column(db.DateTime, nullable=True)
+    completed_at = db.Column(db.DateTime, nullable=True)
+    deadline_at  = db.Column(db.DateTime, nullable=True)
+
+    messages = db.relationship("DealMessage", backref="deal", lazy="dynamic",
+                               cascade="all, delete-orphan", order_by="DealMessage.created_at")
+
+    def net_seller_amount(self):
+        return round(self.budget_usd * (1 - self.platform_fee_pct / 100), 2)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "buyer_user_id": self.buyer_user_id,
+            "seller_user_id": self.seller_user_id,
+            "listing_id": self.listing_id,
+            "title": self.title,
+            "requirements": self.requirements,
+            "deliverable": self.deliverable,
+            "budget_usd": self.budget_usd,
+            "platform_fee_pct": self.platform_fee_pct,
+            "net_seller_amount": self.net_seller_amount(),
+            "status": self.status,
+            "payment_status": self.payment_status,
+            "payment_currency": self.payment_currency,
+            "created_at": self.created_at.isoformat(),
+            "accepted_at": self.accepted_at.isoformat() if self.accepted_at else None,
+            "paid_at": self.paid_at.isoformat() if self.paid_at else None,
+            "delivered_at": self.delivered_at.isoformat() if self.delivered_at else None,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "deadline_at": self.deadline_at.isoformat() if self.deadline_at else None,
+        }
+
+
+class DealMessage(db.Model):
+    """Chat message within a deal thread."""
+    __tablename__ = "deal_messages"
+
+    id = db.Column(db.Integer, primary_key=True)
+    deal_id = db.Column(db.Integer, db.ForeignKey("partnership_deals.id", ondelete="CASCADE"),
+                        nullable=False, index=True)
+    sender_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"),
+                               nullable=False)
+    body = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "deal_id": self.deal_id,
+            "sender_user_id": self.sender_user_id,
+            "body": self.body,
+            "created_at": self.created_at.isoformat(),
+        }

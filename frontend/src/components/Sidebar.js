@@ -7,7 +7,7 @@ import {
 } from '@mui/material';
 import {
   Home, Groups, Campaign, Bolt, Link, AccessTime, Send, AutoMode,
-  Explore, BarChart, SmartToy, CreditCard, Settings, Add, Circle,
+  Explore, BarChart, SmartToy, CreditCard, Settings, Add, Circle, Handshake,
   AccountCircle, Logout, AdminPanelSettings, ExpandMore,
 } from '@mui/icons-material';
 import TelegizerLogo from './TelegizerLogo';
@@ -324,7 +324,7 @@ export default function Sidebar({ onClose }) {
           </ListItemButton>
         </ListItem>
 
-        <NavItem label="Channels" path="/channels" icon={Campaign} badge="Soon" active={isActive('/channels')} onClick={() => nav('/channels')} />
+        <NavItem label="Channels" path="/channels" icon={Campaign} active={isActive('/channels')} onClick={() => nav('/channels')} />
 
         {/* Workspace */}
         <SectionLabel label="Workspace" />
@@ -336,8 +336,9 @@ export default function Sidebar({ onClose }) {
 
         {/* Grow */}
         <SectionLabel label="Grow" />
-        <NavItem label="Directory"   path="/directory"  icon={Explore}  badge="Soon" active={isActive('/directory')}  onClick={() => nav('/directory')} />
-        <NavItem label="Analytics"   path="/analytics"  icon={BarChart}              active={isActive('/analytics')}  onClick={() => nav('/analytics')} />
+        <NavItem label="Directory"    path="/directory"    icon={Explore}    active={isActive('/directory')}    onClick={() => nav('/directory')} />
+        <NavItem label="Marketplace" path="/marketplace"  icon={Handshake}  active={isActive('/marketplace')}  onClick={() => nav('/marketplace')} />
+        <NavItem label="Analytics"   path="/analytics"    icon={BarChart}   active={isActive('/analytics')}    onClick={() => nav('/analytics')} />
 
         {/* Account */}
         <SectionLabel label="Account" />

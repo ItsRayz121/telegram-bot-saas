@@ -50,6 +50,8 @@ import MiniAppLayout from './layouts/MiniAppLayout';
 import Directory from './pages/Directory';
 import DirectorySubmit from './pages/DirectorySubmit';
 import GroupCRM from './pages/GroupCRM';
+import Marketplace from './pages/Marketplace';
+import MarketplaceDeal from './pages/MarketplaceDeal';
 import JoinReferral from './pages/JoinReferral';
 
 // Initialize Sentry if DSN is configured
@@ -201,8 +203,11 @@ export default function App() {
             <Route path="/mini-app/*" element={<MiniAppLayout><MiniApp /></MiniAppLayout>} />
 
             {/* ── Directory ─────────────────────────────────────────────────── */}
-            <Route path="/directory"         element={<Directory />} />
-            <Route path="/directory/submit"  element={<AppRoute><DirectorySubmit /></AppRoute>} />
+            <Route path="/directory"              element={<Directory />} />
+            <Route path="/directory/submit"       element={<AppRoute><DirectorySubmit /></AppRoute>} />
+            <Route path="/marketplace"            element={<Marketplace />} />
+            <Route path="/marketplace/deals"      element={<AppRoute><Marketplace tab="deals" /></AppRoute>} />
+            <Route path="/marketplace/deals/:did" element={<AppRoute><MarketplaceDeal /></AppRoute>} />
 
             {/* ── Analytics ─────────────────────────────────────────────────── */}
             <Route path="/analytics"                element={<AppRoute><OfficialAnalyticsOverview /></AppRoute>} />

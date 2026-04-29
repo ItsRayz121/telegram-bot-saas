@@ -542,6 +542,22 @@ export const forwarding = {
   rejectPending: (logId) => api.post(`/api/forwarding/pending/${logId}/reject`),
 };
 
+export const marketplace = {
+  browse: (params) => api.get('/api/marketplace', { params }),
+  deals: (params) => api.get('/api/marketplace/deals', { params }),
+  getDeal: (id) => api.get(`/api/marketplace/deals/${id}`),
+  createDeal: (data) => api.post('/api/marketplace/deals', data),
+  accept: (id) => api.post(`/api/marketplace/deals/${id}/accept`),
+  decline: (id, data) => api.post(`/api/marketplace/deals/${id}/decline`, data),
+  pay: (id, data) => api.post(`/api/marketplace/deals/${id}/pay`, data),
+  deliver: (id, data) => api.post(`/api/marketplace/deals/${id}/deliver`, data),
+  complete: (id) => api.post(`/api/marketplace/deals/${id}/complete`),
+  dispute: (id, data) => api.post(`/api/marketplace/deals/${id}/dispute`, data),
+  cancel: (id) => api.post(`/api/marketplace/deals/${id}/cancel`),
+  sendMessage: (id, body) => api.post(`/api/marketplace/deals/${id}/messages`, { body }),
+  updatePricing: (lid, data) => api.patch(`/api/marketplace/listing/${lid}/pricing`, data),
+};
+
 export const crm = {
   overview: (gid) => api.get(`/api/crm/${gid}/overview`),
   members: (gid, params) => api.get(`/api/crm/${gid}/members`, { params }),
