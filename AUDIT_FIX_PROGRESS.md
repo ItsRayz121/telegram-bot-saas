@@ -12,22 +12,22 @@
 | Acquisition readiness | 42 | 42 | 85 |
 | UX / Onboarding | 51 | 51 | 85 |
 | Mobile responsiveness | 68 | 68 | 85 |
-| Frontend architecture | 72 | 75 | 90 |
+| Frontend architecture | 72 | 78 | 90 |
 | Backend architecture | 78 | 85 | 92 |
 | Security | 74 | 80 | 92 |
 | Payment readiness | 81 | 88 | 95 |
 | Telegram bot reliability | 80 | 80 | 90 |
 | Feature completeness | 76 | 76 | 88 |
-| **OVERALL** | **61** | **69** | **100** |
+| **OVERALL** | **61** | **70** | **100** |
 
-_Score last updated: 2026-04-29 after Session 1 fixes_
+_Score last updated: 2026-04-29 — P0-05 fixed (axios timeout)_
 
 ---
 
 ## ▶ NEXT RECOMMENDED FIX
 
-**[P0-05] Add axios request timeout** — `frontend/src/services/api.js`  
-Single 3-line change. Zero risk. Prevents entire UI from hanging on slow API calls.  
+**[P0-06] Pricing page crypto-only disclosure** — `frontend/src/pages/Pricing.js`  
+Add "Pay with crypto (USDT/BTC/ETH)" label to paid plan CTAs + short FAQ section.  
 After that: **[P0-01] Landing page overhaul** — biggest impact on launch readiness.
 
 ---
@@ -93,19 +93,6 @@ After that: **[P0-01] Landing page overhaul** — biggest impact on launch readi
 
 ---
 
-### [P0-05] [PENDING] No axios request timeout — UI hangs indefinitely on slow calls
-- **File:** `frontend/src/services/api.js`
-- **Issue:** axios instance created with no `timeout` option. Any slow Railway API call hangs the UI forever — spinner never stops.
-- **Fix needed:** Add `timeout: 30000` to axios instance creation (3-line change)
-- **Exact change:**
-  ```js
-  const api = axios.create({
-    baseURL: API_URL,
-    timeout: 30000,   // ← add this line
-    headers: { 'Content-Type': 'application/json' },
-  });
-  ```
-- **Expected impact:** +3 frontend architecture score, prevents UI hangs
 
 ---
 
@@ -507,6 +494,14 @@ After that: **[P0-01] Landing page overhaul** — biggest impact on launch readi
 
 ---
 
+### [P0-DONE-05] [COMPLETED] No axios request timeout — UI hangs indefinitely on slow calls
+- **Date fixed:** 2026-04-29
+- **Files changed:** `frontend/src/services/api.js:11-14`
+- **Summary:** Added `timeout: 30000` (30 seconds) to the axios instance. Any API call that doesn't respond within 30 seconds now rejects with a timeout error instead of hanging the UI spinner forever. The interceptors already handle rejected promises, so no additional error handling was needed.
+- **Commit:** (next commit)
+
+---
+
 ### [P1-DONE-07] [COMPLETED] Rate limiting falls back to in-process counter in production
 - **Date fixed:** 2026-04-29
 - **Files changed:** `backend/middleware/rate_limit.py`
@@ -521,11 +516,11 @@ After that: **[P0-01] Landing page overhaul** — biggest impact on launch readi
 
 | Priority | Total | Completed | Pending | Partial | Deferred |
 |----------|-------|-----------|---------|---------|----------|
-| P0 | 10 | 4 | 6 | 0 | 0 |
+| P0 | 10 | 5 | 5 | 0 | 0 |
 | P1 | 18 | 7 | 11 | 0 | 0 |
 | P2 | 11 | 0 | 11 | 0 | 0 |
 | P3 | 10 | 0 | 10 | 0 | 0 |
-| **Total** | **49** | **11** | **38** | **0** | **0** |
+| **Total** | **49** | **12** | **37** | **0** | **0** |
 
 ---
 
