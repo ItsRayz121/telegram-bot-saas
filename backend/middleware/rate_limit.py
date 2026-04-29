@@ -57,6 +57,15 @@ def _get_client_ip() -> str:
 
 # ─── Redis helper ─────────────────────────────────────────────────────────────
 
+def _is_production() -> bool:
+    """Return True when the app is connected to a PostgreSQL database (production)."""
+    try:
+        db_url = current_app.config.get("SQLALCHEMY_DATABASE_URI", "")
+        return "postgres" in db_url
+    except Exception:
+        return False
+
+
 def _get_redis():
     try:
         import redis as redis_lib
@@ -68,7 +77,7 @@ def _get_redis():
         r.ping()
         return r
     except Exception as e:
-        logger.warning("[RATE_LIMIT] Redis unavailable — using in-process fallback: %s", e)
+        logger.warning("[RATE_LIMIT] Redis unavailable: %s", e)
         return None
 
 
@@ -95,7 +104,20 @@ def rate_limit(requests_per_minute=60, per="ip"):
 
             r = _get_redis()
             if r is None:
-                # In-process fallback — always enforced, never fails open
+                if _is_production():
+                    # In production Redis is mandatory for reliable rate limiting.
+                    # An in-process counter would be reset on every deploy and is
+                    # not shared across Gunicorn workers — it provides no real protection.
+                    # Return 503 so the problem is visible and alertable.
+                    logger.error(
+                        "[RATE_LIMIT] Redis is unavailable in production — returning 503. "
+                        "Check REDIS_URL in Railway environment."
+                    )
+                    return jsonify({
+                        "error": "Rate limiting service is temporarily unavailable. Please try again shortly.",
+                        "code": "RATE_LIMIT_UNAVAILABLE",
+                    }), 503
+                # Development: fall back to in-process counter
                 if not _fallback_check(rl_key, requests_per_minute):
                     return jsonify({"error": "Rate limit exceeded. Please try again later."}), 429
                 return f(*args, **kwargs)
@@ -116,7 +138,12 @@ def rate_limit(requests_per_minute=60, per="ip"):
                     return jsonify({"error": "Rate limit exceeded. Please try again later."}), 429
             except Exception as e:
                 logger.error("[RATE_LIMIT] Redis pipeline error: %s", e)
-                # Fallback on Redis error — still enforce, never fail open
+                if _is_production():
+                    return jsonify({
+                        "error": "Rate limiting service is temporarily unavailable. Please try again shortly.",
+                        "code": "RATE_LIMIT_UNAVAILABLE",
+                    }), 503
+                # Development fallback
                 if not _fallback_check(rl_key, requests_per_minute):
                     return jsonify({"error": "Rate limit exceeded. Please try again later."}), 429
 

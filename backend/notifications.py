@@ -285,6 +285,40 @@ def send_referral_conversion_email(to_email, referrer_name, referred_first_name,
     )
 
 
+def send_subscription_expiry_warning(to_email: str, full_name: str,
+                                     plan_name: str, expires_at: str,
+                                     days_left: int) -> bool:
+    """Warn the user that their subscription is expiring soon.
+
+    days_left is the integer number of days remaining (e.g. 5 or 1).
+    """
+    urgency = "soon" if days_left > 1 else "tomorrow"
+    billing_url = f"{current_app.config['FRONTEND_URL']}/billing"
+    content = f"""
+    <p>Hi <strong>{full_name}</strong>,</p>
+    <p>Your <strong>{plan_name.capitalize()} Plan</strong> expires <strong>{urgency}</strong>
+    on <strong>{expires_at}</strong>.</p>
+    <p>To keep all your bots, scheduled messages, analytics, and advanced features running
+    without interruption, renew your subscription before it expires.</p>
+    <a href="{billing_url}" class="btn">Renew Now</a>
+    <p style="margin-top:16px;font-size:13px;color:#909090;">
+      If you don't renew, your account will revert to the Free tier and some features
+      will stop working.
+    </p>
+    <div class="tip">
+      💡 All your data is preserved — renewing restores full access instantly.
+    </div>
+    """
+    urgency_label = f"{days_left} day{'s' if days_left != 1 else ''}"
+    return send_email(
+        to_email,
+        f"Your Telegizer {plan_name.capitalize()} Plan expires in {urgency_label}",
+        _base_template(content, "Subscription Expiring Soon"),
+        f"Hi {full_name}, your {plan_name} plan expires on {expires_at}. "
+        f"Renew at {billing_url} to avoid service interruption.",
+    )
+
+
 def send_bot_added_notification(to_email, full_name, bot_name, bot_username):
     content = f"""
     <p>Hi <strong>{full_name}</strong>,</p>

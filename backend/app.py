@@ -99,32 +99,32 @@ def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
 
-    # Lock CORS to explicit origins in production; allow * only in development.
+    # Lock CORS to explicit origins in production; allow localhost only in development.
     # Set FRONTEND_URL and/or ALLOWED_ORIGINS (comma-separated) in Railway env.
     import os as _os
     _allowed_origins_env = _os.environ.get("ALLOWED_ORIGINS", "")
     _allowed = [o.strip() for o in _allowed_origins_env.split(",") if o.strip()]
+    _is_prod_db = "postgres" in _os.environ.get("DATABASE_URL", "")
     if not _allowed:
         _frontend_url = _os.environ.get("FRONTEND_URL", "http://localhost:3000")
         _allowed = [_frontend_url]
-        # Also allow localhost variants in development
-        if "localhost" in _frontend_url or "127.0.0.1" in _frontend_url:
+        # Only add localhost variants in development (non-postgres DB)
+        if not _is_prod_db and ("localhost" in _frontend_url or "127.0.0.1" in _frontend_url):
             _allowed += [
                 "http://localhost:3000",
                 "http://localhost:5000",
                 "http://127.0.0.1:3000",
             ]
-    # Production safety: warn loudly if allowed origins look like a local dev address
-    _is_prod_db = "postgres" in _os.environ.get("DATABASE_URL", "")
-    for _o in _allowed:
-        if _is_prod_db and ("localhost" in _o or "127.0.0.1" in _o):
-            import warnings as _w
-            _w.warn(
-                f"[CORS] Allowing localhost origin '{_o}' while DATABASE_URL points to PostgreSQL. "
-                "Set ALLOWED_ORIGINS or FRONTEND_URL to your production domain in Railway.",
-                RuntimeWarning,
-                stacklevel=2,
+    # Production safety: strip any localhost/127.0.0.1 origins that slipped in
+    if _is_prod_db:
+        _prod_allowed = [o for o in _allowed if "localhost" not in o and "127.0.0.1" not in o]
+        if len(_prod_allowed) < len(_allowed):
+            _scheduler_log.error(
+                "[CORS] Removed localhost origins from allow-list in production. "
+                "Set ALLOWED_ORIGINS or FRONTEND_URL to your production domain in Railway. "
+                "Removed: %s", [o for o in _allowed if o not in _prod_allowed]
             )
+        _allowed = _prod_allowed if _prod_allowed else _allowed  # never go empty
     CORS(app,
          origins=_allowed,
          allow_headers=["Content-Type", "Authorization"],
@@ -342,11 +342,66 @@ def create_app():
     # hold DB connections) begins.
     def _deferred_bot_start():
         import time
+        _bot_log = logging.getLogger("bot_start")
+
+        # Initial delay lets Gunicorn pass its health check before bot polling starts.
         time.sleep(5)
-        with app.app_context():
-            _restart_active_bots(app)
-        # Start official Telegizer shared bot
-        start_official_bot(app)
+
+        # --- Restart user custom bots with exponential backoff ---
+        _max_attempts = 5
+        for _attempt in range(1, _max_attempts + 1):
+            try:
+                with app.app_context():
+                    _restart_active_bots(app)
+                _bot_log.info("Custom bots restarted successfully (attempt %d)", _attempt)
+                break
+            except Exception as exc:
+                _bot_log.error(
+                    "Custom bot restart failed (attempt %d/%d): %s",
+                    _attempt, _max_attempts, exc, exc_info=True,
+                )
+                try:
+                    import sentry_sdk
+                    sentry_sdk.capture_exception(exc)
+                except Exception:
+                    pass
+                if _attempt < _max_attempts:
+                    _backoff = min(60, 5 * (2 ** (_attempt - 1)))  # 5s, 10s, 20s, 40s, 60s
+                    _bot_log.info("Retrying custom bot restart in %ds…", _backoff)
+                    time.sleep(_backoff)
+                else:
+                    _bot_log.critical(
+                        "Custom bot restart permanently failed after %d attempts — "
+                        "bots are NOT running. Check TELEGRAM_BOT_TOKEN and DB connectivity.",
+                        _max_attempts,
+                    )
+
+        # --- Start official Telegizer shared bot with retry ---
+        for _attempt in range(1, _max_attempts + 1):
+            try:
+                start_official_bot(app)
+                _bot_log.info("Official bot started successfully (attempt %d)", _attempt)
+                break
+            except Exception as exc:
+                _bot_log.error(
+                    "Official bot start failed (attempt %d/%d): %s",
+                    _attempt, _max_attempts, exc, exc_info=True,
+                )
+                try:
+                    import sentry_sdk
+                    sentry_sdk.capture_exception(exc)
+                except Exception:
+                    pass
+                if _attempt < _max_attempts:
+                    _backoff = min(120, 10 * (2 ** (_attempt - 1)))  # 10s, 20s, 40s, 80s, 120s
+                    _bot_log.info("Retrying official bot start in %ds…", _backoff)
+                    time.sleep(_backoff)
+                else:
+                    _bot_log.critical(
+                        "Official bot start permanently failed after %d attempts — "
+                        "TELEGRAM_BOT_TOKEN may be invalid or Telegram API unreachable.",
+                        _max_attempts,
+                    )
 
     threading.Thread(target=_deferred_bot_start, daemon=True).start()
 
@@ -1358,29 +1413,72 @@ def _deliver_reminders(app):
         ).all()
         for reminder in due:
             user = User.query.get(reminder.owner_user_id)
-            if not user or not user.telegram_user_id:
+            if not user:
                 reminder.is_delivered = True
                 continue
-            if not TelegramBotStarted.has_started(user.telegram_user_id):
-                reminder.is_delivered = True
-                continue
-            try:
-                text = f"⏰ *Reminder*\n\n{reminder.reminder_text}"
-                if reminder.telegram_group_id:
-                    text += f"\n\n_From group {reminder.telegram_group_id}_"
-                fut = _asyncio.run_coroutine_threadsafe(
-                    bot.send_message(
-                        chat_id=int(user.telegram_user_id),
-                        text=text,
-                        parse_mode="Markdown",
-                    ),
-                    loop,
-                )
-                fut.result(timeout=10)
-                reminder.is_delivered = True
-            except Exception as exc:
-                _scheduler_log.debug("Reminder delivery failed for user %s: %s", user.id, exc)
-                reminder.is_delivered = True  # don't retry forever
+
+            delivered_via_telegram = False
+
+            # Attempt Telegram DM delivery if the user has connected their account
+            # and has previously started the bot (required by Telegram TOS).
+            if user.telegram_user_id and bot and loop and loop.is_running():
+                if TelegramBotStarted.has_started(user.telegram_user_id):
+                    try:
+                        msg_text = f"⏰ *Reminder*\n\n{reminder.reminder_text}"
+                        if reminder.telegram_group_id:
+                            msg_text += f"\n\n_From group {reminder.telegram_group_id}_"
+                        fut = _asyncio.run_coroutine_threadsafe(
+                            bot.send_message(
+                                chat_id=int(user.telegram_user_id),
+                                text=msg_text,
+                                parse_mode="Markdown",
+                            ),
+                            loop,
+                        )
+                        fut.result(timeout=10)
+                        delivered_via_telegram = True
+                    except Exception as exc:
+                        _scheduler_log.error(
+                            "Telegram reminder delivery failed for user %s: %s", user.id, exc
+                        )
+
+            # Email fallback: send if Telegram delivery was not possible/successful.
+            if not delivered_via_telegram:
+                try:
+                    from .notifications import send_email
+                    subject = "Telegizer Reminder"
+                    group_line = (
+                        f"<p style='color:#888;font-size:13px'>From group {reminder.telegram_group_id}</p>"
+                        if reminder.telegram_group_id else ""
+                    )
+                    html = (
+                        f"<h2 style='margin:0 0 8px'>⏰ Reminder</h2>"
+                        f"<p>{reminder.reminder_text}</p>"
+                        f"{group_line}"
+                        f"<hr style='border:none;border-top:1px solid #eee;margin:16px 0'>"
+                        f"<p style='color:#888;font-size:12px'>"
+                        f"You can manage your reminders in the "
+                        f"<a href='{app.config[\"FRONTEND_URL\"]}/workspace/reminders'>Telegizer dashboard</a>."
+                        f"</p>"
+                    )
+                    send_email(user.email, subject, html)
+                    _scheduler_log.info(
+                        "Reminder delivered via email fallback for user %s (reminder %s)",
+                        user.id, reminder.id,
+                    )
+                except Exception as exc:
+                    _scheduler_log.error(
+                        "Email reminder fallback also failed for user %s (reminder %s): %s",
+                        user.id, reminder.id, exc,
+                    )
+                    # Keep is_delivered=False so we retry on the next scheduler tick.
+                    # Reminders older than 24h are force-expired to avoid infinite loops.
+                    age_hours = (now - reminder.remind_at).total_seconds() / 3600
+                    if age_hours < 24:
+                        continue
+
+            reminder.is_delivered = True
+
         try:
             from .models import db
             db.session.commit()
@@ -1558,12 +1656,12 @@ def _scheduler_loop(app):
 
 
 def _run_expiry_notifications():
-    """Send in-app expiry warning notifications at 5-day and 1-day marks."""
+    """Send in-app + email expiry warning notifications at 5-day and 1-day marks."""
     from .models import User, UserNotification
     from .routes.notifications import create_notification
+    from .notifications import send_subscription_expiry_warning
     now = datetime.utcnow()
     five_days = now + timedelta(days=5)
-    one_day = now + timedelta(days=1)
     try:
         expiring_soon = User.query.filter(
             User.subscription_expires.isnot(None),
@@ -1572,7 +1670,7 @@ def _run_expiry_notifications():
             User.subscription_expires <= five_days,
         ).all()
         for user in expiring_soon:
-            days_left = (user.subscription_expires - now).days
+            days_left = max(0, (user.subscription_expires - now).days)
             notif_type = "plan_expiring_1d" if days_left <= 1 else "plan_expiring_5d"
             # Avoid duplicate notifications within 12 hours
             recent = UserNotification.query.filter(
@@ -1583,15 +1681,37 @@ def _run_expiry_notifications():
             if recent:
                 continue
             label = "tomorrow" if days_left <= 1 else f"in {days_left} days"
+            expires_str = user.subscription_expires.strftime("%Y-%m-%d")
+
+            # In-app notification
             create_notification(
                 user.id, notif_type,
                 "Subscription Expiring Soon",
                 f"Your {user.subscription_tier.capitalize()} plan expires {label} "
-                f"({user.subscription_expires.strftime('%Y-%m-%d')}). Renew now to avoid interruption.",
+                f"({expires_str}). Renew now to avoid interruption.",
                 {"expires": user.subscription_expires.isoformat(), "days_left": days_left},
             )
+
+            # Email warning
+            try:
+                send_subscription_expiry_warning(
+                    user.email,
+                    user.full_name,
+                    user.subscription_tier,
+                    expires_str,
+                    max(1, days_left),
+                )
+                _scheduler_log.info(
+                    "Sent expiry warning email to user %d (%s) — %d days left",
+                    user.id, user.email, days_left,
+                )
+            except Exception as email_exc:
+                _scheduler_log.error(
+                    "Failed to send expiry warning email to user %d: %s",
+                    user.id, email_exc,
+                )
     except Exception as exc:
-        _scheduler_log.error(f"Expiry notification error: {exc}")
+        _scheduler_log.error("Expiry notification error: %s", exc, exc_info=True)
 
 
 def _run_official_scheduled_messages():

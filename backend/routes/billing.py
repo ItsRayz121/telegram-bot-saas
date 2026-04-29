@@ -163,6 +163,16 @@ def crypto_checkout():
     if user.email in Config.ADMIN_EMAILS:
         return _admin_upgrade(user, tier)
 
+    # Block flagged accounts from initiating payments — prevents monetising
+    # referral fraud or other abuse before manual review clears the flag.
+    if user.is_suspicious:
+        logger.warning("[BILLING] Blocked checkout for suspicious user %d", user.id)
+        return jsonify({
+            "error": "Your account has been flagged for review. "
+                     "Please contact support@telegizer.xyz to resolve this before upgrading.",
+            "code": "ACCOUNT_FLAGGED",
+        }), 403
+
     if not Config.NOWPAYMENTS_API_KEY:
         return jsonify({"error": "Crypto payments are not configured yet."}), 503
 
@@ -237,7 +247,14 @@ def crypto_webhook():
 
     payment_status = data.get("payment_status", "")
     order_id = data.get("order_id", "")
-    payment_id = str(data.get("payment_id", ""))
+    raw_payment_id = data.get("payment_id")
+
+    # Reject webhooks with a missing payment_id — without it we cannot deduplicate
+    # and a retry would activate the subscription twice.
+    if not raw_payment_id:
+        logger.warning("[NOWPAYMENTS] Webhook missing payment_id — rejecting to prevent duplicate activation")
+        return jsonify({"error": "payment_id is required"}), 400
+    payment_id = str(raw_payment_id)
 
     # Only activate on confirmed/finished payments
     if payment_status not in ("finished", "confirmed"):
@@ -269,10 +286,9 @@ def crypto_webhook():
 
     # Idempotency: atomic INSERT — second delivery for same payment_id gets
     # IntegrityError from UNIQUE constraint and is safely skipped.
-    if payment_id:
-        if not _claim_dedup(payment_id):
-            logger.info(f"[NOWPAYMENTS] Duplicate webhook for payment_id={payment_id} — skipping")
-            return jsonify({"status": "ok"})
+    if not _claim_dedup(payment_id):
+        logger.info(f"[NOWPAYMENTS] Duplicate webhook for payment_id={payment_id} — skipping")
+        return jsonify({"status": "ok"})
 
     price_usd = data.get("price_amount")
     pay_currency = str(data.get("pay_currency") or "USD").upper()
@@ -282,6 +298,20 @@ def crypto_webhook():
             amount_usd_dollars = None
     except Exception:
         amount_usd_dollars = None
+
+    # Server-side price validation — reject if the paid amount is less than the
+    # expected plan price (allow a small tolerance for currency conversion rounding).
+    expected_usd = _TIER_PRICES_USD.get(tier, {}).get(billing_period)
+    if expected_usd and amount_usd_dollars is not None:
+        # Allow up to 5% under-payment (exchange rate slippage), but reject anything
+        # more than that to prevent plan-downgrade attacks via manipulated invoice amounts.
+        min_acceptable = expected_usd * 0.95
+        if amount_usd_dollars < min_acceptable:
+            logger.error(
+                "[NOWPAYMENTS] Price mismatch for order %s: paid $%.2f, expected $%.2f for %s/%s — rejecting",
+                order_id, amount_usd_dollars, expected_usd, tier, billing_period,
+            )
+            return jsonify({"error": "Payment amount does not match plan price"}), 400
 
     _activate_subscription(user, tier, provider="nowpayments",
                            payment_id=payment_id, amount_usd=amount_usd_dollars,

@@ -77,7 +77,23 @@ class Config:
     SMTP_USERNAME = os.environ.get("SMTP_USERNAME", "")
     SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
 
+    # In production (PostgreSQL) email must be configured — users cannot verify
+    # their email address or reset passwords without it.
+    _is_prod = "postgres" in os.environ.get("DATABASE_URL", "")
+    if _is_prod and not EMAIL_PROVIDER:
+        raise RuntimeError(
+            "EMAIL_PROVIDER environment variable is required in production. "
+            "Set EMAIL_PROVIDER=resend (or smtp) and the matching credentials "
+            "(RESEND_API_KEY / SMTP_* vars) in your Railway environment."
+        )
+
     FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+    # In production, FRONTEND_URL pointing to localhost breaks all email links.
+    if _is_prod and ("localhost" in FRONTEND_URL or "127.0.0.1" in FRONTEND_URL):
+        raise RuntimeError(
+            f"FRONTEND_URL is set to '{FRONTEND_URL}' but DATABASE_URL points to PostgreSQL. "
+            "Set FRONTEND_URL=https://your-domain.com in your Railway environment."
+        )
     OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 
     # Official Telegizer shared bot (serves all users/groups)
@@ -86,6 +102,12 @@ class Config:
     _admin_env = os.environ.get("ADMIN_EMAILS", "")
     ADMIN_EMAILS = [e.strip() for e in _admin_env.split(",") if e.strip()]
     if not ADMIN_EMAILS:
+        if _is_prod:
+            raise RuntimeError(
+                "ADMIN_EMAILS environment variable is required in production. "
+                "Set ADMIN_EMAILS=you@example.com (comma-separated) in your Railway environment. "
+                "Without this, nobody can access the admin panel."
+            )
         _log.warning(
             "ADMIN_EMAILS env var is not set — no accounts will have admin access. "
             "Set ADMIN_EMAILS=you@example.com in your Railway environment."
