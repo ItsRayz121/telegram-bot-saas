@@ -124,12 +124,27 @@ def _hash_identifier(value: str) -> str:
 
 
 def _get_client_ip() -> str:
-    """Extract real client IP, honoring X-Forwarded-For from trusted reverse proxies."""
-    xff = request.headers.get("X-Forwarded-For", "")
-    if xff:
-        # Take the first (leftmost) address — the original client IP
-        return xff.split(",")[0].strip()
-    return request.remote_addr or "0.0.0.0"
+    """Extract real client IP.
+
+    Only trust X-Forwarded-For when the direct TCP peer (remote_addr) is a
+    known private/loopback range — i.e. we are sitting behind a local reverse
+    proxy (nginx, Railway's internal router, etc.).  If the request arrives
+    directly from the public internet we ignore the header to prevent spoofing.
+    """
+    import ipaddress
+
+    remote = request.remote_addr or "0.0.0.0"
+    try:
+        remote_ip = ipaddress.ip_address(remote)
+        trusted_proxy = remote_ip.is_private or remote_ip.is_loopback
+    except ValueError:
+        trusted_proxy = False
+
+    if trusted_proxy:
+        xff = request.headers.get("X-Forwarded-For", "")
+        if xff:
+            return xff.split(",")[0].strip()
+    return remote
 
 
 def _count_recent_signups_by_ip(ip_hash: str) -> int:

@@ -220,7 +220,13 @@ def create_reminder():
         return jsonify({"error": "remind_at is required (ISO datetime)"}), 400
 
     try:
-        remind_at = datetime.fromisoformat(str(remind_at_raw).replace("Z", "+00:00").replace("+00:00", ""))
+        # Normalise to UTC naive datetime for consistent comparison with utcnow()
+        parsed = datetime.fromisoformat(str(remind_at_raw).replace("Z", "+00:00"))
+        if parsed.tzinfo is not None:
+            from datetime import timezone as _tz
+            remind_at = parsed.astimezone(_tz.utc).replace(tzinfo=None)
+        else:
+            remind_at = parsed
     except ValueError:
         return jsonify({"error": "remind_at must be a valid ISO datetime"}), 400
 

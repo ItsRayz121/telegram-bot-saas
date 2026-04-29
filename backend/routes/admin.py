@@ -348,16 +348,19 @@ def admin_list_telegram_groups():
     query = query.order_by(TelegramGroup.created_at.desc())
     paginated = query.paginate(page=page, per_page=per_page, error_out=False)
 
+    # Batch-load all owner users in one query to avoid N+1
+    owner_ids = {tg.owner_user_id for tg in paginated.items if tg.owner_user_id}
+    owners_by_id = {}
+    if owner_ids:
+        for u in User.query.filter(User.id.in_(owner_ids)).all():
+            owners_by_id[u.id] = u
+
     result = []
     for tg in paginated.items:
         d = tg.to_dict()
-        if tg.owner_user_id:
-            owner = User.query.get(tg.owner_user_id)
-            d["owner_email"] = owner.email if owner else None
-            d["owner_name"] = owner.full_name if owner else None
-        else:
-            d["owner_email"] = None
-            d["owner_name"] = None
+        owner = owners_by_id.get(tg.owner_user_id) if tg.owner_user_id else None
+        d["owner_email"] = owner.email if owner else None
+        d["owner_name"] = owner.full_name if owner else None
         d["command_count"] = len(tg.custom_commands)
         result.append(d)
 

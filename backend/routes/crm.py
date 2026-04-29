@@ -32,7 +32,10 @@ def list_members(group_id):
     # Filters
     tag = request.args.get("tag")
     if tag:
-        q = q.filter(OfficialMember.crm_tags.contains([tag]))
+        q = q.filter(
+            OfficialMember.crm_tags.isnot(None),
+            OfficialMember.crm_tags.contains([tag])
+        )
 
     search = (request.args.get("q") or "").strip()
     if search:

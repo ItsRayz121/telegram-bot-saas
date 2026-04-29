@@ -277,7 +277,9 @@ def crypto_webhook():
     price_usd = data.get("price_amount")
     pay_currency = str(data.get("pay_currency") or "USD").upper()
     try:
-        amount_usd_dollars = int(float(price_usd)) if price_usd else None
+        amount_usd_dollars = round(float(price_usd)) if price_usd else None
+        if amount_usd_dollars is not None and amount_usd_dollars <= 0:
+            amount_usd_dollars = None
     except Exception:
         amount_usd_dollars = None
 

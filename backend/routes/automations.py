@@ -175,7 +175,14 @@ def update_workflow(wf_id):
     if "is_active" in data:
         wf.is_active = bool(data["is_active"])
     if "source_group_id" in data:
-        wf.source_group_id = data["source_group_id"] or None
+        new_sgid = data["source_group_id"] or None
+        if new_sgid:
+            g = TelegramGroup.query.filter_by(
+                telegram_group_id=new_sgid, owner_user_id=user.id, is_disabled=False
+            ).first()
+            if not g:
+                return jsonify({"error": "Source group not found or not owned by you"}), 404
+        wf.source_group_id = new_sgid
 
     db.session.commit()
     return jsonify({"workflow": wf.to_dict()})

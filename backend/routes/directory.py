@@ -193,10 +193,16 @@ def update_listing(lid):
     listing = DirectoryListing.query.filter_by(id=lid, user_id=user.id).first_or_404()
     data = request.get_json() or {}
 
-    for field in ("title", "description", "category", "language", "country", "telegram_link"):
+    for field in ("title", "description", "category", "language", "country"):
         val = data.get(field)
         if val is not None:
             setattr(listing, field, val.strip() if isinstance(val, str) else val)
+
+    if "telegram_link" in data and data["telegram_link"] is not None:
+        tl = str(data["telegram_link"]).strip()
+        if not (tl.startswith("https://t.me/") or tl.startswith("https://telegram.me/")):
+            return jsonify({"error": "telegram_link must be a valid Telegram URL (https://t.me/...)"}), 400
+        listing.telegram_link = tl
 
     if "is_public" in data:
         listing.is_public = bool(data["is_public"])

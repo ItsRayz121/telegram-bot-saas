@@ -279,7 +279,7 @@ export default function Sidebar({ onClose }) {
                   }}
                 >
                   <ListItemText
-                    primary={group.name}
+                    primary={group.title || group.name}
                     primaryTypographyProps={{
                       fontSize: '0.78rem',
                       fontWeight: gActive ? 600 : 400,
