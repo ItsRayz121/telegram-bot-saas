@@ -521,11 +521,20 @@ export default function ChannelDetail() {
       </Card>
 
       <Divider sx={{ my: 3 }} />
-      <Typography variant="caption" color="text.disabled">
-        Last refreshed: {channel.last_refreshed_at
-          ? new Date(channel.last_refreshed_at).toLocaleString()
-          : 'Never'}
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
+        <Typography variant="caption" color="text.disabled">
+          Last refreshed: {channel.last_refreshed_at
+            ? new Date(channel.last_refreshed_at).toLocaleString()
+            : 'Never'}
+        </Typography>
+        <Button
+          size="small" variant="outlined" startIcon={<Shield fontSize="small" />}
+          onClick={() => navigate('/directory/submit')}
+          sx={{ fontSize: '0.72rem' }}
+        >
+          List in Directory
+        </Button>
+      </Box>
     </Box>
   );
 }

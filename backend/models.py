@@ -1636,3 +1636,84 @@ class ChannelDailyStat(db.Model):
             "total_forwards": self.total_forwards,
             "avg_views_per_post": round(self.avg_views_per_post, 1),
         }
+
+
+# ── Community Directory ───────────────────────────────────────────────────────
+
+DIRECTORY_CATEGORIES = [
+    "Technology & Dev", "Crypto & Web3", "News & Politics",
+    "Business & Finance", "Education & Learning", "Entertainment",
+    "Gaming", "Health & Wellness", "Sports", "Art & Design", "Other",
+]
+
+DIRECTORY_LANGUAGES = [
+    "English", "Arabic", "Spanish", "Portuguese", "Russian",
+    "Hindi", "Indonesian", "Turkish", "French", "German", "Other",
+]
+
+
+class DirectoryListing(db.Model):
+    """Public community directory — opt-in listing for channels and groups."""
+    __tablename__ = "directory_listings"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"),
+                        nullable=False, index=True)
+    # Exactly one of these is set
+    channel_id = db.Column(db.Integer, db.ForeignKey("channels.id", ondelete="CASCADE"),
+                           nullable=True, unique=True)
+    telegram_group_id = db.Column(
+        db.String(255),
+        db.ForeignKey("telegram_groups.telegram_group_id", ondelete="CASCADE"),
+        nullable=True, unique=True,
+    )
+
+    listing_type = db.Column(db.String(16), nullable=False)   # channel | group
+    title = db.Column(db.String(256), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    category = db.Column(db.String(64), nullable=False, index=True)
+    language = db.Column(db.String(32), default="English")
+    country = db.Column(db.String(64), default="Global", index=True)
+    telegram_link = db.Column(db.String(256), nullable=False)  # t.me/... join link
+
+    # Denormalized stats (refreshed periodically)
+    member_count = db.Column(db.Integer, default=0)
+    tcs_score = db.Column(db.Integer, nullable=True)
+    tcs_grade = db.Column(db.String(2), nullable=True)
+
+    # Status
+    is_public = db.Column(db.Boolean, default=True, nullable=False, index=True)
+    is_featured = db.Column(db.Boolean, default=False, nullable=False, index=True)
+    is_verified = db.Column(db.Boolean, default=False, nullable=False)
+
+    # Engagement metrics
+    view_count = db.Column(db.Integer, default=0)
+    contact_count = db.Column(db.Integer, default=0)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    last_updated = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self, include_contact=False):
+        d = {
+            "id": self.id,
+            "listing_type": self.listing_type,
+            "title": self.title,
+            "description": self.description,
+            "category": self.category,
+            "language": self.language,
+            "country": self.country,
+            "telegram_link": self.telegram_link,
+            "member_count": self.member_count,
+            "tcs_score": self.tcs_score,
+            "tcs_grade": self.tcs_grade,
+            "is_featured": self.is_featured,
+            "is_verified": self.is_verified,
+            "view_count": self.view_count,
+            "contact_count": self.contact_count,
+            "created_at": self.created_at.isoformat(),
+        }
+        if include_contact:
+            d["user_id"] = self.user_id
+            d["channel_id"] = self.channel_id
+            d["telegram_group_id"] = self.telegram_group_id
+        return d

@@ -48,6 +48,7 @@ import WorkspaceAutomations from './pages/WorkspaceAutomations';
 import MiniApp from './pages/MiniApp';
 import MiniAppLayout from './layouts/MiniAppLayout';
 import Directory from './pages/Directory';
+import DirectorySubmit from './pages/DirectorySubmit';
 import JoinReferral from './pages/JoinReferral';
 
 // Initialize Sentry if DSN is configured
@@ -198,8 +199,8 @@ export default function App() {
             <Route path="/mini-app/*" element={<MiniAppLayout><MiniApp /></MiniAppLayout>} />
 
             {/* ── Directory ─────────────────────────────────────────────────── */}
-            <Route path="/directory"  element={<AppRoute><Directory /></AppRoute>} />
-            <Route path="/directory/*" element={<AppRoute><Directory /></AppRoute>} />
+            <Route path="/directory"         element={<Directory />} />
+            <Route path="/directory/submit"  element={<AppRoute><DirectorySubmit /></AppRoute>} />
 
             {/* ── Analytics ─────────────────────────────────────────────────── */}
             <Route path="/analytics"                element={<AppRoute><OfficialAnalyticsOverview /></AppRoute>} />

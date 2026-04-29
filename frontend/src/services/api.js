@@ -542,6 +542,16 @@ export const forwarding = {
   rejectPending: (logId) => api.post(`/api/forwarding/pending/${logId}/reject`),
 };
 
+export const directory = {
+  list: (params) => api.get('/api/directory', { params }),
+  mine: () => api.get('/api/directory/mine'),
+  create: (data) => api.post('/api/directory', data),
+  update: (id, data) => api.put(`/api/directory/${id}`, data),
+  delete: (id) => api.delete(`/api/directory/${id}`),
+  recordView: (id) => api.post(`/api/directory/${id}/view`),
+  recordContact: (id) => api.post(`/api/directory/${id}/contact`),
+};
+
 export const channels = {
   list: () => api.get('/api/channels'),
   add: (data) => api.post('/api/channels', data),
