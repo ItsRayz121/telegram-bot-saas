@@ -515,6 +515,11 @@ export const workspace = {
   deleteReminder: (id) => api.delete(`/api/workspace/reminders/${id}`),
 };
 
+export const miniapp = {
+  auth: (initData) => api.post('/api/miniapp/auth', { init_data: initData }),
+  me: () => api.get('/api/miniapp/me'),
+};
+
 export const forwarding = {
   listRules: () => api.get('/api/forwarding/rules'),
   createRule: (data) => api.post('/api/forwarding/rules', data),
