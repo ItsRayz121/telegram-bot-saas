@@ -39,6 +39,7 @@ import AdminPanel from './pages/AdminPanel';
 
 // Pages — new sections
 import Channels from './pages/Channels';
+import ChannelDetail from './pages/ChannelDetail';
 import Workspace from './pages/Workspace';
 import WorkspaceSmartLinks from './pages/WorkspaceSmartLinks';
 import WorkspaceReminders from './pages/WorkspaceReminders';
@@ -182,8 +183,8 @@ export default function App() {
             <Route path="/add-group"                        element={<Navigate to="/groups" replace />} />
 
             {/* ── Channels ──────────────────────────────────────────────────── */}
-            <Route path="/channels"    element={<AppRoute><Channels /></AppRoute>} />
-            <Route path="/channels/*"  element={<AppRoute><Channels /></AppRoute>} />
+            <Route path="/channels"         element={<AppRoute><Channels /></AppRoute>} />
+            <Route path="/channels/:cid"    element={<AppRoute><ChannelDetail /></AppRoute>} />
 
             {/* ── Workspace ─────────────────────────────────────────────────── */}
             <Route path="/workspace"               element={<AppRoute><Workspace /></AppRoute>} />

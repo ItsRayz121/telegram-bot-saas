@@ -542,4 +542,13 @@ export const forwarding = {
   rejectPending: (logId) => api.post(`/api/forwarding/pending/${logId}/reject`),
 };
 
+export const channels = {
+  list: () => api.get('/api/channels'),
+  add: (data) => api.post('/api/channels', data),
+  get: (id) => api.get(`/api/channels/${id}`),
+  delete: (id) => api.delete(`/api/channels/${id}`),
+  posts: (id, params) => api.get(`/api/channels/${id}/posts`, { params }),
+  refresh: (id) => api.post(`/api/channels/${id}/refresh`),
+};
+
 export default api;

@@ -3900,6 +3900,68 @@ async def on_reaction(update: Update, context: ContextTypes.DEFAULT_TYPE):
         _log.debug("[OfficialBot] Reaction XP failed: %s", exc)
 
 
+async def on_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Capture channel posts for analytics when bot is admin in the channel."""
+    msg = update.channel_post
+    if not msg:
+        return
+    flask_app = context.bot_data.get("flask_app")
+    if not flask_app:
+        return
+    channel_tg_id = str(msg.chat.id)
+    try:
+        with flask_app.app_context():
+            from .models import db, Channel, ChannelPost
+            ch = Channel.query.filter_by(telegram_channel_id=channel_tg_id).first()
+            if not ch:
+                return
+
+            # Determine media type
+            has_media = False
+            media_type = None
+            if msg.photo:
+                has_media, media_type = True, "photo"
+            elif msg.video:
+                has_media, media_type = True, "video"
+            elif msg.document:
+                has_media, media_type = True, "document"
+            elif msg.poll:
+                has_media, media_type = True, "poll"
+            elif msg.sticker:
+                has_media, media_type = True, "sticker"
+            elif msg.animation:
+                has_media, media_type = True, "gif"
+
+            text = msg.text or msg.caption or ""
+            preview = text[:297] + "…" if len(text) > 300 else text
+
+            # Upsert — Telegram sometimes re-delivers edits
+            existing = ChannelPost.query.filter_by(
+                channel_id=ch.id, message_id=msg.message_id
+            ).first()
+            if existing:
+                existing.views = max(existing.views, msg.views or 0)
+                existing.forwards = max(existing.forwards, msg.forward_count or 0)
+                existing.last_updated = datetime.utcnow()
+            else:
+                post = ChannelPost(
+                    channel_id=ch.id,
+                    message_id=msg.message_id,
+                    text_preview=preview or None,
+                    views=msg.views or 0,
+                    forwards=msg.forward_count or 0,
+                    has_media=has_media,
+                    media_type=media_type,
+                    posted_at=msg.date or datetime.utcnow(),
+                )
+                db.session.add(post)
+
+            ch.bot_status = "active"
+            db.session.commit()
+    except Exception as exc:
+        _log.debug("[OfficialBot] channel_post capture failed: %s", exc)
+
+
 # ─── OfficialBotRunner ────────────────────────────────────────────────────────
 
 class OfficialBotRunner:
@@ -4034,6 +4096,13 @@ class OfficialBotRunner:
             MessageHandler(
                 (filters.ChatType.GROUP | filters.ChatType.SUPERGROUP) & filters.ALL,
                 on_message,
+            )
+        )
+        # Channel post analytics capture
+        a.add_handler(
+            MessageHandler(
+                filters.ChatType.CHANNEL & filters.ALL,
+                on_channel_post,
             )
         )
 

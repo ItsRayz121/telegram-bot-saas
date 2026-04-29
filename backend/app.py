@@ -58,6 +58,7 @@ from .routes.workspace import workspace_bp
 from .routes.forwarding import forwarding_bp
 from .routes.telegram_webapp import miniapp_bp
 from .routes.automations import automations_bp
+from .routes.channels import channels_bp
 from .bot_manager import BotManager
 from .official_bot import start_official_bot
 
@@ -159,6 +160,7 @@ def create_app():
     app.register_blueprint(forwarding_bp)
     app.register_blueprint(miniapp_bp)
     app.register_blueprint(automations_bp)
+    app.register_blueprint(channels_bp)
 
     app.bot_manager = bot_manager
 

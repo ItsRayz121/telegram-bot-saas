@@ -1515,3 +1515,115 @@ class OfficialReportedMessage(db.Model):
             "status": self.status,
             "created_at": self.created_at.isoformat(),
         }
+
+
+# ── Channels ──────────────────────────────────────────────────────────────────
+
+class Channel(db.Model):
+    """A Telegram channel managed by a user."""
+    __tablename__ = "channels"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"),
+                        nullable=False, index=True)
+    telegram_channel_id = db.Column(db.String(64), nullable=False, unique=True, index=True)
+    username = db.Column(db.String(128), nullable=True)   # @handle (without @)
+    title = db.Column(db.String(256), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    member_count = db.Column(db.Integer, default=0)
+    # Rolling 30-day averages (updated on refresh)
+    avg_views = db.Column(db.Float, default=0.0)
+    avg_reactions = db.Column(db.Float, default=0.0)
+    avg_forwards = db.Column(db.Float, default=0.0)
+    engagement_rate = db.Column(db.Float, default=0.0)   # reactions/views %
+    # pending | active | error | no_admin
+    bot_status = db.Column(db.String(32), default="pending", nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    last_refreshed_at = db.Column(db.DateTime, nullable=True)
+
+    posts = db.relationship("ChannelPost", backref="channel", lazy="dynamic",
+                            cascade="all, delete-orphan")
+    daily_stats = db.relationship("ChannelDailyStat", backref="channel", lazy="dynamic",
+                                  cascade="all, delete-orphan")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "telegram_channel_id": self.telegram_channel_id,
+            "username": self.username,
+            "title": self.title,
+            "description": self.description,
+            "member_count": self.member_count,
+            "avg_views": round(self.avg_views or 0, 1),
+            "avg_reactions": round(self.avg_reactions or 0, 1),
+            "avg_forwards": round(self.avg_forwards or 0, 1),
+            "engagement_rate": round(self.engagement_rate or 0, 2),
+            "bot_status": self.bot_status,
+            "post_count": self.posts.count(),
+            "created_at": self.created_at.isoformat(),
+            "last_refreshed_at": self.last_refreshed_at.isoformat() if self.last_refreshed_at else None,
+        }
+
+
+class ChannelPost(db.Model):
+    """Analytics snapshot for a single channel post."""
+    __tablename__ = "channel_posts"
+
+    id = db.Column(db.Integer, primary_key=True)
+    channel_id = db.Column(db.Integer, db.ForeignKey("channels.id", ondelete="CASCADE"),
+                           nullable=False, index=True)
+    message_id = db.Column(db.Integer, nullable=False)
+    text_preview = db.Column(db.String(300), nullable=True)
+    views = db.Column(db.Integer, default=0)
+    reactions = db.Column(db.Integer, default=0)
+    forwards = db.Column(db.Integer, default=0)
+    has_media = db.Column(db.Boolean, default=False)
+    media_type = db.Column(db.String(32), nullable=True)  # photo/video/document/poll/sticker
+    posted_at = db.Column(db.DateTime, nullable=False, index=True)
+    last_updated = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (db.UniqueConstraint("channel_id", "message_id", name="uq_channel_message"),)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "message_id": self.message_id,
+            "text_preview": self.text_preview,
+            "views": self.views,
+            "reactions": self.reactions,
+            "forwards": self.forwards,
+            "has_media": self.has_media,
+            "media_type": self.media_type,
+            "engagement_rate": round((self.reactions / self.views * 100) if self.views else 0, 2),
+            "posted_at": self.posted_at.isoformat(),
+            "last_updated": self.last_updated.isoformat(),
+        }
+
+
+class ChannelDailyStat(db.Model):
+    """Daily snapshot of channel-level metrics."""
+    __tablename__ = "channel_daily_stats"
+
+    id = db.Column(db.Integer, primary_key=True)
+    channel_id = db.Column(db.Integer, db.ForeignKey("channels.id", ondelete="CASCADE"),
+                           nullable=False, index=True)
+    date = db.Column(db.Date, nullable=False)
+    member_count = db.Column(db.Integer, default=0)
+    posts_count = db.Column(db.Integer, default=0)
+    total_views = db.Column(db.Integer, default=0)
+    total_reactions = db.Column(db.Integer, default=0)
+    total_forwards = db.Column(db.Integer, default=0)
+    avg_views_per_post = db.Column(db.Float, default=0.0)
+
+    __table_args__ = (db.UniqueConstraint("channel_id", "date", name="uq_channel_date"),)
+
+    def to_dict(self):
+        return {
+            "date": self.date.isoformat(),
+            "member_count": self.member_count,
+            "posts_count": self.posts_count,
+            "total_views": self.total_views,
+            "total_reactions": self.total_reactions,
+            "total_forwards": self.total_forwards,
+            "avg_views_per_post": round(self.avg_views_per_post, 1),
+        }
