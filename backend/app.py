@@ -323,6 +323,7 @@ def create_app():
         _run_phase6_migrations()
         _run_smart_links_migration()
         _run_workspace_migrations()
+        _run_marketplace_migrations()
         _backfill_group_defaults()
 
     # Start bots in a background thread after a short delay so Gunicorn can
@@ -698,6 +699,78 @@ def _run_workspace_migrations():
                         pass
     except Exception as exc:
         _mig_log.warning("workspace migrations failed: %s", exc)
+
+
+def _run_marketplace_migrations():
+    """Add marketplace/directory/CRM columns and tables introduced alongside the
+    B2B Partnership Marketplace feature.  All statements are idempotent."""
+    _mig_log = logging.getLogger("migrations")
+    stmts = [
+        # ── directory_listings: new pricing/partnership columns ─────────────────
+        "ALTER TABLE directory_listings ADD COLUMN IF NOT EXISTS accepts_partnerships BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE directory_listings ADD COLUMN IF NOT EXISTS price_per_post FLOAT",
+        "ALTER TABLE directory_listings ADD COLUMN IF NOT EXISTS price_per_week FLOAT",
+        "ALTER TABLE directory_listings ADD COLUMN IF NOT EXISTS pricing_notes VARCHAR(512)",
+        # ── official_members: CRM columns ───────────────────────────────────────
+        "ALTER TABLE official_members ADD COLUMN IF NOT EXISTS crm_tags JSON",
+        "ALTER TABLE official_members ADD COLUMN IF NOT EXISTS crm_notes TEXT",
+        "ALTER TABLE official_members ADD COLUMN IF NOT EXISTS engagement_score INTEGER",
+        # ── channels: TCS columns (table created by db.create_all, but add cols if table pre-existed) ─
+        "ALTER TABLE channels ADD COLUMN IF NOT EXISTS tcs_score INTEGER",
+        "ALTER TABLE channels ADD COLUMN IF NOT EXISTS tcs_grade VARCHAR(2)",
+        "ALTER TABLE channels ADD COLUMN IF NOT EXISTS tcs_breakdown JSON",
+        "ALTER TABLE channels ADD COLUMN IF NOT EXISTS tcs_computed_at TIMESTAMP",
+        # ── partnership_deals table ──────────────────────────────────────────────
+        """CREATE TABLE IF NOT EXISTS partnership_deals (
+            id SERIAL PRIMARY KEY,
+            listing_id INTEGER NOT NULL REFERENCES directory_listings(id) ON DELETE CASCADE,
+            buyer_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            seller_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            title VARCHAR(255) NOT NULL,
+            requirements TEXT,
+            budget_usd FLOAT NOT NULL,
+            platform_fee_pct FLOAT NOT NULL DEFAULT 10.0,
+            net_seller_amount FLOAT NOT NULL,
+            deadline_at TIMESTAMP,
+            status VARCHAR(30) NOT NULL DEFAULT 'pending',
+            payment_status VARCHAR(30) NOT NULL DEFAULT 'unpaid',
+            payment_currency VARCHAR(20),
+            payment_id VARCHAR(255),
+            pay_address VARCHAR(500),
+            deliverable TEXT,
+            dispute_reason TEXT,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )""",
+        "CREATE INDEX IF NOT EXISTS ix_partnership_deals_buyer ON partnership_deals (buyer_user_id)",
+        "CREATE INDEX IF NOT EXISTS ix_partnership_deals_seller ON partnership_deals (seller_user_id)",
+        "CREATE INDEX IF NOT EXISTS ix_partnership_deals_listing ON partnership_deals (listing_id)",
+        "CREATE INDEX IF NOT EXISTS ix_partnership_deals_status ON partnership_deals (status)",
+        # ── deal_messages table ──────────────────────────────────────────────────
+        """CREATE TABLE IF NOT EXISTS deal_messages (
+            id SERIAL PRIMARY KEY,
+            deal_id INTEGER NOT NULL REFERENCES partnership_deals(id) ON DELETE CASCADE,
+            sender_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            body TEXT NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )""",
+        "CREATE INDEX IF NOT EXISTS ix_deal_messages_deal ON deal_messages (deal_id)",
+        "CREATE INDEX IF NOT EXISTS ix_deal_messages_created ON deal_messages (created_at)",
+    ]
+    try:
+        with db.engine.connect() as conn:
+            for sql in stmts:
+                try:
+                    conn.execute(text(sql))
+                    conn.commit()
+                except Exception as exc:
+                    _mig_log.warning("marketplace migration stmt failed: %s", exc)
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+    except Exception as exc:
+        _mig_log.warning("marketplace migrations failed: %s", exc)
 
 
 def _backfill_group_defaults():
