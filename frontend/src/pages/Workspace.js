@@ -17,7 +17,7 @@ const SECTIONS = [
     label: 'Reminders',
     desc: 'Bot detects "remind me to follow up" and "let\'s discuss Friday" — creates reminders and DMs you at the right time.',
     path: '/workspace/reminders',
-    available: false,
+    available: true,
     color: '#7C3AED',
   },
   {

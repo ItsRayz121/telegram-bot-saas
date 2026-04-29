@@ -1588,6 +1588,86 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as exc:
             _log.debug("Auto-response check failed: %s", exc)
 
+    # Message buffering for AI Daily Digest (opt-in per group)
+    if text and not text.startswith("/") and flask_app:
+        try:
+            with flask_app.app_context():
+                from .models import TelegramGroup, MessageBuffer, db as _db
+                _tg_buf = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
+                if _tg_buf and (_tg_buf.settings or {}).get("assistant", {}).get("ai_digest_enabled"):
+                    sender = message.from_user
+                    sender_name = None
+                    if sender:
+                        sender_name = sender.first_name or sender.username or str(sender.id)
+                    _db.session.add(MessageBuffer(
+                        telegram_group_id=group_id,
+                        sender_user_id=str(sender.id) if sender else "unknown",
+                        sender_name=sender_name,
+                        message_text=text[:2000],
+                    ))
+                    _db.session.commit()
+        except Exception:
+            pass
+
+    # Reminder auto-detection: "remind me to X in Y / tomorrow / on Friday"
+    if text and not text.startswith("/") and flask_app:
+        _REMIND_PATTERNS = [
+            r"remind me to (.+?) in (\d+)\s*(hour|hr|h|minute|min|m|day|d)s?",
+            r"remind me to (.+?) tomorrow",
+            r"remind me about (.+?) in (\d+)\s*(hour|hr|h|minute|min|m|day|d)s?",
+            r"remind me about (.+?) tomorrow",
+        ]
+        _detected_reminder = None
+        _detected_delta = None
+        text_lower = text.lower()
+        for pat in _REMIND_PATTERNS:
+            m = re.search(pat, text_lower)
+            if m:
+                groups = m.groups()
+                subject = groups[0].strip()
+                if "tomorrow" in pat:
+                    _detected_delta = timedelta(hours=24)
+                else:
+                    count, unit = int(groups[1]), groups[2]
+                    if unit in ("day", "d"):
+                        _detected_delta = timedelta(days=count)
+                    elif unit in ("hour", "hr", "h"):
+                        _detected_delta = timedelta(hours=count)
+                    else:
+                        _detected_delta = timedelta(minutes=count)
+                _detected_reminder = subject
+                break
+
+        if _detected_reminder and _detected_delta and _detected_delta.total_seconds() >= 60:
+            try:
+                with flask_app.app_context():
+                    from .models import db, TelegramGroup, User as DBUser, WorkspaceReminder
+                    _tg_r = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
+                    _owner_r = DBUser.query.get(_tg_r.owner_user_id) if _tg_r and _tg_r.owner_user_id else None
+                    if not _owner_r:
+                        _sender_r = message.from_user
+                        if _sender_r:
+                            _owner_r = DBUser.query.filter_by(telegram_user_id=str(_sender_r.id)).first()
+                    if _owner_r:
+                        _remind_at_r = datetime.utcnow() + _detected_delta
+                        db.session.add(WorkspaceReminder(
+                            owner_user_id=_owner_r.id,
+                            telegram_group_id=group_id,
+                            original_message=text[:500],
+                            reminder_text=_detected_reminder[:500],
+                            remind_at=_remind_at_r,
+                        ))
+                        db.session.commit()
+                        try:
+                            await message.reply_text(
+                                f"📝 Reminder saved! I'll DM you about: _{_detected_reminder}_",
+                                parse_mode=ParseMode.MARKDOWN,
+                            )
+                        except Exception:
+                            pass
+            except Exception as exc:
+                _log.debug("Auto-reminder detection failed: %s", exc)
+
     # AutoMod — runs on every non-command group message
     if not text.startswith("/"):
         am_cfg = {}
@@ -3438,6 +3518,109 @@ async def cmd_ask(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ─── /invitelink — Create a Telegram invite link ──────────────────────────────
 
+async def cmd_remind(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /remind <time> <text>
+    time: 30m | 2h | 1d | tomorrow
+    Example: /remind 2h Follow up with Alice about the proposal
+    """
+    chat = update.effective_chat
+    message = update.message
+    flask_app = context.bot_data.get("flask_app")
+    if not message or not flask_app:
+        return
+
+    user = message.from_user
+    if not user:
+        return
+
+    args = (message.text or "").split(None, 2)  # ['/remind', <time>, <text>]
+    if len(args) < 3:
+        await message.reply_text(
+            "Usage: `/remind <time> <text>`\n"
+            "Time examples: `30m`, `2h`, `1d`, `tomorrow`\n"
+            "Example: `/remind 2h Follow up with Alice`",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
+    time_str = args[1].lower()
+    reminder_text = args[2].strip()
+
+    # Parse time offset
+    delta = None
+    if time_str == "tomorrow":
+        delta = timedelta(hours=24)
+    elif time_str.endswith("m"):
+        try:
+            delta = timedelta(minutes=int(time_str[:-1]))
+        except ValueError:
+            pass
+    elif time_str.endswith("h"):
+        try:
+            delta = timedelta(hours=int(time_str[:-1]))
+        except ValueError:
+            pass
+    elif time_str.endswith("d"):
+        try:
+            delta = timedelta(days=int(time_str[:-1]))
+        except ValueError:
+            pass
+
+    if delta is None or delta.total_seconds() < 60:
+        await message.reply_text("Invalid time. Use `30m`, `2h`, `1d`, or `tomorrow`.", parse_mode=ParseMode.MARKDOWN)
+        return
+
+    if delta.total_seconds() > 30 * 86400:
+        await message.reply_text("Maximum reminder time is 30 days.")
+        return
+
+    remind_at = datetime.utcnow() + delta
+
+    try:
+        with flask_app.app_context():
+            from .models import db, TelegramGroup, User as DBUser
+            group_id = str(chat.id) if chat and chat.type != "private" else None
+
+            # Find the group owner (must be linked)
+            owner = None
+            if group_id:
+                tg = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
+                if tg and tg.owner_user_id:
+                    owner = DBUser.query.get(tg.owner_user_id)
+
+            # Fallback: find user by telegram_user_id
+            if not owner:
+                owner = DBUser.query.filter_by(telegram_user_id=str(user.id)).first()
+
+            if not owner:
+                await message.reply_text("⚠️ Reminders only work for linked accounts. Connect your Telegram at telegizer.xyz/settings")
+                return
+
+            from .models import WorkspaceReminder
+            reminder = WorkspaceReminder(
+                owner_user_id=owner.id,
+                telegram_group_id=group_id,
+                original_message=message.text,
+                reminder_text=reminder_text[:500],
+                remind_at=remind_at,
+            )
+            db.session.add(reminder)
+            db.session.commit()
+
+        time_label = (
+            "tomorrow" if time_str == "tomorrow"
+            else f"in {time_str}"
+        )
+        await message.reply_text(
+            f"⏰ Got it! I'll remind you {time_label}:\n_{reminder_text}_",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+    except Exception as exc:
+        _log.warning("cmd_remind failed: %s", exc)
+        await message.reply_text("Sorry, couldn't save the reminder. Try again.")
+
+
 async def cmd_invitelink(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Generate a Telegram invite link for this group (admins only)."""
     if not _is_group_chat(update):
@@ -3696,6 +3879,7 @@ class OfficialBotRunner:
         a.add_handler(CommandHandler("mywallet",       cmd_wallet))
         a.add_handler(CommandHandler("ask",            cmd_ask))
         a.add_handler(CommandHandler("invitelink",     cmd_invitelink))
+        a.add_handler(CommandHandler("remind",         cmd_remind))
         a.add_handler(CallbackQueryHandler(callback_handler))
         # Bot's own membership changes (added/removed from groups)
         a.add_handler(ChatMemberHandler(on_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))
@@ -3843,6 +4027,16 @@ async def _send_official_digest(bot, tg, days: int = 7):
                 lines.append(f"{medals[i]} {name} — Lv.{m.level} ({m.xp} XP)")
 
         lines.append(f"\n_Generated {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC_")
+
+        # AI summary — only if admin enabled it and has an API key configured
+        try:
+            if (tg.settings or {}).get("assistant", {}).get("ai_digest_enabled"):
+                from .assistant.digest_ai import get_group_ai_summary
+                ai_summary = get_group_ai_summary(group_id)
+                if ai_summary:
+                    lines.append(f"\n🤖 *AI Summary*\n{ai_summary}")
+        except Exception as ai_exc:
+            _log.debug("AI digest summary failed for group %s: %s", group_id, ai_exc)
 
         await bot.send_message(
             chat_id=chat_id,

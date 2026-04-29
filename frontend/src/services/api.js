@@ -21,21 +21,88 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Auto-store refresh_token whenever the backend sends one
+const _storeTokens = (response) => {
+  if (response.data?.refresh_token) {
+    localStorage.setItem('refresh_token', response.data.refresh_token);
+  }
+  if (response.data?.token) {
+    localStorage.setItem('token', response.data.token);
+  }
+  return response;
+};
+
+let _isRefreshing = false;
+let _failedQueue = [];
+
+const _processQueue = (error, token = null) => {
+  _failedQueue.forEach((p) => (error ? p.reject(error) : p.resolve(token)));
+  _failedQueue = [];
+};
+
+const _clearSession = () => {
+  localStorage.removeItem('token');
+  localStorage.removeItem('refresh_token');
+  localStorage.removeItem('user');
+  window.location.href = '/login';
+};
+
 api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.href = '/login';
-    }
+  _storeTokens,
+  async (error) => {
+    const original = error.config;
+
     // Hard redirect if backend rejects due to unverified email
-    if (
-      error.response?.status === 403 &&
-      error.response?.data?.code === 'EMAIL_NOT_VERIFIED'
-    ) {
+    if (error.response?.status === 403 && error.response?.data?.code === 'EMAIL_NOT_VERIFIED') {
       window.location.href = '/verify-email';
+      return Promise.reject(error);
     }
+
+    // On 401, try to refresh — but not for auth endpoints themselves
+    const isAuthEndpoint = original.url?.includes('/api/auth/');
+    if (error.response?.status === 401 && !original._retry && !isAuthEndpoint) {
+      const refreshToken = localStorage.getItem('refresh_token');
+      if (!refreshToken) {
+        _clearSession();
+        return Promise.reject(error);
+      }
+
+      if (_isRefreshing) {
+        return new Promise((resolve, reject) => {
+          _failedQueue.push({ resolve, reject });
+        }).then((token) => {
+          original.headers.Authorization = `Bearer ${token}`;
+          return api(original);
+        });
+      }
+
+      original._retry = true;
+      _isRefreshing = true;
+
+      try {
+        const resp = await axios.post(
+          `${BASE_URL}/api/auth/refresh`,
+          {},
+          { headers: { Authorization: `Bearer ${refreshToken}` } }
+        );
+        const newToken = resp.data.token;
+        localStorage.setItem('token', newToken);
+        _processQueue(null, newToken);
+        original.headers.Authorization = `Bearer ${newToken}`;
+        return api(original);
+      } catch (refreshErr) {
+        _processQueue(refreshErr, null);
+        _clearSession();
+        return Promise.reject(refreshErr);
+      } finally {
+        _isRefreshing = false;
+      }
+    }
+
+    if (error.response?.status === 401 && isAuthEndpoint) {
+      _clearSession();
+    }
+
     return Promise.reject(error);
   }
 );
@@ -43,6 +110,7 @@ api.interceptors.response.use(
 export const auth = {
   register: (data) => api.post('/api/auth/register', data),
   login: (data) => api.post('/api/auth/login', data),
+  refresh: () => api.post('/api/auth/refresh'),
   getMe: () => api.get('/api/auth/me'),
   logout: () => api.post('/api/auth/logout'),
   changePassword: (data) => api.post('/api/auth/change-password', data),
@@ -440,6 +508,10 @@ export const workspace = {
   updateSmartLink: (id, data) => api.put(`/api/workspace/smart-links/${id}`, data),
   deleteSmartLink: (id) => api.delete(`/api/workspace/smart-links/${id}`),
   toggleSmartLink: (id) => api.post(`/api/workspace/smart-links/${id}/toggle`),
+  // Reminders
+  listReminders: (params) => api.get('/api/workspace/reminders', { params }),
+  createReminder: (data) => api.post('/api/workspace/reminders', data),
+  deleteReminder: (id) => api.delete(`/api/workspace/reminders/${id}`),
 };
 
 export default api;

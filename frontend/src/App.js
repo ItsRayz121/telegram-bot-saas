@@ -41,6 +41,7 @@ import AdminPanel from './pages/AdminPanel';
 import Channels from './pages/Channels';
 import Workspace from './pages/Workspace';
 import WorkspaceSmartLinks from './pages/WorkspaceSmartLinks';
+import WorkspaceReminders from './pages/WorkspaceReminders';
 import Directory from './pages/Directory';
 
 // Initialize Sentry if DSN is configured
@@ -187,7 +188,7 @@ export default function App() {
             {/* ── Workspace ─────────────────────────────────────────────────── */}
             <Route path="/workspace"               element={<AppRoute><Workspace /></AppRoute>} />
             <Route path="/workspace/smart-links"   element={<AppRoute><WorkspaceSmartLinks /></AppRoute>} />
-            <Route path="/workspace/reminders"     element={<AppRoute><Workspace /></AppRoute>} />
+            <Route path="/workspace/reminders"     element={<AppRoute><WorkspaceReminders /></AppRoute>} />
             <Route path="/workspace/forwarding"    element={<AppRoute><Workspace /></AppRoute>} />
             <Route path="/workspace/automations"   element={<AppRoute><Workspace /></AppRoute>} />
 

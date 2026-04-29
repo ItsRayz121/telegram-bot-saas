@@ -308,6 +308,7 @@ def create_app():
         _run_phase5_migrations()
         _run_phase6_migrations()
         _run_smart_links_migration()
+        _run_workspace_migrations()
         _backfill_group_defaults()
 
     # Start bots in a background thread after a short delay so Gunicorn can
@@ -640,6 +641,49 @@ def _run_smart_links_migration():
                         pass
     except Exception as exc:
         _mig_log.warning("smart_links migrations failed: %s", exc)
+
+
+def _run_workspace_migrations():
+    """Create workspace_reminders and message_buffers tables."""
+    _mig_log = logging.getLogger("migrations")
+    stmts = [
+        """CREATE TABLE IF NOT EXISTS workspace_reminders (
+            id SERIAL PRIMARY KEY,
+            owner_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            telegram_group_id VARCHAR(255),
+            original_message TEXT,
+            reminder_text VARCHAR(500) NOT NULL,
+            remind_at TIMESTAMP NOT NULL,
+            is_delivered BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )""",
+        "CREATE INDEX IF NOT EXISTS ix_workspace_reminders_owner ON workspace_reminders (owner_user_id)",
+        "CREATE INDEX IF NOT EXISTS ix_workspace_reminders_remind_at ON workspace_reminders (remind_at) WHERE is_delivered = FALSE",
+        """CREATE TABLE IF NOT EXISTS message_buffers (
+            id SERIAL PRIMARY KEY,
+            telegram_group_id VARCHAR(255) NOT NULL,
+            sender_user_id VARCHAR(255) NOT NULL,
+            sender_name VARCHAR(255),
+            message_text TEXT NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )""",
+        "CREATE INDEX IF NOT EXISTS ix_message_buffers_group ON message_buffers (telegram_group_id)",
+        "CREATE INDEX IF NOT EXISTS ix_message_buffers_created ON message_buffers (created_at)",
+    ]
+    try:
+        with db.engine.connect() as conn:
+            for sql in stmts:
+                try:
+                    conn.execute(text(sql))
+                    conn.commit()
+                except Exception as exc:
+                    _mig_log.warning("workspace migration stmt failed: %s", exc)
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+    except Exception as exc:
+        _mig_log.warning("workspace migrations failed: %s", exc)
 
 
 def _backfill_group_defaults():
@@ -1194,6 +1238,73 @@ def _run_bot_event_cleanup(retention_days=90):
             pass
 
 
+def _deliver_reminders(app):
+    """Send due workspace reminders as Telegram DMs to group owners."""
+    import asyncio as _asyncio
+    from .models import WorkspaceReminder, User, TelegramBotStarted
+    from .official_bot import _runner
+
+    bot = None
+    loop = None
+    if _runner and _runner.application:
+        bot = _runner.application.bot
+        loop = _runner.loop
+    if not bot or not loop or not loop.is_running():
+        return
+
+    now = datetime.utcnow()
+    with app.app_context():
+        due = WorkspaceReminder.query.filter(
+            WorkspaceReminder.remind_at <= now,
+            WorkspaceReminder.is_delivered == False,
+        ).all()
+        for reminder in due:
+            user = User.query.get(reminder.owner_user_id)
+            if not user or not user.telegram_user_id:
+                reminder.is_delivered = True
+                continue
+            if not TelegramBotStarted.has_started(user.telegram_user_id):
+                reminder.is_delivered = True
+                continue
+            try:
+                text = f"⏰ *Reminder*\n\n{reminder.reminder_text}"
+                if reminder.telegram_group_id:
+                    text += f"\n\n_From group {reminder.telegram_group_id}_"
+                fut = _asyncio.run_coroutine_threadsafe(
+                    bot.send_message(
+                        chat_id=int(user.telegram_user_id),
+                        text=text,
+                        parse_mode="Markdown",
+                    ),
+                    loop,
+                )
+                fut.result(timeout=10)
+                reminder.is_delivered = True
+            except Exception as exc:
+                _scheduler_log.debug("Reminder delivery failed for user %s: %s", user.id, exc)
+                reminder.is_delivered = True  # don't retry forever
+        try:
+            from .models import db
+            db.session.commit()
+        except Exception:
+            pass
+
+
+def _cleanup_message_buffers(app):
+    """Delete MessageBuffer rows older than 48 hours."""
+    from .models import MessageBuffer
+    cutoff = datetime.utcnow() - timedelta(hours=48)
+    try:
+        with app.app_context():
+            from .models import db
+            deleted = MessageBuffer.query.filter(MessageBuffer.created_at < cutoff).delete(synchronize_session=False)
+            db.session.commit()
+            if deleted:
+                _scheduler_log.debug("MessageBuffer cleanup: deleted %d rows", deleted)
+    except Exception as exc:
+        _scheduler_log.debug("MessageBuffer cleanup failed: %s", exc)
+
+
 def _scheduler_loop(app):
     import time
     _last_expiry_check = [0]
@@ -1201,6 +1312,7 @@ def _scheduler_loop(app):
     _last_watchdog = [0]
     _last_official_digest = [0]
     _last_event_cleanup = [0]
+    _last_buffer_cleanup = [0]
     time.sleep(15)  # Wait for bots to fully start
     while True:
         try:
@@ -1246,6 +1358,18 @@ def _scheduler_loop(app):
                     _run_official_group_digests(app)
                 except Exception as od_exc:
                     _scheduler_log.error("Official digest error: %s", od_exc)
+            # Workspace reminder delivery: every 60s (already in loop)
+            try:
+                _deliver_reminders(app)
+            except Exception as rem_exc:
+                _scheduler_log.debug("Reminder delivery error: %s", rem_exc)
+            # Message buffer cleanup: every 6 hours
+            if now_ts - _last_buffer_cleanup[0] > 21600:
+                _last_buffer_cleanup[0] = now_ts
+                try:
+                    _cleanup_message_buffers(app)
+                except Exception as buf_exc:
+                    _scheduler_log.debug("Buffer cleanup error: %s", buf_exc)
         except Exception as exc:
             _scheduler_log.error(f"Scheduler loop error: {exc}")
         time.sleep(60)

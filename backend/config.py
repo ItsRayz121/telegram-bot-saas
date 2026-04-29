@@ -41,11 +41,13 @@ class Config:
         )
     ENCRYPTION_KEY = _enc_key
 
-    # Access tokens expire after 7 days. Reduces compromise window vs 30-day default.
-    # Logout uses a Redis jti blocklist; see routes/auth.py /logout endpoint.
-    JWT_ACCESS_TOKEN_EXPIRES = timedelta(days=7)
+    # Access tokens expire after 1 day; refresh tokens last 30 days.
+    # On 401, the frontend auto-refreshes using the refresh token.
+    # Logout revokes both via the Redis jti blocklist.
+    JWT_ACCESS_TOKEN_EXPIRES = timedelta(days=1)
+    JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
     JWT_BLACKLIST_ENABLED = True
-    JWT_BLACKLIST_TOKEN_CHECKS = ["access"]
+    JWT_BLACKLIST_TOKEN_CHECKS = ["access", "refresh"]
 
     raw_db_url = os.environ.get("DATABASE_URL", "sqlite:///telegram_saas.db")
     if raw_db_url.startswith("postgres://"):

@@ -5,7 +5,8 @@ import threading
 from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import (
-    create_access_token, jwt_required, get_jwt_identity, get_jwt
+    create_access_token, create_refresh_token,
+    jwt_required, get_jwt_identity, get_jwt,
 )
 
 from ..models import db, User, PasswordResetToken, Referral, RevokedToken, SuspiciousActivity
@@ -298,7 +299,8 @@ def register():
         pass
 
     token = create_access_token(identity=str(user.id))
-    return jsonify({"token": token, "user": user.to_dict()}), 201
+    refresh_token = create_refresh_token(identity=str(user.id))
+    return jsonify({"token": token, "refresh_token": refresh_token, "user": user.to_dict()}), 201
 
 
 # ── Login ──────────────────────────────────────────────────────────────────────
@@ -384,9 +386,10 @@ def login():
             db.session.rollback()
 
     token = create_access_token(identity=str(user.id))
+    refresh_token = create_refresh_token(identity=str(user.id))
     user_data = user.to_dict()
     user_data["is_admin"] = user.email in Config.ADMIN_EMAILS
-    return jsonify({"token": token, "user": user_data}), 200
+    return jsonify({"token": token, "refresh_token": refresh_token, "user": user_data}), 200
 
 
 # ── 2FA login completion (submit code after receives requires_2fa) ─────────────
@@ -426,9 +429,10 @@ def verify_totp_login():
         db.session.commit()
 
     token = create_access_token(identity=str(user.id))
+    refresh_token = create_refresh_token(identity=str(user.id))
     user_data = user.to_dict()
     user_data["is_admin"] = user.email in Config.ADMIN_EMAILS
-    return jsonify({"token": token, "user": user_data}), 200
+    return jsonify({"token": token, "refresh_token": refresh_token, "user": user_data}), 200
 
 
 def _verify_totp(user: User, code: str) -> bool:
@@ -749,6 +753,19 @@ def delete_account():
     db.session.delete(user)
     db.session.commit()
     return jsonify({"message": "Account deleted successfully"}), 200
+
+
+@auth_bp.route("/refresh", methods=["POST"])
+@jwt_required(refresh=True)
+@rate_limit(requests_per_minute=20)
+def refresh_access_token():
+    """Issue a new access token using a valid refresh token."""
+    user_id = get_jwt_identity()
+    user = User.query.get(int(user_id))
+    if not user or user.is_banned:
+        return jsonify({"error": "User not found"}), 404
+    new_token = create_access_token(identity=str(user_id))
+    return jsonify({"token": new_token}), 200
 
 
 @auth_bp.route("/logout", methods=["POST"])

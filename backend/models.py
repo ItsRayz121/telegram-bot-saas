@@ -1302,6 +1302,54 @@ class OfficialWebhookIntegration(db.Model):
         }
 
 
+class WorkspaceReminder(db.Model):
+    """Follow-up reminders created manually or auto-detected by the bot."""
+    __tablename__ = "workspace_reminders"
+
+    id = db.Column(db.Integer, primary_key=True)
+    owner_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    telegram_group_id = db.Column(db.String(255), nullable=True)  # source group; None for manual
+    original_message = db.Column(db.Text, nullable=True)          # text that triggered detection
+    reminder_text = db.Column(db.String(500), nullable=False)
+    remind_at = db.Column(db.DateTime, nullable=False, index=True)
+    is_delivered = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "owner_user_id": self.owner_user_id,
+            "telegram_group_id": self.telegram_group_id,
+            "original_message": self.original_message,
+            "reminder_text": self.reminder_text,
+            "remind_at": self.remind_at.isoformat(),
+            "is_delivered": self.is_delivered,
+            "created_at": self.created_at.isoformat(),
+        }
+
+
+class MessageBuffer(db.Model):
+    """Stores recent group messages for AI Daily Digest summarization.
+    Auto-expired after 48 hours via scheduler cleanup."""
+    __tablename__ = "message_buffers"
+
+    id = db.Column(db.Integer, primary_key=True)
+    telegram_group_id = db.Column(db.String(255), nullable=False, index=True)
+    sender_user_id = db.Column(db.String(255), nullable=False)
+    sender_name = db.Column(db.String(255), nullable=True)
+    message_text = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "telegram_group_id": self.telegram_group_id,
+            "sender_name": self.sender_name,
+            "message_text": self.message_text,
+            "created_at": self.created_at.isoformat(),
+        }
+
+
 class OfficialReportedMessage(db.Model):
     """User reports (/report command) for official-bot groups."""
     __tablename__ = "official_reported_messages"

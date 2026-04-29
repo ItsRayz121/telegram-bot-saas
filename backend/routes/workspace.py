@@ -2,11 +2,12 @@
 Workspace API — user-scoped features that span all groups.
 
 Smart Links  POST/GET/PUT/DELETE /api/workspace/smart-links
+Reminders    POST/GET/DELETE      /api/workspace/reminders
 """
 from datetime import datetime
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from ..models import db, User, AutoResponse, TelegramGroup
+from ..models import db, User, AutoResponse, TelegramGroup, WorkspaceReminder
 from ..middleware.rate_limit import rate_limit
 
 workspace_bp = Blueprint("workspace", __name__, url_prefix="/api/workspace")
@@ -185,3 +186,66 @@ def toggle_smart_link(link_id):
     ar.is_enabled = not ar.is_enabled
     db.session.commit()
     return jsonify({"smart_link": ar.to_dict()})
+
+
+# ── Reminders ──────────────────────────────────────────────────────────────────
+
+@workspace_bp.route("/reminders", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def list_reminders():
+    user = _current_user()
+    include_delivered = request.args.get("delivered", "false").lower() == "true"
+    q = WorkspaceReminder.query.filter_by(owner_user_id=user.id)
+    if not include_delivered:
+        q = q.filter_by(is_delivered=False)
+    reminders = q.order_by(WorkspaceReminder.remind_at.asc()).all()
+    return jsonify({"reminders": [r.to_dict() for r in reminders]})
+
+
+@workspace_bp.route("/reminders", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def create_reminder():
+    user = _current_user()
+    data = request.get_json() or {}
+
+    reminder_text = (data.get("reminder_text") or "").strip()
+    remind_at_raw = data.get("remind_at")
+    telegram_group_id = data.get("telegram_group_id") or None
+
+    if not reminder_text:
+        return jsonify({"error": "reminder_text is required"}), 400
+    if not remind_at_raw:
+        return jsonify({"error": "remind_at is required (ISO datetime)"}), 400
+
+    try:
+        remind_at = datetime.fromisoformat(str(remind_at_raw).replace("Z", "+00:00").replace("+00:00", ""))
+    except ValueError:
+        return jsonify({"error": "remind_at must be a valid ISO datetime"}), 400
+
+    if remind_at <= datetime.utcnow():
+        return jsonify({"error": "remind_at must be in the future"}), 400
+
+    reminder = WorkspaceReminder(
+        owner_user_id=user.id,
+        reminder_text=reminder_text[:500],
+        remind_at=remind_at,
+        telegram_group_id=telegram_group_id,
+    )
+    db.session.add(reminder)
+    db.session.commit()
+    return jsonify({"reminder": reminder.to_dict()}), 201
+
+
+@workspace_bp.route("/reminders/<int:reminder_id>", methods=["DELETE"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def delete_reminder(reminder_id):
+    user = _current_user()
+    reminder = WorkspaceReminder.query.get_or_404(reminder_id)
+    if reminder.owner_user_id != user.id:
+        return jsonify({"error": "Not found"}), 404
+    db.session.delete(reminder)
+    db.session.commit()
+    return jsonify({"deleted": True})
