@@ -2,16 +2,16 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Box, List, ListItem, ListItemButton, ListItemIcon, ListItemText,
-  Typography, Avatar, Chip, Divider, Tooltip, Badge, Skeleton,
-  Menu, MenuItem, IconButton,
+  Typography, Avatar, Chip, Divider, Skeleton,
+  Menu, MenuItem, IconButton, Collapse,
 } from '@mui/material';
 import {
   Home, Groups, Campaign, Bolt, Link, AccessTime, Send, AutoMode,
-  Explore, BarChart, SmartToy, CreditCard, Settings, Add, Circle, Handshake,
-  AccountCircle, Logout, AdminPanelSettings, ExpandMore,
+  Explore, BarChart, SmartToy, CreditCard, Settings, Add, Handshake,
+  AccountCircle, Logout, AdminPanelSettings, ExpandMore, ExpandLess,
 } from '@mui/icons-material';
 import TelegizerLogo from './TelegizerLogo';
-import { telegramGroups as tgApi, auth as authApi } from '../services/api';
+import { telegramGroups as tgApi, auth as authApi, channels as chApi } from '../services/api';
 
 const SIDEBAR_WIDTH = 240;
 
@@ -103,6 +103,71 @@ function NavItem({ label, path, icon: Icon, badge, badgeCount, active, onClick, 
   );
 }
 
+// ── Expandable section header (text navigates, chevron toggles) ───────────────
+
+function ExpandableHeader({ label, icon: Icon, path, active, open, onToggle, onNavigate }) {
+  return (
+    <ListItem disablePadding sx={{ display: 'block' }}>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          mx: 0.75,
+          mb: 0.15,
+          borderRadius: 1.5,
+          bgcolor: active ? 'rgba(37,99,235,0.12)' : 'transparent',
+          '&:hover': { bgcolor: active ? 'rgba(37,99,235,0.18)' : 'rgba(255,255,255,0.04)' },
+          transition: 'background 0.12s',
+        }}
+      >
+        {/* Main clickable area — navigates to section page */}
+        <ListItemButton
+          onClick={onNavigate}
+          sx={{
+            flex: 1,
+            pl: 1.5,
+            pr: 0.5,
+            py: 0.6,
+            minHeight: 34,
+            borderRadius: 1.5,
+            '&:hover': { bgcolor: 'transparent' },
+          }}
+        >
+          {Icon && (
+            <ListItemIcon sx={{ minWidth: 30, color: active ? 'primary.light' : 'text.secondary' }}>
+              <Icon sx={{ fontSize: 17 }} />
+            </ListItemIcon>
+          )}
+          <ListItemText
+            primary={label}
+            primaryTypographyProps={{
+              fontSize: '0.82rem',
+              fontWeight: active ? 600 : 400,
+              noWrap: true,
+              color: active ? 'primary.light' : 'text.secondary',
+            }}
+          />
+        </ListItemButton>
+
+        {/* Chevron — only toggles, does not navigate */}
+        <IconButton
+          size="small"
+          onClick={(e) => { e.stopPropagation(); onToggle(); }}
+          sx={{
+            mr: 0.5,
+            width: 22,
+            height: 22,
+            color: 'text.disabled',
+            '&:hover': { color: 'text.secondary', bgcolor: 'rgba(255,255,255,0.06)' },
+          }}
+        >
+          {open ? <ExpandLess sx={{ fontSize: 15 }} /> : <ExpandMore sx={{ fontSize: 15 }} />}
+        </IconButton>
+      </Box>
+    </ListItem>
+  );
+}
+
 // ── Sidebar content ───────────────────────────────────────────────────────────
 
 export default function Sidebar({ onClose }) {
@@ -111,6 +176,8 @@ export default function Sidebar({ onClose }) {
 
   const [groups, setGroups] = useState([]);
   const [groupsLoading, setGroupsLoading] = useState(true);
+  const [channels, setChannels] = useState([]);
+  const [channelsLoading, setChannelsLoading] = useState(true);
   const [user, setUser] = useState(null);
   const [anchorEl, setAnchorEl] = useState(null);
   const [showAllGroups, setShowAllGroups] = useState(false);
@@ -120,6 +187,22 @@ export default function Sidebar({ onClose }) {
       exact ? pathname === path : pathname === path || pathname.startsWith(path + '/'),
     [pathname]
   );
+
+  // Derive initial open states from current URL so deep-linking opens the right section
+  const groupActive = isActive('/groups');
+  const channelActive = isActive('/channels');
+
+  const [groupsOpen, setGroupsOpen] = useState(groupActive);
+  const [channelsOpen, setChannelsOpen] = useState(channelActive);
+
+  // Keep sections open when navigating within them
+  useEffect(() => {
+    if (isActive('/groups')) setGroupsOpen(true);
+  }, [pathname, isActive]);
+
+  useEffect(() => {
+    if (isActive('/channels')) setChannelsOpen(true);
+  }, [pathname, isActive]);
 
   // ── Load user and groups ───────────────────────────────────────────────────
 
@@ -140,6 +223,12 @@ export default function Sidebar({ onClose }) {
     }).catch(() => {}).finally(() => setGroupsLoading(false));
   }, []);
 
+  useEffect(() => {
+    chApi.list().then(r => {
+      setChannels(r.data.channels || []);
+    }).catch(() => {}).finally(() => setChannelsLoading(false));
+  }, []);
+
   // ── Derived state ─────────────────────────────────────────────────────────
 
   const plan = user?.subscription_tier || 'free';
@@ -149,6 +238,7 @@ export default function Sidebar({ onClose }) {
   const isAdmin = user?.is_admin;
   const visibleGroups = showAllGroups ? groups : groups.slice(0, 8);
   const hasMoreGroups = groups.length > 8;
+  const hasChannels = channels.length > 0;
 
   const handleLogout = () => {
     authApi.logout?.().catch(() => {});
@@ -242,105 +332,203 @@ export default function Sidebar({ onClose }) {
       {/* ── Nav list ── */}
       <List dense disablePadding sx={{ flex: 1, py: 0.5 }}>
 
-        {/* Overview */}
+        {/* Dashboard */}
         <NavItem label="Dashboard" path="/dashboard" icon={Home} active={isActive('/dashboard', true)} onClick={() => nav('/dashboard')} />
 
-        {/* Communities */}
+        {/* ── COMMUNITIES ── */}
         <SectionLabel label="Communities" />
 
-        {/* Groups */}
-        <NavItem
+        {/* Groups — expandable */}
+        <ExpandableHeader
           label="Groups"
-          path="/groups"
           icon={Groups}
-          active={isActive('/groups') && !groups.some(g => isActive(`/groups/${g.id}`))}
-          onClick={() => nav('/groups')}
+          path="/groups"
+          active={groupActive}
+          open={groupsOpen}
+          onToggle={() => setGroupsOpen(o => !o)}
+          onNavigate={() => nav('/groups')}
         />
 
-        {/* Inline group list */}
-        {groupsLoading ? (
-          [1, 2].map(i => (
-            <ListItem key={i} sx={{ pl: 4, py: 0.3 }}>
-              <Skeleton width={140} height={14} />
-            </ListItem>
-          ))
-        ) : (
-          visibleGroups.map(group => {
-            const gPath = `/groups/${group.id}`;
-            const gActive = isActive(gPath);
-            return (
-              <ListItem key={group.id} disablePadding>
-                <ListItemButton
-                  onClick={() => nav(gPath)}
-                  sx={{
-                    pl: 3.5, pr: 1.5, py: 0.4, mx: 0.75, mb: 0.1, borderRadius: 1.5,
-                    bgcolor: gActive ? 'rgba(37,99,235,0.15)' : 'transparent',
-                    '&:hover': { bgcolor: 'rgba(255,255,255,0.05)' },
-                  }}
-                >
-                  <ListItemText
-                    primary={group.title || group.name}
-                    primaryTypographyProps={{
-                      fontSize: '0.78rem',
-                      fontWeight: gActive ? 600 : 400,
-                      noWrap: true,
-                      color: gActive ? 'primary.light' : 'text.secondary',
-                    }}
-                  />
-                  <StatusDot status={group.bot_status} permissions={group.bot_permissions} />
-                </ListItemButton>
+        <Collapse in={groupsOpen} timeout={160} unmountOnExit>
+          {groupsLoading ? (
+            [1, 2].map(i => (
+              <ListItem key={i} sx={{ pl: 4, py: 0.3 }}>
+                <Skeleton width={140} height={14} />
               </ListItem>
-            );
-          })
-        )}
+            ))
+          ) : (
+            visibleGroups.map(group => {
+              const gPath = `/groups/${group.id}`;
+              const gActive = isActive(gPath);
+              return (
+                <ListItem key={group.id} disablePadding>
+                  <ListItemButton
+                    onClick={() => nav(gPath)}
+                    sx={{
+                      pl: 3.5, pr: 1.5, py: 0.4, mx: 0.75, mb: 0.1, borderRadius: 1.5,
+                      bgcolor: gActive ? 'rgba(37,99,235,0.15)' : 'transparent',
+                      '&:hover': { bgcolor: 'rgba(255,255,255,0.05)' },
+                    }}
+                  >
+                    <ListItemText
+                      primary={group.title || group.name}
+                      primaryTypographyProps={{
+                        fontSize: '0.78rem',
+                        fontWeight: gActive ? 600 : 400,
+                        noWrap: true,
+                        color: gActive ? 'primary.light' : 'text.secondary',
+                      }}
+                    />
+                    <StatusDot status={group.bot_status} permissions={group.bot_permissions} />
+                  </ListItemButton>
+                </ListItem>
+              );
+            })
+          )}
 
-        {hasMoreGroups && !showAllGroups && (
+          {hasMoreGroups && !showAllGroups && (
+            <ListItem disablePadding>
+              <ListItemButton
+                onClick={() => setShowAllGroups(true)}
+                sx={{ pl: 3.5, py: 0.3, mx: 0.75, borderRadius: 1.5, '&:hover': { bgcolor: 'rgba(255,255,255,0.04)' } }}
+              >
+                <ListItemText
+                  primary={`+${groups.length - 8} more`}
+                  primaryTypographyProps={{ fontSize: '0.73rem', color: 'text.disabled' }}
+                />
+              </ListItemButton>
+            </ListItem>
+          )}
+
+          {/* + Add Group */}
           <ListItem disablePadding>
             <ListItemButton
-              onClick={() => setShowAllGroups(true)}
-              sx={{ pl: 3.5, py: 0.3, mx: 0.75, borderRadius: 1.5, '&:hover': { bgcolor: 'rgba(255,255,255,0.04)' } }}
+              onClick={() => nav('/groups')}
+              sx={{ pl: 3.5, py: 0.4, mx: 0.75, mb: 0.25, borderRadius: 1.5, '&:hover': { bgcolor: 'rgba(255,255,255,0.04)' } }}
             >
+              <ListItemIcon sx={{ minWidth: 22 }}>
+                <Add sx={{ fontSize: 14, color: 'text.disabled' }} />
+              </ListItemIcon>
               <ListItemText
-                primary={`+${groups.length - 8} more`}
-                primaryTypographyProps={{ fontSize: '0.73rem', color: 'text.disabled' }}
+                primary="Add Group"
+                primaryTypographyProps={{ fontSize: '0.75rem', color: 'text.disabled' }}
               />
+            </ListItemButton>
+          </ListItem>
+        </Collapse>
+
+        {/* Channels — expandable if channels exist, flat with add-icon if not */}
+        {hasChannels ? (
+          <>
+            <ExpandableHeader
+              label="Channels"
+              icon={Campaign}
+              path="/channels"
+              active={channelActive}
+              open={channelsOpen}
+              onToggle={() => setChannelsOpen(o => !o)}
+              onNavigate={() => nav('/channels')}
+            />
+
+            <Collapse in={channelsOpen} timeout={160} unmountOnExit>
+              {channelsLoading ? (
+                [1].map(i => (
+                  <ListItem key={i} sx={{ pl: 4, py: 0.3 }}>
+                    <Skeleton width={140} height={14} />
+                  </ListItem>
+                ))
+              ) : (
+                channels.map(channel => {
+                  const cPath = `/channels/${channel.id}`;
+                  const cActive = isActive(cPath);
+                  return (
+                    <ListItem key={channel.id} disablePadding>
+                      <ListItemButton
+                        onClick={() => nav(cPath)}
+                        sx={{
+                          pl: 3.5, pr: 1.5, py: 0.4, mx: 0.75, mb: 0.1, borderRadius: 1.5,
+                          bgcolor: cActive ? 'rgba(37,99,235,0.15)' : 'transparent',
+                          '&:hover': { bgcolor: 'rgba(255,255,255,0.05)' },
+                        }}
+                      >
+                        <ListItemText
+                          primary={channel.title || channel.name}
+                          primaryTypographyProps={{
+                            fontSize: '0.78rem',
+                            fontWeight: cActive ? 600 : 400,
+                            noWrap: true,
+                            color: cActive ? 'primary.light' : 'text.secondary',
+                          }}
+                        />
+                      </ListItemButton>
+                    </ListItem>
+                  );
+                })
+              )}
+
+              {/* + Add Channel */}
+              <ListItem disablePadding>
+                <ListItemButton
+                  onClick={() => nav('/channels')}
+                  sx={{ pl: 3.5, py: 0.4, mx: 0.75, mb: 0.25, borderRadius: 1.5, '&:hover': { bgcolor: 'rgba(255,255,255,0.04)' } }}
+                >
+                  <ListItemIcon sx={{ minWidth: 22 }}>
+                    <Add sx={{ fontSize: 14, color: 'text.disabled' }} />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary="Add Channel"
+                    primaryTypographyProps={{ fontSize: '0.75rem', color: 'text.disabled' }}
+                  />
+                </ListItemButton>
+              </ListItem>
+            </Collapse>
+          </>
+        ) : (
+          // No channels yet — flat item with add icon on the right
+          <ListItem disablePadding sx={{ display: 'block' }}>
+            <ListItemButton
+              onClick={() => nav('/channels')}
+              sx={{
+                pl: 1.5, pr: 0.5, py: 0.6, mx: 0.75, mb: 0.15, borderRadius: 1.5, minHeight: 34,
+                bgcolor: channelActive ? 'rgba(37,99,235,0.12)' : 'transparent',
+                color: channelActive ? 'primary.light' : 'text.secondary',
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.05)', color: 'text.primary' },
+                transition: 'background 0.12s, color 0.12s',
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 30, color: 'inherit' }}>
+                <Campaign sx={{ fontSize: 17 }} />
+              </ListItemIcon>
+              <ListItemText
+                primary="Channels"
+                primaryTypographyProps={{ fontSize: '0.82rem', fontWeight: channelActive ? 600 : 400, noWrap: true }}
+              />
+              <IconButton
+                size="small"
+                onClick={(e) => { e.stopPropagation(); nav('/channels'); }}
+                sx={{ width: 20, height: 20, mr: 0.25, color: 'text.disabled', '&:hover': { color: 'text.secondary' } }}
+              >
+                <Add sx={{ fontSize: 14 }} />
+              </IconButton>
             </ListItemButton>
           </ListItem>
         )}
 
-        {/* Add Group shortcut */}
-        <ListItem disablePadding>
-          <ListItemButton
-            onClick={() => nav('/groups')}
-            sx={{ pl: 3.5, py: 0.4, mx: 0.75, mb: 0.5, borderRadius: 1.5, '&:hover': { bgcolor: 'rgba(255,255,255,0.04)' } }}
-          >
-            <ListItemIcon sx={{ minWidth: 22 }}>
-              <Add sx={{ fontSize: 14, color: 'text.disabled' }} />
-            </ListItemIcon>
-            <ListItemText
-              primary="Add Group"
-              primaryTypographyProps={{ fontSize: '0.75rem', color: 'text.disabled' }}
-            />
-          </ListItemButton>
-        </ListItem>
-
-        <NavItem label="Channels" path="/channels" icon={Campaign} active={isActive('/channels')} onClick={() => nav('/channels')} />
-
-        {/* Workspace */}
+        {/* ── WORKSPACE ── */}
         <SectionLabel label="Workspace" />
-        <NavItem label="Overview"    path="/workspace"             icon={Bolt}     active={isActive('/workspace', true)}              onClick={() => nav('/workspace')} />
-        <NavItem label="Smart Links" path="/workspace/smart-links" icon={Link}     active={isActive('/workspace/smart-links')}        onClick={() => nav('/workspace/smart-links')} indent />
-        <NavItem label="Reminders"   path="/workspace/reminders"   icon={AccessTime} active={isActive('/workspace/reminders')}       onClick={() => nav('/workspace/reminders')} indent />
-        <NavItem label="Forwarding"  path="/workspace/forwarding"  icon={Send}     active={isActive('/workspace/forwarding')}        onClick={() => nav('/workspace/forwarding')} indent />
-        <NavItem label="Automations" path="/workspace/automations" icon={AutoMode} active={isActive('/workspace/automations')}       onClick={() => nav('/workspace/automations')} indent />
+        <NavItem label="Overview"    path="/workspace"             icon={Bolt}       active={isActive('/workspace', true)}          onClick={() => nav('/workspace')} />
+        <NavItem label="Smart Links" path="/workspace/smart-links" icon={Link}       active={isActive('/workspace/smart-links')}    onClick={() => nav('/workspace/smart-links')} indent />
+        <NavItem label="Reminders"   path="/workspace/reminders"   icon={AccessTime} active={isActive('/workspace/reminders')}     onClick={() => nav('/workspace/reminders')} indent />
+        <NavItem label="Forwarding"  path="/workspace/forwarding"  icon={Send}       active={isActive('/workspace/forwarding')}    onClick={() => nav('/workspace/forwarding')} indent />
+        <NavItem label="Automations" path="/workspace/automations" icon={AutoMode}   active={isActive('/workspace/automations')}   onClick={() => nav('/workspace/automations')} indent />
 
-        {/* Grow */}
+        {/* ── GROW ── */}
         <SectionLabel label="Grow" />
-        <NavItem label="Directory"    path="/directory"    icon={Explore}    active={isActive('/directory')}    onClick={() => nav('/directory')} />
-        <NavItem label="Marketplace" path="/marketplace"  icon={Handshake}  active={isActive('/marketplace')}  onClick={() => nav('/marketplace')} />
-        <NavItem label="Analytics"   path="/analytics"    icon={BarChart}   active={isActive('/analytics')}    onClick={() => nav('/analytics')} />
+        <NavItem label="Directory"   path="/directory"   icon={Explore}   active={isActive('/directory')}   onClick={() => nav('/directory')} />
+        <NavItem label="Marketplace" path="/marketplace" icon={Handshake} active={isActive('/marketplace')} onClick={() => nav('/marketplace')} />
+        <NavItem label="Analytics"   path="/analytics"   icon={BarChart}  active={isActive('/analytics')}   onClick={() => nav('/analytics')} />
 
-        {/* Account */}
+        {/* ── ACCOUNT ── */}
         <SectionLabel label="Account" />
         <NavItem label="Custom Bots" path="/custom-bots" icon={SmartToy}  active={isActive('/custom-bots')} onClick={() => nav('/custom-bots')} />
         <NavItem label="Billing"     path="/billing"     icon={CreditCard} active={isActive('/billing')}    onClick={() => nav('/billing')} />
@@ -348,7 +536,7 @@ export default function Sidebar({ onClose }) {
 
       </List>
 
-      {/* ── Plan banner at bottom ── */}
+      {/* ── Plan upgrade banner ── */}
       {plan === 'free' && (
         <Box
           sx={{
