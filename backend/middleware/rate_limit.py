@@ -105,19 +105,13 @@ def rate_limit(requests_per_minute=60, per="ip"):
             r = _get_redis()
             if r is None:
                 if _is_production():
-                    # In production Redis is mandatory for reliable rate limiting.
-                    # An in-process counter would be reset on every deploy and is
-                    # not shared across Gunicorn workers — it provides no real protection.
-                    # Return 503 so the problem is visible and alertable.
-                    logger.error(
-                        "[RATE_LIMIT] Redis is unavailable in production — returning 503. "
-                        "Check REDIS_URL in Railway environment."
+                    # Redis is down — log once, then degrade gracefully.
+                    # In-process counter doesn't span workers, but it's far better than
+                    # returning 503 for every request and breaking the entire app.
+                    logger.warning(
+                        "[RATE_LIMIT] Redis unavailable in production — falling back to "
+                        "in-process rate limiter. Set REDIS_URL in Railway to restore full protection."
                     )
-                    return jsonify({
-                        "error": "Rate limiting service is temporarily unavailable. Please try again shortly.",
-                        "code": "RATE_LIMIT_UNAVAILABLE",
-                    }), 503
-                # Development: fall back to in-process counter
                 if not _fallback_check(rl_key, requests_per_minute):
                     return jsonify({"error": "Rate limit exceeded. Please try again later."}), 429
                 return f(*args, **kwargs)
@@ -137,13 +131,7 @@ def rate_limit(requests_per_minute=60, per="ip"):
                 if count > requests_per_minute:
                     return jsonify({"error": "Rate limit exceeded. Please try again later."}), 429
             except Exception as e:
-                logger.error("[RATE_LIMIT] Redis pipeline error: %s", e)
-                if _is_production():
-                    return jsonify({
-                        "error": "Rate limiting service is temporarily unavailable. Please try again shortly.",
-                        "code": "RATE_LIMIT_UNAVAILABLE",
-                    }), 503
-                # Development fallback
+                logger.warning("[RATE_LIMIT] Redis pipeline error, falling back: %s", e)
                 if not _fallback_check(rl_key, requests_per_minute):
                     return jsonify({"error": "Rate limit exceeded. Please try again later."}), 429
 
