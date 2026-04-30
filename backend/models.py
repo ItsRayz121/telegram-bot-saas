@@ -1879,6 +1879,34 @@ class DealMessage(db.Model):
         }
 
 
+class Note(db.Model):
+    """User-created or AI-extracted notes from group messages."""
+    __tablename__ = "notes"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    group_id = db.Column(db.String(255), nullable=True, index=True)   # telegram_group_id; null = personal
+    group_title = db.Column(db.String(200), nullable=True)
+    content = db.Column(db.Text, nullable=False)
+    source = db.Column(db.String(20), default="manual", nullable=False)  # manual | ai | bot
+    tags = db.Column(db.JSON, default=list, nullable=False)              # ['decision','task','link','question']
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "group_id": self.group_id,
+            "group_title": self.group_title,
+            "content": self.content,
+            "source": self.source,
+            "tags": self.tags or [],
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
 class DigestLog(db.Model):
     """Record of each AI digest that was generated and sent."""
     __tablename__ = "digest_logs"

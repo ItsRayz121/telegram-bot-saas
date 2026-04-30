@@ -538,6 +538,14 @@ export const digests = {
   getHistory: (groupId) => api.get(`/api/telegram-groups/${groupId}/digest/history`),
 };
 
+export const notes = {
+  list: (params) => api.get('/api/notes', { params }),
+  create: (data) => api.post('/api/notes', data),
+  update: (id, data) => api.put(`/api/notes/${id}`, data),
+  delete: (id) => api.delete(`/api/notes/${id}`),
+  generate: (groupId) => api.post(`/api/notes/generate/${groupId}`),
+};
+
 export const automations = {
   listWorkflows: () => api.get('/api/automations/workflows'),
   createWorkflow: (data) => api.post('/api/automations/workflows', data),

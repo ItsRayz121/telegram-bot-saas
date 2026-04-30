@@ -719,16 +719,50 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ─── Private message handler (bot token submission) ───────────────────────────
 
 async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles free-text in private chat when user is submitting a bot token."""
+    """Handles free-text in private chat: note capture shortcut + bot token submission."""
     if update.effective_chat.type != ChatType.PRIVATE:
-        return
-    if not context.user_data.get("awaiting_bot_token"):
         return
 
     flask_app = context.bot_data.get("flask_app")
     user = update.effective_user
     message = update.message
     frontend = _frontend()
+
+    # ── Note capture shortcut ─────────────────────────────────────────────────
+    _raw = (message.text or "").strip()
+    _low = _raw.lower()
+    _NOTE_STARTS = ("note this", "save this", "remember this", "note:", "save:")
+    if any(_low == s or _low.startswith(s) for s in _NOTE_STARTS):
+        content = None
+        if message.reply_to_message and message.reply_to_message.text:
+            content = message.reply_to_message.text
+        else:
+            for _pfx in ("note:", "save:"):
+                if _low.startswith(_pfx):
+                    content = _raw[len(_pfx):].strip()
+                    break
+        if not content:
+            content = _raw
+        if content and flask_app:
+            try:
+                with flask_app.app_context():
+                    from .models import User as _User, Note as _Note, db as _db
+                    _u = _User.query.filter_by(telegram_user_id=str(user.id)).first()
+                    if _u:
+                        _db.session.add(_Note(user_id=_u.id, content=content[:5000], source="bot", tags=[]))
+                        _db.session.commit()
+                        await message.reply_text("✓ Saved to your notes.")
+                    else:
+                        await message.reply_text(
+                            "⚠️ Connect your Telegram account on telegizer.xyz first to save notes."
+                        )
+            except Exception as _exc:
+                _log.warning("Note capture failed: %s", _exc)
+        return
+
+    # ── Bot token submission ──────────────────────────────────────────────────
+    if not context.user_data.get("awaiting_bot_token"):
+        return
 
     # Rate limit: 3 attempts per 10 minutes
     now = datetime.utcnow()
