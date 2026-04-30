@@ -1971,3 +1971,87 @@ class PendingReminderState(db.Model):
             "remind_at": self.remind_at.isoformat() if self.remind_at else None,
             "expires_at": self.expires_at.isoformat(),
         }
+
+
+class Task(db.Model):
+    """User task — created manually, by AI extraction, or via bot DM."""
+    __tablename__ = "tasks"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    title = db.Column(db.String(500), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    status = db.Column(db.String(20), default="todo", nullable=False)   # todo|doing|done
+    priority = db.Column(db.String(10), default="medium", nullable=False)  # low|medium|high
+    source = db.Column(db.String(20), default="manual", nullable=False)   # manual|ai|bot
+    due_at = db.Column(db.DateTime, nullable=True)
+    group_id = db.Column(db.String(255), nullable=True, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "title": self.title,
+            "description": self.description,
+            "status": self.status,
+            "priority": self.priority,
+            "source": self.source,
+            "due_at": self.due_at.isoformat() if self.due_at else None,
+            "group_id": self.group_id,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+        }
+
+
+class AutoReplyLog(db.Model):
+    """Log of auto-reply (SmartLink) triggers fired in groups."""
+    __tablename__ = "auto_reply_logs"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    auto_response_id = db.Column(db.Integer, db.ForeignKey("auto_responses.id", ondelete="SET NULL"), nullable=True)
+    telegram_group_id = db.Column(db.String(255), nullable=True, index=True)
+    trigger_text = db.Column(db.String(500), nullable=True)
+    message_text = db.Column(db.String(1000), nullable=True)  # incoming message excerpt
+    triggered_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "auto_response_id": self.auto_response_id,
+            "telegram_group_id": self.telegram_group_id,
+            "trigger_text": self.trigger_text,
+            "message_text": self.message_text,
+            "triggered_at": self.triggered_at.isoformat(),
+        }
+
+
+class WorkspaceKnowledgeDocument(db.Model):
+    """Workspace-scoped knowledge document (not tied to a specific group/bot)."""
+    __tablename__ = "workspace_knowledge_documents"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    filename = db.Column(db.String(255), nullable=False)
+    file_type = db.Column(db.String(20), nullable=False)    # pdf|txt|md|docx
+    content_text = db.Column(db.Text, nullable=False)
+    chunks = db.Column(db.JSON, nullable=True)               # text chunks for search
+    tags = db.Column(db.JSON, nullable=True)                 # user-assigned tags
+    description = db.Column(db.String(500), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "filename": self.filename,
+            "file_type": self.file_type,
+            "chunk_count": len(self.chunks) if self.chunks else 0,
+            "tags": self.tags or [],
+            "description": self.description,
+            "content_preview": self.content_text[:300] if self.content_text else "",
+            "created_at": self.created_at.isoformat(),
+        }

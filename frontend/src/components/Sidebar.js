@@ -9,7 +9,7 @@ import {
   Home, Groups, Campaign, AccessTime, Send, AutoMode,
   Explore, BarChart, SmartToy, CreditCard, Settings, Add, Handshake,
   AccountCircle, Logout, AdminPanelSettings, ExpandMore, ExpandLess,
-  Psychology, Reply, EditNote, Summarize, Tune,
+  Psychology, Reply, EditNote, Summarize, Tune, CheckBox, LibraryBooks,
 } from '@mui/icons-material';
 import TelegizerLogo from './TelegizerLogo';
 import { telegramGroups as tgApi, auth as authApi, channels as chApi } from '../services/api';
@@ -520,20 +520,26 @@ export default function Sidebar({ onClose }) {
         <NavItem label="Hub"          path="/workspace"                  icon={Psychology} active={isActive('/workspace', true)}             onClick={() => nav('/workspace')} />
         <NavItem label="Auto-Replies" path="/workspace/smart-links"      icon={Reply}      active={isActive('/workspace/smart-links')}       onClick={() => nav('/workspace/smart-links')} indent />
         <NavItem label="Reminders"    path="/workspace/reminders"        icon={AccessTime} active={isActive('/workspace/reminders')}         onClick={() => nav('/workspace/reminders')} indent />
+        <NavItem label="Tasks"        path="/workspace/tasks"            icon={CheckBox}   active={isActive('/workspace/tasks')}             onClick={() => nav('/workspace/tasks')} indent />
         <NavItem label="Notes"        path="/workspace/notes"            icon={EditNote}   active={isActive('/workspace/notes')}             onClick={() => nav('/workspace/notes')} indent />
+        <NavItem label="Knowledge"    path="/workspace/knowledge"        icon={LibraryBooks} active={isActive('/workspace/knowledge')}       onClick={() => nav('/workspace/knowledge')} indent />
         <NavItem label="Digests"      path="/workspace/digests"          icon={Summarize}  active={isActive('/workspace/digests')}           onClick={() => nav('/workspace/digests')} indent />
         <NavItem label="AI Settings"  path="/workspace/ai-settings"      icon={Tune}       active={isActive('/workspace/ai-settings')}       onClick={() => nav('/workspace/ai-settings')} indent />
 
         {/* ── AUTOMATION ── */}
         <SectionLabel label="Automation" />
-        <NavItem label="Forwarding"   path="/workspace/forwarding"       icon={Send}       active={isActive('/workspace/forwarding')}        onClick={() => nav('/workspace/forwarding')} />
-        <NavItem label="Workflows"    path="/workspace/automations"      icon={AutoMode}   active={isActive('/workspace/automations')}       onClick={() => nav('/workspace/automations')} />
+        <NavItem label="Forwarding"    path="/workspace/forwarding"       icon={Send}     active={isActive('/workspace/forwarding')}        onClick={() => nav('/workspace/forwarding')} />
+        <NavItem label="Workflows"     path="/workspace/automations"      icon={AutoMode} active={isActive('/workspace/automations')}       onClick={() => nav('/workspace/automations')} />
+        <NavItem label="Flow Builder"  path="/workflow-builder"           icon={AutoMode} active={isActive('/workflow-builder')}            onClick={() => nav('/workflow-builder')} />
+
+        {/* ── ANALYTICS ── */}
+        <SectionLabel label="Analytics" />
+        <NavItem label="Analytics Hub" path="/analytics" icon={BarChart} active={isActive('/analytics')} onClick={() => nav('/analytics')} />
 
         {/* ── GROW ── */}
         <SectionLabel label="Grow" />
         <NavItem label="Directory"   path="/directory"   icon={Explore}   active={isActive('/directory')}   onClick={() => nav('/directory')} />
         <NavItem label="Marketplace" path="/marketplace" icon={Handshake} active={isActive('/marketplace')} onClick={() => nav('/marketplace')} />
-        <NavItem label="Analytics"   path="/analytics"   icon={BarChart}  active={isActive('/analytics')}   onClick={() => nav('/analytics')} />
 
         {/* ── ACCOUNT ── */}
         <SectionLabel label="Account" />

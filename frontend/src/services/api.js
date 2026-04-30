@@ -550,6 +550,25 @@ export const assistant = {
   hubSummary: () => api.get('/api/assistant/hub-summary'),
   getDmMessages: (lastId = 0) => api.get(`/api/assistant/dm-messages?last_id=${lastId}`),
   sendDm: (text) => api.post('/api/assistant/send-dm', { text }),
+  ask: (question) => api.post('/api/assistant/ask', { question }),
+  getAutoReplyLogs: () => api.get('/api/assistant/autoreply-logs'),
+};
+
+export const tasks = {
+  list: (params) => api.get('/api/tasks', { params }),
+  create: (data) => api.post('/api/tasks', data),
+  update: (id, data) => api.put(`/api/tasks/${id}`, data),
+  delete: (id) => api.delete(`/api/tasks/${id}`),
+  extract: (groupId) => api.post(`/api/tasks/extract/${groupId}`),
+};
+
+export const knowledge = {
+  list: () => api.get('/api/workspace/knowledge'),
+  upload: (formData) => api.post('/api/workspace/knowledge', formData),
+  uploadText: (data) => api.post('/api/workspace/knowledge', data),
+  delete: (id) => api.delete(`/api/workspace/knowledge/${id}`),
+  search: (q) => api.get('/api/workspace/knowledge/search', { params: { q } }),
+  ask: (id, question) => api.post(`/api/workspace/knowledge/${id}/ask`, { question }),
 };
 
 export const automations = {

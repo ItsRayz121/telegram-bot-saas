@@ -2,8 +2,10 @@
 Assistant Hub API — aggregated summary for the Hub dashboard + Live Chat DMs.
 
 GET  /api/assistant/hub-summary
-GET  /api/assistant/dm-messages?last_id=X   (polling, returns new BotDMMessages)
-POST /api/assistant/send-dm                 (sends a message from web UI via bot)
+GET  /api/assistant/dm-messages?last_id=X
+POST /api/assistant/send-dm
+POST /api/assistant/ask                     cross-group intelligence query
+GET  /api/assistant/autoreply-logs          auto-reply execution history
 """
 from datetime import datetime, timedelta
 import logging
@@ -11,7 +13,11 @@ import logging
 from flask import jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
-from ..models import db, User, TelegramGroup, WorkspaceReminder, Note, DigestLog, AutomationExecution, AutomationWorkflow, BotDMMessage
+from ..models import (
+    db, User, TelegramGroup, WorkspaceReminder, Note, DigestLog,
+    AutomationExecution, AutomationWorkflow, BotDMMessage,
+    AutoReplyLog, MessageBuffer,
+)
 from ..middleware.rate_limit import rate_limit
 from ..config import Config
 from flask import Blueprint
@@ -184,3 +190,115 @@ def send_dm():
     db.session.add(msg)
     db.session.commit()
     return jsonify({"message": msg.to_dict()}), 201
+
+
+@assistant_bp.route("/ask", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=10)
+def ask_groups():
+    """Cross-group intelligence: answer a question using all connected groups' message buffers."""
+    user = _current_user()
+    body = request.get_json(silent=True) or {}
+    question = (body.get("question") or "").strip()[:500]
+    if not question:
+        return jsonify({"error": "question required"}), 400
+
+    # Gather recent messages across all user's groups
+    groups = TelegramGroup.query.filter_by(owner_user_id=user.id, is_disabled=False).all()
+    if not groups:
+        return jsonify({"error": "No groups connected"}), 400
+
+    cutoff = datetime.utcnow() - timedelta(hours=72)
+    group_ids = [g.telegram_group_id for g in groups]
+    msgs = (
+        MessageBuffer.query
+        .filter(MessageBuffer.telegram_group_id.in_(group_ids))
+        .filter(MessageBuffer.created_at >= cutoff)
+        .order_by(MessageBuffer.created_at.desc())
+        .limit(300)
+        .all()
+    )
+    if not msgs:
+        return jsonify({"error": "No recent messages found in your groups"}), 400
+
+    # Build context with group labels
+    group_title_map = {g.telegram_group_id: g.title for g in groups}
+    context_lines = []
+    for m in reversed(msgs):
+        grp = group_title_map.get(m.telegram_group_id, m.telegram_group_id)
+        context_lines.append(f"[{grp}] {m.sender_name or 'User'}: {m.content}")
+    context = "\n".join(context_lines)[:14000]
+
+    from ..assistant.ai_key_resolver import get_workspace_ai_key
+    key_info = get_workspace_ai_key(user)
+    if not key_info.get("api_key"):
+        return jsonify({"error": "No AI key configured — set one in AI Settings"}), 400
+
+    prompt = (
+        "You are an AI assistant that answers questions about a user's Telegram group conversations.\n"
+        "Use only the provided conversation context to answer. If the answer is not in the context, say so.\n\n"
+        f"Context (last 72h from {len(groups)} group(s)):\n{context}\n\n"
+        f"Question: {question}\n\nAnswer:"
+    )
+
+    try:
+        answer = _call_ai_text(key_info, prompt)
+    except Exception as exc:
+        _log.warning("Cross-group ask failed: %s", exc)
+        return jsonify({"error": "AI request failed"}), 502
+
+    return jsonify({
+        "answer": answer,
+        "groups_searched": len(groups),
+        "messages_scanned": len(msgs),
+    })
+
+
+@assistant_bp.route("/autoreply-logs", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def autoreply_logs():
+    """Return recent auto-reply execution logs for the user."""
+    user = _current_user()
+    logs = (
+        AutoReplyLog.query
+        .filter_by(user_id=user.id)
+        .order_by(AutoReplyLog.triggered_at.desc())
+        .limit(100)
+        .all()
+    )
+    return jsonify({"logs": [l.to_dict() for l in logs]})
+
+
+def _call_ai_text(key_info: dict, prompt: str) -> str:
+    import requests as _r
+    provider = key_info.get("provider", "gemini")
+    api_key = key_info["api_key"]
+    model = key_info.get("model", "gemini-2.0-flash")
+    if provider == "gemini":
+        resp = _r.post(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}",
+            json={"contents": [{"parts": [{"text": prompt}]}]},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        return resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+    if provider == "anthropic":
+        resp = _r.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={"x-api-key": api_key, "anthropic-version": "2023-06-01"},
+            json={"model": model or "claude-haiku-4-5-20251001", "max_tokens": 1024,
+                  "messages": [{"role": "user", "content": prompt}]},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        return resp.json()["content"][0]["text"].strip()
+    base = key_info.get("base_url", "https://api.openai.com/v1")
+    resp = _r.post(
+        f"{base.rstrip('/')}/chat/completions",
+        headers={"Authorization": f"Bearer {api_key}"},
+        json={"model": model or "gpt-4o-mini", "messages": [{"role": "user", "content": prompt}]},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    return resp.json()["choices"][0]["message"]["content"].strip()

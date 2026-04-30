@@ -54,10 +54,14 @@ import Marketplace from './pages/Marketplace';
 import MarketplaceDeal from './pages/MarketplaceDeal';
 import JoinReferral from './pages/JoinReferral';
 
-// Pages — lazy (Sprint 1 placeholders, built out in later sprints)
+// Pages — lazy loaded
 const AssistantNotes = React.lazy(() => import('./pages/AssistantNotes'));
 const AssistantDigests = React.lazy(() => import('./pages/AssistantDigests'));
 const AssistantAISettings = React.lazy(() => import('./pages/AssistantAISettings'));
+const AssistantTasks = React.lazy(() => import('./pages/AssistantTasks'));
+const AssistantKnowledge = React.lazy(() => import('./pages/AssistantKnowledge'));
+const AnalyticsHub = React.lazy(() => import('./pages/AnalyticsHub'));
+const WorkflowBuilder = React.lazy(() => import('./pages/WorkflowBuilder'));
 
 // Initialize Sentry if DSN is configured
 const SENTRY_DSN = process.env.REACT_APP_SENTRY_DSN;
@@ -212,6 +216,9 @@ export default function App() {
             <Route path="/workspace/notes"         element={<AppRoute><React.Suspense fallback={null}><AssistantNotes /></React.Suspense></AppRoute>} />
             <Route path="/workspace/digests"       element={<AppRoute><React.Suspense fallback={null}><AssistantDigests /></React.Suspense></AppRoute>} />
             <Route path="/workspace/ai-settings"   element={<AppRoute><React.Suspense fallback={null}><AssistantAISettings /></React.Suspense></AppRoute>} />
+            <Route path="/workspace/tasks"         element={<AppRoute><React.Suspense fallback={null}><AssistantTasks /></React.Suspense></AppRoute>} />
+            <Route path="/workspace/knowledge"     element={<AppRoute><React.Suspense fallback={null}><AssistantKnowledge /></React.Suspense></AppRoute>} />
+            <Route path="/workflow-builder"        element={<AppRoute><React.Suspense fallback={null}><WorkflowBuilder /></React.Suspense></AppRoute>} />
 
             {/* ── Telegram Mini App ─────────────────────────────────────────── */}
             <Route path="/mini-app" element={<MiniAppLayout><MiniApp /></MiniAppLayout>} />
@@ -225,7 +232,7 @@ export default function App() {
             <Route path="/marketplace/deals/:did" element={<AppRoute><MarketplaceDeal /></AppRoute>} />
 
             {/* ── Analytics ─────────────────────────────────────────────────── */}
-            <Route path="/analytics"                element={<AppRoute><OfficialAnalyticsOverview /></AppRoute>} />
+            <Route path="/analytics"                element={<AppRoute><React.Suspense fallback={null}><AnalyticsHub /></React.Suspense></AppRoute>} />
             <Route path="/analytics/:id"            element={<AppRoute><Analytics /></AppRoute>} />
             <Route path="/official-analytics"       element={<Navigate to="/analytics" replace />} />
 

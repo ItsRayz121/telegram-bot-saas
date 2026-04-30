@@ -57,6 +57,10 @@ def list_notes():
         except ValueError:
             pass
 
+    search = (request.args.get("search") or "").strip().lower()
+    if search:
+        q = q.filter(Note.content.ilike(f"%{search}%"))
+
     notes = q.order_by(Note.created_at.desc()).limit(200).all()
     return jsonify({"notes": [n.to_dict() for n in notes]})
 

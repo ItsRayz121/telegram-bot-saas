@@ -7,7 +7,8 @@ import {
 import {
   Psychology, AccessTime, EditNote, Summarize, AutoMode, Reply,
   OpenInNew, ContentCopy, CheckCircle, RadioButtonUnchecked, Close,
-  ArrowForward, Chat, Send, ExpandMore, ExpandLess,
+  ArrowForward, Chat, Send, ExpandMore, ExpandLess, QuestionAnswer,
+  CalendarMonth,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { assistant } from '../services/api';
@@ -150,6 +151,22 @@ function OnboardingCard({ onboarding }) {
 
 // ── Data Cards ────────────────────────────────────────────────────────────────
 
+// Phase 3A: build a Google Calendar "Add Event" URL from a reminder
+function calendarUrl(reminder) {
+  const dt = new Date(reminder.remind_at);
+  const pad = n => String(n).padStart(2, '0');
+  const fmt = d =>
+    `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}` +
+    `T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}00Z`;
+  const end = new Date(dt.getTime() + 30 * 60000);
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: reminder.reminder_text,
+    dates: `${fmt(dt)}/${fmt(end)}`,
+  });
+  return `https://calendar.google.com/calendar/render?${params}`;
+}
+
 function RemindersCard({ reminders }) {
   const navigate = useNavigate();
   return (
@@ -170,7 +187,14 @@ function RemindersCard({ reminders }) {
         ) : (
           reminders.map(r => (
             <Box key={r.id} sx={{ mb: 1, pb: 1, borderBottom: '1px solid', borderColor: 'divider', '&:last-child': { mb: 0, pb: 0, border: 'none' } }}>
-              <Typography fontSize="0.84rem" noWrap>{r.reminder_text}</Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <Typography fontSize="0.84rem" noWrap sx={{ flex: 1 }}>{r.reminder_text}</Typography>
+                <Tooltip title="Add to Google Calendar">
+                  <IconButton size="small" component="a" href={calendarUrl(r)} target="_blank" rel="noopener noreferrer">
+                    <CalendarMonth sx={{ fontSize: 14, color: 'text.disabled' }} />
+                  </IconButton>
+                </Tooltip>
+              </Box>
               <Typography fontSize="0.72rem" color={r.is_delivered ? 'success.main' : 'text.disabled'}>
                 {upcomingTime(r.remind_at)}{r.is_delivered ? ' · Done' : ''}
               </Typography>
@@ -279,6 +303,78 @@ function ActivityCard({ activity }) {
             <Typography fontSize="0.75rem" color="text.secondary">Workflows fired</Typography>
           </Box>
         </Box>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Ask Your Community (cross-group intelligence) ─────────────────────────────
+
+function AskCard({ hasGroups }) {
+  const [open, setOpen] = useState(false);
+  const [question, setQuestion] = useState('');
+  const [answer, setAnswer] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const ask = async () => {
+    if (!question.trim()) return;
+    setLoading(true); setError(''); setAnswer(null);
+    try {
+      const { data } = await assistant.ask(question.trim());
+      setAnswer(data);
+    } catch (e) {
+      setError(e.response?.data?.error || 'AI request failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Card variant="outlined" sx={{ mt: 2 }}>
+      <CardContent sx={{ pb: open ? 1 : undefined }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
+          onClick={() => setOpen(v => !v)}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <QuestionAnswer fontSize="small" color="primary" />
+            <Typography fontWeight={600} fontSize="0.95rem">Ask Your Community</Typography>
+            {!hasGroups && <Chip label="Connect groups first" size="small" color="warning" sx={{ fontSize: '0.65rem', height: 18 }} />}
+          </Box>
+          {open ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
+        </Box>
+        <Collapse in={open}>
+          <Typography fontSize="0.82rem" color="text.secondary" mt={1.5} mb={1.5}>
+            Ask a question — AI searches the last 72h of messages across all your groups and answers.
+          </Typography>
+          {!hasGroups ? (
+            <Typography fontSize="0.84rem" color="text.secondary">Connect at least one group to use this feature.</Typography>
+          ) : (
+            <>
+              <Box sx={{ display: 'flex', gap: 1, mb: 1.5 }}>
+                <TextField
+                  size="small" fullWidth
+                  placeholder="What was decided about the product launch?"
+                  value={question}
+                  onChange={e => setQuestion(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), ask())}
+                  disabled={loading}
+                />
+                <Button variant="contained" size="small" onClick={ask} disabled={loading || !question.trim()} sx={{ minWidth: 72 }}>
+                  {loading ? <CircularProgress size={18} /> : 'Ask'}
+                </Button>
+              </Box>
+              {error && <Alert severity="error" sx={{ mb: 1 }}>{error}</Alert>}
+              {answer && (
+                <Paper variant="outlined" sx={{ p: 1.5, bgcolor: 'action.hover' }}>
+                  <Typography fontSize="0.85rem" sx={{ whiteSpace: 'pre-wrap' }}>{answer.answer}</Typography>
+                  <Typography fontSize="0.7rem" color="text.disabled" mt={0.75}>
+                    Searched {answer.groups_searched} group{answer.groups_searched !== 1 ? 's' : ''} · {answer.messages_scanned} messages
+                  </Typography>
+                </Paper>
+              )}
+            </>
+          )}
+        </Collapse>
       </CardContent>
     </Card>
   );
@@ -511,6 +607,9 @@ export default function AssistantHub() {
           <ActivityCard activity={data?.automation_activity || { auto_replies_today: 0, workflows_today: 0 }} />
         </Grid>
       </Grid>
+
+      {/* Ask Your Community */}
+      <AskCard hasGroups={(data?.active_groups || 0) > 0} />
 
       {/* Live Chat */}
       <LiveChatCard botConnected={!!data?.bot_connected} />
