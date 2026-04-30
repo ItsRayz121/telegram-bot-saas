@@ -184,18 +184,27 @@ export default function GroupSettings() {
   const [groupAdmins, setGroupAdmins] = useState([]);
   const [adminsLoading, setAdminsLoading] = useState(false);
 
+  const isMounted = React.useRef(true);
+  React.useEffect(() => {
+    isMounted.current = true;
+    return () => { isMounted.current = false; };
+  }, []);
+
   const fetchSettings = useCallback(async () => {
+    setLoading(true);
     try {
       const res = await settings.getGroupSettings(botId, groupId);
+      if (!isMounted.current) return;
       setGroupData(res.data.group);
       setSettingsData(res.data.settings);
     } catch {
+      if (!isMounted.current) return;
       toast.error('Failed to load settings');
       navigate(isOfficial ? '/my-groups' : `/bot/${botId}`);
     } finally {
-      setLoading(false);
+      if (isMounted.current) setLoading(false);
     }
-  }, [botId, groupId, navigate]);
+  }, [botId, groupId, navigate, isOfficial]);
 
   const fetchMembers = useCallback(async (page = 1) => {
     try {

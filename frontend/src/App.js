@@ -107,6 +107,13 @@ function _storedUser() {
   try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; }
 }
 
+// Forces GroupSettings remount when groupId (or botId) changes, preventing stale state/race conditions
+function KeyedGroupSettings() {
+  const params = useParams();
+  const key = params.id ? `${params.id}-${params.groupId}` : params.groupId;
+  return <GroupSettings key={key} />;
+}
+
 // Requires auth + verified email + wraps in AppLayout (sidebar)
 function AppRoute({ children }) {
   const token = localStorage.getItem('token');
@@ -176,7 +183,7 @@ export default function App() {
 
             {/* ── Groups (canonical routes) ─────────────────────────────────── */}
             <Route path="/groups"                           element={<AppRoute><MyGroups /></AppRoute>} />
-            <Route path="/groups/:groupId"                  element={<AppRoute><GroupSettings /></AppRoute>} />
+            <Route path="/groups/:groupId"                  element={<AppRoute><KeyedGroupSettings /></AppRoute>} />
             <Route path="/groups/:groupId/analytics"        element={<AppRoute><OfficialGroupAnalytics /></AppRoute>} />
             <Route path="/groups/:groupId/manage"           element={<AppRoute><GroupManagement /></AppRoute>} />
             <Route path="/groups/:groupId/crm"             element={<AppRoute><GroupCRM /></AppRoute>} />
@@ -218,7 +225,7 @@ export default function App() {
             <Route path="/custom-bots"              element={<AppRoute><MyBots /></AppRoute>} />
             <Route path="/my-bots"                  element={<Navigate to="/custom-bots" replace />} />
             <Route path="/bot/:id"                  element={<AppRoute><BotSettings /></AppRoute>} />
-            <Route path="/bot/:id/group/:groupId"            element={<AppRoute><GroupSettings /></AppRoute>} />
+            <Route path="/bot/:id/group/:groupId"            element={<AppRoute><KeyedGroupSettings /></AppRoute>} />
             <Route path="/bot/:id/group/:groupId/analytics"  element={<AppRoute><GroupAnalytics /></AppRoute>} />
 
             {/* ── Billing / Settings ─────────────────────────────────────────── */}
