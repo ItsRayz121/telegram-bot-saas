@@ -548,6 +548,8 @@ export const notes = {
 
 export const assistant = {
   hubSummary: () => api.get('/api/assistant/hub-summary'),
+  getDmMessages: (lastId = 0) => api.get(`/api/assistant/dm-messages?last_id=${lastId}`),
+  sendDm: (text) => api.post('/api/assistant/send-dm', { text }),
 };
 
 export const automations = {

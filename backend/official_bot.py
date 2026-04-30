@@ -760,6 +760,72 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 _log.warning("Note capture failed: %s", _exc)
         return
 
+    # ── Reminder intent detection ─────────────────────────────────────────────
+    _REMINDER_PATS = re.compile(
+        r"\b(remind me|set a reminder|reminder for|don.t let me forget|remind|reminder)\b",
+        re.IGNORECASE,
+    )
+    if _REMINDER_PATS.search(_raw) and flask_app:
+        try:
+            with flask_app.app_context():
+                from .models import (
+                    User as _User, BotDMMessage as _BotDM,
+                    PendingReminderState as _PRS, db as _db,
+                )
+                _u = _User.query.filter_by(telegram_user_id=str(user.id)).first()
+                if not _u:
+                    await message.reply_text(
+                        "⚠️ Connect your Telegram account on the website first."
+                    )
+                else:
+                    # Strip trigger phrase to get the subject
+                    _subject = _REMINDER_PATS.sub("", _raw).strip().strip(",. ") or _raw
+                    _expires = datetime.utcnow() + timedelta(minutes=10)
+                    # Upsert pending state (one per user)
+                    _prs = _PRS.query.filter_by(user_id=_u.id).first()
+                    if _prs:
+                        _prs.subject = _subject[:500]
+                        _prs.remind_at = None
+                        _prs.expires_at = _expires
+                    else:
+                        _prs = _PRS(user_id=_u.id, subject=_subject[:500], expires_at=_expires)
+                        _db.session.add(_prs)
+                    # Log inbound DM
+                    _db.session.add(_BotDM(user_id=_u.id, direction="in", content=_raw[:4000], intent="reminder"))
+                    _db.session.commit()
+                    # Ask when
+                    _kb = InlineKeyboardMarkup([
+                        [
+                            InlineKeyboardButton("30 min", callback_data="remind_time:30m"),
+                            InlineKeyboardButton("1 hour", callback_data="remind_time:1h"),
+                            InlineKeyboardButton("2 hours", callback_data="remind_time:2h"),
+                        ],
+                        [
+                            InlineKeyboardButton("Today 6 pm", callback_data="remind_time:today18"),
+                            InlineKeyboardButton("Tomorrow 9 am", callback_data="remind_time:tmr9"),
+                        ],
+                    ])
+                    _reply = f"⏰ Got it! When should I remind you?\n\n*{_subject[:200]}*"
+                    _sent = await message.reply_text(_reply, parse_mode=ParseMode.MARKDOWN, reply_markup=_kb)
+                    # Log outbound DM
+                    _db.session.add(_BotDM(user_id=_u.id, direction="out", content=_reply[:4000], intent="reminder"))
+                    _db.session.commit()
+        except Exception as _exc:
+            _log.warning("Reminder intent failed: %s", _exc)
+        return
+
+    # ── General DM logging (pass-through) ────────────────────────────────────
+    if flask_app and _raw:
+        try:
+            with flask_app.app_context():
+                from .models import User as _User, BotDMMessage as _BotDM, db as _db
+                _u = _User.query.filter_by(telegram_user_id=str(user.id)).first()
+                if _u:
+                    _db.session.add(_BotDM(user_id=_u.id, direction="in", content=_raw[:4000], intent="other"))
+                    _db.session.commit()
+        except Exception as _exc:
+            _log.warning("DM log failed: %s", _exc)
+
     # ── Bot token submission ──────────────────────────────────────────────────
     if not context.user_data.get("awaiting_bot_token"):
         return
@@ -926,6 +992,84 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     await query.answer()
+
+    # ── remind_time: user picked when ────────────────────────────────────────
+    if data.startswith("remind_time:"):
+        _slot = data.split(":", 1)[1]
+        if flask_app:
+            try:
+                with flask_app.app_context():
+                    from .models import User as _User, PendingReminderState as _PRS, BotDMMessage as _BotDM, db as _db
+                    _u = _User.query.filter_by(telegram_user_id=str(user.id)).first()
+                    _prs = _PRS.query.filter_by(user_id=_u.id).first() if _u else None
+                    if not _u or not _prs:
+                        await query.edit_message_text("⚠️ Session expired. Please start over.")
+                        return
+                    _now = datetime.utcnow()
+                    if _slot == "30m":
+                        _t = _now + timedelta(minutes=30)
+                    elif _slot == "1h":
+                        _t = _now + timedelta(hours=1)
+                    elif _slot == "2h":
+                        _t = _now + timedelta(hours=2)
+                    elif _slot == "today18":
+                        _t = _now.replace(hour=18, minute=0, second=0, microsecond=0)
+                        if _t <= _now:
+                            _t += timedelta(days=1)
+                    else:  # tmr9
+                        _t = (_now + timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0)
+                    _prs.remind_at = _t
+                    _db.session.commit()
+                    _kb = InlineKeyboardMarkup([
+                        [
+                            InlineKeyboardButton("Once", callback_data="remind_freq:1"),
+                            InlineKeyboardButton("2× (15 min early too)", callback_data="remind_freq:2"),
+                            InlineKeyboardButton("3× (30/15/0)", callback_data="remind_freq:3"),
+                        ],
+                    ])
+                    _msg = f"How many times should I remind you?\n\n*{_prs.subject[:200]}*\nat {_t.strftime('%H:%M UTC')}"
+                    await query.edit_message_text(_msg, parse_mode=ParseMode.MARKDOWN, reply_markup=_kb)
+                    _db.session.add(_BotDM(user_id=_u.id, direction="out", content=_msg[:4000], intent="reminder"))
+                    _db.session.commit()
+            except Exception as _exc:
+                _log.warning("remind_time callback failed: %s", _exc)
+        return
+
+    # ── remind_freq: user picked frequency → create WorkspaceReminder(s) ─────
+    if data.startswith("remind_freq:"):
+        _freq = int(data.split(":", 1)[1])
+        if flask_app:
+            try:
+                with flask_app.app_context():
+                    from .models import (
+                        User as _User, PendingReminderState as _PRS,
+                        WorkspaceReminder as _WR, BotDMMessage as _BotDM, db as _db,
+                    )
+                    _u = _User.query.filter_by(telegram_user_id=str(user.id)).first()
+                    _prs = _PRS.query.filter_by(user_id=_u.id).first() if _u else None
+                    if not _u or not _prs or not _prs.remind_at:
+                        await query.edit_message_text("⚠️ Session expired. Please start over.")
+                        return
+                    _base = _prs.remind_at
+                    _offsets = {1: [timedelta(0)], 2: [timedelta(minutes=-15), timedelta(0)], 3: [timedelta(minutes=-30), timedelta(minutes=-15), timedelta(0)]}
+                    for _off in _offsets.get(_freq, [timedelta(0)]):
+                        _fire = _base + _off
+                        if _fire > datetime.utcnow():
+                            _db.session.add(_WR(
+                                owner_user_id=_u.id,
+                                reminder_text=_prs.subject,
+                                remind_at=_fire,
+                                is_delivered=False,
+                            ))
+                    _db.session.delete(_prs)
+                    _db.session.commit()
+                    _confirm = f"✅ Reminder set for *{_base.strftime('%H:%M UTC')}*!\n\n_{_prs.subject[:200]}_"
+                    await query.edit_message_text(_confirm, parse_mode=ParseMode.MARKDOWN)
+                    _db.session.add(_BotDM(user_id=_u.id, direction="out", content=_confirm[:4000], intent="reminder"))
+                    _db.session.commit()
+            except Exception as _exc:
+                _log.warning("remind_freq callback failed: %s", _exc)
+        return
 
     # ── cancel bot token submission ───────────────────────────────────────────
     if data == "cancel_bot_token":

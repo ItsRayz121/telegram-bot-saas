@@ -1929,3 +1929,45 @@ class DigestLog(db.Model):
             "tokens_used": self.tokens_used,
             "sent_at": self.sent_at.isoformat(),
         }
+
+
+class BotDMMessage(db.Model):
+    """DM conversation between a user and the bot (for Live Chat in the web UI)."""
+    __tablename__ = "bot_dm_messages"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    direction = db.Column(db.String(3), nullable=False)  # 'in' (user→bot) | 'out' (bot→user)
+    content = db.Column(db.Text, nullable=False)
+    intent = db.Column(db.String(50), nullable=True)  # 'reminder', 'note', 'other', etc.
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "direction": self.direction,
+            "content": self.content,
+            "intent": self.intent,
+            "created_at": self.created_at.isoformat(),
+        }
+
+
+class PendingReminderState(db.Model):
+    """Transient state while bot collects reminder time/frequency from the user."""
+    __tablename__ = "pending_reminder_states"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, unique=True, index=True)
+    subject = db.Column(db.String(500), nullable=False)
+    remind_at = db.Column(db.DateTime, nullable=True)   # filled after user picks time
+    expires_at = db.Column(db.DateTime, nullable=False)  # auto-expire stale state
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "subject": self.subject,
+            "remind_at": self.remind_at.isoformat() if self.remind_at else None,
+            "expires_at": self.expires_at.isoformat(),
+        }

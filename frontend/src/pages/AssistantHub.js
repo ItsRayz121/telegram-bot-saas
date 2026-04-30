@@ -1,13 +1,13 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, Chip, CircularProgress,
   Alert, Grid, LinearProgress, Divider, List, ListItem, ListItemText,
-  IconButton, Tooltip, Checkbox,
+  IconButton, Tooltip, Checkbox, Collapse, TextField, Paper,
 } from '@mui/material';
 import {
   Psychology, AccessTime, EditNote, Summarize, AutoMode, Reply,
   OpenInNew, ContentCopy, CheckCircle, RadioButtonUnchecked, Close,
-  ArrowForward,
+  ArrowForward, Chat, Send, ExpandMore, ExpandLess,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { assistant } from '../services/api';
@@ -284,6 +284,149 @@ function ActivityCard({ activity }) {
   );
 }
 
+// ── Live Chat ─────────────────────────────────────────────────────────────────
+
+function LiveChatCard({ botConnected }) {
+  const [open, setOpen] = useState(false);
+  const [messages, setMessages] = useState([]);
+  const [draft, setDraft] = useState('');
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState('');
+  const lastIdRef = useRef(0);
+  const endRef = useRef(null);
+  const pollRef = useRef(null);
+
+  const fetchMessages = useCallback(async () => {
+    try {
+      const { data } = await assistant.getDmMessages(lastIdRef.current);
+      if (data.messages && data.messages.length > 0) {
+        lastIdRef.current = data.messages[data.messages.length - 1].id;
+        setMessages(prev => [...prev, ...data.messages]);
+      }
+    } catch {
+      // silent — keep polling
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!open) {
+      clearInterval(pollRef.current);
+      return;
+    }
+    fetchMessages();
+    pollRef.current = setInterval(fetchMessages, 3000);
+    return () => clearInterval(pollRef.current);
+  }, [open, fetchMessages]);
+
+  useEffect(() => {
+    if (open) endRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, open]);
+
+  const send = async () => {
+    if (!draft.trim()) return;
+    setSending(true);
+    setError('');
+    try {
+      const { data } = await assistant.sendDm(draft.trim());
+      setMessages(prev => [...prev, data.message]);
+      lastIdRef.current = data.message.id;
+      setDraft('');
+    } catch {
+      setError('Failed to send.');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleKey = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
+
+  return (
+    <Card variant="outlined" sx={{ mt: 3 }}>
+      <CardContent sx={{ pb: open ? 1 : undefined }}>
+        <Box
+          sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
+          onClick={() => setOpen(v => !v)}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Chat fontSize="small" color="primary" />
+            <Typography fontWeight={600} fontSize="0.95rem">Live Chat with Bot</Typography>
+            {!botConnected && (
+              <Chip label="Connect Telegram first" size="small" color="warning" sx={{ fontSize: '0.65rem', height: 18 }} />
+            )}
+          </Box>
+          {open ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
+        </Box>
+
+        <Collapse in={open}>
+          {!botConnected ? (
+            <Typography fontSize="0.84rem" color="text.secondary" mt={1.5}>
+              Link your Telegram account in Settings to use Live Chat.
+            </Typography>
+          ) : (
+            <>
+              <Paper
+                variant="outlined"
+                sx={{ height: 260, overflowY: 'auto', mt: 1.5, p: 1.5, bgcolor: 'background.default' }}
+              >
+                {messages.length === 0 ? (
+                  <Typography fontSize="0.82rem" color="text.disabled">No messages yet. Say hi to the bot!</Typography>
+                ) : (
+                  messages.map(m => (
+                    <Box
+                      key={m.id}
+                      sx={{
+                        display: 'flex',
+                        justifyContent: m.direction === 'out' ? 'flex-end' : 'flex-start',
+                        mb: 0.75,
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          maxWidth: '75%',
+                          bgcolor: m.direction === 'out' ? 'primary.main' : 'action.hover',
+                          color: m.direction === 'out' ? 'primary.contrastText' : 'text.primary',
+                          borderRadius: 2,
+                          px: 1.5,
+                          py: 0.75,
+                        }}
+                      >
+                        <Typography fontSize="0.83rem" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                          {m.content}
+                        </Typography>
+                        <Typography fontSize="0.65rem" sx={{ opacity: 0.7, mt: 0.25 }}>
+                          {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  ))
+                )}
+                <div ref={endRef} />
+              </Paper>
+              {error && <Alert severity="error" sx={{ mt: 0.5, py: 0 }}>{error}</Alert>}
+              <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                <TextField
+                  size="small"
+                  fullWidth
+                  multiline
+                  maxRows={3}
+                  placeholder="Message the bot…"
+                  value={draft}
+                  onChange={e => setDraft(e.target.value)}
+                  onKeyDown={handleKey}
+                  disabled={sending}
+                />
+                <IconButton color="primary" onClick={send} disabled={sending || !draft.trim()}>
+                  {sending ? <CircularProgress size={18} /> : <Send fontSize="small" />}
+                </IconButton>
+              </Box>
+            </>
+          )}
+        </Collapse>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Main Hub ──────────────────────────────────────────────────────────────────
 
 export default function AssistantHub() {
@@ -368,6 +511,9 @@ export default function AssistantHub() {
           <ActivityCard activity={data?.automation_activity || { auto_replies_today: 0, workflows_today: 0 }} />
         </Grid>
       </Grid>
+
+      {/* Live Chat */}
+      <LiveChatCard botConnected={!!data?.bot_connected} />
     </Box>
   );
 }
