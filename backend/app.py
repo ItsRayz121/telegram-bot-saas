@@ -1706,11 +1706,18 @@ def _cleanup_revoked_tokens():
             pass
 
 
-def _run_task_with_timeout(fn, *args, timeout=30, label="task"):
-    """Run *fn* in a worker thread; log a warning if it exceeds *timeout* seconds."""
+def _run_task_with_timeout(fn, *args, timeout=30, label="task", flask_app=None):
+    """Run *fn* in a worker thread; push an app context in the thread if flask_app is given."""
     import concurrent.futures
+
+    def _run():
+        if flask_app is not None:
+            with flask_app.app_context():
+                return fn(*args)
+        return fn(*args)
+
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        future = pool.submit(fn, *args)
+        future = pool.submit(_run)
         try:
             future.result(timeout=timeout)
         except concurrent.futures.TimeoutError:
@@ -1732,32 +1739,33 @@ def _scheduler_loop(app):
     while True:
         try:
             now_ts = time.time()
-            with app.app_context():
-                _run_task_with_timeout(_run_scheduled_messages, timeout=30, label="_run_scheduled_messages")
-                _run_task_with_timeout(_run_scheduled_polls, timeout=30, label="_run_scheduled_polls")
-                _run_task_with_timeout(_run_official_scheduled_messages, timeout=30, label="_run_official_scheduled_messages")
-                _run_task_with_timeout(_run_official_scheduled_polls, timeout=30, label="_run_official_scheduled_polls")
-                # Check subscription expiry warnings every 6 hours
-                if now_ts - _last_expiry_check[0] > 6 * 3600:
-                    _last_expiry_check[0] = now_ts
-                    _run_task_with_timeout(_run_expiry_notifications, timeout=30, label="_run_expiry_notifications")
-                # Bot health heartbeat every 5 minutes
-                if now_ts - _last_heartbeat[0] > 300:
-                    _last_heartbeat[0] = now_ts
-                    _run_task_with_timeout(bot_manager.heartbeat, app, timeout=30, label="bot_heartbeat")
-                # Bot watchdog: restart dead threads every 2 minutes
-                if now_ts - _last_watchdog[0] > 120:
-                    _last_watchdog[0] = now_ts
-                    _run_task_with_timeout(_watchdog_bots, app, timeout=30, label="_watchdog_bots")
-                # BotEvent retention: purge rows older than 90 days, once per day
-                if now_ts - _last_event_cleanup[0] > 86400:
-                    _last_event_cleanup[0] = now_ts
-                    _run_task_with_timeout(_run_bot_event_cleanup, timeout=30, label="_run_bot_event_cleanup")
-                # Revoked token TTL cleanup: once per day
-                if now_ts - _last_token_cleanup[0] > 86400:
-                    _last_token_cleanup[0] = now_ts
-                    _run_task_with_timeout(_cleanup_revoked_tokens, timeout=30, label="_cleanup_revoked_tokens")
-                    _run_task_with_timeout(_cleanup_pending_verifications, timeout=30, label="_cleanup_pending_verifications")
+            # Each task gets its own app context inside its worker thread.
+            # app.app_context() is thread-local — it does NOT propagate to ThreadPoolExecutor threads.
+            _run_task_with_timeout(_run_scheduled_messages, timeout=30, label="_run_scheduled_messages", flask_app=app)
+            _run_task_with_timeout(_run_scheduled_polls, timeout=30, label="_run_scheduled_polls", flask_app=app)
+            _run_task_with_timeout(_run_official_scheduled_messages, timeout=30, label="_run_official_scheduled_messages", flask_app=app)
+            _run_task_with_timeout(_run_official_scheduled_polls, timeout=30, label="_run_official_scheduled_polls", flask_app=app)
+            # Check subscription expiry warnings every 6 hours
+            if now_ts - _last_expiry_check[0] > 6 * 3600:
+                _last_expiry_check[0] = now_ts
+                _run_task_with_timeout(_run_expiry_notifications, timeout=30, label="_run_expiry_notifications", flask_app=app)
+            # Bot health heartbeat every 5 minutes
+            if now_ts - _last_heartbeat[0] > 300:
+                _last_heartbeat[0] = now_ts
+                _run_task_with_timeout(bot_manager.heartbeat, app, timeout=30, label="bot_heartbeat")
+            # Bot watchdog: restart dead threads every 2 minutes
+            if now_ts - _last_watchdog[0] > 120:
+                _last_watchdog[0] = now_ts
+                _run_task_with_timeout(_watchdog_bots, app, timeout=30, label="_watchdog_bots")
+            # BotEvent retention: purge rows older than 90 days, once per day
+            if now_ts - _last_event_cleanup[0] > 86400:
+                _last_event_cleanup[0] = now_ts
+                _run_task_with_timeout(_run_bot_event_cleanup, timeout=30, label="_run_bot_event_cleanup", flask_app=app)
+            # Revoked token TTL cleanup: once per day
+            if now_ts - _last_token_cleanup[0] > 86400:
+                _last_token_cleanup[0] = now_ts
+                _run_task_with_timeout(_cleanup_revoked_tokens, timeout=30, label="_cleanup_revoked_tokens", flask_app=app)
+                _run_task_with_timeout(_cleanup_pending_verifications, timeout=30, label="_cleanup_pending_verifications", flask_app=app)
             _run_task_with_timeout(run_digest_scheduler, app, timeout=30, label="run_digest_scheduler")
             # Official group digest: check every 30 minutes
             if now_ts - _last_official_digest[0] > 1800:
