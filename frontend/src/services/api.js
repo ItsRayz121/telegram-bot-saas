@@ -546,6 +546,10 @@ export const notes = {
   generate: (groupId) => api.post(`/api/notes/generate/${groupId}`),
 };
 
+export const assistant = {
+  hubSummary: () => api.get('/api/assistant/hub-summary'),
+};
+
 export const automations = {
   listWorkflows: () => api.get('/api/automations/workflows'),
   createWorkflow: (data) => api.post('/api/automations/workflows', data),

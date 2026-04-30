@@ -63,6 +63,7 @@ from .routes.directory import directory_bp
 from .routes.crm import crm_bp
 from .routes.marketplace import marketplace_bp
 from .routes.notes import notes_bp
+from .routes.assistant import assistant_bp
 from .bot_manager import BotManager
 from .official_bot import start_official_bot
 
@@ -178,6 +179,7 @@ def create_app():
     app.register_blueprint(crm_bp)
     app.register_blueprint(marketplace_bp)
     app.register_blueprint(notes_bp)
+    app.register_blueprint(assistant_bp)
 
     app.bot_manager = bot_manager
 
