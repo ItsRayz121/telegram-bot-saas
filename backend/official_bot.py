@@ -3901,22 +3901,30 @@ async def on_reaction(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def on_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Capture channel posts for analytics when bot is admin in the channel."""
-    msg = update.channel_post
+    """Capture channel posts and view-count updates for analytics.
+
+    Handles both channel_post (new post) and edited_channel_post (view/reaction updates).
+    Telegram re-sends edited_channel_post as view counts grow — without this we would
+    always store the initial view count (often 1).
+    """
+    # edited_channel_post carries updated view/reaction counts; treat identically
+    msg = update.channel_post or update.edited_channel_post
     if not msg:
         return
     flask_app = context.bot_data.get("flask_app")
     if not flask_app:
         return
     channel_tg_id = str(msg.chat.id)
+    is_edit = update.edited_channel_post is not None
     try:
         with flask_app.app_context():
             from .models import db, Channel, ChannelPost
             ch = Channel.query.filter_by(telegram_channel_id=channel_tg_id).first()
             if not ch:
+                # Channel post arrived but this channel is not tracked — ignore silently
                 return
 
-            # Determine media type
+            # Determine media type (only meaningful for new posts, but harmless to compute)
             has_media = False
             media_type = None
             if msg.photo:
@@ -3935,11 +3943,11 @@ async def on_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text = msg.text or msg.caption or ""
             preview = text[:297] + "…" if len(text) > 300 else text
 
-            # Upsert — Telegram sometimes re-delivers edits
             existing = ChannelPost.query.filter_by(
                 channel_id=ch.id, message_id=msg.message_id
             ).first()
             if existing:
+                # Always take the higher value — Telegram sends increasing counts
                 existing.views = max(existing.views, msg.views or 0)
                 existing.forwards = max(existing.forwards, msg.forward_count or 0)
                 existing.last_updated = datetime.utcnow()
@@ -3958,8 +3966,13 @@ async def on_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             ch.bot_status = "active"
             db.session.commit()
+            _log.info(
+                "[OfficialBot] channel_post %s: channel=%s msg_id=%d views=%d",
+                "updated" if existing else "captured",
+                channel_tg_id, msg.message_id, msg.views or 0,
+            )
     except Exception as exc:
-        _log.debug("[OfficialBot] channel_post capture failed: %s", exc)
+        _log.warning("[OfficialBot] channel_post capture failed: %s", exc)
 
 
 # ─── OfficialBotRunner ────────────────────────────────────────────────────────
@@ -4128,7 +4141,20 @@ class OfficialBotRunner:
             ])
         except Exception as exc:
             _log.warning("[OfficialBot] set_my_commands: %s", exc)
-        await a.updater.start_polling(drop_pending_updates=True)
+        # Explicitly list allowed_updates so Telegram always delivers channel_post
+        # and edited_channel_post regardless of any previous webhook configuration.
+        # Without this, a prior webhook with a restricted allowed_updates list
+        # would cause Telegram to silently discard channel updates.
+        await a.updater.start_polling(
+            drop_pending_updates=True,
+            allowed_updates=[
+                "message", "edited_message",
+                "channel_post", "edited_channel_post",
+                "callback_query",
+                "my_chat_member", "chat_member", "chat_join_request",
+                "message_reaction", "message_reaction_count",
+            ],
+        )
         _log.info("[OfficialBot] Long-polling active — bot is live.")
         # Keep alive in 60-second ticks so the stop_event is checked regularly.
         try:

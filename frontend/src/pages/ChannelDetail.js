@@ -3,20 +3,25 @@ import {
   Box, Typography, Card, CardContent, Button, Chip, Grid,
   CircularProgress, Alert, Avatar, IconButton, Tooltip,
   Table, TableBody, TableCell, TableHead, TableRow, TableContainer,
-  Paper, Divider, Stack,
+  Paper, Divider, Stack, ToggleButtonGroup, ToggleButton,
 } from '@mui/material';
 import {
   ArrowBack, Refresh, People, Visibility, ThumbUp,
-  Forward, Image, VideoLibrary, Poll, ArticleOutlined,
-  TrendingUp, TrendingDown, Remove, Shield, CheckCircle,
-  Warning, Error as ErrorIcon, InfoOutlined,
+  Image, VideoLibrary, Poll, ArticleOutlined,
+  TrendingUp, TrendingDown, Remove, Shield, InfoOutlined,
 } from '@mui/icons-material';
 import LinearProgress from '@mui/material/LinearProgress';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { channels as chApi } from '../services/api';
 
-// Simple bar chart using pure CSS/MUI — no charting lib needed
+const FILTER_OPTIONS = [
+  { label: '7 days', days: 7 },
+  { label: '30 days', days: 30 },
+  { label: '1 year', days: 365 },
+  { label: 'All captured', days: 0 },
+];
+
 function MiniBar({ value, max, color = 'primary.main' }) {
   const pct = max > 0 ? Math.round((value / max) * 100) : 0;
   return (
@@ -58,18 +63,18 @@ function StatCard({ label, value, sub, color = 'primary.main' }) {
   );
 }
 
-// Member growth chart (last 30 days)
 function MemberGrowthChart({ stats }) {
   if (!stats?.length) return (
     <Box sx={{ py: 4, textAlign: 'center' }}>
-      <Typography variant="body2" color="text.disabled">No daily data yet — refresh to start tracking.</Typography>
+      <Typography variant="body2" color="text.disabled">
+        No daily data yet. Hit Refresh to record today's member count.
+      </Typography>
     </Box>
   );
-
   const max = Math.max(...stats.map(s => s.member_count), 1);
   return (
     <Box>
-      {stats.slice(-14).map((s, i) => (
+      {stats.slice(-14).map(s => (
         <Box key={s.date} sx={{ mb: 0.75 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.25 }}>
             <Typography variant="caption" color="text.disabled" sx={{ minWidth: 72 }}>
@@ -83,16 +88,18 @@ function MemberGrowthChart({ stats }) {
   );
 }
 
-// Views per post chart
-function ViewsChart({ stats }) {
-  if (!stats?.length) return null;
-  const filtered = stats.filter(s => s.avg_views_per_post > 0);
-  if (!filtered.length) return (
-    <Box sx={{ py: 4, textAlign: 'center' }}>
-      <Typography variant="body2" color="text.disabled">No post data yet. Bot needs to be admin in the channel.</Typography>
-    </Box>
-  );
-
+function ViewsChart({ stats, botStatus }) {
+  const filtered = (stats || []).filter(s => s.avg_views_per_post > 0);
+  if (!filtered.length) {
+    const msg = botStatus !== 'active'
+      ? 'Add the bot as admin to start capturing post views.'
+      : 'No view data captured in this period yet. New posts will appear here automatically.';
+    return (
+      <Box sx={{ py: 4, textAlign: 'center' }}>
+        <Typography variant="body2" color="text.disabled">{msg}</Typography>
+      </Box>
+    );
+  }
   const max = Math.max(...filtered.map(s => s.avg_views_per_post), 1);
   return (
     <Box>
@@ -194,7 +201,6 @@ function TcsPanel({ channel, onComputed }) {
           </Alert>
         ) : (
           <>
-            {/* Score display */}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, mb: 3, p: 2, bgcolor: 'rgba(255,255,255,0.04)', borderRadius: 2 }}>
               <Box sx={{ textAlign: 'center', minWidth: 80 }}>
                 <Typography variant="h2" fontWeight={900} color={GRADE_MUI[grade] || 'text.primary'} lineHeight={1}>
@@ -220,11 +226,7 @@ function TcsPanel({ channel, onComputed }) {
                 )}
               </Box>
             </Box>
-
-            {/* Signal breakdown */}
             {result.breakdown?.map(s => <SignalRow key={s.label} signal={s} />)}
-
-            {/* Recommendations */}
             {result.recommendations?.length > 0 && (
               <Box sx={{ mt: 2, p: 1.5, bgcolor: 'rgba(255,255,255,0.03)', borderRadius: 1.5 }}>
                 <Typography variant="caption" fontWeight={700} color="text.secondary" display="block" mb={1}>
@@ -245,6 +247,8 @@ function TcsPanel({ channel, onComputed }) {
   );
 }
 
+// ── Main page ─────────────────────────────────────────────────────────────────
+
 export default function ChannelDetail() {
   const { cid } = useParams();
   const navigate = useNavigate();
@@ -254,21 +258,23 @@ export default function ChannelDetail() {
   const [refreshing, setRefreshing] = useState(false);
   const [postsPage, setPostsPage] = useState(1);
   const [postsTotal, setPostsTotal] = useState(0);
+  const [filterDays, setFilterDays] = useState(30);
 
   const load = useCallback(() => {
-    return chApi.get(cid).then(r => setChannel(r.data));
-  }, [cid]);
+    return chApi.get(cid, { days: filterDays }).then(r => setChannel(r.data));
+  }, [cid, filterDays]);
 
   const loadPosts = useCallback((page = 1) => {
-    return chApi.posts(cid, { page }).then(r => {
+    return chApi.posts(cid, { page, days: filterDays }).then(r => {
       setPosts(r.data.posts);
       setPostsTotal(r.data.total);
       setPostsPage(page);
     });
-  }, [cid]);
+  }, [cid, filterDays]);
 
   useEffect(() => {
-    Promise.all([load(), loadPosts()])
+    setLoading(true);
+    Promise.all([load(), loadPosts(1)])
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [load, loadPosts]);
@@ -277,14 +283,20 @@ export default function ChannelDetail() {
     setRefreshing(true);
     try {
       const res = await chApi.refresh(cid);
-      setChannel(prev => ({ ...prev, ...res.data }));
-      await loadPosts();
+      // Reload channel with current period filter to get fresh period metrics
+      await load();
+      await loadPosts(1);
       toast.success('Stats refreshed');
     } catch {
       toast.error('Refresh failed');
     } finally {
       setRefreshing(false);
     }
+  };
+
+  const handleFilterChange = (_, newVal) => {
+    if (newVal == null) return;
+    setFilterDays(newVal);
   };
 
   if (loading) return <Box sx={{ py: 8, textAlign: 'center' }}><CircularProgress /></Box>;
@@ -295,10 +307,14 @@ export default function ChannelDetail() {
   const prevMember = lastTwo[0]?.member_count;
   const curMember = channel.member_count;
 
+  const periodLabel = FILTER_OPTIONS.find(o => o.days === filterDays)?.label || '';
+  const isActive = channel.bot_status === 'active';
+
   return (
     <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: 960, mx: 'auto' }}>
+
       {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3, flexWrap: 'wrap' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2, flexWrap: 'wrap' }}>
         <IconButton onClick={() => navigate('/channels')} size="small">
           <ArrowBack />
         </IconButton>
@@ -309,8 +325,8 @@ export default function ChannelDetail() {
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
             <Typography variant="h6" fontWeight={700}>{channel.title}</Typography>
             <Chip
-              label={channel.bot_status === 'active' ? 'Live' : 'No admin access'}
-              color={channel.bot_status === 'active' ? 'success' : 'warning'}
+              label={isActive ? 'Live' : 'No admin access'}
+              color={isActive ? 'success' : 'warning'}
               size="small" sx={{ height: 20, fontSize: '0.65rem' }}
             />
           </Box>
@@ -318,7 +334,7 @@ export default function ChannelDetail() {
             <Typography variant="caption" color="text.secondary">@{channel.username}</Typography>
           )}
         </Box>
-        <Tooltip title="Refresh stats from Telegram">
+        <Tooltip title="Refresh member count and recompute averages">
           <span>
             <Button
               variant="outlined" size="small" startIcon={refreshing ? <CircularProgress size={14} /> : <Refresh />}
@@ -330,14 +346,52 @@ export default function ChannelDetail() {
         </Tooltip>
       </Box>
 
+      {/* Tracking provenance banner */}
+      <Alert
+        severity="info"
+        icon={<InfoOutlined fontSize="small" />}
+        sx={{ mb: 2, fontSize: '0.78rem', '& .MuiAlert-message': { width: '100%' } }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 0.5 }}>
+          <span>
+            Tracking started:{' '}
+            <strong>{new Date(channel.tracking_started_at || channel.created_at).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' })}</strong>
+            {' '}— Telegizer captures posts from this date onward. Historical posts before this date are not available via the Telegram Bot API.
+          </span>
+        </Box>
+      </Alert>
+
       {channel.bot_status === 'no_admin' && (
-        <Alert severity="warning" sx={{ mb: 3 }}>
-          The bot is not an admin in this channel. Add it as admin to start capturing post analytics automatically.
-          Member count will still update on manual refresh.
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          The bot is not admin in this channel. Add it as admin with "Post messages" permission to start capturing post analytics automatically.
+          Member count will still update on manual Refresh.
         </Alert>
       )}
 
-      {/* Overview stats */}
+      {/* Time filter */}
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3, flexWrap: 'wrap', gap: 1 }}>
+        <Typography variant="subtitle2" color="text.secondary">
+          Showing: <strong style={{ color: 'inherit' }}>{periodLabel}</strong>
+        </Typography>
+        <ToggleButtonGroup
+          value={filterDays}
+          exclusive
+          onChange={handleFilterChange}
+          size="small"
+        >
+          {FILTER_OPTIONS.map(opt => (
+            <ToggleButton
+              key={opt.days}
+              value={opt.days}
+              sx={{ px: 1.5, py: 0.4, fontSize: '0.73rem', textTransform: 'none' }}
+            >
+              {opt.label}
+            </ToggleButton>
+          ))}
+        </ToggleButtonGroup>
+      </Box>
+
+      {/* Overview stat cards — period-specific */}
       <Grid container spacing={2} mb={3}>
         <Grid item xs={6} sm={3}>
           <StatCard
@@ -350,22 +404,24 @@ export default function ChannelDetail() {
         <Grid item xs={6} sm={3}>
           <StatCard
             label="Avg Views / Post"
-            value={Math.round(channel.avg_views || 0).toLocaleString()}
+            value={Math.round(channel.period_avg_views || 0).toLocaleString()}
+            sub={periodLabel}
             color="secondary.main"
           />
         </Grid>
         <Grid item xs={6} sm={3}>
           <StatCard
             label="Engagement Rate"
-            value={`${(channel.engagement_rate || 0).toFixed(2)}%`}
+            value={`${(channel.period_engagement_rate || 0).toFixed(2)}%`}
             sub="reactions / views"
-            color={channel.engagement_rate > 1 ? 'success.main' : 'text.primary'}
+            color={(channel.period_engagement_rate || 0) > 1 ? 'success.main' : 'text.primary'}
           />
         </Grid>
         <Grid item xs={6} sm={3}>
           <StatCard
             label="Posts Tracked"
-            value={channel.post_count || 0}
+            value={channel.period_post_count || 0}
+            sub={filterDays === 0 ? 'all captured' : periodLabel}
             color="text.primary"
           />
         </Grid>
@@ -377,7 +433,7 @@ export default function ChannelDetail() {
           <Card>
             <CardContent sx={{ p: 2 }}>
               <Typography variant="subtitle2" fontWeight={700} mb={2}>
-                Member Growth (last 14 days)
+                Member Growth
               </Typography>
               <MemberGrowthChart stats={dailyStats} />
             </CardContent>
@@ -387,9 +443,9 @@ export default function ChannelDetail() {
           <Card>
             <CardContent sx={{ p: 2 }}>
               <Typography variant="subtitle2" fontWeight={700} mb={2}>
-                Avg Views / Post (last 14 days)
+                Avg Views / Post
               </Typography>
-              <ViewsChart stats={dailyStats} />
+              <ViewsChart stats={dailyStats} botStatus={channel.bot_status} />
             </CardContent>
           </Card>
         </Grid>
@@ -411,7 +467,9 @@ export default function ChannelDetail() {
       {channel.top_posts?.length > 0 && (
         <Card sx={{ mb: 3 }}>
           <CardContent sx={{ p: 2 }}>
-            <Typography variant="subtitle2" fontWeight={700} mb={2}>Top Posts by Views</Typography>
+            <Typography variant="subtitle2" fontWeight={700} mb={2}>
+              Top Posts by Views <Typography component="span" variant="caption" color="text.disabled">({periodLabel})</Typography>
+            </Typography>
             {channel.top_posts.map((p, i) => (
               <Box key={p.id} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
                 <Typography variant="caption" color="text.disabled" sx={{ minWidth: 18, fontWeight: 700 }}>
@@ -446,15 +504,29 @@ export default function ChannelDetail() {
       <Card>
         <CardContent sx={{ p: 2 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-            <Typography variant="subtitle2" fontWeight={700}>All Posts</Typography>
+            <Typography variant="subtitle2" fontWeight={700}>
+              All Posts <Typography component="span" variant="caption" color="text.disabled">({periodLabel})</Typography>
+            </Typography>
             <Typography variant="caption" color="text.secondary">{postsTotal} total</Typography>
           </Box>
 
           {posts.length === 0 ? (
             <Box sx={{ py: 4, textAlign: 'center' }}>
-              <Typography variant="body2" color="text.disabled">
-                No posts captured yet. Make the bot an admin in your channel to start tracking.
-              </Typography>
+              {isActive ? (
+                <>
+                  <Typography variant="body2" color="text.disabled" mb={0.5}>
+                    No posts captured in this period.
+                  </Typography>
+                  <Typography variant="caption" color="text.disabled">
+                    New posts are captured automatically as they are published.
+                    {filterDays > 0 && ' Try "All captured" to see older posts.'}
+                  </Typography>
+                </>
+              ) : (
+                <Typography variant="body2" color="text.disabled">
+                  Add the bot as admin in this channel to start capturing post analytics.
+                </Typography>
+              )}
             </Box>
           ) : (
             <>
@@ -525,7 +597,7 @@ export default function ChannelDetail() {
         <Typography variant="caption" color="text.disabled">
           Last refreshed: {channel.last_refreshed_at
             ? new Date(channel.last_refreshed_at).toLocaleString()
-            : 'Never'}
+            : 'Never — hit Refresh to record today\'s snapshot'}
         </Typography>
         <Button
           size="small" variant="outlined" startIcon={<Shield fontSize="small" />}

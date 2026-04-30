@@ -128,22 +128,38 @@ def add_channel():
 def get_channel(cid):
     user = _get_user()
     ch = Channel.query.filter_by(id=cid, user_id=user.id).first_or_404()
+    # days=0 means all captured data; 7/30/365 means that many days back
+    days = request.args.get("days", 30, type=int)
+
     data = ch.to_dict()
 
-    # Last 30 days daily stats
-    cutoff = date.today() - timedelta(days=30)
-    stats = (ch.daily_stats
-               .filter(ChannelDailyStat.date >= cutoff)
-               .order_by(ChannelDailyStat.date)
-               .all())
-    data["daily_stats"] = [s.to_dict() for s in stats]
+    # Daily stats for chart — filtered by period
+    stat_q = ch.daily_stats.order_by(ChannelDailyStat.date)
+    if days > 0:
+        stat_q = stat_q.filter(ChannelDailyStat.date >= date.today() - timedelta(days=days))
+    data["daily_stats"] = [s.to_dict() for s in stat_q.all()]
 
-    # Top 5 posts by views
-    top = (ch.posts
-             .order_by(ChannelPost.views.desc())
-             .limit(5)
-             .all())
+    # Period-specific aggregate metrics (computed fresh from posts, not cached rolling avg)
+    post_q = ch.posts
+    if days > 0:
+        post_q = post_q.filter(
+            ChannelPost.posted_at >= datetime.utcnow() - timedelta(days=days)
+        )
+    period_posts = post_q.all()
+    n = len(period_posts)
+    total_views = sum(p.views for p in period_posts)
+    total_reactions = sum(p.reactions for p in period_posts)
+    data["period_post_count"] = n
+    data["period_avg_views"] = round(total_views / n, 1) if n else 0
+    data["period_avg_reactions"] = round(total_reactions / n, 1) if n else 0
+    data["period_engagement_rate"] = round(
+        (total_reactions / total_views * 100) if total_views else 0, 2
+    )
+
+    # Top 5 posts by views within the selected period
+    top = sorted(period_posts, key=lambda p: p.views, reverse=True)[:5]
     data["top_posts"] = [p.to_dict() for p in top]
+
     return jsonify(data)
 
 
@@ -165,8 +181,11 @@ def list_posts(cid):
     user = _get_user()
     ch = Channel.query.filter_by(id=cid, user_id=user.id).first_or_404()
     page = request.args.get("page", 1, type=int)
+    days = request.args.get("days", 0, type=int)
     per_page = 20
     q = ch.posts.order_by(ChannelPost.posted_at.desc())
+    if days > 0:
+        q = q.filter(ChannelPost.posted_at >= datetime.utcnow() - timedelta(days=days))
     total = q.count()
     posts = q.offset((page - 1) * per_page).limit(per_page).all()
     return jsonify({

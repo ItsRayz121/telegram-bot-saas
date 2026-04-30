@@ -1623,6 +1623,7 @@ class Channel(db.Model):
             "bot_status": self.bot_status,
             "post_count": self.posts.count(),
             "created_at": self.created_at.isoformat(),
+            "tracking_started_at": self.created_at.isoformat(),
             "last_refreshed_at": self.last_refreshed_at.isoformat() if self.last_refreshed_at else None,
             "tcs_score": self.tcs_score,
             "tcs_grade": self.tcs_grade,
