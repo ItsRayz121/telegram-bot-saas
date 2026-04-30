@@ -6,9 +6,10 @@ import {
   Menu, MenuItem, IconButton, Collapse,
 } from '@mui/material';
 import {
-  Home, Groups, Campaign, Bolt, Link, AccessTime, Send, AutoMode,
+  Home, Groups, Campaign, AccessTime, Send, AutoMode,
   Explore, BarChart, SmartToy, CreditCard, Settings, Add, Handshake,
   AccountCircle, Logout, AdminPanelSettings, ExpandMore, ExpandLess,
+  Psychology, Reply, EditNote, Summarize, Tune,
 } from '@mui/icons-material';
 import TelegizerLogo from './TelegizerLogo';
 import { telegramGroups as tgApi, auth as authApi, channels as chApi } from '../services/api';
@@ -514,13 +515,19 @@ export default function Sidebar({ onClose }) {
           </ListItem>
         )}
 
-        {/* ── WORKSPACE ── */}
-        <SectionLabel label="Workspace" />
-        <NavItem label="Overview"    path="/workspace"             icon={Bolt}       active={isActive('/workspace', true)}          onClick={() => nav('/workspace')} />
-        <NavItem label="Smart Links" path="/workspace/smart-links" icon={Link}       active={isActive('/workspace/smart-links')}    onClick={() => nav('/workspace/smart-links')} indent />
-        <NavItem label="Reminders"   path="/workspace/reminders"   icon={AccessTime} active={isActive('/workspace/reminders')}     onClick={() => nav('/workspace/reminders')} indent />
-        <NavItem label="Forwarding"  path="/workspace/forwarding"  icon={Send}       active={isActive('/workspace/forwarding')}    onClick={() => nav('/workspace/forwarding')} indent />
-        <NavItem label="Automations" path="/workspace/automations" icon={AutoMode}   active={isActive('/workspace/automations')}   onClick={() => nav('/workspace/automations')} indent />
+        {/* ── ASSISTANT ── */}
+        <SectionLabel label="Assistant" />
+        <NavItem label="Hub"          path="/workspace"                  icon={Psychology} active={isActive('/workspace', true)}             onClick={() => nav('/workspace')} />
+        <NavItem label="Auto-Replies" path="/workspace/smart-links"      icon={Reply}      active={isActive('/workspace/smart-links')}       onClick={() => nav('/workspace/smart-links')} indent />
+        <NavItem label="Reminders"    path="/workspace/reminders"        icon={AccessTime} active={isActive('/workspace/reminders')}         onClick={() => nav('/workspace/reminders')} indent />
+        <NavItem label="Notes"        path="/workspace/notes"            icon={EditNote}   active={isActive('/workspace/notes')}             onClick={() => nav('/workspace/notes')} indent />
+        <NavItem label="Digests"      path="/workspace/digests"          icon={Summarize}  active={isActive('/workspace/digests')}           onClick={() => nav('/workspace/digests')} indent />
+        <NavItem label="AI Settings"  path="/workspace/ai-settings"      icon={Tune}       active={isActive('/workspace/ai-settings')}       onClick={() => nav('/workspace/ai-settings')} indent />
+
+        {/* ── AUTOMATION ── */}
+        <SectionLabel label="Automation" />
+        <NavItem label="Forwarding"   path="/workspace/forwarding"       icon={Send}       active={isActive('/workspace/forwarding')}        onClick={() => nav('/workspace/forwarding')} />
+        <NavItem label="Workflows"    path="/workspace/automations"      icon={AutoMode}   active={isActive('/workspace/automations')}       onClick={() => nav('/workspace/automations')} />
 
         {/* ── GROW ── */}
         <SectionLabel label="Grow" />

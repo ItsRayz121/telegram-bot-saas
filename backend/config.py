@@ -96,6 +96,10 @@ class Config:
         )
     OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 
+    # Platform-wide Gemini key — powers AI features for all users at no extra config.
+    # Free users: 50k tokens/day cap. Pro users: 200k tokens/day cap.
+    PLATFORM_GEMINI_API_KEY = os.environ.get("PLATFORM_GEMINI_API_KEY", "")
+
     # Official Telegizer shared bot (serves all users/groups)
     TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
     TELEGRAM_BOT_USERNAME = os.environ.get("TELEGRAM_BOT_USERNAME", "telegizer_bot")

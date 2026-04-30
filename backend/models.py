@@ -555,6 +555,7 @@ class UserApiKey(db.Model):
     telegram_group_id = db.Column(db.String(255), nullable=True, index=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     provider = db.Column(db.String(50), nullable=False)  # openai|openrouter|anthropic|gemini|custom
+    scope = db.Column(db.String(20), nullable=False, default="group")  # group | workspace
     api_key_encrypted = db.Column(db.Text, nullable=False)
     base_url = db.Column(db.String(500), nullable=True)
     model_name = db.Column(db.String(255), nullable=True)

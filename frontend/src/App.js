@@ -45,6 +45,9 @@ import WorkspaceSmartLinks from './pages/WorkspaceSmartLinks';
 import WorkspaceReminders from './pages/WorkspaceReminders';
 import WorkspaceForwarding from './pages/WorkspaceForwarding';
 import WorkspaceAutomations from './pages/WorkspaceAutomations';
+const AssistantNotes = React.lazy(() => import('./pages/AssistantNotes'));
+const AssistantDigests = React.lazy(() => import('./pages/AssistantDigests'));
+const AssistantAISettings = React.lazy(() => import('./pages/AssistantAISettings'));
 import MiniApp from './pages/MiniApp';
 import MiniAppLayout from './layouts/MiniAppLayout';
 import Directory from './pages/Directory';
@@ -204,6 +207,9 @@ export default function App() {
             <Route path="/workspace/reminders"     element={<AppRoute><WorkspaceReminders /></AppRoute>} />
             <Route path="/workspace/forwarding"    element={<AppRoute><WorkspaceForwarding /></AppRoute>} />
             <Route path="/workspace/automations"   element={<AppRoute><WorkspaceAutomations /></AppRoute>} />
+            <Route path="/workspace/notes"         element={<AppRoute><React.Suspense fallback={null}><AssistantNotes /></React.Suspense></AppRoute>} />
+            <Route path="/workspace/digests"       element={<AppRoute><React.Suspense fallback={null}><AssistantDigests /></React.Suspense></AppRoute>} />
+            <Route path="/workspace/ai-settings"   element={<AppRoute><React.Suspense fallback={null}><AssistantAISettings /></React.Suspense></AppRoute>} />
 
             {/* ── Telegram Mini App ─────────────────────────────────────────── */}
             <Route path="/mini-app" element={<MiniAppLayout><MiniApp /></MiniAppLayout>} />
