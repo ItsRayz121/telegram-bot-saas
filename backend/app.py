@@ -2211,6 +2211,39 @@ def _run_scheduled_polls():
 
 app = create_app()
 
+# ── Redis startup probe ───────────────────────────────────────────────────────
+# Runs once per gunicorn worker at import time so Railway logs show clearly
+# whether Redis is reachable.  Never raises — a missing Redis is non-fatal
+# (rate limiter degrades to in-process fallback).
+def _probe_redis():
+    _log = logging.getLogger("startup")
+    redis_url = app.config.get("REDIS_URL", "")
+    if not redis_url:
+        _log.warning(
+            "[REDIS] REDIS_URL is not set — rate limiting will use in-process "
+            "fallback (not shared across workers). Add REDIS_URL in Railway to "
+            "enable full rate limiting."
+        )
+        return
+    try:
+        import redis as _redis_lib
+        r = _redis_lib.from_url(redis_url, socket_connect_timeout=2, socket_timeout=2)
+        r.ping()
+        info = r.info("server")
+        _log.info(
+            "[REDIS] Connected OK — version=%s mode=%s",
+            info.get("redis_version", "?"),
+            info.get("redis_mode", "standalone"),
+        )
+    except Exception as _e:
+        _log.error(
+            "[REDIS] Connection FAILED — %s. Rate limiting will fall back to "
+            "in-process counter. Check REDIS_URL in Railway environment.",
+            _e,
+        )
+
+_probe_redis()
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
