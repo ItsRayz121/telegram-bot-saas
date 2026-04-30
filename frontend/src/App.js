@@ -45,9 +45,6 @@ import WorkspaceSmartLinks from './pages/WorkspaceSmartLinks';
 import WorkspaceReminders from './pages/WorkspaceReminders';
 import WorkspaceForwarding from './pages/WorkspaceForwarding';
 import WorkspaceAutomations from './pages/WorkspaceAutomations';
-const AssistantNotes = React.lazy(() => import('./pages/AssistantNotes'));
-const AssistantDigests = React.lazy(() => import('./pages/AssistantDigests'));
-const AssistantAISettings = React.lazy(() => import('./pages/AssistantAISettings'));
 import MiniApp from './pages/MiniApp';
 import MiniAppLayout from './layouts/MiniAppLayout';
 import Directory from './pages/Directory';
@@ -56,6 +53,11 @@ import GroupCRM from './pages/GroupCRM';
 import Marketplace from './pages/Marketplace';
 import MarketplaceDeal from './pages/MarketplaceDeal';
 import JoinReferral from './pages/JoinReferral';
+
+// Pages — lazy (Sprint 1 placeholders, built out in later sprints)
+const AssistantNotes = React.lazy(() => import('./pages/AssistantNotes'));
+const AssistantDigests = React.lazy(() => import('./pages/AssistantDigests'));
+const AssistantAISettings = React.lazy(() => import('./pages/AssistantAISettings'));
 
 // Initialize Sentry if DSN is configured
 const SENTRY_DSN = process.env.REACT_APP_SENTRY_DSN;
