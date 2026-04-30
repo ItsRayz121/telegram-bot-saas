@@ -1,8 +1,35 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import { Box } from '@mui/material';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { TelegramProvider, useTelegram } from '../contexts/TelegramContext';
+
+// Auto-wire Telegram BackButton: show when navigated past the mini-app root
+function BackButtonManager() {
+  const { tg } = useTelegram();
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const isRoot = pathname === '/mini-app' || pathname === '/mini-app/';
+
+  useEffect(() => {
+    const btn = tg?.BackButton;
+    if (!btn) return;
+    if (isRoot) {
+      btn.hide();
+    } else {
+      const handler = () => navigate(-1);
+      btn.show();
+      btn.onClick(handler);
+      return () => {
+        btn.offClick(handler);
+        btn.hide();
+      };
+    }
+  }, [tg, isRoot, navigate]);
+
+  return null;
+}
 
 // Inner component so it can read tgTheme from context
 function ThemedContent({ children }) {
@@ -36,6 +63,7 @@ function ThemedContent({ children }) {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
+      <BackButtonManager />
       <Box
         sx={{
           minHeight: '100vh',

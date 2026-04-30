@@ -104,6 +104,13 @@ api.interceptors.response.use(
       _clearSession();
     }
 
+    // Capture 5xx errors in Sentry
+    if (error.response?.status >= 500) {
+      try {
+        import('@sentry/react').then(({ captureException }) => captureException(error)).catch(() => {});
+      } catch {}
+    }
+
     return Promise.reject(error);
   }
 );

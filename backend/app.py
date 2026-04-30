@@ -1454,7 +1454,30 @@ def _run_official_group_digests(app):
                         from .models import db
                         db.session.commit()
             except Exception as exc:
-                _scheduler_log.debug("Official digest for group %s failed: %s", tg.telegram_group_id, exc)
+                _scheduler_log.warning(
+                    "[DIGEST] Telegram delivery failed for group %s: %s — attempting email fallback",
+                    tg.telegram_group_id, exc,
+                )
+                # Email fallback: notify the group owner so the digest is not silently lost
+                try:
+                    from .models import User
+                    owner = User.query.get(tg.owner_user_id)
+                    if owner and owner.email:
+                        from .notifications import send_email
+                        from flask import current_app
+                        group_name = tg.name or tg.telegram_group_id
+                        send_email(
+                            owner.email,
+                            f"Telegizer Digest — {group_name} (delivery failed)",
+                            f"<p>Hi {owner.full_name},</p>"
+                            f"<p>We were unable to deliver the AI digest for <strong>{group_name}</strong> "
+                            f"to Telegram. Please ensure the bot is still a member of the group "
+                            f"and has permission to send messages.</p>"
+                            f"<p>Error: {exc}</p>",
+                        )
+                except Exception as mail_exc:
+                    _scheduler_log.error("[DIGEST] Email fallback also failed for group %s: %s",
+                                         tg.telegram_group_id, mail_exc)
 
 
 def _run_bot_event_cleanup(retention_days=90):

@@ -1,6 +1,6 @@
-﻿/* Telegizer Service Worker â€” cache-first for static assets, network-first for API */
-const CACHE_NAME = 'Telegizer-v2';
-const STATIC_ASSETS = ['/', '/index.html', '/manifest.json'];
+﻿/* Telegizer Service Worker — cache-first for static assets, network-first for API */
+const CACHE_NAME = 'Telegizer-v3';
+const STATIC_ASSETS = ['/', '/index.html', '/manifest.json', '/offline.html'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -25,7 +25,7 @@ self.addEventListener('fetch', (event) => {
   // Skip non-GET and API requests (always go to network)
   if (request.method !== 'GET' || url.pathname.startsWith('/api/')) return;
 
-  // Cache-first for same-origin static assets
+  // Cache-first for same-origin static assets; serve offline.html on network failure
   if (url.origin === self.location.origin) {
     event.respondWith(
       caches.match(request).then((cached) => {
@@ -36,7 +36,12 @@ self.addEventListener('fetch', (event) => {
             caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
           }
           return response;
-        });
+        }).catch(() =>
+          // Navigation requests fall back to offline page; sub-resources just fail
+          request.mode === 'navigate'
+            ? caches.match('/offline.html')
+            : Response.error()
+        );
       })
     );
   }

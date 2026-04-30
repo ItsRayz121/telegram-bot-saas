@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../services/api';
 
 const TelegramContext = createContext(null);
@@ -91,3 +92,24 @@ export function TelegramProvider({ children }) {
 }
 
 export const useTelegram = () => useContext(TelegramContext);
+
+/**
+ * Show the Telegram BackButton for the lifetime of the component that calls this hook.
+ * Pass a custom `onBack` handler, or leave undefined to call navigate(-1).
+ */
+export function useBackButton(onBack) {
+  const { tg } = useTelegram();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const btn = tg?.BackButton;
+    if (!btn) return;
+    const handler = onBack || (() => navigate(-1));
+    btn.show();
+    btn.onClick(handler);
+    return () => {
+      btn.offClick(handler);
+      btn.hide();
+    };
+  }, [tg, onBack, navigate]);
+}
