@@ -44,6 +44,16 @@ def init_db():
             "ALTER TABLE user_api_keys ADD COLUMN IF NOT EXISTS scope VARCHAR(20) NOT NULL DEFAULT 'group'",
             "user_api_keys.scope",
         )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS workspace_ai_tokens_today INTEGER NOT NULL DEFAULT 0",
+            "users.workspace_ai_tokens_today",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS workspace_ai_tokens_reset_at TIMESTAMP",
+            "users.workspace_ai_tokens_reset_at",
+        )
         print("Migration complete.")
 
 

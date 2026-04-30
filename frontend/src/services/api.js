@@ -522,6 +522,15 @@ export const workspace = {
   deleteReminder: (id) => api.delete(`/api/workspace/reminders/${id}`),
 };
 
+export const workspaceAI = {
+  getSettings: () => api.get('/api/workspace/ai-settings'),
+  saveKey: (provider, apiKey, model, baseUrl) =>
+    api.post('/api/workspace/ai-settings', { provider, api_key: apiKey, model, base_url: baseUrl }),
+  deleteKey: () => api.delete('/api/workspace/ai-settings'),
+  testKey: (provider, apiKey, model, baseUrl) =>
+    api.post('/api/workspace/ai-settings/test', { provider, api_key: apiKey, model, base_url: baseUrl }),
+};
+
 export const automations = {
   listWorkflows: () => api.get('/api/automations/workflows'),
   createWorkflow: (data) => api.post('/api/automations/workflows', data),

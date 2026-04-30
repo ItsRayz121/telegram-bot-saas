@@ -46,6 +46,9 @@ class User(db.Model):
     telegram_username = db.Column(db.String(255), nullable=True)
     telegram_first_name = db.Column(db.String(255), nullable=True)
     telegram_connected_at = db.Column(db.DateTime, nullable=True)
+    # Workspace AI token usage tracking (reset daily)
+    workspace_ai_tokens_today = db.Column(db.Integer, default=0, nullable=False)
+    workspace_ai_tokens_reset_at = db.Column(db.DateTime, nullable=True)
 
     bots = db.relationship("Bot", backref="owner", lazy=True, cascade="all, delete-orphan")
 

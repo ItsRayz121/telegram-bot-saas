@@ -1,13 +1,15 @@
 """
 Workspace API — user-scoped features that span all groups.
 
-Smart Links  POST/GET/PUT/DELETE /api/workspace/smart-links
-Reminders    POST/GET/DELETE      /api/workspace/reminders
+Smart Links   POST/GET/PUT/DELETE /api/workspace/smart-links
+Reminders     POST/GET/DELETE      /api/workspace/reminders
+AI Settings   GET/POST/DELETE      /api/workspace/ai-settings
+              POST                 /api/workspace/ai-settings/test
 """
 from datetime import datetime
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from ..models import db, User, AutoResponse, TelegramGroup, WorkspaceReminder
+from ..models import db, User, AutoResponse, TelegramGroup, WorkspaceReminder, UserApiKey
 from ..middleware.rate_limit import rate_limit
 
 workspace_bp = Blueprint("workspace", __name__, url_prefix="/api/workspace")
@@ -255,3 +257,221 @@ def delete_reminder(reminder_id):
     db.session.delete(reminder)
     db.session.commit()
     return jsonify({"deleted": True})
+
+
+# ── Workspace AI Settings ──────────────────────────────────────────────────────
+
+def _token_limit(user: User) -> int:
+    return 200000 if user.subscription_tier in ("pro", "enterprise") else 50000
+
+
+def _maybe_reset_tokens(user: User) -> None:
+    """Reset daily token counter if 24 hours have elapsed since last reset."""
+    now = datetime.utcnow()
+    if (
+        user.workspace_ai_tokens_reset_at is None
+        or (now - user.workspace_ai_tokens_reset_at).total_seconds() >= 86400
+    ):
+        user.workspace_ai_tokens_today = 0
+        user.workspace_ai_tokens_reset_at = now
+        db.session.commit()
+
+
+def _test_provider_key(provider: str, api_key: str, model: str, base_url: str = None) -> tuple:
+    """Send a minimal prompt to verify an AI provider key. Returns (ok, message)."""
+    import requests as _req
+    timeout = 10
+
+    try:
+        if provider == "gemini":
+            model_id = model or "gemini-2.0-flash"
+            url = (
+                f"https://generativelanguage.googleapis.com/v1beta/models/"
+                f"{model_id}:generateContent?key={api_key}"
+            )
+            r = _req.post(
+                url,
+                json={"contents": [{"parts": [{"text": "Hi"}]}]},
+                timeout=timeout,
+            )
+            if r.status_code == 200:
+                return True, "Key is valid"
+            err = (r.json().get("error") or {}).get("message", f"Error {r.status_code}")
+            return False, err
+
+        elif provider in ("openai", "custom"):
+            base = (base_url or "https://api.openai.com").rstrip("/")
+            endpoint = f"{base}/v1/chat/completions"
+            headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+            r = _req.post(
+                endpoint,
+                json={
+                    "model": model or "gpt-4o-mini",
+                    "messages": [{"role": "user", "content": "Hi"}],
+                    "max_tokens": 5,
+                },
+                headers=headers,
+                timeout=timeout,
+            )
+            if r.status_code == 200:
+                return True, "Key is valid"
+            try:
+                err = (r.json().get("error") or {}).get("message", f"Error {r.status_code}")
+            except Exception:
+                err = f"Error {r.status_code}"
+            return False, err
+
+        elif provider == "anthropic":
+            headers = {
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            }
+            r = _req.post(
+                "https://api.anthropic.com/v1/messages",
+                json={
+                    "model": model or "claude-haiku-4-5-20251001",
+                    "max_tokens": 5,
+                    "messages": [{"role": "user", "content": "Hi"}],
+                },
+                headers=headers,
+                timeout=timeout,
+            )
+            if r.status_code == 200:
+                return True, "Key is valid"
+            try:
+                err = (r.json().get("error") or {}).get("message", f"Error {r.status_code}")
+            except Exception:
+                err = f"Error {r.status_code}"
+            return False, err
+
+        elif provider == "openrouter":
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://telegizer.com",
+            }
+            r = _req.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                json={
+                    "model": model or "google/gemini-flash-1.5",
+                    "messages": [{"role": "user", "content": "Hi"}],
+                    "max_tokens": 5,
+                },
+                headers=headers,
+                timeout=timeout,
+            )
+            if r.status_code == 200:
+                return True, "Key is valid"
+            try:
+                err = (r.json().get("error") or {}).get("message", f"Error {r.status_code}")
+            except Exception:
+                err = f"Error {r.status_code}"
+            return False, err
+
+        return False, f"Unknown provider: {provider}"
+
+    except Exception as exc:
+        return False, f"Connection error: {str(exc)[:120]}"
+
+
+@workspace_bp.route("/ai-settings", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def get_ai_settings():
+    from ..config import Config
+
+    user = _current_user()
+    _maybe_reset_tokens(user)
+
+    user_key = (
+        UserApiKey.query
+        .filter_by(user_id=user.id, scope="workspace", is_active=True)
+        .order_by(UserApiKey.updated_at.desc())
+        .first()
+    )
+
+    return jsonify({
+        "platform_key_active": bool(Config.PLATFORM_GEMINI_API_KEY),
+        "user_key": user_key.to_dict() if user_key else None,
+        "token_usage": {
+            "used": user.workspace_ai_tokens_today or 0,
+            "limit": _token_limit(user),
+            "reset_at": (
+                user.workspace_ai_tokens_reset_at.isoformat()
+                if user.workspace_ai_tokens_reset_at else None
+            ),
+        },
+        "telegram_connected": bool(user.telegram_user_id),
+        "telegram_username": user.telegram_username,
+    })
+
+
+_VALID_PROVIDERS = {"gemini", "openai", "anthropic", "openrouter", "custom"}
+
+
+@workspace_bp.route("/ai-settings", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=10)
+def save_ai_settings():
+    from ..utils.encryption import encrypt_value
+
+    user = _current_user()
+    data = request.get_json() or {}
+
+    provider = (data.get("provider") or "").strip().lower()
+    api_key = (data.get("api_key") or "").strip()
+    model = (data.get("model") or "").strip() or None
+    base_url = (data.get("base_url") or "").strip() or None
+
+    if provider not in _VALID_PROVIDERS:
+        return jsonify({"error": f"provider must be one of {sorted(_VALID_PROVIDERS)}"}), 400
+    if not api_key:
+        return jsonify({"error": "api_key is required"}), 400
+
+    # Deactivate any existing workspace key
+    for existing in UserApiKey.query.filter_by(user_id=user.id, scope="workspace", is_active=True).all():
+        existing.is_active = False
+
+    new_key = UserApiKey(
+        user_id=user.id,
+        scope="workspace",
+        provider=provider,
+        api_key_encrypted=encrypt_value(api_key),
+        model_name=model,
+        base_url=base_url,
+        is_active=True,
+    )
+    db.session.add(new_key)
+    db.session.commit()
+    return jsonify({"success": True, "user_key": new_key.to_dict()}), 201
+
+
+@workspace_bp.route("/ai-settings", methods=["DELETE"])
+@jwt_required()
+@rate_limit(requests_per_minute=10)
+def delete_ai_settings():
+    user = _current_user()
+    for key in UserApiKey.query.filter_by(user_id=user.id, scope="workspace", is_active=True).all():
+        key.is_active = False
+    db.session.commit()
+    return jsonify({"success": True})
+
+
+@workspace_bp.route("/ai-settings/test", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=5)
+def test_ai_settings():
+    data = request.get_json() or {}
+    provider = (data.get("provider") or "").strip().lower()
+    api_key = (data.get("api_key") or "").strip()
+    model = (data.get("model") or "").strip() or None
+    base_url = (data.get("base_url") or "").strip() or None
+
+    if not provider or not api_key:
+        return jsonify({"error": "provider and api_key are required"}), 400
+    if provider not in _VALID_PROVIDERS:
+        return jsonify({"error": f"provider must be one of {sorted(_VALID_PROVIDERS)}"}), 400
+
+    ok, message = _test_provider_key(provider, api_key, model, base_url)
+    return jsonify({"success": ok, "message": message})
