@@ -453,15 +453,27 @@ def update_digest_settings(group_id):
 
     data = request.get_json() or {}
     settings = dict(tg.settings or {})
-    settings["digest"] = {
-        "daily":   bool(data.get("daily", False)),
-        "weekly":  bool(data.get("weekly", False)),
-        "monthly": bool(data.get("monthly", False)),
-        "send_to_group": bool(data.get("send_to_group", True)),
-    }
+    # Merge into existing digest config so last_daily/weekly/monthly timestamps survive
+    existing_digest = dict(settings.get("digest", {}))
+    valid_delivery = {"dm", "group"}
+    delivery = data.get("delivery", existing_digest.get("delivery", "dm"))
+    if delivery not in valid_delivery:
+        delivery = "dm"
+    existing_digest.update({
+        "enabled":       bool(data.get("enabled", existing_digest.get("enabled", False))),
+        "frequency":     data.get("frequency", existing_digest.get("frequency", "daily")),
+        "schedule_time": (data.get("schedule_time") or existing_digest.get("schedule_time") or "09:00")[:5],
+        "delivery":      delivery,
+        # Legacy fields kept for scheduler compatibility
+        "daily":         data.get("frequency", existing_digest.get("frequency", "daily")) == "daily",
+        "weekly":        data.get("frequency", existing_digest.get("frequency", "daily")) == "weekly",
+        "monthly":       data.get("frequency", existing_digest.get("frequency", "daily")) == "monthly",
+        "send_to_group": delivery == "group",
+    })
+    settings["digest"] = existing_digest
     tg.settings = settings
     db.session.commit()
-    return jsonify({"digest": settings["digest"]}), 200
+    return jsonify({"digest": existing_digest}), 200
 
 
 @tg_groups_bp.route("/<group_id>/digest/send", methods=["POST"])
@@ -493,6 +505,29 @@ def send_digest_now(group_id):
         return jsonify({"message": "Digest sent"}), 200
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
+
+
+@tg_groups_bp.route("/<group_id>/digest/history", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def get_digest_history(group_id):
+    from ..models import DigestLog
+    user = _current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    tg = _owns_group(user.id, group_id)
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+
+    logs = (
+        DigestLog.query
+        .filter_by(group_id=tg.telegram_group_id)
+        .order_by(DigestLog.sent_at.desc())
+        .limit(20)
+        .all()
+    )
+    return jsonify({"history": [l.to_dict() for l in logs]}), 200
 
 
 # ── Official Scheduled Messages ───────────────────────────────────────────────

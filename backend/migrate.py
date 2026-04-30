@@ -54,6 +54,12 @@ def init_db():
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS workspace_ai_tokens_reset_at TIMESTAMP",
             "users.workspace_ai_tokens_reset_at",
         )
+        # DigestLog table is created by db.create_all() above; add any missing columns here
+        _run_alter(
+            db.engine,
+            "ALTER TABLE digest_logs ADD COLUMN IF NOT EXISTS tokens_used INTEGER",
+            "digest_logs.tokens_used",
+        )
         print("Migration complete.")
 
 

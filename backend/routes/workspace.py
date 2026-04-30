@@ -458,6 +458,43 @@ def delete_ai_settings():
     return jsonify({"success": True})
 
 
+# ── Workspace Digests overview ─────────────────────────────────────────────────
+
+@workspace_bp.route("/digests", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def list_digests():
+    """Return all user's groups with their digest config and last-sent info."""
+    from ..models import TelegramGroup, DigestLog
+
+    user = _current_user()
+    groups = (
+        TelegramGroup.query
+        .filter_by(owner_user_id=user.id, is_disabled=False)
+        .order_by(TelegramGroup.linked_at.desc())
+        .all()
+    )
+
+    result = []
+    for g in groups:
+        digest = (g.settings or {}).get("digest", {})
+        last_log = (
+            DigestLog.query
+            .filter_by(group_id=g.telegram_group_id)
+            .order_by(DigestLog.sent_at.desc())
+            .first()
+        )
+        result.append({
+            "group_id": g.telegram_group_id,
+            "group_title": g.title,
+            "bot_status": g.bot_status,
+            "digest": digest,
+            "last_sent": last_log.to_dict() if last_log else None,
+        })
+
+    return jsonify({"groups": result})
+
+
 @workspace_bp.route("/ai-settings/test", methods=["POST"])
 @jwt_required()
 @rate_limit(requests_per_minute=5)

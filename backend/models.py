@@ -1877,3 +1877,27 @@ class DealMessage(db.Model):
             "body": self.body,
             "created_at": self.created_at.isoformat(),
         }
+
+
+class DigestLog(db.Model):
+    """Record of each AI digest that was generated and sent."""
+    __tablename__ = "digest_logs"
+
+    id = db.Column(db.Integer, primary_key=True)
+    group_id = db.Column(db.String(255), nullable=False, index=True)  # telegram_group_id
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    content_preview = db.Column(db.String(300), nullable=True)
+    provider = db.Column(db.String(50), nullable=True)
+    tokens_used = db.Column(db.Integer, nullable=True)
+    sent_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "group_id": self.group_id,
+            "user_id": self.user_id,
+            "content_preview": self.content_preview,
+            "provider": self.provider,
+            "tokens_used": self.tokens_used,
+            "sent_at": self.sent_at.isoformat(),
+        }

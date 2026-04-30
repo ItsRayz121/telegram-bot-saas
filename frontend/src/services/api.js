@@ -531,6 +531,13 @@ export const workspaceAI = {
     api.post('/api/workspace/ai-settings/test', { provider, api_key: apiKey, model, base_url: baseUrl }),
 };
 
+export const digests = {
+  getAll: () => api.get('/api/workspace/digests'),
+  update: (groupId, config) => api.put(`/api/telegram-groups/${groupId}/digest`, config),
+  sendNow: (groupId) => api.post(`/api/telegram-groups/${groupId}/digest/send`),
+  getHistory: (groupId) => api.get(`/api/telegram-groups/${groupId}/digest/history`),
+};
+
 export const automations = {
   listWorkflows: () => api.get('/api/automations/workflows'),
   createWorkflow: (data) => api.post('/api/automations/workflows', data),
