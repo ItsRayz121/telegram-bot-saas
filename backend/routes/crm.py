@@ -14,7 +14,7 @@ def _get_user():
 
 def _check_group_owner(user, group_id):
     return TelegramGroup.query.filter_by(
-        telegram_group_id=str(group_id), user_id=user.id
+        telegram_group_id=str(group_id), owner_user_id=user.id
     ).first()
 
 
