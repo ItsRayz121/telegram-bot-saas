@@ -1553,6 +1553,7 @@ def _deliver_reminders(app):
                 try:
                     from .notifications import send_email
                     subject = "Telegizer Reminder"
+                    frontend_url = app.config["FRONTEND_URL"]
                     group_line = (
                         f"<p style='color:#888;font-size:13px'>From group {reminder.telegram_group_id}</p>"
                         if reminder.telegram_group_id else ""
@@ -1564,7 +1565,7 @@ def _deliver_reminders(app):
                         f"<hr style='border:none;border-top:1px solid #eee;margin:16px 0'>"
                         f"<p style='color:#888;font-size:12px'>"
                         f"You can manage your reminders in the "
-                        f"<a href='{app.config['FRONTEND_URL']}/workspace/reminders'>Telegizer dashboard</a>."
+                        f"<a href='{frontend_url}/workspace/reminders'>Telegizer dashboard</a>."
                         f"</p>"
                     )
                     send_email(user.email, subject, html)
