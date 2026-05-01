@@ -207,6 +207,17 @@ export default function Sidebar({ onClose }) {
     return !o;
   });
 
+  const automationActive = isActive('/workspace/forwarding') || isActive('/workspace/automations') || isActive('/workflow-builder');
+  const [automationOpen, setAutomationOpen] = useState(() => {
+    const stored = localStorage.getItem('sidebar_automation_open');
+    return stored === null ? true : stored === '1';
+  });
+
+  const toggleAutomation = () => setAutomationOpen(o => {
+    localStorage.setItem('sidebar_automation_open', !o ? '1' : '0');
+    return !o;
+  });
+
   // Keep sections open when navigating within them
   useEffect(() => {
     if (isActive('/groups')) setGroupsOpen(true);
@@ -554,9 +565,20 @@ export default function Sidebar({ onClose }) {
 
         {/* ── AUTOMATION ── */}
         <SectionLabel label="Automation" />
-        <NavItem label="Forwarding"    path="/workspace/forwarding"       icon={Send}     active={isActive('/workspace/forwarding')}        onClick={() => nav('/workspace/forwarding')} />
-        <NavItem label="Workflows"     path="/workspace/automations"      icon={AutoMode} active={isActive('/workspace/automations')}       onClick={() => nav('/workspace/automations')} />
-        <NavItem label="Flow Builder"  path="/workflow-builder"           icon={AutoMode} active={isActive('/workflow-builder')}            onClick={() => nav('/workflow-builder')} />
+        <ExpandableHeader
+          label="Automation"
+          icon={AutoMode}
+          path="/workspace/automations"
+          active={automationActive}
+          open={automationOpen}
+          onToggle={toggleAutomation}
+          onNavigate={() => nav('/workspace/automations')}
+        />
+        <Collapse in={automationOpen} timeout={160} unmountOnExit>
+          <NavItem label="Forwarding"   path="/workspace/forwarding"   icon={Send}     active={isActive('/workspace/forwarding')}   onClick={() => nav('/workspace/forwarding')} indent />
+          <NavItem label="Workflows"    path="/workspace/automations"  icon={AutoMode} active={isActive('/workspace/automations')}  onClick={() => nav('/workspace/automations')} indent />
+          <NavItem label="Flow Builder" path="/workflow-builder"       icon={AutoMode} active={isActive('/workflow-builder')}       onClick={() => nav('/workflow-builder')} indent />
+        </Collapse>
 
         {/* ── ANALYTICS ── */}
         {/* Temporarily hidden for future reactivation — routes and backend intact */}
