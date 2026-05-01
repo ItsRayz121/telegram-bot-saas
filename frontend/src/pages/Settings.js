@@ -755,17 +755,17 @@ export default function Settings() {
           <Stack spacing={1.5}>
             <Button
               variant="outlined" fullWidth startIcon={<Telegram />}
-              href="https://t.me/telegizer_support" target="_blank" rel="noopener"
+              href="https://t.me/telegizer_community" target="_blank" rel="noopener"
               sx={{ justifyContent: 'flex-start' }}
             >
               Join Telegram Support Group
             </Button>
             <Button
               variant="outlined" fullWidth startIcon={<EmailOutlined />}
-              href="mailto:support@telegizer.xyz"
+              href="mailto:fazalelahi5577@gmail.com"
               sx={{ justifyContent: 'flex-start' }}
             >
-              Email support@telegizer.xyz
+              Email fazalelahi5577@gmail.com
             </Button>
             <Button
               variant="text" fullWidth

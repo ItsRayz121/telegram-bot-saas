@@ -128,12 +128,12 @@ export default function Status() {
           <Box sx={{ mt: 4, textAlign: 'center' }}>
             <Typography variant="body2" color="text.secondary">
               Having issues?{' '}
-              <Link href="https://t.me/telegizer_support" target="_blank" rel="noopener" color="primary.main">
+              <Link href="https://t.me/telegizer_community" target="_blank" rel="noopener" color="primary.main">
                 Contact support on Telegram
               </Link>{' '}
               or email{' '}
-              <Link href="mailto:support@telegizer.xyz" color="primary.main">
-                support@telegizer.xyz
+              <Link href="mailto:fazalelahi5577@gmail.com" color="primary.main">
+                fazalelahi5577@gmail.com
               </Link>
             </Typography>
           </Box>
