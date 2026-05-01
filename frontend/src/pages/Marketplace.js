@@ -1,3 +1,8 @@
+// ── FEATURE FLAG: Marketplace is temporarily hidden for future reactivation ───
+// All backend routes, DB schema, and API calls below are fully preserved.
+// To re-enable: set SHOW_MARKETPLACE = true or remove the feature flag block.
+const SHOW_MARKETPLACE = false;
+
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, Chip, Grid,
@@ -14,6 +19,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { marketplace as mktApi } from '../services/api';
+import ComingSoonPage from '../components/ComingSoonPage';
 
 const CATEGORIES = [
   "All", "Technology & Dev", "Crypto & Web3", "News & Politics",
@@ -236,9 +242,9 @@ function MyDeals() {
   );
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
+// ── Main page (preserved in full for future reactivation) ────────────────────
 
-export default function Marketplace({ tab: initialTab }) {
+function MarketplaceFull({ tab: initialTab }) {
   const navigate = useNavigate();
   const [tab, setTab] = useState(initialTab === 'deals' ? 1 : 0);
   const [listings, setListings] = useState([]);
@@ -393,5 +399,23 @@ export default function Marketplace({ tab: initialTab }) {
 
       <DealDialog listing={contactListing} open={!!contactListing} onClose={() => setContactListing(null)} />
     </Box>
+  );
+}
+
+// ── Feature-flagged export ────────────────────────────────────────────────────
+// Temporarily hidden for future reactivation. Swap to MarketplaceFull when ready.
+export default function Marketplace(props) {
+  if (SHOW_MARKETPLACE) return <MarketplaceFull {...props} />;
+  return (
+    <ComingSoonPage
+      icon={Handshake}
+      title="Partnership Marketplace"
+      subtitle="Connect brands with authentic Telegram communities. TCS-verified channels, crypto escrow, and transparent partnership deals — coming soon."
+      features={[
+        { icon: Shield, title: 'TCS-Verified Listings', desc: 'Only authentic, score-verified communities' },
+        { icon: AttachMoney, title: 'Crypto Escrow Payments', desc: 'USDT, BTC, ETH, BNB, SOL supported' },
+        { icon: Gavel, title: 'Deal Management', desc: 'Track negotiations, deliverables, and completion' },
+      ]}
+    />
   );
 }

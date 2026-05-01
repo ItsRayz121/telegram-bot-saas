@@ -7,6 +7,7 @@ import {
 import {
   Campaign, Add, Refresh, Delete, Analytics, People,
   Visibility, ThumbUp, OpenInNew, CheckCircle, Warning,
+  Handshake,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -252,11 +253,113 @@ export default function Channels() {
         </Grid>
       )}
 
+      {/* ── Marketplace listing card — temporarily shows Coming Soon ──────── */}
+      {/* Temporarily hidden for future reactivation: clicking opens the
+          DirectorySubmit form when the Marketplace feature is re-enabled.
+          Currently shows a Coming Soon badge with the form behind it. */}
+      <MarketplaceListingCard />
+
       <AddChannelDialog
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
         onAdded={handleAdded}
       />
     </Box>
+  );
+}
+
+// ── Marketplace listing teaser card ──────────────────────────────────────────
+// Temporarily shows "Coming Soon". When Marketplace launches, wire the onClick
+// to navigate('/directory/submit') to open the real listing form.
+function MarketplaceListingCard() {
+  return (
+    <Card
+      sx={{
+        mt: 4,
+        border: '1px dashed',
+        borderColor: 'rgba(124,58,237,0.4)',
+        bgcolor: 'rgba(124,58,237,0.04)',
+        cursor: 'default',
+        position: 'relative',
+        overflow: 'visible',
+      }}
+    >
+      {/* Coming Soon badge */}
+      <Chip
+        label="Coming Soon"
+        size="small"
+        sx={{
+          position: 'absolute',
+          top: -10,
+          right: 16,
+          bgcolor: 'rgba(124,58,237,0.85)',
+          color: '#fff',
+          fontWeight: 700,
+          fontSize: '0.68rem',
+          letterSpacing: '0.05em',
+          height: 20,
+        }}
+      />
+
+      <CardContent sx={{ p: 2.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, flexWrap: 'wrap' }}>
+          <Box
+            sx={{
+              width: 48,
+              height: 48,
+              borderRadius: '50%',
+              bgcolor: 'rgba(124,58,237,0.15)',
+              border: '1px solid rgba(124,58,237,0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <Handshake sx={{ fontSize: 24, color: 'secondary.light' }} />
+          </Box>
+
+          <Box sx={{ flex: 1, minWidth: 200 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 0.5 }}>
+              <Typography fontWeight={700} fontSize="1rem">
+                List Your Channel in Telegizer Marketplace
+              </Typography>
+            </Box>
+            <Typography variant="body2" color="text.secondary" mb={1.5}>
+              Future collaborations, sponsorships, and partnership opportunities.
+            </Typography>
+            <Stack direction="row" spacing={1} flexWrap="wrap">
+              {['Sponsorships', 'Collaborations', 'Partnerships'].map(tag => (
+                <Chip
+                  key={tag}
+                  label={tag}
+                  size="small"
+                  variant="outlined"
+                  sx={{ height: 20, fontSize: '0.65rem', borderColor: 'rgba(124,58,237,0.3)', color: 'secondary.light' }}
+                />
+              ))}
+            </Stack>
+          </Box>
+
+          <Tooltip title="Marketplace launching soon — your listing form will open here">
+            <span>
+              <Button
+                variant="outlined"
+                disabled
+                startIcon={<Handshake />}
+                sx={{
+                  borderColor: 'rgba(124,58,237,0.4)',
+                  color: 'secondary.light',
+                  '&.Mui-disabled': { borderColor: 'rgba(124,58,237,0.25)', color: 'rgba(167,139,250,0.4)' },
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                List My Channel
+              </Button>
+            </span>
+          </Tooltip>
+        </Box>
+      </CardContent>
+    </Card>
   );
 }

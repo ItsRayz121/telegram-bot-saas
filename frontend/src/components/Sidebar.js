@@ -537,10 +537,9 @@ export default function Sidebar({ onClose }) {
         <NavItem label="Groups" path="/analytics" icon={BarChart} active={isActive('/analytics')} onClick={() => nav('/analytics')} indent />
         <NavItem label="Channels" path="/analytics" icon={BarChart} active={false} onClick={() => nav('/analytics')} indent />
 
-        {/* ── GROW ── */}
-        <SectionLabel label="Grow" />
-        <NavItem label="Directory"   path="/directory"   icon={Explore}   active={isActive('/directory')}   onClick={() => nav('/directory')} />
-        <NavItem label="Marketplace" path="/marketplace" icon={Handshake} active={isActive('/marketplace')} onClick={() => nav('/marketplace')} />
+        {/* ── GROW — Temporarily hidden for future reactivation ── */}
+        {/* Directory and Marketplace nav items are masked pending feature completion.
+            Routes, backend endpoints, and DB schema are fully intact. */}
 
         {/* ── ACCOUNT ── */}
         <SectionLabel label="Account" />

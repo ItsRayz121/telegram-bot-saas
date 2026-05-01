@@ -1,3 +1,8 @@
+// ── FEATURE FLAG: Directory is temporarily hidden for future reactivation ──────
+// All backend routes, DB schema, and API calls below are fully preserved.
+// To re-enable: set SHOW_DIRECTORY = true or remove the feature flag block.
+const SHOW_DIRECTORY = false;
+
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, Chip, Grid,
@@ -11,6 +16,7 @@ import {
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { directory as dirApi } from '../services/api';
+import ComingSoonPage from '../components/ComingSoonPage';
 
 const CATEGORIES = [
   "All", "Technology & Dev", "Crypto & Web3", "News & Politics",
@@ -131,7 +137,8 @@ function ListingCard({ listing }) {
   );
 }
 
-export default function Directory() {
+// ── Original Directory component (preserved in full for future reactivation) ──
+function DirectoryFull() {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -302,5 +309,23 @@ export default function Directory() {
         </Box>
       </Box>
     </Box>
+  );
+}
+
+// ── Feature-flagged export ────────────────────────────────────────────────────
+// Temporarily hidden for future reactivation. Swap to DirectoryFull when ready.
+export default function Directory() {
+  if (SHOW_DIRECTORY) return <DirectoryFull />;
+  return (
+    <ComingSoonPage
+      icon={Explore}
+      title="Community Directory"
+      subtitle="Discover and list Telegram channels and groups verified by the Telegizer Community Score (TCS). Filtered by topic, language, and authenticity."
+      features={[
+        { icon: Search, title: 'Browse Verified Communities', desc: 'Filter by category, language, and TCS grade' },
+        { icon: Shield, title: 'TCS Authenticity Score', desc: 'Engagement-based trust rating for every listing' },
+        { icon: Add, title: 'List Your Community', desc: 'Submit your channel or group for discovery' },
+      ]}
+    />
   );
 }
