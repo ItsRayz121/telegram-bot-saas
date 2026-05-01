@@ -56,10 +56,20 @@ export default function VerifyEmail() {
       return;
     }
     auth.verifyEmail({ token })
-      .then(() => {
-        // Stamp email_verified in localStorage so VerifiedRoute unblocks immediately
+      .then((res) => {
+        // Swap the email_verify_pending token for a full-scope JWT.
+        // The backend now returns token + user on successful verification.
         try {
-          const u = JSON.parse(localStorage.getItem('user') || '{}');
+          if (res.data?.token) {
+            localStorage.setItem('token', res.data.token);
+          }
+          if (res.data?.refresh_token) {
+            localStorage.setItem('refresh_token', res.data.refresh_token);
+          }
+          const incoming = res.data?.user || {};
+          const u = Object.keys(incoming).length
+            ? incoming
+            : JSON.parse(localStorage.getItem('user') || '{}');
           u.email_verified = true;
           localStorage.setItem('user', JSON.stringify(u));
         } catch {}

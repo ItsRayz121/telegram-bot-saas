@@ -1,11 +1,14 @@
 import axios from 'axios';
 
-if (!process.env.REACT_APP_API_URL) {
-  console.error(
-    '[api] REACT_APP_API_URL is not set. ' +
-    'Add it to Vercel Environment Variables and redeploy.'
-  );
+export const API_CONFIG_ERROR =
+  !process.env.REACT_APP_API_URL && process.env.NODE_ENV === 'production'
+    ? 'REACT_APP_API_URL is not set. All API calls will fail. Contact support or check Vercel environment variables.'
+    : null;
+
+if (API_CONFIG_ERROR) {
+  console.error('[api]', API_CONFIG_ERROR);
 }
+
 const BASE_URL = process.env.REACT_APP_API_URL || '';
 
 const api = axios.create({

@@ -3,7 +3,7 @@ from functools import wraps
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 import json
-from ..models import db, User, Bot, Group, Member, SuspiciousActivity, Referral, TelegramGroup, CustomBot, BotEvent, AdminAuditLog
+from ..models import db, User, Bot, Group, Member, SuspiciousActivity, Referral, TelegramGroup, CustomBot, BotEvent, AdminAuditLog, DirectoryListing
 from ..config import Config
 from ..middleware.rate_limit import rate_limit
 
@@ -509,3 +509,31 @@ def admin_disable_custom_bot(bot_id):
     bot.status = "inactive"
     db.session.commit()
     return jsonify({"message": "Custom bot disabled", "bot": bot.to_dict()})
+
+
+@admin_bp.route("/directory/pending", methods=["GET"])
+@admin_required
+@rate_limit(requests_per_minute=60)
+def list_pending_directory():
+    """List directory listings awaiting moderation approval."""
+    pending = DirectoryListing.query.filter_by(moderation_status="pending").order_by(
+        DirectoryListing.created_at.asc()
+    ).all()
+    return jsonify({"listings": [l.to_dict(include_contact=True) for l in pending], "total": len(pending)})
+
+
+@admin_bp.route("/directory/<int:lid>/moderate", methods=["POST"])
+@admin_required
+@rate_limit(requests_per_minute=30)
+def moderate_directory_listing(lid):
+    """Approve or reject a directory listing."""
+    listing = DirectoryListing.query.get(lid)
+    if not listing:
+        return jsonify({"error": "Listing not found"}), 404
+    data = request.get_json() or {}
+    action = data.get("action")
+    if action not in ("approve", "reject"):
+        return jsonify({"error": "action must be 'approve' or 'reject'"}), 400
+    listing.moderation_status = "approved" if action == "approve" else "rejected"
+    db.session.commit()
+    return jsonify({"listing": listing.to_dict(include_contact=True)})

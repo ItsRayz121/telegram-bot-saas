@@ -8,6 +8,7 @@ import 'react-toastify/dist/ReactToastify.css';
 import ErrorBoundary from './components/ErrorBoundary';
 import PWAInstallBanner from './components/PWAInstallBanner';
 import AppLayout from './layouts/AppLayout';
+import { API_CONFIG_ERROR } from './services/api';
 
 // Pages — public
 import Landing from './pages/Landing';
@@ -168,6 +169,11 @@ export default function App() {
   return (
     <ThemeProvider theme={darkTheme}>
       <CssBaseline />
+      {API_CONFIG_ERROR && (
+        <Box sx={{ bgcolor: 'error.main', color: '#fff', p: 1.5, textAlign: 'center', fontSize: '0.85rem', fontWeight: 600, zIndex: 9999 }}>
+          ⚠️ {API_CONFIG_ERROR}
+        </Box>
+      )}
       <ErrorBoundary>
         <BrowserRouter>
           <Routes>

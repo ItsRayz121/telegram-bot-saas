@@ -652,7 +652,18 @@ def verify_email():
             pass
 
     logger.info("Email verified for user %s", user.id)
-    return jsonify({"message": "Email verified successfully!", "email_verified": True}), 200
+    # Issue a full-scope JWT now that email is verified.
+    # The registration endpoint issues email_verify_pending scope, so the
+    # frontend needs to swap it for a real token to access protected routes.
+    token = create_access_token(identity=str(user.id))
+    refresh_token = create_refresh_token(identity=str(user.id))
+    return jsonify({
+        "message": "Email verified successfully!",
+        "email_verified": True,
+        "token": token,
+        "refresh_token": refresh_token,
+        "user": user.to_dict(),
+    }), 200
 
 
 @auth_bp.route("/resend-verification", methods=["POST"])
