@@ -180,23 +180,33 @@ export default function AssistantAISettings() {
                 <Chip icon={<CheckCircle />} label="Active" color="success" size="small" />
               )
             ) : (
-              <Chip icon={<Cancel />} label="Unavailable" color="error" size="small" />
+              <Chip icon={<Cancel />} label="Not configured" color="default" size="small" />
             )}
           </Box>
 
-          <Typography fontSize="0.78rem" color="text.secondary" mb={0.5}>
-            Usage today: {(usage.used || 0).toLocaleString()} / {(usage.limit || 50000).toLocaleString()} tokens
-          </Typography>
-          <LinearProgress
-            variant="determinate"
-            value={usagePct}
-            color={atLimit ? 'error' : usagePct > 80 ? 'warning' : 'primary'}
-            sx={{ borderRadius: 1, height: 6, mb: 0.75 }}
-          />
-          {usage.limit === 50000 && (
-            <Typography fontSize="0.75rem" color="text.disabled">
-              Upgrade to Pro for 200,000 tokens/day
+          {!settings?.platform_key_active && (
+            <Typography fontSize="0.8rem" color="text.secondary" mb={1}>
+              The platform AI key is not set up yet. Set your own API key below to enable all AI features.
             </Typography>
+          )}
+
+          {settings?.platform_key_active && (
+            <>
+              <Typography fontSize="0.78rem" color="text.secondary" mb={0.5}>
+                Usage today: {(usage.used || 0).toLocaleString()} / {(usage.limit || 50000).toLocaleString()} tokens
+              </Typography>
+              <LinearProgress
+                variant="determinate"
+                value={usagePct}
+                color={atLimit ? 'error' : usagePct > 80 ? 'warning' : 'primary'}
+                sx={{ borderRadius: 1, height: 6, mb: 0.75 }}
+              />
+              {usage.limit === 50000 && (
+                <Typography fontSize="0.75rem" color="text.disabled">
+                  Upgrade to Pro for 200,000 tokens/day
+                </Typography>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
