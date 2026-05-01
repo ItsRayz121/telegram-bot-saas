@@ -216,6 +216,52 @@ def send_welcome_email(to_email, full_name):
     )
 
 
+def send_onboarding_day3_email(to_email, full_name):
+    content = f"""
+    <p>Hi <strong>{full_name}</strong>,</p>
+    <p>It's been 3 days since you joined Telegizer — hope you're settling in!</p>
+    <p>Here are a few power features worth trying:</p>
+    <ul class="feature-list">
+      <li><strong>AI Moderation</strong> — auto-remove spam and toxic messages</li>
+      <li><strong>Smart Reminders</strong> — schedule recurring announcements</li>
+      <li><strong>Welcome Messages</strong> — greet new members automatically</li>
+      <li><strong>Group Analytics</strong> — see who's active and when</li>
+    </ul>
+    <p>Any questions? Reply to this email or join our support group.</p>
+    <a href="{current_app.config['FRONTEND_URL']}/dashboard" class="btn">Open Dashboard</a>
+    """
+    return send_email(
+        to_email,
+        "Quick tips to get more from Telegizer",
+        _base_template(content, "3-Day Tips"),
+        f"Hi {full_name}, here are some power features to try in Telegizer.",
+    )
+
+
+def send_onboarding_day7_email(to_email, full_name):
+    content = f"""
+    <p>Hi <strong>{full_name}</strong>,</p>
+    <p>You've been on Telegizer for a week — great to have you!</p>
+    <p>If you're managing an active community, upgrading to <strong>Pro</strong> unlocks:</p>
+    <ul class="feature-list">
+      <li>Unlimited bots &amp; groups</li>
+      <li>AI-powered auto-replies &amp; digests</li>
+      <li>Advanced analytics dashboard</li>
+      <li>Priority support</li>
+    </ul>
+    <a href="{current_app.config['FRONTEND_URL']}/pricing" class="btn">View Pricing</a>
+    <p style="margin-top:16px;font-size:0.85em;color:#94a3b8;">
+      Not interested? No worries — your free account stays active forever.
+    </p>
+    """
+    return send_email(
+        to_email,
+        "Ready to level up your Telegram community?",
+        _base_template(content, "Upgrade to Pro"),
+        f"Hi {full_name}, upgrade to Telegizer Pro for unlimited bots and AI features.",
+    )
+
+
 def send_subscription_confirmation(to_email, full_name, plan_name, expires_at):
     content = f"""
     <p>Hi <strong>{full_name}</strong>,</p>

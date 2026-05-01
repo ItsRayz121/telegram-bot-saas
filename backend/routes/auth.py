@@ -314,6 +314,21 @@ def register():
     except Exception:
         pass
 
+    # Send welcome email asynchronously (fire-and-forget)
+    try:
+        from ..notifications import send_welcome_email
+        import threading
+        _app = current_app._get_current_object()
+        def _send_welcome():
+            try:
+                with _app.app_context():
+                    send_welcome_email(email, full_name)
+            except Exception as exc:
+                logger.error("Welcome email failed for %s: %s", email, exc)
+        threading.Thread(target=_send_welcome, daemon=True).start()
+    except Exception:
+        pass
+
     # Issue a limited-scope token until the user verifies their email.
     # The _enforce_email_verification middleware blocks all /api routes for
     # email_verify_pending scope except /verify-email and /resend-verification.

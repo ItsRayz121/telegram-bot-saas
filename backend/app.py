@@ -200,6 +200,7 @@ def create_app():
     app.bot_manager = bot_manager
 
     @app.route("/health")
+    @app.route("/api/health")
     def health():
         db_ok = False
         try:
@@ -207,9 +208,13 @@ def create_app():
             db_ok = True
         except Exception:
             pass
+        bot_ok = getattr(app, "official_bot_instance", None) is not None
         return jsonify({
             "status": "ok",
             "db": "connected" if db_ok else "error",
+            "db_status": "ok" if db_ok else "outage",
+            "bot_status": "ok" if bot_ok else "degraded",
+            "email_status": "ok",
             "version": Config.VERSION,
         })
 
@@ -415,6 +420,7 @@ def create_app():
         _run_assistant_bot_migration()
         _run_assistant_spaces_migration()
         _run_linked_telegram_accounts_migration()
+        _run_onboarding_emails_migration()
 
         # Encryption self-check — must run after all migrations so tokens exist
         from .utils.encryption import startup_encryption_selfcheck
@@ -967,6 +973,19 @@ def _run_linked_telegram_accounts_migration():
             conn.commit()
     except Exception as exc:
         _mig_log.warning("user_telegram_accounts migration failed: %s", exc)
+
+
+def _run_onboarding_emails_migration():
+    """Add onboarding_emails_sent column to users table. Additive only."""
+    _mig_log = logging.getLogger("migrations")
+    try:
+        with db.engine.connect() as conn:
+            conn.execute(text("""
+                ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_emails_sent INTEGER NOT NULL DEFAULT 0
+            """))
+            conn.commit()
+    except Exception as exc:
+        _mig_log.warning("onboarding_emails_sent migration failed: %s", exc)
 
 
 def _run_assistant_bot_migration():

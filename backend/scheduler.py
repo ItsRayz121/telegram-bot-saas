@@ -35,6 +35,10 @@ def make_celery(app=None):
                 "task": "backend.scheduler.send_scheduled_polls",
                 "schedule": 60.0,
             },
+            "send-onboarding-emails": {
+                "task": "backend.scheduler.send_onboarding_emails",
+                "schedule": crontab(hour=10, minute=0),  # daily at 10:00 UTC
+            },
         },
     )
 
@@ -293,3 +297,54 @@ def check_raid_reminders():
 
     except Exception as e:
         logger.error(f"check_raid_reminders error: {e}")
+
+
+@celery.task(name="backend.scheduler.send_onboarding_emails")
+def send_onboarding_emails():
+    """Send day-3 and day-7 onboarding emails to users who haven't received them yet."""
+    try:
+        from .app import create_app
+        app = create_app()
+
+        with app.app_context():
+            from .models import db, User
+            from .notifications import send_onboarding_day3_email, send_onboarding_day7_email
+            from datetime import timedelta
+
+            now = datetime.utcnow()
+
+            # Day-3: registered 3 days ago, onboarding_step < 2
+            day3_cutoff = now - timedelta(days=3)
+            day3_users = User.query.filter(
+                User.created_at <= day3_cutoff,
+                User.created_at > day3_cutoff - timedelta(hours=24),
+                User.onboarding_emails_sent < 2,
+                User.email_verified == True,
+            ).all()
+            for u in day3_users:
+                try:
+                    send_onboarding_day3_email(u.email, u.full_name or u.email.split("@")[0])
+                    u.onboarding_emails_sent = max(u.onboarding_emails_sent or 0, 2)
+                except Exception as exc:
+                    logger.error("Day-3 email failed for %s: %s", u.email, exc)
+
+            # Day-7: registered 7 days ago, onboarding_step < 3
+            day7_cutoff = now - timedelta(days=7)
+            day7_users = User.query.filter(
+                User.created_at <= day7_cutoff,
+                User.created_at > day7_cutoff - timedelta(hours=24),
+                User.onboarding_emails_sent < 3,
+                User.email_verified == True,
+            ).all()
+            for u in day7_users:
+                try:
+                    send_onboarding_day7_email(u.email, u.full_name or u.email.split("@")[0])
+                    u.onboarding_emails_sent = max(u.onboarding_emails_sent or 0, 3)
+                except Exception as exc:
+                    logger.error("Day-7 email failed for %s: %s", u.email, exc)
+
+            db.session.commit()
+            logger.info("[celery:onboarding] day3=%d day7=%d", len(day3_users), len(day7_users))
+
+    except Exception as e:
+        logger.error(f"send_onboarding_emails error: {e}")

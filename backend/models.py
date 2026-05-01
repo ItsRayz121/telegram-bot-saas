@@ -30,6 +30,8 @@ class User(db.Model):
     email_verified = db.Column(db.Boolean, default=False, nullable=False)
     email_verification_token = db.Column(db.String(64), nullable=True, index=True)
     email_verification_expires = db.Column(db.DateTime, nullable=True)
+    # Onboarding email sequence (0=none sent, 2=day3 sent, 3=day7 sent)
+    onboarding_emails_sent = db.Column(db.Integer, default=0, nullable=False)
     # Brute-force login protection
     failed_login_attempts = db.Column(db.Integer, default=0, nullable=False)
     locked_until = db.Column(db.DateTime, nullable=True)

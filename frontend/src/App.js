@@ -19,6 +19,7 @@ import PaymentSuccess from './pages/PaymentSuccess';
 import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
 import NotFound from './pages/NotFound';
+import Status from './pages/Status';
 import VerifyEmail from './pages/VerifyEmail';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
@@ -232,6 +233,7 @@ export default function App() {
             <Route path="/payment/success" element={<PaymentSuccess />} />
             <Route path="/terms" element={<Terms />} />
             <Route path="/privacy" element={<Privacy />} />
+            <Route path="/status" element={<Status />} />
             <Route path="/join" element={<JoinReferral />} />
 
             {/* ── Auth (no sidebar) ─────────────────────────────────────────── */}
