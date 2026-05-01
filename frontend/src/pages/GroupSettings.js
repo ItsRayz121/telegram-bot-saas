@@ -1138,6 +1138,27 @@ export default function GroupSettings() {
                   </FormControl>
                 </Grid>
               </Grid>
+
+              <Divider sx={{ my: 2 }} />
+              <Typography variant="subtitle2" fontWeight={600} mb={1}>Auto-Delete</Typography>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={v.auto_delete_on_timeout !== false}
+                    onChange={(e) => updateSetting('verification.auto_delete_on_timeout', e.target.checked)}
+                  />
+                }
+                label={
+                  <Box>
+                    <Typography variant="body2">Auto-delete verification message on timeout</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      When enabled, the challenge message is automatically deleted after {v.timeout_seconds || 300} seconds
+                      — keeping the group clean even if the user never responds.
+                    </Typography>
+                  </Box>
+                }
+              />
+
               <Divider sx={{ my: 2 }} />
               <Typography variant="subtitle2" fontWeight={600} mb={1}>Verification Location</Typography>
               <Typography variant="body2" color="text.secondary" mb={2}>

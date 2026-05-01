@@ -2242,6 +2242,7 @@ async def _start_verification(bot, chat, user, v_cfg, flask_app, group_id):
         "kick_on_fail": bool(v_cfg.get("kick_on_fail", True)),
         "max_attempts": int(v_cfg.get("max_attempts", 3)),
         "attempts": 0,
+        "auto_delete_on_timeout": bool(v_cfg.get("auto_delete_on_timeout", True)),
     }
     _save_pending_verification(flask_app, chat_id, user_id, _pending_verifications[key])
 
@@ -2416,9 +2417,30 @@ async def _fail_verification(bot, chat_id, user_id, pending, flask_app):
 async def _verification_timeout(bot, chat_id, user_id):
     key = f"{chat_id}:{user_id}"
     pending = _pending_verifications.get(key)
-    if pending and datetime.utcnow() > pending["expires_at"]:
-        _log.info("[OfficialBot] Verification timed out: user=%s group=%s", user_id, chat_id)
+    if not pending:
+        return
+    if datetime.utcnow() <= pending["expires_at"]:
+        return
+    _log.info("[OfficialBot] Verification timed out: user=%s group=%s", user_id, chat_id)
+
+    if pending.get("kick_on_fail", True):
+        # Full fail: kick + delete message
         await _fail_verification(bot, chat_id, user_id, pending, None)
+    else:
+        # Restrict-only: just auto-delete the challenge message if enabled
+        if pending.get("auto_delete_on_timeout", True) and pending.get("msg_id"):
+            try:
+                await bot.delete_message(chat_id=chat_id, message_id=pending["msg_id"])
+            except Exception:
+                pass
+        try:
+            await bot.send_message(
+                chat_id=chat_id,
+                text=f"⏰ Verification timed out for user {user_id}. They remain restricted until manually verified.",
+            )
+        except Exception:
+            pass
+        _pending_verifications.pop(key, None)
 
 
 async def _safe_delete(bot, chat_id, message_id):

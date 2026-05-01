@@ -75,7 +75,7 @@ _DEFAULTS: dict = {
     "verification": {
         "enabled": False,
         "method": "button",          # "button" | "math" | "word"
-        "timeout_seconds": 180,      # 3 min — comfortable on mobile
+        "timeout_seconds": 300,      # 5 min — matches the user-facing default
         "max_attempts": 3,
         "on_failure": "restrict",
         "kick_on_fail": True,
@@ -83,6 +83,7 @@ _DEFAULTS: dict = {
         "destination": "same_group",
         "destination_topic_id": None,
         "destination_chat_id": None,
+        "auto_delete_on_timeout": True,  # delete the challenge message when timeout fires
     },
 
     # ── Welcome ───────────────────────────────────────────────────────────────

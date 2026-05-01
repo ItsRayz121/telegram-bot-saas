@@ -101,6 +101,7 @@ class VerificationSystem:
     async def captcha_button_verification(self, bot, chat_id, user_id, user, group, timeout, group_name):
         v_cfg = group.settings.get("verification", {})
         max_attempts = v_cfg.get("max_attempts", 3)
+        auto_delete = v_cfg.get("auto_delete_on_timeout", True)
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton(
                 "✅ I am human — Click to verify",
@@ -127,6 +128,7 @@ class VerificationSystem:
             "attempts": 0,
             "max_attempts": max_attempts,
             "kick_on_fail": v_cfg.get("kick_on_fail", True),
+            "auto_delete_on_timeout": auto_delete,
         }
         asyncio.get_event_loop().call_later(
             timeout,
@@ -136,6 +138,7 @@ class VerificationSystem:
     async def math_verification(self, bot, chat_id, user_id, user, group, timeout, group_name):
         v_cfg = group.settings.get("verification", {})
         max_attempts = v_cfg.get("max_attempts", 3)
+        auto_delete = v_cfg.get("auto_delete_on_timeout", True)
         op_name, op_sym = random.choice(MATH_OPS)
         a = random.randint(1, 20)
         b = random.randint(1, 20)
@@ -186,6 +189,7 @@ class VerificationSystem:
             "max_attempts": max_attempts,
             "a": a, "b": b, "op_sym": op_sym, "options": options,
             "kick_on_fail": v_cfg.get("kick_on_fail", True),
+            "auto_delete_on_timeout": auto_delete,
         }
         asyncio.get_event_loop().call_later(
             timeout,
@@ -195,6 +199,7 @@ class VerificationSystem:
     async def word_verification(self, bot, chat_id, user_id, user, group, settings, timeout, group_name):
         v_cfg = group.settings.get("verification", {})
         max_attempts = v_cfg.get("max_attempts", 3)
+        auto_delete = v_cfg.get("auto_delete_on_timeout", True)
         question = settings.get("verification", {}).get("custom_question", "What is the group's main topic?")
         msg = await bot.send_message(
             chat_id=chat_id,
@@ -216,6 +221,7 @@ class VerificationSystem:
             "attempts": 0,
             "max_attempts": max_attempts,
             "kick_on_fail": v_cfg.get("kick_on_fail", True),
+            "auto_delete_on_timeout": auto_delete,
         }
         asyncio.get_event_loop().call_later(
             timeout,
@@ -361,6 +367,7 @@ class VerificationSystem:
             if pending.get("kick_on_fail", True):
                 await bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
                 await bot.unban_chat_member(chat_id=chat_id, user_id=user_id)
+            # Always delete the challenge message to keep the group clean
             try:
                 await bot.delete_message(chat_id=chat_id, message_id=pending["message_id"])
             except Exception:
@@ -371,7 +378,33 @@ class VerificationSystem:
             self.pending.pop(key, None)
 
     async def _check_verification_timeout(self, bot, chat_id, user_id, group):
+        """Called when the timeout timer fires. Kicks/restricts and auto-deletes the challenge message."""
         key = f"{chat_id}:{user_id}"
         pending = self.pending.get(key)
-        if pending and datetime.utcnow() > pending["expires_at"]:
+        if not pending:
+            return
+        if datetime.utcnow() <= pending["expires_at"]:
+            # Timer fired early (e.g. clock drift) — ignore
+            return
+
+        auto_delete = pending.get("auto_delete_on_timeout", True)
+
+        if pending.get("kick_on_fail", True):
+            # Full fail path: kick + delete message
             await self.fail_verification(bot, chat_id, user_id, pending, group.id)
+        else:
+            # Restrict-only path: user stays restricted but message is auto-deleted if enabled
+            if auto_delete:
+                try:
+                    await bot.delete_message(chat_id=chat_id, message_id=pending["message_id"])
+                except Exception:
+                    pass
+            # Send a quiet notice so group admins know who timed out
+            try:
+                await bot.send_message(
+                    chat_id=chat_id,
+                    text=f"⏰ Verification timed out for user {user_id}. They remain restricted until manually verified.",
+                )
+            except Exception:
+                pass
+            self.pending.pop(key, None)
