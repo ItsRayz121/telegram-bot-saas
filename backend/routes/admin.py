@@ -2,7 +2,8 @@ from datetime import datetime
 from functools import wraps
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from ..models import db, User, Bot, Group, Member, SuspiciousActivity, Referral, TelegramGroup, CustomBot, BotEvent
+import json
+from ..models import db, User, Bot, Group, Member, SuspiciousActivity, Referral, TelegramGroup, CustomBot, BotEvent, AdminAuditLog
 from ..config import Config
 from ..middleware.rate_limit import rate_limit
 
@@ -23,6 +24,25 @@ def admin_required(f):
             return jsonify({"error": "User not found"}), 404
         if user.email not in Config.ADMIN_EMAILS:
             return jsonify({"error": "Admin access required"}), 403
+        if not user.totp_enabled:
+            return jsonify({"error": "Admin accounts must have 2FA enabled"}), 403
+        # Log every admin action for audit trail
+        try:
+            body = request.get_json(silent=True) or {}
+            # Strip any sensitive fields from the log
+            sanitised = {k: v for k, v in body.items() if k not in {"password", "token", "api_key"}}
+            log = AdminAuditLog(
+                admin_id=user.id,
+                action=request.endpoint or "",
+                method=request.method,
+                path=request.path,
+                payload_json=json.dumps(sanitised) if sanitised else None,
+                ip_address=request.remote_addr,
+            )
+            db.session.add(log)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
         return f(*args, **kwargs)
     return decorated
 

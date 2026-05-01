@@ -138,6 +138,14 @@ def create_app():
                 "Removed: %s", [o for o in _allowed if o not in _prod_allowed]
             )
         _allowed = _prod_allowed if _prod_allowed else _allowed  # never go empty
+    # Startup assertion: reject wildcard or empty CORS config in production
+    if _is_prod_db:
+        if not _allowed:
+            raise RuntimeError("CORS misconfiguration: ALLOWED_ORIGINS is empty in production. "
+                               "Set ALLOWED_ORIGINS or FRONTEND_URL in Railway env.")
+        _wildcards = [o for o in _allowed if "*" in o]
+        if _wildcards:
+            raise RuntimeError(f"CORS misconfiguration: wildcard origins not allowed in production: {_wildcards}")
     CORS(app,
          origins=_allowed,
          allow_headers=["Content-Type", "Authorization"],
@@ -263,19 +271,27 @@ def create_app():
             if not uid:
                 return None  # Unauthenticated — let the route return its own 401
 
-            # Block totp_pending tokens from reaching any endpoint except the
-            # 2FA completion route — prevents a stolen pending token from
-            # accessing real API resources before TOTP is verified.
             claims = get_jwt()
-            if claims.get("scope") == "totp_pending" and path != "/api/auth/verify-totp-login":
+            scope = claims.get("scope")
+
+            # Block totp_pending tokens from any endpoint except 2FA completion
+            if scope == "totp_pending" and path != "/api/auth/verify-totp-login":
                 return jsonify({
                     "error": "Two-factor authentication is required to access this resource.",
                     "code": "TOTP_REQUIRED",
                 }), 403
 
+            # Block email_verify_pending tokens from any endpoint except verify/resend
+            _EMAIL_VERIFY_ALLOWED = {"/api/auth/verify-email", "/api/auth/resend-verification"}
+            if scope == "email_verify_pending" and path not in _EMAIL_VERIFY_ALLOWED:
+                return jsonify({
+                    "error": "Please verify your email address before accessing this feature.",
+                    "code": "EMAIL_NOT_VERIFIED",
+                }), 403
+
             from .models import User as _User
             user = _User.query.get(int(uid))
-            if user and not user.email_verified:
+            if user and not user.email_verified and scope != "email_verify_pending":
                 return jsonify({
                     "error": "Please verify your email address before accessing this feature. "
                              "Check your inbox for the verification link.",

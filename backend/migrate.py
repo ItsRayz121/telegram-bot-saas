@@ -99,6 +99,12 @@ def init_db():
                 f"CREATE INDEX IF NOT EXISTS ix_{table}_{col} ON {table} ({col})",
                 f"{table}.{col} index",
             )
+        # admin_audit_logs is created by db.create_all(); add any future columns here
+        _run_alter(
+            db.engine,
+            "CREATE INDEX IF NOT EXISTS ix_admin_audit_logs_admin_id ON admin_audit_logs (admin_id)",
+            "admin_audit_logs.admin_id index",
+        )
         print("Migration complete.")
 
     # One-shot TOTP secret encryption migration.

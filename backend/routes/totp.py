@@ -27,18 +27,20 @@ _BACKUP_CODE_COUNT = 8
 def _generate_backup_codes():
     """Generate 8 random backup codes.
 
-    Returns (plaintext_list, indexed_dict) where indexed_dict maps
-    sha256(plain) → bcrypt_hash for O(1) lookup during verification.
-    Stored as a JSON dict in user.totp_backup_codes.
+    Returns (plaintext_list, stored_list) where stored_list is a list of
+    {"id": uuid, "hash": bcrypt_hash} dicts for single-use consumption.
+    Stored as a JSON list in user.totp_backup_codes.
     """
-    import hashlib
+    import uuid
     plain = [secrets.token_hex(4).upper() + "-" + secrets.token_hex(4).upper() for _ in range(_BACKUP_CODE_COUNT)]
-    indexed = {}
+    stored = []
     for c in plain:
         clean = c.replace("-", "").lower()
-        sha = hashlib.sha256(clean.encode()).hexdigest()
-        indexed[sha] = bcrypt.hashpw(clean.encode(), bcrypt.gensalt()).decode()
-    return plain, indexed
+        stored.append({
+            "id": str(uuid.uuid4()),
+            "hash": bcrypt.hashpw(clean.encode(), bcrypt.gensalt()).decode(),
+        })
+    return plain, stored
 
 
 def _require_paid_or_admin(user):

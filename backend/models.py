@@ -42,12 +42,20 @@ class User(db.Model):
 
     @property
     def totp_secret(self):
-        """Return the decrypted TOTP secret, or None if not set."""
+        """Return the decrypted TOTP secret, or None if not set.
+
+        Automatically re-encrypts under the current key when the old key was used,
+        so the old ENCRYPTION_KEY_OLD can be retired after a rotation window.
+        """
         if not self._totp_secret_enc:
             return None
-        from .utils.encryption import decrypt_value, DecryptionError
+        from .utils.encryption import decrypt_value, encrypt_value, DecryptionError
+
+        def _reenc(new_ct):
+            self._totp_secret_enc = new_ct
+
         try:
-            return decrypt_value(self._totp_secret_enc)
+            return decrypt_value(self._totp_secret_enc, _re_encrypt_callback=_reenc)
         except DecryptionError:
             import logging
             logging.getLogger(__name__).error(
@@ -200,9 +208,13 @@ class Bot(db.Model):
     groups = db.relationship("Group", backref="bot", lazy=True, cascade="all, delete-orphan")
 
     def get_token(self) -> str:
-        """Return the decrypted plain-text bot token."""
-        from .utils.encryption import decrypt_value
-        return decrypt_value(self.bot_token)
+        """Return the decrypted plain-text bot token, re-encrypting under the current key if needed."""
+        from .utils.encryption import decrypt_value, encrypt_value
+
+        def _reenc(new_ct):
+            self.bot_token = new_ct
+
+        return decrypt_value(self.bot_token, _re_encrypt_callback=_reenc)
 
     def set_token(self, plain_token: str):
         """Encrypt and store the bot token; update the hash column."""
@@ -1260,8 +1272,12 @@ class CustomBot(db.Model):
     linked_groups = db.relationship("TelegramGroup", backref="custom_bot", lazy=True)
 
     def get_token(self) -> str:
-        from .utils.encryption import decrypt_value
-        return decrypt_value(self.bot_token_encrypted)
+        from .utils.encryption import decrypt_value, encrypt_value
+
+        def _reenc(new_ct):
+            self.bot_token_encrypted = new_ct
+
+        return decrypt_value(self.bot_token_encrypted, _re_encrypt_callback=_reenc)
 
     def set_token(self, plain_token: str):
         from .utils.encryption import encrypt_value
@@ -2136,5 +2152,30 @@ class WorkspaceKnowledgeDocument(db.Model):
             "tags": self.tags or [],
             "description": self.description,
             "content_preview": self.content_text[:300] if self.content_text else "",
+            "created_at": self.created_at.isoformat(),
+        }
+
+
+class AdminAuditLog(db.Model):
+    """Immutable log of every admin action for security review."""
+    __tablename__ = "admin_audit_logs"
+
+    id = db.Column(db.Integer, primary_key=True)
+    admin_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    action = db.Column(db.String(255), nullable=False)   # Flask endpoint name
+    method = db.Column(db.String(10), nullable=False)
+    path = db.Column(db.String(500), nullable=False)
+    payload_json = db.Column(db.Text, nullable=True)     # sanitised request body
+    ip_address = db.Column(db.String(45), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "admin_id": self.admin_id,
+            "action": self.action,
+            "method": self.method,
+            "path": self.path,
+            "ip_address": self.ip_address,
             "created_at": self.created_at.isoformat(),
         }

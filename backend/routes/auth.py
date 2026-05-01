@@ -314,7 +314,14 @@ def register():
     except Exception:
         pass
 
-    token = create_access_token(identity=str(user.id))
+    # Issue a limited-scope token until the user verifies their email.
+    # The _enforce_email_verification middleware blocks all /api routes for
+    # email_verify_pending scope except /verify-email and /resend-verification.
+    token = create_access_token(
+        identity=str(user.id),
+        expires_delta=timedelta(hours=24),
+        additional_claims={"scope": "email_verify_pending"},
+    )
     refresh_token = create_refresh_token(identity=str(user.id))
     return jsonify({"token": token, "refresh_token": refresh_token, "user": user.to_dict()}), 201
 
@@ -378,10 +385,14 @@ def login():
         if not totp_code:
             # Return indicator that 2FA is required; do NOT issue full JWT yet
             import secrets as _s
+            nonce = _s.token_hex(16)
+            _r = _get_redis()
+            if _r:
+                _r.setex(f"totp_nonce:{user.id}", 90, nonce)
             pending_token = create_access_token(
                 identity=str(user.id),
-                expires_delta=timedelta(minutes=5),
-                additional_claims={"scope": "totp_pending"},
+                expires_delta=timedelta(seconds=90),
+                additional_claims={"scope": "totp_pending", "nonce": nonce},
             )
             return jsonify({
                 "requires_2fa": True,
@@ -411,7 +422,7 @@ def login():
 # ── 2FA login completion (submit code after receives requires_2fa) ─────────────
 
 @auth_bp.route("/verify-totp-login", methods=["POST"])
-@rate_limit(requests_per_minute=10)
+@rate_limit(requests_per_minute=3)
 def verify_totp_login():
     """Complete login when 2FA is required: validate pending token + TOTP code."""
     from flask_jwt_extended import decode_token
@@ -431,9 +442,19 @@ def verify_totp_login():
         return jsonify({"error": "Invalid token scope"}), 401
 
     user_id = decoded.get("sub")
+    token_nonce = decoded.get("nonce", "")
     user = User.query.get(int(user_id))
     if not user:
         return jsonify({"error": "User not found"}), 404
+
+    # Verify one-time nonce to prevent replay of stolen pending tokens
+    _r = _get_redis()
+    if _r:
+        stored_nonce = _r.get(f"totp_nonce:{user.id}")
+        if not stored_nonce or stored_nonce != token_nonce:
+            return jsonify({"error": "Session expired or already used. Please log in again."}), 401
+        # Delete nonce before TOTP check — any failure requires a fresh login
+        _r.delete(f"totp_nonce:{user.id}")
 
     if not _verify_totp(user, totp_code):
         return jsonify({"error": "Invalid 2FA code"}), 401
@@ -475,20 +496,45 @@ def _verify_totp(user: User, code: str) -> bool:
 def _consume_backup_code(user: User, code: str) -> bool:
     """Return True and remove the code if it matches a stored backup code.
 
-    Supports two storage formats:
-    - New (indexed dict): {sha256_of_plain -> bcrypt_hash} — O(1) sha256 lookup, 1 bcrypt check.
-    - Old (list): [bcrypt_hash, ...] — O(n) fallback for pre-migration codes.
+    Supports three storage formats (newest first):
+    - List-of-dicts: [{"id": uuid, "hash": bcrypt_hash}, ...] — current format.
+    - Indexed dict: {sha256_of_plain -> bcrypt_hash} — legacy format.
+    - Plain list: [bcrypt_hash, ...] — oldest format.
+    Rate-limited to 5 attempts/min per user via Redis.
     """
     import hashlib
     if not user.totp_backup_codes:
         return False
     code_clean = code.replace("-", "").strip().lower()
 
+    # Rate-limit backup code attempts per user (5/min)
+    _r = _get_redis()
+    if _r:
+        rate_key = f"backup_code_attempts:{user.id}"
+        attempts = int(_r.get(rate_key) or 0)
+        if attempts >= 5:
+            return False  # treat as failure; caller returns 401
+        _r.incr(rate_key)
+        _r.expire(rate_key, 60)
+
     stored = user.totp_backup_codes
     matched = False
+    remaining = None
 
-    if isinstance(stored, dict):
-        # New indexed format — O(1) lookup
+    if isinstance(stored, list) and stored and isinstance(stored[0], dict):
+        # Current list-of-dicts format
+        remaining = []
+        for entry in stored:
+            if not matched:
+                try:
+                    if bcrypt.checkpw(code_clean.encode(), entry["hash"].encode()):
+                        matched = True
+                        continue  # drop this entry (single-use)
+                except Exception:
+                    pass
+            remaining.append(entry)
+    elif isinstance(stored, dict):
+        # Legacy indexed-dict format
         sha = hashlib.sha256(code_clean.encode()).hexdigest()
         bcrypt_hash = stored.get(sha)
         if bcrypt_hash:
@@ -498,10 +544,8 @@ def _consume_backup_code(user: User, code: str) -> bool:
                     remaining = {k: v for k, v in stored.items() if k != sha}
             except Exception:
                 pass
-        if not matched:
-            return False
     else:
-        # Old list format — O(n) fallback
+        # Oldest list-of-hashes format
         remaining = []
         for bcrypt_hash in stored:
             if not matched:
@@ -513,7 +557,9 @@ def _consume_backup_code(user: User, code: str) -> bool:
                     pass
             remaining.append(bcrypt_hash)
 
-    if matched:
+    if matched and remaining is not None:
+        if _r:
+            _r.delete(f"backup_code_attempts:{user.id}")  # reset counter on success
         user.totp_backup_codes = remaining
         try:
             db.session.commit()
@@ -529,15 +575,34 @@ def _consume_backup_code(user: User, code: str) -> bool:
 def verify_email():
     data = request.get_json() or {}
     token = data.get("token", "").strip()
+    email = data.get("email", "").strip().lower()
     if not token:
         return jsonify({"error": "Verification token is required"}), 400
 
+    # Per-email brute-force counter (5 failures/hr locks the email)
+    _r = _get_redis()
+    _email_fail_key = f"verify_fail:{email}" if email else None
+    if _r and _email_fail_key:
+        fails = int(_r.get(_email_fail_key) or 0)
+        if fails >= 5:
+            return jsonify({"error": "Too many failed verification attempts. Try again in 1 hour."}), 429
+
     user = User.query.filter_by(email_verification_token=token).first()
     if not user:
+        if _r and _email_fail_key:
+            _r.incr(_email_fail_key)
+            _r.expire(_email_fail_key, 3600)
         return jsonify({"error": "Invalid or expired verification link"}), 400
 
     if user.email_verification_expires and datetime.utcnow() > user.email_verification_expires:
+        if _r and _email_fail_key:
+            _r.incr(_email_fail_key)
+            _r.expire(_email_fail_key, 3600)
         return jsonify({"error": "Verification link has expired. Please request a new one."}), 400
+
+    # Clear failure counter on success
+    if _r and _email_fail_key:
+        _r.delete(_email_fail_key)
 
     user.email_verified = True
     user.email_verification_token = None
