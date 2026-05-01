@@ -42,11 +42,11 @@ const PRO_GATED_LABELS = {
 };
 
 const buildCategories = (isOfficial) => [
-  { id: 'moderation', label: 'Moderation', icon: Shield, subTabs: ['AutoMod', 'Behavior', 'Reports'] },
   { id: 'members',    label: 'Members',    icon: Group,  subTabs: ['Verification', 'Welcome', 'XP & Roles'] },
-  { id: 'automation', label: 'Automation', icon: Bolt,   subTabs: ['Scheduler', 'Auto Reply', 'Polls'] },
-  { id: 'community',  label: 'Community',  icon: People, subTabs: ['Raids', 'Invite Links'] },
+  { id: 'moderation', label: 'Moderation', icon: Shield, subTabs: ['AutoMod', 'Behavior', 'Reports'] },
+  { id: 'community',  label: 'Engagement', icon: People, subTabs: ['Raids', 'Invite Links'] },
   { id: 'ai',         label: 'AI & Integrations', icon: AutoAwesome, subTabs: ['Knowledge Base', 'Webhooks'] },
+  { id: 'automation', label: 'Automation', icon: Bolt,   subTabs: ['Scheduler', 'Auto Reply', 'Polls'] },
   {
     id: 'analytics', label: 'Analytics', icon: BarChart,
     subTabs: isOfficial
