@@ -361,84 +361,8 @@ export default function Sidebar({ onClose }) {
         {/* ── COMMUNITIES ── */}
         <SectionLabel label="Communities" />
 
-        {/* Groups — expandable */}
-        <ExpandableHeader
-          label="Groups"
-          icon={Groups}
-          path="/groups"
-          active={groupActive}
-          open={groupsOpen}
-          onToggle={() => setGroupsOpen(o => !o)}
-          onNavigate={() => nav('/groups')}
-        />
-
-        <Collapse in={groupsOpen} timeout={160} unmountOnExit>
-          {groupsLoading ? (
-            [1, 2].map(i => (
-              <ListItem key={i} sx={{ pl: 4, py: 0.3 }}>
-                <Skeleton width={140} height={14} />
-              </ListItem>
-            ))
-          ) : (
-            visibleGroups.map(group => {
-              const gPath = `/groups/${group.id}`;
-              const gActive = isActive(gPath);
-              return (
-                <ListItem key={group.id} disablePadding>
-                  <ListItemButton
-                    onClick={() => nav(gPath)}
-                    sx={{
-                      pl: 3.5, pr: 1.5, py: 0.4, mx: 0.75, mb: 0.1, borderRadius: 1.5,
-                      bgcolor: gActive ? 'rgba(37,99,235,0.15)' : 'transparent',
-                      '&:hover': { bgcolor: 'rgba(255,255,255,0.05)' },
-                    }}
-                  >
-                    <ListItemText
-                      primary={group.title || group.name}
-                      primaryTypographyProps={{
-                        fontSize: '0.78rem',
-                        fontWeight: gActive ? 600 : 400,
-                        noWrap: true,
-                        color: gActive ? 'primary.light' : 'text.secondary',
-                      }}
-                    />
-                    <StatusDot status={group.bot_status} permissions={group.bot_permissions} />
-                  </ListItemButton>
-                </ListItem>
-              );
-            })
-          )}
-
-          {hasMoreGroups && !showAllGroups && (
-            <ListItem disablePadding>
-              <ListItemButton
-                onClick={() => setShowAllGroups(true)}
-                sx={{ pl: 3.5, py: 0.3, mx: 0.75, borderRadius: 1.5, '&:hover': { bgcolor: 'rgba(255,255,255,0.04)' } }}
-              >
-                <ListItemText
-                  primary={`+${groups.length - 8} more`}
-                  primaryTypographyProps={{ fontSize: '0.73rem', color: 'text.disabled' }}
-                />
-              </ListItemButton>
-            </ListItem>
-          )}
-
-          {/* + Add Group */}
-          <ListItem disablePadding>
-            <ListItemButton
-              onClick={() => nav('/groups')}
-              sx={{ pl: 3.5, py: 0.4, mx: 0.75, mb: 0.25, borderRadius: 1.5, '&:hover': { bgcolor: 'rgba(255,255,255,0.04)' } }}
-            >
-              <ListItemIcon sx={{ minWidth: 22 }}>
-                <Add sx={{ fontSize: 14, color: 'text.disabled' }} />
-              </ListItemIcon>
-              <ListItemText
-                primary="Add Group"
-                primaryTypographyProps={{ fontSize: '0.75rem', color: 'text.disabled' }}
-              />
-            </ListItemButton>
-          </ListItem>
-        </Collapse>
+        {/* Groups — flat link, opens My Groups page */}
+        <NavItem label="Groups" path="/groups" icon={Groups} active={groupActive} />
 
         {/* Channels — expandable if channels exist, flat with add-icon if not */}
         {hasChannels ? (
