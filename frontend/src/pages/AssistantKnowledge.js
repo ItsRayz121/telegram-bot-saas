@@ -8,7 +8,7 @@ import {
   LibraryBooks, Upload, Delete, Search, QuestionAnswer,
   InsertDriveFile, PictureAsPdf, Close, Send,
 } from '@mui/icons-material';
-import { knowledge as knowledgeApi } from '../services/api';
+import { workspaceKnowledge as knowledgeApi } from '../services/api';
 import PlanGate from '../components/PlanGate';
 
 function _getUser() {

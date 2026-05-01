@@ -565,7 +565,7 @@ export const tasks = {
   extract: (groupId) => api.post(`/api/tasks/extract/${groupId}`),
 };
 
-export const knowledge = {
+export const workspaceKnowledge = {
   list: () => api.get('/api/workspace/knowledge'),
   upload: (formData) => api.post('/api/workspace/knowledge', formData),
   uploadText: (data) => api.post('/api/workspace/knowledge', data),
