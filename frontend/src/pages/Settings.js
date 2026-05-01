@@ -755,10 +755,17 @@ export default function Settings() {
           <Stack spacing={1.5}>
             <Button
               variant="outlined" fullWidth startIcon={<Telegram />}
+              href="https://t.me/telegizer" target="_blank" rel="noopener"
+              sx={{ justifyContent: 'flex-start' }}
+            >
+              Follow Official Channel (@telegizer)
+            </Button>
+            <Button
+              variant="outlined" fullWidth startIcon={<Telegram />}
               href="https://t.me/telegizer_community" target="_blank" rel="noopener"
               sx={{ justifyContent: 'flex-start' }}
             >
-              Join Telegram Support Group
+              Join Community Group
             </Button>
             <Button
               variant="outlined" fullWidth startIcon={<EmailOutlined />}

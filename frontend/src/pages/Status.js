@@ -129,9 +129,13 @@ export default function Status() {
             <Typography variant="body2" color="text.secondary">
               Having issues?{' '}
               <Link href="https://t.me/telegizer_community" target="_blank" rel="noopener" color="primary.main">
-                Contact support on Telegram
-              </Link>{' '}
-              or email{' '}
+                Join the community group
+              </Link>
+              {', '}
+              <Link href="https://t.me/telegizer" target="_blank" rel="noopener" color="primary.main">
+                follow the official channel
+              </Link>
+              {', or email '}
               <Link href="mailto:fazalelahi5577@gmail.com" color="primary.main">
                 fazalelahi5577@gmail.com
               </Link>
