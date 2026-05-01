@@ -1088,8 +1088,11 @@ def test_official_api_key(group_id):
     if not record:
         return jsonify({"error": "No API key configured"}), 404
 
-    from ..utils.encryption import decrypt_value
-    raw_key = decrypt_value(record.api_key_encrypted)
+    from ..utils.encryption import decrypt_value, DecryptionError
+    try:
+        raw_key = decrypt_value(record.api_key_encrypted)
+    except DecryptionError:
+        return jsonify({"error": "Failed to decrypt stored API key — check ENCRYPTION_KEY config"}), 500
 
     try:
         if record.provider == "openai":

@@ -10,6 +10,11 @@ import {
   Close, CheckCircle, Error as ErrorIcon, Bolt,
 } from '@mui/icons-material';
 import { automations as autoApi, telegramGroups as groupsApi } from '../services/api';
+import PlanGate from '../components/PlanGate';
+
+function _getUser() {
+  try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; }
+}
 
 // ── Config definitions ────────────────────────────────────────────────────────
 
@@ -356,7 +361,10 @@ export default function WorkflowBuilder() {
     try { await autoApi.deleteWorkflow(id); } catch { load(); }
   };
 
+  const user = _getUser();
+
   return (
+    <PlanGate plan="pro" userTier={user.subscription_tier} feature="Workflow Builder">
     <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 900, mx: 'auto' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
@@ -421,5 +429,6 @@ export default function WorkflowBuilder() {
         </DialogActions>
       </Dialog>
     </Box>
+    </PlanGate>
   );
 }

@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy.exc import IntegrityError
-from ..models import db, User, ProcessedPayment, PaymentHistory
+from ..models import db, User, ProcessedPayment, PaymentHistory, PendingInvoice
 from ..config import Config
 from ..middleware.rate_limit import rate_limit
 from ..notifications import send_subscription_confirmation, send_subscription_cancelled
@@ -217,7 +217,6 @@ def crypto_checkout():
 
     amount = _TIER_PRICES_USD[tier][billing_period]
     period_label = "1 Year" if billing_period == "annual" else "1 Month"
-    order_id = f"user_{user.id}_{tier}_{billing_period}_{int(datetime.utcnow().timestamp())}"
 
     try:
         resp = requests.post(
@@ -229,7 +228,6 @@ def crypto_checkout():
             json={
                 "price_amount": amount,
                 "price_currency": "usd",
-                "order_id": order_id,
                 "order_description": f"Telegizer {tier.capitalize()} Plan - {period_label}",
                 "success_url": f"{Config.FRONTEND_URL}/payment/success",
                 "cancel_url": f"{Config.FRONTEND_URL}/payment/success?status=failed",
@@ -242,9 +240,25 @@ def crypto_checkout():
         resp.raise_for_status()
         result = resp.json()
         invoice_url = result.get("invoice_url")
-        if not invoice_url:
-            logger.error(f"[NOWPAYMENTS] No invoice_url in response: {result}")
+        nowpayments_invoice_id = str(result.get("id") or result.get("invoice_id") or "")
+        if not invoice_url or not nowpayments_invoice_id:
+            logger.error(f"[NOWPAYMENTS] Unexpected response: {result}")
             return jsonify({"error": "Failed to get payment URL. Please try again."}), 502
+
+        # Persist a server-side record BEFORE returning the URL.
+        # The IPN handler will look up user_id from this row — never from the order string.
+        pending = PendingInvoice(
+            invoice_id=nowpayments_invoice_id,
+            user_id=user.id,
+            tier=tier,
+            billing_period=billing_period,
+            amount_usd=amount,
+        )
+        db.session.add(pending)
+        db.session.commit()
+        logger.info("[NOWPAYMENTS] Created pending invoice %s for user %d (%s/%s)",
+                    nowpayments_invoice_id, user.id, tier, billing_period)
+
         return jsonify({"url": invoice_url})
     except requests.RequestException as e:
         logger.error(f"[NOWPAYMENTS] Checkout error for user {user.id}: {e}")
@@ -299,8 +313,13 @@ def crypto_webhook():
     if payment_status in ("refunded", "partially_refunded"):
         logger.warning("[NOWPAYMENTS] Refund received for payment_id=%s order=%s", payment_id, order_id)
         try:
-            parts = order_id.split("_")
-            refund_user_id = int(parts[1])
+            # Prefer server-side lookup; fall back to parsing order_id for legacy invoices
+            pending_ref = PendingInvoice.query.filter_by(invoice_id=order_id).first()
+            if pending_ref:
+                refund_user_id = pending_ref.user_id
+            else:
+                parts = order_id.split("_")
+                refund_user_id = int(parts[1])
             refund_user = User.query.get(refund_user_id)
             if refund_user and refund_user.subscription_tier != "free":
                 prev = refund_user.subscription_tier
@@ -329,27 +348,49 @@ def crypto_webhook():
         logger.info(f"[NOWPAYMENTS] Ignoring status '{payment_status}' for order {order_id}")
         return jsonify({"status": "ok"})
 
-    # Parse and validate order_id BEFORE claiming the dedup slot.
-    # If parsing fails, we must not write a dedup record — otherwise a retry
-    # with a fixed order_id would be silently skipped.
-    #
-    # order_id formats:
-    #   legacy:  user_{id}_{tier}_{timestamp}            (4 parts)
-    #   current: user_{id}_{tier}_{billing_period}_{ts}  (5 parts)
-    try:
-        parts = order_id.split("_")
-        user_id = int(parts[1])
-        tier = parts[2]
-        if tier not in ("pro", "enterprise"):
-            raise ValueError("Invalid tier")
-        billing_period = parts[3] if len(parts) >= 5 and parts[3] in ("monthly", "annual") else "monthly"
-    except Exception:
-        logger.warning(f"[NOWPAYMENTS] Could not parse order_id: {order_id}")
-        return jsonify({"status": "ok"})
+    # Timestamp validation — reject IPNs older than 1 hour to prevent replays
+    # after a DB restore or ProcessedPayment table purge.
+    webhook_ts = data.get("created_at") or data.get("updated_at")
+    if webhook_ts:
+        try:
+            from datetime import timezone
+            ts = datetime.fromisoformat(str(webhook_ts).replace("Z", "+00:00"))
+            if ts.tzinfo:
+                ts = ts.astimezone(timezone.utc).replace(tzinfo=None)
+            age_seconds = (datetime.utcnow() - ts).total_seconds()
+            if age_seconds > 3600:
+                logger.warning("[NOWPAYMENTS] Stale IPN (age=%.0fs) for payment_id=%s — ignoring", age_seconds, payment_id)
+                return jsonify({"status": "stale"}), 200
+        except Exception as ts_exc:
+            logger.warning("[NOWPAYMENTS] Could not parse IPN timestamp %r: %s", webhook_ts, ts_exc)
 
-    user = User.query.get(user_id)
+    # Resolve user_id from server-side PendingInvoice (order_id = invoice_id).
+    # This prevents tampered order strings from crediting an arbitrary user.
+    pending = PendingInvoice.query.filter_by(invoice_id=order_id).first()
+    if pending:
+        user = User.query.get(pending.user_id)
+        tier = pending.tier
+        billing_period = pending.billing_period
+        expected_usd = float(pending.amount_usd)
+        logger.info("[NOWPAYMENTS] Resolved user %d from PendingInvoice for invoice %s", pending.user_id, order_id)
+    else:
+        # Fallback for legacy invoices created before PendingInvoice was added.
+        # Parse order_id string — but ONLY if the invoice_id lookup found nothing.
+        try:
+            parts = order_id.split("_")
+            user_id = int(parts[1])
+            tier = parts[2]
+            if tier not in ("pro", "enterprise"):
+                raise ValueError("Invalid tier")
+            billing_period = parts[3] if len(parts) >= 5 and parts[3] in ("monthly", "annual") else "monthly"
+        except Exception:
+            logger.warning("[NOWPAYMENTS] Could not resolve order_id: %s — no PendingInvoice found", order_id)
+            return jsonify({"status": "ok"})
+        user = User.query.get(user_id)
+        expected_usd = _TIER_PRICES_USD.get(tier, {}).get(billing_period)
+
     if not user:
-        logger.warning(f"[NOWPAYMENTS] User {user_id} not found for order {order_id}")
+        logger.warning("[NOWPAYMENTS] User not found for order %s", order_id)
         return jsonify({"status": "ok"})
 
     # Idempotency: atomic INSERT — second delivery for same payment_id gets
@@ -361,19 +402,16 @@ def crypto_webhook():
     price_usd = data.get("price_amount")
     pay_currency = str(data.get("pay_currency") or "USD").upper()
     try:
-        amount_usd_dollars = round(float(price_usd)) if price_usd else None
+        amount_usd_dollars = float(price_usd) if price_usd else None
         if amount_usd_dollars is not None and amount_usd_dollars <= 0:
             amount_usd_dollars = None
     except Exception:
         amount_usd_dollars = None
 
-    # Server-side price validation — reject if the paid amount is less than the
-    # expected plan price (allow a small tolerance for currency conversion rounding).
-    expected_usd = _TIER_PRICES_USD.get(tier, {}).get(billing_period)
+    # Server-side price validation — 1% tolerance for crypto conversion rounding.
+    # Any more than that indicates a price-manipulation attempt.
     if expected_usd and amount_usd_dollars is not None:
-        # Allow up to 5% under-payment (exchange rate slippage), but reject anything
-        # more than that to prevent plan-downgrade attacks via manipulated invoice amounts.
-        min_acceptable = expected_usd * 0.95
+        min_acceptable = expected_usd * 0.99
         if amount_usd_dollars < min_acceptable:
             logger.error(
                 "[NOWPAYMENTS] Price mismatch for order %s: paid $%.2f, expected $%.2f for %s/%s — rejecting",
@@ -381,8 +419,12 @@ def crypto_webhook():
             )
             return jsonify({"error": "Payment amount does not match plan price"}), 400
 
+    # Mark pending invoice processed atomically with the subscription activation
+    if pending and not pending.processed:
+        pending.processed = True
+
     _activate_subscription(user, tier, provider="nowpayments",
                            payment_id=payment_id, amount_usd=amount_usd_dollars,
                            currency=pay_currency, billing_period=billing_period)
-    logger.info(f"[NOWPAYMENTS] Upgraded user {user_id} to {tier} (status={payment_status})")
+    logger.info("[NOWPAYMENTS] Upgraded user %d to %s (status=%s)", user.id, tier, payment_status)
     return jsonify({"status": "ok"})

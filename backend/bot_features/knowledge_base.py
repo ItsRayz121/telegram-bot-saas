@@ -65,7 +65,8 @@ class KnowledgeBaseSystem:
         try:
             with self.app.app_context():
                 from ..models import UserApiKey
-                from ..utils.encryption import decrypt_value
+                from ..utils.encryption import decrypt_value, DecryptionError
+                import logging as _log
                 if telegram_group_id:
                     record = UserApiKey.query.filter_by(
                         telegram_group_id=str(telegram_group_id), is_active=True
@@ -76,9 +77,14 @@ class KnowledgeBaseSystem:
                     ).order_by(UserApiKey.created_at.desc()).first()
                 if not record:
                     return None
+                try:
+                    api_key = decrypt_value(record.api_key_encrypted)
+                except DecryptionError:
+                    _log.getLogger(__name__).error("knowledge_base: API key decryption failed for group %s", group_id)
+                    return None
                 return {
                     "provider": record.provider,
-                    "api_key": decrypt_value(record.api_key_encrypted),
+                    "api_key": api_key,
                     "base_url": record.base_url,
                     "model_name": record.model_name,
                 }

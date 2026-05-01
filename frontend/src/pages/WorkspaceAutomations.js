@@ -13,6 +13,11 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { automations as autoApi, telegramGroups as tgApi } from '../services/api';
+import PlanGate from '../components/PlanGate';
+
+function _getUser() {
+  try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; }
+}
 
 const TRIGGER_LABELS = {
   message_received: 'Message received',
@@ -399,8 +404,10 @@ export default function WorkspaceAutomations() {
   };
 
   const activeCount = workflows.filter(w => w.is_active).length;
+  const user = _getUser();
 
   return (
+    <PlanGate plan="pro" userTier={user.subscription_tier} feature="Workflow Automations">
     <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: 900, mx: 'auto' }}>
 
       {/* Header */}
@@ -463,5 +470,6 @@ export default function WorkspaceAutomations() {
         templates={templates}
       />
     </Box>
+    </PlanGate>
   );
 }

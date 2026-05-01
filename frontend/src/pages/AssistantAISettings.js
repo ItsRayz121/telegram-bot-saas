@@ -9,6 +9,11 @@ import {
   Delete, Send, Link as LinkIcon,
 } from '@mui/icons-material';
 import { workspaceAI, telegramAccount } from '../services/api';
+import PlanGate from '../components/PlanGate';
+
+function _getUser() {
+  try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; }
+}
 
 const PROVIDERS = [
   { id: 'gemini',     label: 'Gemini',     defaultModel: 'gemini-2.0-flash',          needsBase: false },
@@ -147,7 +152,10 @@ export default function AssistantAISettings() {
   const usagePct = Math.min(100, (usage.used / usage.limit) * 100);
   const atLimit = usagePct >= 100;
 
+  const user = _getUser();
+
   return (
+    <PlanGate plan="pro" userTier={user.subscription_tier} feature="AI Settings">
     <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 720, mx: 'auto' }}>
       <Typography variant="h5" fontWeight={700} gutterBottom>AI Settings</Typography>
       <Typography color="text.secondary" fontSize="0.9rem" mb={3}>
@@ -351,5 +359,6 @@ export default function AssistantAISettings() {
         </CardContent>
       </Card>
     </Box>
+    </PlanGate>
   );
 }

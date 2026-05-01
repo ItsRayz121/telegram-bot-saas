@@ -393,6 +393,10 @@ def create_app():
         _backfill_group_defaults()
         _run_token_hash_hmac_migration()
 
+        # Encryption self-check — must run after all migrations so tokens exist
+        from .utils.encryption import startup_encryption_selfcheck
+        startup_encryption_selfcheck(app)
+
     # Start bots in a background thread after a short delay so Gunicorn can
     # pass its healthcheck before bot polling (which may contact Telegram and
     # hold DB connections) begins.
@@ -1274,14 +1278,17 @@ def _run_token_hash_hmac_migration():
     mismatch (idempotent — runs harmlessly on subsequent restarts).
     """
     from .models import Bot
-    from .utils.encryption import decrypt_value, hash_token as _hmac_hash
-    import hashlib as _hl
+    from .utils.encryption import decrypt_value, hash_token as _hmac_hash, DecryptionError
 
     try:
         bots = Bot.query.filter(Bot.bot_token_hash.isnot(None)).all()
         changed = False
         for bot in bots:
-            plain = decrypt_value(bot.bot_token)
+            try:
+                plain = decrypt_value(bot.bot_token)
+            except DecryptionError:
+                _scheduler_log.error("[MIGRATION] Cannot decrypt token for bot %s — skipping re-hash", bot.id)
+                continue
             if not plain:
                 continue
             expected_hmac = _hmac_hash(plain)
@@ -1321,19 +1328,28 @@ def _run_bot_token_encryption_migration():
         pass
 
     # Encrypt any existing plain-text tokens and populate hashes.
+    # Detection: DecryptionError means the stored value is plaintext (pre-encryption era).
     try:
         from .models import Bot
+        from .utils.encryption import DecryptionError as _DecryptionError
         bots = Bot.query.all()
         changed = False
         for bot in bots:
-            plain = decrypt_value(bot.bot_token)
-            need_encrypt = plain == bot.bot_token  # decrypt returned unchanged → was plain
-            need_hash = not bot.bot_token_hash
-            if need_encrypt or need_hash:
-                if need_encrypt:
-                    bot.bot_token = encrypt_value(plain) or plain
-                bot.bot_token_hash = hash_token(plain)
-                changed = True
+            try:
+                plain = decrypt_value(bot.bot_token)
+                # Successfully decrypted — only re-hash if hash is missing or stale
+                if not bot.bot_token_hash:
+                    bot.bot_token_hash = hash_token(plain)
+                    changed = True
+            except _DecryptionError:
+                # Value is likely a legacy plaintext token — encrypt it now
+                plain = bot.bot_token
+                if plain and ":" in plain:
+                    bot.bot_token = encrypt_value(plain)
+                    bot.bot_token_hash = hash_token(plain)
+                    changed = True
+                else:
+                    _scheduler_log.error("[MIGRATION] Bot %s has unrecoverable token — skipping", bot.id)
         if changed:
             db.session.commit()
             _scheduler_log.info("[MIGRATION] Bot token encryption applied to existing rows")
@@ -1715,7 +1731,11 @@ def _cleanup_revoked_tokens():
 
 
 def _run_task_with_timeout(fn, *args, timeout=30, label="task", flask_app=None):
-    """Run *fn* in a worker thread; push an app context in the thread if flask_app is given."""
+    """Run *fn* in a worker thread; push an app context in the thread if flask_app is given.
+
+    All errors and timeouts are logged and captured to Sentry so scheduler failures
+    surface in alerting rather than disappearing silently into log files.
+    """
     import concurrent.futures
 
     def _run():
@@ -1729,9 +1749,22 @@ def _run_task_with_timeout(fn, *args, timeout=30, label="task", flask_app=None):
         try:
             future.result(timeout=timeout)
         except concurrent.futures.TimeoutError:
-            _scheduler_log.warning("[SCHEDULER] %s timed out after %ss", label, timeout)
+            msg = f"[SCHEDULER] {label} timed out after {timeout}s"
+            _scheduler_log.warning(msg)
+            try:
+                import sentry_sdk
+                sentry_sdk.capture_message(msg, level="warning", extras={"job": label, "timeout": timeout})
+            except Exception:
+                pass
         except Exception as exc:
-            _scheduler_log.error("[SCHEDULER] %s error: %s", label, exc)
+            _scheduler_log.error("[SCHEDULER] %s error: %s", label, exc, exc_info=True)
+            try:
+                import sentry_sdk
+                with sentry_sdk.push_scope() as scope:
+                    scope.set_tag("scheduler_job", label)
+                    sentry_sdk.capture_exception(exc)
+            except Exception:
+                pass
 
 
 def _scheduler_loop(app):
@@ -1774,11 +1807,11 @@ def _scheduler_loop(app):
                 _last_token_cleanup[0] = now_ts
                 _run_task_with_timeout(_cleanup_revoked_tokens, timeout=30, label="_cleanup_revoked_tokens", flask_app=app)
                 _run_task_with_timeout(_cleanup_pending_verifications, timeout=30, label="_cleanup_pending_verifications", flask_app=app)
-            _run_task_with_timeout(run_digest_scheduler, app, timeout=30, label="run_digest_scheduler")
+            _run_task_with_timeout(run_digest_scheduler, app, timeout=90, label="run_digest_scheduler")
             # Official group digest: check every 30 minutes
             if now_ts - _last_official_digest[0] > 1800:
                 _last_official_digest[0] = now_ts
-                _run_task_with_timeout(_run_official_group_digests, app, timeout=30, label="_run_official_group_digests")
+                _run_task_with_timeout(_run_official_group_digests, app, timeout=90, label="_run_official_group_digests")
             # Workspace reminder delivery: every 60s (already in loop)
             _run_task_with_timeout(_deliver_reminders, app, timeout=30, label="_deliver_reminders")
             # Scheduled automations: check every 60s

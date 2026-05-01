@@ -33,10 +33,36 @@ class User(db.Model):
     # Brute-force login protection
     failed_login_attempts = db.Column(db.Integer, default=0, nullable=False)
     locked_until = db.Column(db.DateTime, nullable=True)
-    # 2FA / TOTP (secret stored encrypted)
-    totp_secret = db.Column(db.String(255), nullable=True)
+    # 2FA / TOTP — always stored Fernet-encrypted; use the totp_secret property.
+    # The DB column stays named 'totp_secret'; the Python attribute is _totp_secret_enc
+    # so that the property below intercepts all reads and writes.
+    _totp_secret_enc = db.Column("totp_secret", db.String(255), nullable=True)
     totp_enabled = db.Column(db.Boolean, default=False, nullable=False)
     totp_backup_codes = db.Column(db.JSON, nullable=True)  # list of bcrypt-hashed backup codes
+
+    @property
+    def totp_secret(self):
+        """Return the decrypted TOTP secret, or None if not set."""
+        if not self._totp_secret_enc:
+            return None
+        from .utils.encryption import decrypt_value, DecryptionError
+        try:
+            return decrypt_value(self._totp_secret_enc)
+        except DecryptionError:
+            import logging
+            logging.getLogger(__name__).error(
+                "User %s totp_secret decryption failed — secret may be corrupt or key rotated incorrectly", self.id
+            )
+            return None
+
+    @totp_secret.setter
+    def totp_secret(self, plaintext):
+        """Encrypt and store the TOTP secret. Pass None to clear it."""
+        if plaintext is None:
+            self._totp_secret_enc = None
+            return
+        from .utils.encryption import encrypt_value
+        self._totp_secret_enc = encrypt_value(plaintext)
     # Anti-abuse: hashed signup identifiers (SHA-256; never raw IP or fingerprint)
     signup_ip_hash = db.Column(db.String(64), nullable=True, index=True)
     device_fingerprint_hash = db.Column(db.String(64), nullable=True, index=True)
@@ -103,15 +129,43 @@ class PasswordResetToken(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
-    token = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    # token_hash: SHA-256 of the raw token sent in the reset email URL.
+    # The raw token is NEVER stored — only the hash. This prevents DB-dump
+    # + email-cache attacks from producing a working reset link.
+    token_hash = db.Column(db.String(64), unique=True, nullable=True, index=True)
+    # Legacy column — kept to avoid dropping existing rows; no longer written.
+    token = db.Column(db.String(64), unique=True, nullable=True, index=True)
     expires_at = db.Column(db.DateTime, nullable=False)
     used = db.Column(db.Boolean, default=False)
 
     @staticmethod
+    def _hash(raw_token: str) -> str:
+        import hashlib
+        return hashlib.sha256(raw_token.encode()).hexdigest()
+
+    @staticmethod
     def create_for_user(user_id):
-        token = secrets.token_urlsafe(32)
+        """Return (raw_token, PasswordResetToken) — caller sends raw_token in email."""
+        raw = secrets.token_urlsafe(32)
         expires_at = datetime.utcnow() + timedelta(hours=1)
-        return PasswordResetToken(user_id=user_id, token=token, expires_at=expires_at)
+        row = PasswordResetToken(
+            user_id=user_id,
+            token_hash=PasswordResetToken._hash(raw),
+            expires_at=expires_at,
+        )
+        return raw, row
+
+    @staticmethod
+    def find_valid(raw_token: str):
+        """Look up a valid (unused, unexpired) token row by the raw token string."""
+        token_hash = PasswordResetToken._hash(raw_token)
+        row = PasswordResetToken.query.filter_by(token_hash=token_hash, used=False).first()
+        if row is None:
+            # Fallback: check legacy plaintext column for rows created before this fix
+            row = PasswordResetToken.query.filter_by(token=raw_token, used=False).first()
+        if row is None or datetime.utcnow() >= row.expires_at:
+            return None
+        return row
 
     @property
     def is_valid(self):
@@ -132,7 +186,7 @@ class Bot(db.Model):
     __tablename__ = "bots"
 
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
     # Stores the Fernet-encrypted token; use get_token()/set_token() helpers.
     bot_token = db.Column(db.Text, nullable=False)
     # SHA-256 hash of the plain token used for fast uniqueness checks.
@@ -153,7 +207,7 @@ class Bot(db.Model):
     def set_token(self, plain_token: str):
         """Encrypt and store the bot token; update the hash column."""
         from .utils.encryption import encrypt_value, hash_token
-        self.bot_token = encrypt_value(plain_token) or plain_token
+        self.bot_token = encrypt_value(plain_token)
         self.bot_token_hash = hash_token(plain_token)
 
     def get_health_status(self):
@@ -231,7 +285,7 @@ class Member(db.Model):
     __tablename__ = "members"
 
     id = db.Column(db.Integer, primary_key=True)
-    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False)
+    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False, index=True)
     telegram_user_id = db.Column(db.String(255), nullable=False)
     username = db.Column(db.String(255), nullable=True)
     first_name = db.Column(db.String(255), nullable=True)
@@ -275,7 +329,7 @@ class AuditLog(db.Model):
     __tablename__ = "audit_logs"
 
     id = db.Column(db.Integer, primary_key=True)
-    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False)
+    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False, index=True)
     action_type = db.Column(db.String(50), nullable=False)
     target_user_id = db.Column(db.String(255), nullable=True)
     target_username = db.Column(db.String(255), nullable=True)
@@ -304,7 +358,7 @@ class ScheduledMessage(db.Model):
     __tablename__ = "scheduled_messages"
 
     id = db.Column(db.Integer, primary_key=True)
-    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False)
+    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False, index=True)
     title = db.Column(db.String(255), nullable=False)
     message_text = db.Column(db.Text, nullable=False)
     media_url = db.Column(db.String(500), nullable=True)
@@ -345,7 +399,7 @@ class Raid(db.Model):
     __tablename__ = "raids"
 
     id = db.Column(db.Integer, primary_key=True)
-    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False)
+    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False, index=True)
     tweet_url = db.Column(db.String(500), nullable=False)
     goals = db.Column(db.JSON, nullable=False, default=dict)
     duration_hours = db.Column(db.Integer, default=24)
@@ -419,7 +473,7 @@ class KnowledgeDocument(db.Model):
     __tablename__ = "knowledge_documents"
 
     id = db.Column(db.Integer, primary_key=True)
-    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=True)
+    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=True, index=True)
     telegram_group_id = db.Column(db.String(255), nullable=True, index=True)
     filename = db.Column(db.String(255), nullable=False)
     file_type = db.Column(db.String(20), nullable=False)
@@ -443,7 +497,7 @@ class Poll(db.Model):
     __tablename__ = "polls"
 
     id = db.Column(db.Integer, primary_key=True)
-    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False)
+    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False, index=True)
     question = db.Column(db.String(500), nullable=False)
     options = db.Column(db.JSON, nullable=False)
     correct_option_index = db.Column(db.Integer, nullable=True)
@@ -478,9 +532,13 @@ class WebhookIntegration(db.Model):
     __tablename__ = "webhook_integrations"
 
     id = db.Column(db.Integer, primary_key=True)
-    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False)
+    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False, index=True)
     name = db.Column(db.String(100), nullable=False)
+    # webhook_token: in the trigger URL — proves the caller knows the endpoint.
     webhook_token = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    # signing_secret: HMAC-SHA256 key — callers sign the raw request body with this
+    # and put the hex digest in X-Telegizer-Signature. Null = legacy (token-only auth).
+    signing_secret = db.Column(db.String(64), nullable=True)
     description = db.Column(db.String(255), nullable=True)
     message_template = db.Column(db.Text, nullable=False, default="{payload}")
     is_active = db.Column(db.Boolean, default=True)
@@ -492,6 +550,7 @@ class WebhookIntegration(db.Model):
             "group_id": self.group_id,
             "name": self.name,
             "webhook_token": self.webhook_token,
+            "signing_secret": self.signing_secret,  # shown once at creation
             "description": self.description,
             "message_template": self.message_template,
             "is_active": self.is_active,
@@ -554,7 +613,7 @@ class UserApiKey(db.Model):
     __tablename__ = "user_api_keys"
 
     id = db.Column(db.Integer, primary_key=True)
-    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=True)
+    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=True, index=True)
     telegram_group_id = db.Column(db.String(255), nullable=True, index=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     provider = db.Column(db.String(50), nullable=False)  # openai|openrouter|anthropic|gemini|custom
@@ -567,8 +626,11 @@ class UserApiKey(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     def to_dict(self):
-        from .utils.encryption import mask_key, decrypt_value
-        raw = decrypt_value(self.api_key_encrypted) if self.api_key_encrypted else ""
+        from .utils.encryption import mask_key, decrypt_value, DecryptionError
+        try:
+            raw = decrypt_value(self.api_key_encrypted) if self.api_key_encrypted else ""
+        except DecryptionError:
+            raw = ""
         updated = self.updated_at or self.created_at
         return {
             "id": self.id,
@@ -637,6 +699,27 @@ class Referral(db.Model):
             "ip_match": self.ip_match,
             "device_match": self.device_match,
         }
+
+
+class PendingInvoice(db.Model):
+    """Server-side record created when a user initiates a NOWPayments checkout.
+
+    The invoice_id (NOWPayments' invoice ID) is used as order_id so the IPN
+    handler looks up user_id from the DB row rather than trusting a user_id
+    embedded in the order string — which an attacker could tamper with to credit
+    a different account.
+    """
+    __tablename__ = "pending_invoices"
+
+    id = db.Column(db.Integer, primary_key=True)
+    # NOWPayments invoice ID returned from /v1/invoice — used as order_id in IPN
+    invoice_id = db.Column(db.String(128), unique=True, nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    tier = db.Column(db.String(50), nullable=False)
+    billing_period = db.Column(db.String(10), nullable=False)
+    amount_usd = db.Column(db.Numeric(10, 2), nullable=False)
+    processed = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
 
 class ProcessedPayment(db.Model):
@@ -740,7 +823,7 @@ class ReportedMessage(db.Model):
     __tablename__ = "reported_messages"
 
     id = db.Column(db.Integer, primary_key=True)
-    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False)
+    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False, index=True)
     reporter_user_id = db.Column(db.BigInteger, nullable=False)
     reporter_username = db.Column(db.String(100), nullable=True)
     reported_message_id = db.Column(db.BigInteger, nullable=True)
@@ -1182,7 +1265,7 @@ class CustomBot(db.Model):
 
     def set_token(self, plain_token: str):
         from .utils.encryption import encrypt_value
-        self.bot_token_encrypted = encrypt_value(plain_token) or plain_token
+        self.bot_token_encrypted = encrypt_value(plain_token)
 
     @property
     def health_status(self) -> str:

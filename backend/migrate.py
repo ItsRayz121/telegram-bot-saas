@@ -60,7 +60,90 @@ def init_db():
             "ALTER TABLE digest_logs ADD COLUMN IF NOT EXISTS tokens_used INTEGER",
             "digest_logs.tokens_used",
         )
+        # pending_invoices is created by db.create_all(); add any future columns here
+        _run_alter(
+            db.engine,
+            "CREATE INDEX IF NOT EXISTS ix_pending_invoices_user_id ON pending_invoices (user_id)",
+            "pending_invoices.user_id index",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE webhook_integrations ADD COLUMN IF NOT EXISTS signing_secret VARCHAR(64)",
+            "webhook_integrations.signing_secret",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE password_reset_tokens ADD COLUMN IF NOT EXISTS token_hash VARCHAR(64)",
+            "password_reset_tokens.token_hash",
+        )
+        _run_alter(
+            db.engine,
+            "CREATE UNIQUE INDEX IF NOT EXISTS ix_prt_token_hash ON password_reset_tokens (token_hash)",
+            "password_reset_tokens.token_hash index",
+        )
+        # FK indexes for hot-path query columns (P1-08)
+        for table, col in [
+            ("bots", "user_id"),
+            ("members", "group_id"),
+            ("audit_logs", "group_id"),
+            ("scheduled_messages", "group_id"),
+            ("raids", "group_id"),
+            ("knowledge_documents", "group_id"),
+            ("webhook_integrations", "group_id"),
+            ("user_api_keys", "group_id"),
+            ("reported_messages", "group_id"),
+            ("polls", "group_id"),
+        ]:
+            _run_alter(
+                db.engine,
+                f"CREATE INDEX IF NOT EXISTS ix_{table}_{col} ON {table} ({col})",
+                f"{table}.{col} index",
+            )
         print("Migration complete.")
+
+    # One-shot TOTP secret encryption migration.
+    # Run with: MIGRATE_ENCRYPT_TOTP=1 python -m backend.migrate
+    import os as _os
+    if _os.environ.get("MIGRATE_ENCRYPT_TOTP") == "1":
+        _migrate_encrypt_totp(app)
+
+
+def _migrate_encrypt_totp(app):
+    """Re-encrypt any plaintext TOTP secrets in the database under the current key.
+
+    Detects plaintext by attempting to decrypt — if decryption raises DecryptionError
+    the stored value is treated as plaintext (legacy pre-encryption row) and encrypted.
+    Already-encrypted rows are left untouched (idempotent).
+
+    Enable with: MIGRATE_ENCRYPT_TOTP=1 python -m backend.migrate
+    """
+    from .models import db, User
+    from .utils.encryption import encrypt_value, DecryptionError
+
+    with app.app_context():
+        users = User.query.filter(User._totp_secret_enc.isnot(None)).all()
+        updated = 0
+        for user in users:
+            raw = user._totp_secret_enc
+            # Try to decrypt — success means already encrypted, skip
+            try:
+                from .utils.encryption import decrypt_value
+                decrypt_value(raw)
+                continue
+            except DecryptionError:
+                pass
+            # Value looks like plaintext — validate it's a base32 TOTP secret
+            import re
+            if re.match(r'^[A-Z2-7]{16,64}$', raw):
+                user._totp_secret_enc = encrypt_value(raw)
+                updated += 1
+            else:
+                print(f"  ⚠ User {user.id} has unrecognisable totp_secret — skipping")
+        if updated:
+            db.session.commit()
+            print(f"  ✓ Encrypted {updated} plaintext TOTP secrets")
+        else:
+            print("  – No plaintext TOTP secrets found (already encrypted or none set)")
 
 
 if __name__ == "__main__":

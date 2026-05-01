@@ -68,13 +68,12 @@ def setup_totp():
 
     try:
         import pyotp
-        from ..utils.encryption import encrypt_value
         secret = pyotp.random_base32()
         totp = pyotp.TOTP(secret)
         provisioning_uri = totp.provisioning_uri(name=user.email, issuer_name="Telegizer")
 
-        # Store encrypted secret temporarily (not enabled until confirmed)
-        user.totp_secret = encrypt_value(secret)
+        # Store secret (property auto-encrypts) — not enabled until confirmed
+        user.totp_secret = secret
         user.totp_enabled = False  # still pending confirmation
         db.session.commit()
 
@@ -113,8 +112,10 @@ def enable_totp():
 
     try:
         import pyotp
-        from ..utils.encryption import decrypt_value
-        secret = decrypt_value(user.totp_secret)
+        # totp_secret property auto-decrypts; None means setup is corrupt
+        secret = user.totp_secret
+        if not secret:
+            return jsonify({"error": "2FA setup is corrupted — please run /setup again"}), 500
         totp = pyotp.TOTP(secret)
         if not totp.verify(code, valid_window=1):
             return jsonify({"error": "Invalid code. Check your authenticator app."}), 400

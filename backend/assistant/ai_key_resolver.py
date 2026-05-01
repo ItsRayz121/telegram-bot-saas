@@ -22,13 +22,22 @@ def get_workspace_ai_key(user) -> dict:
     )
 
     if user_key:
-        from ..utils.encryption import decrypt_value
-        return {
-            "provider": user_key.provider,
-            "api_key": decrypt_value(user_key.api_key_encrypted),
-            "model": user_key.model_name or _default_model(user_key.provider),
-            "source": "user",
-        }
+        from ..utils.encryption import decrypt_value, DecryptionError
+        import logging
+        try:
+            api_key = decrypt_value(user_key.api_key_encrypted)
+        except DecryptionError:
+            logging.getLogger(__name__).error(
+                "ai_key_resolver: workspace key decryption failed for user %s — falling back to platform key", user.id
+            )
+            api_key = None
+        if api_key:
+            return {
+                "provider": user_key.provider,
+                "api_key": api_key,
+                "model": user_key.model_name or _default_model(user_key.provider),
+                "source": "user",
+            }
 
     return {
         "provider": "gemini",

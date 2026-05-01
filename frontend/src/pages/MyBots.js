@@ -13,6 +13,11 @@ import {
 import { toast } from 'react-toastify';
 import { customBots, telegramGroups as telegramGroupsApi } from '../services/api';
 import TopNav from '../components/TopNav';
+import PlanGate from '../components/PlanGate';
+
+function _getUser() {
+  try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; }
+}
 
 const BOT_USERNAME = process.env.REACT_APP_BOT_USERNAME || 'telegizer_bot';
 
@@ -106,7 +111,10 @@ export default function MyBots() {
   const customBotGroups = (g) =>
     officialGroups.filter((og) => og.linked_via_bot_type !== 'official');
 
+  const user = _getUser();
+
   return (
+    <PlanGate plan="pro" userTier={user.subscription_tier} feature="Custom Bots">
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
       <TopNav hasSidebar
         breadcrumb={[
@@ -449,5 +457,6 @@ export default function MyBots() {
         </DialogActions>
       </Dialog>
     </Box>
+    </PlanGate>
   );
 }

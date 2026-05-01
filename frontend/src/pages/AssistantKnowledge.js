@@ -9,6 +9,11 @@ import {
   InsertDriveFile, PictureAsPdf, Close, Send,
 } from '@mui/icons-material';
 import { knowledge as knowledgeApi } from '../services/api';
+import PlanGate from '../components/PlanGate';
+
+function _getUser() {
+  try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; }
+}
 
 const TYPE_ICON = { pdf: PictureAsPdf, txt: InsertDriveFile, md: InsertDriveFile, docx: InsertDriveFile };
 const TYPE_COLOR = { pdf: '#f44336', txt: '#2196f3', md: '#4caf50', docx: '#2196f3' };
@@ -272,7 +277,10 @@ export default function AssistantKnowledge() {
     finally { setSearching(false); }
   };
 
+  const user = _getUser();
+
   return (
+    <PlanGate plan="pro" userTier={user.subscription_tier} feature="Knowledge Base">
     <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 860, mx: 'auto' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
@@ -336,5 +344,6 @@ export default function AssistantKnowledge() {
         <AskDialog open={Boolean(askDoc)} doc={askDoc} onClose={() => setAskDoc(null)} />
       )}
     </Box>
+    </PlanGate>
   );
 }

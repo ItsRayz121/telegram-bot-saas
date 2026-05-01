@@ -110,9 +110,10 @@ def _resolve_ai_key(user_id: int, group_id: str) -> dict | None:
       3. Workspace-scoped key (user's personal workspace key or platform Gemini)
     """
     from ..models import UserApiKey
-    from ..utils.encryption import decrypt_value
+    from ..utils.encryption import decrypt_value, DecryptionError
     from .ai_key_resolver import get_workspace_ai_key
     from ..models import User
+    import logging as _log
 
     # 1. Group-scoped key
     group_key = UserApiKey.query.filter_by(
@@ -121,7 +122,11 @@ def _resolve_ai_key(user_id: int, group_id: str) -> dict | None:
         is_active=True,
     ).first()
     if group_key:
-        raw = decrypt_value(group_key.api_key_encrypted)
+        try:
+            raw = decrypt_value(group_key.api_key_encrypted)
+        except DecryptionError:
+            _log.getLogger(__name__).error("digest_ai: group key decryption failed for user %s", user_id)
+            raw = None
         if raw:
             return {
                 "provider": group_key.provider,

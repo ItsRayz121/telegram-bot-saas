@@ -185,7 +185,10 @@ def test_api_key(bot_id, group_id):
         existing = UserApiKey.query.filter_by(group_id=group.id, is_active=True).first()
         if not existing:
             return jsonify({"error": "No API key saved yet"}), 400
-        api_key = decrypt_value(existing.api_key_encrypted)
+        try:
+            api_key = decrypt_value(existing.api_key_encrypted)
+        except Exception:
+            return jsonify({"error": "Failed to decrypt stored API key — check ENCRYPTION_KEY config"}), 500
         if not api_key:
             return jsonify({"error": "Failed to decrypt stored API key"}), 500
         provider = existing.provider

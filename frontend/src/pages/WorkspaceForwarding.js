@@ -13,6 +13,11 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { forwarding as fwdApi, telegramGroups as tgApi } from '../services/api';
+import PlanGate from '../components/PlanGate';
+
+function _getUser() {
+  try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; }
+}
 
 const STATUS_COLOR = {
   forwarded: 'success',
@@ -386,7 +391,10 @@ export default function WorkspaceForwarding() {
     setRules(prev => [rule, ...prev]);
   };
 
+  const user = _getUser();
+
   return (
+    <PlanGate plan="pro" userTier={user.subscription_tier} feature="Message Forwarding">
     <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: 900, mx: 'auto' }}>
 
       {/* Header */}
@@ -466,5 +474,6 @@ export default function WorkspaceForwarding() {
         groups={groups}
       />
     </Box>
+    </PlanGate>
   );
 }

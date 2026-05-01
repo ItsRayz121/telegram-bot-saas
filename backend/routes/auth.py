@@ -455,9 +455,11 @@ def _verify_totp(user: User, code: str) -> bool:
     """Verify a TOTP code or a backup code against the user's credentials."""
     try:
         import pyotp
-        from ..utils.encryption import decrypt_value
-        secret = decrypt_value(user.totp_secret)
+        # user.totp_secret property auto-decrypts; returns None on DecryptionError
+        secret = user.totp_secret
         if not secret:
+            if user._totp_secret_enc:
+                logger.error("TOTP secret decryption failed for user %s — ENCRYPTION_KEY may have changed", user.id)
             return False
         totp = pyotp.TOTP(secret)
         # Allow 30-second window on each side
@@ -662,7 +664,7 @@ def forgot_password():
         PasswordResetToken.query.filter_by(user_id=user.id, used=False).update({"used": True})
         db.session.flush()
 
-        reset_token = PasswordResetToken.create_for_user(user.id)
+        raw_token, reset_token = PasswordResetToken.create_for_user(user.id)
         db.session.add(reset_token)
         db.session.commit()
 
@@ -670,12 +672,12 @@ def forgot_password():
             from flask import current_app
             from ..notifications import send_password_reset_email
             _app = current_app._get_current_object()
-            _uemail, _uname, _tok = user.email, user.full_name, reset_token.token
+            _uemail, _uname = user.email, user.full_name
 
             def _send_reset():
                 try:
                     with _app.app_context():
-                        send_password_reset_email(_uemail, _uname, _tok)
+                        send_password_reset_email(_uemail, _uname, raw_token)
                 except Exception as exc:
                     logger.error("Password reset email failed for %s: %s", _uemail, exc)
                     try:
@@ -706,20 +708,27 @@ def reset_password():
     if len(new_password) > 128:
         return jsonify({"error": "Password too long"}), 400
 
-    reset_token = PasswordResetToken.query.filter_by(token=token_str).first()
-    if not reset_token or not reset_token.is_valid:
+    reset_token = PasswordResetToken.find_valid(token_str)
+    if not reset_token:
         return jsonify({"error": "Invalid or expired reset token"}), 400
 
     user = User.query.get(reset_token.user_id)
     if not user:
         return jsonify({"error": "User not found"}), 404
 
-    user.password_hash = bcrypt.hashpw(new_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-    # Reset brute-force counter on successful password reset
-    user.failed_login_attempts = 0
-    user.locked_until = None
-    reset_token.used = True
-    db.session.commit()
+    # Mark token used BEFORE updating password in the same transaction.
+    # This closes the race window where two simultaneous requests with the
+    # same token both pass the validity check before either commits.
+    try:
+        reset_token.used = True
+        db.session.flush()  # acquires row lock before password update
+        user.password_hash = bcrypt.hashpw(new_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+        user.failed_login_attempts = 0
+        user.locked_until = None
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        return jsonify({"error": "Failed to reset password. Please try again."}), 500
 
     return jsonify({"message": "Password reset successfully. You can now log in."}), 200
 
