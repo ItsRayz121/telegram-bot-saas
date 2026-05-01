@@ -898,15 +898,112 @@ export default function Dashboard() {
           <OfficialBotSection user={user} navigate={navigate} officialGroupCount={officialGroupCount} />
         )}
 
-        {/* ── Custom Bots header + search ── */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1, gap: 1, flexWrap: 'wrap' }}>
-          <Box>
-            <Typography variant="h5" fontWeight={700}>Custom Bots</Typography>
-            <Typography variant="caption" color="text.secondary">
-              {botCount} / {maxBots} custom bots · {tier} plan
-            </Typography>
-          </Box>
-          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+        {/* ── Custom Bots section ── */}
+        <Card sx={{
+          mb: 3,
+          border: '1px solid',
+          borderColor: 'divider',
+          bgcolor: 'rgba(255,255,255,0.02)',
+          overflow: 'visible',
+        }}>
+          <CardContent sx={{ pb: 0 }}>
+            {/* Header row */}
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5, flexWrap: 'wrap', gap: 1 }}>
+              <Avatar sx={{ bgcolor: 'secondary.main', mr: 1.5, width: 40, height: 40, flexShrink: 0 }}>
+                <SmartToy fontSize="small" />
+              </Avatar>
+              <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                <Typography variant="subtitle1" fontWeight={700}>Custom Bots</Typography>
+                <Typography variant="body2" color="text.secondary" noWrap>
+                  Your own branded bot · {botCount} / {maxBots} used · {tier} plan
+                </Typography>
+              </Box>
+              <Chip
+                label={atLimit ? 'Limit Reached' : `${maxBots - botCount} slot${maxBots - botCount !== 1 ? 's' : ''} free`}
+                color={atLimit ? 'error' : nearLimit ? 'warning' : 'success'}
+                size="small"
+              />
+            </Box>
+
+            {/* Usage bar */}
+            <Box sx={{ mb: 2 }}>
+              <LinearProgress
+                variant="determinate"
+                value={(botCount / maxBots) * 100}
+                color={atLimit ? 'error' : nearLimit ? 'warning' : 'primary'}
+                sx={{ height: 5, borderRadius: 3 }}
+              />
+            </Box>
+
+            {/* How-to guide — always visible */}
+            <Box sx={{
+              bgcolor: 'rgba(255,255,255,0.03)',
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 2,
+              px: 2.5,
+              py: 2,
+              mb: botList.length > 0 ? 2 : 0,
+            }}>
+              <Typography variant="caption" fontWeight={700} color="text.disabled"
+                sx={{ textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', mb: 1.5 }}>
+                How to add your own bot
+              </Typography>
+              <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: { xs: 1.5, sm: 0 } }}>
+                {[
+                  { step: '1', label: 'Create bot', desc: 'Open Telegram → message @BotFather → /newbot' },
+                  { step: '2', label: 'Copy token', desc: 'BotFather gives you a token like 123456:ABC…' },
+                  { step: '3', label: 'Paste & add', desc: 'Click "Add Bot" below, paste your token, done' },
+                ].map((s, i, arr) => (
+                  <React.Fragment key={s.step}>
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, flex: 1 }}>
+                      <Box sx={{
+                        width: 26, height: 26, borderRadius: '50%',
+                        bgcolor: 'primary.main', color: '#fff',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: '0.72rem', fontWeight: 700, flexShrink: 0, mt: 0.2,
+                      }}>
+                        {s.step}
+                      </Box>
+                      <Box>
+                        <Typography variant="body2" fontWeight={600}>{s.label}</Typography>
+                        <Typography variant="caption" color="text.secondary">{s.desc}</Typography>
+                      </Box>
+                    </Box>
+                    {i < arr.length - 1 && (
+                      <Box sx={{
+                        display: { xs: 'none', sm: 'flex' },
+                        alignItems: 'center', px: 1, color: 'text.disabled', flexShrink: 0,
+                      }}>
+                        →
+                      </Box>
+                    )}
+                  </React.Fragment>
+                ))}
+              </Box>
+            </Box>
+          </CardContent>
+
+          <CardActions sx={{ px: 2, pb: 2, pt: 1.5, gap: 1, flexWrap: 'wrap' }}>
+            <Button
+              variant="contained"
+              startIcon={<Add />}
+              onClick={() => setAddOpen(true)}
+              disabled={atLimit}
+            >
+              Add Bot
+            </Button>
+            <Button
+              variant="outlined"
+              size="small"
+              component="a"
+              href="https://t.me/BotFather"
+              target="_blank"
+              rel="noopener noreferrer"
+              startIcon={<Telegram />}
+            >
+              Open BotFather
+            </Button>
             {botList.length > 1 && (
               <TextField
                 size="small"
@@ -914,43 +1011,18 @@ export default function Dashboard() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <Search fontSize="small" />
-                    </InputAdornment>
-                  ),
+                  startAdornment: <InputAdornment position="start"><Search fontSize="small" /></InputAdornment>,
                   endAdornment: searchQuery ? (
                     <InputAdornment position="end">
-                      <IconButton size="small" onClick={() => setSearchQuery('')}>
-                        <Close fontSize="small" />
-                      </IconButton>
+                      <IconButton size="small" onClick={() => setSearchQuery('')}><Close fontSize="small" /></IconButton>
                     </InputAdornment>
                   ) : null,
                 }}
-                sx={{ width: { xs: '100%', sm: 220 } }}
+                sx={{ width: { xs: '100%', sm: 200 }, ml: { sm: 'auto' } }}
               />
             )}
-            <Button
-              variant="contained"
-              startIcon={<Add />}
-              onClick={() => setAddOpen(true)}
-              disabled={atLimit}
-              sx={{ flexShrink: 0 }}
-            >
-              Add Bot
-            </Button>
-          </Box>
-        </Box>
-
-        {/* ── Bot limit bar ── */}
-        <Box sx={{ mb: 3 }}>
-          <LinearProgress
-            variant="determinate"
-            value={(botCount / maxBots) * 100}
-            color={atLimit ? 'error' : nearLimit ? 'warning' : 'primary'}
-            sx={{ height: 4, borderRadius: 2 }}
-          />
-        </Box>
+          </CardActions>
+        </Card>
 
         {/* ── Bot list ── */}
         {loading ? (
@@ -961,21 +1033,8 @@ export default function Dashboard() {
               </Grid>
             ))}
           </Grid>
-        ) : botList.length === 0 ? (
-          <Card sx={{ textAlign: 'center', py: 8, px: 3 }}>
-            <TelegizerLogo variant="icon" size="xl" sx={{ mb: 2, opacity: 0.35 }} />
-            <Typography variant="h6" fontWeight={700} mb={1}>Add your first bot</Typography>
-            <Typography variant="body2" color="text.secondary" mb={0.5} sx={{ maxWidth: 400, mx: 'auto' }}>
-              Get a token from <strong>@BotFather</strong> on Telegram, paste it here, and you're running in seconds.
-            </Typography>
-            <Typography variant="caption" color="text.disabled" display="block" mb={3}>
-              Your free plan includes 1 bot and 1 group — no credit card needed.
-            </Typography>
-            <Button variant="contained" startIcon={<Add />} onClick={() => setAddOpen(true)} size="large">
-              Add Your First Bot
-            </Button>
-          </Card>
-        ) : filteredBots.length === 0 ? (
+        ) : botList.length === 0 ? null
+        : filteredBots.length === 0 ? (
           <Box sx={{ textAlign: 'center', py: 6 }}>
             <Typography color="text.secondary">No bots match "{searchQuery}"</Typography>
           </Box>
