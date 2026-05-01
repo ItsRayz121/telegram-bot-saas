@@ -8,7 +8,7 @@ import {
   Psychology, AccessTime, EditNote, Summarize, AutoMode, Reply,
   OpenInNew, ContentCopy, CheckCircle, RadioButtonUnchecked, Close,
   ArrowForward, Chat, Send, ExpandMore, ExpandLess, QuestionAnswer,
-  CalendarMonth,
+  CalendarMonth, SmartToy, Lock,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { assistant } from '../services/api';
@@ -523,6 +523,43 @@ function LiveChatCard({ botConnected }) {
   );
 }
 
+// ── Assistant Bot Status Card ─────────────────────────────────────────────────
+
+function AssistantBotCard({ plan }) {
+  const navigate = useNavigate();
+  const isPro = plan === 'pro' || plan === 'enterprise';
+
+  return (
+    <Card variant="outlined" sx={{ mb: 3, borderColor: isPro ? 'divider' : 'rgba(37,99,235,0.3)', bgcolor: isPro ? 'transparent' : 'rgba(37,99,235,0.03)' }}>
+      <CardContent>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <SmartToy fontSize="small" color={isPro ? 'primary' : 'disabled'} />
+            <Box>
+              <Typography fontWeight={600} fontSize="0.9rem">Your Assistant Bot</Typography>
+              <Typography fontSize="0.78rem" color="text.secondary">
+                Official Telegizer Assistant
+              </Typography>
+            </Box>
+          </Box>
+          {isPro ? (
+            <Button size="small" variant="outlined" onClick={() => navigate('/workspace/assistant-bot')}>
+              Configure
+            </Button>
+          ) : (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Lock sx={{ fontSize: 14, color: 'text.disabled' }} />
+              <Button size="small" variant="contained" onClick={() => navigate('/billing')}>
+                Upgrade to Connect Your Own Bot
+              </Button>
+            </Box>
+          )}
+        </Box>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Main Hub ──────────────────────────────────────────────────────────────────
 
 export default function AssistantHub() {
@@ -532,6 +569,7 @@ export default function AssistantHub() {
   const [bannerDismissed, setBannerDismissed] = useState(
     () => localStorage.getItem(DISMISS_KEY) === '1'
   );
+  const plan = (() => { try { return JSON.parse(localStorage.getItem('user') || '{}').subscription_tier || 'free'; } catch { return 'free'; } })();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -573,6 +611,9 @@ export default function AssistantHub() {
         <Typography variant="h5" fontWeight={700}>Assistant Hub</Typography>
       </Box>
       <Typography color="text.secondary" fontSize="0.88rem" mb={3}>{today}</Typography>
+
+      {/* Assistant Bot status card */}
+      <AssistantBotCard plan={plan} />
 
       {error && <Alert severity="error" onClose={() => setError('')} sx={{ mb: 2 }}>{error}</Alert>}
 

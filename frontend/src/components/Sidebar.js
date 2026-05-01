@@ -516,8 +516,11 @@ export default function Sidebar({ onClose }) {
         )}
 
         {/* ── ASSISTANT ── */}
-        <SectionLabel label="Assistant" />
+        <SectionLabel label="Assistant Hub" />
         <NavItem label="Hub"          path="/workspace"                  icon={Psychology} active={isActive('/workspace', true)}             onClick={() => nav('/workspace')} />
+        <Typography variant="caption" sx={{ px: 2, pb: 0.5, display: 'block', fontSize: '0.62rem', color: 'text.disabled', lineHeight: 1.3 }}>
+          Powered by Telegizer Assistant
+        </Typography>
         <NavItem label="Auto-Replies" path="/workspace/smart-links"      icon={Reply}      active={isActive('/workspace/smart-links')}       onClick={() => nav('/workspace/smart-links')} indent />
         <NavItem label="Reminders"    path="/workspace/reminders"        icon={AccessTime} active={isActive('/workspace/reminders')}         onClick={() => nav('/workspace/reminders')} indent />
         <NavItem label="Tasks"        path="/workspace/tasks"            icon={CheckBox}   active={isActive('/workspace/tasks')}             onClick={() => nav('/workspace/tasks')} indent />
