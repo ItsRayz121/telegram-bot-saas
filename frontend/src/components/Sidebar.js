@@ -528,6 +528,7 @@ export default function Sidebar({ onClose }) {
         <NavItem label="Knowledge"    path="/workspace/knowledge"        icon={LibraryBooks} active={isActive('/workspace/knowledge')}       onClick={() => nav('/workspace/knowledge')} indent />
         <NavItem label="Digests"      path="/workspace/digests"          icon={Summarize}  active={isActive('/workspace/digests')}           onClick={() => nav('/workspace/digests')} indent />
         <NavItem label="AI Settings"  path="/workspace/ai-settings"      icon={Tune}       active={isActive('/workspace/ai-settings')}       onClick={() => nav('/workspace/ai-settings')} indent />
+        <NavItem label="Assistant Bot" path="/workspace/assistant-bot"   icon={SmartToy}   active={isActive('/workspace/assistant-bot')}      onClick={() => nav('/workspace/assistant-bot')} indent badge={plan === 'free' ? 'Pro' : null} />
 
         {/* ── AUTOMATION ── */}
         <SectionLabel label="Automation" />
