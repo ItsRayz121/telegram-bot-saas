@@ -534,7 +534,8 @@ export default function Sidebar({ onClose }) {
 
         {/* ── ANALYTICS ── */}
         <SectionLabel label="Analytics" />
-        <NavItem label="Analytics Hub" path="/analytics" icon={BarChart} active={isActive('/analytics')} onClick={() => nav('/analytics')} />
+        <NavItem label="Groups" path="/analytics" icon={BarChart} active={isActive('/analytics')} onClick={() => nav('/analytics')} indent />
+        <NavItem label="Channels" path="/analytics" icon={BarChart} active={false} onClick={() => nav('/analytics')} indent />
 
         {/* ── GROW ── */}
         <SectionLabel label="Grow" />

@@ -10,7 +10,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 
 const BOTTOM_NAV_ITEMS = [
   { label: 'Home', icon: <Home />, path: '/dashboard' },
-  { label: 'Groups', icon: <Groups />, path: '/my-groups' },
+  { label: 'Groups', icon: <Groups />, path: '/groups' },
   { label: 'Channels', icon: <Campaign />, path: '/channels' },
   { label: 'Workspace', icon: <Bolt />, path: '/workspace' },
   { label: 'Account', icon: <AccountCircle />, path: '/settings' },
