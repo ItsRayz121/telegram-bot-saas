@@ -96,7 +96,7 @@ export default function DirectorySubmit() {
   if (loadingData) return <Box sx={{ py: 8, textAlign: 'center' }}><CircularProgress /></Box>;
 
   if (done) return (
-    <Box sx={{ p: 4, maxWidth: 520, mx: 'auto', textAlign: 'center' }}>
+    <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: 520, mx: 'auto', textAlign: 'center' }}>
       <CheckCircle sx={{ fontSize: 64, color: 'success.main', mb: 2 }} />
       <Typography variant="h5" fontWeight={700} gutterBottom>You're listed!</Typography>
       <Typography variant="body2" color="text.secondary" mb={3}>
@@ -124,7 +124,7 @@ export default function DirectorySubmit() {
       </Box>
 
       <Card>
-        <CardContent sx={{ p: 3 }}>
+        <CardContent sx={{ p: { xs: 2, md: 3 } }}>
           {/* Type toggle */}
           <Typography variant="subtitle2" fontWeight={700} mb={1.5}>Community type</Typography>
           <ToggleButtonGroup

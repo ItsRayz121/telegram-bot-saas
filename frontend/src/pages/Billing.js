@@ -114,14 +114,14 @@ export default function Billing() {
         {loading ? (
           <>
             <Card sx={{ mb: 3 }}>
-              <CardContent sx={{ p: 3 }}>
+              <CardContent sx={{ p: { xs: 2, md: 3 } }}>
                 <Skeleton width="30%" height={16} sx={{ mb: 1 }} />
                 <Skeleton width="50%" height={48} sx={{ mb: 1 }} />
                 <Skeleton width="20%" height={24} />
               </CardContent>
             </Card>
             <Card sx={{ mb: 3 }}>
-              <CardContent sx={{ p: 3 }}>
+              <CardContent sx={{ p: { xs: 2, md: 3 } }}>
                 <Skeleton width="40%" height={20} sx={{ mb: 2 }} />
                 {[1, 2, 3, 4].map((i) => (
                   <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
@@ -136,7 +136,7 @@ export default function Billing() {
           <>
             {/* Current Plan */}
             <Card sx={{ mb: 3 }}>
-              <CardContent sx={{ p: 3 }}>
+              <CardContent sx={{ p: { xs: 2, md: 3 } }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 2 }}>
                   <Box>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -234,7 +234,7 @@ export default function Billing() {
 
             {/* Included Features */}
             <Card sx={{ mb: 3 }}>
-              <CardContent sx={{ p: 3 }}>
+              <CardContent sx={{ p: { xs: 2, md: 3 } }}>
                 <Typography variant="subtitle1" fontWeight={700} mb={2}>
                   What's included in your plan
                 </Typography>
@@ -253,7 +253,7 @@ export default function Billing() {
 
             {/* Payment Methods */}
             <Card sx={{ mb: 3 }}>
-              <CardContent sx={{ p: 3 }}>
+              <CardContent sx={{ p: { xs: 2, md: 3 } }}>
                 <Typography variant="subtitle1" fontWeight={700} mb={2}>
                   Payment Methods
                 </Typography>
@@ -272,7 +272,7 @@ export default function Billing() {
 
             {/* Payment History */}
             <Card sx={{ mb: 3 }}>
-              <CardContent sx={{ p: 3 }}>
+              <CardContent sx={{ p: { xs: 2, md: 3 } }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                   <Typography variant="subtitle1" fontWeight={700}>Payment History</Typography>
                 </Box>
@@ -366,7 +366,7 @@ export default function Billing() {
                   border: 'none',
                 }}
               >
-                <CardContent sx={{ p: 3, textAlign: 'center' }}>
+                <CardContent sx={{ p: { xs: 2, md: 3 }, textAlign: 'center' }}>
                   <Typography variant="h6" fontWeight={700} color="white" mb={1}>
                     {tier === 'free'
                       ? 'Unlock the full power of Telegizer'

@@ -27,7 +27,7 @@ function LoadingScreen() {
 
 function NotLinkedScreen() {
   return (
-    <Box sx={{ p: 3, textAlign: 'center' }}>
+    <Box sx={{ p: { xs: 2, md: 3 }, textAlign: 'center' }}>
       <LinkIcon sx={{ fontSize: 56, color: 'warning.main', mb: 2 }} />
       <Typography variant="h6" fontWeight={700} gutterBottom>Connect your Telegram account</Typography>
       <Typography variant="body2" color="text.secondary" mb={3}>
@@ -44,7 +44,7 @@ function NotLinkedScreen() {
 
 function ErrorScreen() {
   return (
-    <Box sx={{ p: 3, textAlign: 'center' }}>
+    <Box sx={{ p: { xs: 2, md: 3 }, textAlign: 'center' }}>
       <ErrorOutline sx={{ fontSize: 56, color: 'error.main', mb: 2 }} />
       <Typography variant="h6" fontWeight={700} gutterBottom>Something went wrong</Typography>
       <Typography variant="body2" color="text.secondary" mb={2}>
@@ -56,7 +56,7 @@ function ErrorScreen() {
 
 function NoWebAppScreen() {
   return (
-    <Box sx={{ p: 3, textAlign: 'center' }}>
+    <Box sx={{ p: { xs: 2, md: 3 }, textAlign: 'center' }}>
       <Alert severity="info" sx={{ textAlign: 'left', mb: 3 }}>
         Open this page inside Telegram — it's a Telegram Mini App.
       </Alert>

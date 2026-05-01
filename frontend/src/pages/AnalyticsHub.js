@@ -71,7 +71,7 @@ function OverviewTab({ isPro }) {
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
-        <FormControl size="small" sx={{ minWidth: 110 }}>
+        <FormControl size="small" sx={{ minWidth: { xs: 90, sm: 110 } }}>
           <InputLabel>Range</InputLabel>
           <Select value={days} label="Range" onChange={e => setDays(e.target.value)}>
             <MenuItem value={7}>7 days</MenuItem>

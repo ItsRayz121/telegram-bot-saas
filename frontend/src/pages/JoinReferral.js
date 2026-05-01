@@ -86,7 +86,7 @@ export default function JoinReferral() {
 
         {/* Feature list */}
         <Card sx={{ mb: 4 }}>
-          <CardContent sx={{ p: 3 }}>
+          <CardContent sx={{ p: { xs: 2, md: 3 } }}>
             <Stack spacing={2}>
               {FEATURES.map(({ icon: Icon, label, desc }) => (
                 <Box key={label} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>

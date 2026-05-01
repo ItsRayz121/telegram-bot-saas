@@ -54,11 +54,11 @@ function HistoryDialog({ groupTitle, groupId, open, onClose }) {
       <DialogTitle>Digest History — {groupTitle}</DialogTitle>
       <DialogContent dividers sx={{ p: 0 }}>
         {loading ? (
-          <Box sx={{ p: 3, display: 'flex', justifyContent: 'center' }}>
+          <Box sx={{ p: { xs: 2, md: 3 }, display: 'flex', justifyContent: 'center' }}>
             <CircularProgress size={28} />
           </Box>
         ) : rows.length === 0 ? (
-          <Box sx={{ p: 3, textAlign: 'center' }}>
+          <Box sx={{ p: { xs: 2, md: 3 }, textAlign: 'center' }}>
             <Typography color="text.secondary" fontSize="0.88rem">No digests sent yet.</Typography>
           </Box>
         ) : (
@@ -287,7 +287,7 @@ export default function AssistantDigests() {
 
   if (loading) {
     return (
-      <Box sx={{ p: 3, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 300 }}>
+      <Box sx={{ p: { xs: 2, md: 3 }, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 300 }}>
         <CircularProgress size={32} />
       </Box>
     );

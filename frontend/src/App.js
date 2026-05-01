@@ -99,6 +99,33 @@ const darkTheme = createTheme({
   },
   typography: {
     fontFamily: "'Inter', -apple-system, sans-serif",
+    // Responsive scale: mobile-first sizes, step up at sm (600px) and md (900px).
+    // Fixes 141 h3-h6 usages across 45 pages that previously rendered at desktop
+    // sizes (e.g. h4=34px, h5=24px) on 320-390px screens.
+    h3: {
+      fontSize: '1.6rem',
+      '@media (min-width:600px)': { fontSize: '2rem' },
+      '@media (min-width:900px)': { fontSize: '3rem' },
+    },
+    h4: {
+      fontSize: '1.35rem',
+      '@media (min-width:600px)': { fontSize: '1.65rem' },
+      '@media (min-width:900px)': { fontSize: '2.125rem' },
+    },
+    h5: {
+      fontSize: '1.1rem',
+      '@media (min-width:600px)': { fontSize: '1.25rem' },
+      '@media (min-width:900px)': { fontSize: '1.5rem' },
+    },
+    h6: {
+      fontSize: '0.975rem',
+      '@media (min-width:600px)': { fontSize: '1.05rem' },
+      '@media (min-width:900px)': { fontSize: '1.25rem' },
+    },
+    subtitle1: {
+      fontSize: '0.9rem',
+      '@media (min-width:600px)': { fontSize: '1rem' },
+    },
   },
   components: {
     MuiButton: {
@@ -109,6 +136,26 @@ const darkTheme = createTheme({
     },
     MuiPaper: {
       styleOverrides: { root: { borderRadius: 12 } },
+    },
+    // Default CardContent padding: 16px on mobile, 20px on sm+, 24px on md+.
+    // Overridden by explicit sx={{ p: N }} props in individual components.
+    MuiCardContent: {
+      styleOverrides: {
+        root: {
+          padding: '14px',
+          '&:last-child': { paddingBottom: '14px' },
+          '@media (min-width:600px)': { padding: '20px', '&:last-child': { paddingBottom: '20px' } },
+          '@media (min-width:900px)': { padding: '24px', '&:last-child': { paddingBottom: '24px' } },
+        },
+      },
+    },
+    // Toolbar minimum height: 52px mobile (keeps header compact), 64px desktop.
+    MuiToolbar: {
+      styleOverrides: {
+        root: {
+          '@media (max-width:599px)': { minHeight: '52px !important' },
+        },
+      },
     },
   },
 });

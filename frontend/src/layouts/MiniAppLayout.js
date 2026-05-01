@@ -52,10 +52,37 @@ function ThemedContent({ children }) {
         text: { primary: text, secondary: hint },
         divider: 'rgba(255,255,255,0.08)',
       },
-      typography: { fontFamily: "'Inter', -apple-system, sans-serif" },
+      typography: {
+        fontFamily: "'Inter', -apple-system, sans-serif",
+        h4: { fontSize: '1.25rem', '@media (min-width:600px)': { fontSize: '1.65rem' } },
+        h5: { fontSize: '1.05rem', '@media (min-width:600px)': { fontSize: '1.25rem' } },
+        h6: { fontSize: '0.95rem', '@media (min-width:600px)': { fontSize: '1.1rem' } },
+        subtitle1: { fontSize: '0.875rem', '@media (min-width:600px)': { fontSize: '1rem' } },
+        body1: { fontSize: '0.9rem' },
+        body2: { fontSize: '0.8rem' },
+      },
       components: {
-        MuiButton: { styleOverrides: { root: { textTransform: 'none', borderRadius: 10 } } },
+        MuiButton: {
+          styleOverrides: {
+            root: {
+              textTransform: 'none',
+              borderRadius: 10,
+              // Tappable but not oversized inside Telegram WebView
+              minHeight: 40,
+              fontSize: '0.875rem',
+            },
+          },
+        },
         MuiCard: { styleOverrides: { root: { borderRadius: 14, border: '1px solid rgba(255,255,255,0.07)' } } },
+        MuiCardContent: {
+          styleOverrides: {
+            root: {
+              padding: '12px',
+              '&:last-child': { paddingBottom: '12px' },
+              '@media (min-width:600px)': { padding: '16px', '&:last-child': { paddingBottom: '16px' } },
+            },
+          },
+        },
       },
     });
   }, [tgTheme]);
