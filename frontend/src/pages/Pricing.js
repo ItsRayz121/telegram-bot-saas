@@ -21,8 +21,8 @@ const PLANS = [
     color: 'default',
     tagline: 'Perfect to get started',
     features: [
-      '1 custom bot',
-      'Unlimited groups',
+      '1 custom bot · 3 groups per bot',
+      '@telegizer_bot · unlimited groups',
       'Welcome messages',
       'Verification system',
       'XP & levels',
@@ -40,8 +40,8 @@ const PLANS = [
     popular: true,
     tagline: 'For serious community builders',
     features: [
-      '3 custom bots',
-      'Unlimited groups',
+      '3 custom bots · unlimited groups',
+      '@telegizer_bot · unlimited groups',
       'Everything in Free',
       'AI Auto-Reply (knowledge base Q&A)',
       'AI Group Digests (daily / weekly)',
@@ -81,8 +81,9 @@ const PLANS = [
 
 // Full feature comparison table rows
 const COMPARISON = [
-  { label: 'Custom bots',             free: '1',         pro: '3',              ent: '50' },
-  { label: 'Groups per bot',          free: 'Unlimited', pro: 'Unlimited',       ent: 'Unlimited' },
+  { label: 'Custom bots',                   free: '1',       pro: '3',         ent: '50' },
+  { label: 'Groups per custom bot',         free: '3',       pro: 'Unlimited', ent: 'Unlimited' },
+  { label: '@telegizer_bot groups',         free: 'Unlimited', pro: 'Unlimited', ent: 'Unlimited' },
   { label: 'Members per group',       free: 'Unlimited', pro: 'Unlimited',       ent: 'Unlimited' },
   { label: 'Welcome messages',        free: true,        pro: true,              ent: true },
   { label: 'Verification system',     free: true,        pro: true,              ent: true },

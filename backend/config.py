@@ -131,10 +131,18 @@ class Config:
         "enterprise": 50,
     }
 
-    # Max official-bot linked groups per user (TelegramGroup model)
-    # -1 = unlimited
+    # Max groups per custom bot — -1 = unlimited
+    # Free users hit the limit at 3 groups/bot → natural upgrade trigger.
+    # Official @telegizer_bot groups are always unlimited (drives brand reach).
+    MAX_GROUPS_PER_CUSTOM_BOT = {
+        "free": 3,
+        "pro": -1,
+        "enterprise": -1,
+    }
+
+    # Max official-bot linked groups per user (TelegramGroup model) — always unlimited
     MAX_OFFICIAL_GROUPS = {
-        "free": -1,   # Unlimited on free to drive growth
+        "free": -1,
         "pro": -1,
         "enterprise": -1,
     }

@@ -1,6 +1,7 @@
 from datetime import datetime
-from .models import db, Group, Member, AuditLog
+from .models import db, Group, Member, AuditLog, Bot, User
 from .group_defaults import get_group_default_settings
+from .config import Config
 
 
 def get_default_settings():
@@ -19,6 +20,21 @@ class DatabaseManager:
         ).first()
 
         if not group:
+            # Enforce per-plan group limit for custom bots
+            bot = Bot.query.get(bot_id)
+            if bot:
+                user = User.query.get(bot.user_id)
+                tier = user.subscription_tier if user else "free"
+                max_groups = Config.MAX_GROUPS_PER_CUSTOM_BOT.get(tier, 3)
+                if max_groups != -1:
+                    current_count = Group.query.filter_by(bot_id=bot_id).count()
+                    if current_count >= max_groups:
+                        raise PermissionError(
+                            f"Group limit reached. Your {tier.capitalize()} plan allows "
+                            f"{max_groups} group(s) per custom bot. "
+                            "Upgrade to Pro for unlimited groups."
+                        )
+
             group = Group(
                 bot_id=bot_id,
                 telegram_group_id=str(telegram_group_id),
