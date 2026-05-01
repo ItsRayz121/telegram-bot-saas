@@ -2,6 +2,7 @@
 API routes for the user's personal Assistant Bot (bring-your-own-token, Pro+).
 """
 
+import logging
 import requests
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
@@ -10,7 +11,8 @@ from ..middleware.rate_limit import rate_limit
 
 assistant_bots_bp = Blueprint("assistant_bots", __name__, url_prefix="/api/assistant-bot")
 
-TELEGRAM_API = "https://api.telegram.org/bot{token}/getMe"
+TELEGRAM_API = "https://api.telegram.org/bot{token}/{method}"
+_log = logging.getLogger("assistant_bots")
 
 
 def _current_user():
@@ -26,7 +28,7 @@ def _require_pro(user):
 def _validate_token(bot_token: str):
     """Call Telegram getMe to validate token and fetch bot info. Returns (username, name) or raises ValueError."""
     try:
-        resp = requests.get(TELEGRAM_API.format(token=bot_token), timeout=8)
+        resp = requests.get(TELEGRAM_API.format(token=bot_token, method="getMe"), timeout=8)
         data = resp.json()
     except Exception:
         raise ValueError("Could not reach Telegram API — check your internet connection.")
@@ -34,6 +36,37 @@ def _validate_token(bot_token: str):
         raise ValueError("Invalid bot token — Telegram rejected it.")
     result = data["result"]
     return result.get("username"), result.get("first_name")
+
+
+def _register_webhook(bot_token: str):
+    """Tell Telegram to send updates for this bot to our webhook endpoint."""
+    try:
+        from .telegram_updates import make_webhook_url
+        url = make_webhook_url(bot_token)
+        resp = requests.post(
+            TELEGRAM_API.format(token=bot_token, method="setWebhook"),
+            json={"url": url, "allowed_updates": ["message", "edited_message", "callback_query"]},
+            timeout=10,
+        )
+        data = resp.json()
+        if not data.get("ok"):
+            _log.warning("setWebhook failed: %s", data)
+        else:
+            _log.info("Webhook registered for assistant bot: %s", url)
+    except Exception as exc:
+        _log.warning("_register_webhook error: %s", exc)
+
+
+def _deregister_webhook(bot_token: str):
+    """Remove the Telegram webhook for this bot token."""
+    try:
+        requests.post(
+            TELEGRAM_API.format(token=bot_token, method="deleteWebhook"),
+            json={"drop_pending_updates": False},
+            timeout=10,
+        )
+    except Exception as exc:
+        _log.warning("_deregister_webhook error: %s", exc)
 
 
 # ── GET /api/assistant-bot ────────────────────────────────────────────────────
@@ -81,6 +114,9 @@ def create_assistant_bot():
     bot.bot_token = bot_token
     db.session.add(bot)
     db.session.commit()
+
+    _register_webhook(bot_token)
+
     return jsonify({"bot": bot.to_dict()}), 201
 
 
@@ -103,6 +139,7 @@ def update_assistant_bot():
         return jsonify({"error": "No assistant bot found. Use POST to create one."}), 404
 
     data = request.get_json() or {}
+    old_token = bot.bot_token
 
     if "bot_token" in data:
         new_token = (data["bot_token"] or "").strip()
@@ -112,6 +149,9 @@ def update_assistant_bot():
             username, name = _validate_token(new_token)
         except ValueError as e:
             return jsonify({"error": str(e)}), 422
+        # Deregister old webhook before saving new token
+        if old_token and old_token != new_token:
+            _deregister_webhook(old_token)
         bot.bot_token = new_token
         bot.bot_username = username
         bot.bot_name = name
@@ -120,6 +160,14 @@ def update_assistant_bot():
         bot.is_active = bool(data["is_active"])
 
     db.session.commit()
+
+    # Re-register webhook with new token (or re-enable if toggled active)
+    current_token = bot.bot_token
+    if current_token and bot.is_active:
+        _register_webhook(current_token)
+    elif current_token and not bot.is_active:
+        _deregister_webhook(current_token)
+
     return jsonify({"bot": bot.to_dict()})
 
 
@@ -137,6 +185,11 @@ def delete_assistant_bot():
     if not bot:
         return jsonify({"error": "No assistant bot found"}), 404
 
+    raw_token = bot.bot_token
     db.session.delete(bot)
     db.session.commit()
+
+    if raw_token:
+        _deregister_webhook(raw_token)
+
     return jsonify({"message": "Assistant bot removed."})

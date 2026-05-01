@@ -67,6 +67,7 @@ from .routes.assistant import assistant_bp
 from .routes.tasks import tasks_bp
 from .routes.knowledge_workspace import knowledge_ws_bp
 from .routes.assistant_bots import assistant_bots_bp
+from .routes.telegram_updates import telegram_updates_bp
 from .bot_manager import BotManager
 from .official_bot import start_official_bot
 
@@ -194,6 +195,7 @@ def create_app():
     app.register_blueprint(tasks_bp)
     app.register_blueprint(knowledge_ws_bp)
     app.register_blueprint(assistant_bots_bp)
+    app.register_blueprint(telegram_updates_bp)
 
     app.bot_manager = bot_manager
 
