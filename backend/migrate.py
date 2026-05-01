@@ -105,6 +105,21 @@ def init_db():
             "CREATE INDEX IF NOT EXISTS ix_admin_audit_logs_admin_id ON admin_audit_logs (admin_id)",
             "admin_audit_logs.admin_id index",
         )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS timezone VARCHAR(64) NOT NULL DEFAULT 'UTC'",
+            "users.timezone",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE directory_listings ADD COLUMN IF NOT EXISTS moderation_status VARCHAR(16) NOT NULL DEFAULT 'approved'",
+            "directory_listings.moderation_status (existing rows → approved)",
+        )
+        _run_alter(
+            db.engine,
+            "CREATE INDEX IF NOT EXISTS ix_directory_listings_moderation_status ON directory_listings (moderation_status)",
+            "directory_listings.moderation_status index",
+        )
         print("Migration complete.")
 
     # One-shot TOTP secret encryption migration.

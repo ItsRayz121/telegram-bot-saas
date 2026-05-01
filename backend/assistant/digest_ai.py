@@ -140,7 +140,12 @@ def _resolve_ai_key(user_id: int, group_id: str) -> dict | None:
     user = User.query.get(user_id)
     if not user:
         return None
-    ws = get_workspace_ai_key(user)
+    from .ai_key_resolver import QuotaExceededError
+    try:
+        ws = get_workspace_ai_key(user)
+    except QuotaExceededError as qe:
+        _log.getLogger(__name__).warning("digest_ai: quota exceeded for user %s: %s", user_id, qe)
+        return None
     if not ws.get("api_key"):
         return None
     ws["source"] = ws.get("source", "platform")
@@ -201,6 +206,18 @@ def get_group_ai_summary(telegram_group_id: str) -> str | None:
                 db.session.commit()
             except Exception as log_exc:
                 _log.warning("Failed to log digest for %s: %s", telegram_group_id, log_exc)
+
+            # Record platform token usage (rough estimate: ~1 token per 4 chars)
+            if key_info.get("source") == "platform":
+                try:
+                    from ..models import User as _User
+                    from .ai_key_resolver import record_token_usage
+                    _u = _User.query.get(tg.owner_user_id)
+                    if _u:
+                        estimated = len(summary) // 4 + sum(len(m["text"]) for m in messages) // 4
+                        record_token_usage(_u, estimated)
+                except Exception as _te:
+                    _log.warning("Failed to record token usage: %s", _te)
 
         return summary
 

@@ -6,6 +6,7 @@ from ..models import (
     db, DirectoryListing, Channel, TelegramGroup, User,
     DIRECTORY_CATEGORIES, DIRECTORY_LANGUAGES,
 )
+from ..middleware.rate_limit import rate_limit
 
 directory_bp = Blueprint("directory", __name__)
 
@@ -20,7 +21,7 @@ def _get_user():
 
 @directory_bp.route("/api/directory", methods=["GET"])
 def list_directory():
-    q = DirectoryListing.query.filter_by(is_public=True)
+    q = DirectoryListing.query.filter_by(is_public=True, moderation_status="approved")
 
     category = request.args.get("category")
     if category:
@@ -104,6 +105,7 @@ def my_listings():
 
 @directory_bp.route("/api/directory", methods=["POST"])
 @jwt_required()
+@rate_limit(requests_per_minute=5)
 def create_listing():
     user = _get_user()
     data = request.get_json() or {}
@@ -180,10 +182,13 @@ def create_listing():
         member_count=member_count,
         tcs_score=tcs_score,
         tcs_grade=tcs_grade,
+        moderation_status="pending",  # requires admin approval before appearing in public browse
     )
     db.session.add(listing)
     db.session.commit()
-    return jsonify(listing.to_dict(include_contact=True)), 201
+    result = listing.to_dict(include_contact=True)
+    result["moderation_note"] = "Your listing is under review and will appear publicly once approved."
+    return jsonify(result), 201
 
 
 @directory_bp.route("/api/directory/<int:lid>", methods=["PUT"])

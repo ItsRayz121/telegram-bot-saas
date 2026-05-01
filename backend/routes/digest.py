@@ -625,6 +625,26 @@ def _check_and_send(group, bot, now, key, period_delta, tolerance):
         except Exception:
             pass
 
+    # Timezone-aware hour gate: only send during the user's preferred digest hour (default 8am).
+    # Falls back gracefully if pytz is unavailable or timezone is invalid.
+    digest_hour = int(digest.get("hour", 8))
+    owner_tz_name = "UTC"
+    try:
+        from ..models import User as _User
+        owner = _User.query.get(group.bot.user_id) if group.bot else None
+        if owner and owner.timezone:
+            owner_tz_name = owner.timezone
+    except Exception:
+        pass
+    try:
+        import pytz
+        tz = pytz.timezone(owner_tz_name)
+        local_now = datetime.utcnow().replace(tzinfo=pytz.utc).astimezone(tz)
+        if local_now.hour != digest_hour:
+            return
+    except Exception:
+        pass  # pytz unavailable or bad timezone — fall through and send anyway
+
     label_map = {"daily": "Daily", "weekly": "Weekly", "monthly": "Monthly"}
     result = _do_send_report(group, bot, f"{label_map[key]} Report", now - period_delta)
     if result.get("sent"):

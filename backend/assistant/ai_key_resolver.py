@@ -3,7 +3,12 @@ Resolves which AI key + provider to use for workspace-level assistant features
 (Notes, Digests, Hub). Priority: user's workspace key → platform Gemini key.
 """
 
+from datetime import datetime, timedelta
 from .. import config as _cfg
+
+
+class QuotaExceededError(Exception):
+    """Raised when a user's daily platform AI token quota is exhausted."""
 
 
 def get_workspace_ai_key(user) -> dict:
@@ -11,6 +16,9 @@ def get_workspace_ai_key(user) -> dict:
 
     Checks for a workspace-scoped UserApiKey first; falls back to the
     platform-wide Gemini Flash key from environment config.
+
+    Raises QuotaExceededError if the user has no personal key and the platform
+    key daily quota is exhausted.
     """
     from ..models import UserApiKey
 
@@ -39,12 +47,52 @@ def get_workspace_ai_key(user) -> dict:
                 "source": "user",
             }
 
+    # Platform key path — enforce daily quota
+    _check_and_reset_quota(user)
+    daily_limit = 200000 if user.subscription_tier in ("pro", "enterprise") else 50000
+    if user.workspace_ai_tokens_today >= daily_limit:
+        raise QuotaExceededError(
+            f"Daily AI token limit ({daily_limit:,}) reached. "
+            "Quota resets in 24 hours or add your own API key in AI Settings."
+        )
+
     return {
         "provider": "gemini",
         "api_key": _cfg.Config.PLATFORM_GEMINI_API_KEY,
         "model": "gemini-2.0-flash",
         "source": "platform",
+        "daily_limit": daily_limit,
     }
+
+
+def record_token_usage(user, tokens_used: int):
+    """Increment the user's daily platform token counter after a successful call.
+
+    Call this only when source == "platform"; user-key usage is not tracked here.
+    """
+    from ..models import db
+    _check_and_reset_quota(user)
+    user.workspace_ai_tokens_today = (user.workspace_ai_tokens_today or 0) + tokens_used
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+
+def _check_and_reset_quota(user):
+    """Reset the daily counter if 24 hours have elapsed since last reset."""
+    from ..models import db
+    now = datetime.utcnow()
+    if (
+        user.workspace_ai_tokens_reset_at is None
+        or (now - user.workspace_ai_tokens_reset_at).total_seconds() >= 86400
+    ):
+        user.workspace_ai_tokens_today = 0
+        user.workspace_ai_tokens_reset_at = now
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
 
 
 def _default_model(provider: str) -> str:

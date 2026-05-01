@@ -715,6 +715,44 @@ def get_me():
     return jsonify({"user": user_data}), 200
 
 
+@auth_bp.route("/me", methods=["PATCH"])
+@jwt_required()
+@rate_limit(requests_per_minute=10)
+def update_me():
+    """Update mutable profile fields: full_name, timezone."""
+    user_id = get_jwt_identity()
+    user = User.query.get(int(user_id))
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    data = request.get_json() or {}
+
+    if "full_name" in data:
+        name = data["full_name"].strip()
+        if not name or len(name) > 255:
+            return jsonify({"error": "full_name must be 1–255 characters"}), 400
+        user.full_name = name
+
+    if "timezone" in data:
+        tz_str = data["timezone"].strip()
+        try:
+            import pytz
+            pytz.timezone(tz_str)  # validates IANA timezone name
+        except Exception:
+            return jsonify({"error": f"Invalid timezone: {tz_str!r}. Use an IANA timezone name (e.g. 'America/New_York')."}), 400
+        user.timezone = tz_str
+
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        return jsonify({"error": "Failed to save profile"}), 500
+
+    user_data = user.to_dict()
+    user_data["is_admin"] = user.email in Config.ADMIN_EMAILS
+    return jsonify({"user": user_data}), 200
+
+
 @auth_bp.route("/forgot-password", methods=["POST"])
 @rate_limit(requests_per_minute=5)
 def forgot_password():

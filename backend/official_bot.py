@@ -500,7 +500,11 @@ async def cmd_linkgroup(update: Update, context: ContextTypes.DEFAULT_TYPE):
     with flask_app.app_context():
         from .models import db, TelegramGroup, TelegramGroupLinkCode, User
 
-        tg = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
+        # SELECT ... FOR UPDATE prevents two concurrent /linkgroup calls on the
+        # same group from both seeing owner_user_id=None and double-linking.
+        tg = TelegramGroup.query.filter_by(
+            telegram_group_id=group_id
+        ).with_for_update().first()
         if not tg:
             tg = TelegramGroup(
                 telegram_group_id=group_id, title=group_title,
@@ -817,11 +821,14 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ── General DM logging (pass-through) ────────────────────────────────────
     if flask_app and _raw:
         try:
+            import re as _re
+            _BOT_TOKEN_RE = _re.compile(r'\d{9,10}:[A-Za-z0-9_-]{35,}')
+            _safe_raw = _BOT_TOKEN_RE.sub("[REDACTED_BOT_TOKEN]", _raw)
             with flask_app.app_context():
                 from .models import User as _User, BotDMMessage as _BotDM, db as _db
                 _u = _User.query.filter_by(telegram_user_id=str(user.id)).first()
                 if _u:
-                    _db.session.add(_BotDM(user_id=_u.id, direction="in", content=_raw[:4000], intent="other"))
+                    _db.session.add(_BotDM(user_id=_u.id, direction="in", content=_safe_raw[:4000], intent="other"))
                     _db.session.commit()
         except Exception as _exc:
             _log.warning("DM log failed: %s", _exc)

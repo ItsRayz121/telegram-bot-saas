@@ -83,6 +83,8 @@ class User(db.Model):
     # Workspace AI token usage tracking (reset daily)
     workspace_ai_tokens_today = db.Column(db.Integer, default=0, nullable=False)
     workspace_ai_tokens_reset_at = db.Column(db.DateTime, nullable=True)
+    # User's preferred timezone (IANA name, e.g. "America/New_York"). Used for digest scheduling.
+    timezone = db.Column(db.String(64), default="UTC", nullable=False)
 
     bots = db.relationship("Bot", backref="owner", lazy=True, cascade="all, delete-orphan")
 
@@ -129,6 +131,7 @@ class User(db.Model):
             "telegram_username": self.telegram_username,
             "telegram_first_name": self.telegram_first_name,
             "telegram_connected_at": self.telegram_connected_at.isoformat() if self.telegram_connected_at else None,
+            "timezone": self.timezone or "UTC",
         }
 
 
@@ -1846,6 +1849,8 @@ class DirectoryListing(db.Model):
     is_public = db.Column(db.Boolean, default=True, nullable=False, index=True)
     is_featured = db.Column(db.Boolean, default=False, nullable=False, index=True)
     is_verified = db.Column(db.Boolean, default=False, nullable=False)
+    # Moderation: pending | approved | rejected. Public browse filtered by approved.
+    moderation_status = db.Column(db.String(16), default="pending", nullable=False, index=True)
 
     # Partnership / marketplace pricing
     accepts_partnerships = db.Column(db.Boolean, default=False, nullable=False, index=True)

@@ -40,9 +40,12 @@ def list_documents(bot_id, group_id):
         return jsonify({"error": str(e)}), 500
 
 
+_KB_GROUP_QUOTA_BYTES = 100 * 1024 * 1024  # 100MB per group
+
+
 @knowledge_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/knowledge", methods=["POST"])
 @jwt_required()
-@rate_limit(requests_per_minute=10)
+@rate_limit(requests_per_minute=3)
 def upload_document(bot_id, group_id):
     user = _get_current_user()
     if not user:
@@ -63,8 +66,17 @@ def upload_document(bot_id, group_id):
         return jsonify({"error": f"File type .{ext} not supported. Use: {', '.join(sorted(allowed_ext))}"}), 400
 
     content_bytes = f.read()
-    if len(content_bytes) > 5 * 1024 * 1024:
+    file_size = len(content_bytes)
+    if file_size > 5 * 1024 * 1024:
         return jsonify({"error": "File too large (max 5MB)"}), 400
+
+    # Group-level storage quota (100MB total)
+    from sqlalchemy import func as _func
+    existing_total = db.session.query(
+        _func.sum(_func.length(KnowledgeDocument.content_text))
+    ).filter_by(group_id=group.id).scalar() or 0
+    if existing_total + file_size > _KB_GROUP_QUOTA_BYTES:
+        return jsonify({"error": "Group knowledge base storage limit (100MB) reached. Delete documents to free space."}), 413
 
     # Validate actual MIME type via magic bytes — extension alone is spoofable.
     _MAGIC_SIGNATURES = {
