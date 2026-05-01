@@ -8,7 +8,9 @@ import {
 import {
   ArrowBack, SmartToy, Person, Lock, DeleteForever, Schedule,
   Security, CheckCircle, ContentCopy, Telegram, LinkOff, OpenInNew,
+  Add, Star, StarBorder, Delete,
 } from '@mui/icons-material';
+import { List, ListItem, ListItemText, ListItemSecondaryAction, Tooltip } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { auth, totp as totpApi, billing, userSettings, telegramAccount } from '../services/api';
@@ -373,6 +375,136 @@ function TelegramConnectSection({ user, onUserRefresh }) {
   );
 }
 
+// ── Linked Telegram Accounts ───────────────────────────────────────────────────
+function LinkedTelegramAccountsSection() {
+  const [accounts, setAccounts] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [addingCode, setAddingCode] = React.useState(false);
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await telegramAccount.listLinkedAccounts();
+      setAccounts(r.data.accounts || []);
+    } catch { /* ignore */ }
+    finally { setLoading(false); }
+  }, []);
+
+  React.useEffect(() => { load(); }, [load]);
+
+  const handleAddAccount = async () => {
+    setAddingCode(true);
+    try {
+      const r = await telegramAccount.generateConnectCode();
+      window.open(r.data.url, '_blank', 'noopener,noreferrer');
+      // Poll briefly for the new account to appear
+      let attempts = 0;
+      const poll = setInterval(async () => {
+        attempts++;
+        try {
+          const r2 = await telegramAccount.listLinkedAccounts();
+          const newAccounts = r2.data.accounts || [];
+          if (newAccounts.length > accounts.length) {
+            setAccounts(newAccounts);
+            clearInterval(poll);
+            setAddingCode(false);
+            toast.success('New Telegram account linked!');
+          }
+        } catch { /* ignore */ }
+        if (attempts >= 40) { clearInterval(poll); setAddingCode(false); }
+      }, 3000);
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to generate connect code');
+      setAddingCode(false);
+    }
+  };
+
+  const handleRemove = async (id) => {
+    try {
+      await telegramAccount.removeLinkedAccount(id);
+      setAccounts(prev => prev.filter(a => a.id !== id));
+      toast.success('Account unlinked');
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to unlink');
+    }
+  };
+
+  const handleSetPrimary = async (id) => {
+    try {
+      await telegramAccount.setPrimaryAccount(id);
+      setAccounts(prev => prev.map(a => ({ ...a, is_primary: a.id === id })));
+      toast.success('Primary account updated');
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to update primary');
+    }
+  };
+
+  if (loading) return <CircularProgress size={20} />;
+
+  return (
+    <Box>
+      <Typography variant="body2" color="text.secondary" mb={1.5}>
+        Link multiple Telegram accounts to the same email — manage all your groups and bots
+        from one dashboard regardless of which Telegram account you're using.
+      </Typography>
+
+      {accounts.length > 0 && (
+        <List dense disablePadding sx={{ mb: 2 }}>
+          {accounts.map((acct) => (
+            <ListItem
+              key={acct.id ?? acct.telegram_user_id}
+              sx={{ px: 0, py: 0.5, borderBottom: '1px solid', borderColor: 'divider' }}
+            >
+              <Telegram sx={{ fontSize: 18, color: 'primary.main', mr: 1.5 }} />
+              <ListItemText
+                primary={
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography fontSize="0.88rem" fontWeight={500}>
+                      {acct.telegram_first_name || 'Unknown'}
+                      {acct.telegram_username && (
+                        <Typography component="span" fontSize="0.82rem" color="text.secondary"> @{acct.telegram_username}</Typography>
+                      )}
+                    </Typography>
+                    {acct.is_primary && <Chip label="Primary" size="small" color="primary" sx={{ height: 18, fontSize: '0.65rem' }} />}
+                  </Box>
+                }
+                secondary={acct.linked_at ? `Linked ${new Date(acct.linked_at).toLocaleDateString()}` : ''}
+              />
+              <ListItemSecondaryAction sx={{ display: 'flex', gap: 0.5 }}>
+                {!acct.is_primary && acct.id && (
+                  <Tooltip title="Set as primary">
+                    <IconButton size="small" onClick={() => handleSetPrimary(acct.id)}>
+                      <StarBorder fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
+                {acct.is_primary && <Star fontSize="small" sx={{ color: 'warning.main', mt: 0.5 }} />}
+                {acct.id && (
+                  <Tooltip title="Unlink">
+                    <IconButton size="small" color="error" onClick={() => handleRemove(acct.id)}>
+                      <Delete fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
+              </ListItemSecondaryAction>
+            </ListItem>
+          ))}
+        </List>
+      )}
+
+      <Button
+        variant="outlined"
+        size="small"
+        startIcon={addingCode ? <CircularProgress size={16} /> : <Add />}
+        onClick={handleAddAccount}
+        disabled={addingCode}
+      >
+        {addingCode ? 'Waiting for confirmation…' : 'Add Telegram Account'}
+      </Button>
+    </Box>
+  );
+}
+
 // ── Main Settings Page ─────────────────────────────────────────────────────────
 export default function Settings() {
   const navigate = useNavigate();
@@ -588,6 +720,11 @@ export default function Settings() {
         {/* Connect Telegram */}
         <Section title="Connect Telegram Account" icon={<Telegram color="primary" />}>
           <TelegramConnectSection user={user} onUserRefresh={fetchUser} />
+        </Section>
+
+        {/* Linked Telegram Accounts */}
+        <Section title="Linked Telegram Accounts" icon={<Telegram color="primary" />}>
+          <LinkedTelegramAccountsSection />
         </Section>
 
         {/* Two-Factor Authentication */}

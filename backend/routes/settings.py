@@ -3,7 +3,7 @@ from datetime import datetime
 import requests as _http
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from ..models import db, User, Bot, Group, Member, AuditLog, ScheduledMessage, Raid, AutoResponse, ReportedMessage, TelegramBotStarted
+from ..models import db, User, Bot, Group, Member, AuditLog, ScheduledMessage, Raid, AutoResponse, ReportedMessage, TelegramBotStarted, UserTelegramAccount
 from ..middleware.rate_limit import rate_limit
 
 _PAID_TIERS = {"pro", "enterprise"}
@@ -694,3 +694,178 @@ def resolve_report(bot_id, group_id, report_id):
         except Exception:
             pass
         return jsonify({"error": str(e)}), 500
+
+
+# ── Linked Telegram Accounts ─────────────────────────────────────────────────
+
+logger = logging.getLogger(__name__)
+
+
+@settings_bp.route("/account/telegram-accounts", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def list_telegram_accounts():
+    """List all Telegram accounts linked to the current user."""
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    accounts = UserTelegramAccount.query.filter_by(user_id=user_id).order_by(
+        UserTelegramAccount.is_primary.desc(), UserTelegramAccount.linked_at
+    ).all()
+    # Also surface the legacy primary account stored directly on the User model
+    # if it hasn't been migrated to the junction table yet.
+    primary_ids = {a.telegram_user_id for a in accounts}
+    legacy = []
+    if user.telegram_user_id and user.telegram_user_id not in primary_ids:
+        legacy = [{
+            "id": None,
+            "telegram_user_id": user.telegram_user_id,
+            "telegram_username": user.telegram_username,
+            "telegram_first_name": user.telegram_first_name,
+            "is_primary": True,
+            "linked_at": user.telegram_connected_at.isoformat() if user.telegram_connected_at else None,
+        }]
+    return jsonify({"accounts": legacy + [a.to_dict() for a in accounts]})
+
+
+@settings_bp.route("/account/telegram-accounts", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=10)
+def add_telegram_account():
+    """Link an additional Telegram account.
+
+    The official bot sends a /connect command that POSTs the Telegram user ID
+    here after verifying the user's one-time token. The frontend also calls this
+    directly when the bot confirms the link via the deep-link flow.
+    """
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    tg_id = str(data.get("telegram_user_id", "")).strip()
+    tg_username = data.get("telegram_username", "")
+    tg_first_name = data.get("telegram_first_name", "")
+
+    if not tg_id:
+        return jsonify({"error": "telegram_user_id is required"}), 400
+
+    # Check if this Telegram ID is already linked to another user account
+    existing_user = User.query.filter_by(telegram_user_id=tg_id).first()
+    if existing_user and existing_user.id != user_id:
+        return jsonify({"error": "This Telegram account is already linked to a different user"}), 409
+
+    existing_linked = UserTelegramAccount.query.filter_by(telegram_user_id=tg_id).first()
+    if existing_linked and existing_linked.user_id != user_id:
+        return jsonify({"error": "This Telegram account is already linked to a different user"}), 409
+    if existing_linked and existing_linked.user_id == user_id:
+        return jsonify({"account": existing_linked.to_dict(), "message": "Already linked"}), 200
+
+    # Count existing linked accounts — cap at reasonable limit to prevent abuse
+    count = UserTelegramAccount.query.filter_by(user_id=user_id).count()
+    if user.telegram_user_id:
+        count += 1  # include legacy primary
+    if count >= 10:
+        return jsonify({"error": "Maximum 10 Telegram accounts per user"}), 400
+
+    is_primary = not bool(user.telegram_user_id) and count == 0
+    account = UserTelegramAccount(
+        user_id=user_id,
+        telegram_user_id=tg_id,
+        telegram_username=tg_username,
+        telegram_first_name=tg_first_name,
+        is_primary=is_primary,
+    )
+    db.session.add(account)
+
+    # Backfill the legacy primary columns on first link
+    if is_primary and not user.telegram_user_id:
+        user.telegram_user_id = tg_id
+        user.telegram_username = tg_username
+        user.telegram_first_name = tg_first_name
+        user.telegram_connected_at = datetime.utcnow()
+
+    try:
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        logger.error("add_telegram_account error: %s", exc)
+        return jsonify({"error": "Could not link account"}), 500
+
+    return jsonify({"account": account.to_dict(), "message": "Telegram account linked"}), 201
+
+
+@settings_bp.route("/account/telegram-accounts/<int:account_id>", methods=["DELETE"])
+@jwt_required()
+@rate_limit(requests_per_minute=20)
+def remove_telegram_account(account_id):
+    """Unlink a Telegram account from the current user."""
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    account = UserTelegramAccount.query.filter_by(id=account_id, user_id=user_id).first()
+    if not account:
+        return jsonify({"error": "Account not found"}), 404
+
+    was_primary = account.is_primary
+    db.session.delete(account)
+
+    if was_primary:
+        # Promote the next linked account to primary
+        next_acct = UserTelegramAccount.query.filter_by(user_id=user_id).order_by(
+            UserTelegramAccount.linked_at
+        ).first()
+        if next_acct:
+            next_acct.is_primary = True
+            user.telegram_user_id = next_acct.telegram_user_id
+            user.telegram_username = next_acct.telegram_username
+            user.telegram_first_name = next_acct.telegram_first_name
+        else:
+            user.telegram_user_id = None
+            user.telegram_username = None
+            user.telegram_first_name = None
+            user.telegram_connected_at = None
+
+    try:
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        logger.error("remove_telegram_account error: %s", exc)
+        return jsonify({"error": "Could not unlink account"}), 500
+
+    return jsonify({"message": "Telegram account unlinked"})
+
+
+@settings_bp.route("/account/telegram-accounts/<int:account_id>/set-primary", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=20)
+def set_primary_telegram_account(account_id):
+    """Set a linked Telegram account as the primary one."""
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    account = UserTelegramAccount.query.filter_by(id=account_id, user_id=user_id).first()
+    if not account:
+        return jsonify({"error": "Account not found"}), 404
+
+    # Demote current primary
+    UserTelegramAccount.query.filter_by(user_id=user_id, is_primary=True).update({"is_primary": False})
+    account.is_primary = True
+    user.telegram_user_id = account.telegram_user_id
+    user.telegram_username = account.telegram_username
+    user.telegram_first_name = account.telegram_first_name
+
+    try:
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        logger.error("set_primary_telegram_account error: %s", exc)
+        return jsonify({"error": "Could not update primary account"}), 500
+
+    return jsonify({"account": account.to_dict(), "message": "Primary account updated"})

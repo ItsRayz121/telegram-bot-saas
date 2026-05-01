@@ -135,6 +135,32 @@ class User(db.Model):
         }
 
 
+class UserTelegramAccount(db.Model):
+    """Linked Telegram accounts for a user. Multiple Telegram IDs can be
+    associated with one email/user account and managed under the same dashboard."""
+    __tablename__ = "user_telegram_accounts"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    telegram_user_id = db.Column(db.String(255), nullable=False, unique=True, index=True)
+    telegram_username = db.Column(db.String(255), nullable=True)
+    telegram_first_name = db.Column(db.String(255), nullable=True)
+    is_primary = db.Column(db.Boolean, default=False, nullable=False)
+    linked_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (db.UniqueConstraint("user_id", "telegram_user_id", name="uq_user_telegram"),)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "telegram_user_id": self.telegram_user_id,
+            "telegram_username": self.telegram_username,
+            "telegram_first_name": self.telegram_first_name,
+            "is_primary": self.is_primary,
+            "linked_at": self.linked_at.isoformat(),
+        }
+
+
 class PasswordResetToken(db.Model):
     __tablename__ = "password_reset_tokens"
 

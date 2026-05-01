@@ -9,7 +9,9 @@ import {
   OpenInNew, ContentCopy, CheckCircle, RadioButtonUnchecked, Close,
   ArrowForward, Chat, Send, ExpandMore, ExpandLess, QuestionAnswer,
   CalendarMonth, SmartToy, Lock, Groups, Person,
+  NotificationsActive, MenuBook, FlashOn, BarChart,
 } from '@mui/icons-material';
+import { useMediaQuery, useTheme } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { assistant, assistantBot as assistantBotApi } from '../services/api';
 
@@ -94,6 +96,53 @@ function ConnectBotBanner({ botUsername, connectedGroups, onDismiss }) {
         </Box>
       </CardContent>
     </Card>
+  );
+}
+
+// ── Mobile Feature Navigation Grid ───────────────────────────────────────────
+
+const FEATURE_TILES = [
+  { label: 'Notes', icon: EditNote, path: '/workspace/notes', color: '#3b82f6' },
+  { label: 'Tasks', icon: CheckCircle, path: '/workspace/tasks', color: '#10b981' },
+  { label: 'Reminders', icon: NotificationsActive, path: '/workspace/reminders', color: '#f59e0b' },
+  { label: 'Digests', icon: Summarize, path: '/workspace/digests', color: '#8b5cf6' },
+  { label: 'Auto-Reply', icon: Reply, path: '/workspace/smart-links', color: '#ec4899' },
+  { label: 'Knowledge', icon: MenuBook, path: '/workspace/knowledge-base', color: '#06b6d4' },
+  { label: 'Automations', icon: AutoMode, path: '/workspace/automations', color: '#f97316' },
+  { label: 'Analytics', icon: BarChart, path: '/analytics', color: '#64748b' },
+];
+
+function MobileFeatureGrid() {
+  const navigate = useNavigate();
+  return (
+    <Box sx={{ mb: 3 }}>
+      <Typography fontWeight={600} fontSize="0.82rem" color="text.secondary" mb={1.5} sx={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        Features
+      </Typography>
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1 }}>
+        {FEATURE_TILES.map(({ label, icon: Icon, path, color }) => (
+          <Box
+            key={path}
+            onClick={() => navigate(path)}
+            sx={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center',
+              gap: 0.75, p: 1.25, borderRadius: 2,
+              bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider',
+              cursor: 'pointer',
+              transition: 'transform 0.15s, box-shadow 0.15s',
+              '&:active': { transform: 'scale(0.95)' },
+            }}
+          >
+            <Box sx={{ width: 36, height: 36, borderRadius: '50%', bgcolor: color + '22', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Icon sx={{ fontSize: 18, color }} />
+            </Box>
+            <Typography fontSize="0.68rem" fontWeight={500} textAlign="center" lineHeight={1.2}>
+              {label}
+            </Typography>
+          </Box>
+        ))}
+      </Box>
+    </Box>
   );
 }
 
@@ -645,6 +694,8 @@ export default function AssistantHub() {
     () => localStorage.getItem(DISMISS_KEY) === '1'
   );
   const plan = (() => { try { return JSON.parse(localStorage.getItem('user') || '{}').subscription_tier || 'free'; } catch { return 'free'; } })();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -700,6 +751,9 @@ export default function AssistantHub() {
           onDismiss={dismissBanner}
         />
       )}
+
+      {/* Mobile feature navigation grid */}
+      {isMobile && <MobileFeatureGrid />}
 
       {/* Onboarding checklist */}
       {data?.onboarding && <OnboardingCard onboarding={data.onboarding} />}

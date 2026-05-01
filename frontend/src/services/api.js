@@ -510,6 +510,11 @@ export const telegramAccount = {
   generateConnectCode: () => api.post('/api/telegram/generate-connect-code'),
   connectionStatus: () => api.get('/api/telegram/connection-status'),
   disconnect: () => api.delete('/api/telegram/disconnect'),
+  // Multi-account management
+  listLinkedAccounts: () => api.get('/api/account/telegram-accounts'),
+  addLinkedAccount: (data) => api.post('/api/account/telegram-accounts', data),
+  removeLinkedAccount: (id) => api.delete(`/api/account/telegram-accounts/${id}`),
+  setPrimaryAccount: (id) => api.post(`/api/account/telegram-accounts/${id}/set-primary`),
 };
 
 export const workspace = {

@@ -3,7 +3,7 @@ import {
   Box, AppBar, Toolbar, IconButton, Typography, Drawer,
   useMediaQuery, useTheme, Paper, BottomNavigation, BottomNavigationAction,
 } from '@mui/material';
-import { Menu as MenuIcon, Home, Groups, Campaign, Bolt, AccountCircle } from '@mui/icons-material';
+import { Menu as MenuIcon, Home, Groups, AutoMode, Psychology, AccountCircle } from '@mui/icons-material';
 import Sidebar, { SIDEBAR_WIDTH } from '../components/Sidebar';
 import TelegizerLogo from '../components/TelegizerLogo';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -11,8 +11,8 @@ import { useNavigate, useLocation } from 'react-router-dom';
 const BOTTOM_NAV_ITEMS = [
   { label: 'Home', icon: <Home />, path: '/dashboard' },
   { label: 'Groups', icon: <Groups />, path: '/groups' },
-  { label: 'Channels', icon: <Campaign />, path: '/channels' },
-  { label: 'Workspace', icon: <Bolt />, path: '/workspace' },
+  { label: 'Automations', icon: <AutoMode />, path: '/workspace/automations' },
+  { label: 'AI Hub', icon: <Psychology />, path: '/workspace' },
   { label: 'Account', icon: <AccountCircle />, path: '/settings' },
 ];
 

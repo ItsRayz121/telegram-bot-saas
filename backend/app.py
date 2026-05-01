@@ -414,6 +414,7 @@ def create_app():
         _run_token_hash_hmac_migration()
         _run_assistant_bot_migration()
         _run_assistant_spaces_migration()
+        _run_linked_telegram_accounts_migration()
 
         # Encryption self-check — must run after all migrations so tokens exist
         from .utils.encryption import startup_encryption_selfcheck
@@ -942,6 +943,30 @@ def _run_assistant_spaces_migration():
             conn.commit()
     except Exception as exc:
         _mig_log.warning("assistant_spaces migration failed: %s", exc)
+
+
+def _run_linked_telegram_accounts_migration():
+    """Create user_telegram_accounts junction table. Additive only."""
+    _mig_log = logging.getLogger("migrations")
+    try:
+        with db.engine.connect() as conn:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS user_telegram_accounts (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    telegram_user_id VARCHAR(255) NOT NULL UNIQUE,
+                    telegram_username VARCHAR(255),
+                    telegram_first_name VARCHAR(255),
+                    is_primary BOOLEAN NOT NULL DEFAULT FALSE,
+                    linked_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                    CONSTRAINT uq_user_telegram UNIQUE (user_id, telegram_user_id)
+                )
+            """))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_user_telegram_accounts_user_id ON user_telegram_accounts (user_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_user_telegram_accounts_tg_id ON user_telegram_accounts (telegram_user_id)"))
+            conn.commit()
+    except Exception as exc:
+        _mig_log.warning("user_telegram_accounts migration failed: %s", exc)
 
 
 def _run_assistant_bot_migration():
