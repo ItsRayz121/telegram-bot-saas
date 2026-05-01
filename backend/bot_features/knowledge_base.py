@@ -200,7 +200,11 @@ class KnowledgeBaseSystem:
                 embed_client = self._get_openai_client()
 
             if not embed_client:
-                logger.debug(f"KB: No embed client available for group {group_id or telegram_group_id}")
+                logger.warning(
+                    "KB: No AI API key configured for group %s — knowledge base Q&A unavailable. "
+                    "Configure an API key in group AI Settings.",
+                    group_id or telegram_group_id,
+                )
                 return None, 0.0
 
             q_resp = embed_client.embeddings.create(model="text-embedding-3-small", input=question)

@@ -4165,6 +4165,7 @@ async def on_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
 class OfficialBotRunner:
     def __init__(self):
         self.application = None
+        self._app = None  # PTB Application — used by the webhook route
         self.loop = None
         self._thread = None
         self._running = False
@@ -4196,7 +4197,7 @@ class OfficialBotRunner:
             )
 
     def _run_loop(self, flask_app):
-        """Polling loop with exponential-backoff auto-restart on crash."""
+        """Webhook bot loop with exponential-backoff auto-restart on crash."""
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
 
@@ -4206,9 +4207,9 @@ class OfficialBotRunner:
 
         while not self._stop_event.is_set():
             try:
-                _log.info("[OfficialBot] Starting polling (attempt %d)…", attempt)
+                _log.info("[OfficialBot] Starting webhook mode (attempt %d)…", attempt)
                 self.loop.run_until_complete(self._poll(flask_app))
-                _log.info("[OfficialBot] Polling finished cleanly — exiting restart loop.")
+                _log.info("[OfficialBot] Bot finished cleanly — exiting restart loop.")
                 break
             except Exception as exc:
                 _log.error(
@@ -4221,7 +4222,6 @@ class OfficialBotRunner:
 
             delay = min(base_delay * (2 ** attempt), max_delay)
             _log.info("[OfficialBot] Restarting in %ds…", delay)
-            # Use stop_event.wait so we can be interrupted cleanly
             if self._stop_event.wait(timeout=delay):
                 break
             attempt += 1
@@ -4234,6 +4234,9 @@ class OfficialBotRunner:
         _load_pending_verifications_from_db(flask_app)
         self.application = Application.builder().token(Config.TELEGRAM_BOT_TOKEN).build()
         self.application.bot_data["flask_app"] = flask_app
+        # Expose the PTB Application so the webhook route can forward updates
+        self._app = self.application
+        flask_app.official_bot_instance = self
 
         a = self.application
         a.add_handler(CommandHandler("start", cmd_start))
@@ -4326,30 +4329,43 @@ class OfficialBotRunner:
             ])
         except Exception as exc:
             _log.warning("[OfficialBot] set_my_commands: %s", exc)
-        # Explicitly list allowed_updates so Telegram always delivers channel_post
-        # and edited_channel_post regardless of any previous webhook configuration.
-        # Without this, a prior webhook with a restricted allowed_updates list
-        # would cause Telegram to silently discard channel updates.
-        await a.updater.start_polling(
-            drop_pending_updates=True,
-            allowed_updates=[
-                "message", "edited_message",
-                "channel_post", "edited_channel_post",
-                "callback_query",
-                "my_chat_member", "chat_member", "chat_join_request",
-                "message_reaction", "message_reaction_count",
-            ],
-        )
-        _log.info("[OfficialBot] Long-polling active — bot is live.")
-        # Keep alive in 60-second ticks so the stop_event is checked regularly.
+        # Register the webhook with Telegram so updates are POSTed to our endpoint
+        # rather than using long-polling (more efficient, scales to any concurrency).
+        webhook_url = f"{Config.BACKEND_URL}/api/official-bot-update"
+        secret_token = getattr(Config, "TELEGRAM_WEBHOOK_SECRET", None) or Config.SECRET_KEY[:32]
+        allowed_updates = [
+            "message", "edited_message",
+            "channel_post", "edited_channel_post",
+            "callback_query",
+            "my_chat_member", "chat_member", "chat_join_request",
+            "message_reaction", "message_reaction_count",
+        ]
+        try:
+            await a.bot.set_webhook(
+                url=webhook_url,
+                secret_token=secret_token,
+                allowed_updates=allowed_updates,
+                drop_pending_updates=True,
+            )
+            _log.info("[OfficialBot] Webhook registered at %s", webhook_url)
+        except Exception as exc:
+            _log.error("[OfficialBot] Failed to register webhook: %s", exc)
+            raise
+
+        _log.info("[OfficialBot] Webhook mode active — bot is live.")
+        # Wait until stop is requested; updates arrive via HTTP webhook.
         try:
             while not self._stop_event.is_set():
                 await asyncio.sleep(60)
         except asyncio.CancelledError:
             pass
         finally:
-            _log.info("[OfficialBot] Shutting down polling...")
-            for _coro in (a.updater.stop(), a.stop(), a.shutdown()):
+            _log.info("[OfficialBot] Shutting down webhook bot...")
+            try:
+                await a.bot.delete_webhook()
+            except Exception:
+                pass
+            for _coro in (a.stop(), a.shutdown()):
                 try:
                     await _coro
                 except Exception:

@@ -79,3 +79,52 @@ async def _dispatch(update: Update, bot_token: str, flask_app, assistant_bot_id:
 def make_webhook_url(bot_token: str) -> str:
     """Return the full public webhook URL for a given bot token."""
     return f"{Config.BACKEND_URL}/api/tg-update/{_token_hash(bot_token)}"
+
+
+# ── Official @telegizer_bot webhook endpoint ─────────────────────────────────
+
+@telegram_updates_bp.route("/official-bot-update", methods=["POST"])
+def receive_official_bot_update():
+    """Receive Telegram updates for the shared @telegizer_bot via webhook."""
+    flask_app = current_app._get_current_object()
+
+    # Validate the X-Telegram-Bot-Api-Secret-Token header
+    secret = getattr(Config, "TELEGRAM_WEBHOOK_SECRET", None) or Config.SECRET_KEY[:32]
+    incoming_secret = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+    if not hmac.compare_digest(incoming_secret, secret):
+        _log.warning("official-bot-update: invalid secret token")
+        return jsonify({"ok": False}), 403
+
+    try:
+        payload = request.get_json(force=True, silent=True) or {}
+    except Exception as exc:
+        _log.warning("official-bot-update: failed to parse JSON: %s", exc)
+        return jsonify({"ok": True}), 200
+
+    official_bot = getattr(flask_app, "official_bot_instance", None)
+    if official_bot is None:
+        _log.warning("official-bot-update: official bot not running")
+        return jsonify({"ok": True}), 200
+
+    try:
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(_dispatch_official(payload, official_bot))
+        loop.close()
+    except Exception as exc:
+        _log.error("official-bot-update dispatch error: %s", exc, exc_info=True)
+
+    return jsonify({"ok": True}), 200
+
+
+async def _dispatch_official(payload: dict, official_bot):
+    """Forward a raw update dict into the official bot's PTB Application."""
+    from telegram import Update
+    try:
+        app = official_bot._app
+        if app is None:
+            return
+        bot = app.bot
+        update = Update.de_json(payload, bot)
+        await app.process_update(update)
+    except Exception as exc:
+        _log.error("_dispatch_official error: %s", exc, exc_info=True)
