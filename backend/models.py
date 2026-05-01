@@ -2184,3 +2184,54 @@ class AdminAuditLog(db.Model):
             "ip_address": self.ip_address,
             "created_at": self.created_at.isoformat(),
         }
+
+
+# ── AssistantBot ──────────────────────────────────────────────────────────────
+
+class AssistantBot(db.Model):
+    """A user-supplied bot token used as their personal Assistant Bot.
+
+    One bot per user (enforced at the route layer via subscription gate).
+    The token is stored encrypted via the shared Fernet utility.
+    """
+    __tablename__ = "assistant_bots"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    _bot_token_enc = db.Column("bot_token", db.String(512), nullable=False)
+    bot_username = db.Column(db.String(255), nullable=True)
+    bot_name = db.Column(db.String(255), nullable=True)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    @property
+    def bot_token(self):
+        if not self._bot_token_enc:
+            return None
+        from .utils.encryption import decrypt_value, DecryptionError
+        try:
+            return decrypt_value(self._bot_token_enc)
+        except DecryptionError:
+            import logging
+            logging.getLogger(__name__).error("AssistantBot %s token decryption failed", self.id)
+            return None
+
+    @bot_token.setter
+    def bot_token(self, plaintext):
+        if plaintext is None:
+            self._bot_token_enc = None
+            return
+        from .utils.encryption import encrypt_value
+        self._bot_token_enc = encrypt_value(plaintext)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "bot_username": self.bot_username,
+            "bot_name": self.bot_name,
+            "is_active": self.is_active,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+        }

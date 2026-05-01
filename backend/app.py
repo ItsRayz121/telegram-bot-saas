@@ -66,6 +66,7 @@ from .routes.notes import notes_bp
 from .routes.assistant import assistant_bp
 from .routes.tasks import tasks_bp
 from .routes.knowledge_workspace import knowledge_ws_bp
+from .routes.assistant_bots import assistant_bots_bp
 from .bot_manager import BotManager
 from .official_bot import start_official_bot
 
@@ -192,6 +193,7 @@ def create_app():
     app.register_blueprint(assistant_bp)
     app.register_blueprint(tasks_bp)
     app.register_blueprint(knowledge_ws_bp)
+    app.register_blueprint(assistant_bots_bp)
 
     app.bot_manager = bot_manager
 
@@ -408,6 +410,7 @@ def create_app():
         _run_marketplace_migrations()
         _backfill_group_defaults()
         _run_token_hash_hmac_migration()
+        _run_assistant_bot_migration()
 
         # Encryption self-check — must run after all migrations so tokens exist
         from .utils.encryption import startup_encryption_selfcheck
@@ -913,6 +916,29 @@ def _run_marketplace_migrations():
                         pass
     except Exception as exc:
         _mig_log.warning("marketplace migrations failed: %s", exc)
+
+
+def _run_assistant_bot_migration():
+    """Create assistant_bots table if it doesn't exist. Additive only."""
+    _mig_log = logging.getLogger("migrations")
+    try:
+        with db.engine.connect() as conn:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS assistant_bots (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+                    bot_token VARCHAR(512) NOT NULL,
+                    bot_username VARCHAR(255),
+                    bot_name VARCHAR(255),
+                    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+                )
+            """))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_assistant_bots_user_id ON assistant_bots (user_id)"))
+            conn.commit()
+    except Exception as exc:
+        _mig_log.warning("assistant_bot migration failed: %s", exc)
 
 
 def _backfill_group_defaults():

@@ -557,6 +557,13 @@ export const assistant = {
   getAutoReplyLogs: () => api.get('/api/assistant/autoreply-logs'),
 };
 
+export const assistantBot = {
+  get: () => api.get('/api/assistant-bot'),
+  create: (data) => api.post('/api/assistant-bot', data),
+  update: (data) => api.put('/api/assistant-bot', data),
+  remove: () => api.delete('/api/assistant-bot'),
+};
+
 export const tasks = {
   list: (params) => api.get('/api/tasks', { params }),
   create: (data) => api.post('/api/tasks', data),

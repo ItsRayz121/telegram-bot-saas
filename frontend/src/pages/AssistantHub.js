@@ -11,7 +11,7 @@ import {
   CalendarMonth, SmartToy, Lock,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { assistant } from '../services/api';
+import { assistant, assistantBot as assistantBotApi } from '../services/api';
 
 const DISMISS_KEY = 'hub_connect_banner_dismissed';
 
@@ -528,23 +528,33 @@ function LiveChatCard({ botConnected }) {
 function AssistantBotCard({ plan }) {
   const navigate = useNavigate();
   const isPro = plan === 'pro' || plan === 'enterprise';
+  const [bot, setBot] = useState(undefined); // undefined = loading, null = none
+
+  useEffect(() => {
+    if (!isPro) { setBot(null); return; }
+    assistantBotApi.get().then(r => setBot(r.data.bot)).catch(() => setBot(null));
+  }, [isPro]);
+
+  const subtitle = bot
+    ? `@${bot.bot_username || bot.bot_name} · ${bot.is_active ? 'Active' : 'Inactive'}`
+    : isPro
+    ? 'No bot connected yet'
+    : 'Official Telegizer Assistant';
 
   return (
     <Card variant="outlined" sx={{ mb: 3, borderColor: isPro ? 'divider' : 'rgba(37,99,235,0.3)', bgcolor: isPro ? 'transparent' : 'rgba(37,99,235,0.03)' }}>
       <CardContent>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <SmartToy fontSize="small" color={isPro ? 'primary' : 'disabled'} />
+            <SmartToy fontSize="small" color={bot ? 'primary' : 'disabled'} />
             <Box>
               <Typography fontWeight={600} fontSize="0.9rem">Your Assistant Bot</Typography>
-              <Typography fontSize="0.78rem" color="text.secondary">
-                Official Telegizer Assistant
-              </Typography>
+              <Typography fontSize="0.78rem" color="text.secondary">{subtitle}</Typography>
             </Box>
           </Box>
           {isPro ? (
             <Button size="small" variant="outlined" onClick={() => navigate('/workspace/assistant-bot')}>
-              Configure
+              {bot ? 'Manage' : 'Connect Bot'}
             </Button>
           ) : (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
