@@ -562,6 +562,7 @@ export const assistantBot = {
   create: (data) => api.post('/api/assistant-bot', data),
   update: (data) => api.put('/api/assistant-bot', data),
   remove: () => api.delete('/api/assistant-bot'),
+  listSpaces: () => api.get('/api/assistant-bot/spaces'),
 };
 
 export const tasks = {

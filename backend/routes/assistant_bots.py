@@ -69,6 +69,27 @@ def _deregister_webhook(bot_token: str):
         _log.warning("_deregister_webhook error: %s", exc)
 
 
+# ── GET /api/assistant-bot/spaces ────────────────────────────────────────────
+
+@assistant_bots_bp.route("/spaces", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def list_spaces():
+    user = _current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    from ..models import AssistantBot, AssistantSpace
+    bot = AssistantBot.query.filter_by(user_id=user.id).first()
+    if not bot:
+        return jsonify({"spaces": []})
+
+    spaces = AssistantSpace.query.filter_by(assistant_bot_id=bot.id).order_by(
+        AssistantSpace.last_seen_at.desc()
+    ).all()
+    return jsonify({"spaces": [s.to_dict() for s in spaces]})
+
+
 # ── GET /api/assistant-bot ────────────────────────────────────────────────────
 
 @assistant_bots_bp.route("", methods=["GET"])

@@ -30,6 +30,55 @@ async def _reply(bot: Bot, chat_id: int, text: str):
         _log.warning("assistant_bot send_message failed chat_id=%s: %s", chat_id, exc)
 
 
+# ── space auto-registration ───────────────────────────────────────────────────
+
+def _register_space(flask_app, assistant_bot_id: int, message):
+    """Upsert an AssistantSpace row for the chat this message came from."""
+    try:
+        chat = message.chat
+        chat_id_str = str(chat.id)
+        title = getattr(chat, "title", None) or getattr(chat, "first_name", None) or chat_id_str
+        chat_type = chat.type or "unknown"
+
+        with flask_app.app_context():
+            from ..models import db, AssistantSpace
+            from sqlalchemy.dialects.postgresql import insert as pg_insert
+            from sqlalchemy import text
+
+            now = datetime.utcnow()
+            # Try upsert via raw SQL so it's a single round-trip
+            try:
+                db.session.execute(text("""
+                    INSERT INTO assistant_spaces (assistant_bot_id, telegram_chat_id, chat_title, chat_type, first_seen_at, last_seen_at)
+                    VALUES (:bot_id, :chat_id, :title, :ctype, :now, :now)
+                    ON CONFLICT (assistant_bot_id, telegram_chat_id)
+                    DO UPDATE SET chat_title = EXCLUDED.chat_title, last_seen_at = EXCLUDED.last_seen_at
+                """), {"bot_id": assistant_bot_id, "chat_id": chat_id_str, "title": title, "ctype": chat_type, "now": now})
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+                # Fallback for SQLite (dev)
+                space = AssistantSpace.query.filter_by(
+                    assistant_bot_id=assistant_bot_id, telegram_chat_id=chat_id_str
+                ).first()
+                if space:
+                    space.chat_title = title
+                    space.last_seen_at = now
+                else:
+                    space = AssistantSpace(
+                        assistant_bot_id=assistant_bot_id,
+                        telegram_chat_id=chat_id_str,
+                        chat_title=title,
+                        chat_type=chat_type,
+                        first_seen_at=now,
+                        last_seen_at=now,
+                    )
+                    db.session.add(space)
+                db.session.commit()
+    except Exception as exc:
+        _log.warning("_register_space failed: %s", exc)
+
+
 # ── command dispatcher ────────────────────────────────────────────────────────
 
 async def handle_update(update: Update, bot: Bot, flask_app, assistant_bot_id: int):
@@ -37,6 +86,9 @@ async def handle_update(update: Update, bot: Bot, flask_app, assistant_bot_id: i
     message = update.message or update.edited_message
     if not message or not message.text:
         return
+
+    # Auto-register this chat as an assistant space on every message
+    _register_space(flask_app, assistant_bot_id, message)
 
     text = message.text.strip()
     chat_id = message.chat_id

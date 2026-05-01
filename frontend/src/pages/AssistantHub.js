@@ -8,7 +8,7 @@ import {
   Psychology, AccessTime, EditNote, Summarize, AutoMode, Reply,
   OpenInNew, ContentCopy, CheckCircle, RadioButtonUnchecked, Close,
   ArrowForward, Chat, Send, ExpandMore, ExpandLess, QuestionAnswer,
-  CalendarMonth, SmartToy, Lock,
+  CalendarMonth, SmartToy, Lock, Groups, Person,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { assistant, assistantBot as assistantBotApi } from '../services/api';
@@ -570,6 +570,71 @@ function AssistantBotCard({ plan }) {
   );
 }
 
+// ── Active Spaces ─────────────────────────────────────────────────────────────
+
+function ActiveSpacesCard({ plan }) {
+  const navigate = useNavigate();
+  const isPro = plan === 'pro' || plan === 'enterprise';
+  const [spaces, setSpaces] = useState([]);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isPro) return;
+    assistantBotApi.listSpaces().then(r => setSpaces(r.data.spaces || [])).catch(() => {});
+  }, [isPro]);
+
+  if (!isPro || spaces.length === 0) return null;
+
+  const typeIcon = (type) => type === 'private' ? <Person sx={{ fontSize: 14 }} /> : <Groups sx={{ fontSize: 14 }} />;
+
+  function relTime(iso) {
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 2) return 'Just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return `${Math.floor(hrs / 24)}d ago`;
+  }
+
+  return (
+    <Card variant="outlined" sx={{ mt: 2 }}>
+      <CardContent sx={{ pb: open ? 1 : undefined }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
+          onClick={() => setOpen(v => !v)}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <SmartToy fontSize="small" color="primary" />
+            <Typography fontWeight={600} fontSize="0.95rem">Active Spaces</Typography>
+            <Chip label={spaces.length} size="small" sx={{ height: 17, fontSize: '0.65rem' }} />
+          </Box>
+          {open ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
+        </Box>
+        <Collapse in={open}>
+          <Typography fontSize="0.8rem" color="text.secondary" mt={1} mb={1.5}>
+            Chats where your assistant bot has been active. Commands work in all of these.
+          </Typography>
+          {spaces.map(s => (
+            <Box key={s.id} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
+              <Box sx={{ color: 'text.disabled' }}>{typeIcon(s.chat_type)}</Box>
+              <Typography fontSize="0.84rem" sx={{ flex: 1 }} noWrap>
+                {s.chat_title || s.telegram_chat_id}
+              </Typography>
+              <Typography fontSize="0.72rem" color="text.disabled" flexShrink={0}>
+                {relTime(s.last_seen_at)}
+              </Typography>
+            </Box>
+          ))}
+          <Button size="small" sx={{ mt: 0.5, fontSize: '0.75rem' }}
+            endIcon={<ArrowForward sx={{ fontSize: 13 }} />}
+            onClick={() => navigate('/workspace/assistant-bot')}>
+            Manage Bot
+          </Button>
+        </Collapse>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Main Hub ──────────────────────────────────────────────────────────────────
 
 export default function AssistantHub() {
@@ -664,6 +729,9 @@ export default function AssistantHub() {
 
       {/* Live Chat */}
       <LiveChatCard botConnected={!!data?.bot_connected} />
+
+      {/* Active Spaces — assistant bot chats */}
+      <ActiveSpacesCard plan={plan} />
     </Box>
   );
 }

@@ -413,6 +413,7 @@ def create_app():
         _backfill_group_defaults()
         _run_token_hash_hmac_migration()
         _run_assistant_bot_migration()
+        _run_assistant_spaces_migration()
 
         # Encryption self-check — must run after all migrations so tokens exist
         from .utils.encryption import startup_encryption_selfcheck
@@ -918,6 +919,29 @@ def _run_marketplace_migrations():
                         pass
     except Exception as exc:
         _mig_log.warning("marketplace migrations failed: %s", exc)
+
+
+def _run_assistant_spaces_migration():
+    """Create assistant_spaces table if it doesn't exist. Additive only."""
+    _mig_log = logging.getLogger("migrations")
+    try:
+        with db.engine.connect() as conn:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS assistant_spaces (
+                    id SERIAL PRIMARY KEY,
+                    assistant_bot_id INTEGER NOT NULL REFERENCES assistant_bots(id) ON DELETE CASCADE,
+                    telegram_chat_id VARCHAR(255) NOT NULL,
+                    chat_title VARCHAR(255),
+                    chat_type VARCHAR(30) NOT NULL DEFAULT 'unknown',
+                    first_seen_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                    last_seen_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                    CONSTRAINT uq_assistant_space UNIQUE (assistant_bot_id, telegram_chat_id)
+                )
+            """))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_assistant_spaces_bot ON assistant_spaces (assistant_bot_id)"))
+            conn.commit()
+    except Exception as exc:
+        _mig_log.warning("assistant_spaces migration failed: %s", exc)
 
 
 def _run_assistant_bot_migration():

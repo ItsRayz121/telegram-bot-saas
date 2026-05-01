@@ -2235,3 +2235,34 @@ class AssistantBot(db.Model):
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
         }
+
+
+class AssistantSpace(db.Model):
+    """A chat (group, supergroup, or private DM) where an AssistantBot has been seen.
+
+    Auto-created on first message — no /link_group command needed.
+    """
+    __tablename__ = "assistant_spaces"
+
+    id = db.Column(db.Integer, primary_key=True)
+    assistant_bot_id = db.Column(db.Integer, db.ForeignKey("assistant_bots.id", ondelete="CASCADE"), nullable=False, index=True)
+    telegram_chat_id = db.Column(db.String(255), nullable=False)
+    chat_title = db.Column(db.String(255), nullable=True)
+    chat_type = db.Column(db.String(30), nullable=False, default="unknown")  # private|group|supergroup|channel
+    first_seen_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    last_seen_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint("assistant_bot_id", "telegram_chat_id", name="uq_assistant_space"),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "assistant_bot_id": self.assistant_bot_id,
+            "telegram_chat_id": self.telegram_chat_id,
+            "chat_title": self.chat_title,
+            "chat_type": self.chat_type,
+            "first_seen_at": self.first_seen_at.isoformat(),
+            "last_seen_at": self.last_seen_at.isoformat(),
+        }
