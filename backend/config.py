@@ -120,65 +120,93 @@ class Config:
     # Max custom bots per user (Bot model — bring-your-own running bots)
     MAX_BOTS = {
         "free": 1,
-        "pro": 5,
+        "pro": 3,
         "enterprise": 50,
     }
 
     # Max bring-your-own-token custom bots (CustomBot model — token stored, not running)
     MAX_CUSTOM_BOTS = {
-        "free": 0,
-        "pro": 2,
-        "enterprise": 10,
+        "free": 1,
+        "pro": 3,
+        "enterprise": 50,
     }
 
     # Max official-bot linked groups per user (TelegramGroup model)
     # -1 = unlimited
     MAX_OFFICIAL_GROUPS = {
-        "free": 3,
+        "free": -1,   # Unlimited on free to drive growth
         "pro": -1,
         "enterprise": -1,
     }
 
+    # AI token daily budgets (platform Gemini key)
+    AI_TOKEN_LIMITS = {
+        "free": 10_000,
+        "pro": 500_000,
+        "enterprise": 500_000,
+    }
+
     # Version string surfaced by /health — update on each deploy to aid debugging
-    VERSION = os.environ.get("APP_VERSION", "2026-04-27-v1")
+    VERSION = os.environ.get("APP_VERSION", "2026-05-01-v2")
 
     PLANS = {
         "free": {
             "name": "Free",
             "price": 0,
             "max_bots": 1,
-            "features": ["1 bot", "1 group per bot", "Basic moderation", "Welcome messages"],
+            "ai_tokens_day": 10_000,
+            "features": [
+                "1 custom bot",
+                "Unlimited groups",
+                "Welcome messages",
+                "Basic moderation",
+                "Verification system",
+                "XP & levels",
+                "Scheduled messages",
+                "10k AI credits / day",
+            ],
         },
         "pro": {
             "name": "Pro",
-            "price": 900,
-            "price_annual": 9000,
-            "max_bots": 5,
+            "price": 1900,         # $19/mo in cents
+            "price_annual": 18240, # $152/yr (~$12.67/mo, save ~33%)
+            "max_bots": 3,
+            "ai_tokens_day": 500_000,
             "features": [
-                "5 bots",
+                "3 custom bots",
                 "Unlimited groups",
-                "Advanced moderation",
-                "Verification system",
-                "Scheduled messages",
-                "XP & levels",
-                "Analytics",
+                "Everything in Free",
+                "AI Auto-Reply (knowledge base Q&A)",
+                "AI Group Digests (daily/weekly)",
+                "AI Assistant Hub (notes, tasks, queries)",
+                "500k AI credits / day",
+                "Bring your own AI API key",
+                "Advanced analytics (90 days)",
+                "Message forwarding & automations",
+                "Webhook integrations",
+                "Member CRM",
                 "Priority support",
             ],
         },
         "enterprise": {
             "name": "Enterprise",
-            "price": 4900,
-            "price_annual": 47000,
+            "price": 4900,         # $49/mo in cents
+            "price_annual": 47040, # $392/yr (~$32.67/mo, save ~33%)
             "max_bots": 50,
+            "ai_tokens_day": 500_000,
             "features": [
-                "50 bots",
+                "50 custom bots",
                 "Unlimited groups",
-                "All Pro features",
+                "Everything in Pro",
+                "White-label custom bots",
+                "Full REST API access",
+                "Bulk group operations",
+                "Advanced member CRM",
                 "Raid coordinator",
-                "Custom branding",
-                "API access",
-                "Dedicated support",
+                "Marketplace access",
+                "Dedicated support channel",
                 "SLA guarantee",
+                "Custom integrations",
             ],
         },
     }

@@ -3,9 +3,10 @@ import {
   Box, AppBar, Toolbar, Typography, Button, Card, CardContent,
   Grid, Chip, List, ListItem, ListItemIcon, ListItemText,
   CircularProgress, IconButton, Dialog, DialogTitle, DialogContent,
-  DialogActions, Stack, Alert, Accordion, AccordionSummary, AccordionDetails, Divider,
+  DialogActions, Stack, Alert, Accordion, AccordionSummary, AccordionDetails,
+  Divider, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
 } from '@mui/material';
-import { Check, ArrowBack, CurrencyBitcoin, LocalOffer, ExpandMore } from '@mui/icons-material';
+import { Check, Close, ArrowBack, CurrencyBitcoin, LocalOffer, ExpandMore, AutoAwesome, Bolt } from '@mui/icons-material';
 import Switch from '@mui/material/Switch';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -17,33 +18,40 @@ const PLANS = [
     name: 'Free',
     monthlyPrice: 0,
     annualPrice: 0,
-    period: 'forever',
     color: 'default',
+    tagline: 'Perfect to get started',
     features: [
-      '1 bot',
-      '1 group per bot',
-      'Basic verification',
+      '1 custom bot',
+      'Unlimited groups',
       'Welcome messages',
-      'XP system',
-      'Basic moderation commands',
+      'Verification system',
+      'XP & levels',
+      'Scheduled messages & polls',
+      'Basic moderation',
+      '10k AI credits / day',
     ],
   },
   {
     id: 'pro',
     name: 'Pro',
-    monthlyPrice: 9,
-    annualPrice: 90,
-    period: '/month',
+    monthlyPrice: 19,
+    annualPrice: 152,
     color: 'primary',
     popular: true,
+    tagline: 'For serious community builders',
     features: [
-      '5 bots',
+      '3 custom bots',
       'Unlimited groups',
-      'All verification types',
-      'Advanced AutoMod',
-      'Scheduled messages',
-      'Raid management',
-      'Analytics dashboard',
+      'Everything in Free',
+      'AI Auto-Reply (knowledge base Q&A)',
+      'AI Group Digests (daily / weekly)',
+      'AI Assistant Hub (notes, tasks, queries)',
+      '500k AI credits / day',
+      'Bring your own AI API key (unlimited)',
+      'Analytics dashboard (90 days)',
+      'Message forwarding & automations',
+      'Webhook integrations',
+      'Member CRM',
       'Priority support',
     ],
   },
@@ -51,20 +59,57 @@ const PLANS = [
     id: 'enterprise',
     name: 'Enterprise',
     monthlyPrice: 49,
-    annualPrice: 470,
-    period: '/month',
+    annualPrice: 392,
     color: 'secondary',
+    tagline: 'For agencies & large communities',
     features: [
-      '50 bots',
+      '50 custom bots',
       'Unlimited groups',
-      'All Pro features',
-      'Custom rank cards',
-      'API access',
-      'Dedicated support',
+      'Everything in Pro',
+      'White-label custom bots',
+      'Full REST API access',
+      'Bulk group operations',
+      'Advanced member CRM',
+      'Raid coordinator',
+      'Marketplace access',
+      'Dedicated support channel',
       'SLA guarantee',
       'Custom integrations',
     ],
   },
+];
+
+// Full feature comparison table rows
+const COMPARISON = [
+  { label: 'Custom bots',             free: '1',         pro: '3',              ent: '50' },
+  { label: 'Groups per bot',          free: 'Unlimited', pro: 'Unlimited',       ent: 'Unlimited' },
+  { label: 'Members per group',       free: 'Unlimited', pro: 'Unlimited',       ent: 'Unlimited' },
+  { label: 'Welcome messages',        free: true,        pro: true,              ent: true },
+  { label: 'Verification system',     free: true,        pro: true,              ent: true },
+  { label: 'XP & leveling',           free: true,        pro: true,              ent: true },
+  { label: 'Scheduled messages',      free: true,        pro: true,              ent: true },
+  { label: 'Polls',                   free: true,        pro: true,              ent: true },
+  { label: 'Auto-responses',          free: true,        pro: true,              ent: true },
+  { label: 'Basic moderation',        free: true,        pro: true,              ent: true },
+  { label: 'Webhook integrations',    free: false,       pro: true,              ent: true },
+  { label: 'Invite link tracking',    free: true,        pro: true,              ent: true },
+  { label: 'Analytics',               free: '7 days',    pro: '90 days',         ent: '90 days' },
+  { label: 'AI auto-reply (Q&A)',     free: false,       pro: true,              ent: true },
+  { label: 'AI group digests',        free: false,       pro: true,              ent: true },
+  { label: 'AI assistant hub',        free: false,       pro: true,              ent: true },
+  { label: 'AI credits / day',        free: '10k',       pro: '500k',            ent: '500k' },
+  { label: 'Bring your own API key',  free: false,       pro: true,              ent: true },
+  { label: 'Message forwarding',      free: false,       pro: true,              ent: true },
+  { label: 'Automation workflows',    free: false,       pro: true,              ent: true },
+  { label: 'Member CRM',              free: false,       pro: true,              ent: true },
+  { label: 'Custom commands',         free: true,        pro: true,              ent: true },
+  { label: 'White-label bot',         free: false,       pro: false,             ent: true },
+  { label: 'REST API access',         free: false,       pro: false,             ent: true },
+  { label: 'Bulk group operations',   free: false,       pro: false,             ent: true },
+  { label: 'Raid coordinator',        free: false,       pro: false,             ent: true },
+  { label: 'Marketplace access',      free: false,       pro: false,             ent: true },
+  { label: 'SLA guarantee',           free: false,       pro: false,             ent: true },
+  { label: 'Support',                 free: 'Community', pro: 'Priority email',  ent: 'Dedicated channel' },
 ];
 
 export default function Pricing() {
@@ -196,111 +241,142 @@ export default function Pricing() {
         <Grid container spacing={3} justifyContent="center" sx={{ mb: 2 }}>
           {PLANS.map((plan) => (
             <Grid item xs={12} sm={6} md={4} key={plan.id}>
-              {/* Wrapper reserves badge space for ALL cards so they stay the same height */}
               <Box sx={{ position: 'relative', pt: '14px', height: '100%' }}>
                 {plan.popular && !isCurrentPlan(plan.id) && (
-                  <Chip
-                    label="Most Popular"
-                    color="primary"
-                    size="small"
-                    sx={{
-                      position: 'absolute',
-                      top: 0,
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                      zIndex: 1,
-                      fontWeight: 700,
-                      whiteSpace: 'nowrap',
-                    }}
+                  <Chip label="Most Popular" color="primary" size="small" icon={<Bolt fontSize="small" />}
+                    sx={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', zIndex: 1, fontWeight: 700, whiteSpace: 'nowrap' }}
                   />
                 )}
                 {isCurrentPlan(plan.id) && (
-                  <Chip
-                    label="Your Plan"
-                    color="success"
-                    size="small"
-                    sx={{
-                      position: 'absolute',
-                      top: 0,
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                      zIndex: 1,
-                      fontWeight: 700,
-                      whiteSpace: 'nowrap',
-                    }}
+                  <Chip label="Your Plan" color="success" size="small"
+                    sx={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', zIndex: 1, fontWeight: 700, whiteSpace: 'nowrap' }}
                   />
                 )}
-                <Card
-                  sx={{
-                    height: '100%',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    border: plan.popular ? '2px solid' : '1px solid',
-                    borderColor: isCurrentPlan(plan.id) ? 'success.main' : plan.popular ? 'primary.main' : 'divider',
-                  }}
-                >
-                <CardContent sx={{ flexGrow: 1, p: { xs: 2.5, md: 3 } }}>
-                  <Typography variant="h5" fontWeight={700} mb={1}>{plan.name}</Typography>
-                  <Box sx={{ mb: 1 }}>
-                    {plan.id === 'free' ? (
-                      <>
-                        <Typography component="span" fontWeight={800} sx={{ fontSize: { xs: '2.2rem', md: '3rem' } }}>$0</Typography>
-                        <Typography component="span" variant="body1" color="text.secondary"> forever</Typography>
-                      </>
-                    ) : annual ? (
-                      <>
-                        <Typography component="span" fontWeight={800} sx={{ fontSize: { xs: '2.2rem', md: '3rem' } }}>
-                          ${Math.round(plan.annualPrice / 12)}
-                        </Typography>
-                        <Typography component="span" variant="body1" color="text.secondary">/month</Typography>
-                        <Typography variant="caption" display="block" color="success.main" fontWeight={600} mb={1}>
-                          ${plan.annualPrice}/year · ~2 months free
-                        </Typography>
-                      </>
-                    ) : (
-                      <>
-                        <Typography component="span" fontWeight={800} sx={{ fontSize: { xs: '2.2rem', md: '3rem' } }}>
-                          ${plan.monthlyPrice}
-                        </Typography>
-                        <Typography component="span" variant="body1" color="text.secondary">/month</Typography>
-                      </>
-                    )}
-                  </Box>
-                  <Button
-                    fullWidth
-                    variant={isCurrentPlan(plan.id) ? 'outlined' : plan.popular ? 'contained' : 'outlined'}
-                    color={isCurrentPlan(plan.id) ? 'success' : plan.color === 'default' ? 'inherit' : plan.color}
-                    onClick={() => handleUpgrade(plan.id)}
-                    disabled={loading === plan.id || plan.id === 'free' || isCurrentPlan(plan.id)}
-                    sx={{ mb: 3 }}
-                  >
-                    {loading === plan.id
-                      ? <CircularProgress size={20} color="inherit" />
-                      : getPlanButtonLabel(plan)}
-                  </Button>
-                  <List dense disablePadding>
-                    {plan.features.map((feature) => (
-                      <ListItem key={feature} disableGutters>
-                        <ListItemIcon sx={{ minWidth: 28 }}>
-                          <Check fontSize="small" color="success" />
-                        </ListItemIcon>
-                        <ListItemText primary={feature} primaryTypographyProps={{ variant: 'body2' }} />
-                      </ListItem>
-                    ))}
-                  </List>
-                </CardContent>
-              </Card>
+                <Card sx={{
+                  height: '100%', display: 'flex', flexDirection: 'column',
+                  border: plan.popular ? '2px solid' : '1px solid',
+                  borderColor: isCurrentPlan(plan.id) ? 'success.main' : plan.popular ? 'primary.main' : 'divider',
+                  background: plan.popular ? 'linear-gradient(160deg, rgba(33,150,243,0.06) 0%, rgba(0,0,0,0) 60%)' : undefined,
+                }}>
+                  <CardContent sx={{ flexGrow: 1, p: { xs: 2.5, md: 3 } }}>
+                    <Typography variant="h5" fontWeight={700}>{plan.name}</Typography>
+                    <Typography variant="caption" color="text.secondary" display="block" mb={2}>{plan.tagline}</Typography>
+
+                    {/* Price */}
+                    <Box sx={{ mb: 2 }}>
+                      {plan.id === 'free' ? (
+                        <>
+                          <Typography component="span" fontWeight={800} sx={{ fontSize: { xs: '2.2rem', md: '2.8rem' } }}>$0</Typography>
+                          <Typography component="span" variant="body1" color="text.secondary"> / forever</Typography>
+                        </>
+                      ) : annual ? (
+                        <>
+                          <Typography component="span" fontWeight={800} sx={{ fontSize: { xs: '2.2rem', md: '2.8rem' } }}>
+                            ${Math.round(plan.annualPrice / 12)}
+                          </Typography>
+                          <Typography component="span" variant="body1" color="text.secondary">/month</Typography>
+                          <Typography variant="caption" display="block" color="success.main" fontWeight={600}>
+                            ${plan.annualPrice}/year · ~{Math.round(100 - (plan.annualPrice / (plan.monthlyPrice * 12)) * 100)}% off
+                          </Typography>
+                        </>
+                      ) : (
+                        <>
+                          <Typography component="span" fontWeight={800} sx={{ fontSize: { xs: '2.2rem', md: '2.8rem' } }}>
+                            ${plan.monthlyPrice}
+                          </Typography>
+                          <Typography component="span" variant="body1" color="text.secondary">/month</Typography>
+                          {plan.annualPrice > 0 && (
+                            <Typography variant="caption" display="block" color="text.disabled">
+                              or ${plan.annualPrice}/yr billed annually
+                            </Typography>
+                          )}
+                        </>
+                      )}
+                    </Box>
+
+                    <Button
+                      fullWidth variant={isCurrentPlan(plan.id) ? 'outlined' : plan.popular ? 'contained' : 'outlined'}
+                      color={isCurrentPlan(plan.id) ? 'success' : plan.color === 'default' ? 'inherit' : plan.color}
+                      onClick={() => handleUpgrade(plan.id)}
+                      disabled={loading === plan.id || plan.id === 'free' || isCurrentPlan(plan.id)}
+                      sx={{ mb: 2.5 }}
+                    >
+                      {loading === plan.id ? <CircularProgress size={20} color="inherit" /> : getPlanButtonLabel(plan)}
+                    </Button>
+
+                    <List dense disablePadding>
+                      {plan.features.map((feature) => (
+                        <ListItem key={feature} disableGutters sx={{ py: 0.3 }}>
+                          <ListItemIcon sx={{ minWidth: 26 }}>
+                            <Check fontSize="small" color={feature.startsWith('AI') ? 'secondary' : 'success'}
+                              sx={feature.startsWith('AI') ? { color: '#7c3aed' } : {}} />
+                          </ListItemIcon>
+                          <ListItemText
+                            primary={feature}
+                            primaryTypographyProps={{
+                              variant: 'body2',
+                              fontWeight: feature.startsWith('AI') ? 600 : 400,
+                              color: feature.startsWith('AI') ? '#a78bfa' : undefined,
+                            }}
+                          />
+                          {feature.startsWith('AI') && (
+                            <AutoAwesome sx={{ fontSize: 13, color: '#7c3aed', ml: 0.5, flexShrink: 0 }} />
+                          )}
+                        </ListItem>
+                      ))}
+                    </List>
+                  </CardContent>
+                </Card>
               </Box>
             </Grid>
           ))}
         </Grid>
 
-        <Typography variant="body2" color="text.secondary" mt={4} mb={1}>
-          All plans include a 14-day money-back guarantee. No hidden fees.
+        <Typography variant="body2" color="text.secondary" mt={3} mb={0.5}>
+          All paid plans include a 14-day money-back guarantee. No hidden fees.
         </Typography>
         <Typography variant="caption" color="text.disabled">
-          Payments accepted via crypto — USDT, BTC, ETH, BNB, TRX, SOL and 300+ coins via NOWPayments
+          Payments via crypto — USDT, BTC, ETH, BNB, TRX, SOL and 300+ coins via NOWPayments
         </Typography>
+
+        {/* ── Full Feature Comparison Table ── */}
+        <Divider sx={{ my: 6 }} />
+        <Typography variant="overline" color="primary.main" fontWeight={700} display="block" mb={1}>
+          Compare Plans
+        </Typography>
+        <Typography variant="h5" fontWeight={800} mb={4}>
+          Everything side by side
+        </Typography>
+        <TableContainer component={Paper} variant="outlined" sx={{ textAlign: 'left', mb: 2, borderRadius: 2 }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow sx={{ bgcolor: 'rgba(255,255,255,0.04)' }}>
+                <TableCell sx={{ fontWeight: 700, fontSize: '0.8rem', width: '40%' }}>Feature</TableCell>
+                <TableCell align="center" sx={{ fontWeight: 700, fontSize: '0.8rem' }}>Free</TableCell>
+                <TableCell align="center" sx={{ fontWeight: 700, fontSize: '0.8rem', color: 'primary.main' }}>Pro</TableCell>
+                <TableCell align="center" sx={{ fontWeight: 700, fontSize: '0.8rem', color: 'secondary.main' }}>Enterprise</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {COMPARISON.map((row, i) => (
+                <TableRow key={row.label} sx={{ bgcolor: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)' }}>
+                  <TableCell sx={{ fontSize: '0.8rem', py: 1 }}>{row.label}</TableCell>
+                  {[row.free, row.pro, row.ent].map((val, ci) => (
+                    <TableCell key={ci} align="center" sx={{ py: 1 }}>
+                      {val === true ? (
+                        <Check fontSize="small" color="success" />
+                      ) : val === false ? (
+                        <Close fontSize="small" sx={{ color: 'text.disabled', opacity: 0.4 }} />
+                      ) : (
+                        <Typography variant="caption" fontWeight={600}>{val}</Typography>
+                      )}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
 
         {/* FAQ */}
         <Divider sx={{ my: 6 }} />

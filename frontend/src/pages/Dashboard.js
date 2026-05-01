@@ -19,7 +19,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { bots, auth, billing, referrals as referralsApi, notifications as notificationsApi, telegramAccount, telegramGroups as telegramGroupsApi } from '../services/api';
 
-const MAX_BOTS = { free: 1, pro: 5, enterprise: 50 };
+const MAX_BOTS = { free: 1, pro: 3, enterprise: 50 };
 
 const HEALTH_COLORS = {
   active:     'success',
