@@ -1,8 +1,3 @@
-// ── FEATURE FLAG: Directory is temporarily hidden for future reactivation ──────
-// All backend routes, DB schema, and API calls below are fully preserved.
-// To re-enable: set SHOW_DIRECTORY = true or remove the feature flag block.
-const SHOW_DIRECTORY = false;
-
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, Chip, Grid,
@@ -17,6 +12,11 @@ import {
 import { useNavigate, useLocation } from 'react-router-dom';
 import { directory as dirApi } from '../services/api';
 import ComingSoonPage from '../components/ComingSoonPage';
+
+// ── FEATURE FLAG: Directory is temporarily hidden for future reactivation ──────
+// All backend routes, DB schema, and API calls below are fully preserved.
+// To re-enable: set SHOW_DIRECTORY = true or remove the feature flag block.
+const SHOW_DIRECTORY = false;
 
 const CATEGORIES = [
   "All", "Technology & Dev", "Crypto & Web3", "News & Politics",

@@ -1,8 +1,3 @@
-// ── FEATURE FLAG: Marketplace is temporarily hidden for future reactivation ───
-// All backend routes, DB schema, and API calls below are fully preserved.
-// To re-enable: set SHOW_MARKETPLACE = true or remove the feature flag block.
-const SHOW_MARKETPLACE = false;
-
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, Chip, Grid,
@@ -20,6 +15,11 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { marketplace as mktApi } from '../services/api';
 import ComingSoonPage from '../components/ComingSoonPage';
+
+// ── FEATURE FLAG: Marketplace is temporarily hidden for future reactivation ───
+// All backend routes, DB schema, and API calls below are fully preserved.
+// To re-enable: set SHOW_MARKETPLACE = true or remove the feature flag block.
+const SHOW_MARKETPLACE = false;
 
 const CATEGORIES = [
   "All", "Technology & Dev", "Crypto & Web3", "News & Politics",
