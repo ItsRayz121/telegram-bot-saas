@@ -7,11 +7,13 @@ import {
 import {
   Campaign, Add, Refresh, Delete, Analytics, People,
   Visibility, ThumbUp, OpenInNew, CheckCircle, Warning,
-  Handshake,
+  Handshake, HourglassEmpty, Cancel,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { channels as chApi } from '../services/api';
+import { channels as chApi, directory as dirApi } from '../services/api';
+
+const OWNER_EMAIL = 'fazalelahi5577@gmail.com';
 
 function StatusChip({ status }) {
   const map = {
@@ -180,20 +182,41 @@ function AddChannelDialog({ open, onClose, onAdded }) {
 
 export default function Channels() {
   const navigate = useNavigate();
-  const [list, setList] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [dialogOpen, setDialogOpen] = useState(false);
+  // Temporarily hidden for future reactivation: channel tracking list & add dialog
+  // const [list, setList] = useState([]);
+  // const [loading, setLoading] = useState(true);
+  // const [dialogOpen, setDialogOpen] = useState(false);
+
+  const [myListings, setMyListings] = useState([]);
+  const [listingsLoading, setListingsLoading] = useState(true);
+  const [listDialogOpen, setListDialogOpen] = useState(false);
+
+  // Load current user for admin check
+  const [currentUser, setCurrentUser] = useState(null);
+  useEffect(() => {
+    const stored = localStorage.getItem('user');
+    if (stored) {
+      try { setCurrentUser(JSON.parse(stored)); } catch {}
+    }
+  }, []);
+  const isAdminOrOwner = currentUser?.is_admin || currentUser?.email === OWNER_EMAIL;
 
   useEffect(() => {
-    chApi.list()
-      .then(r => setList(r.data))
+    // Temporarily hidden for future reactivation: channel tracking fetch
+    // chApi.list().then(r => setList(r.data)).catch(() => {}).finally(() => setLoading(false));
+
+    dirApi.mine()
+      .then(r => setMyListings(r.data || []))
       .catch(() => {})
-      .finally(() => setLoading(false));
+      .finally(() => setListingsLoading(false));
   }, []);
 
-  const handleAdded = (ch) => setList(prev => [ch, ...prev]);
-  const handleDelete = (id) => setList(prev => prev.filter(c => c.id !== id));
-  const handleRefresh = (updated) => setList(prev => prev.map(c => c.id === updated.id ? updated : c));
+  // Temporarily hidden for future reactivation
+  // const handleAdded = (ch) => setList(prev => [ch, ...prev]);
+  // const handleDelete = (id) => setList(prev => prev.filter(c => c.id !== id));
+  // const handleRefresh = (updated) => setList(prev => prev.map(c => c.id === updated.id ? updated : c));
+
+  const channelListings = myListings.filter(l => l.listing_type === 'channel');
 
   return (
     <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: 960, mx: 'auto' }}>
@@ -203,15 +226,17 @@ export default function Channels() {
           <Box>
             <Typography variant="h5" fontWeight={700}>Channels</Typography>
             <Typography variant="caption" color="text.secondary">
-              Track analytics for your Telegram channels
+              Manage your channel marketplace listings
             </Typography>
           </Box>
         </Box>
+        {/* Temporarily hidden for future reactivation: Add Channel button
         <Button variant="contained" startIcon={<Add />} onClick={() => setDialogOpen(true)}>
           Add Channel
-        </Button>
+        </Button> */}
       </Box>
 
+      {/* Temporarily hidden for future reactivation: channel analytics list & empty state
       {loading ? (
         <Box sx={{ py: 6, textAlign: 'center' }}><CircularProgress /></Box>
       ) : list.length === 0 ? (
@@ -251,27 +276,60 @@ export default function Channels() {
             </Grid>
           ))}
         </Grid>
+      )} */}
+
+      {/* ── Admin/Owner: Listing Status Panel ─────────────────────────────── */}
+      {isAdminOrOwner && !listingsLoading && channelListings.length > 0 && (
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" color="text.secondary" mb={1.5} fontWeight={600}>
+            Your Channel Listings
+          </Typography>
+          <Stack spacing={1.5}>
+            {channelListings.map(l => (
+              <ListingStatusRow key={l.id} listing={l} />
+            ))}
+          </Stack>
+        </Box>
       )}
 
-      {/* ── Marketplace listing card — temporarily shows Coming Soon ──────── */}
-      {/* Temporarily hidden for future reactivation: clicking opens the
-          DirectorySubmit form when the Marketplace feature is re-enabled.
-          Currently shows a Coming Soon badge with the form behind it. */}
-      <MarketplaceListingCard />
+      {/* ── Marketplace listing card ──────────────────────────────────────── */}
+      <MarketplaceListingCard onList={() => setListDialogOpen(true)} />
 
+      {/* ── DirectorySubmit inline dialog ─────────────────────────────────── */}
+      <Dialog open={listDialogOpen} onClose={() => setListDialogOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Handshake sx={{ color: 'secondary.light' }} />
+          List Your Channel in Telegizer Marketplace
+        </DialogTitle>
+        <DialogContent dividers sx={{ p: 0 }}>
+          {/* DirectorySubmit renders its own full UI — we embed it here */}
+          <Box sx={{ p: 2 }}>
+            <DirectorySubmitInline
+              onDone={() => {
+                setListDialogOpen(false);
+                dirApi.mine().then(r => setMyListings(r.data || [])).catch(() => {});
+                toast.success('Your channel listing was submitted!');
+              }}
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setListDialogOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Temporarily hidden for future reactivation: AddChannelDialog
       <AddChannelDialog
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
         onAdded={handleAdded}
-      />
+      /> */}
     </Box>
   );
 }
 
-// ── Marketplace listing teaser card ──────────────────────────────────────────
-// Temporarily shows "Coming Soon". When Marketplace launches, wire the onClick
-// to navigate('/directory/submit') to open the real listing form.
-function MarketplaceListingCard() {
+// ── Marketplace listing card ──────────────────────────────────────────────────
+function MarketplaceListingCard({ onList }) {
   return (
     <Card
       sx={{
@@ -279,87 +337,208 @@ function MarketplaceListingCard() {
         border: '1px dashed',
         borderColor: 'rgba(124,58,237,0.4)',
         bgcolor: 'rgba(124,58,237,0.04)',
-        cursor: 'default',
         position: 'relative',
         overflow: 'visible',
       }}
     >
-      {/* Coming Soon badge */}
-      <Chip
-        label="Coming Soon"
-        size="small"
-        sx={{
-          position: 'absolute',
-          top: -10,
-          right: 16,
-          bgcolor: 'rgba(124,58,237,0.85)',
-          color: '#fff',
-          fontWeight: 700,
-          fontSize: '0.68rem',
-          letterSpacing: '0.05em',
-          height: 20,
-        }}
-      />
+      {/* Coming Soon badge — Temporarily hidden for future reactivation when marketplace goes live
+      <Chip label="Coming Soon" size="small" sx={{ position: 'absolute', top: -10, right: 16,
+        bgcolor: 'rgba(124,58,237,0.85)', color: '#fff', fontWeight: 700, fontSize: '0.68rem',
+        letterSpacing: '0.05em', height: 20 }} /> */}
 
       <CardContent sx={{ p: 2.5 }}>
         <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, flexWrap: 'wrap' }}>
           <Box
             sx={{
-              width: 48,
-              height: 48,
-              borderRadius: '50%',
-              bgcolor: 'rgba(124,58,237,0.15)',
-              border: '1px solid rgba(124,58,237,0.3)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
+              width: 48, height: 48, borderRadius: '50%',
+              bgcolor: 'rgba(124,58,237,0.15)', border: '1px solid rgba(124,58,237,0.3)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
             }}
           >
             <Handshake sx={{ fontSize: 24, color: 'secondary.light' }} />
           </Box>
 
           <Box sx={{ flex: 1, minWidth: 200 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 0.5 }}>
-              <Typography fontWeight={700} fontSize="1rem">
-                List Your Channel in Telegizer Marketplace
-              </Typography>
-            </Box>
+            <Typography fontWeight={700} fontSize="1rem" mb={0.5}>
+              List Your Channel in Telegizer Marketplace
+            </Typography>
             <Typography variant="body2" color="text.secondary" mb={1.5}>
               Future collaborations, sponsorships, and partnership opportunities.
             </Typography>
             <Stack direction="row" spacing={1} flexWrap="wrap">
               {['Sponsorships', 'Collaborations', 'Partnerships'].map(tag => (
-                <Chip
-                  key={tag}
-                  label={tag}
-                  size="small"
-                  variant="outlined"
-                  sx={{ height: 20, fontSize: '0.65rem', borderColor: 'rgba(124,58,237,0.3)', color: 'secondary.light' }}
-                />
+                <Chip key={tag} label={tag} size="small" variant="outlined"
+                  sx={{ height: 20, fontSize: '0.65rem', borderColor: 'rgba(124,58,237,0.3)', color: 'secondary.light' }} />
               ))}
             </Stack>
           </Box>
 
-          <Tooltip title="Marketplace launching soon — your listing form will open here">
-            <span>
-              <Button
-                variant="outlined"
-                disabled
-                startIcon={<Handshake />}
-                sx={{
-                  borderColor: 'rgba(124,58,237,0.4)',
-                  color: 'secondary.light',
-                  '&.Mui-disabled': { borderColor: 'rgba(124,58,237,0.25)', color: 'rgba(167,139,250,0.4)' },
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                List My Channel
-              </Button>
-            </span>
-          </Tooltip>
+          <Button
+            variant="outlined"
+            startIcon={<Handshake />}
+            onClick={onList}
+            sx={{
+              borderColor: 'rgba(124,58,237,0.5)',
+              color: 'secondary.light',
+              whiteSpace: 'nowrap',
+              '&:hover': { borderColor: 'secondary.light', bgcolor: 'rgba(124,58,237,0.1)' },
+            }}
+          >
+            List My Channel
+          </Button>
         </Box>
       </CardContent>
     </Card>
+  );
+}
+
+// ── Listing status badge helper ───────────────────────────────────────────────
+const STATUS_MAP = {
+  pending:  { label: 'Pending Review', color: 'warning',  icon: <HourglassEmpty sx={{ fontSize: 14 }} /> },
+  approved: { label: 'Approved',       color: 'success',  icon: <CheckCircle sx={{ fontSize: 14 }} /> },
+  rejected: { label: 'Rejected',       color: 'error',    icon: <Cancel sx={{ fontSize: 14 }} /> },
+};
+
+function ListingStatusRow({ listing }) {
+  const s = STATUS_MAP[listing.status] || STATUS_MAP.pending;
+  return (
+    <Card variant="outlined" sx={{ p: 0 }}>
+      <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+          <Campaign sx={{ color: 'secondary.light', fontSize: 18, flexShrink: 0 }} />
+          <Typography variant="body2" fontWeight={600} sx={{ flex: 1 }}>
+            {listing.title}
+          </Typography>
+          <Chip
+            icon={s.icon}
+            label={s.label}
+            color={s.color}
+            size="small"
+            sx={{ height: 22, fontSize: '0.68rem', fontWeight: 700 }}
+          />
+        </Box>
+        {listing.status === 'rejected' && listing.rejection_reason && (
+          <Typography variant="caption" color="error.light" sx={{ mt: 0.5, display: 'block', pl: 4 }}>
+            Reason: {listing.rejection_reason}
+          </Typography>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Inline DirectorySubmit for modal embedding ────────────────────────────────
+// Reuses existing dirApi.create — no new backend logic.
+function DirectorySubmitInline({ onDone }) {
+  const navigate = useNavigate();
+  const [channels, setChannels] = useState([]);
+  const [myListings, setMyListings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [done, setDone] = useState(false);
+  const [form, setForm] = useState({
+    channel_id: '', title: '', description: '', category: '',
+    language: 'English', country: 'Global', telegram_link: '',
+  });
+
+  const CATEGORIES = [
+    'Technology & Dev', 'Crypto & Web3', 'News & Politics',
+    'Business & Finance', 'Education & Learning', 'Entertainment',
+    'Gaming', 'Health & Wellness', 'Sports', 'Art & Design', 'Other',
+  ];
+
+  useEffect(() => {
+    Promise.all([chApi.list(), dirApi.mine()])
+      .then(([chRes, mineRes]) => {
+        setChannels(chRes.data || []);
+        setMyListings(mineRes.data || []);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const set = (field, val) => setForm(prev => ({ ...prev, [field]: val }));
+
+  const handleChannelSelect = (id) => {
+    set('channel_id', id);
+    const ch = channels.find(c => c.id === id);
+    if (ch) {
+      set('title', ch.title);
+      if (ch.username) set('telegram_link', `https://t.me/${ch.username}`);
+    }
+  };
+
+  const isAlreadyListed = (id) =>
+    myListings.some(l => String(l.channel_id) === String(id));
+
+  const handleSubmit = async () => {
+    if (!form.channel_id) { toast.error('Select a channel'); return; }
+    if (!form.category)   { toast.error('Select a category'); return; }
+    if (!form.telegram_link) { toast.error('Enter a Telegram link'); return; }
+    setSubmitting(true);
+    try {
+      await dirApi.create({ ...form, listing_type: 'channel' });
+      setDone(true);
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Submission failed');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (loading) return <Box sx={{ py: 4, textAlign: 'center' }}><CircularProgress /></Box>;
+
+  if (done) return (
+    <Box sx={{ py: 4, textAlign: 'center' }}>
+      <CheckCircle sx={{ fontSize: 56, color: 'success.main', mb: 1.5 }} />
+      <Typography variant="h6" fontWeight={700} gutterBottom>Listing submitted!</Typography>
+      <Typography variant="body2" color="text.secondary" mb={2}>
+        Your channel is under review. You'll see the status update here.
+      </Typography>
+      <Button variant="contained" onClick={onDone}>Done</Button>
+    </Box>
+  );
+
+  return (
+    <Stack spacing={2.5}>
+      {channels.length === 0 ? (
+        <Alert severity="info">
+          You don't have any channels tracked yet.{' '}
+          <Button size="small" onClick={() => navigate('/channels')}>Add a channel first</Button>
+        </Alert>
+      ) : (
+        <TextField
+          select
+          fullWidth
+          label="Select your channel"
+          value={form.channel_id}
+          onChange={e => handleChannelSelect(e.target.value)}
+          SelectProps={{ native: false }}
+        >
+          {channels.map(ch => (
+            <option key={ch.id} value={ch.id} disabled={isAlreadyListed(ch.id)} style={{ padding: 8 }}>
+              {ch.title}{isAlreadyListed(ch.id) ? ' (Already listed)' : ''}
+            </option>
+          ))}
+        </TextField>
+      )}
+
+      <TextField fullWidth label="Title" value={form.title} onChange={e => set('title', e.target.value)} />
+      <TextField fullWidth multiline rows={3} label="Description (optional)"
+        value={form.description} onChange={e => set('description', e.target.value)} />
+
+      <TextField select fullWidth label="Category" value={form.category}
+        onChange={e => set('category', e.target.value)} SelectProps={{ native: false }}>
+        {CATEGORIES.map(c => <option key={c} value={c} style={{ padding: 8 }}>{c}</option>)}
+      </TextField>
+
+      <TextField fullWidth label="Telegram join link" placeholder="https://t.me/mychannel"
+        value={form.telegram_link} onChange={e => set('telegram_link', e.target.value)} />
+
+      <Button variant="contained" size="large" startIcon={<Handshake />}
+        onClick={handleSubmit} disabled={submitting || channels.length === 0}>
+        {submitting ? <CircularProgress size={20} /> : 'Submit Listing'}
+      </Button>
+    </Stack>
   );
 }

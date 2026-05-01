@@ -533,9 +533,10 @@ export default function Sidebar({ onClose }) {
         <NavItem label="Flow Builder"  path="/workflow-builder"           icon={AutoMode} active={isActive('/workflow-builder')}            onClick={() => nav('/workflow-builder')} />
 
         {/* ── ANALYTICS ── */}
-        <SectionLabel label="Analytics" />
-        <NavItem label="Groups" path="/analytics" icon={BarChart} active={isActive('/analytics')} onClick={() => nav('/analytics')} indent />
-        <NavItem label="Channels" path="/analytics" icon={BarChart} active={false} onClick={() => nav('/analytics')} indent />
+        {/* Temporarily hidden for future reactivation — routes and backend intact */}
+        {/* <SectionLabel label="Analytics" />
+        <NavItem label="Groups"    path="/analytics" icon={BarChart} active={isActive('/analytics')} onClick={() => nav('/analytics')} indent />
+        <NavItem label="Channels"  path="/analytics" icon={BarChart} active={false}                  onClick={() => nav('/analytics')} indent /> */}
 
         {/* ── GROW — Temporarily hidden for future reactivation ── */}
         {/* Directory and Marketplace nav items are masked pending feature completion.
