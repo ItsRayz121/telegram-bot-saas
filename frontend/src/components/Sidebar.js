@@ -196,6 +196,17 @@ export default function Sidebar({ onClose }) {
   const [groupsOpen, setGroupsOpen] = useState(groupActive);
   const [channelsOpen, setChannelsOpen] = useState(channelActive);
 
+  const assistantActive = isActive('/workspace');
+  const [assistantOpen, setAssistantOpen] = useState(() => {
+    const stored = localStorage.getItem('sidebar_assistant_open');
+    return stored === null ? true : stored === '1';
+  });
+
+  const toggleAssistant = () => setAssistantOpen(o => {
+    localStorage.setItem('sidebar_assistant_open', !o ? '1' : '0');
+    return !o;
+  });
+
   // Keep sections open when navigating within them
   useEffect(() => {
     if (isActive('/groups')) setGroupsOpen(true);
@@ -515,20 +526,31 @@ export default function Sidebar({ onClose }) {
           </ListItem>
         )}
 
-        {/* ── ASSISTANT ── */}
+        {/* ── ASSISTANT HUB ── */}
         <SectionLabel label="Assistant Hub" />
-        <NavItem label="Hub"          path="/workspace"                  icon={Psychology} active={isActive('/workspace', true)}             onClick={() => nav('/workspace')} />
+        <ExpandableHeader
+          label="Hub"
+          icon={Psychology}
+          path="/workspace"
+          active={assistantActive}
+          open={assistantOpen}
+          onToggle={toggleAssistant}
+          onNavigate={() => nav('/workspace')}
+        />
+        {/* "Powered by" subtitle — always visible, outside the Collapse */}
         <Typography variant="caption" sx={{ px: 2, pb: 0.5, display: 'block', fontSize: '0.62rem', color: 'text.disabled', lineHeight: 1.3 }}>
           Powered by Telegizer Assistant
         </Typography>
-        <NavItem label="Auto-Replies" path="/workspace/smart-links"      icon={Reply}      active={isActive('/workspace/smart-links')}       onClick={() => nav('/workspace/smart-links')} indent />
-        <NavItem label="Reminders"    path="/workspace/reminders"        icon={AccessTime} active={isActive('/workspace/reminders')}         onClick={() => nav('/workspace/reminders')} indent />
-        <NavItem label="Tasks"        path="/workspace/tasks"            icon={CheckBox}   active={isActive('/workspace/tasks')}             onClick={() => nav('/workspace/tasks')} indent />
-        <NavItem label="Notes"        path="/workspace/notes"            icon={EditNote}   active={isActive('/workspace/notes')}             onClick={() => nav('/workspace/notes')} indent />
-        <NavItem label="Knowledge"    path="/workspace/knowledge"        icon={LibraryBooks} active={isActive('/workspace/knowledge')}       onClick={() => nav('/workspace/knowledge')} indent />
-        <NavItem label="Digests"      path="/workspace/digests"          icon={Summarize}  active={isActive('/workspace/digests')}           onClick={() => nav('/workspace/digests')} indent />
-        <NavItem label="AI Settings"  path="/workspace/ai-settings"      icon={Tune}       active={isActive('/workspace/ai-settings')}       onClick={() => nav('/workspace/ai-settings')} indent />
-        <NavItem label="Assistant Bot" path="/workspace/assistant-bot"   icon={SmartToy}   active={isActive('/workspace/assistant-bot')}      onClick={() => nav('/workspace/assistant-bot')} indent badge={plan === 'free' ? 'Pro' : null} />
+        <Collapse in={assistantOpen} timeout={160} unmountOnExit>
+          <NavItem label="Auto-Replies"  path="/workspace/smart-links"    icon={Reply}       active={isActive('/workspace/smart-links')}    onClick={() => nav('/workspace/smart-links')} indent />
+          <NavItem label="Reminders"     path="/workspace/reminders"      icon={AccessTime}  active={isActive('/workspace/reminders')}      onClick={() => nav('/workspace/reminders')} indent />
+          <NavItem label="Tasks"         path="/workspace/tasks"          icon={CheckBox}    active={isActive('/workspace/tasks')}          onClick={() => nav('/workspace/tasks')} indent />
+          <NavItem label="Notes"         path="/workspace/notes"          icon={EditNote}    active={isActive('/workspace/notes')}          onClick={() => nav('/workspace/notes')} indent />
+          <NavItem label="Knowledge"     path="/workspace/knowledge"      icon={LibraryBooks} active={isActive('/workspace/knowledge')}    onClick={() => nav('/workspace/knowledge')} indent />
+          <NavItem label="Digests"       path="/workspace/digests"        icon={Summarize}   active={isActive('/workspace/digests')}       onClick={() => nav('/workspace/digests')} indent />
+          <NavItem label="AI Settings"   path="/workspace/ai-settings"    icon={Tune}        active={isActive('/workspace/ai-settings')}   onClick={() => nav('/workspace/ai-settings')} indent />
+          <NavItem label="Assistant Bot" path="/workspace/assistant-bot"  icon={SmartToy}    active={isActive('/workspace/assistant-bot')} onClick={() => nav('/workspace/assistant-bot')} indent badge={plan === 'free' ? 'Pro' : null} />
+        </Collapse>
 
         {/* ── AUTOMATION ── */}
         <SectionLabel label="Automation" />
