@@ -973,8 +973,8 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     _log.warning("Unlinked user reply failed: %s", _exc)
             elif _reply_text:
                 # Convert AI markdown (**bold** etc.) to Telegram HTML
-                _html = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', _reply_text, flags=re.DOTALL)
-                _html = re.sub(r'\*(?!\*)(.+?)(?<!\*)\*', r'<i>\1</i>', _html, flags=re.DOTALL)
+                _html = re.sub(r'\*\*([^*\n]+?)\*\*', r'<b>\1</b>', _reply_text)
+                _html = re.sub(r'\*([^*\n]+?)\*', r'<i>\1</i>', _html)
                 _html = re.sub(r'^#{1,3}\s+(.+)$', r'<b>\1</b>', _html, flags=re.MULTILINE)
                 try:
                     await message.reply_text(_html, parse_mode=ParseMode.HTML, reply_markup=_keyboard)
@@ -2180,7 +2180,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                 chat_id=chat.id,
                                 text=lvl_up_text,
                             )
-                            asyncio.get_event_loop().call_later(
+                            asyncio.get_running_loop().call_later(
                                 15, lambda: asyncio.ensure_future(
                                     _safe_delete(context.bot, chat.id, lvl_up_msg.message_id)
                                 )
@@ -2405,7 +2405,7 @@ async def _start_verification(bot, chat, user, v_cfg, flask_app, group_id):
     }
     _save_pending_verification(flask_app, chat_id, user_id, _pending_verifications[key])
 
-    asyncio.get_event_loop().call_later(
+    asyncio.get_running_loop().call_later(
         timeout,
         lambda: asyncio.ensure_future(_verification_timeout(bot, chat_id, user_id)),
     )
@@ -2506,7 +2506,7 @@ async def _complete_verification(bot, query, chat_id, user_id, pending, flask_ap
                 chat_id=chat_id,
                 text=f"✅ {first_name} verified and joined!",
             )
-            asyncio.get_event_loop().call_later(
+            asyncio.get_running_loop().call_later(
                 8, lambda: asyncio.ensure_future(_safe_delete(bot, chat_id, notif.message_id))
             )
         except Exception:
@@ -2627,7 +2627,7 @@ async def _automod_execute(bot, message, group_id: str, flask_app, rule: str, ac
     async def _timed_notify(text):
         try:
             nm = await bot.send_message(chat_id=chat_id, text=text)
-            asyncio.get_event_loop().call_later(
+            asyncio.get_running_loop().call_later(
                 notify_seconds,
                 lambda: asyncio.ensure_future(_safe_delete(bot, chat_id, nm.message_id)),
             )
@@ -2887,7 +2887,7 @@ async def _check_warn_escalation(bot, chat_id: int, group_id: str,
                 )
             else:
                 return
-            asyncio.get_event_loop().call_later(
+            asyncio.get_running_loop().call_later(
                 15, lambda: asyncio.ensure_future(_safe_delete(bot, chat_id, notif.message_id))
             )
         except Exception as exc:
@@ -3076,7 +3076,7 @@ async def cmd_warn(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Reason: {reason}\n"
         f"Warning #{warn_count}"
     )
-    asyncio.get_event_loop().call_later(
+    asyncio.get_running_loop().call_later(
         30, lambda: asyncio.ensure_future(_safe_delete(context.bot, update.effective_chat.id, warn_msg.message_id))
     )
     if flask_app:
@@ -3111,7 +3111,7 @@ async def cmd_ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
                    f"{target_name} banned by {update.effective_user.first_name}: {reason}",
                    {"target_user_id": str(target_id), "moderator_id": str(update.effective_user.id), "reason": reason})
         ban_msg = await update.message.reply_text(f"🚫 {target_name} has been banned.\nReason: {reason}")
-        asyncio.get_event_loop().call_later(
+        asyncio.get_running_loop().call_later(
             15, lambda: asyncio.ensure_future(_safe_delete(context.bot, chat_id, ban_msg.message_id))
         )
         if flask_app:
@@ -3145,7 +3145,7 @@ async def cmd_kick(update: Update, context: ContextTypes.DEFAULT_TYPE):
                    f"{target_name} kicked by {update.effective_user.first_name}: {reason}",
                    {"target_user_id": str(target_id), "moderator_id": str(update.effective_user.id), "reason": reason})
         kick_msg = await update.message.reply_text(f"👢 {target_name} has been kicked.\nReason: {reason}")
-        asyncio.get_event_loop().call_later(
+        asyncio.get_running_loop().call_later(
             15, lambda: asyncio.ensure_future(_safe_delete(context.bot, chat_id, kick_msg.message_id))
         )
         if flask_app:
@@ -3201,7 +3201,7 @@ async def cmd_mute(update: Update, context: ContextTypes.DEFAULT_TYPE):
         mute_msg = await update.message.reply_text(
             f"🔇 {target_name} muted for {duration_min} min.\nReason: {reason}"
         )
-        asyncio.get_event_loop().call_later(
+        asyncio.get_running_loop().call_later(
             15, lambda: asyncio.ensure_future(_safe_delete(context.bot, chat_id, mute_msg.message_id))
         )
         if flask_app:
@@ -3288,7 +3288,7 @@ async def cmd_tempban(update: Update, context: ContextTypes.DEFAULT_TYPE):
         tb_msg = await update.message.reply_text(
             f"⛔ {target_name} temp-banned for {label}.\nReason: {reason}"
         )
-        asyncio.get_event_loop().call_later(
+        asyncio.get_running_loop().call_later(
             15, lambda: asyncio.ensure_future(_safe_delete(context.bot, chat_id, tb_msg.message_id))
         )
     except Exception as exc:
@@ -3334,7 +3334,7 @@ async def cmd_purge(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         notif = await context.bot.send_message(chat_id=chat_id, text=f"🗑️ Purged {deleted} messages.")
-        asyncio.get_event_loop().call_later(
+        asyncio.get_running_loop().call_later(
             5, lambda: asyncio.ensure_future(_safe_delete(context.bot, chat_id, notif.message_id))
         )
     except Exception:
@@ -3541,7 +3541,7 @@ async def cmd_tempmute(update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = await update.message.reply_text(
             f"🔇 {target_name} muted for {duration_min} min.\nReason: {reason}"
         )
-        asyncio.get_event_loop().call_later(
+        asyncio.get_running_loop().call_later(
             15, lambda: asyncio.ensure_future(_safe_delete(context.bot, chat_id, msg.message_id))
         )
         if flask_app:
@@ -3800,7 +3800,7 @@ async def cmd_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     try:
         notif = await update.message.reply_text(report_text, parse_mode=ParseMode.MARKDOWN)
-        asyncio.get_event_loop().call_later(
+        asyncio.get_running_loop().call_later(
             60, lambda: asyncio.ensure_future(_safe_delete(context.bot, chat_id, notif.message_id))
         )
     except Exception as exc:

@@ -132,6 +132,11 @@ def init_db():
             "ALTER TABLE knowledge_documents ADD COLUMN IF NOT EXISTS embedding TEXT",
             "knowledge_documents.embedding",
         )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE workspace_knowledge_documents ADD COLUMN IF NOT EXISTS embedding TEXT",
+            "workspace_knowledge_documents.embedding",
+        )
 
         # ── Phase 6.3: BotDMMessage extra columns ────────────────────────────
         _run_alter(

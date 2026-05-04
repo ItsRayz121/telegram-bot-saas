@@ -288,15 +288,11 @@ async def _cmd_task(bot: Bot, chat_id: int, tg_user, text: str, flask_app, assis
     title = parts[1]
 
     with flask_app.app_context():
-        from ..models import db, AssistantBot, WorkspaceTask
+        from ..models import db, AssistantBot, Task
         abot = AssistantBot.query.get(assistant_bot_id)
         if not abot:
             return
-        try:
-            task = WorkspaceTask(user_id=abot.user_id, title=title, status="todo")
-        except Exception:
-            from ..models import Task
-            task = Task(user_id=abot.user_id, title=title, status="todo", source="bot")
+        task = Task(user_id=abot.user_id, title=title, status="todo", source="bot")
         db.session.add(task)
         db.session.commit()
 

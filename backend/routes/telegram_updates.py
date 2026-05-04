@@ -111,7 +111,8 @@ def receive_official_bot_update():
     # were created in official_bot._runner.loop; crossing loops causes RuntimeError.
     try:
         runner_loop = getattr(official_bot, "loop", None)
-        app = getattr(official_bot, "_app", None)
+        # OfficialBotRunner stores the PTB Application as .application (not ._app)
+        app = getattr(official_bot, "application", None)
 
         if runner_loop is None or not runner_loop.is_running() or app is None:
             _log.warning("official-bot-update: runner loop not ready")

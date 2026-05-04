@@ -69,13 +69,32 @@ def _chunk_text(text: str, size: int = 800) -> list[str]:
 @rate_limit(requests_per_minute=60)
 def list_docs():
     user = _me()
-    docs = (
-        WorkspaceKnowledgeDocument.query
-        .filter_by(user_id=user.id)
-        .order_by(WorkspaceKnowledgeDocument.created_at.desc())
-        .all()
-    )
-    return jsonify({"documents": [d.to_dict() for d in docs]})
+    try:
+        docs = (
+            WorkspaceKnowledgeDocument.query
+            .filter_by(user_id=user.id)
+            .order_by(WorkspaceKnowledgeDocument.created_at.desc())
+            .all()
+        )
+        return jsonify({"documents": [d.to_dict() for d in docs]})
+    except Exception as _e:
+        # Graceful degradation while migration is pending (e.g. missing embedding column)
+        from ..models import db
+        db.session.rollback()
+        import logging
+        logging.getLogger(__name__).warning("list_docs fallback (schema migration pending): %s", _e)
+        from sqlalchemy import text
+        rows = db.session.execute(
+            text("SELECT id, user_id, filename, file_type, content_text, tags, description, created_at FROM workspace_knowledge_documents WHERE user_id=:uid ORDER BY created_at DESC"),
+            {"uid": user.id}
+        ).fetchall()
+        docs_list = [
+            {"id": r[0], "filename": r[2], "file_type": r[3],
+             "content_preview": (r[4] or "")[:120], "tags": r[5] or [],
+             "description": r[6], "created_at": str(r[7])}
+            for r in rows
+        ]
+        return jsonify({"documents": docs_list})
 
 
 @knowledge_ws_bp.route("", methods=["POST"])
