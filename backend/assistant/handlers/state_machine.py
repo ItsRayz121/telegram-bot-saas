@@ -43,11 +43,21 @@ def handle_continue_state(user_id: int, state, message: str, key_info: dict, use
             data["_reminder_asked"] = True
 
         elif awaiting == "notes":
-            data["notes"] = None if (msg == SKIP_VALUE or msg.lower() in ("skip", "no", "none", "no notes")) else msg[:2000]
+            skip_notes = (
+                msg == SKIP_VALUE
+                or msg.lower() in ("skip", "no", "none", "no notes")
+                or re.search(r"\b(remind|reminder|schedule|create task|save note)\b", msg, re.I)
+            )
+            data["notes"] = None if skip_notes else msg[:2000]
             data["_notes_asked"] = True
 
         elif awaiting == "resource_url":
-            if msg == SKIP_VALUE or msg.lower() in ("skip", "no", "none", "no link", "no resource"):
+            skip_resource = (
+                msg == SKIP_VALUE
+                or msg.lower() in ("skip", "no", "none", "no link", "no resource")
+                or (not re.search(r"https?://", msg) and re.search(r"\b(remind|reminder|schedule|skip)\b", msg, re.I))
+            )
+            if skip_resource:
                 data["resource_url"] = None
             else:
                 url_m = re.search(r"https?://\S+", msg)

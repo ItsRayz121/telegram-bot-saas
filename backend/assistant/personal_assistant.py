@@ -106,6 +106,7 @@ def process_message(user_id: int, message: str, user_tz: str | None = None) -> d
         high_confidence_escapes = (
             "group_query", "list_meetings", "list_reminders",
             "list_notes", "list_tasks", "upcoming_schedule",
+            "create_reminder", "save_note", "create_task", "save_link",
         )
         if escape_intent and escape_intent != state.pending_intent and escape_intent in high_confidence_escapes:
             _log.info("State escape: %s → %s", state.pending_intent, escape_intent)

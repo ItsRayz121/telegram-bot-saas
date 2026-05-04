@@ -18,9 +18,10 @@ Return exactly this structure:
 
 Rules:
 - ALWAYS return valid JSON only. No text before or after the JSON object.
-- schedule_meeting: user wants to book/create a meeting. Set title and datetime_hint when available.
-- create_reminder: user wants to be reminded about something. Set title=reminder text, datetime_hint if given.
-- upcoming_schedule: user asks about upcoming events, schedule, what's next, what's today.
+- schedule_meeting: user explicitly wants to CREATE/BOOK a new meeting. Must include clear booking intent ("schedule", "book", "set up a meeting"). Do NOT use this if user is merely asking about existing meetings.
+- list_meetings: user asks if they HAVE meetings, what meetings exist, "any meeting today?", "do I have a meeting?", "meeting today?".
+- upcoming_schedule: user asks what's on their schedule, what's today, what's coming up.
+- create_reminder: user says "remind me", "set a reminder", "reminder for". Set title=reminder text, datetime_hint if given.
 - save_note: put note content in resource_note field.
 - save_link: put URL in resource_url field.
 - create_task: put task title in title field.
@@ -28,6 +29,7 @@ Rules:
 - group_query: user asks about group issues, activity, status, problems.
 - general: set reply only.
 - Default priority is "medium".
+- CRITICAL: "any meeting today", "do I have a meeting", "meeting today?" → list_meetings, NOT schedule_meeting.
 """
 
 RESOLVE_DATETIME_SYSTEM = """\

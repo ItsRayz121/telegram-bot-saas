@@ -11,8 +11,9 @@ MEETING_NOUN = re.compile(
     re.IGNORECASE,
 )
 LIST_MEETINGS_PATTERNS = re.compile(
-    r"\b(any meetings|what meetings|my meetings|show meetings|list meetings|next meeting"
-    r"|meetings today|meetings tomorrow|do i have.*meeting)\b",
+    r"\b(any meetings?|what meetings?|my meetings?|show meetings?|list meetings?|next meeting"
+    r"|meetings? today|meetings? tomorrow|do i have.*meeting|meeting scheduled|scheduled.*meeting"
+    r"|upcoming meeting|got a meeting|have a meeting)\b",
     re.IGNORECASE,
 )
 UPCOMING_SCHEDULE_PATTERNS = re.compile(
