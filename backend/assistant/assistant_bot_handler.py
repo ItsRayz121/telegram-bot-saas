@@ -1,88 +1,67 @@
 """
-Handler for user-owned Assistant Bots.
+Handler for user-owned Assistant Bots (Telegram DM interface).
 
-Receives a parsed python-telegram-bot Update and dispatches to the correct
-command handler.  All handlers are async and receive the Flask app context
-so they can write to the DB.
+Natural language DMs are routed through process_message() — the same hybrid AI
+engine that powers the web assistant. All AI upgrades (general chat, expand
+analysis, workspace intelligence) apply automatically here too.
 
-Supported commands: /remind, /note, /task, /summary, /start, /help
+Slash commands are kept as shortcuts for power users.
 """
 
 import logging
 import re
 from datetime import datetime, timedelta
 
-from telegram import Bot, Update
+from telegram import Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 
 _log = logging.getLogger("assistant_bot_handler")
 
-# ── helpers ───────────────────────────────────────────────────────────────────
 
-def _user_desc(tg_user):
-    return f"@{tg_user.username}" if tg_user.username else tg_user.first_name or str(tg_user.id)
+# ── Formatting helpers ────────────────────────────────────────────────────────
+
+def _md_to_telegram(text: str) -> str:
+    """
+    Convert AI-generated markdown (**bold**, *italic*, bullet lists)
+    to Telegram HTML so it renders properly in bot messages.
+    """
+    if not text:
+        return text
+    # **bold** → <b>bold</b>
+    text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text, flags=re.DOTALL)
+    # *italic* → <i>italic</i>  (only single asterisk remaining)
+    text = re.sub(r'\*(?!\*)(.+?)(?<!\*)\*', r'<i>\1</i>', text, flags=re.DOTALL)
+    # ### Header → <b>Header</b>
+    text = re.sub(r'^#{1,3}\s+(.+)$', r'<b>\1</b>', text, flags=re.MULTILINE)
+    # Escape bare < and > that aren't part of our tags
+    # (already escaped because we build the HTML ourselves — no extra escaping needed)
+    return text
 
 
 async def _reply(bot: Bot, chat_id: int, text: str):
+    """Send a message with HTML formatting. Falls back to plain text on error."""
+    html = _md_to_telegram(text)
     try:
-        await bot.send_message(chat_id=chat_id, text=text, parse_mode=ParseMode.MARKDOWN)
-    except Exception as exc:
-        _log.warning("assistant_bot send_message failed chat_id=%s: %s", chat_id, exc)
+        await bot.send_message(chat_id=chat_id, text=html, parse_mode=ParseMode.HTML)
+    except Exception:
+        try:
+            await bot.send_message(chat_id=chat_id, text=text)
+        except Exception as exc:
+            _log.warning("send_message failed chat_id=%s: %s", chat_id, exc)
 
 
-# ── space auto-registration ───────────────────────────────────────────────────
-
-def _register_space(flask_app, assistant_bot_id: int, message):
-    """Upsert an AssistantSpace row for the chat this message came from."""
+async def _reply_with_keyboard(bot: Bot, chat_id: int, text: str, keyboard):
+    html = _md_to_telegram(text)
     try:
-        chat = message.chat
-        chat_id_str = str(chat.id)
-        title = getattr(chat, "title", None) or getattr(chat, "first_name", None) or chat_id_str
-        chat_type = chat.type or "unknown"
-
-        with flask_app.app_context():
-            from ..models import db, AssistantSpace
-            from sqlalchemy.dialects.postgresql import insert as pg_insert
-            from sqlalchemy import text
-
-            now = datetime.utcnow()
-            # Try upsert via raw SQL so it's a single round-trip
-            try:
-                db.session.execute(text("""
-                    INSERT INTO assistant_spaces (assistant_bot_id, telegram_chat_id, chat_title, chat_type, first_seen_at, last_seen_at)
-                    VALUES (:bot_id, :chat_id, :title, :ctype, :now, :now)
-                    ON CONFLICT (assistant_bot_id, telegram_chat_id)
-                    DO UPDATE SET chat_title = EXCLUDED.chat_title, last_seen_at = EXCLUDED.last_seen_at
-                """), {"bot_id": assistant_bot_id, "chat_id": chat_id_str, "title": title, "ctype": chat_type, "now": now})
-                db.session.commit()
-            except Exception:
-                db.session.rollback()
-                # Fallback for SQLite (dev)
-                space = AssistantSpace.query.filter_by(
-                    assistant_bot_id=assistant_bot_id, telegram_chat_id=chat_id_str
-                ).first()
-                if space:
-                    space.chat_title = title
-                    space.last_seen_at = now
-                else:
-                    space = AssistantSpace(
-                        assistant_bot_id=assistant_bot_id,
-                        telegram_chat_id=chat_id_str,
-                        chat_title=title,
-                        chat_type=chat_type,
-                        first_seen_at=now,
-                        last_seen_at=now,
-                    )
-                    db.session.add(space)
-                db.session.commit()
-    except Exception as exc:
-        _log.warning("_register_space failed: %s", exc)
+        await bot.send_message(chat_id=chat_id, text=html, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+    except Exception:
+        try:
+            await bot.send_message(chat_id=chat_id, text=text, reply_markup=keyboard)
+        except Exception as exc:
+            _log.warning("send_message_with_keyboard failed chat_id=%s: %s", chat_id, exc)
 
 
-# ── command dispatcher ────────────────────────────────────────────────────────
-
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-
+# ── Suggestion keyboard builder ───────────────────────────────────────────────
 
 def _build_suggestion_keyboard(suggestions):
     if not suggestions:
@@ -102,9 +81,52 @@ def _build_suggestion_keyboard(suggestions):
     return InlineKeyboardMarkup(rows) if rows else None
 
 
+# ── Space auto-registration ───────────────────────────────────────────────────
+
+def _register_space(flask_app, assistant_bot_id: int, message):
+    try:
+        chat = message.chat
+        chat_id_str = str(chat.id)
+        title = getattr(chat, "title", None) or getattr(chat, "first_name", None) or chat_id_str
+        chat_type = chat.type or "unknown"
+
+        with flask_app.app_context():
+            from ..models import db, AssistantSpace
+            from sqlalchemy import text
+
+            now = datetime.utcnow()
+            try:
+                db.session.execute(text("""
+                    INSERT INTO assistant_spaces (assistant_bot_id, telegram_chat_id, chat_title, chat_type, first_seen_at, last_seen_at)
+                    VALUES (:bot_id, :chat_id, :title, :ctype, :now, :now)
+                    ON CONFLICT (assistant_bot_id, telegram_chat_id)
+                    DO UPDATE SET chat_title = EXCLUDED.chat_title, last_seen_at = EXCLUDED.last_seen_at
+                """), {"bot_id": assistant_bot_id, "chat_id": chat_id_str, "title": title, "ctype": chat_type, "now": now})
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+                space = AssistantSpace.query.filter_by(
+                    assistant_bot_id=assistant_bot_id, telegram_chat_id=chat_id_str
+                ).first()
+                if space:
+                    space.chat_title = title
+                    space.last_seen_at = now
+                else:
+                    space = AssistantSpace(
+                        assistant_bot_id=assistant_bot_id,
+                        telegram_chat_id=chat_id_str,
+                        chat_title=title, chat_type=chat_type,
+                        first_seen_at=now, last_seen_at=now,
+                    )
+                    db.session.add(space)
+                db.session.commit()
+    except Exception as exc:
+        _log.warning("_register_space failed: %s", exc)
+
+
+# ── Main update handler ───────────────────────────────────────────────────────
+
 async def handle_update(update: Update, bot: Bot, flask_app, assistant_bot_id: int):
-    """Entry point called by the webhook receiver for every incoming update."""
-    # Handle suggestion button taps
     if update.callback_query:
         await _handle_callback(update.callback_query, bot, flask_app, assistant_bot_id)
         return
@@ -113,7 +135,6 @@ async def handle_update(update: Update, bot: Bot, flask_app, assistant_bot_id: i
     if not message or not message.text:
         return
 
-    # Auto-register this chat as an assistant space on every message
     _register_space(flask_app, assistant_bot_id, message)
 
     text = message.text.strip()
@@ -132,10 +153,9 @@ async def handle_update(update: Update, bot: Bot, flask_app, assistant_bot_id: i
         await _cmd_note(bot, chat_id, tg_user, text, flask_app, assistant_bot_id)
     elif cmd == "/task":
         await _cmd_task(bot, chat_id, tg_user, text, flask_app, assistant_bot_id)
-    elif cmd == "/summary":
-        await _cmd_summary(bot, chat_id, tg_user, text, flask_app, assistant_bot_id)
+    elif cmd == "/analyze" or cmd == "/summary" or cmd == "/day":
+        await _cmd_analyze(bot, chat_id, tg_user, flask_app, assistant_bot_id)
     elif cmd is None and message.chat.type == "private":
-        # Natural language DM — route through personal assistant
         await _cmd_natural_language(bot, chat_id, tg_user, text, flask_app, assistant_bot_id)
 
 
@@ -143,37 +163,59 @@ async def handle_update(update: Update, bot: Bot, flask_app, assistant_bot_id: i
 
 async def _cmd_start(bot: Bot, chat_id: int, tg_user):
     name = tg_user.first_name or "there"
-    await _reply(bot, chat_id, (
-        f"👋 Hi {name}! I'm your personal Telegizer Assistant Bot.\n\n"
-        "Here's what I can do:\n"
-        "• `/remind <time> <text>` — set a reminder\n"
-        "• `/note <text>` — save a quick note\n"
-        "• `/task <text>` — create a task\n"
-        "• `/summary` — get an AI summary of recent activity\n\n"
-        "Type /help for details."
-    ))
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🧠 Analyze My Day", callback_data="assist_pick:Analyze my day"),
+         InlineKeyboardButton("📅 My Schedule", callback_data="assist_pick:What's on my schedule?")],
+        [InlineKeyboardButton("👥 Group Health", callback_data="assist_pick:Any issues in my groups?"),
+         InlineKeyboardButton("📋 My Tasks", callback_data="assist_pick:Show my tasks")],
+    ])
+    await _reply_with_keyboard(bot, chat_id, (
+        f"👋 Hi <b>{name}</b>! I'm your Telegizer AI Assistant.\n\n"
+        "I'm a hybrid AI — just talk to me naturally:\n\n"
+        "💬 <b>Ask anything</b>\n"
+        "• \"What is the capital of France?\"\n"
+        "• \"Explain Telegram community growth\"\n"
+        "• \"Write an announcement for my group\"\n\n"
+        "🏢 <b>Manage your workspace</b>\n"
+        "• \"Any issues in my groups?\"\n"
+        "• \"Schedule a meeting tomorrow 3pm\"\n"
+        "• \"Remind me to send report at 5pm\"\n"
+        "• \"Analyze my day\"\n\n"
+        "⚡ <b>Quick commands</b>\n"
+        "/analyze — daily briefing\n"
+        "/remind — set reminder\n"
+        "/note — save a note\n"
+        "/task — create a task\n\n"
+        "<i>Just type anything — I understand natural language.</i>"
+    ), keyboard)
 
 
 # ── /help ─────────────────────────────────────────────────────────────────────
 
 async def _cmd_help(bot: Bot, chat_id: int):
     await _reply(bot, chat_id, (
-        "*Assistant Bot Commands*\n\n"
-        "*/remind* `<time> <text>`\n"
-        "  Set a reminder. Time examples: `30m`, `2h`, `tomorrow 9am`\n\n"
-        "*/note* `<text>`\n"
-        "  Save a note to your Workspace.\n\n"
-        "*/task* `<text>`\n"
-        "  Create a task in your Workspace.\n\n"
-        "*/summary*\n"
-        "  AI summary of your recent workspace activity."
+        "<b>Telegizer Assistant — Hybrid AI</b>\n\n"
+        "Just talk to me naturally — no commands needed.\n\n"
+        "<b>Examples:</b>\n"
+        "• \"What's happening in my groups?\"\n"
+        "• \"Schedule a call Friday 2pm with Ahmed\"\n"
+        "• \"Remind me about the proposal tomorrow morning\"\n"
+        "• \"Who is the current PM of UK?\"\n"
+        "• \"Write a welcome message for my community\"\n"
+        "• \"Analyze my day\"\n"
+        "• \"Any low activity groups?\"\n"
+        "• \"Create task: review analytics report\"\n\n"
+        "<b>Quick commands:</b>\n"
+        "/analyze — full daily briefing\n"
+        "/remind 30m &lt;text&gt; — quick reminder\n"
+        "/note &lt;text&gt; — save a note\n"
+        "/task &lt;text&gt; — create a task"
     ))
 
 
 # ── /remind ───────────────────────────────────────────────────────────────────
 
 def _parse_remind_offset(raw: str):
-    """Parse simple offsets like '30m', '2h', '1d'. Returns timedelta or None."""
     m = re.match(r"^(\d+)(m|h|d)$", raw.lower())
     if not m:
         return None
@@ -182,15 +224,15 @@ def _parse_remind_offset(raw: str):
 
 
 async def _cmd_remind(bot: Bot, chat_id: int, tg_user, text: str, flask_app, assistant_bot_id: int):
-    # /remind <offset> <reminder text>
     parts = text.split(maxsplit=2)
     if len(parts) < 3:
-        await _reply(bot, chat_id, "Usage: `/remind 30m Buy groceries`\nSupported: `30m`, `2h`, `1d`")
+        await _reply(bot, chat_id, "Usage: <code>/remind 30m Buy groceries</code>\nOr just say: \"Remind me to buy groceries in 30 minutes\"")
         return
 
     delta = _parse_remind_offset(parts[1])
     if not delta:
-        await _reply(bot, chat_id, f"Unrecognised time `{parts[1]}`. Use `30m`, `2h`, `1d`, etc.")
+        # Fallback to natural language processing
+        await _cmd_natural_language(bot, chat_id, tg_user, text[len("/remind "):], flask_app, assistant_bot_id)
         return
 
     remind_text = parts[2]
@@ -209,8 +251,8 @@ async def _cmd_remind(bot: Bot, chat_id: int, tg_user, text: str, flask_app, ass
         db.session.add(r)
         db.session.commit()
 
-    when_str = remind_at.strftime("%Y-%m-%d %H:%M UTC")
-    await _reply(bot, chat_id, f"⏰ Reminder set for *{when_str}*:\n_{remind_text}_")
+    when_str = remind_at.strftime("%d %b %Y at %H:%M UTC")
+    await _reply(bot, chat_id, f"⏰ Reminder set for <b>{when_str}</b>:\n<i>{remind_text}</i>")
 
 
 # ── /note ─────────────────────────────────────────────────────────────────────
@@ -218,7 +260,7 @@ async def _cmd_remind(bot: Bot, chat_id: int, tg_user, text: str, flask_app, ass
 async def _cmd_note(bot: Bot, chat_id: int, tg_user, text: str, flask_app, assistant_bot_id: int):
     parts = text.split(maxsplit=1)
     if len(parts) < 2:
-        await _reply(bot, chat_id, "Usage: `/note Meeting decided to launch on Friday`")
+        await _reply(bot, chat_id, "Usage: <code>/note Meeting decided to launch on Friday</code>\nOr just say: \"Note this: ...\"")
         return
 
     content = parts[1]
@@ -228,15 +270,11 @@ async def _cmd_note(bot: Bot, chat_id: int, tg_user, text: str, flask_app, assis
         abot = AssistantBot.query.get(assistant_bot_id)
         if not abot:
             return
-        note = Note(
-            user_id=abot.user_id,
-            content=content,
-            source="assistant_bot",
-        )
+        note = Note(user_id=abot.user_id, content=content, source="assistant_bot")
         db.session.add(note)
         db.session.commit()
 
-    await _reply(bot, chat_id, f"📝 Note saved:\n_{content}_")
+    await _reply(bot, chat_id, f"📝 Note saved:\n<i>{content}</i>")
 
 
 # ── /task ─────────────────────────────────────────────────────────────────────
@@ -244,88 +282,67 @@ async def _cmd_note(bot: Bot, chat_id: int, tg_user, text: str, flask_app, assis
 async def _cmd_task(bot: Bot, chat_id: int, tg_user, text: str, flask_app, assistant_bot_id: int):
     parts = text.split(maxsplit=1)
     if len(parts) < 2:
-        await _reply(bot, chat_id, "Usage: `/task Write the product spec by Friday`")
+        await _reply(bot, chat_id, "Usage: <code>/task Write the product spec by Friday</code>\nOr just say: \"Create task: ...\"")
         return
 
     title = parts[1]
 
     with flask_app.app_context():
-        from ..models import db, AssistantBot, Task
+        from ..models import db, AssistantBot, WorkspaceTask
         abot = AssistantBot.query.get(assistant_bot_id)
         if not abot:
             return
-        task = Task(
-            user_id=abot.user_id,
-            title=title,
-            status="todo",
-            source="bot",
-        )
+        try:
+            task = WorkspaceTask(user_id=abot.user_id, title=title, status="todo")
+        except Exception:
+            from ..models import Task
+            task = Task(user_id=abot.user_id, title=title, status="todo", source="bot")
         db.session.add(task)
         db.session.commit()
 
-    await _reply(bot, chat_id, f"✅ Task created:\n_{title}_")
+    await _reply(bot, chat_id, f"✅ Task created:\n<i>{title}</i>")
 
 
-# ── /summary ──────────────────────────────────────────────────────────────────
+# ── /analyze (/summary, /day) ─────────────────────────────────────────────────
 
-async def _cmd_summary(bot: Bot, chat_id: int, tg_user, text: str, flask_app, assistant_bot_id: int):
-    await _reply(bot, chat_id, "⏳ Generating your workspace summary…")
+async def _cmd_analyze(bot: Bot, chat_id: int, tg_user, flask_app, assistant_bot_id: int):
+    await _reply(bot, chat_id, "⏳ Analyzing your workspace…")
 
-    try:
-        with flask_app.app_context():
-            from ..models import AssistantBot, Note, Task, WorkspaceReminder
-            from ..assistant.ai_key_resolver import resolve_ai_key
-            import openai as _openai
+    with flask_app.app_context():
+        from ..models import AssistantBot
+        from ..assistant.ai_key_resolver import get_workspace_ai_key
+        from ..models import User
 
-            abot = AssistantBot.query.get(assistant_bot_id)
-            if not abot:
-                return
+        abot = AssistantBot.query.get(assistant_bot_id)
+        if not abot:
+            return
 
-            uid = abot.user_id
-            now = datetime.utcnow()
-            since = now - timedelta(days=7)
+        user = User.query.get(abot.user_id)
+        if not user:
+            return
 
-            notes = Note.query.filter(Note.user_id == uid, Note.created_at >= since).order_by(Note.created_at.desc()).limit(5).all()
-            tasks = Task.query.filter(Task.user_id == uid, Task.status == "pending").order_by(Task.created_at.desc()).limit(5).all()
-            reminders = WorkspaceReminder.query.filter(WorkspaceReminder.owner_user_id == uid, WorkspaceReminder.remind_at >= now, WorkspaceReminder.is_delivered == False).order_by(WorkspaceReminder.remind_at).limit(5).all()
+        try:
+            key_info = get_workspace_ai_key(user)
+        except Exception:
+            key_info = {}
 
-            lines = []
-            if notes:
-                lines.append("*Recent notes:*\n" + "\n".join(f"- {n.content[:80]}" for n in notes))
-            if tasks:
-                lines.append("*Pending tasks:*\n" + "\n".join(f"- {t.title[:80]}" for t in tasks))
-            if reminders:
-                lines.append("*Upcoming reminders:*\n" + "\n".join(f"- {r.reminder_text[:80]} ({r.remind_at.strftime('%b %d %H:%M')})" for r in reminders))
+        try:
+            from ..assistant.handlers.analyze import handle_analyze_day
+            result = handle_analyze_day(abot.user_id, key_info)
+            reply_text = result.get("reply", "No analysis available.")
+            suggestions = result.get("suggestions", [])
+        except Exception as exc:
+            _log.warning("_cmd_analyze failed: %s", exc)
+            reply_text = "Couldn't generate analysis right now. Try asking: \"Analyze my day\""
+            suggestions = []
 
-            if not lines:
-                await _reply(bot, chat_id, "Your workspace is empty — nothing to summarise yet.")
-                return
-
-            context_text = "\n\n".join(lines)
-
-            api_key = resolve_ai_key(uid)
-            client = _openai.AsyncOpenAI(api_key=api_key)
-            resp = await client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant. Summarise the user's workspace activity concisely in 3-5 bullet points."},
-                    {"role": "user", "content": context_text},
-                ],
-                max_tokens=300,
-            )
-            summary = resp.choices[0].message.content.strip()
-
-        await _reply(bot, chat_id, f"*Your Workspace Summary*\n\n{summary}")
-
-    except Exception as exc:
-        _log.warning("assistant /summary failed: %s", exc)
-        await _reply(bot, chat_id, "Sorry, summary generation failed. Try again later.")
+    keyboard = _build_suggestion_keyboard(suggestions)
+    await _reply_with_keyboard(bot, chat_id, reply_text, keyboard)
 
 
 # ── Suggestion button callback ────────────────────────────────────────────────
 
 async def _handle_callback(callback_query, bot: Bot, flask_app, assistant_bot_id: int):
-    """Handle assistant suggestion button taps."""
     await callback_query.answer()
     data = callback_query.data or ""
     chat_id = callback_query.message.chat_id
@@ -335,14 +352,14 @@ async def _handle_callback(callback_query, bot: Bot, flask_app, assistant_bot_id
             await callback_query.edit_message_reply_markup(reply_markup=None)
         except Exception:
             pass
-        await bot.send_message(chat_id=chat_id, text="Go ahead — type your response:")
+        await bot.send_message(chat_id=chat_id, text="Go ahead — type your message:")
         return
 
     if not data.startswith("assist_pick:"):
         return
 
     value = data[len("assist_pick:"):]
-    if not value or not flask_app:
+    if not value:
         return
 
     try:
@@ -359,28 +376,39 @@ async def _handle_callback(callback_query, bot: Bot, flask_app, assistant_bot_id
             return
 
         uid = abot.user_id
-        db.session.add(BotDMMessage(user_id=uid, direction="in", content=value, intent="assistant_pick"))
-        db.session.commit()
+        try:
+            db.session.add(BotDMMessage(user_id=uid, direction="in", content=value, intent="assistant_pick"))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
 
         try:
             result = process_message(user_id=uid, message=value)
         except Exception as exc:
-            _log.warning("assistant_pick handler failed: %s", exc)
+            _log.warning("assist_pick process_message failed: %s", exc)
             return
 
         reply_text = result.get("reply") or "Got it!"
-        db.session.add(BotDMMessage(user_id=uid, direction="out", content=reply_text, intent=result.get("intent", "general")))
-        db.session.commit()
 
-        await bot.send_message(chat_id=chat_id, text=f"▶ {value}")
-        keyboard = _build_suggestion_keyboard(result.get("suggestions"))
-        await bot.send_message(chat_id=chat_id, text=reply_text, reply_markup=keyboard)
+        try:
+            db.session.add(BotDMMessage(user_id=uid, direction="out", content=reply_text, intent=result.get("intent", "general")))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+    await bot.send_message(chat_id=chat_id, text=f"▶ {value}")
+    keyboard = _build_suggestion_keyboard(result.get("suggestions"))
+    await _reply_with_keyboard(bot, chat_id, reply_text, keyboard)
 
 
 # ── Natural language DM ───────────────────────────────────────────────────────
 
 async def _cmd_natural_language(bot: Bot, chat_id: int, tg_user, text: str, flask_app, assistant_bot_id: int):
-    """Handle free-text DMs via the shared personal assistant NLP service."""
+    """
+    Free-text DMs — routed through the full hybrid AI personal assistant.
+    This is the same engine as the web sidebar, so all AI upgrades apply:
+    general chat, workspace intelligence, expand analysis, etc.
+    """
     with flask_app.app_context():
         from ..models import db, AssistantBot, BotDMMessage
         from ..assistant.personal_assistant import process_message
@@ -391,29 +419,27 @@ async def _cmd_natural_language(bot: Bot, chat_id: int, tg_user, text: str, flas
 
         uid = abot.user_id
 
-        inbound = BotDMMessage(user_id=uid, direction="in", content=text, intent="telegram_dm")
-        db.session.add(inbound)
-        db.session.commit()
+        try:
+            db.session.add(BotDMMessage(user_id=uid, direction="in", content=text, intent="telegram_dm"))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
 
         try:
             result = process_message(user_id=uid, message=text)
         except Exception as exc:
-            _log.warning("natural language handler failed: %s", exc)
-            await _reply(bot, chat_id, "Sorry, I couldn't process that. Try /help for available commands.")
+            _log.warning("natural_language process_message failed: %s", exc)
+            await _reply(bot, chat_id, "I had trouble processing that. Try rephrasing or type /help.")
             return
 
-        reply_text = result.get("reply") or "I'm not sure how to help with that."
+        reply_text = result.get("reply") or "I'm not sure how to help with that. Try asking differently."
 
-        outbound = BotDMMessage(user_id=uid, direction="out", content=reply_text, intent=result.get("intent", "general"))
-        db.session.add(outbound)
-        db.session.commit()
+        try:
+            db.session.add(BotDMMessage(user_id=uid, direction="out", content=reply_text, intent=result.get("intent", "general")))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
 
         keyboard = _build_suggestion_keyboard(result.get("suggestions"))
 
-    if keyboard:
-        try:
-            await bot.send_message(chat_id=chat_id, text=reply_text, reply_markup=keyboard)
-        except Exception:
-            await _reply(bot, chat_id, reply_text)
-    else:
-        await _reply(bot, chat_id, reply_text)
+    await _reply_with_keyboard(bot, chat_id, reply_text, keyboard)
