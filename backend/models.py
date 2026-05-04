@@ -2072,6 +2072,10 @@ class BotDMMessage(db.Model):
     direction = db.Column(db.String(3), nullable=False)  # 'in' (user→bot) | 'out' (bot→user)
     content = db.Column(db.Text, nullable=False)
     intent = db.Column(db.String(50), nullable=True)  # 'reminder', 'note', 'other', etc.
+    # Analytics / feedback (Phase 6.3)
+    session_id = db.Column(db.String(36), nullable=True, index=True)  # UUID groups a conversation session
+    feedback = db.Column(db.SmallInteger, nullable=True)               # 1=thumbs up, -1=thumbs down
+    intent_confidence = db.Column(db.Float, nullable=True)             # 0.0–1.0 AI confidence score
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     def to_dict(self):
@@ -2081,6 +2085,9 @@ class BotDMMessage(db.Model):
             "direction": self.direction,
             "content": self.content,
             "intent": self.intent,
+            "session_id": self.session_id,
+            "feedback": self.feedback,
+            "intent_confidence": self.intent_confidence,
             "created_at": self.created_at.isoformat(),
         }
 
@@ -2295,6 +2302,69 @@ class AssistantSpace(db.Model):
             "last_seen_at": self.last_seen_at.isoformat(),
         }
 
+
+# ── Group Daily Signal ────────────────────────────────────────────────────────
+
+class GroupDailySignal(db.Model):
+    """Pre-computed daily health signal for a Telegram group.
+
+    Populated by the GroupSignalExtractor pipeline (runs every 2 hours).
+    One record per group per calendar date (UTC). Upserted, not duplicated.
+    """
+    __tablename__ = "group_daily_signals"
+
+    id = db.Column(db.Integer, primary_key=True)
+    telegram_group_id = db.Column(
+        db.String(255),
+        db.ForeignKey("telegram_groups.telegram_group_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    date = db.Column(db.Date, nullable=False, index=True)
+
+    # Volume & engagement
+    message_count = db.Column(db.Integer, default=0, nullable=False)
+    active_members = db.Column(db.Integer, default=0, nullable=False)
+
+    # Health scores (0–10, higher = worse for spam/conflict)
+    spam_score = db.Column(db.Float, default=0.0, nullable=False)
+    conflict_score = db.Column(db.Float, default=0.0, nullable=False)
+
+    # Quality signals
+    questions_unanswered = db.Column(db.Integer, default=0, nullable=False)
+    top_topics = db.Column(db.JSON, default=list, nullable=False)   # list[str]
+
+    # Computed labels
+    sentiment = db.Column(db.String(20), default="neutral", nullable=False)   # positive|neutral|negative
+    health_status = db.Column(db.String(20), default="healthy", nullable=False)  # healthy|watch|critical
+
+    # AI-generated one-liner
+    ai_summary = db.Column(db.String(500), nullable=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint("telegram_group_id", "date", name="uq_group_daily_signal"),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "telegram_group_id": self.telegram_group_id,
+            "date": self.date.isoformat(),
+            "message_count": self.message_count,
+            "active_members": self.active_members,
+            "spam_score": self.spam_score,
+            "conflict_score": self.conflict_score,
+            "questions_unanswered": self.questions_unanswered,
+            "top_topics": self.top_topics or [],
+            "sentiment": self.sentiment,
+            "health_status": self.health_status,
+            "ai_summary": self.ai_summary,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+        }
 
 class Meeting(db.Model):
     """Meeting/appointment scheduled via natural language through the assistant."""

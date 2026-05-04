@@ -5,6 +5,7 @@ import {
 } from '@mui/material';
 import { Menu as MenuIcon, Home, Groups, AutoMode, Psychology, AccountCircle } from '@mui/icons-material';
 import Sidebar, { SIDEBAR_WIDTH } from '../components/Sidebar';
+import { DesktopAssistantSidebar, MobileAssistantFab } from '../components/AssistantSidebar';
 import TelegizerLogo from '../components/TelegizerLogo';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -51,7 +52,7 @@ export default function AppLayout({ children }) {
       )}
 
       {/* ── Main area ── */}
-      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
 
         {/* Mobile top bar */}
         {isMobile && (
@@ -79,6 +80,9 @@ export default function AppLayout({ children }) {
         <Box sx={{ flex: 1, overflow: 'auto', pb: isMobile ? '56px' : 0 }}>
           {children}
         </Box>
+
+        {/* Mobile: floating assistant button */}
+        {isMobile && <MobileAssistantFab />}
 
         {/* ── Mobile bottom navigation bar ── */}
         {isMobile && (
@@ -118,6 +122,10 @@ export default function AppLayout({ children }) {
           </Paper>
         )}
       </Box>
+
+      {/* ── Desktop: persistent right assistant sidebar ── */}
+      {!isMobile && <DesktopAssistantSidebar />}
+
     </Box>
   );
 }

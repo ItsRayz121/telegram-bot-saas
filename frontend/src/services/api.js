@@ -556,6 +556,7 @@ export const notes = {
 
 export const assistant = {
   hubSummary: () => api.get('/api/assistant/hub-summary'),
+  briefing: () => api.get('/api/assistant/briefing'),
   getDmMessages: (lastId = 0) => api.get(`/api/assistant/dm-messages?last_id=${lastId}`),
   sendDm: (text) => api.post('/api/assistant/send-dm', { text }),
   chat: (message, timezone) => api.post('/api/assistant/chat', { message, timezone }),

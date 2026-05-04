@@ -31,6 +31,81 @@ def _current_user() -> User:
     return User.query.get(int(get_jwt_identity()))
 
 
+@assistant_bp.route("/briefing", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=10)
+def briefing():
+    """
+    Return a pre-built daily briefing for the persistent assistant sidebar.
+    Cached per user per session — built from AssistantContextService.
+    """
+    user = _current_user()
+    try:
+        from ..assistant.context_service import AssistantContextService
+        ctx = AssistantContextService.build(user.id)
+    except Exception as exc:
+        _log.warning("briefing context build failed: %s", exc)
+        return jsonify({"briefing": None, "suggestions": []})
+
+    now = datetime.utcnow()
+    hour = now.hour
+    greeting = "Good morning" if hour < 12 else "Good afternoon" if hour < 18 else "Good evening"
+    name = user.full_name.split()[0] if user.full_name else "there"
+
+    lines = [f"{greeting}, {name}! Here's your day:"]
+    lines.append("")
+
+    if ctx.upcoming_meetings:
+        today_meetings = [
+            m for m in ctx.upcoming_meetings
+            if m["scheduled_at_human"].startswith(now.strftime("%a %d %b"))
+        ]
+        if today_meetings:
+            lines.append(f"📅 Meetings today: {', '.join(m['title'] for m in today_meetings[:3])}")
+        else:
+            next_m = ctx.upcoming_meetings[0]
+            lines.append(f"📅 Next meeting: {next_m['title']} — {next_m['scheduled_at_human']}")
+    else:
+        lines.append("📅 No meetings scheduled")
+
+    if ctx.upcoming_reminders:
+        lines.append(f"🔔 {len(ctx.upcoming_reminders)} reminder(s) coming up")
+
+    if ctx.pending_tasks:
+        lines.append(f"✅ {len(ctx.pending_tasks)} pending task(s)")
+
+    if ctx.group_alerts:
+        for alert in ctx.group_alerts[:2]:
+            lines.append(f"⚠️ {alert['group_title']}: {alert['health_status']}")
+    elif ctx.groups:
+        active = sum(1 for g in ctx.groups if g.get("is_active"))
+        lines.append(f"👥 {len(ctx.groups)} group(s) connected, {active} active")
+
+    if ctx.platform_today.get("messages_received", 0) > 0:
+        lines.append(
+            f"💬 {ctx.platform_today['messages_received']} messages today"
+            + (f", {ctx.platform_today['automations_fired']} automations fired"
+               if ctx.platform_today.get("automations_fired") else "")
+        )
+
+    lines.append("")
+    lines.append("How can I help you today?")
+
+    suggestions = [
+        {"label": "What's on my schedule?", "value": "What's on my schedule today?"},
+        {"label": "Any group issues?", "value": "Any issues in my groups?"},
+    ]
+    if not ctx.upcoming_meetings:
+        suggestions.append({"label": "Book a meeting", "value": "Book a meeting"})
+    if not ctx.upcoming_reminders:
+        suggestions.append({"label": "Set a reminder", "value": "Remind me"})
+
+    return jsonify({
+        "briefing": "\n".join(lines),
+        "suggestions": suggestions,
+    })
+
+
 @assistant_bp.route("/hub-summary", methods=["GET"])
 @jwt_required()
 @rate_limit(requests_per_minute=30)

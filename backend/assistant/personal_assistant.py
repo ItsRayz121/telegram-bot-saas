@@ -254,6 +254,18 @@ def _keyword_intent(message: str) -> str | None:
     if _SCHEDULE_PATTERNS.search(msg) or _MEETING_NOUN.search(msg):
         return "schedule_meeting"
 
+    # Platform action keywords
+    if re.search(r"\b(trigger|send|run)\b.*\bdigest\b", msg):
+        return "trigger_digest"
+    if re.search(r"\b(post|announce|broadcast|send)\b.*(announcement|message|update).*\bgroup\b", msg):
+        return "post_announcement"
+    if re.search(r"\b(group\s+stats?|group\s+health|how.*group.*doing|show.*groups?)\b", msg):
+        return "get_group_stats"
+    if re.search(r"\b(list|show)\b.*(auto.?repl|keyword|trigger)s?\b", msg):
+        return "list_auto_replies"
+    if re.search(r"\b(enable|disable|turn\s+on|turn\s+off)\b.*\b(automod|auto.?mod)\b", msg):
+        return "update_automod"
+
     return None
 
 
@@ -840,6 +852,12 @@ def _handle_schedule_meeting(user_id: int, parsed: dict, key_info: dict, user_tz
     _clear_state(user_id)
 
     try:
+        from ..assistant.context_service import AssistantContextService
+        AssistantContextService.invalidate(user_id)
+    except Exception:
+        pass
+
+    try:
         from ..integrations.dispatcher import fire_event
         fire_event(user_id, "meeting.created", meeting.to_dict())
     except Exception:
@@ -940,6 +958,11 @@ def _handle_create_reminder(user_id: int, parsed: dict, key_info: dict, user_tz:
     db.session.add(reminder)
     db.session.commit()
     _clear_state(user_id)
+    try:
+        from ..assistant.context_service import AssistantContextService
+        AssistantContextService.invalidate(user_id)
+    except Exception:
+        pass
 
     return {
         "reply": (
@@ -1054,6 +1077,11 @@ def _handle_save_note(user_id: int, content: str) -> dict:
     note = Note(user_id=user_id, content=content.strip()[:5000], source="bot", tags=[])
     db.session.add(note)
     db.session.commit()
+    try:
+        from ..assistant.context_service import AssistantContextService
+        AssistantContextService.invalidate(user_id)
+    except Exception:
+        pass
     return {
         "reply": f"📝 Note saved: \"{content.strip()[:80]}{'…' if len(content) > 80 else ''}\"",
         "intent": "save_note",
@@ -1333,7 +1361,7 @@ def _attach_resource(user_id: int, meeting_id: int, value: str, state=None) -> d
 # General AI response with workspace context
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _handle_general(user_id: int, message: str, key_info: dict, ai_reply: str | None) -> dict:
+def _handle_general(user_id: int, message: str, key_info: dict, ai_reply: str | None, ctx=None) -> dict:
     """Intelligent general response using workspace context."""
     if not key_info.get("api_key"):
         return {
@@ -1352,41 +1380,10 @@ def _handle_general(user_id: int, message: str, key_info: dict, ai_reply: str | 
             "data": None,
         }
 
-    # Build lightweight context snapshot
-    try:
-        from ..models import Meeting, WorkspaceReminder, Task, TelegramGroup
-        now = datetime.utcnow()
-        upcoming_meetings = Meeting.query.filter(
-            Meeting.owner_user_id == user_id,
-            Meeting.scheduled_at >= now,
-            Meeting.is_complete == False,
-        ).order_by(Meeting.scheduled_at.asc()).limit(3).all()
-
-        upcoming_reminders = WorkspaceReminder.query.filter(
-            WorkspaceReminder.owner_user_id == user_id,
-            WorkspaceReminder.remind_at >= now,
-            WorkspaceReminder.is_delivered == False,
-        ).order_by(WorkspaceReminder.remind_at.asc()).limit(3).all()
-
-        pending_tasks = Task.query.filter_by(user_id=user_id, status="todo").limit(5).all()
-        groups = TelegramGroup.query.filter_by(owner_user_id=user_id, is_disabled=False).limit(5).all()
-
-        context_parts = []
-        if upcoming_meetings:
-            m_lines = [f"  - {m.title} at {m.scheduled_at.strftime('%b %d %I:%M %p UTC')}" for m in upcoming_meetings]
-            context_parts.append("Upcoming meetings:\n" + "\n".join(m_lines))
-        if upcoming_reminders:
-            r_lines = [f"  - {r.reminder_text} at {r.remind_at.strftime('%b %d %I:%M %p UTC')}" for r in upcoming_reminders]
-            context_parts.append("Upcoming reminders:\n" + "\n".join(r_lines))
-        if pending_tasks:
-            t_lines = [f"  - {t.title}" for t in pending_tasks]
-            context_parts.append("Pending tasks:\n" + "\n".join(t_lines))
-        if groups:
-            g_lines = [f"  - {g.title or g.telegram_group_id}" for g in groups]
-            context_parts.append("Connected groups:\n" + "\n".join(g_lines))
-
-        context = "\n\n".join(context_parts) if context_parts else "No workspace data yet."
-    except Exception:
+    # Use pre-built context from process_message() — avoids redundant DB queries
+    if ctx:
+        context = ctx.to_prompt_text()
+    else:
         context = "Workspace data unavailable."
 
     if ai_reply:
@@ -1513,6 +1510,7 @@ def process_message(user_id: int, message: str, user_tz: str | None = None) -> d
     Returns {"reply": str, "intent": str, "data": dict|None, "suggestions": list}.
     """
     from ..assistant.ai_key_resolver import get_workspace_ai_key, QuotaExceededError
+    from ..assistant.context_service import AssistantContextService
     from ..models import User
 
     _log.info("process_message user_id=%s message=%r", user_id, message[:120])
@@ -1531,6 +1529,16 @@ def process_message(user_id: int, message: str, user_tz: str | None = None) -> d
         key_info = {}
 
     ai_available = bool(key_info.get("api_key"))
+
+    # ── Build workspace context (used by AI handlers and general reply) ────────
+    try:
+        ctx = AssistantContextService.build(user_id)
+        # Override user_tz from context if not provided by client
+        if not user_tz and ctx.timezone and ctx.timezone != "UTC":
+            user_tz = ctx.timezone
+    except Exception as exc:
+        _log.warning("AssistantContextService.build failed: %s", exc)
+        ctx = None
 
     # ── Conversation state resume ─────────────────────────────────────────────
     state = _get_state(user_id)
@@ -1575,9 +1583,24 @@ def process_message(user_id: int, message: str, user_tz: str | None = None) -> d
         _log.info("High-confidence keyword intent=%s — skipping AI for routing", intent)
 
     # ── Step 2: AI parsing for everything else ────────────────────────────────
+    # Enrich the user message with recent conversation history so AI routing
+    # can understand references like "it", "that meeting", "the same group", etc.
+    enriched_message = message
+    if ctx and ctx.recent_conversation:
+        history_lines = []
+        for turn in ctx.recent_conversation[-4:]:  # last 4 turns (2 exchanges)
+            role = "User" if turn["direction"] == "in" else "Assistant"
+            history_lines.append(f"{role}: {turn['content'][:100]}")
+        if history_lines:
+            enriched_message = (
+                "[Recent conversation for context]\n"
+                + "\n".join(history_lines)
+                + f"\n[Current message]\n{message}"
+            )
+
     if intent is None and ai_available:
         try:
-            raw = _call_ai(key_info, _INTENT_SYSTEM, message)
+            raw = _call_ai(key_info, _INTENT_SYSTEM, enriched_message)
             _log.debug("AI raw response: %s", raw[:300])
             parsed = _parse_json(raw)
             intent = parsed.get("intent", "general")
@@ -1665,9 +1688,25 @@ def process_message(user_id: int, message: str, user_tz: str | None = None) -> d
         if intent == "add_resource":
             return _handle_add_resource(user_id, parsed or {})
 
+        # ── Platform action intents ───────────────────────────────────────────
+        if intent in ("trigger_digest", "post_announcement", "get_group_stats",
+                      "list_auto_replies", "update_automod"):
+            from ..assistant.actions import run_action
+            action_args = parsed or {}
+            # For post_announcement, extract text from message if AI didn't parse it
+            if intent == "post_announcement" and not action_args.get("text"):
+                # Strip trigger words, use rest as text
+                text = re.sub(r"^(post|announce|broadcast|send)\s+(an?\s+)?(announcement|message|update)\s*(to\s+\w+\s+group\s*:?)?\s*", "", message, flags=re.I).strip()
+                action_args["text"] = text
+            if intent == "update_automod":
+                action_args["enable"] = not re.search(r"\b(disable|turn\s+off)\b", message, re.I)
+            result = run_action(intent, user, action_args)
+            result.setdefault("suggestions", [])
+            return result
+
         # General — context-aware AI response
         ai_reply = (parsed or {}).get("reply") if ai_available else None
-        return _handle_general(user_id, message, key_info, ai_reply)
+        return _handle_general(user_id, message, key_info, ai_reply, ctx)
 
     except Exception as exc:
         _log.error("intent handler %s failed: %s", intent, exc, exc_info=True)
