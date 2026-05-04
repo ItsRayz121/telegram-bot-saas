@@ -928,6 +928,9 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Don't route bot-token-shaped messages through the assistant
         if not context.user_data.get("awaiting_bot_token"):
+            _reply_text = None
+            _keyboard = None
+            _unlinked = False
             try:
                 with flask_app.app_context():
                     from .models import User as _User, BotDMMessage as _BotDM, db as _db
@@ -935,37 +938,56 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                     _u = _User.query.filter_by(telegram_user_id=str(user.id)).first()
                     if _u:
-                        # Log inbound
-                        _db.session.add(_BotDM(user_id=_u.id, direction="in", content=_safe_raw[:4000], intent="assistant"))
-                        _db.session.commit()
+                        try:
+                            _db.session.add(_BotDM(user_id=_u.id, direction="in", content=_safe_raw[:4000], intent="assistant"))
+                            _db.session.commit()
+                        except Exception:
+                            _db.session.rollback()
 
-                        # Run assistant
                         _result = _process_message(user_id=_u.id, message=_safe_raw)
                         _reply_text = _result.get("reply") or "I'm not sure how to help with that."
 
-                        # Log outbound
-                        _db.session.add(_BotDM(user_id=_u.id, direction="out", content=_reply_text[:4000], intent=_result.get("intent", "general")))
-                        _db.session.commit()
+                        try:
+                            _db.session.add(_BotDM(user_id=_u.id, direction="out", content=_reply_text[:4000], intent=_result.get("intent", "general")))
+                            _db.session.commit()
+                        except Exception:
+                            _db.session.rollback()
 
-                        # Build inline keyboard from suggestions if present
                         _keyboard = _build_suggestion_keyboard(_result.get("suggestions"))
-                        await message.reply_text(
-                            _reply_text,
-                            reply_markup=_keyboard,
-                        )
                     else:
-                        # Unlinked user — prompt to connect account
-                        await message.reply_text(
-                            "👋 Hi! To use the Telegizer assistant, connect your Telegram account at telegizer.xyz/settings.\n\n"
-                            "Once linked, I can schedule meetings, save notes, set reminders, and more!",
-                            reply_markup=InlineKeyboardMarkup([[
-                                InlineKeyboardButton("🔗 Connect Account", url=f"{frontend}/settings"),
-                            ]]),
-                        )
+                        _unlinked = True
             except Exception as _exc:
-                _log.warning("Assistant DM routing failed: %s", _exc)
+                _log.warning("Assistant DM process_message failed: %s", _exc, exc_info=True)
+
+            # Send reply OUTSIDE the app_context block to isolate Telegram API errors
+            if _unlinked:
                 try:
-                    await message.reply_text("Sorry, I had trouble with that. Please try again.")
+                    await message.reply_text(
+                        "👋 Hi! To use the Telegizer assistant, connect your Telegram account at telegizer.xyz/settings.\n\n"
+                        "Once linked, I can schedule meetings, save notes, set reminders, and more!",
+                        reply_markup=InlineKeyboardMarkup([[
+                            InlineKeyboardButton("🔗 Connect Account", url=f"{frontend}/settings"),
+                        ]]),
+                    )
+                except Exception as _exc:
+                    _log.warning("Unlinked user reply failed: %s", _exc)
+            elif _reply_text:
+                # Convert AI markdown (**bold** etc.) to Telegram HTML
+                _html = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', _reply_text, flags=re.DOTALL)
+                _html = re.sub(r'\*(?!\*)(.+?)(?<!\*)\*', r'<i>\1</i>', _html, flags=re.DOTALL)
+                _html = re.sub(r'^#{1,3}\s+(.+)$', r'<b>\1</b>', _html, flags=re.MULTILINE)
+                try:
+                    await message.reply_text(_html, parse_mode=ParseMode.HTML, reply_markup=_keyboard)
+                except Exception:
+                    # Strip all formatting and send plain text as last resort
+                    try:
+                        _plain = re.sub(r'<[^>]+>', '', _html)
+                        await message.reply_text(_plain, reply_markup=_keyboard)
+                    except Exception as _exc:
+                        _log.warning("Assistant DM send failed: %s", _exc)
+            else:
+                try:
+                    await message.reply_text("I had trouble with that. Please try again in a moment.")
                 except Exception:
                     pass
             return
