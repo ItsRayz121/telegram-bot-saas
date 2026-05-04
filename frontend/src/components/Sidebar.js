@@ -10,6 +10,7 @@ import {
   Explore, BarChart, SmartToy, CreditCard, Settings, Add, Handshake,
   AccountCircle, Logout, AdminPanelSettings, ExpandMore, ExpandLess,
   Psychology, Reply, EditNote, Summarize, Tune, CheckBox, LibraryBooks,
+  Webhook,
 } from '@mui/icons-material';
 import TelegizerLogo from './TelegizerLogo';
 import { telegramGroups as tgApi, auth as authApi, channels as chApi } from '../services/api';
@@ -502,6 +503,7 @@ export default function Sidebar({ onClose }) {
           <NavItem label="Forwarding"   path="/workspace/forwarding"   icon={Send}     active={isActive('/workspace/forwarding')}   onClick={() => nav('/workspace/forwarding')} indent />
           <NavItem label="Workflows"    path="/workspace/automations"  icon={AutoMode} active={isActive('/workspace/automations')}  onClick={() => nav('/workspace/automations')} indent />
           <NavItem label="Flow Builder" path="/workflow-builder"       icon={AutoMode} active={isActive('/workflow-builder')}       onClick={() => nav('/workflow-builder')} indent />
+          <NavItem label="Integrations" path="/integrations"           icon={Webhook}  active={isActive('/integrations')}           onClick={() => nav('/integrations')} indent />
         </Collapse>
 
         {/* ── ANALYTICS ── */}

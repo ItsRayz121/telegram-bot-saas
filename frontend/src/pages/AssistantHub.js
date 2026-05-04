@@ -200,20 +200,42 @@ function OnboardingCard({ onboarding }) {
 
 // ── Data Cards ────────────────────────────────────────────────────────────────
 
-// Phase 3A: build a Google Calendar "Add Event" URL from a reminder
-function calendarUrl(reminder) {
-  const dt = new Date(reminder.remind_at);
+function _gcalUrl({ title, startIso, durationMins = 30, description = '' }) {
+  const dt = new Date(startIso);
   const pad = n => String(n).padStart(2, '0');
   const fmt = d =>
     `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}` +
     `T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}00Z`;
-  const end = new Date(dt.getTime() + 30 * 60000);
-  const params = new URLSearchParams({
-    action: 'TEMPLATE',
-    text: reminder.reminder_text,
-    dates: `${fmt(dt)}/${fmt(end)}`,
-  });
+  const end = new Date(dt.getTime() + durationMins * 60000);
+  const params = new URLSearchParams({ action: 'TEMPLATE', text: title, dates: `${fmt(dt)}/${fmt(end)}`, details: description });
   return `https://calendar.google.com/calendar/render?${params}`;
+}
+
+function GCalButton({ title, startIso, durationMins, description, compact = false }) {
+  const url = _gcalUrl({ title, startIso, durationMins, description });
+  if (compact) {
+    return (
+      <Tooltip title="Add to Google Calendar">
+        <IconButton size="small" component="a" href={url} target="_blank" rel="noopener noreferrer">
+          <CalendarMonth sx={{ fontSize: 15, color: '#4285f4' }} />
+        </IconButton>
+      </Tooltip>
+    );
+  }
+  return (
+    <Button
+      size="small"
+      variant="outlined"
+      component="a"
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      startIcon={<CalendarMonth sx={{ fontSize: 14, color: '#4285f4' }} />}
+      sx={{ fontSize: '0.72rem', borderColor: '#4285f4', color: '#4285f4', '&:hover': { bgcolor: 'rgba(66,133,244,0.06)', borderColor: '#4285f4' }, py: 0.25, px: 1 }}
+    >
+      Add to Calendar
+    </Button>
+  );
 }
 
 function RemindersCard({ reminders }) {
@@ -236,17 +258,15 @@ function RemindersCard({ reminders }) {
         ) : (
           reminders.map(r => (
             <Box key={r.id} sx={{ mb: 1, pb: 1, borderBottom: '1px solid', borderColor: 'divider', '&:last-child': { mb: 0, pb: 0, border: 'none' } }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
                 <Typography fontSize="0.84rem" noWrap sx={{ flex: 1 }}>{r.reminder_text}</Typography>
-                <Tooltip title="Add to Google Calendar">
-                  <IconButton size="small" component="a" href={calendarUrl(r)} target="_blank" rel="noopener noreferrer">
-                    <CalendarMonth sx={{ fontSize: 14, color: 'text.disabled' }} />
-                  </IconButton>
-                </Tooltip>
+                <GCalButton title={r.reminder_text} startIso={r.remind_at} compact />
               </Box>
-              <Typography fontSize="0.72rem" color={r.is_delivered ? 'success.main' : 'text.disabled'}>
-                {upcomingTime(r.remind_at)}{r.is_delivered ? ' · Done' : ''}
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography fontSize="0.72rem" color={r.is_delivered ? 'success.main' : 'text.disabled'}>
+                  {upcomingTime(r.remind_at)}{r.is_delivered ? ' · Done' : ''}
+                </Typography>
+              </Box>
             </Box>
           ))
         )}
@@ -631,10 +651,19 @@ function MeetingsCard({ newMeeting }) {
                       <Typography fontSize="0.88rem" fontWeight={600}>{m.title}</Typography>
                       <Chip label={m.priority} size="small" color={PRIORITY_COLOR[m.priority] || 'default'} sx={{ height: 16, fontSize: '0.6rem' }} />
                     </Box>
-                    <Typography fontSize="0.78rem" color="text.secondary">
-                      {new Date(m.scheduled_at).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                      {m.timezone && m.timezone !== 'UTC' ? ` (${m.timezone})` : ' UTC'}
-                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mt: 0.25 }}>
+                      <Typography fontSize="0.78rem" color="text.secondary">
+                        {new Date(m.scheduled_at).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        {m.timezone && m.timezone !== 'UTC' ? ` (${m.timezone})` : ' UTC'}
+                      </Typography>
+                      <GCalButton
+                        title={m.title}
+                        startIso={m.scheduled_at}
+                        durationMins={60}
+                        description={m.participants ? `With: ${m.participants.join(', ')}` : ''}
+                        compact={false}
+                      />
+                    </Box>
                     {m.participants && m.participants.length > 0 && (
                       <Typography fontSize="0.75rem" color="text.secondary">
                         With: {m.participants.join(', ')}

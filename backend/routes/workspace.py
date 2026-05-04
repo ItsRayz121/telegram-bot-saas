@@ -243,6 +243,13 @@ def create_reminder():
     )
     db.session.add(reminder)
     db.session.commit()
+
+    try:
+        from ..integrations.dispatcher import fire_event
+        fire_event(user.id, "reminder.created", reminder.to_dict())
+    except Exception:
+        pass
+
     return jsonify({"reminder": reminder.to_dict()}), 201
 
 

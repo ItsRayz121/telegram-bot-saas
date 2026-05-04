@@ -229,6 +229,12 @@ def _handle_schedule_meeting(user_id: int, parsed: dict, key_info: dict, user_tz
     db.session.commit()
     _clear_state(user_id)
 
+    try:
+        from ..integrations.dispatcher import fire_event
+        fire_event(user_id, "meeting.created", meeting.to_dict())
+    except Exception:
+        pass
+
     participant_str = ""
     if data["participants"]:
         participant_str = f" with {', '.join(data['participants'])}"
@@ -294,6 +300,12 @@ def _attach_resource(user_id: int, meeting_id: int, value: str, state=None) -> d
         from ..models import AssistantConversationState
         AssistantConversationState.query.filter_by(user_id=user_id).delete()
         db.session.commit()
+
+    try:
+        from ..integrations.dispatcher import fire_event
+        fire_event(user_id, "resource.attached", {"meeting": meeting.to_dict(), "resource": {"type": rtype, "value": value.strip()}})
+    except Exception:
+        pass
 
     return {
         "reply": f"Resource added to \"{meeting.title}\".",
@@ -404,6 +416,16 @@ def _handle_group_query(user_id: int, key_info: dict) -> dict:
     except Exception as exc:
         _log.warning("group_query AI call failed: %s", exc)
         return {"reply": "I couldn't generate a group summary right now. Please try again.", "intent": "group_query", "data": None}
+
+    try:
+        from ..integrations.dispatcher import fire_event
+        fire_event(user_id, "group.issue.detected", {
+            "groups_checked": len(groups),
+            "messages_scanned": len(msgs),
+            "summary_preview": summary[:500],
+        })
+    except Exception:
+        pass
 
     return {
         "reply": f"Group summary (last 24h):\n\n{summary}",

@@ -572,6 +572,14 @@ export const meetings = {
   addResource: (id, data) => api.post(`/api/meetings/${id}/resources`, data),
 };
 
+export const integrationWebhooks = {
+  list: () => api.get('/api/integrations/webhooks'),
+  create: (data) => api.post('/api/integrations/webhooks', data),
+  update: (id, data) => api.put(`/api/integrations/webhooks/${id}`, data),
+  remove: (id) => api.delete(`/api/integrations/webhooks/${id}`),
+  test: (id) => api.post(`/api/integrations/webhooks/${id}/test`),
+};
+
 export const assistantBot = {
   get: () => api.get('/api/assistant-bot'),
   create: (data) => api.post('/api/assistant-bot', data),

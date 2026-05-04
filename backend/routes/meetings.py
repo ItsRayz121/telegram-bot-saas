@@ -79,6 +79,13 @@ def create_meeting():
     )
     db.session.add(meeting)
     db.session.commit()
+
+    try:
+        from ..integrations.dispatcher import fire_event
+        fire_event(user.id, "meeting.created", meeting.to_dict())
+    except Exception:
+        pass
+
     return jsonify({"meeting": meeting.to_dict()}), 201
 
 
@@ -157,4 +164,11 @@ def add_resource(meeting_id: int):
     resources.append({"type": rtype, "value": value, "label": label})
     meeting.resources = resources
     db.session.commit()
+
+    try:
+        from ..integrations.dispatcher import fire_event
+        fire_event(user.id, "resource.attached", {"meeting": meeting.to_dict(), "resource": {"type": rtype, "value": value, "label": label}})
+    except Exception:
+        pass
+
     return jsonify({"meeting": meeting.to_dict()})

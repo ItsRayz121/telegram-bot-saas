@@ -2345,3 +2345,45 @@ class AssistantConversationState(db.Model):
     awaiting_field = db.Column(db.String(50), nullable=True)    # which field we're asking about
     expires_at = db.Column(db.DateTime, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class IntegrationWebhook(db.Model):
+    """Outbound webhook — Telegizer POSTs event payloads to user-configured URLs.
+
+    Supported events: meeting.created, reminder.created, resource.attached,
+                      group.issue.detected
+    """
+    __tablename__ = "integration_webhooks"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = db.Column(db.String(200), nullable=False)
+    url = db.Column(db.String(2048), nullable=False)
+    secret = db.Column(db.String(255), nullable=True)   # stored plain; used for HMAC signing
+    # JSON list of subscribed event types, e.g. ["meeting.created", "reminder.created"]
+    events = db.Column(db.JSON, nullable=False, default=list)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    failure_count = db.Column(db.Integer, default=0, nullable=False)
+    last_triggered_at = db.Column(db.DateTime, nullable=True)
+    last_status = db.Column(db.String(20), nullable=True)   # "ok" | "error"
+    last_error = db.Column(db.String(500), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    def to_dict(self, include_secret=False):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "name": self.name,
+            "url": self.url,
+            "secret_set": bool(self.secret),
+            **({"secret": self.secret} if include_secret else {}),
+            "events": self.events or [],
+            "is_active": self.is_active,
+            "failure_count": self.failure_count,
+            "last_triggered_at": self.last_triggered_at.isoformat() if self.last_triggered_at else None,
+            "last_status": self.last_status,
+            "last_error": self.last_error,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+        }
