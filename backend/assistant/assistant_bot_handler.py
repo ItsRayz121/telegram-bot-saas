@@ -108,7 +108,9 @@ async def handle_update(update: Update, bot: Bot, flask_app, assistant_bot_id: i
         await _cmd_task(bot, chat_id, tg_user, text, flask_app, assistant_bot_id)
     elif cmd == "/summary":
         await _cmd_summary(bot, chat_id, tg_user, text, flask_app, assistant_bot_id)
-    # Non-command messages silently ignored — assistant bot only responds to explicit commands
+    elif cmd is None and message.chat.type == "private":
+        # Natural language DM — route through personal assistant
+        await _cmd_natural_language(bot, chat_id, tg_user, text, flask_app, assistant_bot_id)
 
 
 # ── /start ────────────────────────────────────────────────────────────────────
@@ -292,3 +294,39 @@ async def _cmd_summary(bot: Bot, chat_id: int, tg_user, text: str, flask_app, as
     except Exception as exc:
         _log.warning("assistant /summary failed: %s", exc)
         await _reply(bot, chat_id, "Sorry, summary generation failed. Try again later.")
+
+
+# ── Natural language DM ───────────────────────────────────────────────────────
+
+async def _cmd_natural_language(bot: Bot, chat_id: int, tg_user, text: str, flask_app, assistant_bot_id: int):
+    """Handle free-text DMs via the shared personal assistant NLP service."""
+    with flask_app.app_context():
+        from ..models import db, AssistantBot, BotDMMessage
+        from ..assistant.personal_assistant import process_message
+
+        abot = AssistantBot.query.get(assistant_bot_id)
+        if not abot:
+            return
+
+        uid = abot.user_id
+
+        # Store inbound message
+        inbound = BotDMMessage(user_id=uid, direction="in", content=text, intent="telegram_dm")
+        db.session.add(inbound)
+        db.session.commit()
+
+        try:
+            result = process_message(user_id=uid, message=text)
+        except Exception as exc:
+            _log.warning("natural language handler failed: %s", exc)
+            await _reply(bot, chat_id, "Sorry, I couldn't process that. Try /help for available commands.")
+            return
+
+        reply_text = result.get("reply") or "I'm not sure how to help with that."
+
+        # Store outbound message
+        outbound = BotDMMessage(user_id=uid, direction="out", content=reply_text, intent=result.get("intent", "general"))
+        db.session.add(outbound)
+        db.session.commit()
+
+    await _reply(bot, chat_id, reply_text)

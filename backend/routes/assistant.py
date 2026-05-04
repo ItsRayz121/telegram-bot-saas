@@ -254,6 +254,43 @@ def ask_groups():
     })
 
 
+@assistant_bp.route("/chat", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def chat():
+    """
+    Unified assistant chat endpoint for the web LiveChat.
+    Processes natural language messages and returns a reply + optional structured data.
+    """
+    user = _current_user()
+    body = request.get_json(silent=True) or {}
+    message = (body.get("message") or "").strip()[:1000]
+    if not message:
+        return jsonify({"error": "message required"}), 400
+
+    user_tz = body.get("timezone") or None
+
+    # Store inbound message
+    inbound = BotDMMessage(user_id=user.id, direction="in", content=message, intent="web_chat")
+    db.session.add(inbound)
+    db.session.commit()
+
+    from ..assistant.personal_assistant import process_message
+    result = process_message(user_id=user.id, message=message, user_tz=user_tz)
+
+    # Store assistant reply
+    reply_msg = BotDMMessage(user_id=user.id, direction="out", content=result["reply"], intent=result["intent"])
+    db.session.add(reply_msg)
+    db.session.commit()
+
+    return jsonify({
+        "reply": result["reply"],
+        "intent": result["intent"],
+        "data": result.get("data"),
+        "message_id": reply_msg.id,
+    })
+
+
 @assistant_bp.route("/autoreply-logs", methods=["GET"])
 @jwt_required()
 @rate_limit(requests_per_minute=30)

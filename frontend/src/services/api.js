@@ -558,8 +558,18 @@ export const assistant = {
   hubSummary: () => api.get('/api/assistant/hub-summary'),
   getDmMessages: (lastId = 0) => api.get(`/api/assistant/dm-messages?last_id=${lastId}`),
   sendDm: (text) => api.post('/api/assistant/send-dm', { text }),
+  chat: (message, timezone) => api.post('/api/assistant/chat', { message, timezone }),
   ask: (question) => api.post('/api/assistant/ask', { question }),
   getAutoReplyLogs: () => api.get('/api/assistant/autoreply-logs'),
+};
+
+export const meetings = {
+  list: (params) => api.get('/api/meetings', { params }),
+  create: (data) => api.post('/api/meetings', data),
+  update: (id, data) => api.put(`/api/meetings/${id}`, data),
+  remove: (id) => api.delete(`/api/meetings/${id}`),
+  complete: (id) => api.post(`/api/meetings/${id}/complete`),
+  addResource: (id, data) => api.post(`/api/meetings/${id}/resources`, data),
 };
 
 export const assistantBot = {

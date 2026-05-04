@@ -2294,3 +2294,54 @@ class AssistantSpace(db.Model):
             "first_seen_at": self.first_seen_at.isoformat(),
             "last_seen_at": self.last_seen_at.isoformat(),
         }
+
+
+class Meeting(db.Model):
+    """Meeting/appointment scheduled via natural language through the assistant."""
+    __tablename__ = "meetings"
+
+    id = db.Column(db.Integer, primary_key=True)
+    owner_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    title = db.Column(db.String(300), nullable=False)
+    scheduled_at = db.Column(db.DateTime, nullable=False, index=True)
+    timezone = db.Column(db.String(100), nullable=True, default="UTC")
+    participants = db.Column(db.JSON, nullable=True)       # list of name strings
+    priority = db.Column(db.String(10), default="medium", nullable=False)  # low|medium|high
+    resources = db.Column(db.JSON, nullable=True)          # [{type, value, label}]
+    remind_before_minutes = db.Column(db.Integer, default=15, nullable=False)
+    notes = db.Column(db.Text, nullable=True)
+    is_complete = db.Column(db.Boolean, default=False, nullable=False)
+    reminder_sent = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "owner_user_id": self.owner_user_id,
+            "title": self.title,
+            "scheduled_at": self.scheduled_at.isoformat(),
+            "timezone": self.timezone,
+            "participants": self.participants or [],
+            "priority": self.priority,
+            "resources": self.resources or [],
+            "remind_before_minutes": self.remind_before_minutes,
+            "notes": self.notes,
+            "is_complete": self.is_complete,
+            "reminder_sent": self.reminder_sent,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+        }
+
+
+class AssistantConversationState(db.Model):
+    """Tracks multi-turn assistant conversations (pending intent + partially collected data)."""
+    __tablename__ = "assistant_conversation_states"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, unique=True, index=True)
+    pending_intent = db.Column(db.String(50), nullable=True)   # schedule_meeting | add_resource
+    collected_data = db.Column(db.JSON, nullable=True)          # partial fields gathered so far
+    awaiting_field = db.Column(db.String(50), nullable=True)    # which field we're asking about
+    expires_at = db.Column(db.DateTime, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

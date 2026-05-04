@@ -68,6 +68,7 @@ from .routes.tasks import tasks_bp
 from .routes.knowledge_workspace import knowledge_ws_bp
 from .routes.assistant_bots import assistant_bots_bp
 from .routes.telegram_updates import telegram_updates_bp
+from .routes.meetings import meetings_bp
 from .bot_manager import BotManager
 from .official_bot import start_official_bot
 
@@ -196,6 +197,7 @@ def create_app():
     app.register_blueprint(knowledge_ws_bp)
     app.register_blueprint(assistant_bots_bp)
     app.register_blueprint(telegram_updates_bp)
+    app.register_blueprint(meetings_bp)
 
     app.bot_manager = bot_manager
 
@@ -1729,6 +1731,84 @@ def _deliver_reminders(app):
             pass
 
 
+def _deliver_meeting_reminders(app):
+    """Send Telegram DMs (or email fallback) for meetings whose reminder window is due."""
+    import asyncio as _asyncio
+    from .models import Meeting, User, TelegramBotStarted
+    from .official_bot import _runner
+
+    bot = None
+    loop = None
+    if _runner and _runner.application:
+        bot = _runner.application.bot
+        loop = _runner.loop
+    if not bot or not loop or not loop.is_running():
+        return
+
+    now = datetime.utcnow()
+    with app.app_context():
+        from .models import db
+        meetings = Meeting.query.filter(
+            Meeting.is_complete == False,
+            Meeting.reminder_sent == False,
+            Meeting.scheduled_at > now,
+        ).all()
+
+        for meeting in meetings:
+            remind_at = meeting.scheduled_at - timedelta(minutes=meeting.remind_before_minutes)
+            if now < remind_at:
+                continue
+
+            user = User.query.get(meeting.owner_user_id)
+            if not user:
+                meeting.reminder_sent = True
+                continue
+
+            participants = ""
+            if meeting.participants:
+                participants = f"\n👥 With: {', '.join(meeting.participants)}"
+
+            msg_text = (
+                f"📅 *Meeting in {meeting.remind_before_minutes} minutes*\n\n"
+                f"*{meeting.title}*\n"
+                f"🕒 {meeting.scheduled_at.strftime('%b %d, %H:%M UTC')}"
+                f"{participants}"
+            )
+
+            delivered = False
+            if user.telegram_user_id and TelegramBotStarted.has_started(user.telegram_user_id):
+                try:
+                    fut = _asyncio.run_coroutine_threadsafe(
+                        bot.send_message(chat_id=int(user.telegram_user_id), text=msg_text, parse_mode="Markdown"),
+                        loop,
+                    )
+                    fut.result(timeout=10)
+                    delivered = True
+                except Exception as exc:
+                    _scheduler_log.warning("Meeting reminder TG delivery failed user=%s: %s", user.id, exc)
+
+            if not delivered:
+                try:
+                    from .notifications import send_email
+                    frontend_url = app.config["FRONTEND_URL"]
+                    html = (
+                        f"<h2>📅 Meeting in {meeting.remind_before_minutes} minutes</h2>"
+                        f"<p><strong>{meeting.title}</strong><br>"
+                        f"{meeting.scheduled_at.strftime('%b %d, %H:%M UTC')}{participants.replace(chr(10), '<br>')}</p>"
+                        f"<p><a href='{frontend_url}/assistant'>View in dashboard</a></p>"
+                    )
+                    send_email(user.email, f"Meeting Reminder: {meeting.title}", html)
+                except Exception as exc:
+                    _scheduler_log.warning("Meeting reminder email fallback failed user=%s: %s", user.id, exc)
+
+            meeting.reminder_sent = True
+
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+
 def _run_scheduled_automations(app):
     """Fire 'scheduled' automation workflows whose cron expression is due.
 
@@ -1926,6 +2006,8 @@ def _scheduler_loop(app):
                 _run_task_with_timeout(_run_official_group_digests, app, timeout=90, label="_run_official_group_digests")
             # Workspace reminder delivery: every 60s (already in loop)
             _run_task_with_timeout(_deliver_reminders, app, timeout=30, label="_deliver_reminders")
+            # Meeting reminder delivery: every 60s
+            _run_task_with_timeout(_deliver_meeting_reminders, app, timeout=30, label="_deliver_meeting_reminders")
             # Scheduled automations: check every 60s
             _run_task_with_timeout(_run_scheduled_automations, app, timeout=30, label="_run_scheduled_automations")
             # Message buffer cleanup: every 6 hours

@@ -1,19 +1,19 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, Chip, CircularProgress,
-  Alert, Grid, LinearProgress, Divider, List, ListItem, ListItemText,
-  IconButton, Tooltip, Checkbox, Collapse, TextField, Paper,
+  Alert, Grid, LinearProgress,
+  IconButton, Tooltip, Collapse, TextField, Paper,
 } from '@mui/material';
 import {
   Psychology, AccessTime, EditNote, Summarize, AutoMode, Reply,
   OpenInNew, ContentCopy, CheckCircle, RadioButtonUnchecked, Close,
   ArrowForward, Chat, Send, ExpandMore, ExpandLess, QuestionAnswer,
   CalendarMonth, SmartToy, Lock, Groups, Person,
-  NotificationsActive, MenuBook, FlashOn, BarChart,
+  NotificationsActive, MenuBook, BarChart,
 } from '@mui/icons-material';
 import { useMediaQuery, useTheme } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import { assistant, assistantBot as assistantBotApi } from '../services/api';
+import { assistant, assistantBot as assistantBotApi, meetings as meetingsApi } from '../services/api';
 
 const DISMISS_KEY = 'hub_connect_banner_dismissed';
 
@@ -429,142 +429,251 @@ function AskCard({ hasGroups }) {
   );
 }
 
-// ── Live Chat ─────────────────────────────────────────────────────────────────
+// ── Personal Assistant Chat ───────────────────────────────────────────────────
 
-function LiveChatCard({ botConnected }) {
-  const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState([]);
+const SUGGESTIONS = [
+  'Schedule meeting tomorrow at 3 PM',
+  'Any meetings coming up?',
+  'Show my reminders',
+  'Any issues in my group today?',
+];
+
+function PersonalAssistantChat({ onMeetingCreated }) {
+  const [open, setOpen] = useState(true);
+  const [messages, setMessages] = useState([
+    { id: 'welcome', direction: 'out', content: "Hi! I'm your personal assistant. I can schedule meetings, set reminders, show upcoming events, and summarise group issues. What can I help you with?", created_at: new Date().toISOString() },
+  ]);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
-  const lastIdRef = useRef(0);
   const endRef = useRef(null);
-  const pollRef = useRef(null);
-
-  const fetchMessages = useCallback(async () => {
-    try {
-      const { data } = await assistant.getDmMessages(lastIdRef.current);
-      if (data.messages && data.messages.length > 0) {
-        lastIdRef.current = data.messages[data.messages.length - 1].id;
-        setMessages(prev => [...prev, ...data.messages]);
-      }
-    } catch {
-      // silent — keep polling
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!open) {
-      clearInterval(pollRef.current);
-      return;
-    }
-    fetchMessages();
-    pollRef.current = setInterval(fetchMessages, 3000);
-    return () => clearInterval(pollRef.current);
-  }, [open, fetchMessages]);
 
   useEffect(() => {
     if (open) endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, open]);
 
-  const send = async () => {
-    if (!draft.trim()) return;
+  const send = useCallback(async (text) => {
+    const msg = (text || draft).trim();
+    if (!msg) return;
+    const userMsg = { id: Date.now(), direction: 'in', content: msg, created_at: new Date().toISOString() };
+    setMessages(prev => [...prev, userMsg]);
+    setDraft('');
     setSending(true);
     setError('');
     try {
-      const { data } = await assistant.sendDm(draft.trim());
-      setMessages(prev => [...prev, data.message]);
-      lastIdRef.current = data.message.id;
-      setDraft('');
-    } catch {
-      setError('Failed to send.');
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const { data } = await assistant.chat(msg, tz);
+      const botMsg = { id: data.message_id || Date.now() + 1, direction: 'out', content: data.reply, created_at: new Date().toISOString(), intent: data.intent };
+      setMessages(prev => [...prev, botMsg]);
+      if (data.intent === 'schedule_meeting' && data.data && data.data.id && onMeetingCreated) {
+        onMeetingCreated(data.data);
+      }
+    } catch (e) {
+      setError(e.response?.data?.error || 'Failed to get a response. Please try again.');
     } finally {
       setSending(false);
     }
-  };
+  }, [draft, onMeetingCreated]);
 
   const handleKey = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
 
   return (
     <Card variant="outlined" sx={{ mt: 3 }}>
       <CardContent sx={{ pb: open ? 1 : undefined }}>
-        <Box
-          sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
-          onClick={() => setOpen(v => !v)}
-        >
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', mb: open ? 1.5 : 0 }}
+          onClick={() => setOpen(v => !v)}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Chat fontSize="small" color="primary" />
             <Typography fontWeight={600} fontSize="0.95rem">Live Chat with Bot</Typography>
-            {!botConnected && (
-              <Chip label="Connect Telegram first" size="small" color="warning" sx={{ fontSize: '0.65rem', height: 18 }} />
-            )}
+            <Chip label="AI" size="small" color="primary" sx={{ height: 17, fontSize: '0.62rem' }} />
           </Box>
           {open ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
         </Box>
 
         <Collapse in={open}>
-          {!botConnected ? (
-            <Typography fontSize="0.84rem" color="text.secondary" mt={1.5}>
-              Link your Telegram account in Settings to use Live Chat.
+          {/* Quick suggestion chips */}
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mb: 1.5 }}>
+            {SUGGESTIONS.map(s => (
+              <Chip
+                key={s}
+                label={s}
+                size="small"
+                variant="outlined"
+                onClick={() => !sending && send(s)}
+                sx={{ fontSize: '0.72rem', cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
+              />
+            ))}
+          </Box>
+
+          {/* Chat window */}
+          <Paper variant="outlined" sx={{ height: 280, overflowY: 'auto', p: 1.5, bgcolor: 'background.default' }}>
+            {messages.map(m => (
+              <Box key={m.id} sx={{ display: 'flex', justifyContent: m.direction === 'out' ? 'flex-start' : 'flex-end', mb: 1 }}>
+                <Box sx={{
+                  maxWidth: '82%',
+                  bgcolor: m.direction === 'in' ? 'primary.main' : 'action.selected',
+                  color: m.direction === 'in' ? 'primary.contrastText' : 'text.primary',
+                  borderRadius: m.direction === 'in' ? '12px 12px 4px 12px' : '12px 12px 12px 4px',
+                  px: 1.5, py: 1,
+                }}>
+                  <Typography fontSize="0.83rem" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                    {m.content}
+                  </Typography>
+                  <Typography fontSize="0.62rem" sx={{ opacity: 0.6, mt: 0.25 }}>
+                    {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </Typography>
+                </Box>
+              </Box>
+            ))}
+            {sending && (
+              <Box sx={{ display: 'flex', justifyContent: 'flex-start', mb: 1 }}>
+                <Box sx={{ bgcolor: 'action.selected', borderRadius: '12px 12px 12px 4px', px: 1.5, py: 1 }}>
+                  <Typography fontSize="0.83rem" color="text.secondary">Thinking…</Typography>
+                </Box>
+              </Box>
+            )}
+            <div ref={endRef} />
+          </Paper>
+
+          {error && <Alert severity="error" sx={{ mt: 0.75, py: 0, fontSize: '0.8rem' }}>{error}</Alert>}
+
+          <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+            <TextField
+              size="small" fullWidth multiline maxRows={3}
+              placeholder="Schedule meeting, show reminders, group issues…"
+              value={draft}
+              onChange={e => setDraft(e.target.value)}
+              onKeyDown={handleKey}
+              disabled={sending}
+            />
+            <IconButton color="primary" onClick={() => send()} disabled={sending || !draft.trim()}>
+              {sending ? <CircularProgress size={18} /> : <Send fontSize="small" />}
+            </IconButton>
+          </Box>
+        </Collapse>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Meetings Panel ────────────────────────────────────────────────────────────
+
+const PRIORITY_COLOR = { low: 'success', medium: 'warning', high: 'error' };
+
+function MeetingsCard({ newMeeting }) {
+  const [meetings, setMeetings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(true);
+
+  const load = useCallback(async () => {
+    try {
+      const { data } = await meetingsApi.list();
+      setMeetings(data.meetings || []);
+    } catch {
+      // silent
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  // When assistant creates a new meeting, prepend it without re-fetching
+  useEffect(() => {
+    if (!newMeeting) return;
+    setMeetings(prev => {
+      if (prev.find(m => m.id === newMeeting.id)) return prev;
+      return [newMeeting, ...prev];
+    });
+    setOpen(true);
+  }, [newMeeting]);
+
+  const markComplete = async (id) => {
+    try {
+      await meetingsApi.complete(id);
+      setMeetings(prev => prev.filter(m => m.id !== id));
+    } catch { /* noop */ }
+  };
+
+  const deleteMeeting = async (id) => {
+    try {
+      await meetingsApi.remove(id);
+      setMeetings(prev => prev.filter(m => m.id !== id));
+    } catch { /* noop */ }
+  };
+
+  return (
+    <Card variant="outlined" sx={{ mt: 3 }}>
+      <CardContent sx={{ pb: open ? 1 : undefined }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', mb: open ? 1 : 0 }}
+          onClick={() => setOpen(v => !v)}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <CalendarMonth fontSize="small" color="primary" />
+            <Typography fontWeight={600} fontSize="0.95rem">Upcoming Meetings</Typography>
+            {meetings.length > 0 && <Chip label={meetings.length} size="small" sx={{ height: 17, fontSize: '0.65rem' }} />}
+          </Box>
+          {open ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
+        </Box>
+
+        <Collapse in={open}>
+          {loading ? (
+            <CircularProgress size={20} sx={{ mt: 1 }} />
+          ) : meetings.length === 0 ? (
+            <Typography fontSize="0.84rem" color="text.secondary" mt={0.5}>
+              No upcoming meetings. Ask the assistant to schedule one!
             </Typography>
           ) : (
-            <>
-              <Paper
-                variant="outlined"
-                sx={{ height: 260, overflowY: 'auto', mt: 1.5, p: 1.5, bgcolor: 'background.default' }}
-              >
-                {messages.length === 0 ? (
-                  <Typography fontSize="0.82rem" color="text.disabled">No messages yet. Say hi to the bot!</Typography>
-                ) : (
-                  messages.map(m => (
-                    <Box
-                      key={m.id}
-                      sx={{
-                        display: 'flex',
-                        justifyContent: m.direction === 'out' ? 'flex-end' : 'flex-start',
-                        mb: 0.75,
-                      }}
-                    >
-                      <Box
-                        sx={{
-                          maxWidth: '75%',
-                          bgcolor: m.direction === 'out' ? 'primary.main' : 'action.hover',
-                          color: m.direction === 'out' ? 'primary.contrastText' : 'text.primary',
-                          borderRadius: 2,
-                          px: 1.5,
-                          py: 0.75,
-                        }}
-                      >
-                        <Typography fontSize="0.83rem" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                          {m.content}
-                        </Typography>
-                        <Typography fontSize="0.65rem" sx={{ opacity: 0.7, mt: 0.25 }}>
-                          {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </Typography>
-                      </Box>
+            meetings.map(m => (
+              <Box key={m.id} sx={{ mb: 1.5, pb: 1.5, borderBottom: '1px solid', borderColor: 'divider', '&:last-child': { mb: 0, pb: 0, border: 'none' } }}>
+                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                  <Box sx={{ flex: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap', mb: 0.25 }}>
+                      <Typography fontSize="0.88rem" fontWeight={600}>{m.title}</Typography>
+                      <Chip label={m.priority} size="small" color={PRIORITY_COLOR[m.priority] || 'default'} sx={{ height: 16, fontSize: '0.6rem' }} />
                     </Box>
-                  ))
-                )}
-                <div ref={endRef} />
-              </Paper>
-              {error && <Alert severity="error" sx={{ mt: 0.5, py: 0 }}>{error}</Alert>}
-              <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
-                <TextField
-                  size="small"
-                  fullWidth
-                  multiline
-                  maxRows={3}
-                  placeholder="Message the bot…"
-                  value={draft}
-                  onChange={e => setDraft(e.target.value)}
-                  onKeyDown={handleKey}
-                  disabled={sending}
-                />
-                <IconButton color="primary" onClick={send} disabled={sending || !draft.trim()}>
-                  {sending ? <CircularProgress size={18} /> : <Send fontSize="small" />}
-                </IconButton>
+                    <Typography fontSize="0.78rem" color="text.secondary">
+                      {new Date(m.scheduled_at).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      {m.timezone && m.timezone !== 'UTC' ? ` (${m.timezone})` : ' UTC'}
+                    </Typography>
+                    {m.participants && m.participants.length > 0 && (
+                      <Typography fontSize="0.75rem" color="text.secondary">
+                        With: {m.participants.join(', ')}
+                      </Typography>
+                    )}
+                    {m.resources && m.resources.length > 0 && (
+                      <Box sx={{ mt: 0.5, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                        {m.resources.map((r, i) => (
+                          <Chip
+                            key={i}
+                            label={r.type === 'link' ? (r.label || 'Link') : (r.value.slice(0, 30))}
+                            size="small"
+                            variant="outlined"
+                            component={r.type === 'link' ? 'a' : 'div'}
+                            href={r.type === 'link' ? r.value : undefined}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            clickable={r.type === 'link'}
+                            sx={{ height: 18, fontSize: '0.65rem' }}
+                          />
+                        ))}
+                      </Box>
+                    )}
+                  </Box>
+                  <Box sx={{ display: 'flex', gap: 0.25, flexShrink: 0 }}>
+                    <Tooltip title="Mark complete">
+                      <IconButton size="small" onClick={() => markComplete(m.id)} sx={{ color: 'success.main' }}>
+                        <CheckCircle sx={{ fontSize: 16 }} />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Delete">
+                      <IconButton size="small" onClick={() => deleteMeeting(m.id)} sx={{ color: 'text.disabled' }}>
+                        <Close sx={{ fontSize: 16 }} />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+                </Box>
               </Box>
-            </>
+            ))
           )}
         </Collapse>
       </CardContent>
@@ -690,6 +799,7 @@ export default function AssistantHub() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [newMeeting, setNewMeeting] = useState(null);
   const [bannerDismissed, setBannerDismissed] = useState(
     () => localStorage.getItem(DISMISS_KEY) === '1'
   );
@@ -781,8 +891,11 @@ export default function AssistantHub() {
       {/* Ask Your Community */}
       <AskCard hasGroups={(data?.active_groups || 0) > 0} />
 
-      {/* Live Chat */}
-      <LiveChatCard botConnected={!!data?.bot_connected} />
+      {/* Personal Assistant Chat */}
+      <PersonalAssistantChat onMeetingCreated={setNewMeeting} />
+
+      {/* Upcoming Meetings */}
+      <MeetingsCard newMeeting={newMeeting} />
 
       {/* Active Spaces — assistant bot chats */}
       <ActiveSpacesCard plan={plan} />
