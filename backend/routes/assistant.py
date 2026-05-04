@@ -287,6 +287,7 @@ def chat():
         "reply": result["reply"],
         "intent": result["intent"],
         "data": result.get("data"),
+        "suggestions": result.get("suggestions", []),
         "message_id": reply_msg.id,
     })
 

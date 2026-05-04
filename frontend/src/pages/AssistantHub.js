@@ -451,11 +451,11 @@ function AskCard({ hasGroups }) {
 
 // ── Personal Assistant Chat ───────────────────────────────────────────────────
 
-const SUGGESTIONS = [
-  'Schedule meeting tomorrow at 3 PM',
-  'Any meetings coming up?',
-  'Show my reminders',
-  'Any issues in my group today?',
+const QUICK_SUGGESTIONS = [
+  "Book a meeting",
+  "What's on my schedule?",
+  "Remind me about something",
+  "Any issues in my groups?",
 ];
 
 function PersonalAssistantChat({ onMeetingCreated }) {
@@ -483,7 +483,7 @@ function PersonalAssistantChat({ onMeetingCreated }) {
     try {
       const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
       const { data } = await assistant.chat(msg, tz);
-      const botMsg = { id: data.message_id || Date.now() + 1, direction: 'out', content: data.reply, created_at: new Date().toISOString(), intent: data.intent };
+      const botMsg = { id: data.message_id || Date.now() + 1, direction: 'out', content: data.reply, created_at: new Date().toISOString(), intent: data.intent, suggestions: data.suggestions || [] };
       setMessages(prev => [...prev, botMsg]);
       if (data.intent === 'schedule_meeting' && data.data && data.data.id && onMeetingCreated) {
         onMeetingCreated(data.data);
@@ -513,7 +513,7 @@ function PersonalAssistantChat({ onMeetingCreated }) {
         <Collapse in={open}>
           {/* Quick suggestion chips */}
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mb: 1.5 }}>
-            {SUGGESTIONS.map(s => (
+            {QUICK_SUGGESTIONS.map(s => (
               <Chip
                 key={s}
                 label={s}
@@ -526,23 +526,50 @@ function PersonalAssistantChat({ onMeetingCreated }) {
           </Box>
 
           {/* Chat window */}
-          <Paper variant="outlined" sx={{ height: 280, overflowY: 'auto', p: 1.5, bgcolor: 'background.default' }}>
-            {messages.map(m => (
-              <Box key={m.id} sx={{ display: 'flex', justifyContent: m.direction === 'out' ? 'flex-start' : 'flex-end', mb: 1 }}>
-                <Box sx={{
-                  maxWidth: '82%',
-                  bgcolor: m.direction === 'in' ? 'primary.main' : 'action.selected',
-                  color: m.direction === 'in' ? 'primary.contrastText' : 'text.primary',
-                  borderRadius: m.direction === 'in' ? '12px 12px 4px 12px' : '12px 12px 12px 4px',
-                  px: 1.5, py: 1,
-                }}>
-                  <Typography fontSize="0.83rem" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                    {m.content}
-                  </Typography>
-                  <Typography fontSize="0.62rem" sx={{ opacity: 0.6, mt: 0.25 }}>
-                    {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </Typography>
+          <Paper variant="outlined" sx={{ height: 320, overflowY: 'auto', p: 1.5, bgcolor: 'background.default' }}>
+            {messages.map((m, idx) => (
+              <Box key={m.id}>
+                <Box sx={{ display: 'flex', justifyContent: m.direction === 'out' ? 'flex-start' : 'flex-end', mb: m.suggestions?.length ? 0.5 : 1 }}>
+                  <Box sx={{
+                    maxWidth: '82%',
+                    bgcolor: m.direction === 'in' ? 'primary.main' : 'action.selected',
+                    color: m.direction === 'in' ? 'primary.contrastText' : 'text.primary',
+                    borderRadius: m.direction === 'in' ? '12px 12px 4px 12px' : '12px 12px 12px 4px',
+                    px: 1.5, py: 1,
+                  }}>
+                    <Typography fontSize="0.83rem" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                      {m.content}
+                    </Typography>
+                    <Typography fontSize="0.62rem" sx={{ opacity: 0.6, mt: 0.25 }}>
+                      {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </Typography>
+                  </Box>
                 </Box>
+                {/* Inline suggestion buttons for bot messages */}
+                {m.direction === 'out' && m.suggestions?.length > 0 && idx === messages.length - 1 && (
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 1, pl: 0.5 }}>
+                    {m.suggestions.map((s, si) => (
+                      <Chip
+                        key={si}
+                        label={s.label}
+                        size="small"
+                        color="primary"
+                        variant="outlined"
+                        onClick={() => {
+                          if (!sending) {
+                            if (s.value === null) {
+                              // Focus input for custom entry
+                              document.querySelector('[placeholder*="Schedule"]')?.focus();
+                            } else {
+                              send(s.value);
+                            }
+                          }
+                        }}
+                        sx={{ fontSize: '0.72rem', cursor: 'pointer' }}
+                      />
+                    ))}
+                  </Box>
+                )}
               </Box>
             ))}
             {sending && (
