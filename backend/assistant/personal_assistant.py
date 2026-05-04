@@ -249,6 +249,10 @@ def _keyword_intent(message: str) -> str | None:
         return "save_note"
     if re.search(r"https?://", msg) and re.search(r"\b(save|remember|bookmark|keep|note)\b", msg):
         return "save_link"
+    if re.search(r"\b(search|find|look\s+for|look\s+up)\b.*\bnotes?\b", msg):
+        return "search_notes"
+    if re.search(r"\b(summarize|summary\s+of)\b.*\bnotes?\b", msg):
+        return "summarize_notes"
     if _CREATE_TASK_PATTERNS.search(msg):
         return "create_task"
     if _SCHEDULE_PATTERNS.search(msg) or _MEETING_NOUN.search(msg):
@@ -1109,6 +1113,64 @@ def _handle_list_notes(user_id: int) -> dict:
     return {"reply": reply, "intent": "list_notes", "data": {"notes": [n.to_dict() for n in notes]}}
 
 
+def _handle_search_notes(user_id: int, query: str, key_info: dict) -> dict:
+    """Semantic (or keyword-fallback) search across user's notes."""
+    from ..assistant.embeddings import semantic_search
+    results = semantic_search(user_id, query, key_info, limit=5)
+    if not results:
+        return {
+            "reply": f"No notes found matching \"{query[:60]}\". Try a different phrase.",
+            "intent": "search_notes",
+            "data": {"notes": [], "query": query},
+        }
+    lines = [f"• {n.content[:120]}{'…' if len(n.content) > 120 else ''}" for n in results]
+    reply = f"Found {len(results)} note(s) matching \"{query[:40]}\":\n\n" + "\n".join(lines)
+    return {
+        "reply": reply,
+        "intent": "search_notes",
+        "data": {"notes": [n.to_dict() for n in results], "query": query},
+    }
+
+
+def _handle_summarize_notes(user_id: int, key_info: dict) -> dict:
+    """AI summary of the user's recent notes."""
+    from ..models import Note
+    notes = (
+        Note.query
+        .filter_by(user_id=user_id)
+        .order_by(Note.created_at.desc())
+        .limit(20)
+        .all()
+    )
+    if not notes:
+        return {"reply": "You have no notes to summarize yet.", "intent": "summarize_notes", "data": None}
+
+    if not key_info.get("api_key"):
+        # Fallback: just list them
+        return _handle_list_notes(user_id)
+
+    notes_text = "\n".join(f"- {n.content[:200]}" for n in notes)
+    prompt = (
+        "The following are a user's personal notes. Provide a concise summary (3–5 bullet points) "
+        "highlighting key themes, decisions, and action items.\n\n"
+        f"Notes:\n{notes_text}\n\nSummary:"
+    )
+    try:
+        summary = _call_ai_text(key_info, prompt)
+    except Exception:
+        summary = f"You have {len(notes)} notes covering various topics."
+
+    return {
+        "reply": f"📝 Summary of your {len(notes)} most recent notes:\n\n{summary}",
+        "intent": "summarize_notes",
+        "data": {"note_count": len(notes)},
+        "suggestions": [
+            {"label": "Show all notes", "value": "show my notes"},
+            {"label": "Search notes", "value": "search my notes"},
+        ],
+    }
+
+
 def _handle_save_link(user_id: int, url: str, label: str | None = None) -> dict:
     from ..models import db, Note
     content = f"{label or 'Saved link'}: {url}"
@@ -1662,6 +1724,15 @@ def process_message(user_id: int, message: str, user_tz: str | None = None) -> d
 
         if intent == "list_notes":
             return _handle_list_notes(user_id)
+
+        if intent == "search_notes":
+            query = (parsed or {}).get("query") or message.strip()
+            # Strip trigger words if raw message used as query
+            query = re.sub(r"^(search|find|look\s+for|look\s+up)\s+(my\s+)?notes?\s*(for|about)?\s*", "", query, flags=re.I).strip() or query
+            return _handle_search_notes(user_id, query, key_info)
+
+        if intent == "summarize_notes":
+            return _handle_summarize_notes(user_id, key_info)
 
         if intent == "save_link":
             url = (parsed or {}).get("resource_url")

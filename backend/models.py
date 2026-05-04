@@ -5,6 +5,14 @@ import string
 
 db = SQLAlchemy()
 
+# pgvector support — optional, degrades gracefully when extension not installed
+try:
+    from pgvector.sqlalchemy import Vector as _PgVector
+    _PGVECTOR_AVAILABLE = True
+except ImportError:
+    _PgVector = None
+    _PGVECTOR_AVAILABLE = False
+
 # Referral milestones: (required_count, reward_days)
 REFERRAL_MILESTONES = [(3, 7), (10, 30)]
 
@@ -2022,6 +2030,8 @@ class Note(db.Model):
     content = db.Column(db.Text, nullable=False)
     source = db.Column(db.String(20), default="manual", nullable=False)  # manual | ai | bot
     tags = db.Column(db.JSON, default=list, nullable=False)              # ['decision','task','link','question']
+    # Semantic search embedding (pgvector, 1536-dim for OpenAI / 768-dim for Gemini)
+    embedding = db.Column(_PgVector(1536), nullable=True) if _PGVECTOR_AVAILABLE else db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
@@ -2180,6 +2190,8 @@ class WorkspaceKnowledgeDocument(db.Model):
     chunks = db.Column(db.JSON, nullable=True)               # text chunks for search
     tags = db.Column(db.JSON, nullable=True)                 # user-assigned tags
     description = db.Column(db.String(500), nullable=True)
+    # Semantic search embedding
+    embedding = db.Column(_PgVector(768), nullable=True) if _PGVECTOR_AVAILABLE else db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     def to_dict(self):
