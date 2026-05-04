@@ -512,7 +512,7 @@ def universal_search():
     GET /api/assistant/search?q=<query>&types=meetings,reminders,notes,tasks,groups
     Natural language search across all workspace entities.
     """
-    from ..models import Meeting, WorkspaceReminder, Note, WorkspaceTask
+    from ..models import Meeting, WorkspaceReminder, Note, Task as WorkspaceTask
     from datetime import datetime
 
     user = _current_user()

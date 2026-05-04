@@ -20,7 +20,7 @@ _log = logging.getLogger(__name__)
 
 def handle_analyze_day(user_id: int, key_info: dict) -> dict:
     from ...models import (
-        Meeting, WorkspaceReminder, Note, WorkspaceTask, TelegramGroup,
+        Meeting, WorkspaceReminder, Note, Task, TelegramGroup,
         GroupDailySignal,
     )
     from datetime import date
@@ -52,27 +52,27 @@ def handle_analyze_day(user_id: int, key_info: dict) -> dict:
         Meeting.is_complete == False,
     ).count()
 
-    tasks_todo = WorkspaceTask.query.filter_by(
+    tasks_todo = Task.query.filter_by(
         user_id=user_id, status="todo"
-    ).order_by(WorkspaceTask.created_at.desc()).all()
+    ).order_by(Task.created_at.desc()).all()
 
-    tasks_doing = WorkspaceTask.query.filter_by(
+    tasks_doing = Task.query.filter_by(
         user_id=user_id, status="doing"
     ).all()
 
     tasks_high = [t for t in tasks_todo if t.priority == "high"]
 
     reminders_today = WorkspaceReminder.query.filter(
-        WorkspaceReminder.user_id == user_id,
+        WorkspaceReminder.owner_user_id == user_id,
         WorkspaceReminder.remind_at >= today_start,
         WorkspaceReminder.remind_at <= today_end,
-        WorkspaceReminder.is_sent == False,
+        WorkspaceReminder.is_delivered == False,
     ).all()
 
     reminders_overdue = WorkspaceReminder.query.filter(
-        WorkspaceReminder.user_id == user_id,
+        WorkspaceReminder.owner_user_id == user_id,
         WorkspaceReminder.remind_at < today_start,
-        WorkspaceReminder.is_sent == False,
+        WorkspaceReminder.is_delivered == False,
     ).count()
 
     recent_notes = Note.query.filter_by(user_id=user_id).order_by(

@@ -70,7 +70,7 @@ def get_smart_suggestions(user_id: int, last_intent: str | None = None, limit: i
 
 
 def _build_suggestions(user_id: int, last_intent: str | None, limit: int) -> list[dict]:
-    from ..models import Meeting, WorkspaceTask, TelegramGroup, GroupDailySignal
+    from ..models import Meeting, Task, TelegramGroup, GroupDailySignal
     from datetime import date
 
     now = datetime.utcnow()
@@ -85,8 +85,8 @@ def _build_suggestions(user_id: int, last_intent: str | None, limit: int) -> lis
         Meeting.is_complete == False,
     ).count()
 
-    task_todo = WorkspaceTask.query.filter_by(user_id=user_id, status="todo").count()
-    task_doing = WorkspaceTask.query.filter_by(user_id=user_id, status="doing").count()
+    task_todo = Task.query.filter_by(user_id=user_id, status="todo").count()
+    task_doing = Task.query.filter_by(user_id=user_id, status="doing").count()
 
     group_ids = [
         g.telegram_group_id
