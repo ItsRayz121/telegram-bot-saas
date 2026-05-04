@@ -106,25 +106,28 @@ def receive_official_bot_update():
         _log.warning("official-bot-update: official bot not running")
         return jsonify({"ok": True}), 200
 
+    # Submit the update to the bot's own event loop (running in its background thread).
+    # Never create a new event loop here — the PTB Application and its httpx client
+    # were created in official_bot._runner.loop; crossing loops causes RuntimeError.
     try:
-        loop = asyncio.new_event_loop()
-        loop.run_until_complete(_dispatch_official(payload, official_bot))
-        loop.close()
+        runner_loop = getattr(official_bot, "loop", None)
+        app = getattr(official_bot, "_app", None)
+
+        if runner_loop is None or not runner_loop.is_running() or app is None:
+            _log.warning("official-bot-update: runner loop not ready")
+            return jsonify({"ok": True}), 200
+
+        from telegram import Update as TGUpdate
+        bot = app.bot
+        update = TGUpdate.de_json(payload, bot)
+
+        future = asyncio.run_coroutine_threadsafe(
+            app.process_update(update),
+            runner_loop,
+        )
+        # Wait up to 25 s so Telegram doesn't retry the webhook (timeout is 30 s)
+        future.result(timeout=25)
     except Exception as exc:
         _log.error("official-bot-update dispatch error: %s", exc, exc_info=True)
 
     return jsonify({"ok": True}), 200
-
-
-async def _dispatch_official(payload: dict, official_bot):
-    """Forward a raw update dict into the official bot's PTB Application."""
-    from telegram import Update
-    try:
-        app = official_bot._app
-        if app is None:
-            return
-        bot = app.bot
-        update = Update.de_json(payload, bot)
-        await app.process_update(update)
-    except Exception as exc:
-        _log.error("_dispatch_official error: %s", exc, exc_info=True)
