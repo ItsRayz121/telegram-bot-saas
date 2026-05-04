@@ -81,8 +81,34 @@ def _register_space(flask_app, assistant_bot_id: int, message):
 
 # ── command dispatcher ────────────────────────────────────────────────────────
 
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+
+def _build_suggestion_keyboard(suggestions):
+    if not suggestions:
+        return None
+    rows = []
+    row = []
+    for s in suggestions:
+        label = s.get("label", "")
+        value = s.get("value")
+        cb = "assist_custom" if value is None else f"assist_pick:{value[:50]}"
+        row.append(InlineKeyboardButton(label, callback_data=cb))
+        if len(row) == 2:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    return InlineKeyboardMarkup(rows) if rows else None
+
+
 async def handle_update(update: Update, bot: Bot, flask_app, assistant_bot_id: int):
     """Entry point called by the webhook receiver for every incoming update."""
+    # Handle suggestion button taps
+    if update.callback_query:
+        await _handle_callback(update.callback_query, bot, flask_app, assistant_bot_id)
+        return
+
     message = update.message or update.edited_message
     if not message or not message.text:
         return
@@ -296,6 +322,61 @@ async def _cmd_summary(bot: Bot, chat_id: int, tg_user, text: str, flask_app, as
         await _reply(bot, chat_id, "Sorry, summary generation failed. Try again later.")
 
 
+# ── Suggestion button callback ────────────────────────────────────────────────
+
+async def _handle_callback(callback_query, bot: Bot, flask_app, assistant_bot_id: int):
+    """Handle assistant suggestion button taps."""
+    await callback_query.answer()
+    data = callback_query.data or ""
+    chat_id = callback_query.message.chat_id
+
+    if data == "assist_custom":
+        try:
+            await callback_query.edit_message_reply_markup(reply_markup=None)
+        except Exception:
+            pass
+        await bot.send_message(chat_id=chat_id, text="Go ahead — type your response:")
+        return
+
+    if not data.startswith("assist_pick:"):
+        return
+
+    value = data[len("assist_pick:"):]
+    if not value or not flask_app:
+        return
+
+    try:
+        await callback_query.edit_message_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+
+    with flask_app.app_context():
+        from ..models import db, AssistantBot, BotDMMessage
+        from ..assistant.personal_assistant import process_message
+
+        abot = AssistantBot.query.get(assistant_bot_id)
+        if not abot:
+            return
+
+        uid = abot.user_id
+        db.session.add(BotDMMessage(user_id=uid, direction="in", content=value, intent="assistant_pick"))
+        db.session.commit()
+
+        try:
+            result = process_message(user_id=uid, message=value)
+        except Exception as exc:
+            _log.warning("assistant_pick handler failed: %s", exc)
+            return
+
+        reply_text = result.get("reply") or "Got it!"
+        db.session.add(BotDMMessage(user_id=uid, direction="out", content=reply_text, intent=result.get("intent", "general")))
+        db.session.commit()
+
+        await bot.send_message(chat_id=chat_id, text=f"▶ {value}")
+        keyboard = _build_suggestion_keyboard(result.get("suggestions"))
+        await bot.send_message(chat_id=chat_id, text=reply_text, reply_markup=keyboard)
+
+
 # ── Natural language DM ───────────────────────────────────────────────────────
 
 async def _cmd_natural_language(bot: Bot, chat_id: int, tg_user, text: str, flask_app, assistant_bot_id: int):
@@ -310,7 +391,6 @@ async def _cmd_natural_language(bot: Bot, chat_id: int, tg_user, text: str, flas
 
         uid = abot.user_id
 
-        # Store inbound message
         inbound = BotDMMessage(user_id=uid, direction="in", content=text, intent="telegram_dm")
         db.session.add(inbound)
         db.session.commit()
@@ -324,9 +404,16 @@ async def _cmd_natural_language(bot: Bot, chat_id: int, tg_user, text: str, flas
 
         reply_text = result.get("reply") or "I'm not sure how to help with that."
 
-        # Store outbound message
         outbound = BotDMMessage(user_id=uid, direction="out", content=reply_text, intent=result.get("intent", "general"))
         db.session.add(outbound)
         db.session.commit()
 
-    await _reply(bot, chat_id, reply_text)
+        keyboard = _build_suggestion_keyboard(result.get("suggestions"))
+
+    if keyboard:
+        try:
+            await bot.send_message(chat_id=chat_id, text=reply_text, reply_markup=keyboard)
+        except Exception:
+            await _reply(bot, chat_id, reply_text)
+    else:
+        await _reply(bot, chat_id, reply_text)

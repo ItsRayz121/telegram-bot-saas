@@ -726,6 +726,96 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+# ─── Assistant suggestion keyboard helpers ────────────────────────────────────
+
+def _build_suggestion_keyboard(suggestions: list | None) -> InlineKeyboardMarkup | None:
+    """
+    Build an InlineKeyboardMarkup from a list of {"label": str, "value": str|None}.
+    Items with value=None are "Custom…" prompts that dismiss the keyboard.
+    Returns None (no keyboard) when suggestions is empty/None.
+    """
+    if not suggestions:
+        return None
+    rows = []
+    row = []
+    for s in suggestions:
+        label = s.get("label", "")
+        value = s.get("value")
+        if value is None:
+            # Custom input sentinel — just closes the keyboard, user types freely
+            cb = "assist_custom"
+        else:
+            # Encode: assist_pick:<value> (value max 50 chars to stay within 64-byte limit)
+            cb = f"assist_pick:{value[:50]}"
+        row.append(InlineKeyboardButton(label, callback_data=cb))
+        if len(row) == 2:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    return InlineKeyboardMarkup(rows) if rows else None
+
+
+async def on_assistant_pick(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Handles inline button taps from assistant suggestion keyboards.
+    Feeds the tapped value back into process_message() as if the user typed it.
+    """
+    query = update.callback_query
+    await query.answer()
+
+    data = query.data or ""
+    flask_app = context.bot_data.get("flask_app")
+    tg_user = query.from_user
+    chat_id = query.message.chat_id
+
+    if data == "assist_custom":
+        await query.edit_message_reply_markup(reply_markup=None)
+        await context.bot.send_message(chat_id=chat_id, text="Go ahead — type your response:")
+        return
+
+    if not data.startswith("assist_pick:"):
+        return
+
+    value = data[len("assist_pick:"):]
+    if not value or not flask_app:
+        return
+
+    try:
+        # Remove keyboard from previous message
+        await query.edit_message_reply_markup(reply_markup=None)
+
+        with flask_app.app_context():
+            from .models import User as _User, BotDMMessage as _BotDM, db as _db
+            from .assistant.personal_assistant import process_message as _process_message
+
+            _u = _User.query.filter_by(telegram_user_id=str(tg_user.id)).first()
+            if not _u:
+                return
+
+            # Log as if user typed the value
+            _db.session.add(_BotDM(user_id=_u.id, direction="in", content=value[:4000], intent="assistant_pick"))
+            _db.session.commit()
+
+            _result = _process_message(user_id=_u.id, message=value)
+            _reply_text = _result.get("reply") or "Got it!"
+
+            _db.session.add(_BotDM(user_id=_u.id, direction="out", content=_reply_text[:4000], intent=_result.get("intent", "general")))
+            _db.session.commit()
+
+            # Echo what was selected so the chat makes sense
+            await context.bot.send_message(chat_id=chat_id, text=f"▶ {value}")
+
+            _keyboard = _build_suggestion_keyboard(_result.get("suggestions"))
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=_reply_text,
+                reply_markup=_keyboard,
+            )
+    except Exception as exc:
+        _log.warning("on_assistant_pick failed: %s", exc)
+
+
 # ─── Private message handler (bot token submission) ───────────────────────────
 
 async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -850,12 +940,21 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         _db.session.add(_BotDM(user_id=_u.id, direction="out", content=_reply_text[:4000], intent=_result.get("intent", "general")))
                         _db.session.commit()
 
-                        await message.reply_text(_reply_text)
+                        # Build inline keyboard from suggestions if present
+                        _keyboard = _build_suggestion_keyboard(_result.get("suggestions"))
+                        await message.reply_text(
+                            _reply_text,
+                            reply_markup=_keyboard,
+                        )
                     else:
                         # Unlinked user — prompt to connect account
+                        _frontend = _frontend()
                         await message.reply_text(
                             "👋 Hi! To use the Telegizer assistant, connect your Telegram account at telegizer.xyz/settings.\n\n"
-                            "Once linked, I can schedule meetings, save notes, set reminders, and more!"
+                            "Once linked, I can schedule meetings, save notes, set reminders, and more!",
+                            reply_markup=InlineKeyboardMarkup([[
+                                InlineKeyboardButton("🔗 Connect Account", url=f"{_frontend}/settings"),
+                            ]]),
                         )
             except Exception as _exc:
                 _log.warning("Assistant DM routing failed: %s", _exc)
@@ -4325,6 +4424,7 @@ class OfficialBotRunner:
         a.add_handler(CommandHandler("ask",            cmd_ask))
         a.add_handler(CommandHandler("invitelink",     cmd_invitelink))
         a.add_handler(CommandHandler("remind",         cmd_remind))
+        a.add_handler(CallbackQueryHandler(on_assistant_pick, pattern=r"^assist_"))
         a.add_handler(CallbackQueryHandler(callback_handler))
         # Bot's own membership changes (added/removed from groups)
         a.add_handler(ChatMemberHandler(on_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))

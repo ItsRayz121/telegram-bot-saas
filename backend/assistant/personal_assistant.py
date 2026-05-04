@@ -522,6 +522,44 @@ def _save_state(user_id: int, intent: str, data: dict, awaiting: str):
     db.session.commit()
 
 
+def _time_suggestions() -> list:
+    """Return quick-pick time options relative to now (UTC)."""
+    from datetime import datetime, timedelta
+    now = datetime.utcnow()
+    # Today at 3 PM, 5 PM; tomorrow at 9 AM, 12 PM, 3 PM; this Friday
+    suggestions = []
+    today_3pm = now.replace(hour=15, minute=0, second=0, microsecond=0)
+    today_5pm = now.replace(hour=17, minute=0, second=0, microsecond=0)
+    tomorrow = now + timedelta(days=1)
+    tmr_9am = tomorrow.replace(hour=9, minute=0, second=0, microsecond=0)
+    tmr_12pm = tomorrow.replace(hour=12, minute=0, second=0, microsecond=0)
+    tmr_3pm = tomorrow.replace(hour=15, minute=0, second=0, microsecond=0)
+    # Next Friday
+    days_to_friday = (4 - now.weekday()) % 7 or 7
+    friday_3pm = (now + timedelta(days=days_to_friday)).replace(hour=15, minute=0, second=0, microsecond=0)
+
+    if today_3pm > now:
+        suggestions.append({"label": "Today 3 PM", "value": "today at 3 PM"})
+    if today_5pm > now:
+        suggestions.append({"label": "Today 5 PM", "value": "today at 5 PM"})
+    suggestions.append({"label": "Tomorrow 9 AM", "value": "tomorrow at 9 AM"})
+    suggestions.append({"label": "Tomorrow 3 PM", "value": "tomorrow at 3 PM"})
+    suggestions.append({"label": friday_3pm.strftime("Fri %d %b 3 PM"), "value": friday_3pm.strftime("%A at 3 PM")})
+    suggestions.append({"label": "Pick a time…", "value": None})  # sentinel for custom input
+    return suggestions
+
+
+def _meeting_title_suggestions() -> list:
+    return [
+        {"label": "Quick Call", "value": "Quick Call"},
+        {"label": "Team Sync", "value": "Team Sync"},
+        {"label": "1:1 Meeting", "value": "1:1 Meeting"},
+        {"label": "Project Review", "value": "Project Review"},
+        {"label": "Investor Call", "value": "Investor Call"},
+        {"label": "Custom…", "value": None},
+    ]
+
+
 def _is_self_contained_schedule_request(message: str) -> bool:
     """
     Return True if the message looks like a complete, self-contained scheduling
@@ -551,14 +589,20 @@ def _handle_schedule_meeting(user_id: int, parsed: dict, key_info: dict, user_tz
 
     if not data["title"]:
         _save_state(user_id, "schedule_meeting", data, "title")
-        return {"reply": "What's the title or topic of the meeting?", "intent": "schedule_meeting", "data": None}
+        return {
+            "reply": "What's the title or topic of the meeting?",
+            "intent": "schedule_meeting",
+            "data": None,
+            "suggestions": _meeting_title_suggestions(),
+        }
 
     if not data["datetime_hint"]:
         _save_state(user_id, "schedule_meeting", data, "datetime_hint")
         return {
-            "reply": f"When should I schedule \"{data['title']}\"? (e.g. tomorrow at 3 PM, Friday 10 AM)",
+            "reply": f"When should I schedule \"{data['title']}\"?",
             "intent": "schedule_meeting",
             "data": None,
+            "suggestions": _time_suggestions(),
         }
 
     dt_result = _resolve_datetime(key_info, data["datetime_hint"], data["timezone"])
@@ -567,10 +611,11 @@ def _handle_schedule_meeting(user_id: int, parsed: dict, key_info: dict, user_tz
         return {
             "reply": (
                 f"I couldn't parse \"{data['datetime_hint']}\" as a time. "
-                "Try something like \"tomorrow at 3 PM\" or \"Friday 10 AM\"."
+                "Pick one below or type your own:"
             ),
             "intent": "schedule_meeting",
             "data": None,
+            "suggestions": _time_suggestions(),
         }
 
     scheduled_at = datetime.fromisoformat(dt_result["iso"])
