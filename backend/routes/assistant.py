@@ -383,6 +383,231 @@ def autoreply_logs():
     return jsonify({"logs": [l.to_dict() for l in logs]})
 
 
+@assistant_bp.route("/group-trends", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def group_trends():
+    """
+    GET /api/assistant/group-trends?days=7&group_id=<telegram_group_id>
+    Returns daily GroupDailySignal history for chart rendering.
+    """
+    from ..models import GroupDailySignal
+    from datetime import date, timedelta
+
+    user = _current_user()
+    days = min(int(request.args.get("days", 7)), 90)
+    group_id = request.args.get("group_id")
+
+    groups = TelegramGroup.query.filter_by(owner_user_id=user.id, is_disabled=False).all()
+    group_ids = [g.telegram_group_id for g in groups]
+    if not group_ids:
+        return jsonify({"trends": [], "groups": []})
+
+    if group_id and group_id in group_ids:
+        group_ids = [group_id]
+
+    cutoff = date.today() - timedelta(days=days - 1)
+    signals = (
+        GroupDailySignal.query
+        .filter(GroupDailySignal.telegram_group_id.in_(group_ids))
+        .filter(GroupDailySignal.date >= cutoff)
+        .order_by(GroupDailySignal.telegram_group_id, GroupDailySignal.date)
+        .all()
+    )
+
+    group_title_map = {g.telegram_group_id: (g.title or g.telegram_group_id) for g in groups}
+    trends_by_group: dict = {}
+    for sig in signals:
+        gid = sig.telegram_group_id
+        if gid not in trends_by_group:
+            trends_by_group[gid] = {"group_id": gid, "title": group_title_map.get(gid, gid), "days": []}
+        trends_by_group[gid]["days"].append({
+            "date": sig.date.isoformat(),
+            "message_count": sig.message_count,
+            "active_members": sig.active_members,
+            "spam_score": float(sig.spam_score or 0),
+            "conflict_score": float(sig.conflict_score or 0),
+            "questions_unanswered": sig.questions_unanswered,
+            "sentiment": sig.sentiment,
+            "health_status": sig.health_status,
+            "ai_summary": sig.ai_summary,
+        })
+
+    return jsonify({
+        "trends": list(trends_by_group.values()),
+        "groups": [{"id": g.telegram_group_id, "title": g.title or g.telegram_group_id} for g in groups],
+        "days_requested": days,
+    })
+
+
+@assistant_bp.route("/inline-ai", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=20)
+def inline_ai():
+    """
+    POST /api/assistant/inline-ai
+    Body: { "action": "summarize"|"suggest_automod"|"write_announcement"|"explain", "context": "..." }
+    Returns { "result": "..." }
+    """
+    user = _current_user()
+    body = request.get_json(silent=True) or {}
+    action = body.get("action", "summarize")
+    context = (body.get("context") or "")[:8000]
+
+    if not context.strip():
+        return jsonify({"error": "context is required"}), 400
+
+    prompts = {
+        "summarize": (
+            f"Summarize the following Telegram group messages in 3-5 bullet points. "
+            f"Focus on key topics, decisions, and action items.\n\nMessages:\n{context}"
+        ),
+        "suggest_automod": (
+            f"Based on these Telegram group messages, suggest 3 specific automod rules "
+            f"(keyword triggers + auto-reply text) that would improve moderation. "
+            f"Format each as: Trigger: <keyword> → Reply: <response text>\n\nMessages:\n{context}"
+        ),
+        "write_announcement": (
+            f"Write a professional, friendly Telegram group announcement based on this context. "
+            f"Keep it under 200 words, use emojis sparingly.\n\nContext:\n{context}"
+        ),
+        "explain": (
+            f"Explain the following in simple terms for a non-technical Telegram group admin:\n\n{context}"
+        ),
+        "improve_message": (
+            f"Rewrite the following message to be clearer, more professional, and engaging "
+            f"for a Telegram audience. Provide 2 alternatives.\n\nOriginal:\n{context}"
+        ),
+    }
+
+    prompt = prompts.get(action, prompts["summarize"])
+
+    try:
+        from ..assistant.ai_key_resolver import get_workspace_ai_key, QuotaExceededError
+        key_info = get_workspace_ai_key(user)
+        result = _call_ai_text(key_info, prompt)
+        return jsonify({"result": result, "action": action})
+    except Exception as exc:
+        _log.warning("inline_ai action=%s failed: %s", action, exc)
+        return jsonify({"error": str(exc)}), 503
+
+
+@assistant_bp.route("/search", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def universal_search():
+    """
+    GET /api/assistant/search?q=<query>&types=meetings,reminders,notes,tasks,groups
+    Natural language search across all workspace entities.
+    """
+    from ..models import Meeting, WorkspaceReminder, Note, WorkspaceTask
+    from datetime import datetime
+
+    user = _current_user()
+    q = (request.args.get("q") or "").strip()
+    types_param = request.args.get("types", "meetings,reminders,notes,tasks,groups")
+    types = set(types_param.split(","))
+
+    if not q:
+        return jsonify({"error": "q is required"}), 400
+
+    results = []
+    q_lower = q.lower()
+
+    if "meetings" in types:
+        meetings = Meeting.query.filter_by(owner_user_id=user.id).order_by(Meeting.scheduled_at.desc()).limit(200).all()
+        for m in meetings:
+            score = 0
+            text = f"{m.title or ''} {m.notes or ''} {' '.join(m.participants or [])}".lower()
+            for word in q_lower.split():
+                if word in text:
+                    score += 1
+            if score:
+                d = m.to_dict()
+                d["_type"] = "meeting"
+                d["_score"] = score
+                d["_label"] = m.title or "Untitled meeting"
+                d["_date"] = m.scheduled_at.isoformat() if m.scheduled_at else None
+                results.append(d)
+
+    if "reminders" in types:
+        reminders = WorkspaceReminder.query.filter_by(user_id=user.id).order_by(WorkspaceReminder.remind_at.desc()).limit(200).all()
+        for r in reminders:
+            score = sum(1 for word in q_lower.split() if word in (r.reminder_text or "").lower())
+            if score:
+                d = r.to_dict()
+                d["_type"] = "reminder"
+                d["_score"] = score
+                d["_label"] = r.reminder_text or "Reminder"
+                d["_date"] = r.remind_at.isoformat() if r.remind_at else None
+                results.append(d)
+
+    if "notes" in types:
+        notes = Note.query.filter_by(user_id=user.id).order_by(Note.created_at.desc()).limit(200).all()
+        for n in notes:
+            text = f"{n.title or ''} {n.content or ''}".lower()
+            score = sum(1 for word in q_lower.split() if word in text)
+            if score:
+                d = n.to_dict()
+                d["_type"] = "note"
+                d["_score"] = score
+                d["_label"] = n.title or (n.content or "")[:60]
+                d["_date"] = n.created_at.isoformat() if n.created_at else None
+                results.append(d)
+
+    if "tasks" in types:
+        try:
+            tasks = WorkspaceTask.query.filter_by(user_id=user.id).order_by(WorkspaceTask.created_at.desc()).limit(200).all()
+            for t in tasks:
+                text = f"{t.title or ''} {t.description or ''}".lower()
+                score = sum(1 for word in q_lower.split() if word in text)
+                if score:
+                    d = t.to_dict()
+                    d["_type"] = "task"
+                    d["_score"] = score
+                    d["_label"] = t.title or "Task"
+                    d["_date"] = t.created_at.isoformat() if t.created_at else None
+                    results.append(d)
+        except Exception:
+            pass
+
+    if "groups" in types:
+        from ..models import GroupDailySignal
+        from datetime import date, timedelta
+        groups = TelegramGroup.query.filter_by(owner_user_id=user.id, is_disabled=False).all()
+        cutoff = date.today() - timedelta(days=7)
+        for g in groups:
+            text = f"{g.title or ''} {g.description or ''}".lower()
+            score = sum(1 for word in q_lower.split() if word in text)
+            if score:
+                sig = GroupDailySignal.query.filter(
+                    GroupDailySignal.telegram_group_id == g.telegram_group_id,
+                    GroupDailySignal.date >= cutoff,
+                ).order_by(GroupDailySignal.date.desc()).first()
+                results.append({
+                    "_type": "group",
+                    "_score": score,
+                    "_label": g.title or g.telegram_group_id,
+                    "_date": None,
+                    "id": g.telegram_group_id,
+                    "title": g.title,
+                    "health_status": sig.health_status if sig else "unknown",
+                    "spam_score": float(sig.spam_score or 0) if sig else 0,
+                })
+
+    results.sort(key=lambda x: x["_score"], reverse=True)
+    return jsonify({"results": results[:30], "query": q, "total": len(results)})
+
+
+@assistant_bp.route("/profile", methods=["GET"])
+@jwt_required()
+def get_profile():
+    """Return the user's learned assistant preferences."""
+    from ..assistant.profile_service import get_preferences
+    user = _current_user()
+    return jsonify(get_preferences(user.id))
+
+
 def _call_ai_text(key_info: dict, prompt: str) -> str:
     import requests as _r
     provider = key_info.get("provider", "gemini")

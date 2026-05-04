@@ -2469,3 +2469,41 @@ class IntegrationWebhook(db.Model):
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
         }
+
+
+class UserAssistantProfile(db.Model):
+    """Long-term assistant memory — learned preferences and usage patterns per user."""
+    __tablename__ = "user_assistant_profiles"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+
+    # Learned scheduling preferences
+    preferred_meeting_hour = db.Column(db.Integer, nullable=True)   # 0-23 UTC hour most meetings scheduled
+    preferred_reminder_minutes = db.Column(db.Integer, nullable=True)  # most-used lead time
+    most_active_groups = db.Column(db.JSON, nullable=True)          # list of telegram_group_ids sorted by attention
+
+    # Usage counters (used to derive preferences)
+    meetings_created = db.Column(db.Integer, default=0, nullable=False)
+    reminders_created = db.Column(db.Integer, default=0, nullable=False)
+    notes_saved = db.Column(db.Integer, default=0, nullable=False)
+    tasks_created = db.Column(db.Integer, default=0, nullable=False)
+
+    # Aggregate hour histogram for meetings: JSON list of 24 ints
+    meeting_hour_histogram = db.Column(db.JSON, nullable=True)
+
+    # Aggregate reminder lead-time histogram: JSON dict {minutes: count}
+    reminder_minutes_histogram = db.Column(db.JSON, nullable=True)
+
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "preferred_meeting_hour": self.preferred_meeting_hour,
+            "preferred_reminder_minutes": self.preferred_reminder_minutes,
+            "most_active_groups": self.most_active_groups or [],
+            "meetings_created": self.meetings_created,
+            "reminders_created": self.reminders_created,
+            "notes_saved": self.notes_saved,
+            "tasks_created": self.tasks_created,
+        }

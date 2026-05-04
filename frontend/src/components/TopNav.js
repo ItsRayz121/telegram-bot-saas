@@ -7,6 +7,7 @@ import {
   Home, Dashboard, Groups, SmartToy, CreditCard, Settings,
 } from '@mui/icons-material';
 import TelegizerLogo from './TelegizerLogo';
+import UniversalSearchBar from './UniversalSearchBar';
 
 const NAV_ITEMS = [
   { label: 'Home',       path: '/',          icon: Home,      exact: true },
@@ -66,6 +67,14 @@ export default function TopNav({ title, subtitle, actions, breadcrumb, hasSideba
           </Box>
         )}
         {hasSidebar && <Box sx={{ flex: 1 }} />}
+
+        {/* Universal search — visible in sidebar layouts */}
+        {hasSidebar && (
+          <UniversalSearchBar
+            placeholder="Search meetings, notes, reminders…"
+            sx={{ width: { xs: 160, sm: 260 }, mr: 1 }}
+          />
+        )}
 
         {/* Right side: optional actions */}
         {actions && (

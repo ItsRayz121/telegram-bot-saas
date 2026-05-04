@@ -64,6 +64,13 @@ def handle_create_reminder(user_id: int, parsed: dict, key_info: dict, user_tz: 
         AssistantContextService.invalidate(user_id)
     except Exception:
         pass
+    try:
+        from ...assistant.profile_service import record_action
+        record_action(user_id, "create_reminder", reminder.to_dict())
+        from ...models import db as _db
+        _db.session.commit()
+    except Exception:
+        pass
 
     return {
         "reply": f"🔔 Reminder set!\n\n📌 {data['text']}\n🕒 {data['_resolved_human']}",

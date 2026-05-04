@@ -134,6 +134,13 @@ def handle_schedule_meeting(user_id: int, parsed: dict, key_info: dict, user_tz:
         fire_event(user_id, "meeting.created", meeting.to_dict())
     except Exception:
         pass
+    try:
+        from ...assistant.profile_service import record_action
+        record_action(user_id, "schedule_meeting", {**data, **meeting.to_dict()})
+        from ...models import db as _db
+        _db.session.commit()
+    except Exception:
+        pass
 
     suggestions = []
     if not data.get("notes"):

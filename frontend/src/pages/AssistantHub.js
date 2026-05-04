@@ -2,15 +2,16 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, Chip, CircularProgress,
   Alert, Grid, LinearProgress,
-  IconButton, Tooltip, Collapse, TextField, Paper,
+  IconButton, Tooltip, Collapse, TextField, Paper, Tabs, Tab,
 } from '@mui/material';
 import {
   Psychology, AccessTime, EditNote, Summarize, AutoMode, Reply,
   OpenInNew, ContentCopy, CheckCircle, RadioButtonUnchecked, Close,
   ArrowForward, Chat, Send, ExpandMore, ExpandLess, QuestionAnswer,
   CalendarMonth, SmartToy, Lock, Groups, Person,
-  NotificationsActive, MenuBook, BarChart,
+  NotificationsActive, MenuBook, BarChart, TrendingUp,
 } from '@mui/icons-material';
+import GroupTrendsDashboard from '../components/GroupTrendsDashboard';
 import { useMediaQuery, useTheme } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { assistant, assistantBot as assistantBotApi, meetings as meetingsApi } from '../services/api';
@@ -856,6 +857,7 @@ export default function AssistantHub() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [newMeeting, setNewMeeting] = useState(null);
+  const [hubTab, setHubTab] = useState(0);
   const [bannerDismissed, setBannerDismissed] = useState(
     () => localStorage.getItem(DISMISS_KEY) === '1'
   );
@@ -902,59 +904,84 @@ export default function AssistantHub() {
         <Psychology sx={{ fontSize: 26, color: 'primary.main' }} />
         <Typography variant="h5" fontWeight={700}>Assistant Hub</Typography>
       </Box>
-      <Typography color="text.secondary" fontSize="0.88rem" mb={3}>{today}</Typography>
+      <Typography color="text.secondary" fontSize="0.88rem" mb={2}>{today}</Typography>
 
-      {/* Assistant Bot status card */}
-      <AssistantBotCard plan={plan} />
+      {/* Tab navigation */}
+      <Tabs
+        value={hubTab}
+        onChange={(_, v) => setHubTab(v)}
+        sx={{ mb: 3, borderBottom: '1px solid', borderColor: 'divider' }}
+        variant="scrollable"
+        scrollButtons="auto"
+      >
+        <Tab label="Overview" icon={<Psychology fontSize="small" />} iconPosition="start" />
+        <Tab label="Group Trends" icon={<TrendingUp fontSize="small" />} iconPosition="start" />
+      </Tabs>
 
-      {error && <Alert severity="error" onClose={() => setError('')} sx={{ mb: 2 }}>{error}</Alert>}
+      {hubTab === 0 && (
+        <>
+          {/* Assistant Bot status card */}
+          <AssistantBotCard plan={plan} />
 
-      {/* Connect Bot Banner */}
-      {showBanner && (
-        <ConnectBotBanner
-          botUsername={data.bot_username}
-          connectedGroups={data.connected_groups}
-          onDismiss={dismissBanner}
-        />
+          {error && <Alert severity="error" onClose={() => setError('')} sx={{ mb: 2 }}>{error}</Alert>}
+
+          {/* Connect Bot Banner */}
+          {showBanner && (
+            <ConnectBotBanner
+              botUsername={data.bot_username}
+              connectedGroups={data.connected_groups}
+              onDismiss={dismissBanner}
+            />
+          )}
+
+          {/* Mobile feature navigation grid */}
+          {isMobile && <MobileFeatureGrid />}
+
+          {/* Onboarding checklist */}
+          {data?.onboarding && <OnboardingCard onboarding={data.onboarding} />}
+
+          {/* Row 1 — Reminders + Notes */}
+          <Grid container spacing={2} sx={{ mb: 2 }}>
+            <Grid item xs={12} sm={6}>
+              <RemindersCard reminders={data?.reminders_today || []} />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <NotesCard recentNotes={data?.recent_notes || []} />
+            </Grid>
+          </Grid>
+
+          {/* Row 2 — Digest + Automation */}
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6}>
+              <DigestCard digestStatus={data?.digest_status || []} />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <ActivityCard activity={data?.automation_activity || { auto_replies_today: 0, workflows_today: 0 }} />
+            </Grid>
+          </Grid>
+
+          {/* Ask Your Community */}
+          <AskCard hasGroups={(data?.active_groups || 0) > 0} />
+
+          {/* Personal Assistant Chat */}
+          <PersonalAssistantChat onMeetingCreated={setNewMeeting} />
+
+          {/* Upcoming Meetings */}
+          <MeetingsCard newMeeting={newMeeting} />
+
+          {/* Active Spaces — assistant bot chats */}
+          <ActiveSpacesCard plan={plan} />
+        </>
       )}
 
-      {/* Mobile feature navigation grid */}
-      {isMobile && <MobileFeatureGrid />}
-
-      {/* Onboarding checklist */}
-      {data?.onboarding && <OnboardingCard onboarding={data.onboarding} />}
-
-      {/* Row 1 — Reminders + Notes */}
-      <Grid container spacing={2} sx={{ mb: 2 }}>
-        <Grid item xs={12} sm={6}>
-          <RemindersCard reminders={data?.reminders_today || []} />
-        </Grid>
-        <Grid item xs={12} sm={6}>
-          <NotesCard recentNotes={data?.recent_notes || []} />
-        </Grid>
-      </Grid>
-
-      {/* Row 2 — Digest + Automation */}
-      <Grid container spacing={2}>
-        <Grid item xs={12} sm={6}>
-          <DigestCard digestStatus={data?.digest_status || []} />
-        </Grid>
-        <Grid item xs={12} sm={6}>
-          <ActivityCard activity={data?.automation_activity || { auto_replies_today: 0, workflows_today: 0 }} />
-        </Grid>
-      </Grid>
-
-      {/* Ask Your Community */}
-      <AskCard hasGroups={(data?.active_groups || 0) > 0} />
-
-      {/* Personal Assistant Chat */}
-      <PersonalAssistantChat onMeetingCreated={setNewMeeting} />
-
-      {/* Upcoming Meetings */}
-      <MeetingsCard newMeeting={newMeeting} />
-
-      {/* Active Spaces — assistant bot chats */}
-      <ActiveSpacesCard plan={plan} />
+      {hubTab === 1 && (
+        <Box>
+          <Typography variant="body2" color="text.secondary" mb={3}>
+            Daily health signals computed every 2 hours from your connected group activity.
+          </Typography>
+          <GroupTrendsDashboard />
+        </Box>
+      )}
     </Box>
   );
 }

@@ -562,6 +562,14 @@ export const assistant = {
   chat: (message, timezone) => api.post('/api/assistant/chat', { message, timezone }),
   ask: (question) => api.post('/api/assistant/ask', { question }),
   getAutoReplyLogs: () => api.get('/api/assistant/autoreply-logs'),
+  // Group trend analytics (7/30-day history)
+  groupTrends: (days = 7, groupId = null) => api.get('/api/assistant/group-trends', { params: { days, group_id: groupId } }),
+  // Inline AI actions (summarize, suggest_automod, write_announcement, explain, improve_message)
+  inlineAI: (action, context) => api.post('/api/assistant/inline-ai', { action, context }),
+  // Universal search across meetings, reminders, notes, tasks, groups
+  search: (q, types = 'meetings,reminders,notes,tasks,groups') => api.get('/api/assistant/search', { params: { q, types } }),
+  // Learned user preferences
+  getProfile: () => api.get('/api/assistant/profile'),
 };
 
 export const meetings = {
