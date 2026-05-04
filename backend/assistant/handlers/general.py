@@ -125,12 +125,20 @@ def handle_general(user_id: int, message: str, key_info: dict, ai_reply: str | N
     if not key_info.get("api_key"):
         return _no_key_response()
 
-    # If INTENT_SYSTEM already produced a reply (and it's not empty), use it
-    if ai_reply and len(ai_reply.strip()) > 10:
-        suggestions = _build_followup_suggestions(_classify_query(message), message, ctx)
-        return {"reply": ai_reply, "intent": "general", "data": None, "suggestions": suggestions}
-
     query_type = _classify_query(message)
+
+    # Only use the INTENT_SYSTEM's pre-parsed reply for workspace action confirmations
+    # (very short workspace replies like "Reminder set!"). For general/factual questions
+    # always call Gemini directly so it gives a real answer, not a canned response.
+    _is_canned = (
+        ai_reply and
+        query_type in ("workspace",) and
+        len(ai_reply.strip()) < 80 and
+        not any(w in (ai_reply or "").lower() for w in ("i'm here", "i can help", "ask me", "ready to help"))
+    )
+    if _is_canned:
+        suggestions = _build_followup_suggestions(query_type, message, ctx)
+        return {"reply": ai_reply, "intent": "general", "data": None, "suggestions": suggestions}
     context = _build_rich_context(message, ctx, query_type)
 
     # Build conversation history for multi-turn coherence

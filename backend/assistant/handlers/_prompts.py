@@ -29,8 +29,8 @@ Rules:
 - group_query: user asks about group issues, activity, status, problems.
 - analyze_day: user wants a daily overview, briefing, what to focus on, "analyze my day", "how's my day".
 - expand_analysis: user says "expand", "more detail", "deeper analysis", "tell me more", "elaborate".
-- general: for EVERYTHING else — general AI questions, writing requests, strategy, explanations, ideas. The reply field should contain a helpful AI response to the question. Do NOT leave reply empty for general intent.
-- IMPORTANT: Most questions should be "general" with a smart reply in the reply field. Only use specific intents for clear workspace actions.
+- general: for EVERYTHING else — general AI questions, writing requests, strategy, explanations, facts, current events, weather, news, people, places, ideas. Set intent="general" and leave reply="" (empty string). The system will call a dedicated AI model to answer properly.
+- IMPORTANT: Do NOT write a reply for general intent. Just set intent="general" and reply="". The dedicated handler will generate the real answer.
 - Default priority is "medium".
 - CRITICAL: "any meeting today", "do I have a meeting", "meeting today?" → list_meetings, NOT schedule_meeting.
 """
