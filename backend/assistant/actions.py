@@ -159,20 +159,42 @@ def get_group_stats(user, args: dict) -> dict:
 
 @register("list_auto_replies")
 def list_auto_replies(user, args: dict) -> dict:
-    """List the user's auto-reply rules."""
-    from ..models import AutoReplyRule
+    """Show recent auto-reply activity for the user's groups."""
+    from ..models import AutoReplyLog, TelegramGroup
+    from datetime import datetime, timedelta
 
-    rules = AutoReplyRule.query.filter_by(user_id=user.id, is_active=True).limit(10).all()
-    if not rules:
-        return {"reply": "You have no active auto-reply rules. Go to Automations → Auto-Reply to create one.", "data": None}
+    group_ids = [
+        g.telegram_group_id
+        for g in TelegramGroup.query.filter_by(owner_user_id=user.id, is_disabled=False).all()
+    ]
+    if not group_ids:
+        return {"reply": "No groups connected. Add @telegizer_bot to a group first.", "data": None}
 
-    lines = ["🤖 *Auto-Reply Rules*\n"]
-    for r in rules:
-        lines.append(f"• Trigger: `{r.trigger_keyword}` → _{r.response_text[:60]}_")
+    cutoff = datetime.utcnow() - timedelta(days=7)
+    logs = (
+        AutoReplyLog.query
+        .filter(AutoReplyLog.telegram_group_id.in_(group_ids))
+        .filter(AutoReplyLog.triggered_at >= cutoff)
+        .order_by(AutoReplyLog.triggered_at.desc())
+        .limit(10)
+        .all()
+    )
+
+    if not logs:
+        return {
+            "reply": "No auto-reply activity in the last 7 days. Set up SmartLinks in Automations → Auto-Reply.",
+            "data": None,
+        }
+
+    lines = ["🤖 *Recent Auto-Reply Triggers (last 7 days)*\n"]
+    for log in logs:
+        ts = log.triggered_at.strftime("%b %d %H:%M") if log.triggered_at else "?"
+        trigger = log.trigger_text or "unknown"
+        lines.append(f"• [{ts}] `{trigger}` fired in group {log.telegram_group_id}")
 
     return {
         "reply": "\n".join(lines),
-        "data": {"rules": [{"id": r.id, "trigger": r.trigger_keyword} for r in rules]},
+        "data": {"recent_triggers": len(logs)},
     }
 
 
