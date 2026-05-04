@@ -1,1569 +1,50 @@
 """
-Shared personal assistant service — true AI operations assistant.
+personal_assistant.py — public entry point.
 
-Both the web LiveChat (/api/assistant/chat) and the Telegram bot DM handler
-call process_message() here. Returns a structured dict:
-  {
-    "reply": str,           # text to send back to the user
-    "intent": str,          # detected intent key
-    "data": dict | None,    # structured data created (meeting, reminder, etc.)
-    "suggestions": list,    # optional quick-pick buttons
-  }
-
-Intent types:
-  schedule_meeting   – professional multi-step meeting creation
-  list_meetings      – show upcoming meetings
-  create_reminder    – multi-step reminder creation
-  list_reminders     – show upcoming reminders
-  upcoming_schedule  – timeline view of all upcoming items
-  save_note          – save a note
-  list_notes         – show recent notes
-  save_link          – save a URL/resource
-  create_task        – create a task
-  list_tasks         – show pending tasks
-  group_query        – structured group intelligence report
-  add_resource       – attach resource to last meeting
-  general            – context-aware AI reply
+process_message() is called by /api/assistant/chat and the Telegram DM handler.
+All logic lives in backend/assistant/handlers/. This file is now a thin orchestrator
+with intent routing, per-intent rate limiting (Phase 6.5), and context injection.
 """
+from __future__ import annotations
 
-import json
 import logging
 import re
-from datetime import datetime, timedelta
 
 _log = logging.getLogger(__name__)
 
-# ─────────────────────────────────────────────────────────────────────────────
-# AI system prompts
-# ─────────────────────────────────────────────────────────────────────────────
-
-_INTENT_SYSTEM = """\
-You are a Telegram operations assistant for Telegram group/channel owners. Parse the user's message and return ONLY a JSON object — no explanation, no prose, no markdown fences.
-
-Return exactly this structure:
-{
-  "intent": <one of: "schedule_meeting" | "list_meetings" | "create_reminder" | "list_reminders" | "upcoming_schedule" | "save_note" | "list_notes" | "save_link" | "create_task" | "list_tasks" | "group_query" | "add_resource" | "general">,
-  "title": <meeting/task/reminder title string, or null>,
-  "datetime_hint": <natural language date/time phrase, or null>,
-  "participants": <list of name strings, [] if none>,
-  "priority": <"low" | "medium" | "high">,
-  "timezone": <IANA timezone string if mentioned, or null>,
-  "resource_url": <URL string if user wants to attach a link, or null>,
-  "resource_note": <text content for note/task/resource if provided, or null>,
-  "reply": <short friendly assistant reply, plain text, 1-3 sentences>
+# ── Per-intent rate limits (Phase 6.5) ───────────────────────────────────────
+# requests_per_minute per user per intent
+_INTENT_RATE_LIMITS: dict[str, int] = {
+    "schedule_meeting":  5,
+    "create_reminder":   5,
+    "group_query":       3,
+    "trigger_digest":    2,
+    "post_announcement": 3,
+    "get_group_stats":   5,
+    "general":          20,
+    "_default":         15,
 }
 
-Rules:
-- ALWAYS return valid JSON only. No text before or after the JSON object.
-- schedule_meeting: user wants to book/create a meeting. Set title and datetime_hint when available.
-- create_reminder: user wants to be reminded about something. Set title=reminder text, datetime_hint if given.
-- upcoming_schedule: user asks about upcoming events, schedule, what's next, what's today.
-- save_note: put note content in resource_note field.
-- save_link: put URL in resource_url field.
-- create_task: put task title in title field.
-- list_* intents: set intent only, brief reply.
-- group_query: user asks about group issues, activity, status, problems.
-- general: set reply only.
-- Default priority is "medium".
 
-Examples (input → output):
----
-Input: "Book a meeting"
-{"intent":"schedule_meeting","title":null,"datetime_hint":null,"participants":[],"priority":"medium","timezone":null,"resource_url":null,"resource_note":null,"reply":"Sure! Let me set that up for you."}
-
-Input: "Schedule investor call Friday 5 PM"
-{"intent":"schedule_meeting","title":"Investor Call","datetime_hint":"Friday 5 PM","participants":[],"priority":"high","timezone":null,"resource_url":null,"resource_note":null,"reply":"Booking your investor call for Friday at 5 PM."}
-
-Input: "Remind me tomorrow"
-{"intent":"create_reminder","title":null,"datetime_hint":"tomorrow","participants":[],"priority":"medium","timezone":null,"resource_url":null,"resource_note":null,"reply":"Sure, what should I remind you about?"}
-
-Input: "Remind me to call Alice at 3 PM"
-{"intent":"create_reminder","title":"Call Alice","datetime_hint":"3 PM","participants":[],"priority":"medium","timezone":null,"resource_url":null,"resource_note":null,"reply":"Got it, I'll remind you to call Alice at 3 PM."}
-
-Input: "Any important upcoming meetings?"
-{"intent":"upcoming_schedule","title":null,"datetime_hint":null,"participants":[],"priority":"medium","timezone":null,"resource_url":null,"resource_note":null,"reply":"Let me check your upcoming schedule."}
-
-Input: "What's on my schedule today?"
-{"intent":"upcoming_schedule","title":null,"datetime_hint":null,"participants":[],"priority":"medium","timezone":null,"resource_url":null,"resource_note":null,"reply":"Checking your schedule for today."}
-
-Input: "Any meetings coming up?"
-{"intent":"list_meetings","title":null,"datetime_hint":null,"participants":[],"priority":"medium","timezone":null,"resource_url":null,"resource_note":null,"reply":"Let me check your upcoming meetings."}
-
-Input: "Show my reminders"
-{"intent":"list_reminders","title":null,"datetime_hint":null,"participants":[],"priority":"medium","timezone":null,"resource_url":null,"resource_note":null,"reply":"Here are your reminders."}
-
-Input: "Note this: project deadline is Friday"
-{"intent":"save_note","title":null,"datetime_hint":null,"participants":[],"priority":"medium","timezone":null,"resource_url":null,"resource_note":"project deadline is Friday","reply":"Got it, saving that note."}
-
-Input: "Save this link for later: https://example.com/docs"
-{"intent":"save_link","title":null,"datetime_hint":null,"participants":[],"priority":"medium","timezone":null,"resource_url":"https://example.com/docs","resource_note":null,"reply":"Link saved."}
-
-Input: "Create task: write product spec"
-{"intent":"create_task","title":"Write product spec","datetime_hint":null,"participants":[],"priority":"medium","timezone":null,"resource_url":null,"resource_note":null,"reply":"Task created."}
-
-Input: "What's going on in my groups?"
-{"intent":"group_query","title":null,"datetime_hint":null,"participants":[],"priority":"medium","timezone":null,"resource_url":null,"resource_note":null,"reply":"Analyzing your group activity now."}
-
-Input: "Any issue in my groups today?"
-{"intent":"group_query","title":null,"datetime_hint":null,"participants":[],"priority":"medium","timezone":null,"resource_url":null,"resource_note":null,"reply":"Let me check your groups for any issues."}
----
-"""
-
-_RESOLVE_DATETIME_SYSTEM = """\
-You are a date/time parser. Given a natural-language phrase and today's date/time in UTC,
-return ONLY a JSON object (no extra text):
-{
-  "iso": "YYYY-MM-DDTHH:MM:SS" (in UTC, null only if the phrase is completely unparseable),
-  "human": "human-readable string like Monday 12 May at 3:00 PM UTC"
-}
-
-Important rules:
-- If a day is given but no time, default to 12:00 PM (noon).
-- "tomorrow" = tomorrow at 12:00 PM UTC.
-- "today" = today at 12:00 PM UTC.
-- Day names like "Monday", "Friday" = the next occurrence of that day at 12:00 PM UTC.
-- Only return null iso if the phrase contains no date/time information at all.
-"""
-
-_GROUP_ANALYSIS_SYSTEM = """\
-You are a Telegram community operations assistant. Analyze the group messages and return a structured report.
-
-For each group, identify:
-- Spam or moderation issues (raids, floods, suspicious links)
-- Member complaints or conflicts
-- Important unanswered questions from the last 24h
-- High-priority discussions needing admin attention
-- Unusual activity patterns
-
-Format your response exactly like this for each group:
-Group: [group name]
-Status: [Healthy / Needs Attention / Critical]
-Issues:
-• [issue 1]
-• [issue 2]
-Recommended action: [what admin should do]
-
-If a group looks healthy with no issues, just say Status: Healthy with a brief note.
-Be concise and factual. No filler text.
-"""
-
-_GENERAL_AI_SYSTEM = """\
-You are a professional Telegram community operations assistant named Telegizer Assistant.
-You help Telegram group/channel owners manage their communities, schedule meetings, track tasks, and stay organized.
-
-You have access to the user's workspace data (provided in the prompt) and should give intelligent, context-aware answers.
-Keep replies professional, clear, and concise — short enough for Telegram.
-Suggest actions when relevant. Never be robotic.
-"""
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Keyword-based pre-filter / fallback intent detection
-# ─────────────────────────────────────────────────────────────────────────────
-
-_SCHEDULE_PATTERNS = re.compile(
-    r"\b(schedul|book|set up|create|add|save|plan|arrange|organis|organiz|set a meeting|set meeting"
-    r"|new meeting|make a meeting|can you schedule|new call|set a call)\b",
-    re.IGNORECASE,
-)
-_MEETING_NOUN = re.compile(
-    r"\b(meeting|call|standup|stand.?up|sync|catchup|catch.?up|session|appointment|interview|demo|webinar|event)\b",
-    re.IGNORECASE,
-)
-_LIST_MEETINGS_PATTERNS = re.compile(
-    r"\b(any meetings|what meetings|my meetings|show meetings|list meetings|next meeting"
-    r"|meetings today|meetings tomorrow|do i have.*meeting)\b",
-    re.IGNORECASE,
-)
-_UPCOMING_SCHEDULE_PATTERNS = re.compile(
-    r"\b(upcoming|my schedule|check my calendar|what.?s next|what.?s today|what.?s on|schedule today"
-    r"|schedule tomorrow|important.*upcoming|any important|timeline|what do i have|anything today)\b",
-    re.IGNORECASE,
-)
-_CREATE_REMINDER_PATTERNS = re.compile(
-    r"\b(remind me|set a reminder|create reminder|add reminder|new reminder|remind me about|remind me to)\b",
-    re.IGNORECASE,
-)
-_LIST_REMINDERS_PATTERNS = re.compile(
-    r"\b(my reminders|show reminders|list reminders|upcoming reminders|any reminders|what reminders|see reminders)\b",
-    re.IGNORECASE,
-)
-_GROUP_PATTERNS = re.compile(
-    r"\b(group|groups|community|communities|members|moderation|spam|group activity|group summary)\b",
-    re.IGNORECASE,
-)
-_GROUP_ISSUE_SIGNALS = re.compile(
-    r"\b(issue|problem|spam|going on|activity|summary|happening|trouble|concern|report|status|check|any major)\b",
-    re.IGNORECASE,
-)
-_SAVE_NOTE_PATTERNS = re.compile(
-    r"\b(note this|note:|save this as|save as note|remember this|jot this|write this down|log this"
-    r"|save this note|quick note|add note|make a note)\b",
-    re.IGNORECASE,
-)
-_LIST_NOTES_PATTERNS = re.compile(
-    r"\b(my notes|show notes|list notes|what notes|see notes|view notes|recent notes|saved notes|get my notes)\b",
-    re.IGNORECASE,
-)
-_SAVE_LINK_PATTERNS = re.compile(
-    r"\b(save.*link|save.*url|save.*http|remember.*link|bookmark|save for later|keep this link|save this link)\b",
-    re.IGNORECASE,
-)
-_CREATE_TASK_PATTERNS = re.compile(
-    r"\b(create task|add task|new task|task:|to do:|todo:|add to.{0,10}task|add.{0,10}to my list"
-    r"|i need to|don.t forget to)\b",
-    re.IGNORECASE,
-)
-_LIST_TASKS_PATTERNS = re.compile(
-    r"\b(my tasks|show tasks|list tasks|pending tasks|what tasks|see tasks|open tasks|to.do list)\b",
-    re.IGNORECASE,
-)
-_CANCEL_PATTERNS = re.compile(
-    r"^(cancel|stop|nevermind|never mind|forget it|abort|quit|exit|no thanks|nope|no)\s*[.!]?$",
-    re.IGNORECASE,
-)
-_CONFIRM_YES_PATTERNS = re.compile(
-    r"^(yes|yeah|yep|yup|ok|okay|sure|confirm|save it|go ahead|do it|save|correct|right|looks good|perfect)\s*[.!]?$",
-    re.IGNORECASE,
-)
-
-
-def _keyword_intent(message: str) -> str | None:
-    """Return a best-guess intent from keyword matching, or None if uncertain."""
-    msg = message.lower()
-
-    if _LIST_REMINDERS_PATTERNS.search(msg):
-        return "list_reminders"
-    if _LIST_MEETINGS_PATTERNS.search(msg):
-        return "list_meetings"
-    if _LIST_NOTES_PATTERNS.search(msg):
-        return "list_notes"
-    if _LIST_TASKS_PATTERNS.search(msg):
-        return "list_tasks"
-    if _UPCOMING_SCHEDULE_PATTERNS.search(msg):
-        return "upcoming_schedule"
-    if _GROUP_PATTERNS.search(msg) and _GROUP_ISSUE_SIGNALS.search(msg):
-        return "group_query"
-    if _CREATE_REMINDER_PATTERNS.search(msg):
-        return "create_reminder"
-    if _SAVE_NOTE_PATTERNS.search(msg):
-        return "save_note"
-    if re.search(r"https?://", msg) and re.search(r"\b(save|remember|bookmark|keep|note)\b", msg):
-        return "save_link"
-    if re.search(r"\b(search|find|look\s+for|look\s+up)\b.*\bnotes?\b", msg):
-        return "search_notes"
-    if re.search(r"\b(summarize|summary\s+of)\b.*\bnotes?\b", msg):
-        return "summarize_notes"
-    if _CREATE_TASK_PATTERNS.search(msg):
-        return "create_task"
-    if _SCHEDULE_PATTERNS.search(msg) or _MEETING_NOUN.search(msg):
-        return "schedule_meeting"
-
-    # Platform action keywords
-    if re.search(r"\b(trigger|send|run)\b.*\bdigest\b", msg):
-        return "trigger_digest"
-    if re.search(r"\b(post|announce|broadcast|send)\b.*(announcement|message|update).*\bgroup\b", msg):
-        return "post_announcement"
-    if re.search(r"\b(group\s+stats?|group\s+health|how.*group.*doing|show.*groups?)\b", msg):
-        return "get_group_stats"
-    if re.search(r"\b(list|show)\b.*(auto.?repl|keyword|trigger)s?\b", msg):
-        return "list_auto_replies"
-    if re.search(r"\b(enable|disable|turn\s+on|turn\s+off)\b.*\b(automod|auto.?mod)\b", msg):
-        return "update_automod"
-
-    return None
-
-
-def _extract_datetime_hint(message: str) -> str | None:
-    day_pat = re.compile(
-        r"\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday"
-        r"|next\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|week|month)"
-        r"|this\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)"
-        r"|in\s+\d+\s+days?)\b",
-        re.IGNORECASE,
-    )
-    time_pat = re.compile(
-        r"\b(\d{1,2}(?::\d{2})?\s*(?:am|pm)|at\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?|noon|midnight)\b",
-        re.IGNORECASE,
-    )
-    in_pat = re.compile(
-        r"\b(in\s+\d+\s*(?:minutes?|hours?|days?|weeks?))\b",
-        re.IGNORECASE,
-    )
-
-    day_m = day_pat.search(message)
-    time_m = time_pat.search(message)
-    in_m = in_pat.search(message)
-
-    parts = []
-    if day_m:
-        parts.append(day_m.group(0).strip())
-    if time_m:
-        t = time_m.group(0).strip()
-        if t not in parts:
-            parts.append(t)
-
-    if parts:
-        return " ".join(parts)
-    if in_m:
-        return in_m.group(0).strip()
-
-    return None
-
-
-def _parse_reminder_minutes(text: str) -> int:
-    """Parse a reminder preference into minutes-before. Returns 15 as default."""
-    t = text.lower().strip()
-    if "no reminder" in t or t in ("no", "none", "skip", "__skip__"):
-        return 0
-    m = re.search(r"(\d+)\s*minute", t)
-    if m:
-        return int(m.group(1))
-    m = re.search(r"(\d+)\s*hour", t)
-    if m:
-        return int(m.group(1)) * 60
-    m = re.search(r"(\d+)\s*day", t)
-    if m:
-        return int(m.group(1)) * 1440
-    # Common phrases
-    if "morning" in t or "day before" in t or "1 day" in t:
-        return 1440
-    if "30 min" in t:
-        return 30
-    if "1 hour" in t or "an hour" in t:
-        return 60
-    if "2 hour" in t:
-        return 120
-    if "10 min" in t:
-        return 10
-    return 15
-
-
-def _keyword_parse(message: str) -> dict:
-    datetime_hint = _extract_datetime_hint(message)
-    title = re.sub(
-        r"^(schedule|book|create|add|save|plan|set up|arrange|can you schedule|"
-        r"set a meeting for|set meeting for|make a meeting for|"
-        r"new meeting|a meeting|one meeting|my meeting)\s*",
-        "", message.strip(), flags=re.IGNORECASE
-    ).strip()
-    if datetime_hint:
-        title = re.sub(re.escape(datetime_hint), "", title, flags=re.IGNORECASE).strip().strip("-–—,").strip()
-    title = re.sub(
-        r"\b(at|on|for|tomorrow|today|monday|tuesday|wednesday|thursday|friday|saturday|sunday"
-        r"|next\s+\w+|\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\b", "", title, flags=re.IGNORECASE
-    ).strip().strip("-–—,").strip()
-    if not title or len(title) < 2:
-        title = None
-    return {
-        "intent": "schedule_meeting",
-        "title": title,
-        "datetime_hint": datetime_hint,
-        "participants": [],
-        "priority": "medium",
-        "timezone": None,
-        "resource_url": None,
-        "resource_note": None,
-        "reply": "Sure! Let me get that scheduled.",
-    }
-
-
-def _keyword_parse_note(message: str) -> str | None:
-    clean = re.sub(
-        r"^(note this[:\s]*|note[:\s]+|save this as a? note[:\s]*|save this[:\s]+|"
-        r"remember this[:\s]*|jot this down[:\s]*|write this down[:\s]*|"
-        r"log this[:\s]*|save this note[:\s]*|quick note[:\s]*|add note[:\s]*|make a note[:\s]*)",
-        "", message.strip(), flags=re.IGNORECASE
-    ).strip()
-    return clean or None
-
-
-def _keyword_parse_task(message: str) -> str | None:
-    clean = re.sub(
-        r"^(create task[:\s]*|add task[:\s]*|new task[:\s]*|task[:\s]+|to do[:\s]*|todo[:\s]+|"
-        r"add to.{0,10}task list[:\s]*|i need to\s*|don.t forget to\s*)",
-        "", message.strip(), flags=re.IGNORECASE
-    ).strip()
-    return clean or None
-
-
-def _keyword_parse_reminder(message: str) -> tuple[str | None, str | None]:
-    """Returns (text, datetime_hint) extracted from reminder message."""
-    text = re.sub(
-        r"^(remind me (to|about|that)?[:\s]*|set a reminder[:\s]*|create reminder[:\s]*"
-        r"|add reminder[:\s]*|new reminder[:\s]*)",
-        "", message.strip(), flags=re.IGNORECASE
-    ).strip()
-    dt_hint = _extract_datetime_hint(text or message)
-    if dt_hint:
-        text = re.sub(re.escape(dt_hint), "", text, flags=re.IGNORECASE).strip().strip(",-–—").strip()
-    # Strip "at", "on" leftovers
-    text = re.sub(r"\b(at|on|by|in)\b\s*$", "", text, flags=re.IGNORECASE).strip()
-    return (text or None, dt_hint)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# AI call helpers
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _call_ai(key_info: dict, system: str, user_msg: str) -> str:
-    import requests as _r
-    provider = key_info.get("provider", "gemini")
-    api_key = key_info["api_key"]
-    model = key_info.get("model", "gemini-2.0-flash")
-
-    _log.debug("_call_ai provider=%s model=%s msg_len=%d", provider, model, len(user_msg))
-
-    if provider == "gemini":
-        resp = _r.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}",
-            json={
-                "system_instruction": {"parts": [{"text": system}]},
-                "contents": [{"role": "user", "parts": [{"text": user_msg}]}],
-                "generationConfig": {
-                    "temperature": 0.1,
-                    "candidateCount": 1,
-                    "responseMimeType": "application/json",
-                },
-            },
-            timeout=20,
-        )
-        resp.raise_for_status()
-        result = resp.json()
-        _log.debug("gemini raw response: %s", str(result)[:500])
-        return result["candidates"][0]["content"]["parts"][0]["text"].strip()
-
-    if provider == "anthropic":
-        resp = _r.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={"x-api-key": api_key, "anthropic-version": "2023-06-01"},
-            json={
-                "model": model or "claude-haiku-4-5-20251001",
-                "max_tokens": 512,
-                "system": system,
-                "messages": [{"role": "user", "content": user_msg}],
-            },
-            timeout=20,
-        )
-        resp.raise_for_status()
-        return resp.json()["content"][0]["text"].strip()
-
-    base = key_info.get("base_url", "https://api.openai.com/v1")
-    resp = _r.post(
-        f"{base.rstrip('/')}/chat/completions",
-        headers={"Authorization": f"Bearer {api_key}"},
-        json={
-            "model": model or "gpt-4o-mini",
-            "temperature": 0.1,
-            "response_format": {"type": "json_object"},
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user_msg},
-            ],
-        },
-        timeout=20,
-    )
-    resp.raise_for_status()
-    return resp.json()["choices"][0]["message"]["content"].strip()
-
-
-def _call_ai_text(key_info: dict, system: str, user_msg: str) -> str:
-    """Call AI expecting plain text response (not JSON)."""
-    import requests as _r
-    provider = key_info.get("provider", "gemini")
-    api_key = key_info["api_key"]
-    model = key_info.get("model", "gemini-2.0-flash")
-
-    if provider == "gemini":
-        resp = _r.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}",
-            json={
-                "system_instruction": {"parts": [{"text": system}]},
-                "contents": [{"role": "user", "parts": [{"text": user_msg}]}],
-                "generationConfig": {"temperature": 0.3, "candidateCount": 1},
-            },
-            timeout=25,
-        )
-        resp.raise_for_status()
-        return resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-
-    if provider == "anthropic":
-        resp = _r.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={"x-api-key": api_key, "anthropic-version": "2023-06-01"},
-            json={
-                "model": model or "claude-haiku-4-5-20251001",
-                "max_tokens": 1024,
-                "system": system,
-                "messages": [{"role": "user", "content": user_msg}],
-            },
-            timeout=25,
-        )
-        resp.raise_for_status()
-        return resp.json()["content"][0]["text"].strip()
-
-    base = key_info.get("base_url", "https://api.openai.com/v1")
-    resp = _r.post(
-        f"{base.rstrip('/')}/chat/completions",
-        headers={"Authorization": f"Bearer {api_key}"},
-        json={
-            "model": model or "gpt-4o-mini",
-            "temperature": 0.3,
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user_msg},
-            ],
-        },
-        timeout=25,
-    )
-    resp.raise_for_status()
-    return resp.json()["choices"][0]["message"]["content"].strip()
-
-
-def _parse_json(text: str) -> dict:
-    text = re.sub(r"^```(?:json)?\s*", "", text.strip(), flags=re.IGNORECASE | re.MULTILINE)
-    text = re.sub(r"\s*```\s*$", "", text.strip(), flags=re.MULTILINE)
-    text = text.strip()
+def _check_intent_rate_limit(user_id: int, intent: str) -> bool:
+    """Return True if the request is allowed, False if rate-limited."""
+    limit = _INTENT_RATE_LIMITS.get(intent, _INTENT_RATE_LIMITS["_default"])
     try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        pass
-    m = re.search(r"\{[\s\S]*\}", text)
-    if m:
-        try:
-            return json.loads(m.group(0))
-        except json.JSONDecodeError:
-            pass
-    raise ValueError(f"No valid JSON in AI response: {text[:200]!r}")
-
-
-def _resolve_datetime(key_info: dict, hint: str, user_tz: str | None) -> dict:
-    now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
-    tz_note = f" User timezone: {user_tz}." if user_tz else ""
-    prompt = f"Today is {now_str}.{tz_note}\nParse this date/time phrase: \"{hint}\""
-    try:
-        raw = _call_ai(key_info, _RESOLVE_DATETIME_SYSTEM, prompt)
-        result = _parse_json(raw)
-        _log.debug("datetime resolve hint=%r → %s", hint, result)
-        if not result.get("iso"):
-            result = _fallback_datetime(hint)
-        return result
-    except Exception as exc:
-        _log.warning("datetime resolve failed: %s — using fallback", exc)
-        return _fallback_datetime(hint)
-
-
-def _fallback_datetime(hint: str) -> dict:
-    now = datetime.utcnow().replace(hour=12, minute=0, second=0, microsecond=0)
-    h = hint.lower()
-
-    weekday_map = {
-        "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
-        "friday": 4, "saturday": 5, "sunday": 6,
-    }
-
-    target = None
-    if "today" in h:
-        target = now
-    elif "tomorrow" in h:
-        target = now + timedelta(days=1)
-    else:
-        for word, wd in weekday_map.items():
-            if word in h:
-                days_ahead = (wd - now.weekday()) % 7 or 7
-                target = now + timedelta(days=days_ahead)
-                break
-
-    if target:
-        time_m = re.search(r"(\d{1,2})(?::(\d{2}))?\s*(am|pm)", h, re.IGNORECASE)
-        if time_m:
-            hour = int(time_m.group(1))
-            minute = int(time_m.group(2) or 0)
-            meridiem = time_m.group(3).lower()
-            if meridiem == "pm" and hour != 12:
-                hour += 12
-            elif meridiem == "am" and hour == 12:
-                hour = 0
-            target = target.replace(hour=hour, minute=minute)
-        iso = target.strftime("%Y-%m-%dT%H:%M:%S")
-        human = target.strftime("%A %d %B at %I:%M %p UTC")
-        return {"iso": iso, "human": human}
-
-    in_m = re.search(r"in\s+(\d+)\s*(minute|hour|day)s?", h, re.IGNORECASE)
-    if in_m:
-        n, unit = int(in_m.group(1)), in_m.group(2).lower()
-        delta = timedelta(minutes=n) if unit == "minute" else timedelta(hours=n) if unit == "hour" else timedelta(days=n)
-        target = datetime.utcnow() + delta
-        return {"iso": target.strftime("%Y-%m-%dT%H:%M:%S"), "human": target.strftime("%A %d %B at %I:%M %p UTC")}
-
-    return {"iso": None, "human": hint}
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Conversation state helpers
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _get_state(user_id: int):
-    from ..models import AssistantConversationState
-    state = AssistantConversationState.query.filter_by(user_id=user_id).first()
-    if state and state.expires_at < datetime.utcnow():
-        from ..models import db
-        db.session.delete(state)
-        db.session.commit()
-        return None
-    return state
-
-
-def _clear_state(user_id: int):
-    from ..models import db, AssistantConversationState
-    AssistantConversationState.query.filter_by(user_id=user_id).delete()
-    db.session.commit()
-
-
-def _save_state(user_id: int, intent: str, data: dict, awaiting: str):
-    from ..models import db, AssistantConversationState
-    state = AssistantConversationState.query.filter_by(user_id=user_id).first()
-    if not state:
-        state = AssistantConversationState(user_id=user_id)
-        db.session.add(state)
-    state.pending_intent = intent
-    state.collected_data = data
-    state.awaiting_field = awaiting
-    state.expires_at = datetime.utcnow() + timedelta(minutes=15)
-    db.session.commit()
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Quick-pick suggestion helpers
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _time_suggestions() -> list:
-    now = datetime.utcnow()
-    today_3pm = now.replace(hour=15, minute=0, second=0, microsecond=0)
-    today_5pm = now.replace(hour=17, minute=0, second=0, microsecond=0)
-    days_to_friday = (4 - now.weekday()) % 7 or 7
-    friday_3pm = (now + timedelta(days=days_to_friday)).replace(hour=15, minute=0, second=0, microsecond=0)
-    suggestions = []
-    if today_3pm > now:
-        suggestions.append({"label": "Today 3 PM", "value": "today at 3 PM"})
-    if today_5pm > now:
-        suggestions.append({"label": "Today 5 PM", "value": "today at 5 PM"})
-    suggestions.append({"label": "Tomorrow 9 AM", "value": "tomorrow at 9 AM"})
-    suggestions.append({"label": "Tomorrow 3 PM", "value": "tomorrow at 3 PM"})
-    suggestions.append({"label": friday_3pm.strftime("Fri %d %b 3 PM"), "value": friday_3pm.strftime("%A at 3 PM")})
-    suggestions.append({"label": "Custom time…", "value": None})
-    return suggestions
-
-
-def _meeting_title_suggestions() -> list:
-    return [
-        {"label": "Quick Call", "value": "Quick Call"},
-        {"label": "Team Sync", "value": "Team Sync"},
-        {"label": "1:1 Meeting", "value": "1:1 Meeting"},
-        {"label": "Project Review", "value": "Project Review"},
-        {"label": "Investor Call", "value": "Investor Call"},
-        {"label": "Other…", "value": None},
-    ]
-
-
-def _reminder_suggestions() -> list:
-    return [
-        {"label": "10 min before", "value": "10 minutes before"},
-        {"label": "30 min before", "value": "30 minutes before"},
-        {"label": "1 hour before", "value": "1 hour before"},
-        {"label": "1 day before", "value": "1 day before"},
-        {"label": "No reminder", "value": "no reminder"},
-    ]
-
-
-def _skip_suggestions(label: str = "Skip") -> list:
-    return [{"label": label, "value": "__skip__"}]
-
-
-def _yes_no_suggestions() -> list:
-    return [
-        {"label": "Yes, save it", "value": "yes"},
-        {"label": "No, cancel", "value": "cancel"},
-    ]
-
-
-_SKIP_VALUE = "__skip__"
-
-
-def _is_self_contained_schedule_request(message: str) -> bool:
-    has_schedule = bool(_SCHEDULE_PATTERNS.search(message) or _MEETING_NOUN.search(message))
-    has_time = bool(_extract_datetime_hint(message))
-    return has_schedule and has_time
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Meeting creation — professional 6-step flow
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _handle_schedule_meeting(user_id: int, parsed: dict, key_info: dict, user_tz: str | None) -> dict:
-    """
-    Professional multi-step meeting creation.
-    Steps: title → time → reminder → notes → resources → confirmation → save
-    """
-    from ..models import db, Meeting
-
-    data = {
-        "title":              parsed.get("title"),
-        "datetime_hint":      parsed.get("datetime_hint"),
-        "timezone":           parsed.get("timezone") or user_tz or "UTC",
-        "_resolved_iso":      parsed.get("_resolved_iso"),
-        "_resolved_human":    parsed.get("_resolved_human"),
-        "reminder_minutes":   parsed.get("reminder_minutes"),       # int | None
-        "notes":              parsed.get("notes"),                   # agenda text
-        "resource_url":       parsed.get("resource_url"),           # link to attach
-        "_reminder_asked":    parsed.get("_reminder_asked", False),
-        "_notes_asked":       parsed.get("_notes_asked", False),
-        "_resources_asked":   parsed.get("_resources_asked", False),
-    }
-
-    # ── Step 1: Need title ────────────────────────────────────────────────────
-    if not data["title"]:
-        _save_state(user_id, "schedule_meeting", data, "title")
-        return {
-            "reply": "Sure — what should I call this meeting?",
-            "intent": "schedule_meeting",
-            "data": None,
-            "suggestions": _meeting_title_suggestions(),
-        }
-
-    # ── Step 2: Need time ─────────────────────────────────────────────────────
-    if not data["_resolved_iso"] and not data["datetime_hint"]:
-        _save_state(user_id, "schedule_meeting", data, "datetime_hint")
-        return {
-            "reply": f"When should I schedule \"{data['title']}\"?",
-            "intent": "schedule_meeting",
-            "data": None,
-            "suggestions": _time_suggestions(),
-        }
-
-    # Resolve datetime if we have a hint but not yet a resolved ISO
-    if not data["_resolved_iso"] and data["datetime_hint"]:
-        dt_result = _resolve_datetime(key_info, data["datetime_hint"], data["timezone"])
-        if not dt_result.get("iso"):
-            _save_state(user_id, "schedule_meeting", data, "datetime_hint")
-            return {
-                "reply": f"I couldn't parse \"{data['datetime_hint']}\" as a date/time. When should I schedule it?",
-                "intent": "schedule_meeting",
-                "data": None,
-                "suggestions": _time_suggestions(),
-            }
-        data["_resolved_iso"] = dt_result["iso"]
-        data["_resolved_human"] = dt_result["human"]
-
-    # ── Step 3: Ask reminder preference ──────────────────────────────────────
-    if not data["_reminder_asked"] and data["reminder_minutes"] is None:
-        data["_reminder_asked"] = True
-        _save_state(user_id, "schedule_meeting", data, "reminder")
-        return {
-            "reply": (
-                f"Got it — \"{data['title']}\" on {data['_resolved_human']}.\n\n"
-                "Do you want a reminder before the meeting?"
-            ),
-            "intent": "schedule_meeting",
-            "data": None,
-            "suggestions": _reminder_suggestions(),
-        }
-
-    # ── Step 4: Ask notes/agenda ──────────────────────────────────────────────
-    if not data["_notes_asked"] and data["notes"] is None:
-        data["_notes_asked"] = True
-        _save_state(user_id, "schedule_meeting", data, "notes")
-        return {
-            "reply": "Any agenda or notes I should attach? (e.g. topics to cover, goals, context)",
-            "intent": "schedule_meeting",
-            "data": None,
-            "suggestions": [
-                {"label": "Skip", "value": "__skip__"},
-            ],
-        }
-
-    # ── Step 5: Ask for resources/links ──────────────────────────────────────
-    if not data["_resources_asked"] and data["resource_url"] is None:
-        data["_resources_asked"] = True
-        _save_state(user_id, "schedule_meeting", data, "resource_url")
-        return {
-            "reply": "Do you want to attach any links or resources? (e.g. doc, agenda, Zoom link)",
-            "intent": "schedule_meeting",
-            "data": None,
-            "suggestions": [
-                {"label": "Skip", "value": "__skip__"},
-            ],
-        }
-
-    # ── Step 6: Show confirmation summary ────────────────────────────────────
-    if not parsed.get("_confirmed"):
-        reminder_text = _reminder_label(data.get("reminder_minutes"))
-        notes_text = data.get("notes") or "None"
-        resource_text = data.get("resource_url") or "None"
-
-        summary = (
-            f"Here's your meeting summary:\n\n"
-            f"📌 Title: {data['title']}\n"
-            f"🕒 Time: {data['_resolved_human']}\n"
-            f"🔔 Reminder: {reminder_text}\n"
-            f"📝 Notes: {notes_text}\n"
-            f"🔗 Resource: {resource_text}\n\n"
-            f"Should I save it?"
-        )
-        data["_confirmed"] = False
-        _save_state(user_id, "schedule_meeting", data, "confirm")
-        return {
-            "reply": summary,
-            "intent": "schedule_meeting",
-            "data": None,
-            "suggestions": _yes_no_suggestions(),
-        }
-
-    # ── Step 7: Save the meeting ──────────────────────────────────────────────
-    scheduled_at = datetime.fromisoformat(data["_resolved_iso"])
-    window_start = scheduled_at - timedelta(minutes=30)
-    window_end = scheduled_at + timedelta(minutes=30)
-    existing = Meeting.query.filter(
-        Meeting.owner_user_id == user_id,
-        Meeting.title.ilike(data["title"]),
-        Meeting.scheduled_at.between(window_start, window_end),
-        Meeting.is_complete == False,
-    ).first()
-    if existing:
-        _clear_state(user_id)
-        return {
-            "reply": f"You already have \"{existing.title}\" scheduled around that time. I didn't create a duplicate.",
-            "intent": "schedule_meeting",
-            "data": existing.to_dict(),
-        }
-
-    resources = []
-    if data.get("resource_url"):
-        rtype = "link" if data["resource_url"].startswith("http") else "note"
-        resources = [{"type": rtype, "value": data["resource_url"], "label": ""}]
-
-    meeting = Meeting(
-        owner_user_id=user_id,
-        title=data["title"],
-        scheduled_at=scheduled_at,
-        timezone=data["timezone"],
-        priority="medium",
-        remind_before_minutes=data.get("reminder_minutes") or 15,
-        notes=data.get("notes"),
-        resources=resources or None,
-    )
-    db.session.add(meeting)
-    db.session.commit()
-    _clear_state(user_id)
-
-    try:
-        from ..assistant.context_service import AssistantContextService
-        AssistantContextService.invalidate(user_id)
+        import redis as _redis
+        from ..config import Config
+        r = _redis.from_url(getattr(Config, "REDIS_URL", "redis://localhost:6379/0"))
+        key = f"rl:intent:{user_id}:{intent}"
+        pipe = r.pipeline()
+        pipe.incr(key)
+        pipe.expire(key, 60)
+        count, _ = pipe.execute()
+        return count <= limit
     except Exception:
-        pass
+        # Redis unavailable — allow through
+        return True
 
-    try:
-        from ..integrations.dispatcher import fire_event
-        fire_event(user_id, "meeting.created", meeting.to_dict())
-    except Exception:
-        pass
 
-    suggestions = []
-    if not data.get("notes"):
-        suggestions.append({"label": "Add agenda", "value": f"Add notes to my {data['title']} meeting"})
-    suggestions.append({"label": "Schedule another", "value": "Book a meeting"})
-
-    reply = f"✅ Meeting saved!\n\n📅 {meeting.title}\n🕒 {data['_resolved_human']}"
-    if meeting.remind_before_minutes:
-        reply += f"\n🔔 Reminder: {_reminder_label(meeting.remind_before_minutes)}"
-    if not data.get("notes"):
-        reply += "\n\n💡 Suggestion: add an agenda so participants know the purpose."
-
-    return {
-        "reply": reply,
-        "intent": "schedule_meeting",
-        "data": meeting.to_dict(),
-        "suggestions": suggestions,
-    }
-
-
-def _reminder_label(minutes: int | None) -> str:
-    if not minutes:
-        return "None"
-    if minutes < 60:
-        return f"{minutes} minutes before"
-    if minutes == 60:
-        return "1 hour before"
-    if minutes < 1440:
-        return f"{minutes // 60} hours before"
-    return f"{minutes // 1440} day(s) before"
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Reminder creation — multi-step flow
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _handle_create_reminder(user_id: int, parsed: dict, key_info: dict, user_tz: str | None) -> dict:
-    """Multi-step: reminder text → time → save."""
-    from ..models import db, WorkspaceReminder
-
-    data = {
-        "text":           parsed.get("title") or parsed.get("text"),
-        "datetime_hint":  parsed.get("datetime_hint"),
-        "timezone":       parsed.get("timezone") or user_tz or "UTC",
-        "_resolved_iso":  parsed.get("_resolved_iso"),
-        "_resolved_human": parsed.get("_resolved_human"),
-    }
-
-    # ── Step 1: Need reminder text ────────────────────────────────────────────
-    if not data["text"]:
-        _save_state(user_id, "create_reminder", data, "text")
-        return {
-            "reply": "Sure — what should I remind you about?",
-            "intent": "create_reminder",
-            "data": None,
-            "suggestions": [
-                {"label": "Follow up on email", "value": "Follow up on email"},
-                {"label": "Review document", "value": "Review document"},
-                {"label": "Team check-in", "value": "Team check-in"},
-                {"label": "Custom…", "value": None},
-            ],
-        }
-
-    # ── Step 2: Need time ─────────────────────────────────────────────────────
-    if not data["_resolved_iso"] and not data["datetime_hint"]:
-        _save_state(user_id, "create_reminder", data, "datetime_hint")
-        return {
-            "reply": f"When should I remind you about \"{data['text']}\"?",
-            "intent": "create_reminder",
-            "data": None,
-            "suggestions": _time_suggestions(),
-        }
-
-    if not data["_resolved_iso"] and data["datetime_hint"]:
-        dt_result = _resolve_datetime(key_info, data["datetime_hint"], data["timezone"])
-        if not dt_result.get("iso"):
-            _save_state(user_id, "create_reminder", data, "datetime_hint")
-            return {
-                "reply": f"I couldn't parse that time. When exactly should I remind you?",
-                "intent": "create_reminder",
-                "data": None,
-                "suggestions": _time_suggestions(),
-            }
-        data["_resolved_iso"] = dt_result["iso"]
-        data["_resolved_human"] = dt_result["human"]
-
-    # ── Step 3: Save ──────────────────────────────────────────────────────────
-    remind_at = datetime.fromisoformat(data["_resolved_iso"])
-    reminder = WorkspaceReminder(
-        owner_user_id=user_id,
-        reminder_text=data["text"][:500],
-        remind_at=remind_at,
-    )
-    db.session.add(reminder)
-    db.session.commit()
-    _clear_state(user_id)
-    try:
-        from ..assistant.context_service import AssistantContextService
-        AssistantContextService.invalidate(user_id)
-    except Exception:
-        pass
-
-    return {
-        "reply": (
-            f"🔔 Reminder set!\n\n"
-            f"📌 {data['text']}\n"
-            f"🕒 {data['_resolved_human']}"
-        ),
-        "intent": "create_reminder",
-        "data": reminder.to_dict(),
-        "suggestions": [
-            {"label": "Add another reminder", "value": "Remind me"},
-            {"label": "Show my reminders", "value": "show my reminders"},
-        ],
-    }
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Upcoming schedule — timeline view
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _handle_upcoming_schedule(user_id: int) -> dict:
-    """Returns a unified timeline of meetings + reminders + tasks sorted by time."""
-    from ..models import Meeting, WorkspaceReminder, Task
-
-    now = datetime.utcnow()
-    today_end = now.replace(hour=23, minute=59, second=59)
-    tomorrow_end = today_end + timedelta(days=1)
-
-    meetings = (
-        Meeting.query
-        .filter(Meeting.owner_user_id == user_id, Meeting.scheduled_at >= now, Meeting.is_complete == False)
-        .order_by(Meeting.scheduled_at.asc())
-        .limit(20)
-        .all()
-    )
-    reminders = (
-        WorkspaceReminder.query
-        .filter(WorkspaceReminder.owner_user_id == user_id, WorkspaceReminder.remind_at >= now, WorkspaceReminder.is_delivered == False)
-        .order_by(WorkspaceReminder.remind_at.asc())
-        .limit(20)
-        .all()
-    )
-    tasks = (
-        Task.query
-        .filter(Task.user_id == user_id, Task.status == "todo", Task.due_at != None, Task.due_at >= now)
-        .order_by(Task.due_at.asc())
-        .limit(10)
-        .all()
-    )
-
-    # Build unified event list
-    events = []
-    for m in meetings:
-        events.append({"dt": m.scheduled_at, "type": "📅 Meeting", "text": m.title})
-    for r in reminders:
-        events.append({"dt": r.remind_at, "type": "🔔 Reminder", "text": r.reminder_text})
-    for t in tasks:
-        events.append({"dt": t.due_at, "type": "✅ Task", "text": t.title})
-
-    if not events:
-        return {
-            "reply": "You have nothing scheduled coming up. Your calendar is clear! 🎉",
-            "intent": "upcoming_schedule",
-            "data": {"meetings": [], "reminders": [], "tasks": []},
-        }
-
-    events.sort(key=lambda e: e["dt"])
-
-    # Group by today / tomorrow / later
-    today_items = [e for e in events if e["dt"] <= today_end]
-    tomorrow_items = [e for e in events if today_end < e["dt"] <= tomorrow_end]
-    later_items = [e for e in events if e["dt"] > tomorrow_end]
-
-    lines = []
-    if today_items:
-        lines.append("Today:")
-        for e in today_items:
-            lines.append(f"  • {e['dt'].strftime('%I:%M %p')} — {e['type']}: {e['text']}")
-    if tomorrow_items:
-        lines.append("\nTomorrow:")
-        for e in tomorrow_items:
-            lines.append(f"  • {e['dt'].strftime('%I:%M %p')} — {e['type']}: {e['text']}")
-    if later_items:
-        lines.append("\nUpcoming:")
-        for e in later_items[:8]:
-            lines.append(f"  • {e['dt'].strftime('%b %d, %I:%M %p')} — {e['type']}: {e['text']}")
-
-    reply = "Here's your upcoming schedule:\n\n" + "\n".join(lines)
-
-    if not today_items:
-        reply += "\n\n✨ Nothing scheduled for today."
-
-    return {
-        "reply": reply,
-        "intent": "upcoming_schedule",
-        "data": {
-            "meetings": [m.to_dict() for m in meetings],
-            "reminders": [r.to_dict() for r in reminders],
-            "tasks": [t.to_dict() for t in tasks],
-        },
-    }
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Note and link handlers
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _handle_save_note(user_id: int, content: str) -> dict:
-    from ..models import db, Note
-    if not content or not content.strip():
-        return {"reply": "What would you like me to note down?", "intent": "save_note", "data": None}
-    note = Note(user_id=user_id, content=content.strip()[:5000], source="bot", tags=[])
-    db.session.add(note)
-    db.session.commit()
-    try:
-        from ..assistant.context_service import AssistantContextService
-        AssistantContextService.invalidate(user_id)
-    except Exception:
-        pass
-    return {
-        "reply": f"📝 Note saved: \"{content.strip()[:80]}{'…' if len(content) > 80 else ''}\"",
-        "intent": "save_note",
-        "data": note.to_dict(),
-        "suggestions": [
-            {"label": "Show my notes", "value": "show my notes"},
-            {"label": "Add another", "value": "note this: "},
-        ],
-    }
-
-
-def _handle_list_notes(user_id: int) -> dict:
-    from ..models import Note
-    notes = (
-        Note.query
-        .filter_by(user_id=user_id)
-        .order_by(Note.created_at.desc())
-        .limit(8)
-        .all()
-    )
-    if not notes:
-        return {"reply": "You have no notes yet. Try saying \"Note this: your message\".", "intent": "list_notes", "data": {"notes": []}}
-    lines = [f"• {n.content[:100]}{'…' if len(n.content) > 100 else ''}" for n in notes]
-    reply = f"Here are your {len(notes)} most recent notes:\n\n" + "\n".join(lines)
-    return {"reply": reply, "intent": "list_notes", "data": {"notes": [n.to_dict() for n in notes]}}
-
-
-def _handle_search_notes(user_id: int, query: str, key_info: dict) -> dict:
-    """Semantic (or keyword-fallback) search across user's notes."""
-    from ..assistant.embeddings import semantic_search
-    results = semantic_search(user_id, query, key_info, limit=5)
-    if not results:
-        return {
-            "reply": f"No notes found matching \"{query[:60]}\". Try a different phrase.",
-            "intent": "search_notes",
-            "data": {"notes": [], "query": query},
-        }
-    lines = [f"• {n.content[:120]}{'…' if len(n.content) > 120 else ''}" for n in results]
-    reply = f"Found {len(results)} note(s) matching \"{query[:40]}\":\n\n" + "\n".join(lines)
-    return {
-        "reply": reply,
-        "intent": "search_notes",
-        "data": {"notes": [n.to_dict() for n in results], "query": query},
-    }
-
-
-def _handle_summarize_notes(user_id: int, key_info: dict) -> dict:
-    """AI summary of the user's recent notes."""
-    from ..models import Note
-    notes = (
-        Note.query
-        .filter_by(user_id=user_id)
-        .order_by(Note.created_at.desc())
-        .limit(20)
-        .all()
-    )
-    if not notes:
-        return {"reply": "You have no notes to summarize yet.", "intent": "summarize_notes", "data": None}
-
-    if not key_info.get("api_key"):
-        # Fallback: just list them
-        return _handle_list_notes(user_id)
-
-    notes_text = "\n".join(f"- {n.content[:200]}" for n in notes)
-    prompt = (
-        "The following are a user's personal notes. Provide a concise summary (3–5 bullet points) "
-        "highlighting key themes, decisions, and action items.\n\n"
-        f"Notes:\n{notes_text}\n\nSummary:"
-    )
-    try:
-        summary = _call_ai_text(key_info, prompt)
-    except Exception:
-        summary = f"You have {len(notes)} notes covering various topics."
-
-    return {
-        "reply": f"📝 Summary of your {len(notes)} most recent notes:\n\n{summary}",
-        "intent": "summarize_notes",
-        "data": {"note_count": len(notes)},
-        "suggestions": [
-            {"label": "Show all notes", "value": "show my notes"},
-            {"label": "Search notes", "value": "search my notes"},
-        ],
-    }
-
-
-def _handle_save_link(user_id: int, url: str, label: str | None = None) -> dict:
-    from ..models import db, Note
-    content = f"{label or 'Saved link'}: {url}"
-    note = Note(user_id=user_id, content=content[:5000], source="bot", tags=["link"])
-    db.session.add(note)
-    db.session.commit()
-    return {
-        "reply": f"🔗 Link saved: {url[:80]}",
-        "intent": "save_link",
-        "data": note.to_dict(),
-        "suggestions": [
-            {"label": "Show saved links", "value": "show my notes"},
-        ],
-    }
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Task handlers
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _handle_create_task(user_id: int, title: str, priority: str = "medium") -> dict:
-    from ..models import db, Task
-    if not title or not title.strip():
-        _save_state(user_id, "create_task", {}, "title")
-        return {"reply": "What task should I add?", "intent": "create_task", "data": None}
-    task = Task(user_id=user_id, title=title.strip()[:500], status="todo", source="bot")
-    db.session.add(task)
-    db.session.commit()
-    return {
-        "reply": f"✅ Task added: \"{task.title}\"",
-        "intent": "create_task",
-        "data": task.to_dict(),
-        "suggestions": [
-            {"label": "Add another task", "value": None},
-            {"label": "Show all tasks", "value": "show my tasks"},
-        ],
-    }
-
-
-def _handle_list_tasks(user_id: int) -> dict:
-    from ..models import Task
-    tasks = (
-        Task.query
-        .filter_by(user_id=user_id, status="todo")
-        .order_by(Task.created_at.desc())
-        .limit(10)
-        .all()
-    )
-    if not tasks:
-        return {"reply": "You have no pending tasks. Try saying \"Create task: your task\".", "intent": "list_tasks", "data": {"tasks": []}}
-    lines = [f"• {t.title}" for t in tasks]
-    reply = f"You have {len(tasks)} pending task{'s' if len(tasks) != 1 else ''}:\n\n" + "\n".join(lines)
-    return {"reply": reply, "intent": "list_tasks", "data": {"tasks": [t.to_dict() for t in tasks]}}
-
-
-def _handle_list_meetings(user_id: int) -> dict:
-    from ..models import Meeting
-    now = datetime.utcnow()
-    meetings = (
-        Meeting.query
-        .filter(Meeting.owner_user_id == user_id, Meeting.scheduled_at >= now, Meeting.is_complete == False)
-        .order_by(Meeting.scheduled_at.asc())
-        .limit(10)
-        .all()
-    )
-    if not meetings:
-        return {
-            "reply": "You have no upcoming meetings. Want to schedule one?",
-            "intent": "list_meetings",
-            "data": {"meetings": []},
-            "suggestions": [{"label": "Book a meeting", "value": "Book a meeting"}],
-        }
-    lines = []
-    for m in meetings:
-        dt = m.scheduled_at.strftime("%b %d, %I:%M %p UTC")
-        lines.append(f"• {m.title} — {dt}")
-    reply = "Here are your upcoming meetings:\n\n" + "\n".join(lines)
-    return {"reply": reply, "intent": "list_meetings", "data": {"meetings": [m.to_dict() for m in meetings]}}
-
-
-def _handle_list_reminders(user_id: int) -> dict:
-    from ..models import WorkspaceReminder
-    now = datetime.utcnow()
-    reminders = (
-        WorkspaceReminder.query
-        .filter(WorkspaceReminder.owner_user_id == user_id, WorkspaceReminder.remind_at >= now, WorkspaceReminder.is_delivered == False)
-        .order_by(WorkspaceReminder.remind_at.asc())
-        .limit(10)
-        .all()
-    )
-    if not reminders:
-        return {
-            "reply": "You have no upcoming reminders.",
-            "intent": "list_reminders",
-            "data": {"reminders": []},
-            "suggestions": [{"label": "Set a reminder", "value": "Remind me"}],
-        }
-    lines = [f"• {r.reminder_text} — {r.remind_at.strftime('%b %d, %I:%M %p UTC')}" for r in reminders]
-    reply = "Here are your upcoming reminders:\n\n" + "\n".join(lines)
-    return {"reply": reply, "intent": "list_reminders", "data": {"reminders": [r.to_dict() for r in reminders]}}
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Group intelligence — structured report
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _handle_group_query(user_id: int, key_info: dict) -> dict:
-    from ..models import TelegramGroup, MessageBuffer
-    groups = TelegramGroup.query.filter_by(owner_user_id=user_id, is_disabled=False).all()
-    if not groups:
-        return {
-            "reply": (
-                "You don't have any groups connected yet.\n\n"
-                "Add @telegizer_bot to your Telegram group and link it in the dashboard to enable group intelligence."
-            ),
-            "intent": "group_query",
-            "data": None,
-        }
-
-    cutoff = datetime.utcnow() - timedelta(hours=24)
-    group_ids = [g.telegram_group_id for g in groups]
-    msgs = (
-        MessageBuffer.query
-        .filter(MessageBuffer.telegram_group_id.in_(group_ids))
-        .filter(MessageBuffer.created_at >= cutoff)
-        .order_by(MessageBuffer.created_at.desc())
-        .limit(300)
-        .all()
-    )
-
-    if not msgs:
-        lines = []
-        for g in groups:
-            lines.append(
-                f"Group: {g.title or g.telegram_group_id}\n"
-                f"Status: No recent activity\n"
-                f"Issues: None detected\n"
-                f"Recommended action: Check if the bot is still active in this group."
-            )
-        return {
-            "reply": "No messages found in your groups in the last 24 hours.\n\n" + "\n\n".join(lines),
-            "intent": "group_query",
-            "data": {"groups_checked": len(groups), "messages_scanned": 0},
-        }
-
-    group_title_map = {g.telegram_group_id: (g.title or g.telegram_group_id) for g in groups}
-    context = "\n".join(
-        f"[{group_title_map.get(m.telegram_group_id, m.telegram_group_id)}] {m.sender_name or 'User'}: {m.message_text}"
-        for m in reversed(msgs)
-    )[:12000]
-
-    prompt = (
-        f"Analyze messages from {len(groups)} Telegram group(s) over the last 24 hours.\n"
-        f"Groups: {', '.join(group_title_map.values())}\n\n"
-        f"Messages:\n{context}"
-    )
-
-    try:
-        summary = _call_ai_text(key_info, _GROUP_ANALYSIS_SYSTEM, prompt)
-    except Exception as exc:
-        _log.warning("group_query AI call failed: %s", exc)
-        # Fallback: basic stats
-        from collections import Counter
-        group_counts = Counter(m.telegram_group_id for m in msgs)
-        lines = []
-        for gid, count in group_counts.items():
-            lines.append(
-                f"Group: {group_title_map.get(gid, gid)}\n"
-                f"Status: Active\n"
-                f"Issues: {count} messages in last 24h (AI analysis unavailable)\n"
-                f"Recommended action: Review messages manually."
-            )
-        return {
-            "reply": "Group activity (last 24h):\n\n" + "\n\n".join(lines),
-            "intent": "group_query",
-            "data": {"groups_checked": len(groups), "messages_scanned": len(msgs)},
-        }
-
-    try:
-        from ..integrations.dispatcher import fire_event
-        fire_event(user_id, "group.issue.detected", {
-            "groups_checked": len(groups),
-            "messages_scanned": len(msgs),
-            "summary_preview": summary[:500],
-        })
-    except Exception:
-        pass
-
-    return {
-        "reply": f"Group intelligence report (last 24h):\n\n{summary}",
-        "intent": "group_query",
-        "data": {"groups_checked": len(groups), "messages_scanned": len(msgs)},
-    }
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Add resource handler
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _handle_add_resource(user_id: int, parsed: dict) -> dict:
-    from ..models import Meeting
-    now = datetime.utcnow()
-    meeting = (
-        Meeting.query
-        .filter(Meeting.owner_user_id == user_id, Meeting.scheduled_at >= now, Meeting.is_complete == False)
-        .order_by(Meeting.scheduled_at.asc())
-        .first()
-    )
-    if not meeting:
-        return {"reply": "I don't see any upcoming meetings to attach resources to. Schedule a meeting first.", "intent": "add_resource", "data": None}
-
-    resource_value = parsed.get("resource_url") or parsed.get("resource_note") or ""
-    if not resource_value:
-        _save_state(user_id, "add_resource", {"meeting_id": meeting.id}, "resource_value")
-        return {"reply": f"What would you like to attach to \"{meeting.title}\"? Paste a link or type a note.", "intent": "add_resource", "data": None}
-
-    return _attach_resource(user_id, meeting.id, resource_value)
-
-
-def _attach_resource(user_id: int, meeting_id: int, value: str, state=None) -> dict:
-    from ..models import db, Meeting
-    meeting = Meeting.query.filter_by(id=meeting_id, owner_user_id=user_id).first()
-    if not meeting:
-        if state:
-            from ..models import AssistantConversationState
-            AssistantConversationState.query.filter_by(user_id=user_id).delete()
-            db.session.commit()
-        return {"reply": "I couldn't find that meeting to attach the resource to.", "intent": "add_resource", "data": None}
-
-    rtype = "link" if value.strip().startswith("http") else "note"
-    resources = list(meeting.resources or [])
-    resources.append({"type": rtype, "value": value.strip(), "label": ""})
-    meeting.resources = resources
-    db.session.commit()
-    if state:
-        from ..models import AssistantConversationState
-        AssistantConversationState.query.filter_by(user_id=user_id).delete()
-        db.session.commit()
-
-    try:
-        from ..integrations.dispatcher import fire_event
-        fire_event(user_id, "resource.attached", {"meeting": meeting.to_dict(), "resource": {"type": rtype, "value": value.strip()}})
-    except Exception:
-        pass
-
-    return {"reply": f"Resource added to \"{meeting.title}\".", "intent": "add_resource", "data": meeting.to_dict()}
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# General AI response with workspace context
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _handle_general(user_id: int, message: str, key_info: dict, ai_reply: str | None, ctx=None) -> dict:
-    """Intelligent general response using workspace context."""
-    if not key_info.get("api_key"):
-        return {
-            "reply": (
-                "I can help you:\n"
-                "• Schedule meetings — \"Book a call Friday 3 PM\"\n"
-                "• Set reminders — \"Remind me about X tomorrow\"\n"
-                "• Save notes — \"Note this: ...\"\n"
-                "• Create tasks — \"Task: write spec\"\n"
-                "• Save links — \"Save https://...\"\n"
-                "• Check schedule — \"What's on my schedule?\"\n"
-                "• Group insights — \"Any issues in my groups?\"\n\n"
-                "What can I help you with?"
-            ),
-            "intent": "general",
-            "data": None,
-        }
-
-    # Use pre-built context from process_message() — avoids redundant DB queries
-    if ctx:
-        context = ctx.to_prompt_text()
-    else:
-        context = "Workspace data unavailable."
-
-    if ai_reply:
-        return {"reply": ai_reply, "intent": "general", "data": None}
-
-    prompt = (
-        f"User's workspace context:\n{context}\n\n"
-        f"User message: {message}\n\n"
-        f"Give a helpful, professional, concise reply (2-4 sentences max)."
-    )
-    try:
-        reply = _call_ai_text(key_info, _GENERAL_AI_SYSTEM, prompt)
-        return {"reply": reply, "intent": "general", "data": None}
-    except Exception as exc:
-        _log.warning("general AI failed: %s", exc)
-        return {
-            "reply": "I'm here to help! Try: \"Book a meeting\", \"Remind me about X\", \"What's on my schedule?\", or \"Any issues in my groups?\"",
-            "intent": "general",
-            "data": None,
-        }
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Multi-turn conversation continuation
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _handle_continue_state(user_id: int, state, message: str, key_info: dict, user_tz: str | None) -> dict:
-    data = dict(state.collected_data or {})
-    awaiting = state.awaiting_field
-    intent = state.pending_intent
-    msg = message.strip()
-
-    # Universal cancellation
-    if _CANCEL_PATTERNS.match(msg):
-        _clear_state(user_id)
-        return {"reply": "No problem — cancelled. What else can I help you with?", "intent": "general", "data": None}
-
-    # ── Meeting multi-turn ────────────────────────────────────────────────────
-    if intent == "schedule_meeting":
-        if awaiting == "title":
-            data["title"] = msg[:200]
-
-        elif awaiting == "datetime_hint":
-            hint = _extract_datetime_hint(msg) or msg
-            data["datetime_hint"] = hint
-            data["_resolved_iso"] = None
-            data["_resolved_human"] = None
-
-        elif awaiting == "reminder":
-            if msg == _SKIP_VALUE or "no reminder" in msg.lower():
-                data["reminder_minutes"] = 0
-            else:
-                data["reminder_minutes"] = _parse_reminder_minutes(msg)
-            data["_reminder_asked"] = True
-
-        elif awaiting == "notes":
-            if msg == _SKIP_VALUE or msg.lower() in ("skip", "no", "none", "no notes"):
-                data["notes"] = None
-            else:
-                data["notes"] = msg[:2000]
-            data["_notes_asked"] = True
-
-        elif awaiting == "resource_url":
-            if msg == _SKIP_VALUE or msg.lower() in ("skip", "no", "none", "no link", "no resource"):
-                data["resource_url"] = None
-            else:
-                url_m = re.search(r"https?://\S+", msg)
-                data["resource_url"] = url_m.group(0) if url_m else msg
-            data["_resources_asked"] = True
-
-        elif awaiting == "confirm":
-            if _CONFIRM_YES_PATTERNS.match(msg):
-                data["_confirmed"] = True
-                _clear_state(user_id)
-                return _handle_schedule_meeting(user_id, data, key_info, user_tz)
-            else:
-                _clear_state(user_id)
-                return {"reply": "Meeting cancelled. Let me know if you'd like to schedule it differently.", "intent": "general", "data": None}
-
-        _clear_state(user_id)
-        return _handle_schedule_meeting(user_id, data, key_info, user_tz)
-
-    # ── Reminder multi-turn ───────────────────────────────────────────────────
-    if intent == "create_reminder":
-        if awaiting == "text":
-            data["text"] = msg[:500]
-
-        elif awaiting == "datetime_hint":
-            hint = _extract_datetime_hint(msg) or msg
-            data["datetime_hint"] = hint
-            data["_resolved_iso"] = None
-
-        _clear_state(user_id)
-        return _handle_create_reminder(user_id, data, key_info, user_tz)
-
-    # ── Save note ─────────────────────────────────────────────────────────────
-    if intent == "save_note" and awaiting == "content":
-        _clear_state(user_id)
-        return _handle_save_note(user_id, msg)
-
-    # ── Create task ───────────────────────────────────────────────────────────
-    if intent == "create_task" and awaiting == "title":
-        _clear_state(user_id)
-        return _handle_create_task(user_id, msg)
-
-    # ── Add resource ──────────────────────────────────────────────────────────
-    if intent == "add_resource" and awaiting == "resource_value":
-        meeting_id = data.get("meeting_id")
-        if meeting_id:
-            return _attach_resource(user_id, meeting_id, msg, state)
-
-    _clear_state(user_id)
-    return {"reply": "Got it! Is there anything else I can help you with?", "intent": "general", "data": None}
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Public entry point
-# ─────────────────────────────────────────────────────────────────────────────
+# ── Public entry point ────────────────────────────────────────────────────────
 
 def process_message(user_id: int, message: str, user_tz: str | None = None) -> dict:
     """
@@ -1575,27 +56,42 @@ def process_message(user_id: int, message: str, user_tz: str | None = None) -> d
     from ..assistant.context_service import AssistantContextService
     from ..models import User
 
+    # Import handler functions from the package
+    from .handlers import (
+        handle_schedule_meeting, handle_create_reminder, handle_upcoming_schedule,
+        handle_save_note, handle_list_notes, handle_search_notes, handle_summarize_notes,
+        handle_save_link, handle_create_task, handle_list_tasks,
+        handle_list_meetings, handle_list_reminders,
+        handle_group_query, handle_general, handle_add_resource, handle_continue_state,
+    )
+    from .handlers._parsers import (
+        keyword_intent, keyword_parse, keyword_parse_note, keyword_parse_task, keyword_parse_reminder,
+        extract_datetime_hint,
+    )
+    from .handlers._state import get_state, clear_state
+    from .handlers._patterns import SCHEDULE_PATTERNS, MEETING_NOUN
+    from .handlers._ai import call_ai, parse_json
+    from .handlers._prompts import INTENT_SYSTEM
+
     _log.info("process_message user_id=%s message=%r", user_id, message[:120])
 
     user = User.query.get(user_id)
     if not user:
-        return {"reply": "User not found.", "intent": "error", "data": None}
+        return {"reply": "User not found.", "intent": "error", "data": None, "suggestions": []}
 
     try:
         key_info = get_workspace_ai_key(user)
     except QuotaExceededError as exc:
-        _log.info("QuotaExceededError for user %s: %s", user_id, exc)
-        return {"reply": str(exc), "intent": "error", "data": None}
+        return {"reply": str(exc), "intent": "error", "data": None, "suggestions": []}
     except Exception as exc:
         _log.warning("get_workspace_ai_key failed: %s", exc)
         key_info = {}
 
     ai_available = bool(key_info.get("api_key"))
 
-    # ── Build workspace context (used by AI handlers and general reply) ────────
+    # ── Build workspace context ───────────────────────────────────────────────
     try:
         ctx = AssistantContextService.build(user_id)
-        # Override user_tz from context if not provided by client
         if not user_tz and ctx.timezone and ctx.timezone != "UTC":
             user_tz = ctx.timezone
     except Exception as exc:
@@ -1603,54 +99,55 @@ def process_message(user_id: int, message: str, user_tz: str | None = None) -> d
         ctx = None
 
     # ── Conversation state resume ─────────────────────────────────────────────
-    state = _get_state(user_id)
+    state = get_state(user_id)
     if state:
         _log.debug("Pending state intent=%s awaiting=%s", state.pending_intent, state.awaiting_field)
-
-        # Escape: high-confidence different intent from keyword pre-filter
-        escape_intent = _keyword_intent(message)
-        high_confidence_escapes = ("group_query", "list_meetings", "list_reminders", "list_notes", "list_tasks", "upcoming_schedule")
+        escape_intent = keyword_intent(message)
+        high_confidence_escapes = (
+            "group_query", "list_meetings", "list_reminders",
+            "list_notes", "list_tasks", "upcoming_schedule",
+        )
         if escape_intent and escape_intent != state.pending_intent and escape_intent in high_confidence_escapes:
-            _log.info("State escape via different intent: %s → %s", state.pending_intent, escape_intent)
-            _clear_state(user_id)
+            _log.info("State escape: %s → %s", state.pending_intent, escape_intent)
+            clear_state(user_id)
             state = None
-
-        # Escape: complete self-contained new scheduling request while waiting for title/datetime
         elif (
             state.pending_intent == "schedule_meeting"
             and state.awaiting_field in ("title", "datetime_hint")
             and _is_self_contained_schedule_request(message)
         ):
             _log.info("State escape: complete new scheduling request")
-            _clear_state(user_id)
+            clear_state(user_id)
             state = None
 
         if state:
             try:
-                return _handle_continue_state(user_id, state, message, key_info, user_tz)
+                result = handle_continue_state(user_id, state, message, key_info, user_tz)
+                return _ensure_suggestions(result)
             except Exception as exc:
                 _log.warning("continue_state failed: %s", exc)
-                _clear_state(user_id)
+                clear_state(user_id)
 
+    # ── Intent detection ──────────────────────────────────────────────────────
     parsed = None
     intent = None
 
-    # ── Step 1: Keyword pre-filter for high-confidence intents ────────────────
-    keyword_intent = _keyword_intent(message)
-    _log.debug("keyword_intent=%s", keyword_intent)
-    high_confidence_keywords = ("group_query", "list_meetings", "list_reminders", "list_notes", "list_tasks", "upcoming_schedule")
-    if keyword_intent in high_confidence_keywords:
-        intent = keyword_intent
+    # Step 1: high-confidence keyword pre-filter
+    kw_intent = keyword_intent(message)
+    _log.debug("keyword_intent=%s", kw_intent)
+    high_confidence_keywords = (
+        "group_query", "list_meetings", "list_reminders",
+        "list_notes", "list_tasks", "upcoming_schedule",
+    )
+    if kw_intent in high_confidence_keywords:
+        intent = kw_intent
         parsed = {"intent": intent}
-        _log.info("High-confidence keyword intent=%s — skipping AI for routing", intent)
 
-    # ── Step 2: AI parsing for everything else ────────────────────────────────
-    # Enrich the user message with recent conversation history so AI routing
-    # can understand references like "it", "that meeting", "the same group", etc.
+    # Step 2: AI parsing with conversation history context
     enriched_message = message
     if ctx and ctx.recent_conversation:
         history_lines = []
-        for turn in ctx.recent_conversation[-4:]:  # last 4 turns (2 exchanges)
+        for turn in ctx.recent_conversation[-4:]:
             role = "User" if turn["direction"] == "in" else "Assistant"
             history_lines.append(f"{role}: {turn['content'][:100]}")
         if history_lines:
@@ -1662,123 +159,133 @@ def process_message(user_id: int, message: str, user_tz: str | None = None) -> d
 
     if intent is None and ai_available:
         try:
-            raw = _call_ai(key_info, _INTENT_SYSTEM, enriched_message)
-            _log.debug("AI raw response: %s", raw[:300])
-            parsed = _parse_json(raw)
+            raw = call_ai(key_info, INTENT_SYSTEM, enriched_message)
+            _log.debug("AI raw: %s", raw[:300])
+            parsed = parse_json(raw)
             intent = parsed.get("intent", "general")
-            _log.info("AI intent=%s title=%r datetime_hint=%r",
-                      intent, parsed.get("title"), parsed.get("datetime_hint"))
-
-            # Sanity-check: AI said schedule_meeting but keyword says query — trust keyword
-            if intent == "schedule_meeting" and keyword_intent in high_confidence_keywords:
-                _log.warning("AI intent overridden %s → %s (keyword signal)", intent, keyword_intent)
-                intent = keyword_intent
+            if intent == "schedule_meeting" and kw_intent in high_confidence_keywords:
+                _log.warning("AI intent overridden %s → %s (keyword signal)", intent, kw_intent)
+                intent = kw_intent
                 parsed = {"intent": intent}
         except Exception as exc:
-            _log.warning("AI intent parse failed (%s) — falling back to keyword", exc)
+            _log.warning("AI intent parse failed (%s) — keyword fallback", exc)
             parsed = None
             intent = None
 
-    # ── Step 3: Pure keyword fallback ────────────────────────────────────────
+    # Step 3: pure keyword fallback
     if intent is None:
-        intent = keyword_intent or "general"
-        _log.info("Keyword fallback intent=%s", intent)
+        intent = kw_intent or "general"
         if intent == "schedule_meeting":
-            parsed = _keyword_parse(message)
+            parsed = keyword_parse(message)
         elif intent == "create_reminder":
-            text, dt_hint = _keyword_parse_reminder(message)
+            text, dt_hint = keyword_parse_reminder(message)
             parsed = {"intent": "create_reminder", "title": text, "datetime_hint": dt_hint}
         elif intent == "save_note":
-            parsed = {"intent": "save_note", "resource_note": _keyword_parse_note(message) or message.strip()}
+            parsed = {"intent": "save_note", "resource_note": keyword_parse_note(message) or message.strip()}
         elif intent == "create_task":
-            parsed = {"intent": "create_task", "title": _keyword_parse_task(message) or message.strip()}
+            parsed = {"intent": "create_task", "title": keyword_parse_task(message) or message.strip()}
         elif intent == "save_link":
             url_m = re.search(r"https?://\S+", message)
             parsed = {"intent": "save_link", "resource_url": url_m.group(0) if url_m else None}
         else:
             parsed = {"intent": intent}
 
-    # ── Step 4: Route to handler ──────────────────────────────────────────────
+    # ── Per-intent rate limiting (Phase 6.5) ─────────────────────────────────
+    if not _check_intent_rate_limit(user_id, intent):
+        _log.info("Rate limited user=%s intent=%s", user_id, intent)
+        return {
+            "reply": "You're doing that too quickly — please wait a moment and try again.",
+            "intent": intent,
+            "data": None,
+            "suggestions": [],
+        }
+
+    # ── Route to handler ──────────────────────────────────────────────────────
     try:
+        p = parsed or {}
+
         if intent == "schedule_meeting":
-            return _handle_schedule_meeting(user_id, parsed or {}, key_info, user_tz)
-
-        if intent == "list_meetings":
-            return _handle_list_meetings(user_id)
-
-        if intent == "create_reminder":
-            return _handle_create_reminder(user_id, parsed or {}, key_info, user_tz)
-
-        if intent == "list_reminders":
-            return _handle_list_reminders(user_id)
-
-        if intent == "upcoming_schedule":
-            return _handle_upcoming_schedule(user_id)
-
-        if intent == "save_note":
-            content = (parsed or {}).get("resource_note") or ""
+            result = handle_schedule_meeting(user_id, p, key_info, user_tz)
+        elif intent == "list_meetings":
+            result = handle_list_meetings(user_id)
+        elif intent == "create_reminder":
+            result = handle_create_reminder(user_id, p, key_info, user_tz)
+        elif intent == "list_reminders":
+            result = handle_list_reminders(user_id)
+        elif intent == "upcoming_schedule":
+            result = handle_upcoming_schedule(user_id)
+        elif intent == "save_note":
+            content = p.get("resource_note") or ""
             if not content.strip():
-                _save_state(user_id, "save_note", {}, "content")
-                return {"reply": "What would you like me to note down?", "intent": "save_note", "data": None}
-            return _handle_save_note(user_id, content)
-
-        if intent == "list_notes":
-            return _handle_list_notes(user_id)
-
-        if intent == "search_notes":
-            query = (parsed or {}).get("query") or message.strip()
-            # Strip trigger words if raw message used as query
-            query = re.sub(r"^(search|find|look\s+for|look\s+up)\s+(my\s+)?notes?\s*(for|about)?\s*", "", query, flags=re.I).strip() or query
-            return _handle_search_notes(user_id, query, key_info)
-
-        if intent == "summarize_notes":
-            return _handle_summarize_notes(user_id, key_info)
-
-        if intent == "save_link":
-            url = (parsed or {}).get("resource_url")
+                from .handlers._state import save_state
+                save_state(user_id, "save_note", {}, "content")
+                result = {"reply": "What would you like me to note down?", "intent": "save_note", "data": None}
+            else:
+                result = handle_save_note(user_id, content)
+        elif intent == "list_notes":
+            result = handle_list_notes(user_id)
+        elif intent == "search_notes":
+            query = p.get("query") or message.strip()
+            query = re.sub(
+                r"^(search|find|look\s+for|look\s+up)\s+(my\s+)?notes?\s*(for|about)?\s*",
+                "", query, flags=re.I,
+            ).strip() or query
+            result = handle_search_notes(user_id, query, key_info)
+        elif intent == "summarize_notes":
+            result = handle_summarize_notes(user_id, key_info)
+        elif intent == "save_link":
+            url = p.get("resource_url")
             if not url:
                 url_m = re.search(r"https?://\S+", message)
                 url = url_m.group(0) if url_m else None
             if not url:
-                return {"reply": "Please include the URL you'd like me to save.", "intent": "save_link", "data": None}
-            return _handle_save_link(user_id, url)
-
-        if intent == "create_task":
-            title = (parsed or {}).get("title") or ""
-            if not title.strip():
-                _save_state(user_id, "create_task", {}, "title")
-                return {"reply": "What task should I create?", "intent": "create_task", "data": None}
-            return _handle_create_task(user_id, title)
-
-        if intent == "list_tasks":
-            return _handle_list_tasks(user_id)
-
-        if intent == "group_query":
-            return _handle_group_query(user_id, key_info)
-
-        if intent == "add_resource":
-            return _handle_add_resource(user_id, parsed or {})
-
-        # ── Platform action intents ───────────────────────────────────────────
-        if intent in ("trigger_digest", "post_announcement", "get_group_stats",
-                      "list_auto_replies", "update_automod"):
+                result = {"reply": "Please include the URL you'd like me to save.", "intent": "save_link", "data": None}
+            else:
+                result = handle_save_link(user_id, url)
+        elif intent == "create_task":
+            title = p.get("title") or ""
+            result = handle_create_task(user_id, title)
+        elif intent == "list_tasks":
+            result = handle_list_tasks(user_id)
+        elif intent == "group_query":
+            result = handle_group_query(user_id, key_info)
+        elif intent == "add_resource":
+            result = handle_add_resource(user_id, p)
+        elif intent in ("trigger_digest", "post_announcement", "get_group_stats",
+                        "list_auto_replies", "update_automod"):
             from ..assistant.actions import run_action
-            action_args = parsed or {}
-            # For post_announcement, extract text from message if AI didn't parse it
+            action_args = p.copy()
             if intent == "post_announcement" and not action_args.get("text"):
-                # Strip trigger words, use rest as text
-                text = re.sub(r"^(post|announce|broadcast|send)\s+(an?\s+)?(announcement|message|update)\s*(to\s+\w+\s+group\s*:?)?\s*", "", message, flags=re.I).strip()
+                text = re.sub(
+                    r"^(post|announce|broadcast|send)\s+(an?\s+)?(announcement|message|update)"
+                    r"\s*(to\s+\w+\s+group\s*:?)?\s*",
+                    "", message, flags=re.I,
+                ).strip()
                 action_args["text"] = text
             if intent == "update_automod":
                 action_args["enable"] = not re.search(r"\b(disable|turn\s+off)\b", message, re.I)
             result = run_action(intent, user, action_args)
-            result.setdefault("suggestions", [])
-            return result
+        else:
+            ai_reply = p.get("reply") if ai_available else None
+            result = handle_general(user_id, message, key_info, ai_reply, ctx)
 
-        # General — context-aware AI response
-        ai_reply = (parsed or {}).get("reply") if ai_available else None
-        return _handle_general(user_id, message, key_info, ai_reply, ctx)
+        return _ensure_suggestions(result)
 
     except Exception as exc:
         _log.error("intent handler %s failed: %s", intent, exc, exc_info=True)
-        return {"reply": "Something went wrong processing your request. Please try again.", "intent": "error", "data": None}
+        return {"reply": "Something went wrong. Please try again.", "intent": "error",
+                "data": None, "suggestions": []}
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _is_self_contained_schedule_request(message: str) -> bool:
+    from .handlers._patterns import SCHEDULE_PATTERNS, MEETING_NOUN
+    from .handlers._parsers import extract_datetime_hint
+    has_schedule = bool(SCHEDULE_PATTERNS.search(message) or MEETING_NOUN.search(message))
+    return has_schedule and bool(extract_datetime_hint(message))
+
+
+def _ensure_suggestions(result: dict) -> dict:
+    result.setdefault("suggestions", [])
+    return result
