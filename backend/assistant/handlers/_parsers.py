@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from difflib import get_close_matches
 from typing import Optional
 
 from ._patterns import (
@@ -11,6 +12,73 @@ from ._patterns import (
     SAVE_NOTE_PATTERNS, LIST_NOTES_PATTERNS, SAVE_LINK_PATTERNS,
     CREATE_TASK_PATTERNS, LIST_TASKS_PATTERNS,
 )
+
+# Vocabulary of intent-bearing words to fuzzy-match against.
+# Each canonical word maps to a replacement word that the patterns already handle.
+_FUZZY_VOCAB = {
+    "reminder": "reminder",
+    "reminders": "reminders",
+    "remind": "remind",
+    "meeting": "meeting",
+    "meetings": "meetings",
+    "schedule": "schedule",
+    "schedule": "schedule",
+    "calendar": "schedule",
+    "appointment": "appointment",
+    "task": "task",
+    "tasks": "tasks",
+    "todo": "task",
+    "note": "note",
+    "notes": "notes",
+    "group": "group",
+    "groups": "groups",
+    "upcoming": "upcoming",
+    "briefing": "briefing",
+    "announcement": "announcement",
+    "cancel": "cancel",
+    "reschedule": "reschedule",
+    "booking": "book",
+    "book": "book",
+}
+_FUZZY_WORDS = list(_FUZZY_VOCAB.keys())
+
+
+def normalize_typos(message: str) -> str:
+    """
+    Replace misspelled intent-bearing words with their canonical forms.
+    Only corrects words that are clearly close to one known word (cutoff=0.72,
+    n=1) and longer than 3 chars to avoid false positives on short words.
+    """
+    tokens = message.split()
+    corrected = []
+    for token in tokens:
+        # Strip punctuation for matching, keep original punctuation
+        core = re.sub(r"[^a-zA-Z]", "", token).lower()
+        if len(core) > 3 and core not in _FUZZY_VOCAB:
+            matches = get_close_matches(core, _FUZZY_WORDS, n=1, cutoff=0.72)
+            if matches:
+                canonical = _FUZZY_VOCAB[matches[0]]
+                # Preserve original casing style
+                token = token.lower().replace(core, canonical)
+        corrected.append(token)
+    return " ".join(corrected)
+
+
+def low_confidence_suggestions(message: str) -> list[dict]:
+    """
+    When we can't parse intent, check which intent keywords the message words
+    are close to and return 'did you mean?' suggestion buttons.
+    """
+    tokens = [re.sub(r"[^a-zA-Z]", "", t).lower() for t in message.split() if len(t) > 3]
+    seen: set[str] = set()
+    suggestions = []
+    for token in tokens:
+        matches = get_close_matches(token, _FUZZY_WORDS, n=1, cutoff=0.65)
+        if matches and matches[0] not in seen:
+            seen.add(matches[0])
+            canonical = _FUZZY_VOCAB[matches[0]]
+            suggestions.append({"label": f'Did you mean "{canonical}"?', "value": canonical})
+    return suggestions[:3]
 
 
 def keyword_intent(message: str) -> Optional[str]:

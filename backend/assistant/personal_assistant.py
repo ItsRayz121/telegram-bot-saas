@@ -66,7 +66,7 @@ def process_message(user_id: int, message: str, user_tz: str | None = None) -> d
     )
     from .handlers._parsers import (
         keyword_intent, keyword_parse, keyword_parse_note, keyword_parse_task, keyword_parse_reminder,
-        extract_datetime_hint,
+        extract_datetime_hint, normalize_typos, low_confidence_suggestions,
     )
     from .handlers._state import get_state, clear_state
     from .handlers._patterns import SCHEDULE_PATTERNS, MEETING_NOUN
@@ -74,6 +74,12 @@ def process_message(user_id: int, message: str, user_tz: str | None = None) -> d
     from .handlers._prompts import INTENT_SYSTEM
 
     _log.info("process_message user_id=%s message=%r", user_id, message[:120])
+
+    # Normalize typos before any intent parsing (e.g. "raeaminder" → "reminder")
+    normalized = normalize_typos(message)
+    if normalized != message:
+        _log.info("Typo normalization: %r → %r", message, normalized)
+    message = normalized
 
     user = User.query.get(user_id)
     if not user:
@@ -269,6 +275,15 @@ def process_message(user_id: int, message: str, user_tz: str | None = None) -> d
         else:
             ai_reply = p.get("reply") if ai_available else None
             result = handle_general(user_id, message, key_info, ai_reply, ctx)
+            # If general with no AI and no clear intent, check for typo-based suggestions
+            if not ai_available and not result.get("suggestions"):
+                did_you_mean = low_confidence_suggestions(message)
+                if did_you_mean:
+                    result["suggestions"] = did_you_mean
+                    if result.get("reply", "").startswith("I can help"):
+                        result["reply"] = (
+                            "I wasn't sure what you meant — did you mean one of these?"
+                        )
 
         return _ensure_suggestions(result)
 
