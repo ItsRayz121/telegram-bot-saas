@@ -664,43 +664,63 @@ def process_message(user_id: int, message: str, user_tz: str | None = None) -> d
     state = _get_state(user_id)
     if state:
         _log.debug("Resuming conversation state intent=%s awaiting=%s", state.pending_intent, state.awaiting_field)
-        try:
-            if ai_available:
-                return _handle_continue_state(user_id, state, message, key_info, user_tz)
-            else:
-                # No AI — treat message as the awaited field value directly
-                return _handle_continue_state(user_id, state, message, key_info, user_tz)
-        except Exception as exc:
-            _log.warning("continue_state failed: %s", exc)
+        # Escape hatch: if the user is clearly asking for something different
+        # (e.g. group_query while stuck in schedule_meeting), clear state and
+        # let the new intent win — don't consume their message as a field answer.
+        escape_intent = _keyword_intent(message)
+        if escape_intent and escape_intent != state.pending_intent and escape_intent in ("group_query", "list_meetings", "list_reminders"):
+            _log.info("State escape: clearing %s state, routing to %s", state.pending_intent, escape_intent)
             _clear_state(user_id)
+            state = None
+        else:
+            try:
+                return _handle_continue_state(user_id, state, message, key_info, user_tz)
+            except Exception as exc:
+                _log.warning("continue_state failed: %s", exc)
+                _clear_state(user_id)
 
     parsed = None
     intent = None
 
-    # ── Step 1: Try AI parsing ────────────────────────────────────────────────
-    if ai_available:
+    # ── Step 1: Keyword pre-filter for high-confidence, entity-free intents ──
+    # group_query / list_meetings / list_reminders never need AI entity
+    # extraction. Running keyword detection FIRST prevents AI from
+    # misclassifying e.g. "Any issues in my group today?" as schedule_meeting
+    # because it sees a time-like phrase ("today") in the message.
+    keyword_intent = _keyword_intent(message)
+    _log.debug("keyword_intent=%s", keyword_intent)
+    if keyword_intent in ("group_query", "list_meetings", "list_reminders"):
+        intent = keyword_intent
+        parsed = {"intent": intent}
+        _log.info("High-confidence keyword intent=%s — skipping AI", intent)
+
+    # ── Step 2: AI parsing for schedule_meeting / general / ambiguous ────────
+    if intent is None and ai_available:
         try:
             raw = _call_ai(key_info, _INTENT_SYSTEM, message)
             _log.debug("AI raw response: %s", raw[:300])
             parsed = _parse_json(raw)
             intent = parsed.get("intent", "general")
             _log.info("AI intent=%s title=%r datetime_hint=%r", intent, parsed.get("title"), parsed.get("datetime_hint"))
+            # Sanity-check: if AI says schedule_meeting but the message
+            # strongly looks like a query/group intent, override it.
+            if intent == "schedule_meeting" and keyword_intent in ("group_query", "list_meetings", "list_reminders"):
+                _log.warning("AI intent overridden from schedule_meeting → %s by keyword signal", keyword_intent)
+                intent = keyword_intent
+                parsed = {"intent": intent}
         except Exception as exc:
             _log.warning("AI intent parse failed (%s) — falling back to keyword detection", exc)
             parsed = None
             intent = None
 
-    # ── Step 2: Keyword fallback if AI failed or unavailable ─────────────────
+    # ── Step 3: Pure keyword fallback if AI failed or unavailable ────────────
     if intent is None:
-        intent = _keyword_intent(message)
-        _log.info("Keyword intent=%s for message=%r", intent, message[:80])
+        intent = keyword_intent or "general"
+        _log.info("Keyword fallback intent=%s for message=%r", intent, message[:80])
         if intent == "schedule_meeting":
             parsed = _keyword_parse(message)
-        elif intent in ("list_meetings", "list_reminders", "group_query"):
-            parsed = {"intent": intent}
         else:
-            intent = "general"
-            parsed = {"intent": "general"}
+            parsed = {"intent": intent}
 
     # ── Step 3: Route to handler ──────────────────────────────────────────────
     try:
