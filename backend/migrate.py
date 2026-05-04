@@ -120,6 +120,57 @@ def init_db():
             "CREATE INDEX IF NOT EXISTS ix_directory_listings_moderation_status ON directory_listings (moderation_status)",
             "directory_listings.moderation_status index",
         )
+
+        # ── Phase 5: pgvector embedding columns (TEXT fallback — no pgvector ext required) ──
+        _run_alter(
+            db.engine,
+            "ALTER TABLE notes ADD COLUMN IF NOT EXISTS embedding TEXT",
+            "notes.embedding",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE knowledge_documents ADD COLUMN IF NOT EXISTS embedding TEXT",
+            "knowledge_documents.embedding",
+        )
+
+        # ── Phase 6.3: BotDMMessage extra columns ────────────────────────────
+        _run_alter(
+            db.engine,
+            "ALTER TABLE bot_dm_messages ADD COLUMN IF NOT EXISTS session_id VARCHAR(64)",
+            "bot_dm_messages.session_id",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE bot_dm_messages ADD COLUMN IF NOT EXISTS feedback VARCHAR(16)",
+            "bot_dm_messages.feedback",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE bot_dm_messages ADD COLUMN IF NOT EXISTS intent_confidence FLOAT",
+            "bot_dm_messages.intent_confidence",
+        )
+
+        # ── Phase 3: GroupDailySignal table (db.create_all handles new table; ──
+        # ── add any extra columns here if the table already existed) ──────────
+        _run_alter(
+            db.engine,
+            "ALTER TABLE group_daily_signals ADD COLUMN IF NOT EXISTS ai_summary TEXT",
+            "group_daily_signals.ai_summary",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE group_daily_signals ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP",
+            "group_daily_signals.updated_at",
+        )
+
+        # ── UserAssistantProfile table (new — db.create_all handles creation) ─
+        # ── Index for fast per-user lookup ────────────────────────────────────
+        _run_alter(
+            db.engine,
+            "CREATE UNIQUE INDEX IF NOT EXISTS ix_user_assistant_profiles_user_id ON user_assistant_profiles (user_id)",
+            "user_assistant_profiles.user_id index",
+        )
+
         print("Migration complete.")
 
     # One-shot TOTP secret encryption migration.
