@@ -781,8 +781,15 @@ async def on_assistant_pick(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not value or not flask_app:
         return
 
+    # __done__ sentinel — just close the keyboard silently
+    if value == "__done__":
+        try:
+            await query.edit_message_reply_markup(reply_markup=None)
+        except Exception:
+            pass
+        return
+
     try:
-        # Remove keyboard from previous message
         await query.edit_message_reply_markup(reply_markup=None)
 
         with flask_app.app_context():
@@ -793,7 +800,6 @@ async def on_assistant_pick(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if not _u:
                 return
 
-            # Log as if user typed the value
             _db.session.add(_BotDM(user_id=_u.id, direction="in", content=value[:4000], intent="assistant_pick"))
             _db.session.commit()
 
@@ -803,8 +809,9 @@ async def on_assistant_pick(update: Update, context: ContextTypes.DEFAULT_TYPE):
             _db.session.add(_BotDM(user_id=_u.id, direction="out", content=_reply_text[:4000], intent=_result.get("intent", "general")))
             _db.session.commit()
 
-            # Echo what was selected so the chat makes sense
-            await context.bot.send_message(chat_id=chat_id, text=f"▶ {value}")
+            # Show selected value as user echo (skip internal sentinels)
+            if value not in ("__skip__", "__done__"):
+                await context.bot.send_message(chat_id=chat_id, text=f"▶ {value}")
 
             _keyboard = _build_suggestion_keyboard(_result.get("suggestions"))
             await context.bot.send_message(

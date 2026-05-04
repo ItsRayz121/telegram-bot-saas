@@ -524,20 +524,12 @@ def _save_state(user_id: int, intent: str, data: dict, awaiting: str):
 
 def _time_suggestions() -> list:
     """Return quick-pick time options relative to now (UTC)."""
-    from datetime import datetime, timedelta
     now = datetime.utcnow()
-    # Today at 3 PM, 5 PM; tomorrow at 9 AM, 12 PM, 3 PM; this Friday
-    suggestions = []
     today_3pm = now.replace(hour=15, minute=0, second=0, microsecond=0)
     today_5pm = now.replace(hour=17, minute=0, second=0, microsecond=0)
-    tomorrow = now + timedelta(days=1)
-    tmr_9am = tomorrow.replace(hour=9, minute=0, second=0, microsecond=0)
-    tmr_12pm = tomorrow.replace(hour=12, minute=0, second=0, microsecond=0)
-    tmr_3pm = tomorrow.replace(hour=15, minute=0, second=0, microsecond=0)
-    # Next Friday
     days_to_friday = (4 - now.weekday()) % 7 or 7
     friday_3pm = (now + timedelta(days=days_to_friday)).replace(hour=15, minute=0, second=0, microsecond=0)
-
+    suggestions = []
     if today_3pm > now:
         suggestions.append({"label": "Today 3 PM", "value": "today at 3 PM"})
     if today_5pm > now:
@@ -545,7 +537,7 @@ def _time_suggestions() -> list:
     suggestions.append({"label": "Tomorrow 9 AM", "value": "tomorrow at 9 AM"})
     suggestions.append({"label": "Tomorrow 3 PM", "value": "tomorrow at 3 PM"})
     suggestions.append({"label": friday_3pm.strftime("Fri %d %b 3 PM"), "value": friday_3pm.strftime("%A at 3 PM")})
-    suggestions.append({"label": "Pick a time…", "value": None})  # sentinel for custom input
+    suggestions.append({"label": "Custom time…", "value": None})
     return suggestions
 
 
@@ -556,8 +548,30 @@ def _meeting_title_suggestions() -> list:
         {"label": "1:1 Meeting", "value": "1:1 Meeting"},
         {"label": "Project Review", "value": "Project Review"},
         {"label": "Investor Call", "value": "Investor Call"},
-        {"label": "Custom…", "value": None},
+        {"label": "Other…", "value": None},
     ]
+
+
+def _priority_suggestions() -> list:
+    return [
+        {"label": "🔴 High", "value": "high"},
+        {"label": "🟡 Medium", "value": "medium"},
+        {"label": "🟢 Low", "value": "low"},
+    ]
+
+
+def _participants_suggestions() -> list:
+    return [
+        {"label": "Just me", "value": "__skip__"},
+        {"label": "Type names…", "value": None},
+    ]
+
+
+def _skip_suggestions(label: str = "Skip") -> list:
+    return [{"label": label, "value": "__skip__"}]
+
+
+_SKIP_VALUE = "__skip__"
 
 
 def _is_self_contained_schedule_request(message: str) -> bool:
@@ -576,52 +590,91 @@ def _is_self_contained_schedule_request(message: str) -> bool:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _handle_schedule_meeting(user_id: int, parsed: dict, key_info: dict, user_tz: str | None) -> dict:
+    """
+    Full multi-turn meeting scheduler.
+    Walks: title → time → participants → priority → save → ask for resources.
+    Each step saves state and returns a natural question with quick-pick buttons.
+    """
     from ..models import db, Meeting
 
     data = {
-        "title": parsed.get("title"),
-        "datetime_hint": parsed.get("datetime_hint"),
-        "participants": parsed.get("participants") or [],
-        "priority": parsed.get("priority") or "medium",
-        "timezone": parsed.get("timezone") or user_tz or "UTC",
+        "title":          parsed.get("title"),
+        "datetime_hint":  parsed.get("datetime_hint"),
+        "participants":   parsed.get("participants") or [],
+        "priority":       parsed.get("priority") or "medium",
+        "timezone":       parsed.get("timezone") or user_tz or "UTC",
+        # Internal flags to track which steps were explicitly provided up-front
+        "_participants_asked": parsed.get("_participants_asked", False),
+        "_priority_asked":     parsed.get("_priority_asked", False),
     }
     _log.debug("schedule_meeting data=%s", data)
 
+    # ── Step 1: Need title ────────────────────────────────────────────────────
     if not data["title"]:
         _save_state(user_id, "schedule_meeting", data, "title")
         return {
-            "reply": "What's the title or topic of the meeting?",
+            "reply": "Sure! What's the meeting about?",
             "intent": "schedule_meeting",
             "data": None,
             "suggestions": _meeting_title_suggestions(),
         }
 
+    # ── Step 2: Need time ─────────────────────────────────────────────────────
     if not data["datetime_hint"]:
         _save_state(user_id, "schedule_meeting", data, "datetime_hint")
         return {
-            "reply": f"When should I schedule \"{data['title']}\"?",
+            "reply": f"Got it — \"{data['title']}\". When should I schedule it?",
             "intent": "schedule_meeting",
             "data": None,
             "suggestions": _time_suggestions(),
         }
 
+    # Resolve the datetime hint
     dt_result = _resolve_datetime(key_info, data["datetime_hint"], data["timezone"])
     if not dt_result.get("iso"):
         _save_state(user_id, "schedule_meeting", data, "datetime_hint")
         return {
-            "reply": (
-                f"I couldn't parse \"{data['datetime_hint']}\" as a time. "
-                "Pick one below or type your own:"
-            ),
+            "reply": f"I couldn't parse \"{data['datetime_hint']}\" as a time. Pick one or type your own:",
             "intent": "schedule_meeting",
             "data": None,
             "suggestions": _time_suggestions(),
         }
 
-    scheduled_at = datetime.fromisoformat(dt_result["iso"])
+    # Store resolved ISO so later steps don't re-resolve
+    data["_resolved_iso"] = dt_result["iso"]
+    data["_resolved_human"] = dt_result["human"]
 
+    # ── Step 3: Ask for participants (if not already provided or asked) ───────
+    if not data["_participants_asked"] and not data["participants"]:
+        data["_participants_asked"] = True
+        _save_state(user_id, "schedule_meeting", data, "participants")
+        return {
+            "reply": (
+                f"Perfect! \"{data['title']}\" on {dt_result['human']}.\n\n"
+                "Who else is joining? Type names or tap Just me:"
+            ),
+            "intent": "schedule_meeting",
+            "data": None,
+            "suggestions": _participants_suggestions(),
+        }
+
+    # ── Step 4: Ask for priority (if not already set or asked) ───────────────
+    if not data["_priority_asked"] and data.get("priority") == "medium":
+        data["_priority_asked"] = True
+        _save_state(user_id, "schedule_meeting", data, "priority")
+        participant_line = f" with {', '.join(data['participants'])}" if data["participants"] else ""
+        return {
+            "reply": f"How urgent is this meeting{participant_line}?",
+            "intent": "schedule_meeting",
+            "data": None,
+            "suggestions": _priority_suggestions(),
+        }
+
+    # ── Step 5: All fields collected — save the meeting ──────────────────────
+    # Duplicate guard
+    scheduled_at = datetime.fromisoformat(data["_resolved_iso"])
     window_start = scheduled_at - timedelta(minutes=30)
-    window_end = scheduled_at + timedelta(minutes=30)
+    window_end   = scheduled_at + timedelta(minutes=30)
     existing = Meeting.query.filter(
         Meeting.owner_user_id == user_id,
         Meeting.title.ilike(data["title"]),
@@ -631,7 +684,7 @@ def _handle_schedule_meeting(user_id: int, parsed: dict, key_info: dict, user_tz
     if existing:
         _clear_state(user_id)
         return {
-            "reply": f"You already have \"{existing.title}\" scheduled around {dt_result['human']}. I didn't create a duplicate.",
+            "reply": f"You already have \"{existing.title}\" scheduled around {data['_resolved_human']}. I didn't create a duplicate.",
             "intent": "schedule_meeting",
             "data": existing.to_dict(),
         }
@@ -657,14 +710,18 @@ def _handle_schedule_meeting(user_id: int, parsed: dict, key_info: dict, user_tz
     participant_str = f" with {', '.join(data['participants'])}" if data["participants"] else ""
     return {
         "reply": (
-            f"✅ Meeting scheduled!\n\n"
+            f"✅ All set!\n\n"
             f"📅 {meeting.title}{participant_str}\n"
-            f"🕒 {dt_result['human']}\n"
+            f"🕒 {data['_resolved_human']}\n"
             f"⚡ Priority: {meeting.priority}\n\n"
-            f"Want to attach any resources (links, agenda, notes)?"
+            f"Anything else — agenda link, notes, resources to attach?"
         ),
         "intent": "schedule_meeting",
         "data": meeting.to_dict(),
+        "suggestions": [
+            {"label": "Add a link", "value": None},
+            {"label": "No thanks", "value": "__done__"},
+        ],
     }
 
 
@@ -713,18 +770,24 @@ def _handle_save_link(user_id: int, url: str, label: str | None = None) -> dict:
     }
 
 
-def _handle_create_task(user_id: int, title: str) -> dict:
+def _handle_create_task(user_id: int, title: str, priority: str = "medium") -> dict:
     from ..models import db, Task
     if not title or not title.strip():
-        return {"reply": "What task should I create?", "intent": "create_task", "data": None}
+        _save_state(user_id, "create_task", {}, "title")
+        return {"reply": "What task should I add?", "intent": "create_task", "data": None}
     task = Task(user_id=user_id, title=title.strip()[:500], status="todo", source="bot")
     db.session.add(task)
     db.session.commit()
-    _log.info("create_task user=%s title=%r", user_id, title[:60])
+    _log.info("create_task user=%s title=%r priority=%s", user_id, title[:60], priority)
     return {
-        "reply": f"✅ Task created: \"{task.title}\"",
+        "reply": f"✅ Task added: \"{task.title}\"",
         "intent": "create_task",
         "data": task.to_dict(),
+        "suggestions": [
+            {"label": "Add another task", "value": None},
+            {"label": "Show all tasks", "value": "show my tasks"},
+            {"label": "Done", "value": "__done__"},
+        ],
     }
 
 
@@ -745,36 +808,76 @@ def _handle_list_tasks(user_id: int) -> dict:
 
 
 def _handle_continue_state(user_id: int, state, message: str, key_info: dict, user_tz: str | None) -> dict:
+    """
+    Resume a multi-turn conversation.
+    Fills in the awaited field then hands back to the relevant handler
+    so the next missing field is asked automatically.
+    """
     data = dict(state.collected_data or {})
     awaiting = state.awaiting_field
     intent = state.pending_intent
+    msg = message.strip()
 
+    # ── Special sentinels ─────────────────────────────────────────────────────
+    if msg == "__done__":
+        _clear_state(user_id)
+        return {"reply": "Got it! Anything else I can help with?", "intent": "general", "data": None}
+
+    # ── Meeting multi-turn ────────────────────────────────────────────────────
     if intent == "schedule_meeting":
         if awaiting == "title":
-            data["title"] = message.strip()[:200]
+            data["title"] = msg[:200]
+
         elif awaiting == "datetime_hint":
-            # Try to extract a proper datetime hint from the answer
-            hint = _extract_datetime_hint(message) or message.strip()
+            hint = _extract_datetime_hint(msg) or msg
             data["datetime_hint"] = hint
+
+        elif awaiting == "participants":
+            data["_participants_asked"] = True
+            if msg == _SKIP_VALUE or msg.lower() in ("just me", "skip", "none", "no one", "-"):
+                data["participants"] = []
+            else:
+                # Parse comma/and-separated names
+                names = [n.strip().lstrip("@") for n in re.split(r"[,;&]|\band\b", msg) if n.strip()]
+                data["participants"] = names[:20]
+
+        elif awaiting == "priority":
+            data["_priority_asked"] = True
+            pri = msg.lower()
+            if pri in ("high", "🔴", "🔴 high", "urgent"):
+                data["priority"] = "high"
+            elif pri in ("low", "🟢", "🟢 low"):
+                data["priority"] = "low"
+            else:
+                data["priority"] = "medium"
+
         elif awaiting == "resources":
             meeting_id = data.get("meeting_id")
-            if meeting_id:
-                return _attach_resource(user_id, meeting_id, message, state)
+            if meeting_id and msg not in (_SKIP_VALUE, "no", "no thanks", "skip"):
+                return _attach_resource(user_id, meeting_id, msg, state)
+            _clear_state(user_id)
+            return {"reply": "All done! Let me know if you need anything else.", "intent": "general", "data": None}
+
         _clear_state(user_id)
         return _handle_schedule_meeting(user_id, data, key_info, user_tz)
 
-    if intent == "save_note" and awaiting == "content":
-        _clear_state(user_id)
-        return _handle_save_note(user_id, message.strip())
+    # ── Save note ─────────────────────────────────────────────────────────────
+    if intent == "save_note":
+        if awaiting == "content":
+            _clear_state(user_id)
+            return _handle_save_note(user_id, msg)
 
-    if intent == "create_task" and awaiting == "title":
-        _clear_state(user_id)
-        return _handle_create_task(user_id, message.strip())
+    # ── Create task ───────────────────────────────────────────────────────────
+    if intent == "create_task":
+        if awaiting == "title":
+            _clear_state(user_id)
+            return _handle_create_task(user_id, msg)
 
+    # ── Add resource ──────────────────────────────────────────────────────────
     if intent == "add_resource" and awaiting == "resource_value":
         meeting_id = data.get("meeting_id")
         if meeting_id:
-            return _attach_resource(user_id, meeting_id, message, state)
+            return _attach_resource(user_id, meeting_id, msg, state)
 
     _clear_state(user_id)
     return {"reply": "Got it! Is there anything else I can help you with?", "intent": "general", "data": None}
