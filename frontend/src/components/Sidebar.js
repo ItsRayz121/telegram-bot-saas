@@ -477,14 +477,14 @@ export default function Sidebar({ onClose }) {
           Powered by Telegizer Assistant
         </Typography>
         <Collapse in={assistantOpen} timeout={160} unmountOnExit>
+          <NavItem label="Assistant Bot" path="/workspace/assistant-bot"  icon={SmartToy}    active={isActive('/workspace/assistant-bot')} onClick={() => nav('/workspace/assistant-bot')} indent badge={plan === 'free' ? 'Pro' : null} />
           <NavItem label="Auto-Replies"  path="/workspace/smart-links"    icon={Reply}       active={isActive('/workspace/smart-links')}    onClick={() => nav('/workspace/smart-links')} indent />
           <NavItem label="Reminders"     path="/workspace/reminders"      icon={AccessTime}  active={isActive('/workspace/reminders')}      onClick={() => nav('/workspace/reminders')} indent />
           <NavItem label="Tasks"         path="/workspace/tasks"          icon={CheckBox}    active={isActive('/workspace/tasks')}          onClick={() => nav('/workspace/tasks')} indent />
           <NavItem label="Notes"         path="/workspace/notes"          icon={EditNote}    active={isActive('/workspace/notes')}          onClick={() => nav('/workspace/notes')} indent />
-          <NavItem label="Knowledge"     path="/workspace/knowledge"      icon={LibraryBooks} active={isActive('/workspace/knowledge')}    onClick={() => nav('/workspace/knowledge')} indent />
           <NavItem label="Digests"       path="/workspace/digests"        icon={Summarize}   active={isActive('/workspace/digests')}       onClick={() => nav('/workspace/digests')} indent />
+          <NavItem label="Knowledge"     path="/workspace/knowledge"      icon={LibraryBooks} active={isActive('/workspace/knowledge')}    onClick={() => nav('/workspace/knowledge')} indent />
           <NavItem label="AI Settings"   path="/workspace/ai-settings"    icon={Tune}        active={isActive('/workspace/ai-settings')}   onClick={() => nav('/workspace/ai-settings')} indent />
-          <NavItem label="Assistant Bot" path="/workspace/assistant-bot"  icon={SmartToy}    active={isActive('/workspace/assistant-bot')} onClick={() => nav('/workspace/assistant-bot')} indent badge={plan === 'free' ? 'Pro' : null} />
         </Collapse>
 
         {/* ── AUTOMATION ── */}
