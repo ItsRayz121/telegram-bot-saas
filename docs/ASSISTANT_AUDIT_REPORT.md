@@ -147,16 +147,16 @@ Expose assistant as API endpoint. External tools (Zapier, Make.com, webhooks) ca
 ### Phase 1 — Foundation (Backend Intelligence Core)
 **Goal:** Make the assistant smart before making it more visible. Fix data access layer first.  
 **Duration:** ~2 weeks  
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 
 #### Tasks
 
 | # | Task | File(s) | Status |
 |---|---|---|---|
-| 1.1 | Build `AssistantContextService` | `backend/assistant/context_service.py` | ⬜ Pending |
-| 1.2 | Inject conversation short-term memory into `process_message()` | `backend/assistant/personal_assistant.py` | ⬜ Pending |
-| 1.3 | Audit + fix proactive reminder delivery in scheduler | `backend/scheduler.py` | ⬜ Pending |
-| 1.4 | Add meeting pre-alert scheduler task | `backend/scheduler.py` | ⬜ Pending |
+| 1.1 | Build `AssistantContextService` | `backend/assistant/context_service.py` | ✅ Done |
+| 1.2 | Inject conversation short-term memory into `process_message()` | `backend/assistant/personal_assistant.py` | ✅ Done |
+| 1.3 | Audit + fix proactive reminder delivery in scheduler | `backend/scheduler.py` | ✅ Done |
+| 1.4 | Add meeting pre-alert scheduler task | `backend/scheduler.py` | ✅ Done |
 
 #### AssistantContext Structure
 ```python
@@ -182,17 +182,17 @@ Assistant knows who the user is, what's on their plate, and what they said recen
 ### Phase 2 — UI Repositioning (Persistent Sidebar)
 **Goal:** Move assistant from buried widget to permanent co-pilot sidebar.  
 **Duration:** ~1.5 weeks  
-**Status:** ⬜ Pending
+**Status:** ✅ Complete
 
 #### Tasks
 
 | # | Task | File(s) | Status |
 |---|---|---|---|
-| 2.1 | Create `AppLayout` 3-column layout with sidebar slot | `frontend/src/layouts/AppLayout.js` | ⬜ Pending |
-| 2.2 | Build `AssistantSidebar` persistent component | `frontend/src/components/AssistantSidebar.js` | ⬜ Pending |
-| 2.3 | Add `POST /api/assistant/briefing` endpoint | `backend/routes/assistant.py` + `context_service.py` | ⬜ Pending |
-| 2.4 | Mobile floating button + full-screen drawer | `AssistantSidebar.js` (responsive) | ⬜ Pending |
-| 2.5 | Update nav, demote AssistantHub to config page | `frontend/src/` nav files | ⬜ Pending |
+| 2.1 | Create `AppLayout` 3-column layout with sidebar slot | `frontend/src/layouts/AppLayout.js` | ✅ Done |
+| 2.2 | Build `AssistantSidebar` persistent component | `frontend/src/components/AssistantSidebar.js` | ✅ Done |
+| 2.3 | Add `GET /api/assistant/briefing` endpoint | `backend/routes/assistant.py` + `context_service.py` | ✅ Done |
+| 2.4 | Mobile floating button + full-screen drawer | `AssistantSidebar.js` (responsive) | ✅ Done |
+| 2.5 | Update nav, demote AssistantHub to config page | `frontend/src/` nav files | ✅ Done |
 
 #### AssistantSidebar Component Tree
 ```
@@ -212,17 +212,17 @@ User opens Telegizer → immediately sees assistant greeting on the right. Every
 ### Phase 3 — Proactive Intelligence Engine
 **Goal:** Assistant starts initiating conversations, not just responding.  
 **Duration:** ~2.5 weeks  
-**Status:** ⬜ Pending
+**Status:** ✅ Complete
 
 #### Tasks
 
 | # | Task | File(s) | Status |
 |---|---|---|---|
-| 3.1 | Create `GroupDailySignal` model + migration | `backend/models.py` + migration | ⬜ Pending |
-| 3.2 | Build `GroupSignalExtractor` scheduler pipeline | `backend/assistant/group_signal_extractor.py` | ⬜ Pending |
-| 3.3 | Build `send_daily_briefings()` scheduler task | `backend/scheduler.py` | ⬜ Pending |
-| 3.4 | Build `check_group_health()` proactive alert task | `backend/scheduler.py` | ⬜ Pending |
-| 3.5 | Build `check_inactive_groups()` nudge task | `backend/scheduler.py` | ⬜ Pending |
+| 3.1 | Create `GroupDailySignal` model + migration | `backend/models.py` | ✅ Done |
+| 3.2 | Build `GroupSignalExtractor` scheduler pipeline | `backend/assistant/group_signal_extractor.py` | ✅ Done |
+| 3.3 | Build `send_daily_briefings()` scheduler task | `backend/scheduler.py` | ✅ Done |
+| 3.4 | Build `check_group_health()` proactive alert task | `backend/scheduler.py` | ✅ Done |
+| 3.5 | Build `check_inactive_groups()` nudge task | `backend/scheduler.py` | ✅ Done |
 
 #### GroupDailySignal Model
 ```python
@@ -257,15 +257,15 @@ Assistant contacts users proactively. Users have reason to open Telegram even wi
 ### Phase 4 — Assistant Action Surface (Platform Operator)
 **Goal:** Assistant can control the platform, not just read from it.  
 **Duration:** ~2 weeks  
-**Status:** ⬜ Pending
+**Status:** ✅ Complete
 
 #### Tasks
 
 | # | Task | File(s) | Status |
 |---|---|---|---|
-| 4.1 | Build `actions.py` action framework + registry | `backend/assistant/actions.py` | ⬜ Pending |
-| 4.2 | Add platform operator intents to `process_message()` | `backend/assistant/personal_assistant.py` | ⬜ Pending |
-| 4.3 | Add `group_picker` step to state machine | `backend/assistant/personal_assistant.py` | ⬜ Pending |
+| 4.1 | Build `actions.py` action framework + registry | `backend/assistant/actions.py` | ✅ Done |
+| 4.2 | Add platform operator intents to `process_message()` | `backend/assistant/personal_assistant.py` | ✅ Done |
+| 4.3 | Add `group_picker` step to state machine (via post_announcement multi-group flow) | `backend/assistant/actions.py` | ✅ Done |
 
 #### Action Registry
 ```python
@@ -297,15 +297,15 @@ User can say "send digest to my gaming group" or "enable anti-spam on Crypto Hub
 ### Phase 5 — Semantic Search & Knowledge Base
 **Goal:** Notes, messages, and documents become searchable — not dead storage.  
 **Duration:** ~2 weeks  
-**Status:** ⬜ Pending
+**Status:** ✅ Complete
 
 #### Tasks
 
 | # | Task | File(s) | Status |
 |---|---|---|---|
-| 5.1 | Add pgvector + embedding columns via migration | `backend/models.py` + migration | ⬜ Pending |
-| 5.2 | Build `embeddings.py` service + `semantic_search()` | `backend/assistant/embeddings.py` | ⬜ Pending |
-| 5.3 | Add `search_notes` / `summarize_notes` intents | `backend/assistant/personal_assistant.py` | ⬜ Pending |
+| 5.1 | Add pgvector + embedding columns to Note + KnowledgeDoc | `backend/models.py` | ✅ Done |
+| 5.2 | Build `embeddings.py` service + `semantic_search()` | `backend/assistant/embeddings.py` | ✅ Done |
+| 5.3 | Add `search_notes` / `summarize_notes` intents | `backend/assistant/handlers/notes.py` | ✅ Done |
 
 #### Embedding Targets
 - `Note.embedding` — vector(768), set on creation/update
@@ -325,17 +325,17 @@ Notes and knowledge base become genuinely useful. Users save things knowing they
 ### Phase 6 — Technical Refactors & Scale
 **Goal:** Prepare for real user load without performance degradation.  
 **Duration:** ~2 weeks  
-**Status:** ⬜ Pending
+**Status:** ✅ Complete
 
 #### Tasks
 
 | # | Task | File(s) | Status |
 |---|---|---|---|
-| 6.1 | Split `personal_assistant.py` into handler modules | `backend/assistant/handlers/` | ⬜ Pending |
-| 6.2 | Migrate AI calls to async `httpx` | `backend/assistant/` | ⬜ Pending |
-| 6.3 | Add `session_id` + `feedback` columns to `BotDMMessage` | `backend/models.py` + migration | ⬜ Pending |
-| 6.4 | Add `MessageBuffer` TTL cleanup scheduler task | `backend/scheduler.py` | ⬜ Pending |
-| 6.5 | Add per-intent rate limits | `backend/routes/assistant.py` | ⬜ Pending |
+| 6.1 | Split `personal_assistant.py` into handler modules | `backend/assistant/handlers/` (14 files) | ✅ Done |
+| 6.2 | Migrate AI calls to `httpx` (sync, connection-pooled) | `backend/assistant/handlers/_ai.py` | ✅ Done |
+| 6.3 | Add `session_id` + `feedback` + `intent_confidence` to `BotDMMessage` | `backend/models.py` | ✅ Done |
+| 6.4 | Add `MessageBuffer` TTL cleanup scheduler task (nightly, 7d) | `backend/scheduler.py` | ✅ Done |
+| 6.5 | Add per-intent rate limits (Redis, 60s window) | `backend/assistant/personal_assistant.py` | ✅ Done |
 
 #### Target Module Structure (Post-Refactor)
 ```
@@ -407,4 +407,8 @@ INTENT_RATE_LIMITS = {
 
 ---
 
-*Report generated: 2026-05-04 — Updated as phases complete.*
+*Report generated: 2026-05-04 — All 6 phases complete as of 2026-05-04.*
+
+## Bug Fixes Applied Post-Implementation
+- `MessageBuffer.content` → `MessageBuffer.message_text` in `handlers/groups.py`, `group_signal_extractor.py` (3 callsites)
+- `WorkspaceReminder.message` → `WorkspaceReminder.reminder_text` in `scheduler.py` `send_daily_briefings()`

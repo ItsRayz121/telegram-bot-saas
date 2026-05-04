@@ -623,7 +623,7 @@ def send_daily_briefings():
                     lines.append(f"\n🔔 Reminders due today ({len(reminders)}):")
                     for r in reminders:
                         t = r.remind_at.strftime("%H:%M UTC")
-                        lines.append(f"  • {r.message[:60]} at {t}")
+                        lines.append(f"  • {r.reminder_text[:60]} at {t}")
 
                 if critical_groups:
                     lines.append("\n⚠️ Groups needing attention:")

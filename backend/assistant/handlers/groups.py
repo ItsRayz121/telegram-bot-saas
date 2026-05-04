@@ -79,7 +79,7 @@ def handle_group_query(user_id: int, key_info: dict) -> dict:
     group_title_map = {g.telegram_group_id: (g.title or g.telegram_group_id) for g in groups}
     context = "\n".join(
         f"[{group_title_map.get(m.telegram_group_id, m.telegram_group_id)}] "
-        f"{m.sender_name or 'User'}: {m.content}"
+        f"{m.sender_name or 'User'}: {m.message_text}"
         for m in reversed(msgs)
     )[:12000]
 

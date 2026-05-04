@@ -55,7 +55,7 @@ def extract_for_group(group, messages: list, ai_key_info: Optional[dict] = None)
     word_freq: Counter = Counter()
 
     for msg in messages:
-        content = (msg.content or "").strip()
+        content = (msg.message_text or "").strip()
         sender = msg.sender_name or "unknown"
         senders.add(sender)
 
@@ -155,7 +155,7 @@ def _generate_ai_summary(group_title: str, messages: list, health_status: str, k
     lines = []
     for m in messages:
         sender = m.sender_name or "User"
-        lines.append(f"{sender}: {(m.content or '')[:80]}")
+        lines.append(f"{sender}: {(m.message_text or '')[:80]}")
     context = "\n".join(lines)[:3000]
 
     prompt = (
