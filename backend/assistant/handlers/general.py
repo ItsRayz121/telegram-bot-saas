@@ -65,11 +65,7 @@ def _build_rich_context(message: str, ctx, query_type: str) -> str:
         )
 
     if query_type == "realtime":
-        return (
-            f"User: {ctx.full_name} | Plan: {ctx.plan}\n"
-            "(NOTE: You cannot access live internet data. Acknowledge this clearly "
-            "then provide best available general guidance.)"
-        )
+        return f"User: {ctx.full_name} | Plan: {ctx.plan} | Telegram groups connected: {len(ctx.groups)}"
 
     # workspace / productivity — full context
     lines = [ctx.to_prompt_text()]
