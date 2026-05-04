@@ -16,31 +16,99 @@ import {
 } from '@mui/material';
 import {
   Send, SmartToy, ChevronRight, ChevronLeft, Close,
-  Refresh, LightbulbOutlined,
+  Refresh, LightbulbOutlined, ContentCopy, ZoomIn,
 } from '@mui/icons-material';
 import { assistant } from '../services/api';
+
+// Minimal markdown renderer — supports **bold**, *italic*, bullet lists, headers
+function MarkdownText({ content, fontSize = '0.82rem' }) {
+  const lines = (content || '').split('\n');
+  return (
+    <Box>
+      {lines.map((line, i) => {
+        // H2/H3 headers
+        if (/^#{1,3}\s/.test(line)) {
+          const text = line.replace(/^#+\s/, '');
+          return <Typography key={i} fontSize="0.85rem" fontWeight={700} mt={0.5} mb={0.25}>{renderInline(text)}</Typography>;
+        }
+        // Bullet list
+        if (/^[•\-\*]\s/.test(line)) {
+          const text = line.replace(/^[•\-\*]\s/, '');
+          return (
+            <Typography key={i} fontSize={fontSize} sx={{ display: 'flex', gap: 0.5, lineHeight: 1.6 }}>
+              <span style={{ flexShrink: 0 }}>•</span>
+              <span>{renderInline(text)}</span>
+            </Typography>
+          );
+        }
+        // Numbered list
+        if (/^\d+\.\s/.test(line)) {
+          return <Typography key={i} fontSize={fontSize} sx={{ lineHeight: 1.6 }}>{renderInline(line)}</Typography>;
+        }
+        // Empty line = spacing
+        if (!line.trim()) return <Box key={i} sx={{ height: 4 }} />;
+        // Normal line
+        return <Typography key={i} fontSize={fontSize} sx={{ lineHeight: 1.6, wordBreak: 'break-word' }}>{renderInline(line)}</Typography>;
+      })}
+    </Box>
+  );
+}
+
+function renderInline(text) {
+  // Split on **bold** and *italic* patterns
+  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
+  return parts.map((part, i) => {
+    if (/^\*\*[^*]+\*\*$/.test(part)) {
+      return <strong key={i}>{part.slice(2, -2)}</strong>;
+    }
+    if (/^\*[^*]+\*$/.test(part)) {
+      return <em key={i}>{part.slice(1, -1)}</em>;
+    }
+    return part;
+  });
+}
 
 export const ASSISTANT_SIDEBAR_WIDTH = 340;
 
 const WELCOME_MSG = {
   id: 'welcome',
   direction: 'out',
-  content: "Hi! I'm your Telegizer Assistant — your AI operations co-pilot.\n\nAsk me anything: schedule meetings, check your groups, set reminders, or get a briefing on what's happening today.",
+  content: "Hi! I'm your Telegizer Assistant — a hybrid AI co-pilot.\n\n**Ask me anything:**\n• Schedule meetings, set reminders, manage tasks\n• Check your groups and analyze activity\n• Write content, plan strategy, get ideas\n• \"Analyze my day\", \"What should I focus on?\"\n• General AI questions — strategy, writing, planning\n\nWhat can I help you with?",
   suggestions: [
-    { label: "What's on my schedule?", value: "What's on my schedule today?" },
-    { label: "Any group issues?", value: "Any issues in my groups?" },
-    { label: "Book a meeting", value: "Book a meeting" },
-    { label: "Remind me about something", value: "Remind me" },
+    { label: "🧠 Analyze my day", value: "Analyze my day" },
+    { label: "👥 Any group issues?", value: "Any issues in my groups?" },
+    { label: "✍️ Write a post", value: "Write an engaging announcement for my Telegram group" },
+    { label: "📅 My schedule", value: "What's on my schedule today?" },
   ],
 };
 
 // ── Message bubble ─────────────────────────────────────────────────────────────
 
-function MessageBubble({ msg, onSuggestion, isLast }) {
+function MessageBubble({ msg, onSuggestion, isLast, onExpand }) {
   const isUser = msg.direction === 'in';
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(msg.content || '').then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+
+  // Long AI responses (>200 chars) get expand + copy affordances
+  const isLongResponse = !isUser && (msg.content || '').length > 200;
+
   return (
-    <Box sx={{ mb: 1 }}>
-      <Box sx={{ display: 'flex', justifyContent: isUser ? 'flex-end' : 'flex-start' }}>
+    <Box sx={{ mb: 1.25 }}>
+      <Box sx={{ display: 'flex', justifyContent: isUser ? 'flex-end' : 'flex-start', alignItems: 'flex-end', gap: 0.5 }}>
+        {/* Copy button for bot messages */}
+        {!isUser && (
+          <Tooltip title={copied ? 'Copied!' : 'Copy'} placement="left">
+            <IconButton size="small" onClick={handleCopy} sx={{ opacity: 0.4, '&:hover': { opacity: 1 }, mb: 0.5 }}>
+              <ContentCopy sx={{ fontSize: 13 }} />
+            </IconButton>
+          </Tooltip>
+        )}
         <Box
           sx={{
             maxWidth: '88%',
@@ -51,9 +119,13 @@ function MessageBubble({ msg, onSuggestion, isLast }) {
             py: 0.9,
           }}
         >
-          <Typography fontSize="0.82rem" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.5 }}>
-            {msg.content}
-          </Typography>
+          {isUser ? (
+            <Typography fontSize="0.82rem" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.5 }}>
+              {msg.content}
+            </Typography>
+          ) : (
+            <MarkdownText content={msg.content} />
+          )}
           {msg.created_at && (
             <Typography fontSize="0.6rem" sx={{ opacity: 0.55, mt: 0.25, textAlign: isUser ? 'right' : 'left' }}>
               {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -64,7 +136,7 @@ function MessageBubble({ msg, onSuggestion, isLast }) {
 
       {/* Suggestion chips — only on last bot message */}
       {!isUser && isLast && msg.suggestions?.length > 0 && (
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.75, pl: 0.25 }}>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.75, pl: 3 }}>
           {msg.suggestions.map((s, i) => (
             <Chip
               key={i}
@@ -76,6 +148,21 @@ function MessageBubble({ msg, onSuggestion, isLast }) {
               sx={{ fontSize: '0.7rem', cursor: 'pointer', height: 24 }}
             />
           ))}
+        </Box>
+      )}
+
+      {/* Expand Analysis button on long AI responses */}
+      {isLongResponse && isLast && !msg.content?.startsWith('Expand') && (
+        <Box sx={{ mt: 0.5, pl: 3 }}>
+          <Chip
+            icon={<ZoomIn sx={{ fontSize: '14px !important' }} />}
+            label="Expand Analysis"
+            size="small"
+            variant="filled"
+            color="secondary"
+            onClick={onExpand}
+            sx={{ fontSize: '0.68rem', cursor: 'pointer', height: 22 }}
+          />
         </Box>
       )}
     </Box>
@@ -198,6 +285,14 @@ function AssistantContent({ onClose }) {
     }
   }, [send]);
 
+  // Expand the last bot response for deeper analysis
+  const handleExpand = useCallback(() => {
+    const lastBotMsg = [...messages].reverse().find(m => m.direction === 'out' && m.id !== 'welcome');
+    if (lastBotMsg) {
+      send(`Expand analysis: ${lastBotMsg.content.slice(0, 80)}`);
+    }
+  }, [messages, send]);
+
   const handleKey = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -219,7 +314,7 @@ function AssistantContent({ onClose }) {
         <SmartToy fontSize="small" color="primary" />
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography fontWeight={700} fontSize="0.88rem" noWrap>Telegizer Assistant</Typography>
-          <Typography fontSize="0.68rem" color="text.secondary" noWrap>AI Operations Co-Pilot</Typography>
+          <Typography fontSize="0.68rem" color="text.secondary" noWrap>Hybrid AI · Ask anything</Typography>
         </Box>
         <Tooltip title="Refresh briefing">
           <IconButton size="small" onClick={loadBriefing} disabled={loadingBriefing}>
@@ -243,6 +338,7 @@ function AssistantContent({ onClose }) {
             msg={m}
             isLast={idx === messages.length - 1}
             onSuggestion={handleSuggestion}
+            onExpand={handleExpand}
           />
         ))}
         {sending && <ThinkingBubble />}

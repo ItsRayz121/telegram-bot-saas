@@ -108,5 +108,13 @@ def handle_group_query(user_id: int, key_info: dict) -> dict:
     except Exception:
         pass
 
-    return {"reply": f"Group intelligence report (last 24h):\n\n{summary}",
-            "intent": "group_query", "data": {"groups_checked": len(groups), "messages_scanned": len(msgs)}}
+    return {
+        "reply": f"**Group intelligence report (last 24h)**\n\n{summary}",
+        "intent": "group_query",
+        "data": {"groups_checked": len(groups), "messages_scanned": len(msgs)},
+        "suggestions": [
+            {"label": "🔍 Expand Analysis", "value": "Expand analysis: my group intelligence report"},
+            {"label": "📊 Group Trends", "value": "Show group stats"},
+            {"label": "🤖 Setup Automod", "value": "How should I configure automod for my groups?"},
+        ],
+    }

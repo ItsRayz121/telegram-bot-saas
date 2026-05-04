@@ -22,7 +22,8 @@ _INTENT_RATE_LIMITS: dict[str, int] = {
     "post_announcement": 3,
     "get_group_stats":   5,
     "analyze_day":       10,
-    "general":          20,
+    "expand_analysis":   10,
+    "general":          30,
     "_default":         15,
 }
 
@@ -64,7 +65,7 @@ def process_message(user_id: int, message: str, user_tz: str | None = None) -> d
         handle_save_link, handle_create_task, handle_list_tasks,
         handle_list_meetings, handle_list_reminders,
         handle_group_query, handle_general, handle_add_resource, handle_continue_state,
-        handle_analyze_day,
+        handle_analyze_day, handle_expand_analysis,
     )
     from .handlers._parsers import (
         keyword_intent, keyword_parse, keyword_parse_note, keyword_parse_task, keyword_parse_reminder,
@@ -142,13 +143,18 @@ def process_message(user_id: int, message: str, user_tz: str | None = None) -> d
     intent = None
 
     # Step 1: high-confidence keyword pre-filter
+    # Expand analysis — check before AI to avoid misrouting
+    if re.match(r"expand\s+analysis", message, re.IGNORECASE):
+        intent = "expand_analysis"
+        parsed = {"intent": "expand_analysis"}
+
     kw_intent = keyword_intent(message)
     _log.debug("keyword_intent=%s", kw_intent)
     high_confidence_keywords = (
         "group_query", "list_meetings", "list_reminders",
-        "list_notes", "list_tasks", "upcoming_schedule",
+        "list_notes", "list_tasks", "upcoming_schedule", "analyze_day",
     )
-    if kw_intent in high_confidence_keywords:
+    if intent is None and kw_intent in high_confidence_keywords:
         intent = kw_intent
         parsed = {"intent": intent}
 
@@ -258,6 +264,8 @@ def process_message(user_id: int, message: str, user_tz: str | None = None) -> d
             result = handle_list_tasks(user_id)
         elif intent == "analyze_day":
             result = handle_analyze_day(user_id, key_info)
+        elif intent == "expand_analysis":
+            result = handle_expand_analysis(user_id, message, key_info, ctx)
         elif intent == "group_query":
             result = handle_group_query(user_id, key_info)
         elif intent == "add_resource":
