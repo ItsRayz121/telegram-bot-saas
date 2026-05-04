@@ -8,12 +8,13 @@ import {
 } from '@mui/material';
 import {
   Add, Delete, AutoMode, ExpandMore, ExpandLess, PlayArrow, Pause,
-  ArrowBack, BoltOutlined, ContentCopy,
+  ArrowBack, BoltOutlined, ContentCopy, Webhook,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { automations as autoApi, telegramGroups as tgApi } from '../services/api';
 import PlanGate from '../components/PlanGate';
+import { WebhooksSection } from './Integrations';
 
 function _getUser() {
   try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; }
@@ -469,6 +470,11 @@ export default function WorkspaceAutomations() {
         groups={groups}
         templates={templates}
       />
+
+      {/* ── Outbound Webhooks (n8n / Zapier / custom) ── */}
+      <Divider sx={{ my: 4 }} />
+      <WebhooksSection />
+
     </Box>
     </PlanGate>
   );

@@ -269,9 +269,9 @@ function WebhookRow({ hook, onEdit, onDelete, onToggle, onTest }) {
   );
 }
 
-// ── Page ──────────────────────────────────────────────────────────────────────
+// ── Webhooks Section (embeddable) ─────────────────────────────────────────────
 
-export default function Integrations() {
+export function WebhooksSection() {
   const [hooks, setHooks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -320,51 +320,45 @@ export default function Integrations() {
   const handleTest = (id) => integrationWebhooks.test(id);
 
   return (
-    <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 760, mx: 'auto' }}>
-      {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Webhook sx={{ fontSize: 24, color: 'primary.main' }} />
-          <Typography variant="h5" fontWeight={700}>Integrations</Typography>
+    <Box>
+      {/* Section header */}
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Webhook sx={{ fontSize: 20, color: 'primary.main' }} />
+          <Typography fontWeight={700} fontSize="1rem">Outbound Webhooks</Typography>
+          {hooks.length > 0 && <Chip label={hooks.length} size="small" sx={{ height: 18, fontSize: '0.65rem' }} />}
         </Box>
-        <Button variant="contained" size="small" startIcon={<Add />} onClick={openCreate}>
+        <Button variant="outlined" size="small" startIcon={<Add />} onClick={openCreate}>
           Add Webhook
         </Button>
       </Box>
-      <Typography color="text.secondary" fontSize="0.88rem" mb={3}>
-        Send Telegizer events to n8n, Make, Zapier, or any custom automation tool.
-      </Typography>
 
       {/* How it works */}
-      <Card variant="outlined" sx={{ mb: 3, bgcolor: 'rgba(37,99,235,0.04)', borderColor: 'primary.light' }}>
-        <CardContent sx={{ py: '12px !important' }}>
+      <Card variant="outlined" sx={{ mb: 2, bgcolor: 'rgba(37,99,235,0.04)', borderColor: 'primary.light' }}>
+        <CardContent sx={{ py: '10px !important' }}>
           <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-            <Info sx={{ fontSize: 18, color: 'primary.main', mt: 0.1 }} />
-            <Box>
-              <Typography fontWeight={600} fontSize="0.88rem" mb={0.5}>How it works</Typography>
-              <Typography fontSize="0.82rem" color="text.secondary">
-                When events happen in Telegizer (meeting created, reminder set, etc.), we POST a JSON payload
-                to your webhook URL. In <strong>n8n</strong>: add a Webhook node, copy its URL here, choose
-                your events, and build your automation. Requests are signed with{' '}
-                <code style={{ fontSize: '0.78rem' }}>X-Telegizer-Signature</code> if you set a secret.
-              </Typography>
-            </Box>
+            <Info sx={{ fontSize: 16, color: 'primary.main', mt: 0.15 }} />
+            <Typography fontSize="0.81rem" color="text.secondary">
+              Telegizer POSTs a signed JSON event to your URL when meetings, reminders, or group issues occur.
+              In <strong>n8n</strong>: add a Webhook node → copy URL here → build your workflow.
+              Signed with <code style={{ fontSize: '0.75rem' }}>X-Telegizer-Signature</code> if a secret is set.
+            </Typography>
           </Box>
         </CardContent>
       </Card>
 
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      {error && <Alert severity="error" sx={{ mb: 1.5 }}>{error}</Alert>}
 
       {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}><CircularProgress size={28} /></Box>
+        <Box sx={{ py: 4, textAlign: 'center' }}><CircularProgress size={24} /></Box>
       ) : hooks.length === 0 ? (
-        <Box sx={{ textAlign: 'center', py: 6 }}>
-          <Webhook sx={{ fontSize: 48, color: 'text.disabled', mb: 1.5 }} />
-          <Typography fontWeight={600} mb={0.5}>No webhooks yet</Typography>
-          <Typography fontSize="0.84rem" color="text.secondary" mb={2}>
-            Add your first webhook to start sending Telegizer events to n8n or any automation tool.
+        <Box sx={{ textAlign: 'center', py: 4 }}>
+          <Webhook sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
+          <Typography fontWeight={600} fontSize="0.9rem" mb={0.5}>No webhooks yet</Typography>
+          <Typography fontSize="0.82rem" color="text.secondary" mb={1.5}>
+            Connect Telegizer events to n8n or any automation tool.
           </Typography>
-          <Button variant="contained" startIcon={<Add />} onClick={openCreate}>Add Webhook</Button>
+          <Button variant="contained" size="small" startIcon={<Add />} onClick={openCreate}>Add Webhook</Button>
         </Box>
       ) : (
         hooks.map(hook => (

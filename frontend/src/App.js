@@ -59,7 +59,6 @@ import JoinReferral from './pages/JoinReferral';
 // Pages — lazy loaded
 const AssistantNotes = React.lazy(() => import('./pages/AssistantNotes'));
 const AssistantBotSettings = React.lazy(() => import('./pages/AssistantBotSettings'));
-const Integrations = React.lazy(() => import('./pages/Integrations'));
 const AssistantDigests = React.lazy(() => import('./pages/AssistantDigests'));
 const AssistantAISettings = React.lazy(() => import('./pages/AssistantAISettings'));
 const AssistantTasks = React.lazy(() => import('./pages/AssistantTasks'));
@@ -277,7 +276,6 @@ export default function App() {
             <Route path="/workspace/knowledge"     element={<AppRoute><React.Suspense fallback={null}><AssistantKnowledge /></React.Suspense></AppRoute>} />
             <Route path="/workspace/assistant-bot" element={<AppRoute><React.Suspense fallback={null}><AssistantBotSettings /></React.Suspense></AppRoute>} />
             <Route path="/workflow-builder"        element={<AppRoute><React.Suspense fallback={null}><WorkflowBuilder /></React.Suspense></AppRoute>} />
-            <Route path="/integrations"            element={<AppRoute><React.Suspense fallback={null}><Integrations /></React.Suspense></AppRoute>} />
 
             {/* ── Telegram Mini App ─────────────────────────────────────────── */}
             <Route path="/mini-app" element={<MiniAppLayout><MiniApp /></MiniAppLayout>} />
