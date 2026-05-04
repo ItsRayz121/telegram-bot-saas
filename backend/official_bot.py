@@ -284,11 +284,17 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as exc:
             _log.debug("cmd_start context fetch failed: %s", exc)
 
+    assistant_hint = (
+        "\n\n💬 *Just chat with me naturally!*\n"
+        "\"Schedule meeting Friday 3 PM\" · \"Show my reminders\" · "
+        "\"Note this: ...\" · \"Any group issues today?\""
+    ) if is_linked else ""
+
     text = (
         f"👋 *Welcome to Telegizer, {first}!*\n\n"
         "Your all-in-one Telegram Group Management Hub.\n\n"
         "Manage groups, automate moderation, and grow your community — "
-        "all from one place."
+        f"all from one place.{assistant_hint}"
     )
 
     keyboard = []
@@ -818,20 +824,46 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             _log.warning("Reminder intent failed: %s", _exc)
         return
 
-    # ── General DM logging (pass-through) ────────────────────────────────────
+    # ── AI assistant routing — all unmatched DMs go through process_message ──
     if flask_app and _raw:
-        try:
-            import re as _re
-            _BOT_TOKEN_RE = _re.compile(r'\d{9,10}:[A-Za-z0-9_-]{35,}')
-            _safe_raw = _BOT_TOKEN_RE.sub("[REDACTED_BOT_TOKEN]", _raw)
-            with flask_app.app_context():
-                from .models import User as _User, BotDMMessage as _BotDM, db as _db
-                _u = _User.query.filter_by(telegram_user_id=str(user.id)).first()
-                if _u:
-                    _db.session.add(_BotDM(user_id=_u.id, direction="in", content=_safe_raw[:4000], intent="other"))
-                    _db.session.commit()
-        except Exception as _exc:
-            _log.warning("DM log failed: %s", _exc)
+        _BOT_TOKEN_RE = re.compile(r'\d{9,10}:[A-Za-z0-9_-]{35,}')
+        _safe_raw = _BOT_TOKEN_RE.sub("[REDACTED_BOT_TOKEN]", _raw)
+
+        # Don't route bot-token-shaped messages through the assistant
+        if not context.user_data.get("awaiting_bot_token"):
+            try:
+                with flask_app.app_context():
+                    from .models import User as _User, BotDMMessage as _BotDM, db as _db
+                    from .assistant.personal_assistant import process_message as _process_message
+
+                    _u = _User.query.filter_by(telegram_user_id=str(user.id)).first()
+                    if _u:
+                        # Log inbound
+                        _db.session.add(_BotDM(user_id=_u.id, direction="in", content=_safe_raw[:4000], intent="assistant"))
+                        _db.session.commit()
+
+                        # Run assistant
+                        _result = _process_message(user_id=_u.id, message=_safe_raw)
+                        _reply_text = _result.get("reply") or "I'm not sure how to help with that."
+
+                        # Log outbound
+                        _db.session.add(_BotDM(user_id=_u.id, direction="out", content=_reply_text[:4000], intent=_result.get("intent", "general")))
+                        _db.session.commit()
+
+                        await message.reply_text(_reply_text)
+                    else:
+                        # Unlinked user — prompt to connect account
+                        await message.reply_text(
+                            "👋 Hi! To use the Telegizer assistant, connect your Telegram account at telegizer.xyz/settings.\n\n"
+                            "Once linked, I can schedule meetings, save notes, set reminders, and more!"
+                        )
+            except Exception as _exc:
+                _log.warning("Assistant DM routing failed: %s", _exc)
+                try:
+                    await message.reply_text("Sorry, I had trouble with that. Please try again.")
+                except Exception:
+                    pass
+            return
 
     # ── Bot token submission ──────────────────────────────────────────────────
     if not context.user_data.get("awaiting_bot_token"):
