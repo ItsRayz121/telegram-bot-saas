@@ -501,7 +501,7 @@ export default function Sidebar({ onClose }) {
         <Collapse in={automationOpen} timeout={160} unmountOnExit>
           <NavItem label="Forwarding"   path="/workspace/forwarding"   icon={Send}     active={isActive('/workspace/forwarding')}   onClick={() => nav('/workspace/forwarding')} indent />
           <NavItem label="Workflows"    path="/workspace/automations"  icon={AutoMode} active={isActive('/workspace/automations')}  onClick={() => nav('/workspace/automations')} indent />
-          <NavItem label="Flow Builder" path="/workflow-builder"       icon={AutoMode} active={isActive('/workflow-builder')}       onClick={() => nav('/workflow-builder')} indent />
+          {/* Flow Builder hidden — duplicate of Workflows; route and page intact for future reactivation */}
         </Collapse>
 
         {/* ── ANALYTICS ── */}
