@@ -7,6 +7,7 @@ from .tasks import handle_create_task, handle_list_tasks, handle_list_meetings, 
 from .groups import handle_group_query
 from .general import handle_general, handle_add_resource, attach_resource
 from .state_machine import handle_continue_state
+from .analyze import handle_analyze_day
 
 __all__ = [
     "handle_schedule_meeting",
@@ -17,4 +18,5 @@ __all__ = [
     "handle_group_query",
     "handle_general", "handle_add_resource", "attach_resource",
     "handle_continue_state",
+    "handle_analyze_day",
 ]

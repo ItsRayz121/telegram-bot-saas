@@ -113,6 +113,16 @@ function AssistantContent({ onClose }) {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, sending]);
 
+  // Listen for prefill events from other pages (empty state buttons)
+  useEffect(() => {
+    const handler = (e) => {
+      setDraft(e.detail || '');
+      setTimeout(() => inputRef.current?.focus(), 100);
+    };
+    window.addEventListener('assistant:prefill', handler);
+    return () => window.removeEventListener('assistant:prefill', handler);
+  }, []);
+
   // Load daily briefing on first mount
   useEffect(() => {
     if (briefingLoaded) return;
@@ -242,6 +252,32 @@ function AssistantContent({ onClose }) {
           </Alert>
         )}
         <div ref={endRef} />
+      </Box>
+
+      {/* Quick actions */}
+      <Box sx={{
+        px: 1.5, py: 0.75,
+        borderTop: '1px solid', borderColor: 'divider',
+        bgcolor: 'background.paper',
+        flexShrink: 0,
+        display: 'flex', gap: 0.75, flexWrap: 'wrap',
+      }}>
+        {[
+          { label: '🧠 Analyze Day', value: 'Analyze my day' },
+          { label: '+ Task', value: 'Create task' },
+          { label: '⏰ Reminder', value: 'Remind me' },
+          { label: '📅 Schedule', value: "What's on my schedule?" },
+        ].map(q => (
+          <Chip
+            key={q.value}
+            label={q.label}
+            size="small"
+            variant="outlined"
+            onClick={() => send(q.value)}
+            disabled={sending}
+            sx={{ fontSize: '0.68rem', cursor: 'pointer' }}
+          />
+        ))}
       </Box>
 
       {/* Input area */}

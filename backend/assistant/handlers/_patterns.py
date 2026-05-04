@@ -59,6 +59,14 @@ LIST_TASKS_PATTERNS = re.compile(
     r"\b(my tasks|show tasks|list tasks|pending tasks|what tasks|see tasks|open tasks|to.do list)\b",
     re.IGNORECASE,
 )
+ANALYZE_DAY_PATTERNS = re.compile(
+    r"\b(analyze my day|analyse my day|day analysis|what.?s my day look like|how.?s my day"
+    r"|daily overview|daily summary|summarize my day|summarise my day|what do i have today"
+    r"|review my day|day review|what.?s going on today|brief me|give me a briefing"
+    r"|analyze my work|analyse my work|workspace overview|what should i focus on)\b",
+    re.IGNORECASE,
+)
+
 CANCEL_PATTERNS = re.compile(
     r"^(cancel|stop|nevermind|never mind|forget it|abort|quit|exit|no thanks|nope|no)\s*[.!]?$",
     re.IGNORECASE,

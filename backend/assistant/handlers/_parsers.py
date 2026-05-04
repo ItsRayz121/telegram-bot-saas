@@ -10,7 +10,7 @@ from ._patterns import (
     UPCOMING_SCHEDULE_PATTERNS, CREATE_REMINDER_PATTERNS,
     LIST_REMINDERS_PATTERNS, GROUP_PATTERNS, GROUP_ISSUE_SIGNALS,
     SAVE_NOTE_PATTERNS, LIST_NOTES_PATTERNS, SAVE_LINK_PATTERNS,
-    CREATE_TASK_PATTERNS, LIST_TASKS_PATTERNS,
+    CREATE_TASK_PATTERNS, LIST_TASKS_PATTERNS, ANALYZE_DAY_PATTERNS,
 )
 
 # Vocabulary of intent-bearing words to fuzzy-match against.
@@ -84,6 +84,8 @@ def low_confidence_suggestions(message: str) -> list[dict]:
 def keyword_intent(message: str) -> Optional[str]:
     msg = message.lower()
 
+    if ANALYZE_DAY_PATTERNS.search(msg):
+        return "analyze_day"
     if LIST_REMINDERS_PATTERNS.search(msg):
         return "list_reminders"
     if LIST_MEETINGS_PATTERNS.search(msg):

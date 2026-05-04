@@ -338,11 +338,15 @@ export default function AssistantNotes() {
               Add the bot to a group and say "note this", or click Generate AI Notes to extract from recent messages.
             </Typography>
             <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center', flexWrap: 'wrap' }}>
+              <Button variant="contained" size="small" startIcon={<Add />} onClick={() => setEditNote({})}>
+                Create Note
+              </Button>
+              <Button variant="outlined" size="small" startIcon={<AutoAwesome />}
+                onClick={() => window.dispatchEvent(new CustomEvent('assistant:prefill', { detail: 'Summarize my recent notes' }))}>
+                Summarize with AI
+              </Button>
               <Button variant="outlined" size="small" onClick={() => navigate('/groups')}>
                 Connect a Group
-              </Button>
-              <Button variant="contained" size="small" startIcon={<Add />} onClick={() => setEditNote({})}>
-                Create Manual Note
               </Button>
             </Box>
           </CardContent>

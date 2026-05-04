@@ -304,9 +304,21 @@ export default function AssistantTasks() {
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}><CircularProgress size={32} /></Box>
       ) : tasks.length === 0 ? (
-        <Card variant="outlined" sx={{ textAlign: 'center', py: 6 }}>
-          <CheckBox sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
-          <Typography color="text.secondary">No tasks yet. Create one or extract from group messages.</Typography>
+        <Card variant="outlined" sx={{ textAlign: 'center', py: 6, px: 3 }}>
+          <CheckBox sx={{ fontSize: 48, color: 'text.disabled', mb: 2 }} />
+          <Typography variant="h6" gutterBottom>No tasks yet</Typography>
+          <Typography color="text.secondary" mb={3}>
+            Create a task manually or let the assistant extract action items from your group messages.
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <Button variant="contained" startIcon={<Add />} onClick={() => setDialogOpen(true)}>
+              Create Task
+            </Button>
+            <Button variant="outlined" startIcon={<Psychology />}
+              onClick={() => window.dispatchEvent(new CustomEvent('assistant:prefill', { detail: 'Extract action items from my groups' }))}>
+              Extract with AI
+            </Button>
+          </Box>
         </Card>
       ) : filterStatus ? (
         /* Flat list when filtered */

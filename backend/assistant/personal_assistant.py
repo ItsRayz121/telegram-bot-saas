@@ -21,6 +21,7 @@ _INTENT_RATE_LIMITS: dict[str, int] = {
     "trigger_digest":    2,
     "post_announcement": 3,
     "get_group_stats":   5,
+    "analyze_day":       10,
     "general":          20,
     "_default":         15,
 }
@@ -63,6 +64,7 @@ def process_message(user_id: int, message: str, user_tz: str | None = None) -> d
         handle_save_link, handle_create_task, handle_list_tasks,
         handle_list_meetings, handle_list_reminders,
         handle_group_query, handle_general, handle_add_resource, handle_continue_state,
+        handle_analyze_day,
     )
     from .handlers._parsers import (
         keyword_intent, keyword_parse, keyword_parse_note, keyword_parse_task, keyword_parse_reminder,
@@ -130,7 +132,7 @@ def process_message(user_id: int, message: str, user_tz: str | None = None) -> d
         if state:
             try:
                 result = handle_continue_state(user_id, state, message, key_info, user_tz)
-                return _ensure_suggestions(result)
+                return _ensure_suggestions(result, user_id)
             except Exception as exc:
                 _log.warning("continue_state failed: %s", exc)
                 clear_state(user_id)
@@ -254,6 +256,8 @@ def process_message(user_id: int, message: str, user_tz: str | None = None) -> d
             result = handle_create_task(user_id, title)
         elif intent == "list_tasks":
             result = handle_list_tasks(user_id)
+        elif intent == "analyze_day":
+            result = handle_analyze_day(user_id, key_info)
         elif intent == "group_query":
             result = handle_group_query(user_id, key_info)
         elif intent == "add_resource":
@@ -285,7 +289,7 @@ def process_message(user_id: int, message: str, user_tz: str | None = None) -> d
                             "I wasn't sure what you meant — did you mean one of these?"
                         )
 
-        return _ensure_suggestions(result)
+        return _ensure_suggestions(result, user_id)
 
     except Exception as exc:
         _log.error("intent handler %s failed: %s", intent, exc, exc_info=True)
@@ -302,6 +306,14 @@ def _is_self_contained_schedule_request(message: str) -> bool:
     return has_schedule and bool(extract_datetime_hint(message))
 
 
-def _ensure_suggestions(result: dict) -> dict:
+def _ensure_suggestions(result: dict, user_id: int | None = None) -> dict:
     result.setdefault("suggestions", [])
+    if not result["suggestions"] and user_id is not None:
+        try:
+            from .suggestion_engine import get_smart_suggestions
+            result["suggestions"] = get_smart_suggestions(
+                user_id, last_intent=result.get("intent"), limit=3
+            )
+        except Exception:
+            pass
     return result
