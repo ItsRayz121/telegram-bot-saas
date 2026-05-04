@@ -443,20 +443,6 @@ export default function WorkspaceAutomations() {
 
       {loading ? (
         <Box sx={{ py: 6, textAlign: 'center' }}><CircularProgress /></Box>
-      ) : workflows.length === 0 ? (
-        <Card>
-          <CardContent sx={{ py: 6, textAlign: 'center' }}>
-            <AutoMode sx={{ fontSize: 56, color: 'text.disabled', mb: 1.5 }} />
-            <Typography variant="h6" fontWeight={600} gutterBottom>No workflows yet</Typography>
-            <Typography variant="body2" color="text.secondary" mb={3} maxWidth={420} mx="auto">
-              Create your first automation to react to messages, new members, or bans —
-              DM yourself, forward messages, or create reminders automatically.
-            </Typography>
-            <Button variant="contained" startIcon={<Add />} onClick={() => setCreateOpen(true)}>
-              Create your first workflow
-            </Button>
-          </CardContent>
-        </Card>
       ) : (
         workflows.map(wf => (
           <WorkflowCard key={wf.id} wf={wf} groups={groups} onToggle={handleToggle} onDelete={handleDelete} />
