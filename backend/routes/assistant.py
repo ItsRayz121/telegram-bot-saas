@@ -345,25 +345,37 @@ def chat():
 
     user_tz = body.get("timezone") or None
 
-    # Store inbound message
-    inbound = BotDMMessage(user_id=user.id, direction="in", content=message, intent="web_chat")
-    db.session.add(inbound)
-    db.session.commit()
+    # Store inbound message — gracefully skip if schema migration is pending
+    inbound_id = None
+    try:
+        inbound = BotDMMessage(user_id=user.id, direction="in", content=message, intent="web_chat")
+        db.session.add(inbound)
+        db.session.commit()
+        inbound_id = inbound.id
+    except Exception as _e:
+        _log.warning("BotDMMessage inbound insert failed (schema migration pending?): %s", _e)
+        db.session.rollback()
 
     from ..assistant.personal_assistant import process_message
     result = process_message(user_id=user.id, message=message, user_tz=user_tz)
 
     # Store assistant reply
-    reply_msg = BotDMMessage(user_id=user.id, direction="out", content=result["reply"], intent=result["intent"])
-    db.session.add(reply_msg)
-    db.session.commit()
+    reply_msg_id = None
+    try:
+        reply_msg = BotDMMessage(user_id=user.id, direction="out", content=result["reply"], intent=result["intent"])
+        db.session.add(reply_msg)
+        db.session.commit()
+        reply_msg_id = reply_msg.id
+    except Exception as _e:
+        _log.warning("BotDMMessage outbound insert failed (schema migration pending?): %s", _e)
+        db.session.rollback()
 
     return jsonify({
         "reply": result["reply"],
         "intent": result["intent"],
         "data": result.get("data"),
         "suggestions": result.get("suggestions", []),
-        "message_id": reply_msg.id,
+        "message_id": reply_msg_id,
     })
 
 

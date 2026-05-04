@@ -284,22 +284,26 @@ class AssistantContextService:
         ]
 
         # ── Recent notes ──────────────────────────────────────────────────────
-        notes_raw = (
-            Note.query
-            .filter_by(user_id=user_id)
-            .order_by(Note.created_at.desc())
-            .limit(5)
-            .all()
-        )
-        recent_notes = [
-            {
-                "id": n.id,
-                "content_preview": n.content[:120],
-                "tags": n.tags or [],
-                "created_at_human": n.created_at.strftime("%d %b"),
-            }
-            for n in notes_raw
-        ]
+        try:
+            notes_raw = (
+                Note.query
+                .filter_by(user_id=user_id)
+                .order_by(Note.created_at.desc())
+                .limit(5)
+                .all()
+            )
+            recent_notes = [
+                {
+                    "id": n.id,
+                    "content_preview": (n.content or "")[:120],
+                    "tags": n.tags or [],
+                    "created_at_human": n.created_at.strftime("%d %b"),
+                }
+                for n in notes_raw
+            ]
+        except Exception as _notes_exc:
+            _log.warning("context_service notes query failed (schema migration pending?): %s", _notes_exc)
+            recent_notes = []
 
         # ── Recent conversation (last 8 BotDMMessage turns) ───────────────────
         conv_raw = (
