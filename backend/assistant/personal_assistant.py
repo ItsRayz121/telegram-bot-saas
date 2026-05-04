@@ -699,7 +699,8 @@ def _handle_schedule_meeting(user_id: int, parsed: dict, key_info: dict, user_tz
     )
     db.session.add(meeting)
     db.session.commit()
-    _clear_state(user_id)
+    # Save state so the follow-up "add a link" reply is handled in context
+    _save_state(user_id, "schedule_meeting", {"meeting_id": meeting.id}, "resources")
 
     try:
         from ..integrations.dispatcher import fire_event
@@ -853,8 +854,12 @@ def _handle_continue_state(user_id: int, state, message: str, key_info: dict, us
 
         elif awaiting == "resources":
             meeting_id = data.get("meeting_id")
-            if meeting_id and msg not in (_SKIP_VALUE, "no", "no thanks", "skip"):
-                return _attach_resource(user_id, meeting_id, msg, state)
+            _no_signals = (_SKIP_VALUE, "no", "no thanks", "skip", "done", "nope", "not now")
+            if meeting_id and msg.lower() not in _no_signals and msg != "__done__":
+                # Extract URL from message if the user prefixed it with "yes add this link …"
+                url_m = re.search(r"https?://\S+", msg)
+                resource_value = url_m.group(0) if url_m else msg
+                return _attach_resource(user_id, meeting_id, resource_value, state)
             _clear_state(user_id)
             return {"reply": "All done! Let me know if you need anything else.", "intent": "general", "data": None}
 
