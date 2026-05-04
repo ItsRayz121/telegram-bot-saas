@@ -955,12 +955,11 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         )
                     else:
                         # Unlinked user — prompt to connect account
-                        _frontend = _frontend()
                         await message.reply_text(
                             "👋 Hi! To use the Telegizer assistant, connect your Telegram account at telegizer.xyz/settings.\n\n"
                             "Once linked, I can schedule meetings, save notes, set reminders, and more!",
                             reply_markup=InlineKeyboardMarkup([[
-                                InlineKeyboardButton("🔗 Connect Account", url=f"{_frontend}/settings"),
+                                InlineKeyboardButton("🔗 Connect Account", url=f"{frontend}/settings"),
                             ]]),
                         )
             except Exception as _exc:
