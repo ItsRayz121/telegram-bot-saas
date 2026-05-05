@@ -26,7 +26,7 @@ def call_ai(key_info: dict, system: str, user_msg: str) -> str:
     """Call AI expecting a JSON response."""
     provider = key_info.get("provider", "gemini")
     api_key = key_info["api_key"]
-    model = key_info.get("model", "gemini-2.0-flash")
+    model = key_info.get("model", "gemini-1.5-flash")
 
     _log.debug("call_ai provider=%s model=%s msg_len=%d", provider, model, len(user_msg))
 
@@ -43,6 +43,8 @@ def call_ai(key_info: dict, system: str, user_msg: str) -> str:
                 },
             },
         )
+        if not resp.is_success:
+            _log.error("Gemini API error %d: %s", resp.status_code, resp.text[:500])
         resp.raise_for_status()
         return resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
 
@@ -57,6 +59,8 @@ def call_ai(key_info: dict, system: str, user_msg: str) -> str:
                 "messages": [{"role": "user", "content": user_msg}],
             },
         )
+        if not resp.is_success:
+            _log.error("Anthropic API error %d: %s", resp.status_code, resp.text[:500])
         resp.raise_for_status()
         return resp.json()["content"][0]["text"].strip()
 
@@ -74,6 +78,8 @@ def call_ai(key_info: dict, system: str, user_msg: str) -> str:
             ],
         },
     )
+    if not resp.is_success:
+        _log.error("OpenAI API error %d: %s", resp.status_code, resp.text[:500])
     resp.raise_for_status()
     return resp.json()["choices"][0]["message"]["content"].strip()
 
@@ -82,7 +88,7 @@ def call_ai_text(key_info: dict, system: str, user_msg: str) -> str:
     """Call AI expecting a plain-text response (not JSON)."""
     provider = key_info.get("provider", "gemini")
     api_key = key_info["api_key"]
-    model = key_info.get("model", "gemini-2.0-flash")
+    model = key_info.get("model", "gemini-1.5-flash")
 
     if provider == "gemini":
         resp = _client.post(
@@ -93,6 +99,8 @@ def call_ai_text(key_info: dict, system: str, user_msg: str) -> str:
                 "generationConfig": {"temperature": 0.3, "candidateCount": 1},
             },
         )
+        if not resp.is_success:
+            _log.error("Gemini API error %d: %s", resp.status_code, resp.text[:500])
         resp.raise_for_status()
         return resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
 
@@ -107,6 +115,8 @@ def call_ai_text(key_info: dict, system: str, user_msg: str) -> str:
                 "messages": [{"role": "user", "content": user_msg}],
             },
         )
+        if not resp.is_success:
+            _log.error("Anthropic API error %d: %s", resp.status_code, resp.text[:500])
         resp.raise_for_status()
         return resp.json()["content"][0]["text"].strip()
 
@@ -123,6 +133,8 @@ def call_ai_text(key_info: dict, system: str, user_msg: str) -> str:
             ],
         },
     )
+    if not resp.is_success:
+        _log.error("OpenAI API error %d: %s", resp.status_code, resp.text[:500])
     resp.raise_for_status()
     return resp.json()["choices"][0]["message"]["content"].strip()
 

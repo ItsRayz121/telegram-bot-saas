@@ -117,11 +117,18 @@ def _build_followup_suggestions(query_type: str, message: str, ctx) -> list[dict
     return suggestions[:3]
 
 
+_GREETING_WORD = re.compile(
+    r"^(hi|hey|hello|hiya|howdy|yo|sup|helo|hii|hiii|hy|hw|hye|hye)[!?.]*$",
+    re.IGNORECASE,
+)
 _GREETING_PATTERNS = re.compile(
     r"^\s*(hi|hey|hello|hiya|howdy|yo|sup|helo|hii|hiii|hy|hw|hye"
     r"|how are you|how r you|how are u|how was your|hows it going"
     r"|good morning|good afternoon|good evening|good night"
-    r"|what'?s up|wazzup|wsp|hru|how u doing)\s*[?!.]*\s*$",
+    r"|what'?s up|wazzup|wsp|hru|how u doing"
+    # combined forms: "hy how are you", "hey how are you", "hi how are u"
+    r"|(hi|hey|hello|hiya|hy|hw)\s+(how are you|how r you|how are u|hru|how u doing|how.?s it going)"
+    r")\s*[?!.]*\s*$",
     re.IGNORECASE,
 )
 

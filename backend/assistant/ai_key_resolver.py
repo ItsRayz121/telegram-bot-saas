@@ -59,7 +59,7 @@ def get_workspace_ai_key(user) -> dict:
     return {
         "provider": "gemini",
         "api_key": _cfg.Config.PLATFORM_GEMINI_API_KEY,
-        "model": "gemini-2.0-flash",
+        "model": "gemini-1.5-flash",
         "source": "platform",
         "daily_limit": daily_limit,
     }
@@ -97,7 +97,7 @@ def _check_and_reset_quota(user):
 
 def _default_model(provider: str) -> str:
     defaults = {
-        "gemini": "gemini-2.0-flash",
+        "gemini": "gemini-1.5-flash",
         "openai": "gpt-4o-mini",
         "anthropic": "claude-haiku-4-5-20251001",
         "openrouter": "google/gemini-flash-1.5",
