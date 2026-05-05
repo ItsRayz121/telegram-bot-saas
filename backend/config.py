@@ -96,12 +96,21 @@ class Config:
         )
     OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 
-    # Platform-wide Gemini key — powers AI features for all users at no extra config.
-    # Free users: 50k tokens/day cap. Pro users: 200k tokens/day cap.
+    # Platform-wide Gemini key (kept for user workspace keys; not used as platform primary).
     PLATFORM_GEMINI_API_KEY = os.environ.get("PLATFORM_GEMINI_API_KEY", "")
 
-    # Platform-wide OpenRouter key — OpenAI-compatible, used when Gemini key absent.
+    # Ollama — PRIMARY platform AI. Set PLATFORM_OLLAMA_BASE_URL to enable.
+    # Example: http://localhost:11434/v1  or  https://your-ollama-host/v1
+    PLATFORM_OLLAMA_BASE_URL = os.environ.get("PLATFORM_OLLAMA_BASE_URL", "")
+    PLATFORM_OLLAMA_MODEL    = os.environ.get("PLATFORM_OLLAMA_MODEL", "llama3.2")
+    # Ollama usually needs no key; set one if your host requires bearer auth.
+    PLATFORM_OLLAMA_API_KEY  = os.environ.get("PLATFORM_OLLAMA_API_KEY", "ollama")
+
+    # OpenRouter — first fallback (gpt-4o-mini via OpenRouter).
     PLATFORM_OPENROUTER_API_KEY = os.environ.get("PLATFORM_OPENROUTER_API_KEY", "")
+
+    # Direct OpenAI — last resort fallback.
+    PLATFORM_OPENAI_API_KEY = os.environ.get("PLATFORM_OPENAI_API_KEY", "")
 
     # Official Telegizer shared bot (serves all users/groups)
     TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")

@@ -56,12 +56,13 @@ def get_workspace_ai_key(user) -> dict:
             "Quota resets in 24 hours or add your own API key in AI Settings."
         )
 
-    # Priority: Gemini → OpenRouter
-    if _cfg.Config.PLATFORM_GEMINI_API_KEY:
+    # Priority: Ollama (self-hosted) → OpenRouter gpt-4o-mini → direct OpenAI gpt-4o-mini
+    if _cfg.Config.PLATFORM_OLLAMA_BASE_URL:
         return {
-            "provider": "gemini",
-            "api_key": _cfg.Config.PLATFORM_GEMINI_API_KEY,
-            "model": "gemini-2.0-flash",
+            "provider": "ollama",
+            "api_key": _cfg.Config.PLATFORM_OLLAMA_API_KEY,
+            "model": _cfg.Config.PLATFORM_OLLAMA_MODEL,
+            "base_url": _cfg.Config.PLATFORM_OLLAMA_BASE_URL.rstrip("/"),
             "source": "platform",
             "daily_limit": daily_limit,
         }
@@ -70,13 +71,23 @@ def get_workspace_ai_key(user) -> dict:
         return {
             "provider": "openrouter",
             "api_key": _cfg.Config.PLATFORM_OPENROUTER_API_KEY,
-            "model": "google/gemini-flash-1.5",
+            "model": "openai/gpt-4o-mini",
             "base_url": "https://openrouter.ai/api/v1",
             "source": "platform",
             "daily_limit": daily_limit,
         }
 
-    return {"api_key": "", "provider": "gemini", "model": "gemini-2.0-flash", "source": "platform"}
+    if _cfg.Config.PLATFORM_OPENAI_API_KEY:
+        return {
+            "provider": "openai",
+            "api_key": _cfg.Config.PLATFORM_OPENAI_API_KEY,
+            "model": "gpt-4o-mini",
+            "base_url": "https://api.openai.com/v1",
+            "source": "platform",
+            "daily_limit": daily_limit,
+        }
+
+    return {"api_key": "", "provider": "openrouter", "model": "openai/gpt-4o-mini", "source": "platform"}
 
 
 def record_token_usage(user, tokens_used: int):
@@ -114,6 +125,7 @@ def _default_model(provider: str) -> str:
         "gemini": "gemini-1.5-flash",
         "openai": "gpt-4o-mini",
         "anthropic": "claude-haiku-4-5-20251001",
-        "openrouter": "google/gemini-flash-1.5",
+        "openrouter": "openai/gpt-4o-mini",
+        "ollama": "llama3.2",
     }
     return defaults.get(provider, "")

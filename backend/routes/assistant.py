@@ -621,10 +621,11 @@ def get_profile():
 
 
 def _call_ai_text(key_info: dict, prompt: str) -> str:
+    """Simple single-call AI helper (no fallback chain — used for cross-group ask and inline AI)."""
     import requests as _r
-    provider = key_info.get("provider", "gemini")
+    provider = key_info.get("provider", "openrouter")
     api_key = key_info["api_key"]
-    model = key_info.get("model", "gemini-2.0-flash")
+    model = key_info.get("model", "openai/gpt-4o-mini")
     if provider == "gemini":
         resp = _r.post(
             f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}",
@@ -643,11 +644,12 @@ def _call_ai_text(key_info: dict, prompt: str) -> str:
         )
         resp.raise_for_status()
         return resp.json()["content"][0]["text"].strip()
+    # ollama / openrouter / openai — all OpenAI-compatible
     base = key_info.get("base_url", "https://api.openai.com/v1")
     resp = _r.post(
         f"{base.rstrip('/')}/chat/completions",
         headers={"Authorization": f"Bearer {api_key}"},
-        json={"model": model or "gpt-4o-mini", "messages": [{"role": "user", "content": prompt}]},
+        json={"model": model or "openai/gpt-4o-mini", "messages": [{"role": "user", "content": prompt}]},
         timeout=30,
     )
     resp.raise_for_status()

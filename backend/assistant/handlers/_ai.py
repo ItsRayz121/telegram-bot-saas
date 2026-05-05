@@ -69,23 +69,28 @@ def _gemini_post(api_key: str, preferred_model: str, system: str, user_msg: str,
     raise last_exc or RuntimeError("All Gemini model candidates returned 404")
 
 
-# OpenAI-compatible model fallback sequence (OpenRouter / OpenAI / Mistral etc.)
-_OPENAI_MODEL_FALLBACKS = [
-    "google/gemini-flash-1.5",          # cheapest on OpenRouter
-    "openai/gpt-4o-mini",               # very cheap, excellent quality
-    "meta-llama/llama-3.1-8b-instruct:free",  # free on OpenRouter
-    "mistralai/mistral-7b-instruct:free",      # free on OpenRouter
-    "gpt-4o-mini",                      # direct OpenAI fallback
+# OpenAI-compatible model fallback sequence.
+# For Ollama: only tries the configured model (no cross-provider fallback makes sense).
+# For OpenRouter/OpenAI: falls back to gpt-4o-mini variants.
+_OPENROUTER_FALLBACKS = [
+    "openai/gpt-4o-mini",   # OpenRouter-routed gpt-4o-mini
+    "gpt-4o-mini",          # direct OpenAI if base_url is openai.com
 ]
 
 
 def _openai_compat_post(key_info: dict, api_key: str, preferred_model: str,
                         system: str, user_msg: str, json_mode: bool) -> str:
-    """POST to an OpenAI-compatible endpoint with model fallbacks."""
+    """POST to an OpenAI-compatible endpoint (Ollama, OpenRouter, OpenAI) with fallbacks."""
+    provider = key_info.get("provider", "openrouter")
     base = key_info.get("base_url", "https://api.openai.com/v1").rstrip("/")
-    candidates = [preferred_model or "openai/gpt-4o-mini"] + [
-        m for m in _OPENAI_MODEL_FALLBACKS if m != preferred_model
-    ]
+
+    # Ollama: single model, no cross-provider fallback
+    if provider == "ollama":
+        candidates = [preferred_model or "llama3.2"]
+    else:
+        candidates = [preferred_model or "openai/gpt-4o-mini"] + [
+            m for m in _OPENROUTER_FALLBACKS if m != preferred_model
+        ]
 
     body_base: dict = {
         "temperature": 0.1 if json_mode else 0.3,
