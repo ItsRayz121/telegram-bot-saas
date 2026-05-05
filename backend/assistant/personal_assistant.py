@@ -398,15 +398,20 @@ def _is_self_contained_schedule_request(message: str) -> bool:
 
 def _ensure_suggestions(result: dict, user_id: int | None, message: str = "", ctx=None) -> dict:
     result.setdefault("suggestions", [])
+
+    # Never force suggestions onto plain conversational replies — only add them
+    # for workspace/productivity intents where they genuinely help.
+    intent = result.get("intent", "general")
+    is_pure_chat = intent == "general" and not result.get("suggestions")
+    if is_pure_chat:
+        return result
+
     if not result["suggestions"] and user_id is not None:
         try:
             from .suggestion_engine import get_smart_suggestions
             result["suggestions"] = get_smart_suggestions(
-                user_id, last_intent=result.get("intent"), limit=3
+                user_id, last_intent=intent, limit=3
             )
         except Exception:
             pass
-    # If still no suggestions, add contextual ones
-    if not result["suggestions"] and message:
-        result["suggestions"] = _contextual_suggestions(message, ctx)[:3]
     return result

@@ -117,11 +117,29 @@ def _build_followup_suggestions(query_type: str, message: str, ctx) -> list[dict
     return suggestions[:3]
 
 
+_GREETING_PATTERNS = re.compile(
+    r"^\s*(hi|hey|hello|hiya|howdy|yo|sup|helo|hii|hiii|hy|hw|hye"
+    r"|how are you|how r you|how are u|how was your|hows it going"
+    r"|good morning|good afternoon|good evening|good night"
+    r"|what'?s up|wazzup|wsp|hru|how u doing)\s*[?!.]*\s*$",
+    re.IGNORECASE,
+)
+
+
 def handle_general(user_id: int, message: str, key_info: dict, ai_reply: str | None, ctx=None) -> dict:
     """
     Hybrid AI handler — routes between workspace assistant and general AI chat.
     Falls back gracefully when no AI key is configured.
     """
+    # Handle greetings naturally even without an AI key
+    if _GREETING_PATTERNS.match(message):
+        msg_lower = message.lower().strip()
+        if any(w in msg_lower for w in ("how are you", "how r you", "how are u", "how was your", "hru", "how u")):
+            reply = "I'm doing great, thanks for asking! 😊 Ready to help you manage your Telegram workspace. What can I do for you today?"
+        else:
+            reply = "Hey! 👋 I'm your Telegizer AI assistant. Ask me anything — schedule meetings, set reminders, check your groups, or just chat. What's on your mind?"
+        return {"reply": reply, "intent": "general", "data": None, "suggestions": []}
+
     if not key_info.get("api_key"):
         return _no_key_response()
 
@@ -214,26 +232,13 @@ def handle_expand_analysis(user_id: int, message: str, key_info: dict, ctx=None)
 def _no_key_response() -> dict:
     return {
         "reply": (
-            "**What can I help you with?**\n\n"
-            "I'm your Telegizer AI co-pilot. Ask me anything:\n\n"
-            "**Workspace**\n"
-            "• \"What's happening in my groups?\"\n"
-            "• \"Any issues I should fix?\"\n"
-            "• \"Analyze my day\"\n\n"
-            "**Productivity**\n"
-            "• \"Schedule a meeting Friday 3pm\"\n"
-            "• \"Remind me to send the report tomorrow\"\n"
-            "• \"Create task: review analytics\"\n\n"
-            "**General AI**\n"
-            "• \"Write an announcement for my group\"\n"
-            "• \"Give me Telegram growth strategies\"\n"
-            "• \"Explain community engagement best practices\"\n\n"
-            "_Add an AI key in Settings → AI Settings to unlock full AI responses._"
+            "I can help with your workspace — schedule meetings, set reminders, manage tasks, and check your groups.\n\n"
+            "For full AI chat responses, add an AI key in **Settings → AI Settings**.\n\n"
+            "What would you like to do?"
         ),
         "intent": "general",
         "data": None,
         "suggestions": [
-            {"label": "🧠 Analyze My Day", "value": "Analyze my day"},
             {"label": "📅 My Schedule", "value": "What's on my schedule?"},
             {"label": "👥 Group Health", "value": "Any issues in my groups?"},
         ],
@@ -242,18 +247,10 @@ def _no_key_response() -> dict:
 
 def _fallback_response(message: str) -> dict:
     return {
-        "reply": (
-            "I'm here and ready to help. You can ask me about your workspace, "
-            "write content, plan strategy, or get answers to general questions. "
-            "What would you like to explore?"
-        ),
+        "reply": "I had a moment of trouble there — could you rephrase that? I'm here and ready to help.",
         "intent": "general",
         "data": None,
-        "suggestions": [
-            {"label": "🧠 Analyze My Day", "value": "Analyze my day"},
-            {"label": "👥 Group Health", "value": "Any issues in my groups?"},
-            {"label": "🔍 Expand Analysis", "value": f"Expand analysis: {message[:50]}"},
-        ],
+        "suggestions": [],
     }
 
 
