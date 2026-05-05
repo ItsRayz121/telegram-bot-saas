@@ -297,22 +297,6 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"all from one place.{assistant_hint}"
     )
 
-    # Resolve assistant bot deep-link (user-specific bot if configured)
-    assistant_url = f"{frontend}/workspace"
-    assistant_bot_username = None
-    if is_linked and flask_app:
-        try:
-            with flask_app.app_context():
-                from .models import User, AssistantBot as _AB
-                wu = User.query.filter_by(telegram_user_id=str(user.id)).first()
-                if wu:
-                    ab = _AB.query.filter_by(user_id=wu.id, is_active=True).first()
-                    if ab and ab.bot_username:
-                        assistant_bot_username = ab.bot_username.lstrip("@")
-                        assistant_url = f"https://t.me/{assistant_bot_username}"
-        except Exception:
-            pass
-
     keyboard = []
 
     if is_linked:
@@ -345,7 +329,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ],
         # Row 3 — power features (AI + Automations) — open in Telegram where possible
         [
-            InlineKeyboardButton("🧠 AI Assistant", url=assistant_url),
+            InlineKeyboardButton("🧠 AI Assistant", callback_data="menu:ai_assistant"),
             InlineKeyboardButton("⚡ Automations", url=f"{frontend}/workspace/automations"),
         ],
         # Row 4 — utility
@@ -1214,6 +1198,42 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await query.answer()
 
+    # ── AI Assistant quick-action buttons ─────────────────────────────────────
+    if data.startswith("ai:"):
+        _ai_messages = {
+            "ai:analyze_day":   "Analyze my day",
+            "ai:schedule":      "What's on my schedule?",
+            "ai:group_health":  "Any issues in my groups?",
+            "ai:remind":        "Remind me",
+        }
+        _ai_msg = _ai_messages.get(data)
+        if _ai_msg and flask_app:
+            try:
+                with flask_app.app_context():
+                    from .models import User as _User
+                    from .assistant.personal_assistant import process_message as _pm
+                    _wu = _User.query.filter_by(telegram_user_id=str(user.id)).first()
+                    if _wu:
+                        _result = _pm(_wu.id, _ai_msg)
+                        _reply = _result.get("reply") or "I'm here — just type your question!"
+                        await query.edit_message_text(
+                            _reply,
+                            parse_mode=ParseMode.MARKDOWN,
+                            reply_markup=InlineKeyboardMarkup([
+                                [InlineKeyboardButton("« Back to Menu", callback_data="menu:main")],
+                            ]),
+                        )
+                        return
+            except Exception as _e:
+                _log.warning("AI quick-action failed: %s", _e)
+        await query.edit_message_text(
+            "Just type your message below and I'll respond! 👇",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("« Back", callback_data="menu:main")],
+            ]),
+        )
+        return
+
     # ── remind_time: user picked when ────────────────────────────────────────
     if data.startswith("remind_time:"):
         _slot = data.split(":", 1)[1]
@@ -1709,6 +1729,37 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]),
         )
 
+    elif data == "menu:ai_assistant":
+        await query.edit_message_text(
+            "🧠 *Telegizer AI Assistant*\n\n"
+            "I'm your AI co-pilot — just type anything naturally right here in this chat.\n\n"
+            "*Productivity:*\n"
+            "• \"Schedule a meeting with Ahmed Friday 3pm\"\n"
+            "• \"Remind me to send the proposal tomorrow morning\"\n"
+            "• \"Create task: review analytics report — high priority\"\n\n"
+            "*Workspace:*\n"
+            "• \"What's happening in my groups?\"\n"
+            "• \"Analyze my day\"\n"
+            "• \"Any issues I should fix?\"\n\n"
+            "*General AI:*\n"
+            "• \"Write a welcome message for my community\"\n"
+            "• \"Give me Telegram growth strategies\"\n"
+            "• \"What do you think about this partnership idea?\"\n\n"
+            "Just send your message — no commands needed. 👇",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("🧠 Analyze My Day", callback_data="ai:analyze_day"),
+                    InlineKeyboardButton("📅 My Schedule", callback_data="ai:schedule"),
+                ],
+                [
+                    InlineKeyboardButton("👥 Group Health", callback_data="ai:group_health"),
+                    InlineKeyboardButton("⏰ Set Reminder", callback_data="ai:remind"),
+                ],
+                [InlineKeyboardButton("« Back", callback_data="menu:main")],
+            ]),
+        )
+
     elif data == "menu:main":
         await _render_main_menu(query, user, flask_app, frontend)
 
@@ -1716,17 +1767,12 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def _render_main_menu(query, user, flask_app, frontend):
     pending_count = 0
     is_linked = False
-    assistant_url = f"{frontend}/workspace"
     if flask_app:
         try:
             with flask_app.app_context():
-                from .models import TelegramGroupLinkCode, TelegramGroup, User, AssistantBot as _AB
+                from .models import TelegramGroupLinkCode, TelegramGroup, User
                 wu = User.query.filter_by(telegram_user_id=str(user.id)).first()
                 is_linked = wu is not None
-                if wu:
-                    ab = _AB.query.filter_by(user_id=wu.id, is_active=True).first()
-                    if ab and ab.bot_username:
-                        assistant_url = f"https://t.me/{ab.bot_username.lstrip('@')}"
                 codes = TelegramGroupLinkCode.query.filter_by(
                     created_by_telegram_user_id=str(user.id),
                     used_at=None,
@@ -1766,7 +1812,7 @@ async def _render_main_menu(query, user, flask_app, frontend):
             InlineKeyboardButton("🔌 Connect Own Bot", callback_data="menu:connect_bot"),
         ],
         [
-            InlineKeyboardButton("🧠 AI Assistant", url=assistant_url),
+            InlineKeyboardButton("🧠 AI Assistant", callback_data="menu:ai_assistant"),
             InlineKeyboardButton("⚡ Automations", url=f"{frontend}/workspace/automations"),
         ],
         [
