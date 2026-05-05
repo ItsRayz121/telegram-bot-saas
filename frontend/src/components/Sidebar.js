@@ -520,9 +520,8 @@ export default function Sidebar({ onClose }) {
 
         {/* ── ACCOUNT ── */}
         <SectionLabel label="Account" />
-        <NavItem label="Referrals"   path="/referrals"   icon={CardGiftcard} active={isActive('/referrals')}   onClick={() => nav('/referrals')} />
-        <NavItem label="Billing"     path="/billing"     icon={CreditCard}  active={isActive('/billing')}     onClick={() => nav('/billing')} />
-        <NavItem label="Settings"    path="/settings"    icon={Settings}    active={isActive('/settings')}    onClick={() => nav('/settings')} />
+        <NavItem label="Billing"  path="/billing"  icon={CreditCard} active={isActive('/billing')}  onClick={() => nav('/billing')} />
+        <NavItem label="Settings" path="/settings" icon={Settings}   active={isActive('/settings')} onClick={() => nav('/settings')} />
 
       </List>
 
