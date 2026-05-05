@@ -399,7 +399,7 @@ def get_ai_settings():
     )
 
     return jsonify({
-        "platform_key_active": bool(Config.PLATFORM_GEMINI_API_KEY),
+        "platform_key_active": bool(Config.PLATFORM_OPENROUTER_API_KEY),
         "user_key": user_key.to_dict() if user_key else None,
         "token_usage": {
             "used": user.workspace_ai_tokens_today or 0,

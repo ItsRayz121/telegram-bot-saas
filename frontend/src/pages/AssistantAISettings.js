@@ -19,7 +19,7 @@ const PROVIDERS = [
   { id: 'gemini',     label: 'Gemini',     defaultModel: 'gemini-2.0-flash',          needsBase: false },
   { id: 'openai',     label: 'OpenAI',     defaultModel: 'gpt-4o-mini',               needsBase: false },
   { id: 'anthropic',  label: 'Anthropic',  defaultModel: 'claude-haiku-4-5-20251001', needsBase: false },
-  { id: 'openrouter', label: 'OpenRouter', defaultModel: 'google/gemini-flash-1.5',   needsBase: false },
+  { id: 'openrouter', label: 'OpenRouter', defaultModel: 'openai/gpt-4o-mini',        needsBase: false },
   { id: 'custom',     label: 'Custom',     defaultModel: '',                           needsBase: true  },
 ];
 
@@ -169,7 +169,7 @@ export default function AssistantAISettings() {
         <CardContent>
           <Typography fontWeight={600} mb={0.5}>Platform AI — Powered by Telegizer</Typography>
           <Typography fontSize="0.82rem" color="text.secondary" mb={1.5}>
-            Provider: Google Gemini Flash 2.0
+            Provider: OpenRouter · gpt-4o-mini
           </Typography>
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>

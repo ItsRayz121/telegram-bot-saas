@@ -15,7 +15,7 @@ def get_workspace_ai_key(user) -> dict:
     """Return { provider, api_key, model } for the given user's workspace.
 
     Checks for a workspace-scoped UserApiKey first; falls back to the
-    platform-wide Gemini Flash key from environment config.
+    platform-wide OpenRouter key from environment config.
 
     Raises QuotaExceededError if the user has no personal key and the platform
     key daily quota is exhausted.
