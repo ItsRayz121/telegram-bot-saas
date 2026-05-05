@@ -478,6 +478,10 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "`/status` — check bot status & permissions\n\n"
         "*Private commands:*\n"
         "`/start` — open companion hub\n\n"
+        "*Support:*\n"
+        "📢 [Official Channel](https://t.me/telegizer)\n"
+        "👥 [Community Group](https://t.me/telegizer_community)\n"
+        "✉️ fazalelahi5577@gmail.com\n\n"
         f"Dashboard: {frontend}",
         parse_mode=ParseMode.MARKDOWN,
     )
@@ -1666,9 +1670,15 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data == "menu:support":
         await query.edit_message_text(
-            f"*Telegizer Support*\n\nContact us via the dashboard.\n\n{frontend}",
+            "*Telegizer Support*\n\n"
+            "Here's how to get help:\n\n"
+            "📢 *Official Channel* — product updates & announcements\n"
+            "👥 *Community Group* — get help from other users\n"
+            "✉️ *Email Support* — fazalelahi5577@gmail.com",
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("📢 Official Channel", url="https://t.me/telegizer")],
+                [InlineKeyboardButton("👥 Community Group", url="https://t.me/telegizer_community")],
                 [InlineKeyboardButton("🖥️ Open Dashboard", url=frontend)],
                 [InlineKeyboardButton("« Back", callback_data="menu:main")],
             ]),

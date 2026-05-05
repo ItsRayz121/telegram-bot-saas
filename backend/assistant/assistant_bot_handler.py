@@ -209,7 +209,11 @@ async def _cmd_help(bot: Bot, chat_id: int):
         "/analyze — full daily briefing\n"
         "/remind 30m &lt;text&gt; — quick reminder\n"
         "/note &lt;text&gt; — save a note\n"
-        "/task &lt;text&gt; — create a task"
+        "/task &lt;text&gt; — create a task\n\n"
+        "<b>Support:</b>\n"
+        "📢 <a href='https://t.me/telegizer'>Official Channel</a>\n"
+        "👥 <a href='https://t.me/telegizer_community'>Community Group</a>\n"
+        "✉️ fazalelahi5577@gmail.com"
     ))
 
 
