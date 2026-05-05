@@ -12,7 +12,10 @@ import {
   ArrowForward, CreditCard, People, Home, AttachMoney,
   Notifications, NotificationsNone, Search, ManageAccounts,
   EmojiEvents, ExpandMore, Groups, Telegram, OpenInNew,
+  HelpOutline, Campaign, Email,
 } from '@mui/icons-material';
+import Divider from '@mui/material/Divider';
+import ListItemIcon from '@mui/material/ListItemIcon';
 import TelegizerLogo from '../components/TelegizerLogo';
 import Badge from '@mui/material/Badge';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -631,6 +634,7 @@ export default function Dashboard() {
 
   const [unreadNotifs, setUnreadNotifs] = useState(0);
   const [notifAnchor, setNotifAnchor] = useState(null);
+  const [supportAnchor, setSupportAnchor] = useState(null);
   const [notifList, setNotifList] = useState([]);
 
   useEffect(() => {
@@ -729,9 +733,48 @@ export default function Dashboard() {
             <Button size="small" startIcon={<People fontSize="small" />} onClick={() => navigate('/referrals')} sx={{ color: 'text.secondary' }}>
               Referrals
             </Button>
-            <Button size="small" startIcon={<Telegram fontSize="small" />} href="https://t.me/telegizer_community" target="_blank" rel="noopener noreferrer" component="a" sx={{ color: 'text.secondary' }}>
+            <Button size="small" startIcon={<HelpOutline fontSize="small" />} endIcon={<ExpandMore fontSize="small" />}
+              onClick={e => setSupportAnchor(e.currentTarget)} sx={{ color: 'text.secondary' }}>
               Support
             </Button>
+            <Menu
+              anchorEl={supportAnchor}
+              open={Boolean(supportAnchor)}
+              onClose={() => setSupportAnchor(null)}
+              anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+              transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+              PaperProps={{ sx: { mt: 0.5, minWidth: 220, border: '1px solid', borderColor: 'divider' } }}
+            >
+              <Box sx={{ px: 2, py: 1 }}>
+                <Typography variant="caption" fontWeight={700} color="text.disabled" sx={{ textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.65rem' }}>
+                  Help &amp; Support
+                </Typography>
+              </Box>
+              <Divider />
+              <MenuItem component="a" href="https://t.me/telegizer" target="_blank" rel="noopener noreferrer" onClick={() => setSupportAnchor(null)} dense>
+                <ListItemIcon><Campaign fontSize="small" sx={{ color: 'text.secondary' }} /></ListItemIcon>
+                <Box>
+                  <Typography variant="body2" fontWeight={600}>Official Channel</Typography>
+                  <Typography variant="caption" color="text.secondary">Updates &amp; announcements</Typography>
+                </Box>
+                <OpenInNew sx={{ fontSize: 12, ml: 'auto', color: 'text.disabled' }} />
+              </MenuItem>
+              <MenuItem component="a" href="https://t.me/telegizer_community" target="_blank" rel="noopener noreferrer" onClick={() => setSupportAnchor(null)} dense>
+                <ListItemIcon><People fontSize="small" sx={{ color: 'text.secondary' }} /></ListItemIcon>
+                <Box>
+                  <Typography variant="body2" fontWeight={600}>Community Group</Typography>
+                  <Typography variant="caption" color="text.secondary">Help from other users</Typography>
+                </Box>
+                <OpenInNew sx={{ fontSize: 12, ml: 'auto', color: 'text.disabled' }} />
+              </MenuItem>
+              <MenuItem component="a" href="mailto:fazalelahi5577@gmail.com" onClick={() => setSupportAnchor(null)} dense>
+                <ListItemIcon><Email fontSize="small" sx={{ color: 'text.secondary' }} /></ListItemIcon>
+                <Box>
+                  <Typography variant="body2" fontWeight={600}>Email Support</Typography>
+                  <Typography variant="caption" color="text.secondary">Contact the team directly</Typography>
+                </Box>
+              </MenuItem>
+            </Menu>
           </Box>
 
           <Box sx={{ flexGrow: { xs: 1, md: 0 } }} />
