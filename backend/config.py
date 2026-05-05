@@ -100,6 +100,9 @@ class Config:
     # Free users: 50k tokens/day cap. Pro users: 200k tokens/day cap.
     PLATFORM_GEMINI_API_KEY = os.environ.get("PLATFORM_GEMINI_API_KEY", "")
 
+    # Platform-wide OpenRouter key — OpenAI-compatible, used when Gemini key absent.
+    PLATFORM_OPENROUTER_API_KEY = os.environ.get("PLATFORM_OPENROUTER_API_KEY", "")
+
     # Official Telegizer shared bot (serves all users/groups)
     TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
     TELEGRAM_BOT_USERNAME = os.environ.get("TELEGRAM_BOT_USERNAME", "telegizer_bot")

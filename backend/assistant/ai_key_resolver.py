@@ -56,13 +56,27 @@ def get_workspace_ai_key(user) -> dict:
             "Quota resets in 24 hours or add your own API key in AI Settings."
         )
 
-    return {
-        "provider": "gemini",
-        "api_key": _cfg.Config.PLATFORM_GEMINI_API_KEY,
-        "model": "gemini-2.0-flash",
-        "source": "platform",
-        "daily_limit": daily_limit,
-    }
+    # Priority: Gemini → OpenRouter
+    if _cfg.Config.PLATFORM_GEMINI_API_KEY:
+        return {
+            "provider": "gemini",
+            "api_key": _cfg.Config.PLATFORM_GEMINI_API_KEY,
+            "model": "gemini-2.0-flash",
+            "source": "platform",
+            "daily_limit": daily_limit,
+        }
+
+    if _cfg.Config.PLATFORM_OPENROUTER_API_KEY:
+        return {
+            "provider": "openrouter",
+            "api_key": _cfg.Config.PLATFORM_OPENROUTER_API_KEY,
+            "model": "google/gemini-flash-1.5",
+            "base_url": "https://openrouter.ai/api/v1",
+            "source": "platform",
+            "daily_limit": daily_limit,
+        }
+
+    return {"api_key": "", "provider": "gemini", "model": "gemini-2.0-flash", "source": "platform"}
 
 
 def record_token_usage(user, tokens_used: int):
