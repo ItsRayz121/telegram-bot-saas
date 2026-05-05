@@ -1,6 +1,6 @@
 """
 Resolves which AI key + provider to use for workspace-level assistant features
-(Notes, Digests, Hub). Priority: user's workspace key → platform Gemini key.
+(Notes, Digests, Hub). Priority: user workspace key → Ollama → OpenRouter → OpenAI.
 """
 
 from datetime import datetime, timedelta
