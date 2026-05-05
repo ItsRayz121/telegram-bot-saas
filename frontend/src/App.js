@@ -55,6 +55,7 @@ import GroupCRM from './pages/GroupCRM';
 import Marketplace from './pages/Marketplace';
 import MarketplaceDeal from './pages/MarketplaceDeal';
 import JoinReferral from './pages/JoinReferral';
+import Referrals from './pages/Referrals';
 
 // Pages — lazy loaded
 const AssistantNotes = React.lazy(() => import('./pages/AssistantNotes'));
@@ -299,6 +300,9 @@ export default function App() {
             <Route path="/bot/:id"                  element={<AppRoute><BotSettings /></AppRoute>} />
             <Route path="/bot/:id/group/:groupId"            element={<AppRoute><KeyedGroupSettings /></AppRoute>} />
             <Route path="/bot/:id/group/:groupId/analytics"  element={<AppRoute><GroupAnalytics /></AppRoute>} />
+
+            {/* ── Referrals ─────────────────────────────────────────────────── */}
+            <Route path="/referrals" element={<AppRoute><Referrals /></AppRoute>} />
 
             {/* ── Billing / Settings ─────────────────────────────────────────── */}
             <Route path="/billing"  element={<AppRoute><Billing /></AppRoute>} />

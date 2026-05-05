@@ -1119,60 +1119,9 @@ export default function Dashboard() {
           </Card>
         )}
 
-        {/* ── Invite section ── */}
-        {!loading && user.id && <InviteCard userId={user.id} />}
-
-        {/* ── Leaderboard ── */}
-        {!loading && <LeaderboardCard />}
-
-        {/* ── Help & Support ── */}
-        <Card sx={{ mt: 3, borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
-          <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
-              <Box sx={{
-                width: 38, height: 38, borderRadius: 2,
-                background: 'linear-gradient(135deg, #0288d1 0%, #26c6da 100%)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-              }}>
-                <Telegram sx={{ color: '#fff', fontSize: 20 }} />
-              </Box>
-              <Box>
-                <Typography variant="subtitle1" fontWeight={700}>Help &amp; Support</Typography>
-                <Typography variant="body2" color="text.secondary">Get help, report issues, and stay updated</Typography>
-              </Box>
-            </Box>
-            <Grid container spacing={2}>
-              {[
-                { label: 'Official Channel', desc: 'Follow product updates & announcements', href: 'https://t.me/telegizer', icon: '📢' },
-                { label: 'Community Group', desc: 'Join the community and get help from other users', href: 'https://t.me/telegizer_community', icon: '👥' },
-                { label: 'Email Support', desc: 'Contact support directly via email', href: 'mailto:fazalelahi5577@gmail.com', icon: '✉️' },
-              ].map(({ label, desc, href, icon }) => (
-                <Grid item xs={12} sm={4} key={label}>
-                  <Box
-                    component="a"
-                    href={href}
-                    target={href.startsWith('mailto') ? '_self' : '_blank'}
-                    rel="noopener noreferrer"
-                    sx={{
-                      display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5,
-                      borderRadius: 2, border: '1px solid', borderColor: 'divider',
-                      textDecoration: 'none', color: 'text.primary',
-                      transition: 'background 0.15s',
-                      '&:hover': { background: 'action.hover', borderColor: 'primary.main' },
-                    }}
-                  >
-                    <Typography fontSize={22}>{icon}</Typography>
-                    <Box>
-                      <Typography variant="body2" fontWeight={600}>{label}</Typography>
-                      <Typography variant="caption" color="text.secondary">{desc}</Typography>
-                    </Box>
-                    <OpenInNew sx={{ ml: 'auto', fontSize: 16, color: 'text.disabled' }} />
-                  </Box>
-                </Grid>
-              ))}
-            </Grid>
-          </CardContent>
-        </Card>
+        {/* Referrals and Support have moved:
+            Referrals → /referrals (sidebar under Account)
+            Support   → ? button in the top nav header */}
 
       </Box>
 

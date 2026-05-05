@@ -1,13 +1,73 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   AppBar, Toolbar, Box, Button, IconButton, Tooltip, Chip,
+  Popover, List, ListItemButton, ListItemIcon, ListItemText, Typography, Divider,
 } from '@mui/material';
 import {
   Home, Dashboard, Groups, SmartToy, CreditCard, Settings,
+  HelpOutline, Campaign, People, Email, OpenInNew,
 } from '@mui/icons-material';
 import TelegizerLogo from './TelegizerLogo';
 import UniversalSearchBar from './UniversalSearchBar';
+
+const SUPPORT_LINKS = [
+  { label: 'Official Channel',  sub: 'Updates & announcements', href: 'https://t.me/telegizer',           icon: Campaign, external: true },
+  { label: 'Community Group',   sub: 'Help from other users',   href: 'https://t.me/telegizer_community', icon: People,   external: true },
+  { label: 'Email Support',     sub: 'Contact the team',        href: 'mailto:fazalelahi5577@gmail.com',  icon: Email,    external: false },
+];
+
+function SupportPopover() {
+  const [anchor, setAnchor] = useState(null);
+  return (
+    <>
+      <Tooltip title="Help & Support">
+        <IconButton size="small" onClick={e => setAnchor(e.currentTarget)} sx={{ ml: 0.5 }}>
+          <HelpOutline fontSize="small" />
+        </IconButton>
+      </Tooltip>
+      <Popover
+        open={Boolean(anchor)}
+        anchorEl={anchor}
+        onClose={() => setAnchor(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        PaperProps={{ sx: { width: 260, mt: 0.5, border: '1px solid', borderColor: 'divider' } }}
+      >
+        <Box sx={{ px: 2, pt: 1.5, pb: 1 }}>
+          <Typography variant="caption" fontWeight={700} color="text.disabled" sx={{ textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.65rem' }}>
+            Help & Support
+          </Typography>
+        </Box>
+        <Divider />
+        <List dense disablePadding>
+          {SUPPORT_LINKS.map(({ label, sub, href, icon: Icon, external }) => (
+            <ListItemButton
+              key={label}
+              component="a"
+              href={href}
+              target={external ? '_blank' : '_self'}
+              rel="noopener noreferrer"
+              onClick={() => setAnchor(null)}
+              sx={{ px: 2, py: 1 }}
+            >
+              <ListItemIcon sx={{ minWidth: 34 }}>
+                <Icon fontSize="small" sx={{ color: 'text.secondary' }} />
+              </ListItemIcon>
+              <ListItemText
+                primary={label}
+                secondary={sub}
+                primaryTypographyProps={{ fontSize: '0.82rem', fontWeight: 600 }}
+                secondaryTypographyProps={{ fontSize: '0.72rem' }}
+              />
+              {external && <OpenInNew sx={{ fontSize: 13, color: 'text.disabled', ml: 0.5 }} />}
+            </ListItemButton>
+          ))}
+        </List>
+      </Popover>
+    </>
+  );
+}
 
 const NAV_ITEMS = [
   { label: 'Home',       path: '/',          icon: Home,      exact: true },
@@ -82,6 +142,9 @@ export default function TopNav({ title, subtitle, actions, breadcrumb, hasSideba
             {actions}
           </Box>
         )}
+
+        {/* Support popover */}
+        <SupportPopover />
 
         {/* Settings icon shortcut */}
         <Tooltip title="Settings">
