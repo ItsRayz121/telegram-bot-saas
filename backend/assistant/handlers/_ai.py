@@ -21,6 +21,57 @@ _log = logging.getLogger(__name__)
 # Singleton httpx client — reuses TCP connections, supports HTTP/2
 _client = httpx.Client(timeout=25.0, http2=False)
 
+# Model fallback sequence — tried in order until one succeeds
+_GEMINI_MODEL_FALLBACKS = [
+    ("v1", "gemini-1.5-flash-001"),
+    ("v1", "gemini-1.5-pro-001"),
+    ("v1beta", "gemini-2.0-flash"),
+    ("v1beta", "gemini-1.5-flash-latest"),
+    ("v1beta", "gemini-pro"),
+]
+
+
+def _gemini_post(api_key: str, preferred_model: str, system: str, user_msg: str, json_mode: bool) -> dict:
+    """POST to Gemini API, trying preferred model first then falling back through _GEMINI_MODEL_FALLBACKS."""
+    gen_cfg: dict = {"temperature": 0.1 if json_mode else 0.3, "candidateCount": 1}
+    if json_mode:
+        gen_cfg["responseMimeType"] = "application/json"
+
+    body = {
+        "system_instruction": {"parts": [{"text": system}]},
+        "contents": [{"role": "user", "parts": [{"text": user_msg}]}],
+        "generationConfig": gen_cfg,
+    }
+
+    # Build candidate list: preferred model on both endpoints first, then fallbacks
+    candidates = [
+        ("v1", preferred_model),
+        ("v1beta", preferred_model),
+    ] + [(v, m) for v, m in _GEMINI_MODEL_FALLBACKS if m != preferred_model]
+
+    last_exc: Exception | None = None
+    for api_ver, model_id in candidates:
+        url = f"https://generativelanguage.googleapis.com/{api_ver}/models/{model_id}:generateContent?key={api_key}"
+        try:
+            resp = _client.post(url, json=body)
+            if resp.status_code == 404:
+                _log.debug("Gemini 404 for %s/%s — trying next", api_ver, model_id)
+                continue
+            if not resp.is_success:
+                _log.error("Gemini API error %d (%s/%s): %s", resp.status_code, api_ver, model_id, resp.text[:400])
+            resp.raise_for_status()
+            _log.debug("Gemini OK: %s/%s", api_ver, model_id)
+            return resp.json()
+        except httpx.HTTPStatusError as exc:
+            last_exc = exc
+            if exc.response.status_code != 404:
+                raise
+        except Exception as exc:
+            last_exc = exc
+            raise
+
+    raise last_exc or RuntimeError("All Gemini model candidates returned 404")
+
 
 def call_ai(key_info: dict, system: str, user_msg: str) -> str:
     """Call AI expecting a JSON response."""
@@ -31,22 +82,8 @@ def call_ai(key_info: dict, system: str, user_msg: str) -> str:
     _log.debug("call_ai provider=%s model=%s msg_len=%d", provider, model, len(user_msg))
 
     if provider == "gemini":
-        resp = _client.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}",
-            json={
-                "system_instruction": {"parts": [{"text": system}]},
-                "contents": [{"role": "user", "parts": [{"text": user_msg}]}],
-                "generationConfig": {
-                    "temperature": 0.1,
-                    "candidateCount": 1,
-                    "responseMimeType": "application/json",
-                },
-            },
-        )
-        if not resp.is_success:
-            _log.error("Gemini API error %d: %s", resp.status_code, resp.text[:500])
-        resp.raise_for_status()
-        return resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+        resp = _gemini_post(api_key, model, system, user_msg, json_mode=True)
+        return resp["candidates"][0]["content"]["parts"][0]["text"].strip()
 
     if provider == "anthropic":
         resp = _client.post(
@@ -91,18 +128,8 @@ def call_ai_text(key_info: dict, system: str, user_msg: str) -> str:
     model = key_info.get("model", "gemini-1.5-flash-latest")
 
     if provider == "gemini":
-        resp = _client.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}",
-            json={
-                "system_instruction": {"parts": [{"text": system}]},
-                "contents": [{"role": "user", "parts": [{"text": user_msg}]}],
-                "generationConfig": {"temperature": 0.3, "candidateCount": 1},
-            },
-        )
-        if not resp.is_success:
-            _log.error("Gemini API error %d: %s", resp.status_code, resp.text[:500])
-        resp.raise_for_status()
-        return resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+        data = _gemini_post(api_key, model, system, user_msg, json_mode=False)
+        return data["candidates"][0]["content"]["parts"][0]["text"].strip()
 
     if provider == "anthropic":
         resp = _client.post(
