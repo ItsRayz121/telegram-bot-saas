@@ -21,18 +21,18 @@ _log = logging.getLogger(__name__)
 # Singleton httpx client — reuses TCP connections, supports HTTP/2
 _client = httpx.Client(timeout=25.0, http2=False)
 
-# Model fallback sequence — tried in order until one succeeds
+# Model fallback sequence — all use v1beta (system_instruction only supported there)
 _GEMINI_MODEL_FALLBACKS = [
-    ("v1", "gemini-1.5-flash-001"),
-    ("v1", "gemini-1.5-pro-001"),
-    ("v1beta", "gemini-2.0-flash"),
-    ("v1beta", "gemini-1.5-flash-latest"),
-    ("v1beta", "gemini-pro"),
+    "gemini-2.0-flash",
+    "gemini-1.5-flash-001",
+    "gemini-1.5-flash-latest",
+    "gemini-1.5-pro-001",
+    "gemini-pro",
 ]
 
 
 def _gemini_post(api_key: str, preferred_model: str, system: str, user_msg: str, json_mode: bool) -> dict:
-    """POST to Gemini API, trying preferred model first then falling back through _GEMINI_MODEL_FALLBACKS."""
+    """POST to Gemini v1beta API, trying preferred model then fallbacks on 404."""
     gen_cfg: dict = {"temperature": 0.1 if json_mode else 0.3, "candidateCount": 1}
     if json_mode:
         gen_cfg["responseMimeType"] = "application/json"
@@ -43,24 +43,20 @@ def _gemini_post(api_key: str, preferred_model: str, system: str, user_msg: str,
         "generationConfig": gen_cfg,
     }
 
-    # Build candidate list: preferred model on both endpoints first, then fallbacks
-    candidates = [
-        ("v1", preferred_model),
-        ("v1beta", preferred_model),
-    ] + [(v, m) for v, m in _GEMINI_MODEL_FALLBACKS if m != preferred_model]
+    candidates = [preferred_model] + [m for m in _GEMINI_MODEL_FALLBACKS if m != preferred_model]
 
     last_exc: Exception | None = None
-    for api_ver, model_id in candidates:
-        url = f"https://generativelanguage.googleapis.com/{api_ver}/models/{model_id}:generateContent?key={api_key}"
+    for model_id in candidates:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={api_key}"
         try:
             resp = _client.post(url, json=body)
             if resp.status_code == 404:
-                _log.debug("Gemini 404 for %s/%s — trying next", api_ver, model_id)
+                _log.debug("Gemini 404 for %s — trying next", model_id)
                 continue
             if not resp.is_success:
-                _log.error("Gemini API error %d (%s/%s): %s", resp.status_code, api_ver, model_id, resp.text[:400])
+                _log.error("Gemini API error %d (%s): %s", resp.status_code, model_id, resp.text[:400])
             resp.raise_for_status()
-            _log.debug("Gemini OK: %s/%s", api_ver, model_id)
+            _log.info("Gemini OK: %s", model_id)
             return resp.json()
         except httpx.HTTPStatusError as exc:
             last_exc = exc
