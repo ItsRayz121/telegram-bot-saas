@@ -1679,7 +1679,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("📢 Official Channel", url="https://t.me/telegizer")],
                 [InlineKeyboardButton("👥 Community Group", url="https://t.me/telegizer_community")],
-                [InlineKeyboardButton("🖥️ Open Dashboard", url=frontend)],
+                [InlineKeyboardButton("✉️ Email Support", url="https://mail.google.com/mail/?view=cm&to=fazalelahi5577@gmail.com&su=Telegizer+Support")],
                 [InlineKeyboardButton("« Back", callback_data="menu:main")],
             ]),
         )
