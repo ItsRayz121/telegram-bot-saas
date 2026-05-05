@@ -34,7 +34,7 @@ GROUP_PATTERNS = re.compile(
     re.IGNORECASE,
 )
 GROUP_ISSUE_SIGNALS = re.compile(
-    r"\b(issue|problem|spam|going on|activity|summary|happening|trouble|concern|report|status|check|any major)\b",
+    r"\b(issues?|problems?|spam|going on|activity|summary|happening|trouble|concern|report|status|check|any major)\b",
     re.IGNORECASE,
 )
 SAVE_NOTE_PATTERNS = re.compile(

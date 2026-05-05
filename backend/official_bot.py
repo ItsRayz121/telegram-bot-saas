@@ -977,6 +977,18 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                     _u = _User.query.filter_by(telegram_user_id=str(user.id)).first()
                     if _u:
+                        # Clear any expired PendingReminderState so it can't corrupt future sessions
+                        try:
+                            from .models import PendingReminderState as _PRS
+                            _expired = _PRS.query.filter(
+                                _PRS.user_id == _u.id,
+                                _PRS.expires_at < datetime.utcnow(),
+                            ).first()
+                            if _expired:
+                                _db.session.delete(_expired)
+                                _db.session.commit()
+                        except Exception:
+                            _db.session.rollback()
                         try:
                             _db.session.add(_BotDM(user_id=_u.id, direction="in", content=_safe_raw[:4000], intent="assistant"))
                             _db.session.commit()

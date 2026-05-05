@@ -116,11 +116,22 @@ def process_message(user_id: int, message: str, user_tz: str | None = None) -> d
             "group_query", "list_meetings", "list_reminders",
             "list_notes", "list_tasks", "upcoming_schedule",
             "create_reminder", "save_note", "create_task", "save_link",
+            "schedule_meeting", "analyze_day",
         )
         if escape_intent and escape_intent != state.pending_intent and escape_intent in high_confidence_escapes:
             _log.info("State escape: %s → %s", state.pending_intent, escape_intent)
             clear_state(user_id)
             state = None
+        # add_resource: only accept URL or short note — long sentences are new intents
+        elif state.pending_intent == "add_resource" and state.awaiting_field == "resource_value":
+            looks_like_resource = (
+                message.startswith("http")
+                or (len(message) <= 200 and not escape_intent)
+            )
+            if not looks_like_resource:
+                _log.info("State escape: add_resource — message doesn't look like a resource")
+                clear_state(user_id)
+                state = None
         elif (
             state.pending_intent == "schedule_meeting"
             and state.awaiting_field in ("title", "datetime_hint")
