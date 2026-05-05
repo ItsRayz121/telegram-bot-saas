@@ -1052,9 +1052,61 @@ export default function Dashboard() {
           </Card>
         )}
 
-        {/* Referrals and Support have moved:
-            Referrals → /referrals (sidebar under Account)
-            Support   → ? button in the top nav header */}
+        {/* ── Referrals + Support row ── */}
+        <Grid container spacing={2} sx={{ mt: 1 }}>
+          {/* Referrals card */}
+          <Grid item xs={12} sm={6}>
+            <Card
+              sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, cursor: 'pointer', '&:hover': { borderColor: 'primary.main' }, transition: 'border-color 0.15s' }}
+              onClick={() => navigate('/referrals')}
+            >
+              <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
+                  <People sx={{ color: 'primary.main' }} />
+                  <Typography variant="subtitle2" fontWeight={700}>Invite Friends — Earn Free Pro</Typography>
+                </Box>
+                <Typography variant="caption" color="text.secondary" display="block" mb={1.5}>
+                  Invite 3 → 7 days Pro · Invite 10 → 1 month Pro. Rewards apply automatically.
+                </Typography>
+                <Button size="small" variant="outlined" endIcon={<ArrowForward />} onClick={() => navigate('/referrals')}>
+                  View Referrals
+                </Button>
+              </CardContent>
+            </Card>
+          </Grid>
+
+          {/* Support card */}
+          <Grid item xs={12} sm={6}>
+            <Card sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+              <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
+                  <Telegram sx={{ color: 'info.main' }} />
+                  <Typography variant="subtitle2" fontWeight={700}>Help &amp; Support</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                  {[
+                    { label: 'Official Channel', href: 'https://t.me/telegizer', icon: '📢' },
+                    { label: 'Community Group',  href: 'https://t.me/telegizer_community', icon: '👥' },
+                    { label: 'Email Support',    href: 'mailto:fazalelahi5577@gmail.com', icon: '✉️' },
+                  ].map(({ label, href, icon }) => (
+                    <Box
+                      key={label}
+                      component="a"
+                      href={href}
+                      target={href.startsWith('mailto') ? '_self' : '_blank'}
+                      rel="noopener noreferrer"
+                      sx={{ display: 'flex', alignItems: 'center', gap: 1, textDecoration: 'none', color: 'text.secondary', '&:hover': { color: 'text.primary' }, fontSize: '0.82rem' }}
+                    >
+                      <span>{icon}</span>
+                      <Typography variant="caption" fontWeight={500}>{label}</Typography>
+                      <OpenInNew sx={{ fontSize: 11, ml: 'auto', color: 'text.disabled' }} />
+                    </Box>
+                  ))}
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
 
       </Box>
 

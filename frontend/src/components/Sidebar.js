@@ -516,26 +516,7 @@ export default function Sidebar({ onClose }) {
           {/* Flow Builder hidden — duplicate of Workflows; route and page intact for future reactivation */}
         </Collapse>
 
-        {/* ── ANALYTICS ── */}
-        <SectionLabel label="Analytics" />
-        <ExpandableHeader
-          label="Analytics"
-          icon={BarChart}
-          path="/analytics"
-          active={analyticsActive}
-          open={analyticsOpen}
-          onToggle={toggleAnalytics}
-          onNavigate={() => nav('/analytics')}
-        />
-        <Collapse in={analyticsOpen} timeout={160} unmountOnExit>
-          <NavItem label="Overview"  path="/analytics"               icon={BarChart} active={analyticsActive && !search.includes('tab=')} onClick={() => nav('/analytics')} indent />
-          <NavItem label="Groups"    path="/analytics?tab=groups"    icon={Groups}   active={search.includes('tab=groups')}              onClick={() => nav('/analytics?tab=groups')} indent />
-          <NavItem label="Channels"  path="/analytics?tab=channels"  icon={Campaign} active={search.includes('tab=channels')}            onClick={() => nav('/analytics?tab=channels')} indent />
-        </Collapse>
-
-        {/* ── GROW — Temporarily hidden for future reactivation ── */}
-        {/* Directory and Marketplace nav items are masked pending feature completion.
-            Routes, backend endpoints, and DB schema are fully intact. */}
+        {/* Analytics hidden from sidebar — accessible via group/channel pages */}
 
         {/* ── ACCOUNT ── */}
         <SectionLabel label="Account" />
