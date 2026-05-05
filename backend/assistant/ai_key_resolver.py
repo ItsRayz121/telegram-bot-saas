@@ -59,7 +59,7 @@ def get_workspace_ai_key(user) -> dict:
     return {
         "provider": "gemini",
         "api_key": _cfg.Config.PLATFORM_GEMINI_API_KEY,
-        "model": "gemini-1.5-flash",
+        "model": "gemini-1.5-flash-latest",
         "source": "platform",
         "daily_limit": daily_limit,
     }
