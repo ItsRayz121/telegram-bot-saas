@@ -767,7 +767,7 @@ export default function Dashboard() {
                 </Box>
                 <OpenInNew sx={{ fontSize: 12, ml: 'auto', color: 'text.disabled' }} />
               </MenuItem>
-              <MenuItem component="a" href="mailto:fazalelahi5577@gmail.com" onClick={() => setSupportAnchor(null)} dense>
+              <MenuItem onClick={() => { setSupportAnchor(null); window.location.href = 'mailto:fazalelahi5577@gmail.com'; }} dense>
                 <ListItemIcon><Email fontSize="small" sx={{ color: 'text.secondary' }} /></ListItemIcon>
                 <Box>
                   <Typography variant="body2" fontWeight={600}>Email Support</Typography>
