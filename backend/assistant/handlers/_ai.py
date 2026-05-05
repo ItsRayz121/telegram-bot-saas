@@ -73,8 +73,7 @@ def _gemini_post(api_key: str, preferred_model: str, system: str, user_msg: str,
 # For Ollama: only tries the configured model (no cross-provider fallback makes sense).
 # For OpenRouter/OpenAI: falls back to gpt-4o-mini variants.
 _OPENROUTER_FALLBACKS = [
-    "openai/gpt-4o-mini",   # OpenRouter-routed gpt-4o-mini
-    "gpt-4o-mini",          # direct OpenAI if base_url is openai.com
+    "openai/gpt-4o-mini",   # gpt-4o-mini via OpenRouter
 ]
 
 
@@ -113,7 +112,7 @@ def _openai_compat_post(key_info: dict, api_key: str, preferred_model: str,
         except Exception as exc:
             _log.warning("Ollama unreachable (%s) — falling back to OpenRouter/OpenAI", exc)
 
-        # Fall through: build fallback key_info from config
+        # Fall through to OpenRouter
         from ... import config as _cfg
         if _cfg.Config.PLATFORM_OPENROUTER_API_KEY:
             fallback = {
@@ -122,20 +121,10 @@ def _openai_compat_post(key_info: dict, api_key: str, preferred_model: str,
                 "model": "openai/gpt-4o-mini",
                 "base_url": "https://openrouter.ai/api/v1",
             }
-            _log.info("Falling back to OpenRouter gpt-4o-mini")
+            _log.info("Ollama failed — falling back to OpenRouter gpt-4o-mini")
             return _openai_compat_post(fallback, fallback["api_key"], fallback["model"],
                                        system, user_msg, json_mode)
-        if _cfg.Config.PLATFORM_OPENAI_API_KEY:
-            fallback = {
-                "provider": "openai",
-                "api_key": _cfg.Config.PLATFORM_OPENAI_API_KEY,
-                "model": "gpt-4o-mini",
-                "base_url": "https://api.openai.com/v1",
-            }
-            _log.info("Falling back to OpenAI gpt-4o-mini")
-            return _openai_compat_post(fallback, fallback["api_key"], fallback["model"],
-                                       system, user_msg, json_mode)
-        raise RuntimeError("Ollama failed and no OpenRouter/OpenAI fallback key is configured")
+        raise RuntimeError("Ollama failed and no OpenRouter fallback key is configured")
 
     # OpenRouter / OpenAI path — try preferred model then gpt-4o-mini variants
     candidates = [preferred_model or "openai/gpt-4o-mini"] + [

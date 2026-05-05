@@ -109,8 +109,6 @@ class Config:
     # OpenRouter — first fallback (gpt-4o-mini via OpenRouter).
     PLATFORM_OPENROUTER_API_KEY = os.environ.get("PLATFORM_OPENROUTER_API_KEY", "")
 
-    # Direct OpenAI — last resort fallback.
-    PLATFORM_OPENAI_API_KEY = os.environ.get("PLATFORM_OPENAI_API_KEY", "")
 
     # Official Telegizer shared bot (serves all users/groups)
     TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")

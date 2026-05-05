@@ -665,15 +665,11 @@ def _call_ai_text(key_info: dict, prompt: str) -> str:
         try:
             return _openai_compat(key_info, prompt)
         except Exception as exc:
-            _log.warning("_call_ai_text: Ollama failed (%s) — falling back", exc)
+            _log.warning("_call_ai_text: Ollama failed (%s) — falling back to OpenRouter", exc)
             if _cfg.Config.PLATFORM_OPENROUTER_API_KEY:
                 return _openai_compat({"api_key": _cfg.Config.PLATFORM_OPENROUTER_API_KEY,
                                        "model": "openai/gpt-4o-mini",
                                        "base_url": "https://openrouter.ai/api/v1"}, prompt)
-            if _cfg.Config.PLATFORM_OPENAI_API_KEY:
-                return _openai_compat({"api_key": _cfg.Config.PLATFORM_OPENAI_API_KEY,
-                                       "model": "gpt-4o-mini",
-                                       "base_url": "https://api.openai.com/v1"}, prompt)
             raise
 
     # openrouter / openai

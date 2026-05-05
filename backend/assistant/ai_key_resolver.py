@@ -77,16 +77,6 @@ def get_workspace_ai_key(user) -> dict:
             "daily_limit": daily_limit,
         }
 
-    if _cfg.Config.PLATFORM_OPENAI_API_KEY:
-        return {
-            "provider": "openai",
-            "api_key": _cfg.Config.PLATFORM_OPENAI_API_KEY,
-            "model": "gpt-4o-mini",
-            "base_url": "https://api.openai.com/v1",
-            "source": "platform",
-            "daily_limit": daily_limit,
-        }
-
     return {"api_key": "", "provider": "openrouter", "model": "openai/gpt-4o-mini", "source": "platform"}
 
 
