@@ -297,6 +297,22 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"all from one place.{assistant_hint}"
     )
 
+    # Resolve assistant bot deep-link (user-specific bot if configured)
+    assistant_url = f"{frontend}/workspace"
+    assistant_bot_username = None
+    if is_linked and flask_app:
+        try:
+            with flask_app.app_context():
+                from .models import User, AssistantBot as _AB
+                wu = User.query.filter_by(telegram_user_id=str(user.id)).first()
+                if wu:
+                    ab = _AB.query.filter_by(user_id=wu.id, is_active=True).first()
+                    if ab and ab.bot_username:
+                        assistant_bot_username = ab.bot_username.lstrip("@")
+                        assistant_url = f"https://t.me/{assistant_bot_username}"
+        except Exception:
+            pass
+
     keyboard = []
 
     if is_linked:
@@ -317,19 +333,26 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ])
 
     keyboard += [
+        # Row 1 — core group actions (action first, browse second)
         [
-            InlineKeyboardButton("📋 My Groups", callback_data="menu:my_groups"),
             InlineKeyboardButton("➕ Add Group", callback_data="menu:add_group"),
+            InlineKeyboardButton("📋 My Groups", callback_data="menu:my_groups"),
         ],
-        [
-            InlineKeyboardButton("🖥️ Dashboard", url=frontend),
-            InlineKeyboardButton("💬 Support", callback_data="menu:support"),
-        ],
+        # Row 2 — bot management
         [
             InlineKeyboardButton("🤖 My Bots", callback_data="menu:my_bots"),
             InlineKeyboardButton("🔌 Connect Own Bot", callback_data="menu:connect_bot"),
         ],
-        [InlineKeyboardButton("⚙️ Settings", url=f"{frontend}/settings")],
+        # Row 3 — power features (AI + Automations) — open in Telegram where possible
+        [
+            InlineKeyboardButton("🧠 AI Assistant", url=assistant_url),
+            InlineKeyboardButton("⚡ Automations", url=f"{frontend}/workspace/automations"),
+        ],
+        # Row 4 — utility
+        [
+            InlineKeyboardButton("💬 Support", callback_data="menu:support"),
+            InlineKeyboardButton("⚙️ Settings", url=f"{frontend}/settings"),
+        ],
     ]
 
     await update.message.reply_text(
@@ -1693,12 +1716,17 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def _render_main_menu(query, user, flask_app, frontend):
     pending_count = 0
     is_linked = False
+    assistant_url = f"{frontend}/workspace"
     if flask_app:
         try:
             with flask_app.app_context():
-                from .models import TelegramGroupLinkCode, TelegramGroup, User
+                from .models import TelegramGroupLinkCode, TelegramGroup, User, AssistantBot as _AB
                 wu = User.query.filter_by(telegram_user_id=str(user.id)).first()
                 is_linked = wu is not None
+                if wu:
+                    ab = _AB.query.filter_by(user_id=wu.id, is_active=True).first()
+                    if ab and ab.bot_username:
+                        assistant_url = f"https://t.me/{ab.bot_username.lstrip('@')}"
                 codes = TelegramGroupLinkCode.query.filter_by(
                     created_by_telegram_user_id=str(user.id),
                     used_at=None,
@@ -1727,20 +1755,24 @@ async def _render_main_menu(query, user, flask_app, frontend):
                 callback_data="menu:pending_groups",
             )
         ])
+
     keyboard += [
         [
-            InlineKeyboardButton("📋 My Groups", callback_data="menu:my_groups"),
             InlineKeyboardButton("➕ Add Group", callback_data="menu:add_group"),
-        ],
-        [
-            InlineKeyboardButton("🖥️ Dashboard", url=frontend),
-            InlineKeyboardButton("💬 Support", callback_data="menu:support"),
+            InlineKeyboardButton("📋 My Groups", callback_data="menu:my_groups"),
         ],
         [
             InlineKeyboardButton("🤖 My Bots", callback_data="menu:my_bots"),
             InlineKeyboardButton("🔌 Connect Own Bot", callback_data="menu:connect_bot"),
         ],
-        [InlineKeyboardButton("⚙️ Settings", url=f"{frontend}/settings")],
+        [
+            InlineKeyboardButton("🧠 AI Assistant", url=assistant_url),
+            InlineKeyboardButton("⚡ Automations", url=f"{frontend}/workspace/automations"),
+        ],
+        [
+            InlineKeyboardButton("💬 Support", callback_data="menu:support"),
+            InlineKeyboardButton("⚙️ Settings", url=f"{frontend}/settings"),
+        ],
     ]
     await query.edit_message_text(
         "*Telegizer — Telegram Growth & Management Hub*\n\nWhat would you like to do?",
