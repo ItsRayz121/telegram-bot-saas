@@ -325,7 +325,11 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("🖥️ Dashboard", url=frontend),
             InlineKeyboardButton("💬 Support", callback_data="menu:support"),
         ],
-        [InlineKeyboardButton("⚙️ Advanced Options", callback_data="menu:advanced")],
+        [
+            InlineKeyboardButton("🤖 My Bots", callback_data="menu:my_bots"),
+            InlineKeyboardButton("🔌 Connect Own Bot", callback_data="menu:connect_bot"),
+        ],
+        [InlineKeyboardButton("⚙️ Settings", url=f"{frontend}/settings")],
     ]
 
     await update.message.reply_text(
@@ -1563,15 +1567,13 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ── advanced ──────────────────────────────────────────────────────────────
     elif data == "menu:advanced":
+        # Advanced Options now only contains Settings — My Bots and Connect Own Bot
+        # are surfaced on the main menu directly.
         await query.edit_message_text(
-            "*Advanced Options*",
+            "*Settings*",
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton("🤖 My Bots", callback_data="menu:my_bots"),
-                    InlineKeyboardButton("🔌 Connect Own Bot", callback_data="menu:connect_bot"),
-                ],
-                [InlineKeyboardButton("⚙️ Settings", url=f"{frontend}/settings")],
+                [InlineKeyboardButton("⚙️ Account Settings", url=f"{frontend}/settings")],
                 [InlineKeyboardButton("« Back", callback_data="menu:main")],
             ]),
         )
@@ -1602,7 +1604,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode=ParseMode.MARKDOWN,
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔗 Connect Account", url=f"{frontend}/settings")],
-                    [InlineKeyboardButton("« Back", callback_data="menu:advanced")],
+                    [InlineKeyboardButton("« Back", callback_data="menu:main")],
                 ]),
             )
             return
@@ -1627,7 +1629,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🖥️ Manage Bots", url=f"{frontend}/my-bots")],
                 [InlineKeyboardButton("🔌 Connect Own Bot", callback_data="menu:connect_bot")],
-                [InlineKeyboardButton("« Back", callback_data="menu:advanced")],
+                [InlineKeyboardButton("« Back", callback_data="menu:main")],
             ]),
         )
 
@@ -1651,7 +1653,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode=ParseMode.MARKDOWN,
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🖥️ Go to Settings", url=f"{frontend}/settings")],
-                    [InlineKeyboardButton("« Back", callback_data="menu:advanced")],
+                    [InlineKeyboardButton("« Back", callback_data="menu:main")],
                 ]),
             )
             return
@@ -1734,7 +1736,11 @@ async def _render_main_menu(query, user, flask_app, frontend):
             InlineKeyboardButton("🖥️ Dashboard", url=frontend),
             InlineKeyboardButton("💬 Support", callback_data="menu:support"),
         ],
-        [InlineKeyboardButton("⚙️ Advanced Options", callback_data="menu:advanced")],
+        [
+            InlineKeyboardButton("🤖 My Bots", callback_data="menu:my_bots"),
+            InlineKeyboardButton("🔌 Connect Own Bot", callback_data="menu:connect_bot"),
+        ],
+        [InlineKeyboardButton("⚙️ Settings", url=f"{frontend}/settings")],
     ]
     await query.edit_message_text(
         "*Telegizer — Telegram Growth & Management Hub*\n\nWhat would you like to do?",
