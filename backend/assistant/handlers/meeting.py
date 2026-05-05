@@ -65,13 +65,23 @@ def handle_schedule_meeting(user_id: int, parsed: dict, key_info: dict, user_tz:
             "suggestions": time_suggestions(),
         }
 
-    # Resolve datetime hint → ISO
+    # Resolve datetime hint → ISO (max 3 attempts to avoid infinite loop)
     if not data["_resolved_iso"] and data["datetime_hint"]:
         dt = resolve_datetime(key_info, data["datetime_hint"], data["timezone"])
         if not dt.get("iso"):
+            attempts = data.get("_datetime_attempts", 0) + 1
+            if attempts >= 3:
+                clear_state(user_id)
+                return {
+                    "reply": "I'm having trouble understanding that time. Try something like 'tomorrow 3pm' or 'Friday at 10am'.",
+                    "intent": "schedule_meeting",
+                    "data": None,
+                    "suggestions": time_suggestions(),
+                }
+            data["_datetime_attempts"] = attempts
             save_state(user_id, "schedule_meeting", data, "datetime_hint")
             return {
-                "reply": f'I couldn\'t parse "{data["datetime_hint"]}" — when exactly should I schedule it?',
+                "reply": f'I couldn\'t parse "{data["datetime_hint"]}" — try something like "tomorrow 3pm" or "Friday at 10am".',
                 "intent": "schedule_meeting",
                 "data": None,
                 "suggestions": time_suggestions(),

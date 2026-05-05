@@ -47,13 +47,23 @@ def handle_create_reminder(user_id: int, parsed: dict, key_info: dict, user_tz: 
             "suggestions": time_suggestions(),
         }
 
-    # Resolve datetime
+    # Resolve datetime (max 3 attempts to avoid infinite loop)
     if not data["_resolved_iso"] and data["datetime_hint"]:
         dt = resolve_datetime(key_info, data["datetime_hint"], data["timezone"])
         if not dt.get("iso"):
+            attempts = data.get("_datetime_attempts", 0) + 1
+            if attempts >= 3:
+                clear_state(user_id)
+                return {
+                    "reply": "I'm having trouble with that time. Try 'tomorrow 3pm' or 'in 2 hours'.",
+                    "intent": "create_reminder",
+                    "data": None,
+                    "suggestions": time_suggestions(),
+                }
+            data["_datetime_attempts"] = attempts
             save_state(user_id, "create_reminder", data, "datetime_hint")
             return {
-                "reply": "I couldn't parse that time. When exactly should I remind you?",
+                "reply": "I couldn't parse that time — try 'tomorrow 3pm' or 'in 2 hours'.",
                 "intent": "create_reminder",
                 "data": None,
                 "suggestions": time_suggestions(),
