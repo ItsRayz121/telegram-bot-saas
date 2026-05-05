@@ -1080,18 +1080,11 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     token = (message.text or "").strip()
 
-    # Delete the token message immediately — security hygiene (never leave tokens in chat history)
-    try:
-        await message.delete()
-    except Exception:
-        pass
-
-    # Basic format check — count as a failed attempt only on bad format
+    # Basic format check — token stays visible in chat on failure so user can retry
     if ":" not in token or len(token) < 30:
         context.user_data["bot_token_attempts"] = attempts + [now]
-        await context.bot.send_message(
-            chat_id=user.id,
-            text="🗑️ Message deleted for security.\n\n❌ Invalid token format.\nExpected: `1234567890:AAAA...`",
+        await message.reply_text(
+            "❌ Invalid token format. Expected: `1234567890:AAAA...`\n\nPlease try again.",
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("❌ Cancel", callback_data="cancel_bot_token")],
@@ -1114,12 +1107,9 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
 
     if not website_user_id:
-        await context.bot.send_message(
-            chat_id=user.id,
-            text=(
-                "❌ Your Telegram account is not linked to a Telegizer account.\n\n"
-                "Go to *Settings → Connect Telegram* on the website first."
-            ),
+        await message.reply_text(
+            "❌ Your Telegram account is not linked to a Telegizer account.\n\n"
+            "Go to *Settings → Connect Telegram* on the website first.",
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🖥️ Go to Settings", url=f"{frontend}/settings")],
@@ -1127,7 +1117,7 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Verify token with Telegram
+    # Verify token with Telegram — keep message visible until we know it's valid
     bot_name = None
     bot_username_verified = None
     try:
@@ -1138,9 +1128,8 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         result = resp.json()
         if not result.get("ok"):
             context.user_data["bot_token_attempts"] = attempts + [now]
-            await context.bot.send_message(
-                chat_id=user.id,
-                text="🗑️ Message deleted for security.\n\n❌ Telegram rejected this token. Please check it is correct and try again.",
+            await message.reply_text(
+                "❌ Telegram rejected this token. Please check it is correct and try again.",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("❌ Cancel", callback_data="cancel_bot_token")],
                 ]),
@@ -1151,13 +1140,10 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         bot_username_verified = tg_data.get("username")
     except Exception as exc:
         context.user_data["bot_token_attempts"] = attempts + [now]
-        await context.bot.send_message(
-            chat_id=user.id,
-            text="🗑️ Message deleted for security.\n\n❌ Could not verify token with Telegram. Try again.",
-        )
+        await message.reply_text("❌ Could not reach Telegram to verify the token. Please try again.")
         return
 
-    # Pre-flight: check bot limits before asking for confirmation
+    # Pre-flight: check bot limits
     pre_error = None
     if flask_app:
         try:
@@ -1181,9 +1167,8 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if pre_error:
         context.user_data["awaiting_bot_token"] = False
-        await context.bot.send_message(
-            chat_id=user.id,
-            text=pre_error,
+        await message.reply_text(
+            pre_error,
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🖥️ Open Dashboard", url=f"{frontend}/my-bots")],
@@ -1191,6 +1176,12 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]),
         )
         return
+
+    # ✅ Token is valid and quota is fine — NOW delete it from chat history
+    try:
+        await message.delete()
+    except Exception:
+        pass
 
     # Store pending token and ask for confirmation — never log the raw token
     context.user_data["pending_bot_token"] = token
@@ -1201,6 +1192,7 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(
         chat_id=user.id,
         text=(
+            f"🗑️ Token deleted from chat for security.\n\n"
             f"🤖 *Confirm bot connection*\n\n"
             f"Name: *{bot_name}*\n"
             f"Username: @{bot_username_verified}\n\n"
