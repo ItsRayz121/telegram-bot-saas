@@ -69,6 +69,66 @@ def _gemini_post(api_key: str, preferred_model: str, system: str, user_msg: str,
     raise last_exc or RuntimeError("All Gemini model candidates returned 404")
 
 
+# OpenAI-compatible model fallback sequence (OpenRouter / OpenAI / Mistral etc.)
+_OPENAI_MODEL_FALLBACKS = [
+    "google/gemini-flash-1.5",          # cheapest on OpenRouter
+    "openai/gpt-4o-mini",               # very cheap, excellent quality
+    "meta-llama/llama-3.1-8b-instruct:free",  # free on OpenRouter
+    "mistralai/mistral-7b-instruct:free",      # free on OpenRouter
+    "gpt-4o-mini",                      # direct OpenAI fallback
+]
+
+
+def _openai_compat_post(key_info: dict, api_key: str, preferred_model: str,
+                        system: str, user_msg: str, json_mode: bool) -> str:
+    """POST to an OpenAI-compatible endpoint with model fallbacks."""
+    base = key_info.get("base_url", "https://api.openai.com/v1").rstrip("/")
+    candidates = [preferred_model or "openai/gpt-4o-mini"] + [
+        m for m in _OPENAI_MODEL_FALLBACKS if m != preferred_model
+    ]
+
+    body_base: dict = {
+        "temperature": 0.1 if json_mode else 0.3,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user_msg},
+        ],
+    }
+    if json_mode:
+        body_base["response_format"] = {"type": "json_object"}
+
+    last_exc: Exception | None = None
+    for model_id in candidates:
+        try:
+            resp = _client.post(
+                f"{base}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "HTTP-Referer": "https://telegizer.xyz",
+                    "X-Title": "Telegizer",
+                },
+                json={**body_base, "model": model_id},
+            )
+            if resp.status_code in (404, 400, 422):
+                _log.debug("OpenAI-compat %d for %s — trying next", resp.status_code, model_id)
+                last_exc = httpx.HTTPStatusError("", request=resp.request, response=resp)
+                continue
+            if not resp.is_success:
+                _log.error("OpenAI-compat error %d (%s): %s", resp.status_code, model_id, resp.text[:400])
+            resp.raise_for_status()
+            _log.info("OpenAI-compat OK: %s", model_id)
+            return resp.json()["choices"][0]["message"]["content"].strip()
+        except httpx.HTTPStatusError as exc:
+            last_exc = exc
+            if exc.response.status_code not in (404, 400, 422):
+                raise
+        except Exception as exc:
+            last_exc = exc
+            raise
+
+    raise last_exc or RuntimeError("All OpenAI-compat model candidates failed")
+
+
 def call_ai(key_info: dict, system: str, user_msg: str) -> str:
     """Call AI expecting a JSON response."""
     provider = key_info.get("provider", "gemini")
@@ -97,24 +157,7 @@ def call_ai(key_info: dict, system: str, user_msg: str) -> str:
         resp.raise_for_status()
         return resp.json()["content"][0]["text"].strip()
 
-    base = key_info.get("base_url", "https://api.openai.com/v1")
-    resp = _client.post(
-        f"{base.rstrip('/')}/chat/completions",
-        headers={"Authorization": f"Bearer {api_key}"},
-        json={
-            "model": model or "gpt-4o-mini",
-            "temperature": 0.1,
-            "response_format": {"type": "json_object"},
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user_msg},
-            ],
-        },
-    )
-    if not resp.is_success:
-        _log.error("OpenAI API error %d: %s", resp.status_code, resp.text[:500])
-    resp.raise_for_status()
-    return resp.json()["choices"][0]["message"]["content"].strip()
+    return _openai_compat_post(key_info, api_key, model, system, user_msg, json_mode=True)
 
 
 def call_ai_text(key_info: dict, system: str, user_msg: str) -> str:
@@ -143,23 +186,7 @@ def call_ai_text(key_info: dict, system: str, user_msg: str) -> str:
         resp.raise_for_status()
         return resp.json()["content"][0]["text"].strip()
 
-    base = key_info.get("base_url", "https://api.openai.com/v1")
-    resp = _client.post(
-        f"{base.rstrip('/')}/chat/completions",
-        headers={"Authorization": f"Bearer {api_key}"},
-        json={
-            "model": model or "gpt-4o-mini",
-            "temperature": 0.3,
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user_msg},
-            ],
-        },
-    )
-    if not resp.is_success:
-        _log.error("OpenAI API error %d: %s", resp.status_code, resp.text[:500])
-    resp.raise_for_status()
-    return resp.json()["choices"][0]["message"]["content"].strip()
+    return _openai_compat_post(key_info, api_key, model, system, user_msg, json_mode=False)
 
 
 def parse_json(text: str) -> dict:
