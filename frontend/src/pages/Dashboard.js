@@ -1143,15 +1143,15 @@ export default function Dashboard() {
             </Box>
             <Grid container spacing={2}>
               {[
-                { label: 'Support Channel', desc: 'Get help from the team', href: 'https://t.me/telegizer_support', icon: '💬' },
-                { label: 'Community Chat', desc: 'Talk with other users', href: 'https://t.me/telegizer_community', icon: '👥' },
-                { label: 'Announcements', desc: 'New features & updates', href: 'https://t.me/telegizer_news', icon: '📢' },
+                { label: 'Official Channel', desc: 'Follow product updates & announcements', href: 'https://t.me/telegizer', icon: '📢' },
+                { label: 'Community Group', desc: 'Join the community and get help from other users', href: 'https://t.me/telegizer_community', icon: '👥' },
+                { label: 'Email Support', desc: 'Contact support directly via email', href: 'mailto:support@telegizer.com', icon: '✉️' },
               ].map(({ label, desc, href, icon }) => (
                 <Grid item xs={12} sm={4} key={label}>
                   <Box
                     component="a"
                     href={href}
-                    target="_blank"
+                    target={href.startsWith('mailto') ? '_self' : '_blank'}
                     rel="noopener noreferrer"
                     sx={{
                       display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5,

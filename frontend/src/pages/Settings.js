@@ -8,7 +8,7 @@ import {
 import {
   ArrowBack, SmartToy, Person, Lock, DeleteForever, Schedule,
   Security, CheckCircle, ContentCopy, Telegram, LinkOff, OpenInNew,
-  Add, Star, StarBorder, Delete, HelpOutline, EmailOutlined,
+  Add, Star, StarBorder, Delete,
 } from '@mui/icons-material';
 import { List, ListItem, ListItemText, ListItemSecondaryAction, Tooltip } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
@@ -743,43 +743,6 @@ export default function Settings() {
             </Box>
             <Button variant="outlined" onClick={handleSaveTimezone} disabled={tzSaving} sx={{ mt: { xs: 1, sm: 0 } }}>
               Save
-            </Button>
-          </Stack>
-        </Section>
-
-        {/* Help & Support */}
-        <Section title="Help & Support" icon={<HelpOutline color="primary" />}>
-          <Typography variant="body2" color="text.secondary" mb={2}>
-            Need help? Reach out through any of these channels.
-          </Typography>
-          <Stack spacing={1.5}>
-            <Button
-              variant="outlined" fullWidth startIcon={<Telegram />}
-              href="https://t.me/telegizer" target="_blank" rel="noopener"
-              sx={{ justifyContent: 'flex-start' }}
-            >
-              Follow Official Channel (@telegizer)
-            </Button>
-            <Button
-              variant="outlined" fullWidth startIcon={<Telegram />}
-              href="https://t.me/telegizer_community" target="_blank" rel="noopener"
-              sx={{ justifyContent: 'flex-start' }}
-            >
-              Join Community Group
-            </Button>
-            <Button
-              variant="outlined" fullWidth startIcon={<EmailOutlined />}
-              href="mailto:fazalelahi5577@gmail.com"
-              sx={{ justifyContent: 'flex-start' }}
-            >
-              Email fazalelahi5577@gmail.com
-            </Button>
-            <Button
-              variant="text" fullWidth
-              href="/status" target="_blank" rel="noopener"
-              sx={{ justifyContent: 'flex-start', color: 'text.secondary' }}
-            >
-              View System Status →
             </Button>
           </Stack>
         </Section>
