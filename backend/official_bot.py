@@ -978,9 +978,12 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if flask_app and _raw:
         _BOT_TOKEN_RE = re.compile(r'\d{9,10}:[A-Za-z0-9_-]{35,}')
         _safe_raw = _BOT_TOKEN_RE.sub("[REDACTED_BOT_TOKEN]", _raw)
+        _looks_like_token = bool(_BOT_TOKEN_RE.search(_raw))
 
-        # Don't route bot-token-shaped messages through the assistant
-        if not context.user_data.get("awaiting_bot_token"):
+        # Don't route bot-token-shaped messages through the assistant.
+        # Also covers the case where awaiting_bot_token was lost after a bot restart —
+        # if the message pattern matches a Telegram bot token, skip the assistant entirely.
+        if not context.user_data.get("awaiting_bot_token") and not _looks_like_token:
             _reply_text = None
             _keyboard = None
             _unlinked = False
@@ -1058,8 +1061,12 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
     # ── Bot token submission ──────────────────────────────────────────────────
-    if not context.user_data.get("awaiting_bot_token"):
-        return
+    # If the message looks like a bot token (even after a bot restart that wiped context.user_data),
+    # treat it as a token submission attempt.
+    _BOT_TOKEN_RE2 = re.compile(r'\d{9,10}:[A-Za-z0-9_-]{35,}')
+    _is_token_msg = bool(_BOT_TOKEN_RE2.search(_raw or ""))
+    if not context.user_data.get("awaiting_bot_token") and not _is_token_msg:
+        return  # nothing left to handle
 
     # Rate limit: 3 attempts per 10 minutes
     now = datetime.utcnow()
