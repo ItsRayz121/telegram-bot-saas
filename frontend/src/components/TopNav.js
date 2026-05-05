@@ -6,7 +6,7 @@ import {
 } from '@mui/material';
 import {
   Home, Dashboard, Groups, SmartToy, CreditCard, Settings,
-  HelpOutline, Campaign, People, Email, OpenInNew,
+  HelpOutline, Campaign, People, Email, OpenInNew, CardGiftcard,
 } from '@mui/icons-material';
 import TelegizerLogo from './TelegizerLogo';
 import UniversalSearchBar from './UniversalSearchBar';
@@ -142,6 +142,20 @@ export default function TopNav({ title, subtitle, actions, breadcrumb, hasSideba
             {actions}
           </Box>
         )}
+
+        {/* Referrals button */}
+        <Tooltip title="Invite Friends — Earn Free Pro">
+          <Button
+            size="small"
+            startIcon={<CardGiftcard sx={{ fontSize: '15px !important' }} />}
+            onClick={() => navigate('/referrals')}
+            variant={pathname === '/referrals' ? 'contained' : 'outlined'}
+            color="primary"
+            sx={{ px: 1.5, py: 0.4, fontSize: '0.78rem', borderRadius: 1.5, minWidth: 0, display: { xs: 'none', sm: 'flex' } }}
+          >
+            Referrals
+          </Button>
+        </Tooltip>
 
         {/* Support popover */}
         <SupportPopover />
