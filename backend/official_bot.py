@@ -1068,30 +1068,30 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.user_data.get("awaiting_bot_token") and not _is_token_msg:
         return  # nothing left to handle
 
-    # Rate limit: 3 attempts per 10 minutes
+    # Rate limit: 10 failed attempts per 10 minutes (only failed attempts count)
     now = datetime.utcnow()
     attempts = [t for t in context.user_data.get("bot_token_attempts", [])
                 if (now - t).total_seconds() < 600]
-    if len(attempts) >= 3:
+    if len(attempts) >= 10:
         await message.reply_text(
-            "⚠️ Too many attempts. Please wait 10 minutes before trying again."
+            "⚠️ Too many failed attempts. Please wait 10 minutes before trying again."
         )
         return
-    context.user_data["bot_token_attempts"] = attempts + [now]
 
     token = (message.text or "").strip()
 
-    # Delete the token message immediately — security hygiene
+    # Delete the token message immediately — security hygiene (never leave tokens in chat history)
     try:
         await message.delete()
     except Exception:
         pass
 
-    # Basic format check
+    # Basic format check — count as a failed attempt only on bad format
     if ":" not in token or len(token) < 30:
+        context.user_data["bot_token_attempts"] = attempts + [now]
         await context.bot.send_message(
             chat_id=user.id,
-            text="❌ Invalid token format.\nExpected: `1234567890:AAAA...`",
+            text="🗑️ Message deleted for security.\n\n❌ Invalid token format.\nExpected: `1234567890:AAAA...`",
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("❌ Cancel", callback_data="cancel_bot_token")],
@@ -1137,9 +1137,10 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         result = resp.json()
         if not result.get("ok"):
+            context.user_data["bot_token_attempts"] = attempts + [now]
             await context.bot.send_message(
                 chat_id=user.id,
-                text="❌ Telegram rejected this token. Please check it is correct.",
+                text="🗑️ Message deleted for security.\n\n❌ Telegram rejected this token. Please check it is correct and try again.",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("❌ Cancel", callback_data="cancel_bot_token")],
                 ]),
@@ -1149,9 +1150,10 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         bot_name = tg_data.get("first_name")
         bot_username_verified = tg_data.get("username")
     except Exception as exc:
+        context.user_data["bot_token_attempts"] = attempts + [now]
         await context.bot.send_message(
             chat_id=user.id,
-            text=f"❌ Could not verify token with Telegram. Try again.",
+            text="🗑️ Message deleted for security.\n\n❌ Could not verify token with Telegram. Try again.",
         )
         return
 
