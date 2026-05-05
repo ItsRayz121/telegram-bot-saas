@@ -354,20 +354,44 @@ async def _handle_account_connect(update, context, user, flask_app, frontend, bo
                 error_msg = "❌ This link has expired or already been used.\n\nGenerate a new one from *Settings → Connect Telegram* on the website."
             else:
                 # Check if this Telegram account is already linked to a different user
-                existing = User.query.filter_by(telegram_user_id=str(user.id)).first()
-                if existing and existing.id != tc.user_id:
+                from .models import UserTelegramAccount
+                tg_id_str = str(user.id)
+                existing = User.query.filter_by(telegram_user_id=tg_id_str).first()
+                existing_linked = UserTelegramAccount.query.filter_by(telegram_user_id=tg_id_str).first()
+                already_other_user = (
+                    (existing and existing.id != tc.user_id) or
+                    (existing_linked and existing_linked.user_id != tc.user_id)
+                )
+                if already_other_user:
                     error_msg = "❌ This Telegram account is already linked to a different Telegizer account.\n\nDisconnect it first from Settings on the website."
                 else:
                     website_user = User.query.get(tc.user_id)
                     if not website_user:
                         error_msg = "❌ Website account not found."
                     else:
-                        website_user.telegram_user_id = str(user.id)
-                        website_user.telegram_username = user.username
-                        website_user.telegram_first_name = user.first_name
-                        website_user.telegram_connected_at = datetime.utcnow()
+                        # Backfill legacy primary columns on first connect
+                        if not website_user.telegram_user_id:
+                            website_user.telegram_user_id = tg_id_str
+                            website_user.telegram_username = user.username
+                            website_user.telegram_first_name = user.first_name
+                            website_user.telegram_connected_at = datetime.utcnow()
+
+                        # Upsert into UserTelegramAccount for all accounts (primary + additional)
+                        is_primary = not bool(
+                            UserTelegramAccount.query.filter_by(user_id=website_user.id).first()
+                        )
+                        if not existing_linked or existing_linked.user_id != website_user.id:
+                            new_linked = UserTelegramAccount(
+                                user_id=website_user.id,
+                                telegram_user_id=tg_id_str,
+                                telegram_username=user.username,
+                                telegram_first_name=user.first_name,
+                                is_primary=is_primary,
+                            )
+                            db.session.add(new_linked)
+
                         tc.used_at = datetime.utcnow()
-                        tc.telegram_user_id = str(user.id)
+                        tc.telegram_user_id = tg_id_str
                         linked_email = website_user.email
                         _log.info("[OfficialBot] account_connect success tg_user=%s linked_to_user_id=%s email=%s",
                                   user.id, website_user.id, linked_email)

@@ -1125,6 +1125,55 @@ export default function Dashboard() {
         {/* ── Leaderboard ── */}
         {!loading && <LeaderboardCard />}
 
+        {/* ── Help & Support ── */}
+        <Card sx={{ mt: 3, borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
+          <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+              <Box sx={{
+                width: 38, height: 38, borderRadius: 2,
+                background: 'linear-gradient(135deg, #0288d1 0%, #26c6da 100%)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+              }}>
+                <Telegram sx={{ color: '#fff', fontSize: 20 }} />
+              </Box>
+              <Box>
+                <Typography variant="subtitle1" fontWeight={700}>Help &amp; Support</Typography>
+                <Typography variant="body2" color="text.secondary">Get help, report issues, and stay updated</Typography>
+              </Box>
+            </Box>
+            <Grid container spacing={2}>
+              {[
+                { label: 'Support Channel', desc: 'Get help from the team', href: 'https://t.me/telegizer_support', icon: '💬' },
+                { label: 'Community Chat', desc: 'Talk with other users', href: 'https://t.me/telegizer_community', icon: '👥' },
+                { label: 'Announcements', desc: 'New features & updates', href: 'https://t.me/telegizer_news', icon: '📢' },
+              ].map(({ label, desc, href, icon }) => (
+                <Grid item xs={12} sm={4} key={label}>
+                  <Box
+                    component="a"
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    sx={{
+                      display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5,
+                      borderRadius: 2, border: '1px solid', borderColor: 'divider',
+                      textDecoration: 'none', color: 'text.primary',
+                      transition: 'background 0.15s',
+                      '&:hover': { background: 'action.hover', borderColor: 'primary.main' },
+                    }}
+                  >
+                    <Typography fontSize={22}>{icon}</Typography>
+                    <Box>
+                      <Typography variant="body2" fontWeight={600}>{label}</Typography>
+                      <Typography variant="caption" color="text.secondary">{desc}</Typography>
+                    </Box>
+                    <OpenInNew sx={{ ml: 'auto', fontSize: 16, color: 'text.disabled' }} />
+                  </Box>
+                </Grid>
+              ))}
+            </Grid>
+          </CardContent>
+        </Card>
+
       </Box>
 
       {/* ── Add Bot Dialog ── */}
