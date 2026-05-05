@@ -726,6 +726,12 @@ export default function Dashboard() {
             <Button size="small" startIcon={<CreditCard fontSize="small" />} onClick={() => navigate('/billing')} sx={{ color: 'text.secondary' }}>
               Billing
             </Button>
+            <Button size="small" startIcon={<People fontSize="small" />} onClick={() => navigate('/referrals')} sx={{ color: 'text.secondary' }}>
+              Referrals
+            </Button>
+            <Button size="small" startIcon={<Telegram fontSize="small" />} href="https://t.me/telegizer_community" target="_blank" rel="noopener noreferrer" component="a" sx={{ color: 'text.secondary' }}>
+              Support
+            </Button>
           </Box>
 
           <Box sx={{ flexGrow: { xs: 1, md: 0 } }} />
