@@ -34,18 +34,18 @@ def _apply_referral_rewards(referrer: User):
 
     total = Referral.query.filter_by(referrer_user_id=referrer.id, status="approved").count()
 
+    # Load all rewards_given lists for this referrer in one query (Python-side check)
+    all_refs = Referral.query.filter_by(referrer_user_id=referrer.id).with_entities(Referral.rewards_given).all()
+    rewarded_milestones = set()
+    for (rg,) in all_refs:
+        for m in (rg or []):
+            rewarded_milestones.add(m)
+
     for required, reward_days in REFERRAL_MILESTONES:
         if total < required:
             break
 
-        already_given = db.session.query(
-            db.exists().where(
-                Referral.referrer_user_id == referrer.id,
-                Referral.rewards_given.contains([required])
-            )
-        ).scalar()
-
-        if already_given:
+        if required in rewarded_milestones:
             continue
 
         # Award reward_days of Pro
@@ -94,20 +94,20 @@ def get_stats():
     # Only approved referrals count toward milestones
     total_approved = Referral.query.filter_by(referrer_user_id=user.id, status="approved").count()
 
-    # Milestone progress
+    # Milestone progress — check rewards_given in Python to avoid JSON query issues
+    all_refs = Referral.query.filter_by(referrer_user_id=user.id).with_entities(Referral.rewards_given).all()
+    rewarded_milestones = set()
+    for (rg,) in all_refs:
+        for m in (rg or []):
+            rewarded_milestones.add(m)
+
     milestones = []
     for required, reward_days in REFERRAL_MILESTONES:
-        already_given = db.session.query(
-            db.exists().where(
-                Referral.referrer_user_id == user.id,
-                Referral.rewards_given.contains([required])
-            )
-        ).scalar()
         milestones.append({
             "required": required,
             "reward_days": reward_days,
             "reached": total_approved >= required,
-            "rewarded": bool(already_given),
+            "rewarded": required in rewarded_milestones,
         })
 
     return jsonify({
