@@ -621,22 +621,8 @@ def get_profile():
 
 
 def _call_ai_text(key_info: dict, prompt: str) -> str:
-    """AI helper used for cross-group ask and inline AI. Ollama → OpenRouter → OpenAI fallback."""
+    """AI helper for cross-group ask and inline AI. Uses OpenRouter (OpenAI-compatible)."""
     import requests as _r
-    from .. import config as _cfg
-
-    def _openai_compat(ki: dict, p: str) -> str:
-        base = ki.get("base_url", "https://api.openai.com/v1")
-        r = _r.post(
-            f"{base.rstrip('/')}/chat/completions",
-            headers={"Authorization": f"Bearer {ki['api_key']}"},
-            json={"model": ki.get("model", "openai/gpt-4o-mini"),
-                  "messages": [{"role": "user", "content": p}]},
-            timeout=30,
-        )
-        r.raise_for_status()
-        return r.json()["choices"][0]["message"]["content"].strip()
-
     provider = key_info.get("provider", "openrouter")
     api_key = key_info["api_key"]
     model = key_info.get("model", "openai/gpt-4o-mini")
@@ -661,16 +647,13 @@ def _call_ai_text(key_info: dict, prompt: str) -> str:
         resp.raise_for_status()
         return resp.json()["content"][0]["text"].strip()
 
-    if provider == "ollama":
-        try:
-            return _openai_compat(key_info, prompt)
-        except Exception as exc:
-            _log.warning("_call_ai_text: Ollama failed (%s) — falling back to OpenRouter", exc)
-            if _cfg.Config.PLATFORM_OPENROUTER_API_KEY:
-                return _openai_compat({"api_key": _cfg.Config.PLATFORM_OPENROUTER_API_KEY,
-                                       "model": "openai/gpt-4o-mini",
-                                       "base_url": "https://openrouter.ai/api/v1"}, prompt)
-            raise
-
-    # openrouter / openai
-    return _openai_compat(key_info, prompt)
+    # openrouter / openai-compatible
+    base = key_info.get("base_url", "https://openrouter.ai/api/v1")
+    resp = _r.post(
+        f"{base.rstrip('/')}/chat/completions",
+        headers={"Authorization": f"Bearer {api_key}"},
+        json={"model": model, "messages": [{"role": "user", "content": prompt}]},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    return resp.json()["choices"][0]["message"]["content"].strip()

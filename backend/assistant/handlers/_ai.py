@@ -79,54 +79,9 @@ _OPENROUTER_FALLBACKS = [
 
 def _openai_compat_post(key_info: dict, api_key: str, preferred_model: str,
                         system: str, user_msg: str, json_mode: bool) -> str:
-    """POST to an OpenAI-compatible endpoint (Ollama, OpenRouter, OpenAI) with fallbacks.
+    """POST to OpenRouter (OpenAI-compatible) with model fallback."""
+    base = key_info.get("base_url", "https://openrouter.ai/api/v1").rstrip("/")
 
-    For Ollama: if the call fails for any reason (server down, model error),
-    automatically retries with the OpenRouter → OpenAI fallback chain.
-    """
-    provider = key_info.get("provider", "openrouter")
-    base = key_info.get("base_url", "https://api.openai.com/v1").rstrip("/")
-
-    if provider == "ollama":
-        # Try Ollama first; on any failure fall through to OpenRouter/OpenAI
-        body: dict = {
-            "model": preferred_model or "llama3.2",
-            "temperature": 0.1 if json_mode else 0.3,
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user_msg},
-            ],
-        }
-        # Only add response_format for models that explicitly support it
-        # (newer llama3.x, mistral). Skip for safety — prompt-based JSON is more reliable.
-        try:
-            resp = _client.post(
-                f"{base}/chat/completions",
-                headers={"Authorization": f"Bearer {api_key}"},
-                json=body,
-            )
-            if resp.is_success:
-                _log.info("Ollama OK: %s", preferred_model)
-                return resp.json()["choices"][0]["message"]["content"].strip()
-            _log.warning("Ollama returned %d — falling back to OpenRouter/OpenAI", resp.status_code)
-        except Exception as exc:
-            _log.warning("Ollama unreachable (%s) — falling back to OpenRouter/OpenAI", exc)
-
-        # Fall through to OpenRouter
-        from ... import config as _cfg
-        if _cfg.Config.PLATFORM_OPENROUTER_API_KEY:
-            fallback = {
-                "provider": "openrouter",
-                "api_key": _cfg.Config.PLATFORM_OPENROUTER_API_KEY,
-                "model": "openai/gpt-4o-mini",
-                "base_url": "https://openrouter.ai/api/v1",
-            }
-            _log.info("Ollama failed — falling back to OpenRouter gpt-4o-mini")
-            return _openai_compat_post(fallback, fallback["api_key"], fallback["model"],
-                                       system, user_msg, json_mode)
-        raise RuntimeError("Ollama failed and no OpenRouter fallback key is configured")
-
-    # OpenRouter / OpenAI path — try preferred model then gpt-4o-mini variants
     candidates = [preferred_model or "openai/gpt-4o-mini"] + [
         m for m in _OPENROUTER_FALLBACKS if m != preferred_model
     ]

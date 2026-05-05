@@ -99,14 +99,7 @@ class Config:
     # Platform-wide Gemini key (kept for user workspace keys; not used as platform primary).
     PLATFORM_GEMINI_API_KEY = os.environ.get("PLATFORM_GEMINI_API_KEY", "")
 
-    # Ollama — PRIMARY platform AI. Set PLATFORM_OLLAMA_BASE_URL to enable.
-    # Example: http://localhost:11434/v1  or  https://your-ollama-host/v1
-    PLATFORM_OLLAMA_BASE_URL = os.environ.get("PLATFORM_OLLAMA_BASE_URL", "")
-    PLATFORM_OLLAMA_MODEL    = os.environ.get("PLATFORM_OLLAMA_MODEL", "llama3.2")
-    # Ollama usually needs no key; set one if your host requires bearer auth.
-    PLATFORM_OLLAMA_API_KEY  = os.environ.get("PLATFORM_OLLAMA_API_KEY", "ollama")
-
-    # OpenRouter — first fallback (gpt-4o-mini via OpenRouter).
+    # OpenRouter — primary platform AI key.
     PLATFORM_OPENROUTER_API_KEY = os.environ.get("PLATFORM_OPENROUTER_API_KEY", "")
 
 

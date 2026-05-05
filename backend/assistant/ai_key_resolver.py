@@ -1,6 +1,6 @@
 """
 Resolves which AI key + provider to use for workspace-level assistant features
-(Notes, Digests, Hub). Priority: user workspace key → Ollama → OpenRouter → OpenAI.
+(Notes, Digests, Hub). Priority: user workspace key → OpenRouter platform key.
 """
 
 from datetime import datetime, timedelta
@@ -56,17 +56,6 @@ def get_workspace_ai_key(user) -> dict:
             "Quota resets in 24 hours or add your own API key in AI Settings."
         )
 
-    # Priority: Ollama (self-hosted) → OpenRouter gpt-4o-mini → direct OpenAI gpt-4o-mini
-    if _cfg.Config.PLATFORM_OLLAMA_BASE_URL:
-        return {
-            "provider": "ollama",
-            "api_key": _cfg.Config.PLATFORM_OLLAMA_API_KEY,
-            "model": _cfg.Config.PLATFORM_OLLAMA_MODEL,
-            "base_url": _cfg.Config.PLATFORM_OLLAMA_BASE_URL.rstrip("/"),
-            "source": "platform",
-            "daily_limit": daily_limit,
-        }
-
     if _cfg.Config.PLATFORM_OPENROUTER_API_KEY:
         return {
             "provider": "openrouter",
@@ -116,6 +105,5 @@ def _default_model(provider: str) -> str:
         "openai": "gpt-4o-mini",
         "anthropic": "claude-haiku-4-5-20251001",
         "openrouter": "openai/gpt-4o-mini",
-        "ollama": "llama3.2",
     }
     return defaults.get(provider, "")
