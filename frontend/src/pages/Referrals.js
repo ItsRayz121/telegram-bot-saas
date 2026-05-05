@@ -201,7 +201,7 @@ export default function Referrals() {
                 Top Referrers — {leaderboard.month || ''}
               </Typography>
             </Box>
-            <Table size="small">
+            <Table size="small" sx={{ tableLayout: 'fixed', width: '100%' }}>
               <TableBody>
                 {leaderboard.leaderboard.map((entry) => (
                   <TableRow

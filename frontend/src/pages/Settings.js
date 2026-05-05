@@ -737,8 +737,8 @@ export default function Settings() {
           <Typography variant="body2" color="text.secondary" mb={2}>
             Used as a default when creating scheduled messages.
           </Typography>
-          <Stack direction="row" spacing={2} alignItems="flex-start" flexWrap="wrap">
-            <Box sx={{ flexGrow: 1, minWidth: 200 }}>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ xs: 'stretch', sm: 'flex-start' }}>
+            <Box sx={{ flexGrow: 1, minWidth: { xs: 0, sm: 200 } }}>
               <TimezoneSelect value={timezone} onChange={setTimezone} />
             </Box>
             <Button variant="outlined" onClick={handleSaveTimezone} disabled={tzSaving} sx={{ mt: { xs: 1, sm: 0 } }}>

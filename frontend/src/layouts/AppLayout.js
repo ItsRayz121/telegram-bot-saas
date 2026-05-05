@@ -76,8 +76,8 @@ export default function AppLayout({ children }) {
           </AppBar>
         )}
 
-        {/* Page content — add bottom padding on mobile so content isn't hidden behind nav bar */}
-        <Box sx={{ flex: 1, overflow: 'auto', pb: isMobile ? '56px' : 0 }}>
+        {/* Page content — pad bottom on mobile so content isn't hidden behind nav bar */}
+        <Box sx={{ flex: 1, overflow: 'auto', pb: isMobile ? 'calc(56px + env(safe-area-inset-bottom))' : 0 }}>
           {children}
         </Box>
 

@@ -120,7 +120,7 @@ function MobileFeatureGrid() {
       <Typography fontWeight={600} fontSize="0.82rem" color="text.secondary" mb={1.5} sx={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}>
         Features
       </Typography>
-      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(4, 1fr)' }, gap: 1 }}>
         {FEATURE_TILES.map(({ label, icon: Icon, path, color }) => (
           <Box
             key={path}
@@ -528,7 +528,7 @@ function PersonalAssistantChat({ onMeetingCreated, botConnected }) {
           </Box>
 
           {/* Chat window */}
-          <Paper variant="outlined" sx={{ height: 320, overflowY: 'auto', p: 1.5, bgcolor: 'background.default' }}>
+          <Paper variant="outlined" sx={{ height: { xs: 260, sm: 320 }, overflowY: 'auto', p: 1.5, bgcolor: 'background.default' }}>
             {messages.map((m, idx) => (
               <Box key={m.id}>
                 <Box sx={{ display: 'flex', justifyContent: m.direction === 'out' ? 'flex-start' : 'flex-end', mb: m.suggestions?.length ? 0.5 : 1 }}>

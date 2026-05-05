@@ -131,8 +131,8 @@ export default function TopNav({ title, subtitle, actions, breadcrumb, hasSideba
         {/* Universal search — visible in sidebar layouts */}
         {hasSidebar && (
           <UniversalSearchBar
-            placeholder="Search meetings, notes, reminders…"
-            sx={{ width: { xs: 160, sm: 260 }, mr: 1 }}
+            placeholder="Search…"
+            sx={{ width: { xs: 120, sm: 200, md: 260 }, mr: 1, flexShrink: 1 }}
           />
         )}
 

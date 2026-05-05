@@ -715,15 +715,15 @@ export default function Dashboard() {
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
       {/* ── AppBar ── */}
       <AppBar position="sticky" elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
-        <Toolbar sx={{ gap: 0.5 }}>
+        <Toolbar sx={{ gap: 0.5, minHeight: { xs: 52, sm: 64 }, flexWrap: 'nowrap' }}>
           <Box
             onClick={() => navigate('/dashboard')}
-            sx={{ display: 'flex', alignItems: 'center', gap: 0.75, cursor: 'pointer', mr: 2, userSelect: 'none' }}
+            sx={{ display: 'flex', alignItems: 'center', gap: 0.75, cursor: 'pointer', mr: { xs: 0.5, md: 2 }, userSelect: 'none', flexShrink: 0 }}
           >
             <TelegizerLogo size="sm" />
           </Box>
 
-          <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 0.5, flexGrow: 1 }}>
+          <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 0.5, flexGrow: 1, overflow: 'hidden' }}>
             <Button size="small" startIcon={<Home fontSize="small" />} onClick={() => navigate('/')} sx={{ color: 'text.secondary' }}>
               Home
             </Button>
@@ -791,7 +791,7 @@ export default function Dashboard() {
             </Badge>
           </IconButton>
           <Menu anchorEl={notifAnchor} open={Boolean(notifAnchor)} onClose={() => setNotifAnchor(null)}
-            PaperProps={{ sx: { width: 340, maxHeight: 460 } }}>
+            PaperProps={{ sx: { width: { xs: '90vw', sm: 340 }, maxHeight: 460 } }}>
             <Box sx={{ px: 2, py: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <Typography variant="subtitle2" fontWeight={700}>Notifications</Typography>
               {unreadNotifs > 0 && <Button size="small" onClick={markAllRead}>Mark all read</Button>}
@@ -1055,7 +1055,7 @@ export default function Dashboard() {
                         {bot.last_active && <> · last active {new Date(bot.last_active).toLocaleDateString()}</>}
                       </Typography>
                     </CardContent>
-                    <CardActions sx={{ px: 1.5, pb: 1.5, pt: 0, gap: 0.5 }}>
+                    <CardActions sx={{ px: 1.5, pb: 1.5, pt: 0, gap: 0.5, flexWrap: 'wrap' }}>
                       <Button size="small" startIcon={<Settings />} onClick={() => navigate(`/bot/${bot.id}`)}>Groups</Button>
                       <Button size="small" startIcon={<BarChart />} onClick={() => navigate(`/analytics/${bot.id}`)}>Analytics</Button>
                       <Box sx={{ flexGrow: 1 }} />
