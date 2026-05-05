@@ -899,134 +899,74 @@ export default function Dashboard() {
         )}
 
         {/* ── Custom Bots section ── */}
-        <Card sx={{
-          mb: 3,
-          border: '1px solid',
-          borderColor: 'divider',
-          bgcolor: 'rgba(255,255,255,0.02)',
-          overflow: 'visible',
-        }}>
-          <CardContent sx={{ pb: 0 }}>
-            {/* Header row */}
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5, flexWrap: 'wrap', gap: 1 }}>
-              <Avatar sx={{ bgcolor: 'secondary.main', mr: 1.5, width: 40, height: 40, flexShrink: 0 }}>
-                <SmartToy fontSize="small" />
-              </Avatar>
-              <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                <Typography variant="subtitle1" fontWeight={700}>Custom Bots</Typography>
-                <Typography variant="body2" color="text.secondary" noWrap>
-                  Your own branded bot · {botCount} / {maxBots} used · {tier} plan
-                </Typography>
-              </Box>
-              <Chip
-                label={atLimit ? 'Limit Reached' : `${maxBots - botCount} slot${maxBots - botCount !== 1 ? 's' : ''} free`}
-                color={atLimit ? 'error' : nearLimit ? 'warning' : 'success'}
-                size="small"
-              />
-            </Box>
+        {/* Header bar */}
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5, flexWrap: 'wrap', gap: 1 }}>
+          <Avatar sx={{ bgcolor: 'secondary.main', width: 36, height: 36, flexShrink: 0 }}>
+            <SmartToy sx={{ fontSize: 18 }} />
+          </Avatar>
+          <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+            <Typography variant="subtitle1" fontWeight={700} lineHeight={1.2}>Custom Bots</Typography>
+            <Typography variant="caption" color="text.secondary">
+              {botCount} / {maxBots} used · {tier} plan
+            </Typography>
+          </Box>
+          <Chip
+            label={atLimit ? 'Limit Reached' : `${maxBots - botCount} slot${maxBots - botCount !== 1 ? 's' : ''} free`}
+            color={atLimit ? 'error' : nearLimit ? 'warning' : 'success'}
+            size="small"
+          />
+          <LinearProgress
+            variant="determinate"
+            value={(botCount / maxBots) * 100}
+            color={atLimit ? 'error' : nearLimit ? 'warning' : 'primary'}
+            sx={{ width: '100%', height: 3, borderRadius: 3, mt: 0.25 }}
+          />
+        </Box>
 
-            {/* Usage bar */}
-            <Box sx={{ mb: 2 }}>
-              <LinearProgress
-                variant="determinate"
-                value={(botCount / maxBots) * 100}
-                color={atLimit ? 'error' : nearLimit ? 'warning' : 'primary'}
-                sx={{ height: 5, borderRadius: 3 }}
-              />
-            </Box>
-
-            {/* How-to guide — always visible */}
-            <Box sx={{
-              bgcolor: 'rgba(255,255,255,0.03)',
-              border: '1px solid',
-              borderColor: 'divider',
-              borderRadius: 2,
-              px: 2.5,
-              py: 2,
-              mb: botList.length > 0 ? 2 : 0,
-            }}>
-              <Typography variant="caption" fontWeight={700} color="text.disabled"
-                sx={{ textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', mb: 1.5 }}>
-                How to add your own bot
+        {/* CTA row */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, flexWrap: 'wrap' }}>
+          <Button variant="contained" size="small" startIcon={<Add />} onClick={() => setAddOpen(true)} disabled={atLimit}>
+            Add Bot
+          </Button>
+          <Button variant="text" size="small" component="a" href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer" startIcon={<Telegram />} sx={{ color: 'text.secondary' }}>
+            BotFather
+          </Button>
+          {/* Compact how-to — only shown when no bots yet */}
+          {botList.length === 0 && (
+            <Typography variant="caption" color="text.disabled" sx={{ ml: 0.5 }}>
+              Create bot on BotFather → copy token → click Add Bot
+            </Typography>
+          )}
+          {/* How-to link — shown after first bot is added */}
+          {botList.length > 0 && (
+            <Tooltip title="Create bot → /newbot on @BotFather → copy token → Add Bot">
+              <Typography variant="caption" color="text.disabled" sx={{ cursor: 'default', ml: 0.5, '&:hover': { color: 'text.secondary' } }}>
+                How to add a bot?
               </Typography>
-              <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: { xs: 1.5, sm: 0 } }}>
-                {[
-                  { step: '1', label: 'Create bot', desc: 'Open Telegram → message @BotFather → /newbot' },
-                  { step: '2', label: 'Copy token', desc: 'BotFather gives you a token like 123456:ABC…' },
-                  { step: '3', label: 'Paste & add', desc: 'Click "Add Bot" below, paste your token, done' },
-                ].map((s, i, arr) => (
-                  <React.Fragment key={s.step}>
-                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, flex: 1 }}>
-                      <Box sx={{
-                        width: 26, height: 26, borderRadius: '50%',
-                        bgcolor: 'primary.main', color: '#fff',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: '0.72rem', fontWeight: 700, flexShrink: 0, mt: 0.2,
-                      }}>
-                        {s.step}
-                      </Box>
-                      <Box>
-                        <Typography variant="body2" fontWeight={600}>{s.label}</Typography>
-                        <Typography variant="caption" color="text.secondary">{s.desc}</Typography>
-                      </Box>
-                    </Box>
-                    {i < arr.length - 1 && (
-                      <Box sx={{
-                        display: { xs: 'none', sm: 'flex' },
-                        alignItems: 'center', px: 1, color: 'text.disabled', flexShrink: 0,
-                      }}>
-                        →
-                      </Box>
-                    )}
-                  </React.Fragment>
-                ))}
-              </Box>
-            </Box>
-          </CardContent>
-
-          <CardActions sx={{ px: 2, pb: 2, pt: 1.5, gap: 1, flexWrap: 'wrap' }}>
-            <Button
-              variant="contained"
-              startIcon={<Add />}
-              onClick={() => setAddOpen(true)}
-              disabled={atLimit}
-            >
-              Add Bot
-            </Button>
-            <Button
-              variant="outlined"
+            </Tooltip>
+          )}
+          {botList.length > 1 && (
+            <TextField
               size="small"
-              component="a"
-              href="https://t.me/BotFather"
-              target="_blank"
-              rel="noopener noreferrer"
-              startIcon={<Telegram />}
-            >
-              Open BotFather
-            </Button>
-            {botList.length > 1 && (
-              <TextField
-                size="small"
-                placeholder="Search bots…"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                InputProps={{
-                  startAdornment: <InputAdornment position="start"><Search fontSize="small" /></InputAdornment>,
-                  endAdornment: searchQuery ? (
-                    <InputAdornment position="end">
-                      <IconButton size="small" onClick={() => setSearchQuery('')}><Close fontSize="small" /></IconButton>
-                    </InputAdornment>
-                  ) : null,
-                }}
-                sx={{ width: { xs: '100%', sm: 200 }, ml: { sm: 'auto' } }}
-              />
-            )}
-          </CardActions>
-        </Card>
+              placeholder="Search bots…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              InputProps={{
+                startAdornment: <InputAdornment position="start"><Search fontSize="small" /></InputAdornment>,
+                endAdornment: searchQuery ? (
+                  <InputAdornment position="end">
+                    <IconButton size="small" onClick={() => setSearchQuery('')}><Close fontSize="small" /></IconButton>
+                  </InputAdornment>
+                ) : null,
+              }}
+              sx={{ width: { xs: '100%', sm: 180 }, ml: { sm: 'auto' } }}
+            />
+          )}
+        </Box>
 
-        {/* ── Bot list ── */}
+        {/* Bot grid — responsive: 1→full, 2→2col, 3+→3col max */}
         {loading ? (
-          <Grid container spacing={2}>
+          <Grid container spacing={2} sx={{ mb: 3 }}>
             {[1, 2, 3].map((i) => (
               <Grid item xs={12} sm={6} md={4} key={i}>
                 <BotCardSkeleton />
@@ -1035,55 +975,48 @@ export default function Dashboard() {
           </Grid>
         ) : botList.length === 0 ? null
         : filteredBots.length === 0 ? (
-          <Box sx={{ textAlign: 'center', py: 6 }}>
+          <Box sx={{ textAlign: 'center', py: 4, mb: 3 }}>
             <Typography color="text.secondary">No bots match "{searchQuery}"</Typography>
           </Box>
         ) : (
-          <Grid container spacing={2}>
+          <Grid container spacing={2} sx={{ mb: 3 }}>
             {filteredBots.map((bot) => {
               const health = bot.health_status || 'unknown';
+              // 1 bot → full width; 2 bots → half; 3+ → thirds (max 3/row)
+              const colMd = filteredBots.length === 1 ? 12 : filteredBots.length === 2 ? 6 : 4;
+              const colSm = filteredBots.length === 1 ? 12 : 6;
               return (
-                <Grid item xs={12} sm={6} md={4} key={bot.id}>
-                  <Card>
-                    <CardContent>
+                <Grid item xs={12} sm={colSm} md={colMd} key={bot.id} sx={{ display: 'flex' }}>
+                  <Card sx={{ flex: 1, display: 'flex', flexDirection: 'column', border: '1px solid', borderColor: 'divider' }}>
+                    <CardContent sx={{ flex: 1, pb: 1 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                        <Avatar sx={{ bgcolor: 'primary.main', mr: 1.5, width: 40, height: 40 }}>
-                          <SmartToy fontSize="small" />
+                        <Avatar sx={{ bgcolor: 'primary.main', mr: 1.5, width: 38, height: 38, flexShrink: 0 }}>
+                          <SmartToy sx={{ fontSize: 18 }} />
                         </Avatar>
                         <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                          <Typography variant="subtitle1" fontWeight={600} noWrap>{bot.bot_name}</Typography>
-                          <Typography variant="body2" color="text.secondary" noWrap>@{bot.bot_username}</Typography>
+                          <Typography variant="subtitle2" fontWeight={700} noWrap>{bot.bot_name}</Typography>
+                          <Typography variant="caption" color="text.secondary" noWrap>@{bot.bot_username}</Typography>
                         </Box>
                         <Tooltip title={`Health: ${HEALTH_LABELS[health]}`}>
-                          <Chip
-                            label={HEALTH_LABELS[health]}
-                            color={HEALTH_COLORS[health]}
-                            size="small"
-                          />
+                          <Chip label={HEALTH_LABELS[health]} color={HEALTH_COLORS[health]} size="small" />
                         </Tooltip>
                       </Box>
                       <Typography variant="caption" color="text.disabled">
                         {bot.group_count ?? 0} group{bot.group_count !== 1 ? 's' : ''}
-                        {bot.last_active && (
-                          <> · last active {new Date(bot.last_active).toLocaleDateString()}</>
-                        )}
+                        {bot.last_active && <> · last active {new Date(bot.last_active).toLocaleDateString()}</>}
                       </Typography>
                     </CardContent>
-                    <CardActions sx={{ px: 2, pb: 2, gap: 0.5, flexWrap: 'wrap' }}>
-                      <Button size="small" startIcon={<Settings />} onClick={() => navigate(`/bot/${bot.id}`)}>
-                        Groups
-                      </Button>
-                      <Button size="small" startIcon={<BarChart />} onClick={() => navigate(`/analytics/${bot.id}`)}>
-                        Analytics
-                      </Button>
+                    <CardActions sx={{ px: 1.5, pb: 1.5, pt: 0, gap: 0.5 }}>
+                      <Button size="small" startIcon={<Settings />} onClick={() => navigate(`/bot/${bot.id}`)}>Groups</Button>
+                      <Button size="small" startIcon={<BarChart />} onClick={() => navigate(`/analytics/${bot.id}`)}>Analytics</Button>
                       <Box sx={{ flexGrow: 1 }} />
                       <Tooltip title={bot.is_active ? 'Stop bot' : 'Start bot'}>
-                        <IconButton onClick={() => handleToggle(bot)} sx={{ minWidth: 40, minHeight: 40 }}>
+                        <IconButton size="small" onClick={() => handleToggle(bot)}>
                           <PowerSettingsNew fontSize="small" color={bot.is_active ? 'success' : 'disabled'} />
                         </IconButton>
                       </Tooltip>
                       <Tooltip title="Delete bot">
-                        <IconButton onClick={() => { setSelectedBot(bot); setDeleteOpen(true); }} sx={{ minWidth: 40, minHeight: 40 }}>
+                        <IconButton size="small" onClick={() => { setSelectedBot(bot); setDeleteOpen(true); }}>
                           <Delete fontSize="small" color="error" />
                         </IconButton>
                       </Tooltip>
