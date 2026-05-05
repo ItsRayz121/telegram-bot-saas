@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Box, Typography, Tabs, Tab, Card, CardContent, Grid,
   CircularProgress, Alert, Button, FormControl, InputLabel,
@@ -289,9 +289,18 @@ function ChannelsTab() {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
+const TAB_MAP = { groups: 1, channels: 2 };
+
 export default function AnalyticsHub() {
-  const [tab, setTab] = useState(0);
+  const [searchParams] = useSearchParams();
+  const initialTab = TAB_MAP[searchParams.get('tab')] ?? 0;
+  const [tab, setTab] = useState(initialTab);
   const [isPro, setIsPro] = useState(false);
+
+  useEffect(() => {
+    const t = TAB_MAP[searchParams.get('tab')] ?? 0;
+    setTab(t);
+  }, [searchParams]);
 
   useEffect(() => {
     auth.getMe().then(({ data }) => {

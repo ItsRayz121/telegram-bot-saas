@@ -459,7 +459,8 @@ const QUICK_SUGGESTIONS = [
   "Any issues in my groups?",
 ];
 
-function PersonalAssistantChat({ onMeetingCreated }) {
+function PersonalAssistantChat({ onMeetingCreated, botConnected }) {
+  const navigate = useNavigate();
   const [open, setOpen] = useState(true);
   const [messages, setMessages] = useState([
     { id: 'welcome', direction: 'out', content: "Hi! I'm your personal assistant. I can schedule meetings, set reminders, show upcoming events, and summarise group issues. What can I help you with?", created_at: new Date().toISOString() },
@@ -584,6 +585,18 @@ function PersonalAssistantChat({ onMeetingCreated }) {
           </Paper>
 
           {error && <Alert severity="error" sx={{ mt: 0.75, py: 0, fontSize: '0.8rem' }}>{error}</Alert>}
+
+          {!botConnected && (
+            <Alert
+              severity="info"
+              sx={{ mt: 1, py: 0.5, fontSize: '0.8rem' }}
+              action={
+                <Button size="small" onClick={() => navigate('/workspace/ai-settings')}>Connect</Button>
+              }
+            >
+              Connect your Telegram account to receive reminders and DMs from the bot.
+            </Alert>
+          )}
 
           <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
             <TextField
@@ -964,7 +977,7 @@ export default function AssistantHub() {
           <AskCard hasGroups={(data?.active_groups || 0) > 0} />
 
           {/* Personal Assistant Chat */}
-          <PersonalAssistantChat onMeetingCreated={setNewMeeting} />
+          <PersonalAssistantChat onMeetingCreated={setNewMeeting} botConnected={data?.bot_connected} />
 
           {/* Upcoming Meetings */}
           <MeetingsCard newMeeting={newMeeting} />

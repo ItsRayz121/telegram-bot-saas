@@ -173,7 +173,7 @@ function ExpandableHeader({ label, icon: Icon, path, active, open, onToggle, onN
 
 export default function Sidebar({ onClose }) {
   const navigate = useNavigate();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
 
   const [groups, setGroups] = useState([]);
   const [groupsLoading, setGroupsLoading] = useState(true);
@@ -215,6 +215,17 @@ export default function Sidebar({ onClose }) {
 
   const toggleAutomation = () => setAutomationOpen(o => {
     localStorage.setItem('sidebar_automation_open', !o ? '1' : '0');
+    return !o;
+  });
+
+  const analyticsActive = isActive('/analytics');
+  const [analyticsOpen, setAnalyticsOpen] = useState(() => {
+    const stored = localStorage.getItem('sidebar_analytics_open');
+    return stored === null ? isActive('/analytics') : stored === '1';
+  });
+
+  const toggleAnalytics = () => setAnalyticsOpen(o => {
+    localStorage.setItem('sidebar_analytics_open', !o ? '1' : '0');
     return !o;
   });
 
@@ -505,10 +516,21 @@ export default function Sidebar({ onClose }) {
         </Collapse>
 
         {/* ── ANALYTICS ── */}
-        {/* Temporarily hidden for future reactivation — routes and backend intact */}
-        {/* <SectionLabel label="Analytics" />
-        <NavItem label="Groups"    path="/analytics" icon={BarChart} active={isActive('/analytics')} onClick={() => nav('/analytics')} indent />
-        <NavItem label="Channels"  path="/analytics" icon={BarChart} active={false}                  onClick={() => nav('/analytics')} indent /> */}
+        <SectionLabel label="Analytics" />
+        <ExpandableHeader
+          label="Analytics"
+          icon={BarChart}
+          path="/analytics"
+          active={analyticsActive}
+          open={analyticsOpen}
+          onToggle={toggleAnalytics}
+          onNavigate={() => nav('/analytics')}
+        />
+        <Collapse in={analyticsOpen} timeout={160} unmountOnExit>
+          <NavItem label="Overview"  path="/analytics"               icon={BarChart} active={analyticsActive && !search.includes('tab=')} onClick={() => nav('/analytics')} indent />
+          <NavItem label="Groups"    path="/analytics?tab=groups"    icon={Groups}   active={search.includes('tab=groups')}              onClick={() => nav('/analytics?tab=groups')} indent />
+          <NavItem label="Channels"  path="/analytics?tab=channels"  icon={Campaign} active={search.includes('tab=channels')}            onClick={() => nav('/analytics?tab=channels')} indent />
+        </Collapse>
 
         {/* ── GROW — Temporarily hidden for future reactivation ── */}
         {/* Directory and Marketplace nav items are masked pending feature completion.
