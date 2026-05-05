@@ -4,8 +4,8 @@ from __future__ import annotations
 import logging
 import re
 
-from ._ai import call_ai_text
-from ._prompts import HYBRID_AI_SYSTEM, EXPAND_ANALYSIS_SYSTEM
+from ._ai import call_ai, call_ai_text, parse_json
+from ._prompts import HYBRID_AI_SYSTEM, EXPAND_ANALYSIS_SYSTEM, PROACTIVE_SUGGEST_SYSTEM
 from ._state import clear_state, save_state
 
 _log = logging.getLogger(__name__)
@@ -161,7 +161,7 @@ def handle_general(user_id: int, message: str, key_info: dict, ai_reply: str | N
 
     try:
         reply = call_ai_text(key_info, HYBRID_AI_SYSTEM, prompt)
-        suggestions = _build_followup_suggestions(query_type, message, ctx)
+        suggestions = _generate_proactive_suggestions(key_info, message, reply) or _build_followup_suggestions(query_type, message, ctx)
         return {"reply": reply, "intent": "general", "data": None, "suggestions": suggestions}
     except Exception as exc:
         _log.warning("hybrid AI failed: %s", exc)
@@ -255,6 +255,21 @@ def _fallback_response(message: str) -> dict:
             {"label": "🔍 Expand Analysis", "value": f"Expand analysis: {message[:50]}"},
         ],
     }
+
+
+def _generate_proactive_suggestions(key_info: dict, user_msg: str, ai_reply: str) -> list[dict]:
+    """Use AI to generate contextual proactive suggestions based on the conversation."""
+    if not key_info.get("api_key"):
+        return []
+    try:
+        prompt = f"User: {user_msg[:200]}\nAssistant: {ai_reply[:400]}"
+        raw = call_ai(key_info, PROACTIVE_SUGGEST_SYSTEM, prompt)
+        suggestions = parse_json(raw)
+        if isinstance(suggestions, list):
+            return [s for s in suggestions if isinstance(s, dict) and s.get("label")][:3]
+    except Exception:
+        pass
+    return []
 
 
 def handle_add_resource(user_id: int, parsed: dict) -> dict:

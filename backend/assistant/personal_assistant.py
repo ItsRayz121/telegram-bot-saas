@@ -1,9 +1,13 @@
 """
-personal_assistant.py — public entry point.
+personal_assistant.py — conversational-first orchestration layer.
 
-process_message() is called by /api/assistant/chat and the Telegram DM handler.
-All logic lives in backend/assistant/handlers/. This file is now a thin orchestrator
-with intent routing, per-intent rate limiting (Phase 6.5), and context injection.
+Architecture:
+  Layer 1 — Conversational AI (general chat, Q&A, advice, analysis)
+  Layer 2 — Intent Detection / Orchestration (classifies + routes)
+  Layer 3 — Workflow Engine (reminders, tasks, meetings, notes)
+
+Layer 3 activates ONLY when actionable intent is detected with confidence.
+Hybrid intents get a conversational reply FIRST, then offer the workflow action.
 """
 from __future__ import annotations
 
@@ -12,8 +16,7 @@ import re
 
 _log = logging.getLogger(__name__)
 
-# ── Per-intent rate limits (Phase 6.5) ───────────────────────────────────────
-# requests_per_minute per user per intent
+# ── Per-intent rate limits ────────────────────────────────────────────────────
 _INTENT_RATE_LIMITS: dict[str, int] = {
     "schedule_meeting":  5,
     "create_reminder":   5,
@@ -29,7 +32,6 @@ _INTENT_RATE_LIMITS: dict[str, int] = {
 
 
 def _check_intent_rate_limit(user_id: int, intent: str) -> bool:
-    """Return True if the request is allowed, False if rate-limited."""
     limit = _INTENT_RATE_LIMITS.get(intent, _INTENT_RATE_LIMITS["_default"])
     try:
         import redis as _redis
@@ -42,7 +44,6 @@ def _check_intent_rate_limit(user_id: int, intent: str) -> bool:
         count, _ = pipe.execute()
         return count <= limit
     except Exception:
-        # Redis unavailable — allow through
         return True
 
 
@@ -58,7 +59,6 @@ def process_message(user_id: int, message: str, user_tz: str | None = None) -> d
     from ..assistant.context_service import AssistantContextService
     from ..models import User
 
-    # Import handler functions from the package
     from .handlers import (
         handle_schedule_meeting, handle_create_reminder, handle_upcoming_schedule,
         handle_save_note, handle_list_notes, handle_search_notes, handle_summarize_notes,
@@ -68,17 +68,17 @@ def process_message(user_id: int, message: str, user_tz: str | None = None) -> d
         handle_analyze_day, handle_expand_analysis,
     )
     from .handlers._parsers import (
-        keyword_intent, keyword_parse, keyword_parse_note, keyword_parse_task, keyword_parse_reminder,
-        extract_datetime_hint, normalize_typos, low_confidence_suggestions,
+        keyword_intent, keyword_parse, keyword_parse_note, keyword_parse_task,
+        keyword_parse_reminder, extract_datetime_hint, normalize_typos,
+        low_confidence_suggestions,
     )
     from .handlers._state import get_state, clear_state
     from .handlers._patterns import SCHEDULE_PATTERNS, MEETING_NOUN
     from .handlers._ai import call_ai, parse_json
-    from .handlers._prompts import INTENT_SYSTEM
+    from .handlers._prompts import ORCHESTRATION_SYSTEM, INTENT_SYSTEM
 
     _log.info("process_message user_id=%s message=%r", user_id, message[:120])
 
-    # Normalize typos before any intent parsing (e.g. "raeaminder" → "reminder")
     normalized = normalize_typos(message)
     if normalized != message:
         _log.info("Typo normalization: %r → %r", message, normalized)
@@ -133,20 +133,22 @@ def process_message(user_id: int, message: str, user_tz: str | None = None) -> d
         if state:
             try:
                 result = handle_continue_state(user_id, state, message, key_info, user_tz)
-                return _ensure_suggestions(result, user_id)
+                return _ensure_suggestions(result, user_id, message, ctx)
             except Exception as exc:
                 _log.warning("continue_state failed: %s", exc)
                 clear_state(user_id)
 
-    # ── Intent detection ──────────────────────────────────────────────────────
+    # ── Intent detection — new orchestration layer ────────────────────────────
     parsed = None
     intent = None
+    orch_layer = None     # conversational | actionable | hybrid
+    conv_reply = None     # pre-generated conversational reply for hybrid intents
 
-    # Step 1: high-confidence keyword pre-filter
-    # Expand analysis — check before AI to avoid misrouting
+    # Step 1: high-confidence keyword pre-filter (no AI needed)
     if re.match(r"expand\s+analysis", message, re.IGNORECASE):
         intent = "expand_analysis"
         parsed = {"intent": "expand_analysis"}
+        orch_layer = "actionable"
 
     kw_intent = keyword_intent(message)
     _log.debug("keyword_intent=%s", kw_intent)
@@ -157,39 +159,63 @@ def process_message(user_id: int, message: str, user_tz: str | None = None) -> d
     if intent is None and kw_intent in high_confidence_keywords:
         intent = kw_intent
         parsed = {"intent": intent}
+        orch_layer = "actionable"
 
-    # Step 2: AI parsing with conversation history context
-    enriched_message = message
-    if ctx and ctx.recent_conversation:
-        history_lines = []
-        for turn in ctx.recent_conversation[-4:]:
-            role = "User" if turn["direction"] == "in" else "Assistant"
-            history_lines.append(f"{role}: {turn['content'][:100]}")
-        if history_lines:
-            enriched_message = (
-                "[Recent conversation for context]\n"
-                + "\n".join(history_lines)
-                + f"\n[Current message]\n{message}"
-            )
+    # Step 2: AI orchestration — detects layer + extracts all fields in one pass
+    enriched_message = _enrich_with_history(message, ctx)
 
     if intent is None and ai_available:
         try:
-            raw = call_ai(key_info, INTENT_SYSTEM, enriched_message)
-            _log.debug("AI raw: %s", raw[:300])
-            parsed = parse_json(raw)
-            intent = parsed.get("intent", "general")
-            if intent == "schedule_meeting" and kw_intent in high_confidence_keywords:
-                _log.warning("AI intent overridden %s → %s (keyword signal)", intent, kw_intent)
-                intent = kw_intent
-                parsed = {"intent": intent}
+            raw = call_ai(key_info, ORCHESTRATION_SYSTEM, enriched_message)
+            _log.debug("Orchestration raw: %s", raw[:400])
+            orch = parse_json(raw)
+            orch_layer = orch.get("layer", "conversational")
+            orch_intent = orch.get("intent", "general")
+            confidence = float(orch.get("confidence", 0.8))
+            conv_reply = orch.get("conversational_reply", "") or ""
+            extracted = orch.get("extracted") or {}
+
+            # Safety: don't let low-confidence actionable override obvious conversation
+            if orch_layer == "actionable" and confidence < 0.6:
+                orch_layer = "conversational"
+                orch_intent = "general"
+
+            # Safety: keyword overrides AI if keyword is high-confidence
+            if kw_intent in high_confidence_keywords and orch_intent == "schedule_meeting":
+                orch_intent = kw_intent
+                orch_layer = "actionable"
+
+            intent = orch_intent
+            # Merge extracted fields into parsed so handlers can use them
+            parsed = {
+                "intent": intent,
+                "title": extracted.get("title"),
+                "datetime_hint": extracted.get("datetime_hint"),
+                "participants": extracted.get("participants") or [],
+                "priority": extracted.get("priority") or "medium",
+                "timezone": extracted.get("timezone"),
+                "duration_minutes": extracted.get("duration_minutes"),
+                "location": extracted.get("location"),
+                "recurrence": extracted.get("recurrence"),
+                "related_person": extracted.get("related_person"),
+                "project": extracted.get("project"),
+                "notes": extracted.get("notes"),
+                "resource_url": extracted.get("resource_url"),
+                "resource_note": extracted.get("notes"),
+                "followup_required": extracted.get("followup_required"),
+                "reply": conv_reply if orch_layer != "actionable" else "",
+            }
+
         except Exception as exc:
-            _log.warning("AI intent parse failed (%s) — keyword fallback", exc)
+            _log.warning("AI orchestration failed (%s) — keyword fallback", exc)
             parsed = None
             intent = None
+            orch_layer = None
 
     # Step 3: pure keyword fallback
     if intent is None:
         intent = kw_intent or "general"
+        orch_layer = "actionable" if intent != "general" else "conversational"
         if intent == "schedule_meeting":
             parsed = keyword_parse(message)
         elif intent == "create_reminder":
@@ -205,7 +231,29 @@ def process_message(user_id: int, message: str, user_tz: str | None = None) -> d
         else:
             parsed = {"intent": intent}
 
-    # ── Per-intent rate limiting (Phase 6.5) ─────────────────────────────────
+    # ── Handle CONVERSATIONAL layer directly ──────────────────────────────────
+    # For pure conversation, skip all workflow routing entirely
+    if orch_layer == "conversational" and intent == "general":
+        if not _check_intent_rate_limit(user_id, "general"):
+            return {"reply": "You're sending messages too quickly — give me a moment.", "intent": "general", "data": None, "suggestions": []}
+        result = handle_general(user_id, message, key_info, conv_reply or None, ctx)
+        return _ensure_suggestions(result, user_id, message, ctx)
+
+    # ── Handle HYBRID layer — conversational reply + optional workflow offer ──
+    if orch_layer == "hybrid" and conv_reply and intent != "general":
+        # Return conversational reply with a workflow suggestion appended
+        action_label = _intent_to_label(intent)
+        suggestions = [{"label": f"✅ {action_label}", "value": message}]
+        # Add other contextual suggestions
+        suggestions.extend(_contextual_suggestions(message, ctx)[:2])
+        return {
+            "reply": conv_reply,
+            "intent": "hybrid",
+            "data": {"action_intent": intent, "extracted": parsed},
+            "suggestions": suggestions[:3],
+        }
+
+    # ── Per-intent rate limiting ──────────────────────────────────────────────
     if not _check_intent_rate_limit(user_id, intent):
         _log.info("Rate limited user=%s intent=%s", user_id, intent)
         return {
@@ -215,7 +263,7 @@ def process_message(user_id: int, message: str, user_tz: str | None = None) -> d
             "suggestions": [],
         }
 
-    # ── Route to handler ──────────────────────────────────────────────────────
+    # ── Route to workflow handler ─────────────────────────────────────────────
     try:
         p = parsed or {}
 
@@ -230,7 +278,7 @@ def process_message(user_id: int, message: str, user_tz: str | None = None) -> d
         elif intent == "upcoming_schedule":
             result = handle_upcoming_schedule(user_id)
         elif intent == "save_note":
-            content = p.get("resource_note") or ""
+            content = p.get("resource_note") or p.get("notes") or ""
             if not content.strip():
                 from .handlers._state import save_state
                 save_state(user_id, "save_note", {}, "content")
@@ -258,8 +306,7 @@ def process_message(user_id: int, message: str, user_tz: str | None = None) -> d
             else:
                 result = handle_save_link(user_id, url)
         elif intent == "create_task":
-            title = p.get("title") or ""
-            result = handle_create_task(user_id, title)
+            result = handle_create_task(user_id, p, key_info)
         elif intent == "list_tasks":
             result = handle_list_tasks(user_id)
         elif intent == "analyze_day":
@@ -287,17 +334,12 @@ def process_message(user_id: int, message: str, user_tz: str | None = None) -> d
         else:
             ai_reply = p.get("reply") if ai_available else None
             result = handle_general(user_id, message, key_info, ai_reply, ctx)
-            # If general with no AI and no clear intent, check for typo-based suggestions
             if not ai_available and not result.get("suggestions"):
                 did_you_mean = low_confidence_suggestions(message)
                 if did_you_mean:
                     result["suggestions"] = did_you_mean
-                    if result.get("reply", "").startswith("I can help"):
-                        result["reply"] = (
-                            "I wasn't sure what you meant — did you mean one of these?"
-                        )
 
-        return _ensure_suggestions(result, user_id)
+        return _ensure_suggestions(result, user_id, message, ctx)
 
     except Exception as exc:
         _log.error("intent handler %s failed: %s", intent, exc, exc_info=True)
@@ -307,6 +349,46 @@ def process_message(user_id: int, message: str, user_tz: str | None = None) -> d
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+def _enrich_with_history(message: str, ctx) -> str:
+    """Add recent conversation turns to message for better AI context."""
+    if not ctx or not ctx.recent_conversation:
+        return message
+    history_lines = []
+    for turn in ctx.recent_conversation[-4:]:
+        role = "User" if turn["direction"] == "in" else "Assistant"
+        history_lines.append(f"{role}: {turn['content'][:120]}")
+    if not history_lines:
+        return message
+    return (
+        "[Recent conversation for context]\n"
+        + "\n".join(history_lines)
+        + f"\n[Current message]\n{message}"
+    )
+
+
+def _intent_to_label(intent: str) -> str:
+    labels = {
+        "schedule_meeting": "Schedule This",
+        "create_reminder": "Set Reminder",
+        "create_task": "Create Task",
+        "save_note": "Save as Note",
+        "save_link": "Save Link",
+    }
+    return labels.get(intent, "Do This")
+
+
+def _contextual_suggestions(message: str, ctx) -> list[dict]:
+    """Quick contextual suggestions based on message content."""
+    suggestions = []
+    msg = message.lower()
+    if re.search(r"\b(meeting|call|sync|review)\b", msg):
+        suggestions.append({"label": "📅 My Schedule", "value": "What's on my schedule?"})
+    if re.search(r"\b(group|community|member)\b", msg):
+        suggestions.append({"label": "👥 Group Health", "value": "Any issues in my groups?"})
+    suggestions.append({"label": "🧠 Analyze My Day", "value": "Analyze my day"})
+    return suggestions
+
+
 def _is_self_contained_schedule_request(message: str) -> bool:
     from .handlers._patterns import SCHEDULE_PATTERNS, MEETING_NOUN
     from .handlers._parsers import extract_datetime_hint
@@ -314,7 +396,7 @@ def _is_self_contained_schedule_request(message: str) -> bool:
     return has_schedule and bool(extract_datetime_hint(message))
 
 
-def _ensure_suggestions(result: dict, user_id: int | None = None) -> dict:
+def _ensure_suggestions(result: dict, user_id: int | None, message: str = "", ctx=None) -> dict:
     result.setdefault("suggestions", [])
     if not result["suggestions"] and user_id is not None:
         try:
@@ -324,4 +406,7 @@ def _ensure_suggestions(result: dict, user_id: int | None = None) -> dict:
             )
         except Exception:
             pass
+    # If still no suggestions, add contextual ones
+    if not result["suggestions"] and message:
+        result["suggestions"] = _contextual_suggestions(message, ctx)[:3]
     return result

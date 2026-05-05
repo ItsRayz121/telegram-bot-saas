@@ -425,6 +425,7 @@ def create_app():
         _run_assistant_spaces_migration()
         _run_linked_telegram_accounts_migration()
         _run_onboarding_emails_migration()
+        _run_assistant_v2_migrations()
 
         # Encryption self-check — must run after all migrations so tokens exist
         from .utils.encryption import startup_encryption_selfcheck
@@ -1013,6 +1014,46 @@ def _run_assistant_bot_migration():
             conn.commit()
     except Exception as exc:
         _mig_log.warning("assistant_bot migration failed: %s", exc)
+
+
+def _run_assistant_v2_migrations():
+    """Add enriched fields to meetings, reminders, and tasks for v2 assistant."""
+    _mig_log = logging.getLogger("migrations")
+    stmts = [
+        # Meetings — extended fields
+        "ALTER TABLE meetings ADD COLUMN duration_minutes INTEGER",
+        "ALTER TABLE meetings ADD COLUMN location VARCHAR(500)",
+        "ALTER TABLE meetings ADD COLUMN related_person VARCHAR(255)",
+        "ALTER TABLE meetings ADD COLUMN project VARCHAR(255)",
+        "ALTER TABLE meetings ADD COLUMN agenda TEXT",
+        "ALTER TABLE meetings ADD COLUMN prep_notes TEXT",
+        "ALTER TABLE meetings ADD COLUMN expected_outcome TEXT",
+        "ALTER TABLE meetings ADD COLUMN followup_required BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE meetings ADD COLUMN followup_at TIMESTAMP",
+        # Reminders — extended fields
+        "ALTER TABLE workspace_reminders ADD COLUMN priority VARCHAR(10) DEFAULT 'medium'",
+        "ALTER TABLE workspace_reminders ADD COLUMN recurrence VARCHAR(20)",
+        "ALTER TABLE workspace_reminders ADD COLUMN related_person VARCHAR(255)",
+        "ALTER TABLE workspace_reminders ADD COLUMN notes TEXT",
+        # Tasks — extended fields
+        "ALTER TABLE tasks ADD COLUMN related_person VARCHAR(255)",
+        "ALTER TABLE tasks ADD COLUMN project VARCHAR(255)",
+        "ALTER TABLE tasks ADD COLUMN estimated_minutes INTEGER",
+    ]
+    try:
+        with db.engine.connect() as conn:
+            for sql in stmts:
+                try:
+                    conn.execute(text(sql))
+                    conn.commit()
+                except Exception:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+        _mig_log.info("assistant_v2 migrations complete")
+    except Exception as exc:
+        _mig_log.warning("assistant_v2 migrations failed: %s", exc)
 
 
 def _backfill_group_defaults():
