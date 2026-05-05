@@ -1145,7 +1145,7 @@ export default function Dashboard() {
               {[
                 { label: 'Official Channel', desc: 'Follow product updates & announcements', href: 'https://t.me/telegizer', icon: '📢' },
                 { label: 'Community Group', desc: 'Join the community and get help from other users', href: 'https://t.me/telegizer_community', icon: '👥' },
-                { label: 'Email Support', desc: 'Contact support directly via email', href: 'mailto:support@telegizer.com', icon: '✉️' },
+                { label: 'Email Support', desc: 'Contact support directly via email', href: 'mailto:fazalelahi5577@gmail.com', icon: '✉️' },
               ].map(({ label, desc, href, icon }) => (
                 <Grid item xs={12} sm={4} key={label}>
                   <Box
