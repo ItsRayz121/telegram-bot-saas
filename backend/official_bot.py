@@ -53,6 +53,20 @@ from .bot_features.levels import level_from_xp as _level_from_xp, xp_for_level a
 
 _log = logging.getLogger(__name__)
 
+
+def _user_by_tg_id(tg_id: str):
+    """Two-step lookup: legacy User.telegram_user_id first, then UserTelegramAccount junction table.
+    Always use this instead of User.query.filter_by(telegram_user_id=...) directly.
+    """
+    from .models import User, UserTelegramAccount
+    user = User.query.filter_by(telegram_user_id=str(tg_id)).first()
+    if not user:
+        acct = UserTelegramAccount.query.filter_by(telegram_user_id=str(tg_id)).first()
+        if acct:
+            user = User.query.get(acct.user_id)
+    return user
+
+
 # ─── In-process verification state ───────────────────────────────────────────
 # Key: "{chat_id}:{user_id}" → {method, msg_id, answer, expires_at, ...}
 # Phase 3 item 15: move to Redis/DB for persistence across restarts.
@@ -258,7 +272,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             with flask_app.app_context():
                 from .models import TelegramConnectCode, TelegramGroup, User
-                website_user = User.query.filter_by(telegram_user_id=str(user.id)).first()
+                website_user = _user_by_tg_id(user.id)
                 is_linked = website_user is not None
                 if website_user:
                     tg_username_on_account = website_user.email
@@ -566,7 +580,7 @@ async def cmd_linkgroup(update: Update, context: ContextTypes.DEFAULT_TYPE):
             db.session.commit()
         else:
             # Check if this Telegram user has a linked website account
-            website_user = User.query.filter_by(telegram_user_id=str(user.id)).first()
+            website_user = _user_by_tg_id(user.id)
 
             if website_user:
                 # Enforce per-tier official group limit before auto-linking
@@ -893,7 +907,7 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 with flask_app.app_context():
                     from .models import User as _User, Note as _Note, db as _db
-                    _u = _User.query.filter_by(telegram_user_id=str(user.id)).first()
+                    _u = _user_by_tg_id(user.id)
                     if _u:
                         _db.session.add(_Note(user_id=_u.id, content=content[:5000], source="bot", tags=[]))
                         _db.session.commit()
@@ -918,7 +932,7 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     User as _User, BotDMMessage as _BotDM,
                     PendingReminderState as _PRS, db as _db,
                 )
-                _u = _User.query.filter_by(telegram_user_id=str(user.id)).first()
+                _u = _user_by_tg_id(user.id)
                 if not _u:
                     await message.reply_text(
                         "⚠️ Connect your Telegram account on the website first."
@@ -975,7 +989,7 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     from .models import User as _User, BotDMMessage as _BotDM, db as _db
                     from .assistant.personal_assistant import process_message as _process_message
 
-                    _u = _User.query.filter_by(telegram_user_id=str(user.id)).first()
+                    _u = _user_by_tg_id(user.id)
                     if _u:
                         # Clear any expired PendingReminderState so it can't corrupt future sessions
                         try:
@@ -1085,7 +1099,7 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             with flask_app.app_context():
                 from .models import User
-                u = User.query.filter_by(telegram_user_id=str(user.id)).first()
+                u = _user_by_tg_id(user.id)
                 if u:
                     website_user_id = u.id
                     website_tier = u.subscription_tier
@@ -1224,7 +1238,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 with flask_app.app_context():
                     from .models import User as _User
                     from .assistant.personal_assistant import process_message as _pm
-                    _wu = _User.query.filter_by(telegram_user_id=str(user.id)).first()
+                    _wu = _user_by_tg_id(user.id)
                     if _wu:
                         _result = _pm(_wu.id, _ai_msg)
                         _reply = _result.get("reply") or "I'm here — just type your question!"
@@ -1253,7 +1267,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 with flask_app.app_context():
                     from .models import User as _User, PendingReminderState as _PRS, BotDMMessage as _BotDM, db as _db
-                    _u = _User.query.filter_by(telegram_user_id=str(user.id)).first()
+                    _u = _user_by_tg_id(user.id)
                     _prs = _PRS.query.filter_by(user_id=_u.id).first() if _u else None
                     if not _u or not _prs:
                         await query.edit_message_text("⚠️ Session expired. Please start over.")
@@ -1298,7 +1312,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         User as _User, PendingReminderState as _PRS,
                         WorkspaceReminder as _WR, BotDMMessage as _BotDM, db as _db,
                     )
-                    _u = _User.query.filter_by(telegram_user_id=str(user.id)).first()
+                    _u = _user_by_tg_id(user.id)
                     _prs = _PRS.query.filter_by(user_id=_u.id).first() if _u else None
                     if not _u or not _prs or not _prs.remind_at:
                         await query.edit_message_text("⚠️ Session expired. Please start over.")
@@ -1349,7 +1363,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 with flask_app.app_context():
                     from .models import User as _User
-                    u = _User.query.filter_by(telegram_user_id=str(user.id)).first()
+                    u = _user_by_tg_id(user.id)
                     if u:
                         website_user_id = u.id
             except Exception:
@@ -1418,7 +1432,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 with flask_app.app_context():
                     from .models import User
-                    u = User.query.filter_by(telegram_user_id=str(user.id)).first()
+                    u = _user_by_tg_id(user.id)
                     if u:
                         tg_email = u.email
             except Exception:
@@ -1548,7 +1562,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 with flask_app.app_context():
                     from .models import User, TelegramGroup
-                    wu = User.query.filter_by(telegram_user_id=str(user.id)).first()
+                    wu = _user_by_tg_id(user.id)
                     is_linked = wu is not None
                     if wu:
                         groups = TelegramGroup.query.filter_by(
@@ -1640,7 +1654,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 with flask_app.app_context():
                     from .models import User, CustomBot
-                    wu = User.query.filter_by(telegram_user_id=str(user.id)).first()
+                    wu = _user_by_tg_id(user.id)
                     is_linked = wu is not None
                     if wu:
                         custom_bots_list = CustomBot.query.filter_by(
@@ -1695,7 +1709,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 with flask_app.app_context():
                     from .models import User
-                    u = User.query.filter_by(telegram_user_id=str(user.id)).first()
+                    u = _user_by_tg_id(user.id)
                     is_linked = u is not None
             except Exception:
                 pass
@@ -1783,7 +1797,7 @@ async def _render_main_menu(query, user, flask_app, frontend):
         try:
             with flask_app.app_context():
                 from .models import TelegramGroupLinkCode, TelegramGroup, User
-                wu = User.query.filter_by(telegram_user_id=str(user.id)).first()
+                wu = _user_by_tg_id(user.id)
                 is_linked = wu is not None
                 codes = TelegramGroupLinkCode.query.filter_by(
                     created_by_telegram_user_id=str(user.id),
@@ -4215,7 +4229,7 @@ async def cmd_remind(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             # Fallback: find user by telegram_user_id
             if not owner:
-                owner = DBUser.query.filter_by(telegram_user_id=str(user.id)).first()
+                owner = _user_by_tg_id(user.id)
 
             if not owner:
                 await message.reply_text("⚠️ Reminders only work for linked accounts. Connect your Telegram at telegizer.xyz/settings")

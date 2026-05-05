@@ -854,12 +854,10 @@ def set_primary_telegram_account(account_id):
     if not account:
         return jsonify({"error": "Account not found"}), 404
 
-    # Demote current primary
+    # Demote current primary, promote selected account — do NOT overwrite User.telegram_user_id
+    # (that legacy field is only used as a fallback; multi-account lookup goes via UserTelegramAccount)
     UserTelegramAccount.query.filter_by(user_id=user_id, is_primary=True).update({"is_primary": False})
     account.is_primary = True
-    user.telegram_user_id = account.telegram_user_id
-    user.telegram_username = account.telegram_username
-    user.telegram_first_name = account.telegram_first_name
 
     try:
         db.session.commit()

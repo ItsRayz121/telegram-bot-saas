@@ -176,8 +176,13 @@ def init_db():
             "user_assistant_profiles.user_id index",
         )
 
+        # ── Backfill: create UserTelegramAccount rows for legacy User.telegram_user_id ──
+        # Any user with telegram_user_id but no junction row gets a primary record created.
+        _backfill_telegram_accounts(app)
+
         print("Migration complete.")
 
+    # One-shot Telegram account backfill (also runs inline above via _backfill_telegram_accounts).
     # One-shot TOTP secret encryption migration.
     # Run with: MIGRATE_ENCRYPT_TOTP=1 python -m backend.migrate
     import os as _os
@@ -221,6 +226,38 @@ def _migrate_encrypt_totp(app):
             print(f"  ✓ Encrypted {updated} plaintext TOTP secrets")
         else:
             print("  – No plaintext TOTP secrets found (already encrypted or none set)")
+
+
+def _backfill_telegram_accounts(app):
+    """Create UserTelegramAccount rows for any User that has telegram_user_id but no junction row.
+
+    Idempotent — safe to run multiple times.
+    """
+    from .models import db, User, UserTelegramAccount
+    with app.app_context():
+        legacy_users = User.query.filter(User.telegram_user_id.isnot(None)).all()
+        created = 0
+        for user in legacy_users:
+            exists = UserTelegramAccount.query.filter_by(
+                user_id=user.id,
+                telegram_user_id=user.telegram_user_id,
+            ).first()
+            if not exists:
+                acct = UserTelegramAccount(
+                    user_id=user.id,
+                    telegram_user_id=user.telegram_user_id,
+                    telegram_username=user.telegram_username,
+                    telegram_first_name=getattr(user, "telegram_first_name", None),
+                    is_primary=True,
+                    linked_at=getattr(user, "telegram_connected_at", None),
+                )
+                db.session.add(acct)
+                created += 1
+        if created:
+            db.session.commit()
+            print(f"  ✓ Backfilled {created} UserTelegramAccount rows from legacy telegram_user_id")
+        else:
+            print("  – UserTelegramAccount backfill: all rows already present")
 
 
 if __name__ == "__main__":

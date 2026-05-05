@@ -1706,17 +1706,20 @@ def _deliver_reminders(app):
 
             delivered_via_telegram = False
 
-            # Attempt Telegram DM delivery if the user has connected their account
-            # and has previously started the bot (required by Telegram TOS).
-            if user.telegram_user_id and bot and loop and loop.is_running():
-                if TelegramBotStarted.has_started(user.telegram_user_id):
+            # Attempt Telegram DM delivery — check UserTelegramAccount primary first,
+            # then fall back to legacy User.telegram_user_id field.
+            from .models import UserTelegramAccount as _UTA
+            _primary = _UTA.query.filter_by(user_id=user.id, is_primary=True).first()
+            _tg_id = (_primary.telegram_user_id if _primary else None) or user.telegram_user_id
+            if _tg_id and bot and loop and loop.is_running():
+                if TelegramBotStarted.has_started(_tg_id):
                     try:
                         msg_text = f"⏰ *Reminder*\n\n{reminder.reminder_text}"
                         if reminder.telegram_group_id:
                             msg_text += f"\n\n_From group {reminder.telegram_group_id}_"
                         fut = _asyncio.run_coroutine_threadsafe(
                             bot.send_message(
-                                chat_id=int(user.telegram_user_id),
+                                chat_id=int(_tg_id),
                                 text=msg_text,
                                 parse_mode="Markdown",
                             ),
@@ -1819,10 +1822,13 @@ def _deliver_meeting_reminders(app):
             )
 
             delivered = False
-            if user.telegram_user_id and TelegramBotStarted.has_started(user.telegram_user_id):
+            from .models import UserTelegramAccount as _UTA2
+            _mprimary = _UTA2.query.filter_by(user_id=user.id, is_primary=True).first()
+            _mtg_id = (_mprimary.telegram_user_id if _mprimary else None) or user.telegram_user_id
+            if _mtg_id and TelegramBotStarted.has_started(_mtg_id):
                 try:
                     fut = _asyncio.run_coroutine_threadsafe(
-                        bot.send_message(chat_id=int(user.telegram_user_id), text=msg_text, parse_mode="Markdown"),
+                        bot.send_message(chat_id=int(_mtg_id), text=msg_text, parse_mode="Markdown"),
                         loop,
                     )
                     fut.result(timeout=10)

@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
-from ..models import db, User, TelegramConnectCode
+from ..models import db, User, TelegramConnectCode, UserTelegramAccount
 from ..config import Config
 from ..middleware.rate_limit import rate_limit
 
@@ -74,10 +74,15 @@ def connection_status():
     if not user:
         return jsonify({"error": "User not found"}), 404
 
+    # Check UserTelegramAccount junction table first (multi-account), then legacy field
+    primary = UserTelegramAccount.query.filter_by(user_id=user.id, is_primary=True).first()
+    any_linked = UserTelegramAccount.query.filter_by(user_id=user.id).first()
+    connected = bool(primary or any_linked or user.telegram_user_id)
+    tg_acct = primary or any_linked
     return jsonify({
-        "connected": bool(user.telegram_user_id),
-        "telegram_username": user.telegram_username,
-        "telegram_first_name": user.telegram_first_name,
+        "connected": connected,
+        "telegram_username": (tg_acct.telegram_username if tg_acct else None) or user.telegram_username,
+        "telegram_first_name": (tg_acct.telegram_first_name if tg_acct else None) or user.telegram_first_name,
         "connected_at": user.telegram_connected_at.isoformat() if user.telegram_connected_at else None,
     })
 
@@ -90,9 +95,13 @@ def disconnect_telegram():
     if not user:
         return jsonify({"error": "User not found"}), 404
 
-    if not user.telegram_user_id:
+    has_junction = UserTelegramAccount.query.filter_by(user_id=user.id).first()
+    if not user.telegram_user_id and not has_junction:
         return jsonify({"error": "No Telegram account connected"}), 400
 
+    # Remove all junction table rows for this user
+    UserTelegramAccount.query.filter_by(user_id=user.id).delete()
+    # Clear legacy field too
     user.telegram_user_id = None
     user.telegram_username = None
     user.telegram_connected_at = None
