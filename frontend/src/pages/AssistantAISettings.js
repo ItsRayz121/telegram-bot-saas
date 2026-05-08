@@ -8,7 +8,7 @@ import {
   CheckCircle, Cancel, Warning, Visibility, VisibilityOff,
   Delete, Send, Link as LinkIcon,
 } from '@mui/icons-material';
-import { workspaceAI, telegramAccount } from '../services/api';
+import { workspaceAI, telegramAccount, auth as authApi } from '../services/api';
 import PlanGate from '../components/PlanGate';
 
 function _getUser() {
@@ -39,6 +39,9 @@ export default function AssistantAISettings() {
   const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [userTier, setUserTier] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('user') || '{}').subscription_tier || 'free'; } catch { return 'free'; }
+  });
 
   const [providerTab, setProviderTab] = useState(0);
   const [apiKey, setApiKey] = useState('');
@@ -56,8 +59,16 @@ export default function AssistantAISettings() {
     setLoading(true);
     setError('');
     try {
-      const { data } = await workspaceAI.getSettings();
+      const [{ data }, meRes] = await Promise.all([
+        workspaceAI.getSettings(),
+        authApi.getMe().catch(() => null),
+      ]);
       setSettings(data);
+      if (meRes?.data?.user) {
+        const freshTier = meRes.data.user.subscription_tier || 'free';
+        setUserTier(freshTier);
+        localStorage.setItem('user', JSON.stringify({ ...meRes.data.user }));
+      }
       if (data.user_key) {
         const idx = PROVIDERS.findIndex(p => p.id === data.user_key.provider);
         setProviderTab(idx >= 0 ? idx : 0);
@@ -152,10 +163,8 @@ export default function AssistantAISettings() {
   const usagePct = Math.min(100, (usage.used / usage.limit) * 100);
   const atLimit = usagePct >= 100;
 
-  const user = _getUser();
-
   return (
-    <PlanGate plan="pro" userTier={user.subscription_tier} feature="AI Settings">
+    <PlanGate plan="pro" userTier={userTier} feature="AI Settings">
     <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 720, mx: 'auto' }}>
       <Typography variant="h5" fontWeight={700} gutterBottom>AI Settings</Typography>
       <Typography color="text.secondary" fontSize="0.9rem" mb={3}>

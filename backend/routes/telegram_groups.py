@@ -471,6 +471,10 @@ def update_digest_settings(group_id):
         "send_to_group": delivery == "group",
     })
     settings["digest"] = existing_digest
+    # Keep assistant.ai_digest_enabled in sync so message buffering + AI summary activate correctly
+    assistant = dict(settings.get("assistant", {}))
+    assistant["ai_digest_enabled"] = existing_digest["enabled"]
+    settings["assistant"] = assistant
     tg.settings = settings
     db.session.commit()
     return jsonify({"digest": existing_digest}), 200
