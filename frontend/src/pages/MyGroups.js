@@ -82,6 +82,7 @@ export default function MyGroups() {
 
   const [allGroups, setAllGroups] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkCode, setLinkCode] = useState('');
   const [linking, setLinking] = useState(false);
@@ -93,13 +94,30 @@ export default function MyGroups() {
   // Full-screen permissions modal
   const [permsModalGroup, setPermsModalGroup] = useState(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
+    setLoadError(false);
+    // Retry once after a short delay to handle Railway cold-start / transient errors
     try {
-      setLoading(true);
-      const res = await telegramGroups.list();
-      setAllGroups(res.data.groups || []);
-    } catch {
-      toast.error('Failed to load groups');
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const res = await telegramGroups.list();
+          setAllGroups(res.data.groups || []);
+          setLoadError(false);
+          return;
+        } catch (err) {
+          if (process.env.NODE_ENV === 'development') {
+            console.error('[MyGroups] load attempt', attempt + 1, err?.response?.status, err?.response?.data || err?.message);
+          }
+          if (attempt === 0) {
+            // Wait 1.5 s before retrying (covers Railway cold start)
+            await new Promise((r) => setTimeout(r, 1500));
+          } else {
+            setLoadError(true);
+            toast.error(`Failed to load groups (${err?.response?.status || 'network error'})`);
+          }
+        }
+      }
     } finally {
       setLoading(false);
     }
@@ -125,7 +143,7 @@ export default function MyGroups() {
       toast.success(`Group "${res.data.group.title}" linked successfully!`);
       setLinkOpen(false);
       setLinkCode('');
-      load();
+      load({ silent: true });
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to link group');
     } finally {
@@ -139,7 +157,7 @@ export default function MyGroups() {
       await telegramGroups.unlink(unlinkTarget.telegram_group_id);
       toast.success(`Group "${unlinkTarget.title}" unlinked`);
       setUnlinkTarget(null);
-      load();
+      load({ silent: true });
     } catch {
       toast.error('Failed to unlink group');
     }
@@ -250,6 +268,17 @@ export default function MyGroups() {
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
             <CircularProgress />
           </Box>
+        ) : loadError ? (
+          <Card sx={{ textAlign: 'center', py: 6 }}>
+            <Warning sx={{ fontSize: 64, color: 'warning.main', mb: 2 }} />
+            <Typography variant="h6" gutterBottom>Couldn't load your groups</Typography>
+            <Typography variant="body2" color="text.secondary" mb={3}>
+              A network or server error occurred. Your groups are not gone — please try again.
+            </Typography>
+            <Button variant="contained" startIcon={<Refresh />} onClick={() => load()}>
+              Retry
+            </Button>
+          </Card>
         ) : groups.length === 0 ? (
           <Card sx={{ textAlign: 'center', py: 6 }}>
             <Groups sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
