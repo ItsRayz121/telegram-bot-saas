@@ -2,9 +2,9 @@
 API routes for user-owned custom bots (bring-your-own-token).
 """
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from ..models import db, User, CustomBot, TelegramGroup
+from ..models import db, User, CustomBot, Bot, TelegramGroup
 from ..middleware.rate_limit import rate_limit
 from ..config import Config
 
@@ -139,6 +139,12 @@ def add_custom_bot():
     except Exception as exc:
         return jsonify({"error": f"Could not verify token with Telegram: {exc}"}), 502
 
+    # Reject duplicate tokens to prevent two polling threads for the same bot
+    from ..utils.encryption import hash_token as _hash_token
+    token_hash = _hash_token(bot_token)
+    if Bot.query.filter_by(bot_token_hash=token_hash).first():
+        return jsonify({"error": "This bot token is already connected to an account."}), 409
+
     custom_bot = CustomBot(
         owner_user_id=user.id,
         bot_name=bot_name,
@@ -147,7 +153,29 @@ def add_custom_bot():
     )
     custom_bot.set_token(bot_token)
     db.session.add(custom_bot)
+
+    # Create the Bot record that BotManager uses to run the polling thread.
+    # Without this, the bot is saved but never actually starts.
+    bot_record = Bot(
+        user_id=user.id,
+        bot_username=bot_username,
+        bot_name=bot_name,
+        is_active=True,
+    )
+    bot_record.set_token(bot_token)
+    db.session.add(bot_record)
+    db.session.flush()   # populate bot_record.id before starting the thread
+
     db.session.commit()
+
+    # Start the polling thread immediately so the bot responds in Telegram right away
+    try:
+        from ..bot_manager import bot_manager as _bm
+        _bm.start_bot(bot_record.id, bot_token, current_app._get_current_object())
+    except Exception as e:
+        import logging as _log
+        _log.getLogger(__name__).error("Failed to start bot thread for bot_id=%s: %s", bot_record.id, e)
+        # Bot is saved — it will be picked up by start_all() on next deploy even if thread failed now
 
     return jsonify({"bot": custom_bot.to_dict(), "message": "Custom bot connected successfully"}), 201
 
@@ -184,6 +212,19 @@ def delete_custom_bot(bot_id):
     bot = CustomBot.query.filter_by(id=bot_id, owner_user_id=user.id).first()
     if not bot:
         return jsonify({"error": "Bot not found"}), 404
+
+    # Stop the polling thread — find the matching Bot record by username
+    try:
+        from ..bot_manager import bot_manager as _bm
+        bot_rec = Bot.query.filter_by(
+            user_id=user.id, bot_username=bot.bot_username
+        ).first()
+        if bot_rec:
+            _bm.stop_bot(bot_rec.id)
+            db.session.delete(bot_rec)
+    except Exception as e:
+        import logging as _log
+        _log.getLogger(__name__).warning("Could not stop bot thread on disconnect: %s", e)
 
     # Unlink any groups that used this custom bot
     TelegramGroup.query.filter_by(linked_bot_id=bot_id).update({
