@@ -26,6 +26,10 @@ class User(db.Model):
     full_name = db.Column(db.String(255), nullable=False)
     subscription_tier = db.Column(db.String(50), default="free", nullable=False)
     subscription_expires = db.Column(db.DateTime, nullable=True)
+    # Extended subscription lifecycle fields (1-A-01)
+    subscription_expires_at  = db.Column(db.DateTime(timezone=True), nullable=True)
+    subscription_grace_until = db.Column(db.DateTime(timezone=True), nullable=True)
+    subscription_interval    = db.Column(db.String(20), nullable=True)  # "monthly" | "annual"
     # Legacy Stripe columns — kept to avoid dropping data; Stripe is not active.
     stripe_customer_id = db.Column(db.String(255), nullable=True)
     stripe_subscription_id = db.Column(db.String(255), nullable=True)
@@ -95,6 +99,9 @@ class User(db.Model):
     workspace_ai_tokens_reset_at = db.Column(db.DateTime, nullable=True)
     # User's preferred timezone (IANA name, e.g. "America/New_York"). Used for digest scheduling.
     timezone = db.Column(db.String(64), default="UTC", nullable=False)
+    # ToS acceptance tracking (1-D-05)
+    tos_version_accepted = db.Column(db.String(20), nullable=True)  # e.g. "2.0"
+    tos_accepted_at      = db.Column(db.DateTime, nullable=True)
 
     bots = db.relationship("Bot", backref="owner", lazy=True, cascade="all, delete-orphan")
 
@@ -816,6 +823,20 @@ class PaymentHistory(db.Model):
         }
 
 
+class SubscriptionRenewal(db.Model):
+    """One record per successful payment that activates or extends a subscription (1-A-02)."""
+    __tablename__ = "subscription_renewals"
+
+    id          = db.Column(db.Integer, primary_key=True)
+    user_id     = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    plan        = db.Column(db.String(50))      # "pro" | "enterprise"
+    interval    = db.Column(db.String(20))      # "monthly" | "annual"
+    amount_usd  = db.Column(db.Numeric(10, 2))
+    payment_id  = db.Column(db.String(200))     # NOWPayments / LS payment id
+    renewed_at  = db.Column(db.DateTime, default=datetime.utcnow)
+    expires_at  = db.Column(db.DateTime)
+
+
 class SuspiciousActivity(db.Model):
     """Records suspicious signup and referral events for admin review.
     All identifiers are SHA-256 hashes — no raw IPs or fingerprints stored."""
@@ -1141,6 +1162,20 @@ class PendingVerification(db.Model):
     )
 
 
+class PendingUnban(db.Model):
+    """Tracks temp-banned users who need to be unbanned after a delay (1-C-01)."""
+    __tablename__ = "pending_unbans"
+
+    id               = db.Column(db.Integer, primary_key=True)
+    telegram_chat_id = db.Column(db.BigInteger, nullable=False)
+    telegram_user_id = db.Column(db.BigInteger, nullable=False)
+    unban_at         = db.Column(db.DateTime, nullable=False)
+    retry_count      = db.Column(db.Integer, default=0)
+    last_attempt_at  = db.Column(db.DateTime)
+    success          = db.Column(db.Boolean, default=False)
+    created_at       = db.Column(db.DateTime, default=datetime.utcnow)
+
+
 class OfficialWarning(db.Model):
     """Per-user warnings issued by admins in official bot groups."""
     __tablename__ = "official_warnings"
@@ -1268,11 +1303,16 @@ class TelegramGroupLinkCode(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     code = db.Column(db.String(16), unique=True, nullable=False, index=True)
-    telegram_group_id = db.Column(db.String(255), db.ForeignKey("telegram_groups.telegram_group_id"), nullable=False)
+    # dashboard-generated flow (1-B-01): user_id set, telegram_group_id null initially
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
+    bot_id  = db.Column(db.Integer, db.ForeignKey("bots.id"), nullable=True)
+    # bot-generated flow (legacy): telegram_group_id always set
+    telegram_group_id = db.Column(db.String(255), db.ForeignKey("telegram_groups.telegram_group_id"), nullable=True)
     telegram_group_title = db.Column(db.String(255), nullable=True)
-    created_by_telegram_user_id = db.Column(db.String(255), nullable=False)
+    created_by_telegram_user_id = db.Column(db.String(255), nullable=True)
     expires_at = db.Column(db.DateTime, nullable=False)
     used_at = db.Column(db.DateTime, nullable=True)
+    used = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     @staticmethod

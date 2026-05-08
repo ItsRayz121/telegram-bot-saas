@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Box, Card, CardContent, TextField, Button, Typography,
-  Alert, CircularProgress, Link,
+  Alert, CircularProgress, Link, FormControlLabel, Checkbox,
 } from '@mui/material';
 import { CardGiftcard } from '@mui/icons-material';
 import TelegizerLogo from '../components/TelegizerLogo';
@@ -15,6 +15,7 @@ export default function Register() {
   const [searchParams] = useSearchParams();
   const refCode = searchParams.get('ref') || '';
   const [form, setForm] = useState({ email: '', password: '', full_name: '' });
+  const [tosAccepted, setTosAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   // Device fingerprint — generated once on mount, sent with registration payload
@@ -33,15 +34,20 @@ export default function Register() {
       setError('Password must be at least 8 characters.');
       return;
     }
+    if (!tosAccepted) {
+      setError('You must accept the Terms of Service to continue.');
+      return;
+    }
     setLoading(true);
     try {
       const res = await auth.register({
         ...form,
         ref: refCode,
         device_fingerprint: fingerprintRef.current,
+        tos_accepted: true,  // 1-D-05
       });
-      localStorage.setItem('token', res.data.token);
-      localStorage.setItem('user', JSON.stringify(res.data.user));
+      // Cookies set by server; only persist non-sensitive user data
+      if (res.data.user) localStorage.setItem('user', JSON.stringify(res.data.user));
       toast.success('Account created! Please verify your email to continue.');
       navigate('/verify-email');
     } catch (err) {
@@ -130,12 +136,37 @@ export default function Register() {
               sx={{ mb: 3 }}
               autoComplete="new-password"
             />
+            <FormControlLabel
+              sx={{ mb: 2, alignItems: 'flex-start' }}
+              control={
+                <Checkbox
+                  checked={tosAccepted}
+                  onChange={(e) => setTosAccepted(e.target.checked)}
+                  size="small"
+                  sx={{ pt: 0.5 }}
+                  required
+                />
+              }
+              label={
+                <Typography variant="caption" color="text.secondary">
+                  I agree to the{' '}
+                  <Link component="button" type="button" onClick={() => navigate('/terms')} sx={{ color: 'primary.main', cursor: 'pointer', fontSize: 'inherit' }}>
+                    Terms of Service
+                  </Link>
+                  {' '}and{' '}
+                  <Link component="button" type="button" onClick={() => navigate('/privacy')} sx={{ color: 'primary.main', cursor: 'pointer', fontSize: 'inherit' }}>
+                    Privacy Policy
+                  </Link>
+                  {' '}*
+                </Typography>
+              }
+            />
             <Button
               type="submit"
               fullWidth
               variant="contained"
               size="large"
-              disabled={loading}
+              disabled={loading || !tosAccepted}
               sx={{ mb: 2 }}
             >
               {loading ? <CircularProgress size={24} color="inherit" /> : 'Create Account'}
@@ -150,17 +181,6 @@ export default function Register() {
               sx={{ color: 'primary.main', cursor: 'pointer' }}
             >
               Sign in
-            </Link>
-          </Typography>
-
-          <Typography variant="caption" textAlign="center" color="text.disabled" display="block">
-            By creating an account you agree to our{' '}
-            <Link component="button" onClick={() => navigate('/terms')} sx={{ color: 'text.secondary', cursor: 'pointer', fontSize: 'inherit' }}>
-              Terms of Service
-            </Link>
-            {' '}and{' '}
-            <Link component="button" onClick={() => navigate('/privacy')} sx={{ color: 'text.secondary', cursor: 'pointer', fontSize: 'inherit' }}>
-              Privacy Policy
             </Link>
           </Typography>
         </CardContent>

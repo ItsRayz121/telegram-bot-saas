@@ -109,7 +109,17 @@ def create_app():
 
     # Hard cap on incoming request body size — prevents file-upload abuse and
     # memory exhaustion on any endpoint (Flask default is 16 MB, no cap).
-    app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10 MB
+    app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10 MB (1-D-04)
+
+    # JWT cookie configuration (1-D-01)
+    import os as _jwt_os
+    _is_prod_jwt = "postgres" in _jwt_os.environ.get("DATABASE_URL", "")
+    app.config["JWT_TOKEN_LOCATION"] = ["headers", "cookies"]
+    app.config["JWT_ACCESS_COOKIE_NAME"] = "access_token"
+    app.config["JWT_REFRESH_COOKIE_NAME"] = "refresh_token"
+    app.config["JWT_COOKIE_SECURE"] = _is_prod_jwt
+    app.config["JWT_COOKIE_SAMESITE"] = "Strict"
+    app.config["JWT_COOKIE_CSRF_PROTECT"] = False  # using own CSRF (1-D-02)
 
     # Never expose DEBUG mode in production — overrides any accidental env setting.
     import os as _os_debug
@@ -342,11 +352,17 @@ def create_app():
             _scheduler_log.warning("[ORIGIN] Unexpected origin=%s path=%s", origin, request.path)
         return None
 
+    # 1-D-04: tighter size limit for webhook endpoints
+    @app.before_request
+    def _limit_webhook_size():
+        webhook_paths = ["/api/billing/crypto/webhook", "/api/billing/lemon-squeezy/webhook", "/api/webhooks/"]
+        if any(request.path.startswith(p) for p in webhook_paths):
+            if request.content_length and request.content_length > 65536:  # 64 KB
+                abort(413, "Request too large")
+
     @app.after_request
     def _add_security_headers(response):
-        """Attach security headers to every response."""
-        # Content-Security-Policy: restrictive baseline — API only returns JSON,
-        # never HTML with embedded scripts, so a tight policy is safe.
+        """Attach security headers to every response (1-D-03)."""
         response.headers.setdefault(
             "Content-Security-Policy",
             "default-src 'none'; frame-ancestors 'none';",
@@ -354,6 +370,7 @@ def create_app():
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
         return response
 
     def _err(msg, code, http_status, **extra):

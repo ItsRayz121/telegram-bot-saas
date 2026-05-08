@@ -70,6 +70,21 @@ def make_celery(app=None):
                 "task": "backend.scheduler.expire_pending_verifications",
                 "schedule": 300.0,  # every 5 minutes
             },
+            # ── 1-C-03: Pending unban retry ────────────────────────────────
+            "retry-pending-unbans": {
+                "task": "backend.scheduler.retry_pending_unbans",
+                "schedule": 60.0,   # every 1 minute
+            },
+            # ── 1-A-03: Subscription expiry downgrade ──────────────────────
+            "downgrade-expired-subscriptions": {
+                "task": "backend.scheduler.downgrade_expired_subscriptions",
+                "schedule": crontab(hour=1, minute=0),  # daily at 01:00 UTC
+            },
+            # ── 1-A-04: Renewal reminder emails ───────────────────────────
+            "send-renewal-reminders": {
+                "task": "backend.scheduler.send_renewal_reminders",
+                "schedule": crontab(hour=9, minute=0),  # daily at 09:00 UTC
+            },
             # ── Maintenance (Phase 6) ───────────────────────────────────────
             "cleanup-message-buffer": {
                 "task": "backend.scheduler.cleanup_message_buffer",
@@ -850,6 +865,137 @@ def expire_pending_verifications():
 
     except Exception as exc:
         logger.error("expire_pending_verifications error: %s", exc, exc_info=True)
+
+
+@celery.task(name="backend.scheduler.retry_pending_unbans")
+def retry_pending_unbans():
+    """1-C-03: Run every minute. Unban users whose temp ban has expired."""
+    try:
+        from .app import create_app
+        app = create_app()
+        with app.app_context():
+            from .models import db, PendingUnban
+            import os
+            import telegram as _tg
+            from datetime import datetime
+
+            now = datetime.utcnow()
+            pending = PendingUnban.query.filter(
+                PendingUnban.success == False,
+                PendingUnban.unban_at <= now,
+                PendingUnban.retry_count < 5,
+            ).all()
+
+            if not pending:
+                return
+
+            bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+            if not bot_token:
+                logger.warning("[retry_pending_unbans] TELEGRAM_BOT_TOKEN not set")
+                return
+
+            import asyncio
+
+            async def _process(records):
+                bot = _tg.Bot(token=bot_token)
+                for record in records:
+                    try:
+                        await bot.unban_chat_member(
+                            chat_id=record.telegram_chat_id,
+                            user_id=record.telegram_user_id,
+                            only_if_banned=True,
+                        )
+                        record.success = True
+                    except Exception as exc:
+                        record.retry_count += 1
+                        record.last_attempt_at = now
+                        logger.warning("Unban retry %d failed chat=%s user=%s: %s",
+                                       record.retry_count, record.telegram_chat_id,
+                                       record.telegram_user_id, exc)
+
+            loop = asyncio.new_event_loop()
+            try:
+                loop.run_until_complete(_process(pending))
+            finally:
+                loop.close()
+
+            db.session.commit()
+            success_count = sum(1 for r in pending if r.success)
+            logger.info("[celery:retry_pending_unbans] processed=%d success=%d", len(pending), success_count)
+
+    except Exception as exc:
+        logger.error("retry_pending_unbans error: %s", exc)
+
+
+@celery.task(name="backend.scheduler.downgrade_expired_subscriptions")
+def downgrade_expired_subscriptions():
+    """1-A-03: Daily 01:00 UTC. Downgrade users whose grace period has passed."""
+    try:
+        from .app import create_app
+        app = create_app()
+        with app.app_context():
+            from .models import db, User, UserNotification
+            from datetime import datetime
+
+            now = datetime.utcnow()
+            expired = User.query.filter(
+                User.subscription_tier != "free",
+                User.subscription_grace_until.isnot(None),
+                User.subscription_grace_until < now,
+            ).all()
+
+            for user in expired:
+                user.subscription_tier = "free"
+                user.subscription_expires_at = None
+                user.subscription_grace_until = None
+                user.subscription_expires = None
+                db.session.add(UserNotification(
+                    user_id=user.id,
+                    type="subscription_expired",
+                    title="Subscription Expired",
+                    message="Your Pro subscription has expired. Upgrade to restore access.",
+                ))
+
+            db.session.commit()
+            logger.info("[celery:downgrade_expired_subscriptions] downgraded=%d", len(expired))
+    except Exception as exc:
+        logger.error("downgrade_expired_subscriptions error: %s", exc)
+
+
+@celery.task(name="backend.scheduler.send_renewal_reminders")
+def send_renewal_reminders():
+    """1-A-04: Daily 09:00 UTC. Send renewal reminder emails at 7, 3, and 1 day before expiry."""
+    try:
+        from .app import create_app
+        app = create_app()
+        with app.app_context():
+            from .models import db, User
+            from .notifications import send_subscription_expiry_warning
+            from datetime import datetime, timedelta, date
+
+            today = datetime.utcnow().date()
+            for days_before in [7, 3, 1]:
+                target_date = today + timedelta(days=days_before)
+                users = User.query.filter(
+                    User.subscription_tier != "free",
+                    db.func.date(User.subscription_expires_at) == target_date,
+                ).all()
+                for user in users:
+                    try:
+                        expires_str = user.subscription_expires_at.strftime("%Y-%m-%d")
+                        send_subscription_expiry_warning(
+                            user.email,
+                            user.full_name or user.email.split("@")[0],
+                            user.subscription_tier,
+                            expires_str,
+                            days_before,
+                        )
+                    except Exception as exc:
+                        logger.error("renewal reminder failed user=%s days=%d: %s", user.id, days_before, exc)
+
+            logger.info("[celery:send_renewal_reminders] done")
+    except Exception as exc:
+        logger.error("send_renewal_reminders error: %s", exc)
 
 
 def _get_bot_token_for_chat(chat_id, app):

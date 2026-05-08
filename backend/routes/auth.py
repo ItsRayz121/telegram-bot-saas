@@ -4,7 +4,7 @@ import hmac
 import logging
 import threading
 from datetime import datetime, timedelta
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import (
     create_access_token, create_refresh_token,
     jwt_required, get_jwt_identity, get_jwt,
@@ -12,11 +12,48 @@ from flask_jwt_extended import (
 
 from ..models import db, User, PasswordResetToken, Referral, RevokedToken, SuspiciousActivity
 from ..middleware.rate_limit import rate_limit
+from ..middleware.csrf import generate_csrf_token
 from ..config import Config
 
 logger = logging.getLogger(__name__)
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
+
+
+# ── 1-D-01: Cookie auth helpers ────────────────────────────────────────────────
+
+def _is_secure() -> bool:
+    return current_app.config.get("JWT_COOKIE_SECURE", False)
+
+
+def _set_auth_cookies(response, access_token: str, refresh_token: str = None):
+    """Attach httpOnly JWT cookies and a JS-readable CSRF cookie to the response."""
+    secure = _is_secure()
+    response.set_cookie(
+        "access_token", access_token,
+        httponly=True, secure=secure, samesite="Strict",
+        max_age=86400,
+    )
+    if refresh_token:
+        response.set_cookie(
+            "refresh_token", refresh_token,
+            httponly=True, secure=secure, samesite="Strict",
+            path="/api/auth/refresh",
+            max_age=2592000,
+        )
+    # CSRF cookie — readable by JS, paired with X-CSRF-Token header (1-D-02)
+    response.set_cookie(
+        "csrf_token", generate_csrf_token(),
+        httponly=False, secure=secure, samesite="Strict",
+    )
+    return response
+
+
+def _clear_auth_cookies(response):
+    """Expire all auth cookies on logout."""
+    for name, path in [("access_token", "/"), ("refresh_token", "/api/auth/refresh"), ("csrf_token", "/")]:
+        response.set_cookie(name, "", expires=0, path=path)
+    return response
 
 _MAX_FAILED_ATTEMPTS = 10
 _LOCKOUT_MINUTES = 15
@@ -202,6 +239,10 @@ def register():
     if not email or not password or not full_name:
         return jsonify({"error": "Email, password, and full_name are required"}), 400
 
+    # 1-D-05: ToS acceptance required
+    if not data.get("tos_accepted"):
+        return jsonify({"error": "You must accept the Terms of Service to register.", "code": "TOS_REQUIRED"}), 400
+
     # Input length limits
     if len(email) > 255:
         return jsonify({"error": "Email too long"}), 400
@@ -252,6 +293,8 @@ def register():
         email_verified=False,
         signup_ip_hash=ip_hash,
         device_fingerprint_hash=device_hash,
+        tos_version_accepted="2.0",  # 1-D-05
+        tos_accepted_at=datetime.utcnow(),
     )
     # Generate email verification token
     verification_token = user.generate_verification_token()
@@ -338,7 +381,9 @@ def register():
         additional_claims={"scope": "email_verify_pending"},
     )
     refresh_token = create_refresh_token(identity=str(user.id))
-    return jsonify({"token": token, "refresh_token": refresh_token, "user": user.to_dict()}), 201
+    resp = jsonify({"token": token, "user": user.to_dict()})  # token also in body for TMA
+    _set_auth_cookies(resp, token, refresh_token)
+    return resp, 201
 
 
 # ── Login ──────────────────────────────────────────────────────────────────────
@@ -431,7 +476,9 @@ def login():
     refresh_token = create_refresh_token(identity=str(user.id))
     user_data = user.to_dict()
     user_data["is_admin"] = user.email in Config.ADMIN_EMAILS
-    return jsonify({"token": token, "refresh_token": refresh_token, "user": user_data}), 200
+    resp = jsonify({"token": token, "user": user_data})  # token also in body for TMA
+    _set_auth_cookies(resp, token, refresh_token)
+    return resp, 200
 
 
 # ── 2FA login completion (submit code after receives requires_2fa) ─────────────
@@ -484,7 +531,9 @@ def verify_totp_login():
     refresh_token = create_refresh_token(identity=str(user.id))
     user_data = user.to_dict()
     user_data["is_admin"] = user.email in Config.ADMIN_EMAILS
-    return jsonify({"token": token, "refresh_token": refresh_token, "user": user_data}), 200
+    resp = jsonify({"token": token, "user": user_data})
+    _set_auth_cookies(resp, token, refresh_token)
+    return resp, 200
 
 
 def _verify_totp(user: User, code: str) -> bool:
@@ -934,7 +983,9 @@ def refresh_access_token():
     if not user or user.is_banned:
         return jsonify({"error": "User not found"}), 404
     new_token = create_access_token(identity=str(user_id))
-    return jsonify({"token": new_token}), 200
+    resp = jsonify({"token": new_token})
+    _set_auth_cookies(resp, new_token)  # rotate access cookie; refresh cookie untouched
+    return resp, 200
 
 
 @auth_bp.route("/logout", methods=["POST"])
@@ -947,4 +998,6 @@ def logout():
     exp = jwt_data.get("exp")
     if jti:
         _revoke_token(jti, exp)
-    return jsonify({"message": "Logged out successfully"}), 200
+    resp = jsonify({"message": "Logged out successfully"})
+    _clear_auth_cookies(resp)
+    return resp, 200

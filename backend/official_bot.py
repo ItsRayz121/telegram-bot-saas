@@ -512,6 +512,31 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+# ─── 1-B-05: Bot permissions extractor ───────────────────────────────────────
+
+def extract_bot_permissions(bot_member) -> dict:
+    """Extract and score bot permissions from a ChatMember object."""
+    perms = {
+        "can_delete_messages":  getattr(bot_member, "can_delete_messages", False),
+        "can_restrict_members": getattr(bot_member, "can_restrict_members", False),
+        "can_ban_users":        getattr(bot_member, "can_restrict_members", False),
+        "can_pin_messages":     getattr(bot_member, "can_pin_messages", False),
+        "can_invite_users":     getattr(bot_member, "can_invite_users", False),
+        "can_change_info":      getattr(bot_member, "can_change_info", False),
+        "can_manage_chat":      getattr(bot_member, "can_manage_chat", False),
+        "can_send_messages":    True,
+    }
+    score = sum(1 for v in perms.values() if v) / len(perms) * 100
+    perms["permission_score"] = int(score)
+    if score == 100:
+        perms["access_tier"] = "Full Access"
+    elif score >= 50:
+        perms["access_tier"] = "Partial Access"
+    else:
+        perms["access_tier"] = "Limited Access"
+    return perms
+
+
 # ─── /linkgroup ───────────────────────────────────────────────────────────────
 
 async def cmd_linkgroup(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -542,6 +567,86 @@ async def cmd_linkgroup(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
     except Exception:
         pass
+
+    # ── 1-B-03: Dashboard-first flow — /linkgroup TLG-XXXXXXXX ────────────────
+    args = context.args or []
+    if args and args[0].upper().startswith("TLG-"):
+        code = args[0].upper()
+        with flask_app.app_context():
+            from .models import db, TelegramGroup, TelegramGroupLinkCode
+            from datetime import datetime
+
+            link_code = TelegramGroupLinkCode.query.filter_by(code=code, used=False).first()
+            if not link_code or not link_code.user_id:
+                await update.message.reply_text(
+                    "❌ Invalid or expired code. Generate a new one at telegizer.com",
+                )
+                return
+            if link_code.expires_at < datetime.utcnow():
+                await update.message.reply_text(
+                    "❌ This code has expired. Generate a new one at telegizer.com",
+                )
+                return
+
+            existing = TelegramGroup.query.filter_by(
+                telegram_group_id=str(chat.id)
+            ).first()
+            if existing and existing.owner_user_id:
+                await update.message.reply_text("⚠️ This group is already linked to a Telegizer account.")
+                return
+
+            # Get bot permissions
+            bot_perms = {}
+            try:
+                bot_member = await context.bot.get_chat_member(chat.id, context.bot.id)
+                bot_perms = extract_bot_permissions(bot_member)
+            except Exception:
+                pass
+
+            member_count = 0
+            try:
+                member_count = await context.bot.get_chat_member_count(chat.id)
+            except Exception:
+                pass
+
+            if existing:
+                existing.owner_user_id = link_code.user_id
+                existing.bot_status = "active"
+                existing.linked_at = datetime.utcnow()
+                existing.linked_via_bot_type = "official"
+                existing.bot_permissions = bot_perms
+                existing.member_count = member_count
+                group = existing
+            else:
+                group = TelegramGroup(
+                    telegram_group_id=str(chat.id),
+                    title=chat.title or "Untitled",
+                    username=chat.username,
+                    owner_user_id=link_code.user_id,
+                    bot_status="active",
+                    linked_at=datetime.utcnow(),
+                    linked_via_bot_type="official",
+                    bot_permissions=bot_perms,
+                    member_count=member_count,
+                    is_forum=getattr(chat, "is_forum", False),
+                    settings={},
+                )
+                from .group_defaults import fill_missing_defaults
+                fill_missing_defaults(group)
+                db.session.add(group)
+
+            link_code.used = True
+            link_code.used_at = datetime.utcnow()
+            db.session.commit()
+
+        await update.message.reply_text(
+            f"✅ *{chat.title}* is now linked to your Telegizer dashboard!\n\n"
+            f"🔗 [Open Dashboard]({_frontend()}/official-groups)\n\n"
+            "Your bot features are now active. Configure them at telegizer.com",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+    # ── End dashboard-first flow (fall through to bot-generated code flow) ───────
 
     group_id = str(chat.id)
     group_title = chat.title or "Untitled Group"
@@ -2700,9 +2805,22 @@ async def _fail_verification(bot, chat_id, user_id, pending, flask_app):
     group_id = str(chat_id)
     try:
         if pending.get("kick_on_fail", True):
+            # 1-C-02: temp ban + write PendingUnban; scheduler retries unban after 1h
             await bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
-            await bot.unban_chat_member(chat_id=chat_id, user_id=user_id)
-            _log.info("[OfficialBot] Kicked unverified user %s from group %s", user_id, chat_id)
+            _log.info("[OfficialBot] Temp-banned unverified user %s from group %s", user_id, chat_id)
+            if flask_app:
+                try:
+                    with flask_app.app_context():
+                        from .models import db, PendingUnban
+                        from datetime import timedelta
+                        db.session.add(PendingUnban(
+                            telegram_chat_id=chat_id,
+                            telegram_user_id=user_id,
+                            unban_at=datetime.utcnow() + timedelta(hours=1),
+                        ))
+                        db.session.commit()
+                except Exception as db_exc:
+                    _log.warning("PendingUnban write failed: %s", db_exc)
         if pending.get("msg_id"):
             try:
                 await bot.delete_message(chat_id=chat_id, message_id=pending["msg_id"])

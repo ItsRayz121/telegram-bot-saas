@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy.exc import IntegrityError
-from ..models import db, User, ProcessedPayment, PaymentHistory, PendingInvoice
+from ..models import db, User, ProcessedPayment, PaymentHistory, PendingInvoice, SubscriptionRenewal
 from ..config import Config
 from ..middleware.rate_limit import rate_limit
 from ..notifications import send_subscription_confirmation, send_subscription_cancelled
@@ -37,8 +37,23 @@ def _activate_subscription(user, tier, provider="unknown", payment_id=None,
     user.subscription_tier = tier
     now = datetime.utcnow()
     duration_days = _TIER_DURATION_ANNUAL if billing_period == "annual" else _TIER_DURATION_MONTHLY
-    user.subscription_expires = now + timedelta(days=duration_days)
+    expires = now + timedelta(days=duration_days)
+    user.subscription_expires = expires
+    # 1-A-01: populate extended lifecycle fields
+    user.subscription_expires_at  = expires
+    user.subscription_grace_until = expires + timedelta(days=7)
+    user.subscription_interval    = billing_period
     default_amount = _TIER_PRICES_USD.get(tier, {}).get(billing_period, 0)
+    # 1-A-02: renewal audit record
+    renewal = SubscriptionRenewal(
+        user_id=user.id,
+        plan=tier,
+        interval=billing_period,
+        amount_usd=amount_usd or default_amount,
+        payment_id=payment_id,
+        expires_at=expires,
+    )
+    db.session.add(renewal)
     record = PaymentHistory(
         user_id=user.id,
         provider=provider,

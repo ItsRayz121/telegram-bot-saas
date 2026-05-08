@@ -1454,3 +1454,107 @@ def resolve_official_report(group_id, report_id):
     report.status = "resolved"
     db.session.commit()
     return jsonify({"report": report.to_dict()}), 200
+
+
+# ── 1-B-02: Dashboard-side link code generation ────────────────────────────────
+
+@tg_groups_bp.route("/generate-link-code", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=20)
+def generate_link_code():
+    """Generate a one-time TLG-XXXXXXXX code for the user to run in their group."""
+    user = _current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    data = request.get_json() or {}
+    bot_id = data.get("bot_id")  # None = official bot
+
+    # Delete any existing unused dashboard-generated codes for this user
+    TelegramGroupLinkCode.query.filter_by(user_id=user.id, used=False).delete()
+
+    import secrets as _s
+    import string as _str
+    alphabet = _str.ascii_uppercase + _str.digits
+    code = "TLG-" + "".join(_s.choice(alphabet) for _ in range(8))
+    while TelegramGroupLinkCode.query.filter_by(code=code).first():
+        code = "TLG-" + "".join(_s.choice(alphabet) for _ in range(8))
+
+    expires_at = datetime.utcnow() + timedelta(minutes=12)
+    link_code = TelegramGroupLinkCode(
+        code=code,
+        user_id=user.id,
+        bot_id=bot_id,
+        expires_at=expires_at,
+        used=False,
+    )
+    db.session.add(link_code)
+    db.session.commit()
+
+    return jsonify({
+        "code": code,
+        "expires_at": expires_at.isoformat() + "Z",
+        "instructions": f"Run /linkgroup {code} in your Telegram group",
+    }), 200
+
+
+# ── 1-B-04: Link status polling ────────────────────────────────────────────────
+
+@tg_groups_bp.route("/link-status", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def link_status():
+    """Poll whether a dashboard-generated link code has been consumed by the bot."""
+    user = _current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    code = request.args.get("code", "").upper()
+    if not code:
+        return jsonify({"error": "code parameter required"}), 400
+
+    link_code = TelegramGroupLinkCode.query.filter_by(code=code, user_id=user.id).first()
+    if not link_code:
+        return jsonify({"status": "expired"}), 200
+
+    if link_code.used:
+        group = TelegramGroup.query.filter_by(owner_user_id=user.id).order_by(
+            TelegramGroup.linked_at.desc()
+        ).first()
+        group_data = None
+        if group:
+            group_data = {
+                "id": group.telegram_group_id,
+                "title": group.title,
+                "member_count": group.member_count or 0,
+            }
+        return jsonify({"status": "linked", "group": group_data}), 200
+
+    if datetime.utcnow() > link_code.expires_at:
+        return jsonify({"status": "expired"}), 200
+
+    return jsonify({
+        "status": "pending",
+        "expires_at": link_code.expires_at.isoformat() + "Z",
+    }), 200
+
+
+# ── 1-B-05: Bot permissions endpoint ──────────────────────────────────────────
+
+@tg_groups_bp.route("/<group_id>/permissions", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def get_group_permissions(group_id):
+    """Return the stored bot permissions for a group."""
+    user = _current_user()
+    tg = _owns_group(user.id, group_id)
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+
+    perms = tg.bot_permissions or {}
+    score = perms.get("permission_score", 0)
+    return jsonify({
+        "permissions": perms,
+        "permission_score": score,
+        "access_tier": perms.get("access_tier", "Unknown"),
+    }), 200

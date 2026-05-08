@@ -188,6 +188,80 @@ def init_db():
             "pending_verifications.auto_delete_on_timeout",
         )
 
+        # ── 1-A-01: Subscription lifecycle fields ────────────────────────────────
+        _run_alter(
+            db.engine,
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_expires_at TIMESTAMPTZ",
+            "users.subscription_expires_at",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_grace_until TIMESTAMPTZ",
+            "users.subscription_grace_until",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_interval VARCHAR(20)",
+            "users.subscription_interval",
+        )
+        # ── 1-D-05: ToS acceptance tracking ──────────────────────────────────────
+        _run_alter(
+            db.engine,
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS tos_version_accepted VARCHAR(20)",
+            "users.tos_version_accepted",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS tos_accepted_at TIMESTAMP",
+            "users.tos_accepted_at",
+        )
+
+        # ── 1-C-01: PendingUnban table (db.create_all handles creation) ─────────
+        _run_alter(
+            db.engine,
+            "CREATE INDEX IF NOT EXISTS ix_pending_unbans_unban_at ON pending_unbans (unban_at) WHERE success = FALSE",
+            "pending_unbans.unban_at index",
+        )
+
+        # ── 1-B-01: TelegramGroupLinkCode — dashboard-generated flow columns ────
+        _run_alter(
+            db.engine,
+            "ALTER TABLE telegram_group_link_codes ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)",
+            "telegram_group_link_codes.user_id",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE telegram_group_link_codes ADD COLUMN IF NOT EXISTS bot_id INTEGER REFERENCES bots(id)",
+            "telegram_group_link_codes.bot_id",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE telegram_group_link_codes ALTER COLUMN telegram_group_id DROP NOT NULL",
+            "telegram_group_link_codes.telegram_group_id nullable",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE telegram_group_link_codes ALTER COLUMN created_by_telegram_user_id DROP NOT NULL",
+            "telegram_group_link_codes.created_by_telegram_user_id nullable",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE telegram_group_link_codes ADD COLUMN IF NOT EXISTS used BOOLEAN NOT NULL DEFAULT FALSE",
+            "telegram_group_link_codes.used",
+        )
+        _run_alter(
+            db.engine,
+            "CREATE INDEX IF NOT EXISTS ix_tglc_user_id ON telegram_group_link_codes (user_id)",
+            "telegram_group_link_codes.user_id index",
+        )
+
+        # ── 1-A-02: SubscriptionRenewal table (db.create_all handles creation) ─
+        _run_alter(
+            db.engine,
+            "CREATE INDEX IF NOT EXISTS ix_subscription_renewals_user_id ON subscription_renewals (user_id)",
+            "subscription_renewals.user_id index",
+        )
+
         # ── Backfill: create UserTelegramAccount rows for legacy User.telegram_user_id ──
         # Any user with telegram_user_id but no junction row gets a primary record created.
         _backfill_telegram_accounts(app)

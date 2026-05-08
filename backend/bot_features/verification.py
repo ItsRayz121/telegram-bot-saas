@@ -390,8 +390,19 @@ class VerificationSystem:
         key = f"{chat_id}:{user_id}"
         try:
             if pending.get("kick_on_fail", True):
+                # 1-C-02: temp ban + write PendingUnban; scheduler retries unban after 1h
                 await bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
-                await bot.unban_chat_member(chat_id=chat_id, user_id=user_id)
+                try:
+                    with self.app.app_context():
+                        from ..models import db, PendingUnban
+                        db.session.add(PendingUnban(
+                            telegram_chat_id=chat_id,
+                            telegram_user_id=user_id,
+                            unban_at=datetime.utcnow() + timedelta(hours=1),
+                        ))
+                        db.session.commit()
+                except Exception as db_exc:
+                    logger.warning("PendingUnban write failed: %s", db_exc)
             # Always delete the challenge message to keep the group clean
             try:
                 await bot.delete_message(chat_id=chat_id, message_id=pending["message_id"])

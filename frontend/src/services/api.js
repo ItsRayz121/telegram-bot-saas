@@ -11,40 +11,31 @@ if (API_CONFIG_ERROR) {
 
 const BASE_URL = process.env.REACT_APP_API_URL || '';
 
+// 1-D-01: cookies carry JWT — send credentials on every request
 const api = axios.create({
   baseURL: BASE_URL,
   timeout: 30000,
+  withCredentials: true,
   headers: { 'Content-Type': 'application/json' },
 });
 
+// 1-D-02: attach CSRF token from cookie to every state-changing request
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
+  const csrfToken = document.cookie.match(/csrf_token=([^;]+)/)?.[1];
+  if (csrfToken) config.headers['X-CSRF-Token'] = csrfToken;
   return config;
 });
-
-// Auto-store refresh_token whenever the backend sends one
-const _storeTokens = (response) => {
-  if (response.data?.refresh_token) {
-    localStorage.setItem('refresh_token', response.data.refresh_token);
-  }
-  if (response.data?.token) {
-    localStorage.setItem('token', response.data.token);
-  }
-  return response;
-};
 
 let _isRefreshing = false;
 let _failedQueue = [];
 
-const _processQueue = (error, token = null) => {
-  _failedQueue.forEach((p) => (error ? p.reject(error) : p.resolve(token)));
+const _processQueue = (error) => {
+  _failedQueue.forEach((p) => (error ? p.reject(error) : p.resolve()));
   _failedQueue = [];
 };
 
 const _clearSession = () => {
+  // cookies are cleared by the server on logout; just purge any legacy localStorage state
   localStorage.removeItem('token');
   localStorage.removeItem('refresh_token');
   localStorage.removeItem('user');
@@ -52,7 +43,7 @@ const _clearSession = () => {
 };
 
 api.interceptors.response.use(
-  _storeTokens,
+  (response) => response,
   async (error) => {
     const original = error.config;
 
@@ -62,40 +53,25 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    // On 401, try to refresh — but not for auth endpoints themselves
+    // On 401, try silent token refresh using the refresh cookie (set automatically by browser)
     const isAuthEndpoint = original.url?.includes('/api/auth/');
     if (error.response?.status === 401 && !original._retry && !isAuthEndpoint) {
-      const refreshToken = localStorage.getItem('refresh_token');
-      if (!refreshToken) {
-        _clearSession();
-        return Promise.reject(error);
-      }
-
       if (_isRefreshing) {
         return new Promise((resolve, reject) => {
           _failedQueue.push({ resolve, reject });
-        }).then((token) => {
-          original.headers.Authorization = `Bearer ${token}`;
-          return api(original);
-        });
+        }).then(() => api(original));
       }
 
       original._retry = true;
       _isRefreshing = true;
 
       try {
-        const resp = await axios.post(
-          `${BASE_URL}/api/auth/refresh`,
-          {},
-          { headers: { Authorization: `Bearer ${refreshToken}` } }
-        );
-        const newToken = resp.data.token;
-        localStorage.setItem('token', newToken);
-        _processQueue(null, newToken);
-        original.headers.Authorization = `Bearer ${newToken}`;
+        // Refresh cookie is scoped to /api/auth/refresh — browser sends it automatically
+        await axios.post(`${BASE_URL}/api/auth/refresh`, {}, { withCredentials: true });
+        _processQueue(null);
         return api(original);
       } catch (refreshErr) {
-        _processQueue(refreshErr, null);
+        _processQueue(refreshErr);
         _clearSession();
         return Promise.reject(refreshErr);
       } finally {
