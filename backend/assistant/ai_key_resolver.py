@@ -49,7 +49,8 @@ def get_workspace_ai_key(user) -> dict:
 
     # Platform key path — enforce daily quota
     _check_and_reset_quota(user)
-    daily_limit = 500000 if user.subscription_tier in ("pro", "enterprise") else 10000
+    tier = user.subscription_tier
+    daily_limit = 500000 if tier == "enterprise" else (200000 if tier == "pro" else 10000)
     if user.workspace_ai_tokens_today >= daily_limit:
         raise QuotaExceededError(
             f"Daily AI token limit ({daily_limit:,}) reached. "

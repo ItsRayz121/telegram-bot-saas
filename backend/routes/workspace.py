@@ -269,7 +269,12 @@ def delete_reminder(reminder_id):
 # ── Workspace AI Settings ──────────────────────────────────────────────────────
 
 def _token_limit(user: User) -> int:
-    return 200000 if user.subscription_tier in ("pro", "enterprise") else 50000
+    tier = user.subscription_tier
+    if tier == "enterprise":
+        return 500000
+    if tier == "pro":
+        return 200000
+    return 10000
 
 
 def _maybe_reset_tokens(user: User) -> None:
@@ -398,16 +403,53 @@ def get_ai_settings():
         .first()
     )
 
+    tier = user.subscription_tier
+    token_limit = _token_limit(user)
+
+    _PLAN_ENTITLEMENTS = {
+        "enterprise": {
+            "label": "Enterprise",
+            "platform_ai_included": True,
+            "description": "Full Telegizer AI access included",
+            "models": ["GPT-4o Mini", "GPT-4.1 Mini", "Claude Haiku", "Gemini Flash"],
+            "token_limit": 500000,
+            "priority": "High priority queue",
+        },
+        "pro": {
+            "label": "Pro",
+            "platform_ai_included": True,
+            "description": "Telegizer AI included in your Pro plan",
+            "models": ["GPT-4o Mini", "Gemini Flash"],
+            "token_limit": 200000,
+            "priority": "Standard queue",
+        },
+        "free": {
+            "label": "Free",
+            "platform_ai_included": bool(Config.PLATFORM_OPENROUTER_API_KEY),
+            "description": "Limited platform AI access",
+            "models": ["GPT-4o Mini"],
+            "token_limit": 10000,
+            "priority": None,
+        },
+    }
+
+    entitlements = _PLAN_ENTITLEMENTS.get(tier, _PLAN_ENTITLEMENTS["free"])
+
     return jsonify({
         "platform_key_active": bool(Config.PLATFORM_OPENROUTER_API_KEY),
         "user_key": user_key.to_dict() if user_key else None,
         "token_usage": {
             "used": user.workspace_ai_tokens_today or 0,
-            "limit": _token_limit(user),
+            "limit": token_limit,
             "reset_at": (
                 user.workspace_ai_tokens_reset_at.isoformat()
                 if user.workspace_ai_tokens_reset_at else None
             ),
+        },
+        "plan": {
+            "tier": tier,
+            "subscription_active": user.subscription_active,
+            **entitlements,
         },
         "telegram_connected": bool(user.telegram_user_id),
         "telegram_username": user.telegram_username,
