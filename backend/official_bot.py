@@ -349,7 +349,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Row 4 — utility
         [
             InlineKeyboardButton("💬 Support", callback_data="menu:support"),
-            InlineKeyboardButton("⚙️ Settings", url=f"{frontend}/settings"),
+            InlineKeyboardButton("⚙️ Quick Settings", callback_data="qs:groups"),
         ],
     ]
 
@@ -1895,6 +1895,164 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "menu:main":
         await _render_main_menu(query, user, flask_app, frontend)
 
+    elif data.startswith("qs:"):
+        await _handle_qs_callback(query, user, data, flask_app, frontend)
+
+
+# ── Quick Settings inline toggle panel ────────────────────────────────────────
+
+_QS_FEATURES = [
+    ("automod",       "automod.enabled",                   "🛡 AutoMod"),
+    ("verification",  "verification.enabled",              "✅ Verification"),
+    ("welcome",       "welcome.enabled",                   "👋 Welcome Messages"),
+    ("levels",        "levels.enabled",                    "📊 XP / Levels"),
+    ("ai_reply",      "knowledge_base.auto_reply_enabled", "🤖 AI Auto-Reply"),
+]
+
+
+def _qs_get(settings: dict, dotkey: str) -> bool:
+    val = settings
+    for k in dotkey.split("."):
+        val = val.get(k, {}) if isinstance(val, dict) else {}
+    return bool(val)
+
+
+def _qs_set(settings: dict, dotkey: str, value: bool) -> dict:
+    import copy
+    s = copy.deepcopy(settings) if settings else {}
+    keys = dotkey.split(".")
+    node = s
+    for k in keys[:-1]:
+        node = node.setdefault(k, {})
+    node[keys[-1]] = value
+    return s
+
+
+def _qs_toggle_keyboard(group_id: int, settings: dict, frontend: str) -> InlineKeyboardMarkup:
+    rows = []
+    for feat_key, dotkey, label in _QS_FEATURES:
+        on = _qs_get(settings, dotkey)
+        state = "🟢 ON" if on else "🔴 OFF"
+        rows.append([InlineKeyboardButton(
+            f"{label}  {state}",
+            callback_data=f"qs:toggle:{group_id}:{feat_key}",
+        )])
+    rows.append([InlineKeyboardButton("🌐 Full Settings on Web", url=f"{frontend}/groups/{group_id}")])
+    rows.append([InlineKeyboardButton("« Back", callback_data="menu:main")])
+    return InlineKeyboardMarkup(rows)
+
+
+async def _handle_qs_callback(query, user, data: str, flask_app, frontend: str):
+    parts = data.split(":")
+
+    if data == "qs:groups":
+        groups = []
+        if flask_app:
+            try:
+                with flask_app.app_context():
+                    from .models import TelegramGroup
+                    wu = _user_by_tg_id(user.id)
+                    if wu:
+                        gs = TelegramGroup.query.filter_by(
+                            owner_user_id=wu.id, is_disabled=False,
+                        ).order_by(TelegramGroup.linked_at.desc()).limit(10).all()
+                        groups = [{"id": g.id, "title": g.title or f"Group {g.id}"} for g in gs]
+            except Exception as exc:
+                _log.warning("qs:groups load failed: %s", exc)
+
+        if not groups:
+            await query.edit_message_text(
+                "⚙️ *Quick Settings*\n\nNo groups linked yet.\n"
+                "Add @TelegizerBot to a group and run /linkgroup first.",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("« Back", callback_data="menu:main")],
+                ]),
+            )
+            return
+
+        if len(groups) == 1:
+            await _handle_qs_callback(query, user, f"qs:group:{groups[0]['id']}", flask_app, frontend)
+            return
+
+        rows = [[InlineKeyboardButton(g["title"], callback_data=f"qs:group:{g['id']}")] for g in groups]
+        rows.append([InlineKeyboardButton("« Back", callback_data="menu:main")])
+        await query.edit_message_text(
+            "⚙️ *Quick Settings*\n\nChoose a group to configure:",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup(rows),
+        )
+        return
+
+    if len(parts) == 3 and parts[1] == "group":
+        group_id = int(parts[2])
+        settings = {}
+        title = ""
+        if flask_app:
+            try:
+                with flask_app.app_context():
+                    from .models import TelegramGroup
+                    g = TelegramGroup.query.get(group_id)
+                    if not g:
+                        await query.edit_message_text("⚠️ Group not found.")
+                        return
+                    settings = dict(g.settings or {})
+                    title = g.title or f"Group {group_id}"
+            except Exception as exc:
+                _log.warning("qs:group load failed: %s", exc)
+                await query.edit_message_text("⚠️ Could not load group settings.")
+                return
+
+        await query.edit_message_text(
+            f"⚙️ *Quick Settings — {title}*\n\nTap any feature to toggle it on/off instantly:",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=_qs_toggle_keyboard(group_id, settings, frontend),
+        )
+        return
+
+    if len(parts) == 4 and parts[1] == "toggle":
+        group_id = int(parts[2])
+        feat_key = parts[3]
+        dotkey = next((d for k, d, _ in _QS_FEATURES if k == feat_key), None)
+        if not dotkey:
+            await query.answer("Unknown feature.", show_alert=True)
+            return
+
+        new_val = False
+        settings = {}
+        title = ""
+        if flask_app:
+            try:
+                with flask_app.app_context():
+                    from .models import db, TelegramGroup
+                    from sqlalchemy.orm.attributes import flag_modified
+                    g = TelegramGroup.query.get(group_id)
+                    if not g:
+                        await query.answer("Group not found.", show_alert=True)
+                        return
+                    settings = dict(g.settings or {})
+                    new_val = not _qs_get(settings, dotkey)
+                    g.settings = _qs_set(settings, dotkey, new_val)
+                    flag_modified(g, "settings")
+                    db.session.commit()
+                    settings = dict(g.settings)
+                    title = g.title or f"Group {group_id}"
+            except Exception as exc:
+                _log.warning("qs:toggle failed: %s", exc)
+                await query.answer("Failed to save. Try again.", show_alert=True)
+                return
+
+        label = next((l for k, _, l in _QS_FEATURES if k == feat_key), feat_key)
+        await query.answer(f"{label} {'enabled' if new_val else 'disabled'}")
+        await query.edit_message_text(
+            f"⚙️ *Quick Settings — {title}*\n\nTap any feature to toggle it on/off instantly:",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=_qs_toggle_keyboard(group_id, settings, frontend),
+        )
+        return
+
+    await query.answer("Unknown action.", show_alert=True)
+
 
 async def _render_main_menu(query, user, flask_app, frontend):
     pending_count = 0
@@ -1949,7 +2107,7 @@ async def _render_main_menu(query, user, flask_app, frontend):
         ],
         [
             InlineKeyboardButton("💬 Support", callback_data="menu:support"),
-            InlineKeyboardButton("⚙️ Settings", url=f"{frontend}/settings"),
+            InlineKeyboardButton("⚙️ Quick Settings", callback_data="qs:groups"),
         ],
     ]
     await query.edit_message_text(

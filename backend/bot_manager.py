@@ -131,7 +131,7 @@ class BotInstance:
             ],
             [
                 InlineKeyboardButton("💬 Support", callback_data="menu:support"),
-                InlineKeyboardButton("⚙️ Settings", url=f"{frontend}/settings"),
+                InlineKeyboardButton("⚙️ Quick Settings", callback_data="qs:groups"),
             ],
             [
                 InlineKeyboardButton("🌐 Open Telegizer App", url=frontend),
@@ -144,8 +144,8 @@ class BotInstance:
     async def handle_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if update.effective_chat.type != "private":
             await update.message.reply_text(
-                "✅ I'm active here! Use /linkgroup to connect this group to your dashboard, "
-                "or /settings to manage it.",
+                "✅ I'm active here! Use /linkgroup to connect this group to your dashboard. "
+                "DM me /start for the Quick Settings menu.",
             )
             return
 
@@ -637,6 +637,145 @@ class BotInstance:
                 ]),
             )
             return
+
+    # ── Quick Settings inline toggle panel ────────────────────────────────────
+
+    _QS_FEATURES = [
+        ("automod",       "automod.enabled",               "🛡 AutoMod"),
+        ("verification",  "verification.enabled",          "✅ Verification"),
+        ("welcome",       "welcome.enabled",               "👋 Welcome Messages"),
+        ("levels",        "levels.enabled",                "📊 XP / Levels"),
+        ("ai_reply",      "knowledge_base.auto_reply_enabled", "🤖 AI Auto-Reply"),
+    ]
+
+    @staticmethod
+    def _qs_get(settings: dict, dotkey: str) -> bool:
+        keys = dotkey.split(".")
+        val = settings
+        for k in keys:
+            val = val.get(k, {}) if isinstance(val, dict) else {}
+        return bool(val)
+
+    @staticmethod
+    def _qs_set(settings: dict, dotkey: str, value: bool) -> dict:
+        import copy
+        s = copy.deepcopy(settings) if settings else {}
+        keys = dotkey.split(".")
+        node = s
+        for k in keys[:-1]:
+            node = node.setdefault(k, {})
+        node[keys[-1]] = value
+        return s
+
+    def _qs_toggle_keyboard(self, group_id: int, settings: dict, frontend: str) -> InlineKeyboardMarkup:
+        rows = []
+        for feat_key, dotkey, label in self._QS_FEATURES:
+            on = self._qs_get(settings, dotkey)
+            state = "🟢 ON" if on else "🔴 OFF"
+            rows.append([InlineKeyboardButton(
+                f"{label}  {state}",
+                callback_data=f"qs:toggle:{group_id}:{feat_key}",
+            )])
+        rows.append([InlineKeyboardButton("🌐 Full Settings on Web", url=f"{frontend}/bot/{self.bot_id}/group/{group_id}")])
+        rows.append([InlineKeyboardButton("« Back", callback_data="menu:main")])
+        return InlineKeyboardMarkup(rows)
+
+    async def _handle_qs_callback(self, query, user, data: str):
+        frontend = self._frontend()
+        parts = data.split(":")
+
+        # qs:groups — show group selector
+        if data == "qs:groups":
+            groups = []
+            with self.app_context.app_context():
+                from .models import Group
+                gs = Group.query.filter_by(bot_id=self.bot_id).limit(10).all()
+                groups = [{"id": g.id, "title": g.group_name or f"Group {g.id}"} for g in gs]
+
+            if not groups:
+                await query.edit_message_text(
+                    "⚙️ <b>Quick Settings</b>\n\nNo groups linked to this bot yet.\n"
+                    "Add me to a group and run /linkgroup first.",
+                    parse_mode="HTML",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("« Back", callback_data="menu:main")],
+                    ]),
+                )
+                return
+
+            if len(groups) == 1:
+                # Skip selector, go straight to toggle panel
+                await self._handle_qs_callback(query, user, f"qs:group:{groups[0]['id']}")
+                return
+
+            rows = [[InlineKeyboardButton(g["title"], callback_data=f"qs:group:{g['id']}")] for g in groups]
+            rows.append([InlineKeyboardButton("« Back", callback_data="menu:main")])
+            await query.edit_message_text(
+                "⚙️ <b>Quick Settings</b>\n\nChoose a group to configure:",
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup(rows),
+            )
+            return
+
+        # qs:group:{id} — show toggle panel
+        if len(parts) == 3 and parts[1] == "group":
+            group_id = int(parts[2])
+            settings = {}
+            title = ""
+            with self.app_context.app_context():
+                from .models import Group
+                g = Group.query.get(group_id)
+                if not g:
+                    await query.edit_message_text("⚠️ Group not found.")
+                    return
+                settings = dict(g.settings or {})
+                title = g.group_name or f"Group {group_id}"
+
+            await query.edit_message_text(
+                f"⚙️ <b>Quick Settings — {title}</b>\n\nTap any feature to toggle it on/off instantly:",
+                parse_mode="HTML",
+                reply_markup=self._qs_toggle_keyboard(group_id, settings, frontend),
+            )
+            return
+
+        # qs:toggle:{group_id}:{feat_key} — flip setting, re-render
+        if len(parts) == 4 and parts[1] == "toggle":
+            group_id = int(parts[2])
+            feat_key = parts[3]
+            dotkey = next((d for k, d, _ in self._QS_FEATURES if k == feat_key), None)
+            if not dotkey:
+                await query.answer("Unknown feature.", show_alert=True)
+                return
+
+            new_val = False
+            settings = {}
+            title = ""
+            with self.app_context.app_context():
+                from .models import db, Group
+                from sqlalchemy.orm.attributes import flag_modified
+                g = Group.query.get(group_id)
+                if not g:
+                    await query.answer("Group not found.", show_alert=True)
+                    return
+                settings = dict(g.settings or {})
+                current = self._qs_get(settings, dotkey)
+                new_val = not current
+                g.settings = self._qs_set(settings, dotkey, new_val)
+                flag_modified(g, "settings")
+                db.session.commit()
+                settings = dict(g.settings)
+                title = g.group_name or f"Group {group_id}"
+
+            label = next((l for k, _, l in self._QS_FEATURES if k == feat_key), feat_key)
+            await query.answer(f"{label} {'enabled' if new_val else 'disabled'}")
+            await query.edit_message_text(
+                f"⚙️ <b>Quick Settings — {title}</b>\n\nTap any feature to toggle it on/off instantly:",
+                parse_mode="HTML",
+                reply_markup=self._qs_toggle_keyboard(group_id, settings, frontend),
+            )
+            return
+
+        await query.answer("Unknown action.", show_alert=True)
 
     async def handle_settings(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if update.effective_chat.type == "private":
@@ -1880,6 +2019,16 @@ class BotInstance:
                 except Exception:
                     pass
 
+        elif data.startswith("qs:"):
+            try:
+                await self._handle_qs_callback(query, user, data)
+            except Exception as e:
+                logger.error(f"QS callback error bot={self.bot_id} data={data}: {e}", exc_info=True)
+                try:
+                    await query.edit_message_text("⚠️ Something went wrong. Please try again.")
+                except Exception:
+                    pass
+
     async def handle_my_chat_member(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Fires when the bot is added to or removed from a group."""
         result = update.my_chat_member
@@ -1950,7 +2099,7 @@ class BotInstance:
         app.add_handler(CommandHandler("start", self.handle_start))
         app.add_handler(CommandHandler("status", self.handle_status))
         app.add_handler(CommandHandler("linkgroup", self.handle_linkgroup))
-        app.add_handler(CommandHandler("settings", self.handle_settings))
+        # /settings removed — Quick Settings is now accessible via the /start DM menu
         app.add_handler(CommandHandler("rank", self.handle_rank))
         app.add_handler(CommandHandler("leaderboard", self.handle_leaderboard))
         app.add_handler(CommandHandler("warn", self.handle_warn))
