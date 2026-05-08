@@ -262,6 +262,13 @@ def init_db():
             "subscription_renewals.user_id index",
         )
 
+        # ── members.last_name ─────────────────────────────────────────────────────
+        _run_alter(
+            db.engine,
+            "ALTER TABLE members ADD COLUMN IF NOT EXISTS last_name VARCHAR(255)",
+            "members.last_name",
+        )
+
         # ── Backfill: create UserTelegramAccount rows for legacy User.telegram_user_id ──
         # Any user with telegram_user_id but no junction row gets a primary record created.
         _backfill_telegram_accounts(app)

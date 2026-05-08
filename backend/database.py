@@ -58,7 +58,7 @@ class DatabaseManager:
         return group
 
     @staticmethod
-    def get_or_create_member(group_id, telegram_user_id, username=None, first_name=None):
+    def get_or_create_member(group_id, telegram_user_id, username=None, first_name=None, last_name=None):
         member = Member.query.filter_by(
             group_id=group_id,
             telegram_user_id=str(telegram_user_id),
@@ -70,6 +70,7 @@ class DatabaseManager:
                 telegram_user_id=str(telegram_user_id),
                 username=username,
                 first_name=first_name or str(telegram_user_id),
+                last_name=last_name,
             )
             db.session.add(member)
             db.session.commit()
@@ -80,6 +81,9 @@ class DatabaseManager:
                 changed = True
             if first_name and member.first_name != first_name:
                 member.first_name = first_name
+                changed = True
+            if last_name is not None and member.last_name != last_name:
+                member.last_name = last_name
                 changed = True
             if changed:
                 db.session.commit()

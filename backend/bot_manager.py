@@ -26,6 +26,49 @@ from .bot_features.knowledge_base import KnowledgeBaseSystem
 logger = logging.getLogger(__name__)
 
 
+# ── Shared display-name helpers ────────────────────────────────────────────────
+
+def _display_name(tg_user) -> str:
+    """Full display name from a python-telegram-bot User object."""
+    first = (getattr(tg_user, "first_name", None) or "").strip()
+    last = (getattr(tg_user, "last_name", None) or "").strip()
+    username = (getattr(tg_user, "username", None) or "").strip()
+    full = " ".join(x for x in [first, last] if x)
+    if full:
+        return full
+    if username:
+        return f"@{username}"
+    return f"User {tg_user.id}"
+
+
+def _display_name_member(member) -> str:
+    """Full display name from a Member ORM row (has first_name/last_name/username)."""
+    first = (member.first_name or "").strip()
+    last = (getattr(member, "last_name", None) or "").strip()
+    username = (member.username or "").strip()
+    full = " ".join(x for x in [first, last] if x)
+    if full:
+        return full
+    if username:
+        return f"@{username}"
+    return f"User {member.telegram_user_id}"
+
+
+def _mask_wallet(addr: str) -> str:
+    """Show first 6 and last 4 chars of a wallet address."""
+    if len(addr) <= 12:
+        return addr
+    return f"{addr[:6]}...{addr[-4:]}"
+
+
+def _html_escape(text: str) -> str:
+    """Minimal HTML escaping for safe use in parse_mode=HTML messages."""
+    return (text
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;"))
+
+
 async def _auto_delete(bot, chat_id, message_id, delay):
     """Delete a message after `delay` seconds. Logs but does not raise on failure."""
     await asyncio.sleep(delay)
@@ -838,20 +881,20 @@ class BotInstance:
                 Member.xp > member.xp,
             ).count() + 1
 
+        display = _display_name(user)
         rank_image = self.levels.generate_rank_card(member, rank, total, group.settings)
         if rank_image:
             await update.message.reply_photo(
                 photo=rank_image,
-                caption=f"🏆 Rank card for {user.first_name}",
+                caption=f"🏆 Rank card for {display}",
             )
         else:
             await update.message.reply_text(
-                f"📊 *{user.first_name}'s Rank*\n"
-                f"Level: {member.level}\n"
-                f"XP: {member.xp:,}\n"
+                f"📊 <b>{_html_escape(display)}'s Rank</b>\n"
+                f"Level: {member.level}  |  XP: {member.xp:,}\n"
                 f"Rank: #{rank} of {total}\n"
                 f"Role: {member.role.replace('_', ' ').title()}",
-                parse_mode="Markdown",
+                parse_mode="HTML",
             )
 
     async def handle_leaderboard(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -874,12 +917,12 @@ class BotInstance:
             return
 
         medals = ["🥇", "🥈", "🥉"] + ["🏅"] * 7
-        lines = ["🏆 *Leaderboard*\n"]
+        lines = ["🏆 <b>Leaderboard</b>\n"]
         for i, m in enumerate(top_members):
-            name = m.first_name or m.username or f"User {m.telegram_user_id}"
-            lines.append(f"{medals[i]} {name} — Level {m.level} ({m.xp:,} XP)")
+            name = _display_name_member(m)
+            lines.append(f"{medals[i]} {_html_escape(name)} — Level {m.level} ({m.xp:,} XP)")
 
-        await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+        await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
     async def _require_admin_target(self, update, context):
         chat_id = update.effective_chat.id
@@ -1284,14 +1327,15 @@ class BotInstance:
         if not member:
             await update.message.reply_text("You have no stats yet. Start chatting!")
             return
+        joined = member.joined_at.strftime("%Y-%m-%d") if member.joined_at else "Unknown"
         await update.message.reply_text(
-            f"👤 *Your Stats*\n"
-            f"Level: {member.level} | XP: {member.xp:,}\n"
+            f"👤 <b>Your Stats</b>\n"
+            f"Level: {member.level}  |  XP: {member.xp:,}\n"
             f"Role: {member.role.replace('_', ' ').title()}\n"
             f"Warnings: {member.warnings}\n"
-            f"Verified: {'✅' if member.is_verified else '❌'}\n"
-            f"Joined: {member.joined_at.strftime('%Y-%m-%d') if member.joined_at else 'Unknown'}",
-            parse_mode="Markdown",
+            f"Access: Active\n"
+            f"Joined: {joined}",
+            parse_mode="HTML",
         )
 
     async def handle_admins(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1299,27 +1343,51 @@ class BotInstance:
             return
         try:
             admins = await context.bot.get_chat_administrators(update.effective_chat.id)
-            lines = ["👮 *Group Admins*\n"]
+            lines = ["👮 <b>Group Admins</b>\n"]
             for a in admins:
-                name = a.user.first_name or a.user.username or str(a.user.id)
-                title = f" ({a.custom_title})" if getattr(a, "custom_title", None) else ""
-                lines.append(f"• {name}{title}")
-            await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+                name = _display_name(a.user)
+                role = "Owner" if a.status == "creator" else "Admin"
+                custom = f" · <i>{_html_escape(a.custom_title)}</i>" if getattr(a, "custom_title", None) else ""
+                lines.append(f"• {_html_escape(name)} — {role}{custom}")
+            await update.message.reply_text("\n".join(lines), parse_mode="HTML")
         except Exception as e:
-            await update.message.reply_text(f"❌ Could not fetch admins: {e}")
+            await update.message.reply_text(
+                f"❌ Could not fetch admins.\nMake sure the bot is an admin with sufficient permissions.",
+            )
 
     async def handle_roles(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if update.effective_chat.type == "private":
             return
         group = await self._get_or_create_group(update.effective_chat.id, update.effective_chat.title, context.bot)
-        roles = group.settings.get("levels", {}).get("roles", [])
-        if not roles:
-            await update.message.reply_text("No roles configured.")
+        roles_cfg = group.settings.get("levels", {}).get("roles", [])
+
+        with self.app_context.app_context():
+            from .models import Member
+            top = (
+                Member.query.filter_by(group_id=group.id)
+                .order_by(Member.xp.desc())
+                .limit(10)
+                .all()
+            )
+
+        if not top:
+            await update.message.reply_text("No members yet — start chatting to earn XP!")
             return
-        lines = ["🎖 *Roles*\n"]
-        for r in sorted(roles, key=lambda x: x["level"]):
-            lines.append(f"Level {r['level']}+ → {r['name']}")
-        await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+
+        def _role_for_level(lvl):
+            best = "Member"
+            for r in sorted(roles_cfg, key=lambda x: x["level"]):
+                if lvl >= r["level"]:
+                    best = r["name"]
+            return best
+
+        medals = ["🥇", "🥈", "🥉"] + ["🏅"] * 7
+        lines = ["🏅 <b>Top Community Members</b>\n"]
+        for i, m in enumerate(top):
+            name = _display_name_member(m)
+            role_name = _role_for_level(m.level)
+            lines.append(f"{medals[i]} {_html_escape(name)} — {role_name} · Level {m.level}")
+        await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
     async def handle_whois(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if update.effective_chat.type == "private":
@@ -1357,35 +1425,43 @@ class BotInstance:
         if not member:
             await update.message.reply_text("No data found for this user.")
             return
-        wallet_line = f"Wallet: `{member.wallet_address}`" if member.wallet_address else "Wallet: Not submitted"
+        name = _display_name_member(member)
+        wallet_line = f"Wallet: <code>{_html_escape(_mask_wallet(member.wallet_address))}</code>" if member.wallet_address else "Wallet: Not submitted"
+        joined = member.joined_at.strftime("%Y-%m-%d") if member.joined_at else "Unknown"
         await update.message.reply_text(
-            f"🔍 *Whois: {member.first_name or 'Unknown'}*\n"
-            f"Username: @{member.username or 'none'}\n"
-            f"ID: `{member.telegram_user_id}`\n"
-            f"Level: {member.level} | XP: {member.xp:,}\n"
+            f"🔍 <b>Whois: {_html_escape(name)}</b>\n"
+            f"Username: {('@' + member.username) if member.username else '—'}\n"
+            f"ID: <code>{member.telegram_user_id}</code>\n"
+            f"Level: {member.level}  |  XP: {member.xp:,}\n"
             f"Role: {member.role.replace('_', ' ').title()}\n"
             f"Warnings: {member.warnings}\n"
-            f"Verified: {'✅' if member.is_verified else '❌'}\n"
+            f"Access: {'Active' if member.is_verified else 'Pending'}\n"
             f"Muted: {'🔇' if member.is_muted else '🔊'}\n"
-            f"Joined: {member.joined_at.strftime('%Y-%m-%d') if member.joined_at else 'Unknown'}\n"
+            f"Joined: {joined}\n"
             f"{wallet_line}",
-            parse_mode="Markdown",
+            parse_mode="HTML",
         )
 
     async def handle_wallet(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        if update.effective_chat.type == "private":
-            return
+        chat = update.effective_chat
+        user = update.effective_user
+        in_group = chat.type != "private"
 
         if not context.args:
+            hint = "For privacy, you can also DM this bot directly." if in_group else ""
             await update.message.reply_text(
-                "💼 *Wallet Submission*\n"
-                "Usage: `/wallet <your_wallet_address>`\n"
-                "Example: `/wallet 0xAbC123...`",
-                parse_mode="Markdown",
+                "💼 <b>Wallet Submission</b>\n"
+                f"Usage: <code>/wallet &lt;your_wallet_address&gt;</code>\n"
+                f"Example: <code>/wallet 0xAbC123...</code>\n"
+                + (f"\n💡 {hint}" if hint else ""),
+                parse_mode="HTML",
             )
             return
 
         wallet_address = context.args[0].strip()
+        # Basic EVM address validation (starts with 0x, 42 chars) or generic min-length check
+        import re as _re
+        is_evm = bool(_re.fullmatch(r"0x[0-9a-fA-F]{40}", wallet_address))
         if len(wallet_address) < 10:
             await update.message.reply_text("❌ Invalid wallet address. Please provide a valid address.")
             return
@@ -1393,31 +1469,59 @@ class BotInstance:
             await update.message.reply_text("❌ Wallet address too long.")
             return
 
-        group = await self._get_or_create_group(update.effective_chat.id, update.effective_chat.title, context.bot)
-        user = update.effective_user
+        if in_group:
+            group = await self._get_or_create_group(chat.id, chat.title, context.bot)
+            group_id = group.id
+        else:
+            # DM — try to find any group this user is a member of for this bot
+            group_id = None
+            with self.app_context.app_context():
+                from .models import Group, Member as _M
+                bot_groups = Group.query.filter_by(bot_id=self.bot_id).all()
+                for bg in bot_groups:
+                    if _M.query.filter_by(group_id=bg.id, telegram_user_id=str(user.id)).first():
+                        group_id = bg.id
+                        break
+
+            if not group_id:
+                await update.message.reply_text(
+                    "⚠️ You must be a member of a group managed by this bot before submitting a wallet."
+                )
+                return
 
         with self.app_context.app_context():
             from .models import Member, db
-            from datetime import datetime
+            from datetime import datetime as _dt
             member = Member.query.filter_by(
-                group_id=group.id,
+                group_id=group_id,
                 telegram_user_id=str(user.id),
             ).first()
             if not member:
                 member = Member(
-                    group_id=group.id,
+                    group_id=group_id,
                     telegram_user_id=str(user.id),
                     username=user.username,
                     first_name=user.first_name,
+                    last_name=getattr(user, "last_name", None),
                 )
                 db.session.add(member)
             member.wallet_address = wallet_address
-            member.wallet_submitted_at = datetime.utcnow()
+            member.wallet_submitted_at = _dt.utcnow()
             db.session.commit()
 
+        # Try to delete the original message in group (hides full address from chat)
+        if in_group:
+            try:
+                await update.message.delete()
+            except Exception:
+                pass
+
+        masked = _mask_wallet(wallet_address)
+        privacy_note = "\n💡 For privacy, use bot DM next time." if in_group else ""
         await update.message.reply_text(
-            f"✅ *Wallet saved!*\n`{wallet_address}`",
-            parse_mode="Markdown",
+            f"✅ <b>Wallet saved successfully.</b>\n"
+            f"Address: <code>{_html_escape(masked)}</code>{privacy_note}",
+            parse_mode="HTML",
         )
 
     async def handle_mywallet(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1436,15 +1540,15 @@ class BotInstance:
 
         if not member or not member.wallet_address:
             await update.message.reply_text(
-                "You haven't submitted a wallet yet.\nUse `/wallet <address>` to submit.",
-                parse_mode="Markdown",
+                "You haven't submitted a wallet yet.\nUse <code>/wallet &lt;address&gt;</code> to submit.",
+                parse_mode="HTML",
             )
             return
 
         submitted = member.wallet_submitted_at.strftime("%Y-%m-%d %H:%M UTC") if member.wallet_submitted_at else "Unknown"
         await update.message.reply_text(
-            f"💼 *Your Wallet*\n`{member.wallet_address}`\nSubmitted: {submitted}",
-            parse_mode="Markdown",
+            f"💼 <b>Your Wallet</b>\n<code>{_html_escape(_mask_wallet(member.wallet_address))}</code>\nSubmitted: {submitted}",
+            parse_mode="HTML",
         )
 
     async def handle_report(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1617,7 +1721,8 @@ class BotInstance:
                 "Make sure the bot is an admin with 'Invite Users via Link' permission."
             )
             return
-        name = " ".join(context.args) if context.args else f"Link by {user.first_name}"
+        creator_name = _display_name(user)
+        name = " ".join(context.args) if context.args else f"Link by {creator_name}"
         try:
             link = await context.bot.create_chat_invite_link(chat_id=chat.id, name=name[:32])
             group = self._get_group(chat.id)
@@ -1634,11 +1739,14 @@ class BotInstance:
                     db.session.add(il)
                     db.session.commit()
             await update.message.reply_text(
-                f"🔗 *Invite Link Created*\nName: {name}\nLink: {link.invite_link}",
-                parse_mode="Markdown",
+                f"🔗 <b>Invite Link Created</b>\n"
+                f"Created by: {_html_escape(creator_name)}\n"
+                f"Link: {link.invite_link}",
+                parse_mode="HTML",
+                disable_web_page_preview=True,
             )
         except Exception as e:
-            await update.message.reply_text(f"❌ Failed to create invite link: {e}")
+            await update.message.reply_text(f"❌ Failed to create invite link. Make sure the bot has the 'Invite Users via Link' admin permission.")
 
     async def handle_reaction(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         reaction = update.message_reaction
@@ -1741,7 +1849,7 @@ class BotInstance:
         with self.app_context.app_context():
             from .database import DatabaseManager
             DatabaseManager.get_or_create_member(
-                group.id, user.id, user.username, user.first_name
+                group.id, user.id, user.username, user.first_name, user.last_name
             )
 
         # Custom command dispatch

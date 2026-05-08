@@ -347,6 +347,7 @@ class Member(db.Model):
     telegram_user_id = db.Column(db.String(255), nullable=False)
     username = db.Column(db.String(255), nullable=True)
     first_name = db.Column(db.String(255), nullable=True)
+    last_name = db.Column(db.String(255), nullable=True)
     xp = db.Column(db.Integer, default=0)
     level = db.Column(db.Integer, default=1)
     warnings = db.Column(db.Integer, default=0)

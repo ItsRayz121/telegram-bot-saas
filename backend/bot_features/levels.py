@@ -142,7 +142,6 @@ class LevelSystem:
     def generate_rank_card(self, member, rank_position, total_members, settings=None):
         try:
             from PIL import Image, ImageDraw, ImageFont
-            import math
 
             rank_card_cfg = {}
             if settings:
@@ -152,81 +151,93 @@ class LevelSystem:
             color_end = _hex_to_rgb(rank_card_cfg.get("bg_color_end", "#16213e"))
             accent = _hex_to_rgb(rank_card_cfg.get("accent_color", "#2196f3"))
 
-            width, height = 800, 200
+            # 900×360 — 2.5:1 aspect ratio renders as a proper image preview in Telegram
+            width, height = 900, 360
             img = Image.new("RGBA", (width, height), (*color_start, 255))
             draw = ImageDraw.Draw(img)
 
-            for i in range(width):
-                t = i / width
+            # Horizontal gradient background
+            for x in range(width):
+                t = x / width
                 r = int(color_start[0] + (color_end[0] - color_start[0]) * t)
                 g = int(color_start[1] + (color_end[1] - color_start[1]) * t)
                 b = int(color_start[2] + (color_end[2] - color_start[2]) * t)
-                for j in range(height):
-                    img.putpixel((i, j), (r, g, b, 255))
+                for y in range(height):
+                    img.putpixel((x, y), (r, g, b, 255))
 
-            draw.rectangle([0, 0, width - 1, height - 1], outline=accent, width=2)
+            # Accent border
+            draw.rectangle([0, 0, width - 1, height - 1], outline=accent, width=3)
 
-            try:
-                font_large = ImageFont.truetype("arial.ttf", 28)
-                font_medium = ImageFont.truetype("arial.ttf", 20)
-                font_small = ImageFont.truetype("arial.ttf", 16)
-            except Exception:
-                font_large = ImageFont.load_default()
-                font_medium = font_large
-                font_small = font_large
+            # Load fonts — try common system fonts then fall back
+            def _load_font(size):
+                for name in ("arial.ttf", "DejaVuSans.ttf", "LiberationSans-Regular.ttf"):
+                    try:
+                        return ImageFont.truetype(name, size)
+                    except Exception:
+                        pass
+                return ImageFont.load_default()
 
-            avatar_x, avatar_y = 20, 20
+            font_name  = _load_font(36)
+            font_level = _load_font(26)
+            font_info  = _load_font(22)
+            font_bar   = _load_font(20)
+
+            # Avatar circle (left column)
+            pad = 30
             avatar_size = 160
+            av_cx = pad + avatar_size // 2
+            av_cy = height // 2
             draw.ellipse(
-                [avatar_x, avatar_y, avatar_x + avatar_size, avatar_y + avatar_size],
+                [av_cx - avatar_size // 2, av_cy - avatar_size // 2,
+                 av_cx + avatar_size // 2, av_cy + avatar_size // 2],
                 outline=accent,
-                width=3,
+                width=4,
             )
-            draw.text(
-                (avatar_x + avatar_size // 2, avatar_y + avatar_size // 2),
-                (member.first_name or "?")[0].upper(),
-                fill=(255, 255, 255),
-                font=font_large,
-                anchor="mm",
-            )
+            initial = (member.first_name or "?")[0].upper()
+            draw.text((av_cx, av_cy), initial, fill=(255, 255, 255), font=_load_font(72), anchor="mm")
 
-            text_x = avatar_x + avatar_size + 20
-            name = member.first_name or "Unknown"
+            # Text column
+            tx = pad + avatar_size + 30
+            ty = 45
+
+            # Full name
+            first = (member.first_name or "").strip()
+            last = (getattr(member, "last_name", None) or "").strip()
+            full_name = " ".join(x for x in [first, last] if x) or (member.username or f"User {member.telegram_user_id}")
+            draw.text((tx, ty), full_name, fill=(255, 255, 255), font=font_name)
+
+            # Username subtitle
             if member.username:
-                name += f" @{member.username}"
-            draw.text((text_x, 20), name, fill=(255, 255, 255), font=font_large)
-            draw.text((text_x, 60), f"Level {member.level}", fill=accent, font=font_medium)
-            draw.text((text_x, 90), f"Rank #{rank_position} of {total_members}", fill=(180, 180, 200), font=font_small)
-            draw.text((text_x, 115), f"XP: {member.xp:,}", fill=(180, 180, 200), font=font_small)
+                draw.text((tx, ty + 46), f"@{member.username}", fill=(150, 160, 200), font=font_info)
+                ty += 46
 
-            xp_bar_x = text_x
-            xp_bar_y = 145
-            xp_bar_width = width - text_x - 20
-            xp_bar_height = 20
+            ty += 52
+            draw.text((tx, ty), f"Level {member.level}", fill=accent, font=font_level)
+            ty += 38
+            draw.text((tx, ty), f"Rank  #{rank_position} of {total_members}", fill=(180, 190, 210), font=font_info)
+            ty += 32
+            draw.text((tx, ty), f"XP  {member.xp:,}", fill=(180, 190, 210), font=font_info)
+
+            # XP progress bar
+            bar_x = tx
+            bar_y = height - 70
+            bar_w = width - tx - pad
+            bar_h = 28
 
             current_level_xp = self._xp_for_level(member.level)
             next_level_xp = self._xp_for_level(member.level + 1)
             remaining_xp = member.xp - current_level_xp
-            needed_xp = next_level_xp - current_level_xp
-            progress = min(1.0, remaining_xp / max(1, needed_xp))
+            needed_xp = max(1, next_level_xp - current_level_xp)
+            progress = min(1.0, remaining_xp / needed_xp)
 
-            draw.rounded_rectangle(
-                [xp_bar_x, xp_bar_y, xp_bar_x + xp_bar_width, xp_bar_y + xp_bar_height],
-                radius=10,
-                fill=(30, 30, 60),
-            )
-            fill_width = int(xp_bar_width * progress)
-            if fill_width > 0:
-                draw.rounded_rectangle(
-                    [xp_bar_x, xp_bar_y, xp_bar_x + fill_width, xp_bar_y + xp_bar_height],
-                    radius=10,
-                    fill=accent,
-                )
+            draw.rounded_rectangle([bar_x, bar_y, bar_x + bar_w, bar_y + bar_h], radius=14, fill=(30, 30, 60))
+            fill_w = max(28, int(bar_w * progress))
+            draw.rounded_rectangle([bar_x, bar_y, bar_x + fill_w, bar_y + bar_h], radius=14, fill=accent)
             draw.text(
-                (xp_bar_x + xp_bar_width // 2, xp_bar_y + xp_bar_height // 2),
-                f"{remaining_xp}/{needed_xp} XP",
+                (bar_x + bar_w // 2, bar_y + bar_h // 2),
+                f"{remaining_xp} / {needed_xp} XP",
                 fill=(255, 255, 255),
-                font=font_small,
+                font=font_bar,
                 anchor="mm",
             )
 
