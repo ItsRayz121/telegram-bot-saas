@@ -225,7 +225,7 @@ def _bot_username():
 
 
 def _frontend():
-    return Config.FRONTEND_URL or "https://telegizer.xyz"
+    return Config.FRONTEND_URL or "https://opencalwtest.online"
 
 
 # ─── /start ───────────────────────────────────────────────────────────────────
@@ -588,12 +588,12 @@ async def cmd_linkgroup(update: Update, context: ContextTypes.DEFAULT_TYPE):
             link_code = TelegramGroupLinkCode.query.filter_by(code=code, used=False).first()
             if not link_code or not link_code.user_id:
                 await update.message.reply_text(
-                    "❌ Invalid or expired code. Generate a new one at telegizer.com",
+                    "❌ Invalid or expired code. Generate a new one at opencalwtest.online",
                 )
                 return
             if link_code.expires_at < datetime.utcnow():
                 await update.message.reply_text(
-                    "❌ This code has expired. Generate a new one at telegizer.com",
+                    "❌ This code has expired. Generate a new one at opencalwtest.online",
                 )
                 return
 
@@ -651,7 +651,7 @@ async def cmd_linkgroup(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             f"✅ *{chat.title}* is now linked to your Telegizer dashboard!\n\n"
             f"🔗 [Open Dashboard]({_frontend()}/official-groups)\n\n"
-            "Your bot features are now active. Configure them at telegizer.com",
+            "Your bot features are now active. Configure them at opencalwtest.online",
             parse_mode=ParseMode.MARKDOWN,
         )
         return
@@ -1028,7 +1028,7 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         await message.reply_text("✓ Saved to your notes.")
                     else:
                         await message.reply_text(
-                            "⚠️ Connect your Telegram account on telegizer.xyz first to save notes."
+                            "⚠️ Connect your Telegram account on opencalwtest.online first to save notes."
                         )
             except Exception as _exc:
                 _log.warning("Note capture failed: %s", _exc)
@@ -1145,7 +1145,7 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if _unlinked:
                 try:
                     await message.reply_text(
-                        "👋 Hi! To use the Telegizer assistant, connect your Telegram account at telegizer.xyz/settings.\n\n"
+                        "👋 Hi! To use the Telegizer assistant, connect your Telegram account at opencalwtest.online/settings.\n\n"
                         "Once linked, I can schedule meetings, save notes, set reminders, and more!",
                         reply_markup=InlineKeyboardMarkup([[
                             InlineKeyboardButton("🔗 Connect Account", url=f"{frontend}/settings"),
@@ -4642,7 +4642,7 @@ async def cmd_remind(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 owner = _user_by_tg_id(user.id)
 
             if not owner:
-                await message.reply_text("⚠️ Reminders only work for linked accounts. Connect your Telegram at telegizer.xyz/settings")
+                await message.reply_text("⚠️ Reminders only work for linked accounts. Connect your Telegram at opencalwtest.online/settings")
                 return
 
             from .models import WorkspaceReminder
@@ -5078,7 +5078,7 @@ class OfficialBotRunner:
             await a.bot.set_my_description(
                 "Telegizer — the all-in-one Telegram community platform. "
                 "Moderation, welcome messages, AI digests, XP levels and more. "
-                "Visit telegizer.com to connect your group."
+                "Visit opencalwtest.online to connect your group."
             )
             await a.bot.set_my_short_description("All-in-one Telegram community manager")
         except Exception as exc:

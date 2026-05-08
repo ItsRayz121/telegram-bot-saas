@@ -28,7 +28,7 @@ const BOTFATHER_STEPS = [
   {
     label: 'Set the menu button URL',
     content: 'Enter this URL as the Mini App URL:',
-    code: 'https://telegram-bot-saas.vercel.app/mini-app',
+    code: 'https://opencalwtest.online/mini-app',
   },
   {
     label: 'Set the button title',
@@ -77,10 +77,10 @@ function CopyableCode({ value }) {
 function QuickLinks() {
   const { haptic } = useTelegram();
   const links = [
-    { label: 'Groups', icon: <Groups fontSize="small" />, url: 'https://telegram-bot-saas.vercel.app/groups' },
-    { label: 'Workspace', icon: <Bolt fontSize="small" />, url: 'https://telegram-bot-saas.vercel.app/workspace' },
-    { label: 'Billing', icon: <CardGiftcard fontSize="small" />, url: 'https://telegram-bot-saas.vercel.app/billing' },
-    { label: 'Settings', icon: <Settings fontSize="small" />, url: 'https://telegram-bot-saas.vercel.app/settings' },
+    { label: 'Groups', icon: <Groups fontSize="small" />, url: 'https://opencalwtest.online/groups' },
+    { label: 'Workspace', icon: <Bolt fontSize="small" />, url: 'https://opencalwtest.online/workspace' },
+    { label: 'Billing', icon: <CardGiftcard fontSize="small" />, url: 'https://opencalwtest.online/billing' },
+    { label: 'Settings', icon: <Settings fontSize="small" />, url: 'https://opencalwtest.online/settings' },
   ];
   return (
     <Card sx={{ mb: 2 }}>

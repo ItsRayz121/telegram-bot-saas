@@ -35,7 +35,7 @@ function NotLinkedScreen() {
         Open the website → Settings → Link Telegram.
       </Typography>
       <Button variant="contained" startIcon={<OpenInNew />}
-        href="https://telegram-bot-saas.vercel.app/settings" target="_blank" rel="noopener noreferrer">
+        href="https://opencalwtest.online/settings" target="_blank" rel="noopener noreferrer">
         Open Telegizer Settings
       </Button>
     </Box>
@@ -60,7 +60,7 @@ function NoWebAppScreen() {
       <Alert severity="info" sx={{ textAlign: 'left', mb: 3 }}>
         Open this page inside Telegram — it's a Telegram Mini App.
       </Alert>
-      <Button variant="contained" href="https://telegram-bot-saas.vercel.app" startIcon={<OpenInNew />}>
+      <Button variant="contained" href="https://opencalwtest.online" startIcon={<OpenInNew />}>
         Open Telegizer website
       </Button>
     </Box>
@@ -137,7 +137,7 @@ function OnboardingChecklist({ groups }) {
           </Box>
         ))}
         {!hasGroup && (
-          <Button size="small" variant="outlined" href="https://telegram-bot-saas.vercel.app/groups"
+          <Button size="small" variant="outlined" href="https://opencalwtest.online/groups"
             target="_blank" startIcon={<OpenInNew fontSize="small" />} sx={{ mt: 1 }}>
             Add a group
           </Button>
@@ -207,7 +207,7 @@ function HomeTab() {
             <Box sx={{ textAlign: 'center', py: 3 }}>
               <Typography variant="body2" color="text.secondary" mb={1.5}>No groups connected yet.</Typography>
               <Button size="small" variant="outlined" startIcon={<OpenInNew fontSize="small" />}
-                href="https://telegram-bot-saas.vercel.app/groups" target="_blank">
+                href="https://opencalwtest.online/groups" target="_blank">
                 Add a group on the website
               </Button>
             </Box>
@@ -225,7 +225,7 @@ function HomeTab() {
       <Divider sx={{ my: 2.5 }} />
       <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
         <Button size="small" variant="text" endIcon={<OpenInNew fontSize="small" />}
-          href="https://telegram-bot-saas.vercel.app/dashboard" target="_blank" sx={{ fontSize: '0.72rem' }}>
+          href="https://opencalwtest.online/dashboard" target="_blank" sx={{ fontSize: '0.72rem' }}>
           Full Dashboard
         </Button>
       </Box>

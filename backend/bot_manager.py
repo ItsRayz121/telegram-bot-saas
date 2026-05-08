@@ -204,7 +204,7 @@ class BotInstance:
     # ── internal helpers ───────────────────────────────────────────────────────
 
     def _frontend(self):
-        return self.app_context.config.get("FRONTEND_URL", "https://telegizer.xyz")
+        return self.app_context.config.get("FRONTEND_URL", "https://opencalwtest.online")
 
     def _official_bot_username(self):
         raw = self.app_context.config.get("TELEGRAM_BOT_USERNAME", "telegizer_bot")
@@ -2399,7 +2399,7 @@ class BotInstance:
                 if tier == "free":
                     await app.bot.set_my_description(
                         "This group is managed with Telegizer — the all-in-one Telegram community platform. "
-                        "Visit telegizer.com to set up your own."
+                        "Visit opencalwtest.online to set up your own."
                     )
                     await app.bot.set_my_short_description("Powered by Telegizer")
                 else:
