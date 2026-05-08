@@ -1,9 +1,10 @@
 # TELEGIZER — ENTERPRISE SYSTEM SPECIFICATION
-### Master Technical Blueprint · Version 2.2 · May 2026
+### Master Technical Blueprint · Version 2.3 · May 2026
 
-> **Document Status:** COMPLETE. All 4 phases written + 3 new sections (4.15 Forum Groups, 4.16 Formatting, 4.17 Custom Bot Identity) + 9 real-world testing issue fixes integrated. Version 2.2 final.
+> **Document Status:** COMPLETE AND SYNCHRONIZED. All 4 original phases + 10 new sections (§19–§28) added to document real implementation features. Cross-validated against `DEVELOPER_IMPLEMENTATION_PLAN.md`. Version 2.3 final.
 > **Audience:** Developers, architects, UI/UX teams, AI coding systems, technical agencies.
 > **Purpose:** Complete implementation guide from zero to production. A developer who has never seen the codebase must be able to build the entire product from this document alone.
+> **Companion document:** `docs/DEVELOPER_IMPLEMENTATION_PLAN.md` — actionable checklist of every gap between this spec and the real codebase. Work that document top-to-bottom to reach full spec compliance.
 
 ---
 
@@ -31,6 +32,18 @@
 - [13. UI Component System](#13-ui-component-system)
 - [14. Performance Optimization](#14-performance-optimization)
 - [15. Production Readiness Checklist](#15-production-readiness-checklist)
+
+### Version 2.3 Additions (Real Implementation — May 2026)
+- [19. Unified Three-Component Architecture](#19-unified-three-component-architecture)
+- [20. Meetings System](#20-meetings-system)
+- [21. Partnership Deals System](#21-partnership-deals-system)
+- [22. Custom Assistant Bots](#22-custom-assistant-bots)
+- [23. Automation Engine](#23-automation-engine)
+- [24. Polls System](#24-polls-system)
+- [25. Undocumented Models — Canonical Reference](#25-undocumented-models--canonical-reference)
+- [26. Assistant System — Full Module Architecture](#26-assistant-system--full-module-architecture)
+- [27. TCS Engine (Template Content System)](#27-tcs-engine-template-content-system)
+- [28. Group Defaults System](#28-group-defaults-system)
 
 ---
 
@@ -7306,7 +7319,984 @@ Scenario: Bot token leaked
 
 ---
 
-*TELEGIZER ENTERPRISE SPECIFICATION — COMPLETE*
+# 19. UNIFIED THREE-COMPONENT ARCHITECTURE
+
+> **This section documents the canonical system design. Every feature, model, and endpoint must be consistent across all three components. Nothing exists in isolation.**
+
+## 19.1 The Three Components
+
+Telegizer is not a single app. It is a **unified platform** with three coordinated components that share a single backend, a single database, and a single identity system.
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    TELEGIZER UNIFIED PLATFORM                           │
+│                                                                         │
+│  ┌──────────────────┐   ┌──────────────────┐   ┌──────────────────┐   │
+│  │  COMPONENT 1     │   │  COMPONENT 2     │   │  COMPONENT 3     │   │
+│  │  Telegizer Bot   │   │  Web Dashboard   │   │  Telegram Mini   │   │
+│  │  @TelegizerBot   │   │  (React SPA)     │   │  App (TMA)       │   │
+│  │  + Custom Bots   │   │  Vercel          │   │  Embedded in TG  │   │
+│  └────────┬─────────┘   └────────┬─────────┘   └────────┬─────────┘   │
+│           │                      │                       │             │
+│           └──────────────────────┴───────────────────────┘             │
+│                                  │                                      │
+│                    ┌─────────────▼──────────────┐                      │
+│                    │   Flask Backend + PostgreSQL │                      │
+│                    │   + Redis + Railway          │                      │
+│                    └─────────────────────────────┘                      │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+## 19.2 Component 1 — Telegizer Bot
+
+**What it is:** The official shared Telegram bot (`@TelegizerBot`) that any user can add to their group immediately without a bot token. Advanced users may also add their own custom bot token (bring-your-own-bot) for white-label deployments.
+
+**Runs as:** Long-polling daemon thread inside the Flask process (short-term). Separate Railway service in Phase 2. Webhook mode in Phase 3.
+
+**Responsibilities:**
+- Receive and process all Telegram group/channel/DM events
+- Execute moderation actions (mute, ban, warn, delete)
+- Send welcome messages, verification challenges, scheduled posts, digests
+- Track member XP, levels, and engagement
+- Handle custom commands, auto-replies, and knowledge base Q&A
+- Write to MessageBuffer for AI digest generation
+- Write BotEvents for analytics
+- Accept `/linkgroup TLG-XXXXXXXX` codes to associate groups with dashboard users
+
+**Custom Bot Extension:**
+When a user provides their own bot token, the system instantiates a `BotInstance` (via `bot_manager.py`) that runs an identical handler stack to the official bot, but under the user's own bot identity. Every feature available on the official bot is available on custom bots. The only difference is branding and the Telegram bot identity.
+
+**Uniformity Rule:** Every feature added to the official bot MUST also be implemented for custom bots via the shared handler stack. There must be no feature that works on one but not the other.
+
+## 19.3 Component 2 — Web Dashboard
+
+**What it is:** A React 18 SPA hosted on Vercel. This is the primary management interface where users configure bots, view analytics, manage members, write content, use the AI assistant, and manage their subscription.
+
+**Authentication:** JWT stored in httpOnly cookies (see Section 8.2). Auto-refresh on 401. Email + password with optional TOTP.
+
+**Routing:** 60+ routes. All authenticated routes require a valid JWT. Plan-gated routes render `<PlanGate>` for insufficient subscription tier.
+
+**Responsibilities:**
+- Full configuration UI for every bot feature (moderation, verification, welcome, digests, commands, auto-replies)
+- AI Assistant hub (notes, tasks, reminders, digests, knowledge base)
+- Analytics dashboards (group growth, member activity, moderation breakdown)
+- Subscription and billing management
+- CRM and member management
+- Workspace tools (smart links, automations, forwarding rules)
+- Marketplace and directory
+- Admin panel (platform operators only)
+
+## 19.4 Component 3 — Telegram Mini App (TMA)
+
+**What it is:** A web app embedded inside Telegram via the official Telegram Mini App platform. Accessed by tapping a button in the bot's DM or via an inline keyboard button in group messages.
+
+**Tech stack:** Same React frontend, separate route (`/mini-app`), uses `window.Telegram.WebApp` API for native Telegram integration.
+
+**Authentication:** The TMA receives `initData` from Telegram (signed with bot token). The backend validates this signature and issues a JWT. No separate login is needed inside Telegram.
+
+**Responsibilities (Mobile-first, simplified view):**
+- Quick dashboard: member count, last 3 moderation actions, pending verifications
+- Send an announcement to a linked group
+- View and dismiss AI reminders
+- Approve/reject pending verification queue
+- View group health score
+- Quick access to most-used features without leaving Telegram
+
+**TMA Init Flow:**
+```
+User taps [Open Dashboard] in bot DM
+  → Telegram opens Mini App URL: https://telegizer.com/mini-app?tgWebAppData=...
+  → Frontend reads window.Telegram.WebApp.initDataUnsafe
+  → POST /api/webapp/auth { initData: "..." }
+  → Backend validates HMAC of initData using TELEGRAM_BOT_TOKEN
+  → If valid: return JWT + user profile
+  → Frontend stores JWT (in-memory for TMA, not localStorage)
+  → TMA renders with full API access
+```
+
+**Telegram.WebApp Integration:**
+```javascript
+// In MiniApp.js — must implement all of:
+const tg = window.Telegram.WebApp;
+tg.ready();                            // Signal TMA is ready
+tg.expand();                           // Full height
+tg.MainButton.setText("Send Announcement");
+tg.MainButton.show();
+tg.MainButton.onClick(() => handleSend());
+tg.BackButton.show();                  // On sub-pages
+tg.BackButton.onClick(() => navigate(-1));
+tg.setHeaderColor("#0f172a");          // Match app theme
+tg.setBackgroundColor("#0f172a");
+```
+
+## 19.5 Uniformity Rules
+
+These rules are non-negotiable. Violations cause inconsistent user experience and support confusion.
+
+| Rule | Description |
+|---|---|
+| **Feature Parity** | Every bot feature works on BOTH official bot AND custom bots |
+| **Data Parity** | Every action visible on web must also be visible in TMA (read) |
+| **Config Source of Truth** | Web Dashboard is the ONLY place configuration is changed. Bot reads config from DB. TMA reads config from DB. No config stored in bot memory. |
+| **Authentication Uniformity** | One User model. One JWT system. Web uses cookie JWT. TMA uses initData-validated JWT. API keys use Bearer token. All hit the same `/api/*` endpoints. |
+| **Event Uniformity** | Every bot action writes a BotEvent. Every BotEvent is visible in analytics on both web and TMA. |
+| **AI Uniformity** | AI features (digest, auto-reply, knowledge Q&A) use the same AI key resolver regardless of whether triggered by official bot, custom bot, or web assistant. |
+
+## 19.6 Adding a New Custom Bot — End-to-End Flow
+
+When a user adds a new custom bot, this exact sequence must execute:
+
+```
+1. User opens /bots → clicks "Add Bot"
+2. User pastes bot token → POST /api/bots/validate-token
+   → Backend calls Telegram getMe with the token
+   → Checks token is not already registered (by hash)
+   → Returns { username, first_name, valid: true }
+3. User confirms → POST /api/custom-bots { token, name }
+   → Backend Fernet-encrypts token → stores in Bot model
+   → Calls _register_bot_identity(token):
+       - setMyCommands: /start, /help, /rules, /stats, /leaderboard, /report
+       - setMyDescription: "Powered by Telegizer"  (free tier)
+       - setMyShortDescription: "Community manager"
+   → Creates default group settings template
+   → Returns { bot_id, username }
+4. BotManager starts a BotInstance for the new bot
+5. Frontend shows success + "Add this bot to your group" instructions
+6. User adds bot to Telegram group
+7. Bot receives chat_member update (bot was added)
+   → Bot sends welcome message: "👋 I'm [BotName], managed via Telegizer. 
+      Use /start to link this group to your dashboard."
+8. User clicks "Generate Link Code" in the web dashboard → POST /api/telegram-groups/generate-link-code
+   → Backend generates TLG-XXXXXXXX code, stores in DB with 12-minute TTL
+   → Dashboard shows code + copyable instruction: "Run /linkgroup TLG-XXXXXXXX in your group"
+   → Dashboard begins polling GET /api/telegram-groups/link-status?code=TLG-XXXXXXXX every 3s
+9. Admin runs /linkgroup TLG-XXXXXXXX in the Telegram group
+   → Bot validates code, checks admin status, creates TelegramGroup record, marks code used
+   → Polling endpoint returns { status: "linked" } → dashboard auto-redirects to group settings
+   → Bot sends: "✅ Group linked to your Telegizer dashboard!"
+10. POST /api/telegram-groups/link is the internal endpoint called by the bot handler
+   → Validates code, fetches chat info via getChat
+   → Checks bot is admin via getChatMember
+   → Creates TelegramGroup record linked to user
+   → Stores bot_permissions JSON
+   → Writes BotEvent: group_linked
+10. Dashboard polls every 3s on the "waiting for link" screen
+    → On success: redirect to group settings page
+    → On success: bot sends: "✅ Group linked to your Telegizer dashboard!"
+```
+
+## 19.7 Adding an AI Feature — End-to-End Flow
+
+When any AI feature is triggered (digest, auto-reply, notes), this resolver runs:
+
+```
+AI Key Resolution (priority order):
+  1. Group-specific key (group.ai_api_key in settings JSONB) — if set
+  2. Workspace key (user.workspace_ai_api_key) — if set
+  3. Platform key (PLATFORM_GEMINI_API_KEY or PLATFORM_OPENROUTER_API_KEY env var)
+
+Model selection:
+  - Free tier: platform key only, gpt-3.5-turbo or gemini-flash
+  - Pro tier: user's own key supported, gpt-4o or gemini-pro
+  - Enterprise: full model selection, no daily token limit
+
+Token tracking:
+  - Every AI call: deduct from user.workspace_ai_tokens_today (atomic Redis DECR)
+  - On depletion: return 429 with { error: "daily_token_limit_reached", reset_at: "..." }
+  - Reset: midnight UTC cron resets counter to 0
+  - DigestLog: record tokens_used per digest generation
+
+Content safety:
+  - All AI output passes through content_safety_check() before being sent to Telegram
+  - Confidence scoring: only auto-reply if confidence >= 0.85
+  - Topic filter: never auto-reply to medical/legal/financial questions without disclaimer
+```
+
+---
+
+# 20. MEETINGS SYSTEM
+
+> Documented from real implementation. Not in original spec.
+
+## 20.1 Overview
+
+The Meetings system allows community managers to schedule, track, and record meetings associated with their communities or workspace. It is accessible from the web dashboard.
+
+## 20.2 Data Model
+
+```python
+class Meeting(db.Model):
+    __tablename__ = "meetings"
+    id              = db.Column(db.Integer, primary_key=True)
+    user_id         = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    group_id        = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=True)
+    title           = db.Column(db.String(255), nullable=False)
+    description     = db.Column(db.Text)
+    scheduled_at    = db.Column(db.DateTime(timezone=True), nullable=False)
+    duration_minutes= db.Column(db.Integer, default=60)
+    meeting_url     = db.Column(db.String(500))           # Zoom/Meet/Telegram link
+    status          = db.Column(db.String(50), default="scheduled")
+                                                          # scheduled | live | completed | cancelled
+    recording_url   = db.Column(db.String(500))
+    transcription   = db.Column(db.Text)
+    attendees_json  = db.Column(db.JSON, default=list)    # [{ telegram_id, name, joined_at }]
+    notes           = db.Column(db.Text)
+    created_at      = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at      = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+```
+
+## 20.3 API Endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/meetings` | List all meetings for current user (paginated) |
+| POST | `/api/meetings` | Create a new meeting |
+| GET | `/api/meetings/:id` | Get meeting detail |
+| PATCH | `/api/meetings/:id` | Update meeting (status, notes, recording_url) |
+| DELETE | `/api/meetings/:id` | Cancel and delete meeting |
+| POST | `/api/meetings/:id/announce` | Send meeting announcement to linked group via bot |
+
+## 20.4 Bot Integration
+
+When a meeting is announced, the bot sends a formatted message to the linked group:
+
+```
+📅 Upcoming Meeting: [Title]
+🗓 [Date & Time in group timezone]
+⏱ Duration: [X] minutes
+🔗 [Meeting URL]
+
+[Description if set]
+
+React with ✅ to confirm attendance.
+```
+
+## 20.5 Frontend
+
+- Route: `/meetings`
+- Page: `MeetingsPage.js`
+- Shows: calendar/list view, create modal, status badges
+- Links from GroupManagement page for group-specific meetings
+
+---
+
+# 21. PARTNERSHIP DEALS SYSTEM
+
+> Documented from real implementation. Not in original spec.
+
+## 21.1 Overview
+
+The Partnership Deals system allows community operators to propose, negotiate, and track collaboration deals with other communities or partners. This is accessible from the Marketplace section.
+
+## 21.2 Data Models
+
+```python
+class PartnershipDeal(db.Model):
+    __tablename__ = "partnership_deals"
+    id              = db.Column(db.Integer, primary_key=True)
+    proposer_user_id= db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    partner_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    title           = db.Column(db.String(255), nullable=False)
+    description     = db.Column(db.Text)
+    deal_type       = db.Column(db.String(100))   # cross_promo | collab | sponsorship | other
+    status          = db.Column(db.String(50), default="proposed")
+                                                  # proposed | negotiating | active | completed | rejected
+    terms_json      = db.Column(db.JSON, default=dict)
+    created_at      = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at      = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class DealMessage(db.Model):
+    __tablename__ = "deal_messages"
+    id              = db.Column(db.Integer, primary_key=True)
+    deal_id         = db.Column(db.Integer, db.ForeignKey("partnership_deals.id"), nullable=False)
+    sender_user_id  = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    content         = db.Column(db.Text, nullable=False)
+    created_at      = db.Column(db.DateTime, default=datetime.utcnow)
+```
+
+## 21.3 API Endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/marketplace/deals` | List user's deals (proposed + received) |
+| POST | `/api/marketplace/deals` | Propose a new deal |
+| GET | `/api/marketplace/deals/:id` | Deal detail with messages |
+| PATCH | `/api/marketplace/deals/:id` | Update deal status or terms |
+| POST | `/api/marketplace/deals/:id/messages` | Send a message in deal thread |
+| GET | `/api/marketplace/deals/:id/messages` | List deal messages |
+
+---
+
+# 22. CUSTOM ASSISTANT BOTS
+
+> Documented from real implementation. Extends Section 5 (AI Assistant System).
+
+## 22.1 Overview
+
+Beyond the main assistant hub, users can create purpose-built AI assistant bots that operate inside specific Telegram groups. These bots respond to questions using the group's knowledge base, maintain conversation context per user, and can be customized with a persona and instructions.
+
+This is distinct from the main AI assistant (which is a dashboard tool). Custom assistant bots are Telegram-facing: they respond to group members directly.
+
+## 22.2 Data Models
+
+```python
+class AssistantBot(db.Model):
+    __tablename__ = "assistant_bots"
+    id              = db.Column(db.Integer, primary_key=True)
+    user_id         = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    group_id        = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=True)
+    name            = db.Column(db.String(100), nullable=False)
+    persona         = db.Column(db.Text)          # System prompt / persona description
+    model           = db.Column(db.String(100), default="gpt-3.5-turbo")
+    temperature     = db.Column(db.Float, default=0.7)
+    max_tokens      = db.Column(db.Integer, default=500)
+    trigger_mode    = db.Column(db.String(50), default="mention")
+                                                  # mention | all_messages | command
+    trigger_command = db.Column(db.String(50))    # e.g. "/ask"
+    is_active       = db.Column(db.Boolean, default=True)
+    created_at      = db.Column(db.DateTime, default=datetime.utcnow)
+
+class AssistantConversationState(db.Model):
+    __tablename__ = "assistant_conversation_states"
+    id              = db.Column(db.Integer, primary_key=True)
+    assistant_bot_id= db.Column(db.Integer, db.ForeignKey("assistant_bots.id"), nullable=False)
+    telegram_user_id= db.Column(db.BigInteger, nullable=False)
+    group_id        = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=True)
+    history_json    = db.Column(db.JSON, default=list)  # [{ role, content, timestamp }]
+    last_active_at  = db.Column(db.DateTime, default=datetime.utcnow)
+    # Conversation history is capped at 20 turns; older turns are evicted (sliding window)
+```
+
+## 22.3 API Endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/assistant-bots` | List user's assistant bots |
+| POST | `/api/assistant-bots` | Create assistant bot |
+| GET | `/api/assistant-bots/:id` | Get config |
+| PATCH | `/api/assistant-bots/:id` | Update config / persona |
+| DELETE | `/api/assistant-bots/:id` | Delete assistant bot |
+| GET | `/api/assistant-bots/:id/conversations` | List conversation threads |
+| DELETE | `/api/assistant-bots/:id/conversations/:userId` | Clear a user's conversation history |
+
+## 22.4 Bot Handler Integration
+
+When a message arrives in a group with an active AssistantBot:
+```
+1. Check trigger_mode:
+   - "mention": only respond if bot is @mentioned
+   - "all_messages": respond to every message (use sparingly)
+   - "command": only respond if message starts with trigger_command
+2. Load AssistantConversationState for (assistant_bot_id, telegram_user_id)
+3. Append user message to history_json (slide window at 20 turns)
+4. Build prompt: persona + last N turns + current message
+5. Query AI model (via AI key resolver — Section 19.7)
+6. Run content_safety_check() on response
+7. Send response to group (reply to original message)
+8. Save updated history_json
+9. Deduct tokens from user.workspace_ai_tokens_today
+```
+
+---
+
+# 23. AUTOMATION ENGINE
+
+> Documented from real implementation. Extends Section 7 (Backend & API Specification).
+
+## 23.1 Overview
+
+The Automation Engine evaluates user-defined workflow rules and executes actions when conditions are met. It runs as a background job (every 1 minute via APScheduler, or triggered by bot events).
+
+## 23.2 Architecture
+
+```
+backend/automation/
+  engine.py          # Core rule evaluator
+  conditions.py      # Condition type implementations
+  actions.py         # Action type implementations
+
+backend/models.py:
+  AutomationWorkflow  # The rule definition
+  AutomationExecution # One record per rule execution
+```
+
+## 23.3 Data Models
+
+```python
+class AutomationWorkflow(db.Model):
+    __tablename__ = "automation_workflows"
+    id              = db.Column(db.Integer, primary_key=True)
+    user_id         = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    group_id        = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=True)
+    name            = db.Column(db.String(255), nullable=False)
+    is_active       = db.Column(db.Boolean, default=True)
+    trigger_type    = db.Column(db.String(100))
+                     # member_joined | message_received | member_left
+                     # scheduled | member_warned | member_reached_level
+    trigger_config  = db.Column(db.JSON, default=dict)
+    conditions_json = db.Column(db.JSON, default=list)  # List of condition objects
+    actions_json    = db.Column(db.JSON, default=list)  # List of action objects
+    execution_count = db.Column(db.Integer, default=0)
+    last_executed_at= db.Column(db.DateTime)
+    created_at      = db.Column(db.DateTime, default=datetime.utcnow)
+
+class AutomationExecution(db.Model):
+    __tablename__ = "automation_executions"
+    id              = db.Column(db.Integer, primary_key=True)
+    workflow_id     = db.Column(db.Integer, db.ForeignKey("automation_workflows.id"), nullable=False)
+    trigger_data    = db.Column(db.JSON)            # What triggered this execution
+    conditions_passed = db.Column(db.Boolean)
+    actions_executed  = db.Column(db.JSON)          # Which actions ran + results
+    success         = db.Column(db.Boolean)
+    error_message   = db.Column(db.Text)
+    executed_at     = db.Column(db.DateTime, default=datetime.utcnow)
+    duration_ms     = db.Column(db.Integer)
+```
+
+## 23.4 Supported Conditions
+
+```json
+{ "type": "member_count_above", "value": 1000 }
+{ "type": "member_count_below", "value": 100 }
+{ "type": "message_contains", "value": "keyword" }
+{ "type": "member_has_role", "value": "verified" }
+{ "type": "member_level_above", "value": 5 }
+{ "type": "time_of_day", "value": "09:00", "timezone": "UTC" }
+{ "type": "day_of_week", "value": ["monday", "wednesday"] }
+```
+
+## 23.5 Supported Actions
+
+```json
+{ "type": "send_message", "text": "Welcome to {group_name}!", "pin": false }
+{ "type": "assign_role", "role": "verified" }
+{ "type": "send_dm", "text": "Your XP milestone: {xp}" }
+{ "type": "webhook", "url": "https://...", "method": "POST", "payload": {} }
+{ "type": "create_note", "content": "Auto-note: {trigger_summary}" }
+{ "type": "add_xp", "amount": 50 }
+{ "type": "warn_member" }
+{ "type": "mute_member", "duration_seconds": 3600 }
+```
+
+## 23.6 API Endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/automations` | List user's automation workflows |
+| POST | `/api/automations` | Create workflow |
+| GET | `/api/automations/:id` | Get workflow + last 10 executions |
+| PATCH | `/api/automations/:id` | Update workflow |
+| DELETE | `/api/automations/:id` | Delete workflow |
+| POST | `/api/automations/:id/test` | Run workflow in dry-run mode (no side effects) |
+| GET | `/api/automations/:id/executions` | Full execution history (paginated) |
+
+---
+
+# 24. POLLS SYSTEM
+
+> Documented from real implementation. Not in original spec.
+
+## 24.1 Overview
+
+Admins can create, schedule, and send Telegram native polls to their groups from the dashboard. Polls can be one-shot or recurring, and results are tracked.
+
+## 24.2 Data Models
+
+```python
+class Poll(db.Model):
+    __tablename__ = "polls"
+    id              = db.Column(db.Integer, primary_key=True)
+    group_id        = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False)
+    question        = db.Column(db.String(300), nullable=False)
+    options_json    = db.Column(db.JSON, nullable=False)  # ["Option A", "Option B", ...]
+    is_anonymous    = db.Column(db.Boolean, default=True)
+    allows_multiple = db.Column(db.Boolean, default=False)
+    is_quiz         = db.Column(db.Boolean, default=False)
+    correct_option  = db.Column(db.Integer)               # For quiz mode
+    schedule_at     = db.Column(db.DateTime(timezone=True))
+    sent_at         = db.Column(db.DateTime)
+    telegram_poll_id= db.Column(db.String(100))           # Telegram's poll ID after sending
+    results_json    = db.Column(db.JSON, default=dict)    # { option_index: vote_count }
+    open_period     = db.Column(db.Integer)               # Seconds poll stays open
+    created_at      = db.Column(db.DateTime, default=datetime.utcnow)
+
+class OfficialPoll(db.Model):
+    # Identical structure but for official bot groups (linked to TelegramGroup)
+    __tablename__ = "official_polls"
+    # ... same fields, telegram_group_id FK instead of group_id
+```
+
+## 24.3 API Endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/bots/:botId/groups/:groupId/polls` | List polls |
+| POST | `/api/bots/:botId/groups/:groupId/polls` | Create poll |
+| DELETE | `/api/bots/:botId/groups/:groupId/polls/:id` | Delete scheduled poll |
+| POST | `/api/bots/:botId/groups/:groupId/polls/:id/send` | Send immediately |
+
+---
+
+# 25. UNDOCUMENTED MODELS — CANONICAL REFERENCE
+
+> This section documents all models that exist in the real codebase but were not in the original spec. These are part of the official system.
+
+## 25.1 Reported Messages
+
+Members or admins can report messages for review. Reports are visible in the admin/moderation dashboard.
+
+```python
+class ReportedMessage(db.Model):
+    __tablename__ = "reported_messages"
+    id                  = db.Column(db.Integer, primary_key=True)
+    group_id            = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False)
+    reporter_telegram_id= db.Column(db.BigInteger)
+    message_id          = db.Column(db.BigInteger)           # Telegram message_id
+    message_text        = db.Column(db.Text)
+    reason              = db.Column(db.String(200))
+    status              = db.Column(db.String(50), default="pending")
+                                                             # pending | reviewed | actioned | dismissed
+    reviewed_by         = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at          = db.Column(db.DateTime, default=datetime.utcnow)
+
+class OfficialReportedMessage(db.Model):
+    # Same as above but for official bot groups
+    __tablename__ = "official_reported_messages"
+```
+
+**Bot command:** `/report` (reply to a message) → creates ReportedMessage record → notifies group admins via DM.
+
+**Dashboard:** Reports visible in GroupManagement → Reports tab. Status can be updated.
+
+## 25.2 Official Warnings (Structured Records)
+
+The original spec described `Member.warnings` as an integer counter. In the real implementation, official bot groups also store structured warning records.
+
+```python
+class OfficialWarning(db.Model):
+    __tablename__ = "official_warnings"
+    id              = db.Column(db.Integer, primary_key=True)
+    telegram_group_id = db.Column(db.Integer, db.ForeignKey("telegram_groups.id"), nullable=False)
+    telegram_user_id= db.Column(db.BigInteger, nullable=False)
+    reason          = db.Column(db.Text)
+    warned_by       = db.Column(db.BigInteger)  # Telegram user_id of admin who warned
+    message_id      = db.Column(db.BigInteger)  # The warned message
+    created_at      = db.Column(db.DateTime, default=datetime.utcnow)
+```
+
+**Uniformity note:** Custom bots use `Member.warnings` (counter) + automod action logs. Official bot uses `OfficialWarning` structured records. Both should be surfaced identically in the dashboard.
+
+## 25.3 Suspicious Activity
+
+```python
+class SuspiciousActivity(db.Model):
+    __tablename__ = "suspicious_activities"
+    id              = db.Column(db.Integer, primary_key=True)
+    user_id         = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    ip_hash         = db.Column(db.String(64))
+    device_hash     = db.Column(db.String(64))
+    activity_type   = db.Column(db.String(100))
+                     # multi_account | referral_abuse | rate_limit_violation
+                     # payment_anomaly | excessive_api_usage
+    details_json    = db.Column(db.JSON)
+    risk_score      = db.Column(db.Integer, default=0)  # 0-100
+    created_at      = db.Column(db.DateTime, default=datetime.utcnow)
+```
+
+**Written by:** Anti-abuse middleware on signup, referral system, rate limit violations.
+
+**Read by:** Admin panel fraud detection view.
+
+## 25.4 Admin Audit Log
+
+```python
+class AdminAuditLog(db.Model):
+    __tablename__ = "admin_audit_logs"
+    id              = db.Column(db.Integer, primary_key=True)
+    admin_user_id   = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    action          = db.Column(db.String(100))
+                     # user_suspended | subscription_changed | user_deleted
+                     # bot_disabled | refund_issued | ip_blocked
+    target_user_id  = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    target_resource = db.Column(db.String(200))   # e.g. "Bot#42" or "User#99"
+    details_json    = db.Column(db.JSON)
+    ip_address      = db.Column(db.String(45))
+    created_at      = db.Column(db.DateTime, default=datetime.utcnow)
+```
+
+**Classmethod (required):**
+```python
+@classmethod
+def write(cls, admin_user_id, action, target_user_id=None,
+          target_resource=None, details=None, ip_address=None):
+    record = cls(
+        admin_user_id=admin_user_id,
+        action=action,
+        target_user_id=target_user_id,
+        target_resource=target_resource,
+        details_json=details or {},
+        ip_address=ip_address,
+    )
+    db.session.add(record)
+    db.session.commit()
+```
+
+**Written by:** Every function in `admin.py` must call `AdminAuditLog.write(...)` before performing any state-changing action. This is enforced — no admin mutation without a log record.
+
+## 25.5 Group Daily Signal
+
+Pre-aggregated daily analytics snapshot per group. Written by a nightly cron job (2am UTC).
+
+```python
+class GroupDailySignal(db.Model):
+    __tablename__ = "group_daily_signals"
+    id              = db.Column(db.Integer, primary_key=True)
+    group_id        = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=True)
+    telegram_group_id = db.Column(db.Integer, db.ForeignKey("telegram_groups.id"), nullable=True)
+    date            = db.Column(db.Date, nullable=False)
+    message_count   = db.Column(db.Integer, default=0)
+    member_joins    = db.Column(db.Integer, default=0)
+    member_leaves   = db.Column(db.Integer, default=0)
+    moderation_actions = db.Column(db.Integer, default=0)
+    active_members  = db.Column(db.Integer, default=0)   # Members who sent >= 1 message
+    top_members_json = db.Column(db.JSON, default=list)  # [{ telegram_id, message_count }] top 5
+    ai_tokens_used  = db.Column(db.Integer, default=0)
+    __table_args__  = (db.UniqueConstraint("group_id", "date"),)
+```
+
+## 25.6 Channel Daily Stats
+
+```python
+class ChannelDailyStat(db.Model):
+    __tablename__ = "channel_daily_stats"
+    id              = db.Column(db.Integer, primary_key=True)
+    channel_id      = db.Column(db.Integer, db.ForeignKey("channels.id"), nullable=False)
+    date            = db.Column(db.Date, nullable=False)
+    subscriber_count= db.Column(db.Integer, default=0)
+    post_count      = db.Column(db.Integer, default=0)
+    total_views     = db.Column(db.Integer, default=0)
+    total_reactions = db.Column(db.Integer, default=0)
+    __table_args__  = (db.UniqueConstraint("channel_id", "date"),)
+
+class ChannelPost(db.Model):
+    __tablename__ = "channel_posts"
+    id              = db.Column(db.Integer, primary_key=True)
+    channel_id      = db.Column(db.Integer, db.ForeignKey("channels.id"), nullable=False)
+    telegram_message_id = db.Column(db.BigInteger)
+    text            = db.Column(db.Text)
+    views           = db.Column(db.Integer, default=0)
+    reactions_json  = db.Column(db.JSON, default=dict)
+    posted_at       = db.Column(db.DateTime)
+    created_at      = db.Column(db.DateTime, default=datetime.utcnow)
+```
+
+## 25.7 Auto Reply Logs
+
+```python
+class AutoReplyLog(db.Model):
+    __tablename__ = "auto_reply_logs"
+    id              = db.Column(db.Integer, primary_key=True)
+    group_id        = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False)
+    trigger_text    = db.Column(db.Text)          # What message triggered it
+    pattern_matched = db.Column(db.String(200))   # Which pattern/keyword matched
+    response_sent   = db.Column(db.Text)
+    confidence_score= db.Column(db.Float)          # AI confidence (0–1) if AI-generated
+    source          = db.Column(db.String(50))     # "keyword" | "ai" | "knowledge_base"
+    telegram_user_id= db.Column(db.BigInteger)
+    created_at      = db.Column(db.DateTime, default=datetime.utcnow)
+```
+
+## 25.8 Automation Execution Logs (see Section 23.3)
+
+## 25.9 Workspace Knowledge Document
+
+```python
+class WorkspaceKnowledgeDocument(db.Model):
+    __tablename__ = "workspace_knowledge_documents"
+    # Same as KnowledgeDocument but scoped to user workspace, not a specific group
+    # Applied as fallback: if group KB doesn't answer, workspace KB is checked
+    id              = db.Column(db.Integer, primary_key=True)
+    user_id         = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    filename        = db.Column(db.String(255))
+    content         = db.Column(db.Text)
+    chunks_json     = db.Column(db.JSON, default=list)
+    embedding_status= db.Column(db.String(50), default="pending")
+    created_at      = db.Column(db.DateTime, default=datetime.utcnow)
+```
+
+**Priority:** Group KB → Workspace KB → return "I don't know"
+
+## 25.10 Connect Code (Telegram Account Linking)
+
+```python
+class TelegramConnectCode(db.Model):
+    __tablename__ = "telegram_connect_codes"
+    id              = db.Column(db.Integer, primary_key=True)
+    user_id         = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    code            = db.Column(db.String(8), unique=True, nullable=False)  # 8-digit code
+    telegram_user_id= db.Column(db.BigInteger)   # Filled when Telegram user submits code
+    expires_at      = db.Column(db.DateTime)     # 10-minute TTL
+    used            = db.Column(db.Boolean, default=False)
+    created_at      = db.Column(db.DateTime, default=datetime.utcnow)
+```
+
+**Flow:** User clicks "Connect Telegram Account" in Settings → system generates 8-digit code → user sends `/connect XXXXXXXX` to @TelegizerBot in DM → bot validates code → creates UserTelegramAccount record.
+
+---
+
+# 26. ASSISTANT SYSTEM — FULL MODULE ARCHITECTURE
+
+> Extends Section 5. Documents the real implementation structure.
+
+## 26.1 Module Map
+
+```
+backend/assistant/
+  __init__.py
+  ai_client.py              # Unified AI client (OpenAI / Gemini / OpenRouter)
+  key_resolver.py           # AI key resolution (Section 19.7)
+  context_service.py        # Builds enriched context for AI prompts
+  profile_service.py        # Manages UserAssistantProfile
+  embeddings.py             # pgvector embedding generation (Phase 3)
+  group_signal_extractor.py # Extracts signals from GroupDailySignal for suggestions
+  suggestion_engine.py      # Generates proactive assistant suggestions
+  handlers/
+    __init__.py
+    state_machine.py        # Multi-turn conversation state management
+    analyze.py              # "Analyze my community" intent
+    general.py              # Fallback general chat intent
+    groups.py               # Group-specific queries ("how is my group doing?")
+    meeting.py              # Meeting scheduling intent
+    reminder.py             # Reminder creation intent
+    schedule.py             # Scheduled post creation via assistant
+    tasks.py                # Task creation/listing intent
+    notes.py                # Note extraction intent
+    _ai.py                  # Internal: raw AI call wrapper
+    _patterns.py            # Internal: intent detection regex patterns
+    _prompts.py             # Internal: all prompt templates (DIGEST_PROMPT etc.)
+    _parsers.py             # Internal: parse AI JSON responses safely
+    _state.py               # Internal: conversation state helpers
+    _suggestions.py         # Internal: suggestion formatting
+```
+
+## 26.2 Intent Detection Flow
+
+```python
+# handlers/_patterns.py — intent matching order (first match wins)
+
+INTENT_PATTERNS = {
+    "reminder":  [r"remind me", r"don't let me forget", r"set a reminder", r"alert me"],
+    "note":      [r"note (that|this|down)", r"save this", r"remember (that|this)"],
+    "schedule":  [r"schedule a (post|message|announcement)", r"post .* at "],
+    "task":      [r"add a task", r"todo:", r"create a task", r"mark .* as done"],
+    "meeting":   [r"schedule a meeting", r"set up a call", r"book a meeting"],
+    "analyze":   [r"analyze", r"how is my (group|community)", r"give me insights"],
+    "digest":    [r"summarize", r"what happened", r"catch me up", r"digest"],
+    "general":   ["*"]   # Fallback
+}
+
+def detect_intent(text: str) -> str:
+    text_lower = text.lower()
+    for intent, patterns in INTENT_PATTERNS.items():
+        if intent == "general":
+            return "general"
+        for pattern in patterns:
+            if re.search(pattern, text_lower):
+                return intent
+    return "general"
+```
+
+## 26.3 State Machine
+
+The state machine manages multi-turn conversations where the assistant needs clarification before completing an action.
+
+```python
+# State example: Reminder creation
+# Turn 1: User says "remind me about the weekly call"
+#   → Intent: reminder
+#   → State: AWAITING_REMINDER_TIME
+#   → Bot: "When should I remind you?"
+# Turn 2: User says "tomorrow at 3pm"
+#   → State: AWAITING_REMINDER_CONFIRM
+#   → Bot: "Remind you about 'weekly call' tomorrow at 3pm? [Yes/No]"
+# Turn 3: User says "yes"
+#   → State: COMPLETE
+#   → Bot: creates WorkspaceReminder → "Done! ✅ I'll remind you tomorrow at 3pm."
+
+class ConversationState:
+    IDLE                   = "idle"
+    AWAITING_REMINDER_TIME = "awaiting_reminder_time"
+    AWAITING_REMINDER_CONFIRM = "awaiting_reminder_confirm"
+    AWAITING_TASK_TITLE    = "awaiting_task_title"
+    AWAITING_SCHEDULE_TIME = "awaiting_schedule_time"
+    AWAITING_MEETING_TIME  = "awaiting_meeting_time"
+    AWAITING_MEETING_CONFIRM = "awaiting_meeting_confirm"
+```
+
+## 26.4 Context Service
+
+Before every AI call, the context service builds a structured context object:
+
+```python
+# context_service.py
+def build_context(user_id: int, group_id: int = None) -> dict:
+    return {
+        "user": {
+            "name": user.display_name,
+            "timezone": user.timezone,
+            "subscription": user.subscription_tier,
+        },
+        "group": {                              # None if no group selected
+            "name": group.name,
+            "member_count": group.member_count,
+            "last_7d_signals": GroupDailySignal.last_7_days(group_id),
+        },
+        "recent_notes": Note.recent(user_id, limit=5),
+        "pending_reminders": WorkspaceReminder.pending(user_id, limit=3),
+        "open_tasks": Task.open(user_id, limit=5),
+        "current_time": datetime.now(user_timezone).isoformat(),
+    }
+```
+
+## 26.5 Assistant Space & Profile
+
+```python
+class AssistantSpace(db.Model):
+    __tablename__ = "assistant_spaces"
+    id              = db.Column(db.Integer, primary_key=True)
+    user_id         = db.Column(db.Integer, db.ForeignKey("users.id"), unique=True)
+    default_group_id= db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=True)
+    pinned_notes    = db.Column(db.JSON, default=list)    # Note IDs
+    pinned_tasks    = db.Column(db.JSON, default=list)    # Task IDs
+    daily_briefing_enabled = db.Column(db.Boolean, default=True)
+    briefing_time   = db.Column(db.String(5), default="08:00")   # HH:MM
+
+class UserAssistantProfile(db.Model):
+    __tablename__ = "user_assistant_profiles"
+    id              = db.Column(db.Integer, primary_key=True)
+    user_id         = db.Column(db.Integer, db.ForeignKey("users.id"), unique=True)
+    preferred_tone  = db.Column(db.String(50), default="professional")
+                                                     # professional | casual | concise
+    focus_areas     = db.Column(db.JSON, default=list)  # ["growth", "moderation", "content"]
+    ai_model_pref   = db.Column(db.String(100))     # Overrides default model
+    system_prompt_addition = db.Column(db.Text)     # Custom instruction appended to system prompt
+```
+
+---
+
+# 27. TCS ENGINE (TEMPLATE CONTENT SYSTEM)
+
+> Documented from real implementation. Not in original spec.
+
+## 27.1 Overview
+
+The TCS Engine handles variable substitution in all bot message templates. It is used for welcome messages, scheduled posts, auto-replies, digest intros, and any user-defined text that includes template variables.
+
+## 27.2 Supported Variables
+
+| Variable | Resolves To |
+|---|---|
+| `{username}` | Telegram username (@handle) or first name |
+| `{first_name}` | User's Telegram first name |
+| `{group_name}` | Telegram group/channel title |
+| `{member_count}` | Current group member count |
+| `{date}` | Today's date in group timezone (e.g. "May 8, 2026") |
+| `{time}` | Current time in group timezone (e.g. "14:30") |
+| `{xp}` | Member's current XP score |
+| `{level}` | Member's current level |
+| `{warnings}` | Member's current warning count |
+| `{invite_link}` | Group's invite link (if bot has permission) |
+| `{rules_link}` | Link to rules (if configured in group settings) |
+
+## 27.3 Usage
+
+```python
+# backend/tcs_engine.py
+def render(template: str, context: dict) -> str:
+    """
+    Renders a template string by substituting {variable} placeholders.
+    Unknown variables are left as-is (not removed).
+    Errors in context lookup are silently skipped.
+    """
+    for key, value in context.items():
+        template = template.replace(f"{{{key}}}", str(value))
+    return template
+
+# Usage example:
+msg = render(
+    "Welcome {first_name}! You're member #{member_count} of {group_name}.",
+    { "first_name": "Alice", "member_count": 1042, "group_name": "Crypto Alpha" }
+)
+# → "Welcome Alice! You're member #1042 of Crypto Alpha."
+```
+
+## 27.4 Validation
+
+Before saving any template (welcome message, scheduled post, auto-reply), the backend validates all `{variable}` tags against the supported variable list and returns a warning for unknown variables.
+
+---
+
+# 28. GROUP DEFAULTS SYSTEM
+
+> Documented from real implementation.
+
+## 28.1 Overview
+
+`backend/group_defaults.py` defines the default settings applied when a group is first linked to the dashboard. This ensures every group starts in a consistent, safe state without requiring manual configuration.
+
+## 28.2 Default Values
+
+```python
+# backend/group_defaults.py
+
+DEFAULT_GROUP_SETTINGS = {
+    # Moderation
+    "automod_enabled": False,
+    "link_filter": False,
+    "caps_filter": False,
+    "caps_threshold": 70,             # % caps before action
+    "spam_filter": False,
+    "emoji_filter": False,
+    "emoji_max": 10,
+    "automod_action": "warn",         # warn | mute | ban
+    "automod_mute_duration": 300,     # seconds
+    "exempt_admins": True,
+
+    # Verification
+    "verification_enabled": False,
+    "verification_type": "button",    # button | word | math
+    "verification_word": "agree",
+    "verification_timeout": 180,      # seconds before kick
+    "verification_ban_on_fail": False,
+
+    # Welcome
+    "welcome_enabled": False,
+    "welcome_message": "Welcome {first_name} to {group_name}! 🎉",
+    "welcome_delete_after": 0,        # 0 = never delete
+
+    # Digest
+    "digest_enabled": False,
+    "digest_frequency": "daily",
+    "digest_hour": 8,
+    "digest_timezone": "UTC",
+
+    # AI
+    "ai_enabled": False,
+    "ai_auto_reply": False,
+    "ai_confidence_threshold": 0.85,
+    "ai_api_key": None,               # If null, use workspace/platform key
+
+    # XP
+    "xp_enabled": True,
+    "xp_per_message": 1,
+    "level_thresholds": [0, 100, 300, 600, 1000, 2000],
+}
+```
+
+---
+
+*TELEGIZER ENTERPRISE SPECIFICATION — VERSION 2.3 — UPDATED MAY 2026*
+*Sections 19–28 added to document real implementation features not in original spec.*
 *Version 2.1 · May 2026 · All 18 sections documented across 4 phases*
 *Sections 1–15: Original specification · Sections 16–18: Audit-driven additions*
 *Pre-launch audit: 23 open decisions tracked in Appendix A (17 resolved in spec, 6 require implementation)*
