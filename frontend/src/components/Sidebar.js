@@ -14,6 +14,7 @@ import {
 } from '@mui/icons-material';
 import TelegizerLogo from './TelegizerLogo';
 import { telegramGroups as tgApi, auth as authApi, channels as chApi } from '../services/api';
+import { APP_VERSION, BUILD_TIME } from '../version';
 
 const SIDEBAR_WIDTH = 240;
 
@@ -540,6 +541,20 @@ export default function Sidebar({ onClose }) {
           </Typography>
         </Box>
       )}
+
+      {/* Version footer */}
+      <Box sx={{ px: 1.5, pb: 1, pt: 0.5 }}>
+        <Typography
+          variant="caption"
+          color="text.disabled"
+          fontSize="0.65rem"
+          display="block"
+          title={`Build: ${BUILD_TIME}`}
+          sx={{ userSelect: 'none' }}
+        >
+          v{APP_VERSION}
+        </Typography>
+      </Box>
     </Box>
   );
 }
