@@ -76,14 +76,30 @@ function OnboardingCard({ botList, onAddBot, navigate, user, officialGroupCount 
   const [dismissed, setDismissed] = useState(
     () => localStorage.getItem('onboarding_dismissed') === '1'
   );
-  // Expanded by default for new users (no stored preference); remembers choice after that
   const [expanded, setExpanded] = useState(
     () => localStorage.getItem('onboarding_expanded') !== '0'
   );
+  // Track which steps have been synced to backend this session
+  const syncedRef = React.useRef(new Set(user?.onboarding_completed_steps || []));
 
   const hasBots = botList.length > 0;
   const hasGroups = (officialGroupCount ?? 0) > 0 || botList.some((b) => (b.group_count ?? 0) > 0);
   const isTgConnected = user?.telegram_connected;
+
+  // Sync newly completed steps to backend (2-B-01)
+  useEffect(() => {
+    const stepMap = {
+      email_verified: user?.email_verified,
+      bot_connected: hasBots,
+      group_linked: hasGroups,
+    };
+    Object.entries(stepMap).forEach(([step, done]) => {
+      if (done && !syncedRef.current.has(step)) {
+        syncedRef.current.add(step);
+        auth.markOnboardingStep(step).catch(() => {});
+      }
+    });
+  }, [user?.email_verified, hasBots, hasGroups]);
   const botUsername = 'telegizer_bot';
   const addGroupUrl = `https://t.me/${botUsername}?startgroup=setup`;
 
@@ -858,6 +874,21 @@ export default function Dashboard() {
 
         {/* Email verification is now enforced by VerifiedRoute in App.js —
             unverified users never reach this page. No banner needed. */}
+
+        {/* ── Trial countdown banner (2-D-01) ── */}
+        {user.trial_ends_at && user.subscription_tier === 'pro' && !subscription?.is_expired && (() => {
+          const days = Math.max(0, Math.ceil((new Date(user.trial_ends_at) - Date.now()) / 86400000));
+          return days <= 14 ? (
+            <Alert severity={days <= 3 ? 'warning' : 'info'} sx={{ mb: 2 }}
+              action={<Button size="small" color={days <= 3 ? 'warning' : 'info'} onClick={() => navigate('/billing')}>Upgrade</Button>}
+              icon={<Upgrade fontSize="small" />}
+            >
+              {days === 0
+                ? 'Your Pro trial ends today — upgrade now to keep all features.'
+                : `⏰ Your Pro trial ends in ${days} day${days !== 1 ? 's' : ''} — upgrade to keep all features.`}
+            </Alert>
+          ) : null;
+        })()}
 
         {/* ── Expired warning ── */}
         {subscription?.is_expired && (

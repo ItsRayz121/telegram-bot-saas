@@ -269,6 +269,23 @@ def init_db():
             "members.last_name",
         )
 
+        # ── 2-D-01: 14-day Pro trial columns ─────────────────────────────────────
+        _run_alter(
+            db.engine,
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMP",
+            "users.trial_ends_at",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS trial_used BOOLEAN DEFAULT FALSE",
+            "users.trial_used",
+        )
+        # ── 2-B-01: Onboarding completed steps ───────────────────────────────────
+        _run_alter(
+            db.engine,
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_completed_steps JSONB",
+            "users.onboarding_completed_steps",
+        )
         # ── 1-G-04: AI cost tracking columns ─────────────────────────────────────
         _run_alter(
             db.engine,

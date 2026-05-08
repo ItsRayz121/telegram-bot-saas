@@ -5,7 +5,7 @@ import {
   Chip, CircularProgress, Alert, Dialog, DialogTitle,
   DialogContent, DialogActions, TextField, IconButton,
   Tooltip, Grid, Divider, Switch, FormControlLabel,
-  Tabs, Tab, Table, TableBody, TableCell, TableHead,
+  Tabs, Tab, Table, TableBody, TableCell, TableContainer, TableHead,
   TableRow, Paper, Select, MenuItem, InputLabel, FormControl,
 } from '@mui/material';
 import {
@@ -202,6 +202,7 @@ export default function GroupManagement() {
                   </Typography>
                 </Box>
               ) : (
+                <TableContainer sx={{ overflowX: 'auto' }}>
                 <Table size="small">
                   <TableHead>
                     <TableRow>
@@ -264,6 +265,7 @@ export default function GroupManagement() {
               {events.length === 0 ? (
                 <Typography color="text.secondary">No events recorded yet.</Typography>
               ) : (
+                <TableContainer sx={{ overflowX: 'auto' }}>
                 <Table size="small">
                   <TableHead>
                     <TableRow>
@@ -292,6 +294,7 @@ export default function GroupManagement() {
                     ))}
                   </TableBody>
                 </Table>
+                </TableContainer>
               )}
             </Box>
           </TabPanel>

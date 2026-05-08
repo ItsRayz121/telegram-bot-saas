@@ -95,6 +95,16 @@ def make_celery(app=None):
                 "task": "backend.scheduler.recover_missed_payments",
                 "schedule": 1800.0,  # every 30 minutes
             },
+            # ── 2-D-01: Trial expiry ─────────────────────────────────────────
+            "expire-trials": {
+                "task": "backend.scheduler.expire_trials",
+                "schedule": crontab(hour=0, minute=30),  # daily at 00:30 UTC
+            },
+            # ── 2-C-01: Lifecycle email campaigns ────────────────────────────
+            "send-lifecycle-emails": {
+                "task": "backend.scheduler.send_lifecycle_emails",
+                "schedule": crontab(hour=10, minute=0),  # daily at 10:00 UTC
+            },
         },
     )
 
@@ -1078,6 +1088,93 @@ def recover_missed_payments():
             logger.info("[recover_missed_payments] Total recovered=%d", recovered)
     except Exception as exc:
         logger.error("recover_missed_payments error: %s", exc)
+
+
+@celery.task(name="backend.scheduler.expire_trials")
+def expire_trials():
+    """2-D-01: Downgrade users whose 14-day Pro trial has ended without a paid subscription."""
+    try:
+        from .models import db, User
+        from .notifications import send_subscription_expired
+        now = datetime.utcnow()
+        expired = User.query.filter(
+            User.trial_ends_at != None,  # noqa: E711
+            User.trial_ends_at < now,
+            User.subscription_tier == "pro",
+            User.subscription_expires_at == None,  # noqa: E711 — not a paid subscriber
+        ).all()
+        for user in expired:
+            user.subscription_tier = "free"
+            user.trial_ends_at = None
+            try:
+                send_subscription_expired(user.email, user.full_name or user.email.split("@")[0], "Pro Trial")
+            except Exception as exc:
+                logger.debug("trial expiry email failed user=%s: %s", user.id, exc)
+        if expired:
+            db.session.commit()
+            logger.info("[expire_trials] downgraded=%d", len(expired))
+    except Exception as exc:
+        logger.error("expire_trials error: %s", exc)
+
+
+@celery.task(name="backend.scheduler.send_lifecycle_emails")
+def send_lifecycle_emails():
+    """2-C-01: Daily lifecycle email campaigns at 10:00 UTC."""
+    try:
+        from .models import db, User, TelegramGroup, Bot
+        from .notifications import (
+            send_onboarding_day3_email, send_onboarding_day7_email,
+            send_subscription_expired,
+        )
+        from datetime import timedelta
+        now = datetime.utcnow()
+
+        def _window(days):
+            return now - timedelta(days=days + 1), now - timedelta(days=days)
+
+        # Day 1 — no bot connected yet
+        lo, hi = _window(1)
+        day1 = User.query.filter(
+            User.email_verified == True,  # noqa: E712
+            User.created_at.between(lo, hi),
+        ).all()
+        for u in day1:
+            has_bot = Bot.query.filter_by(user_id=u.id).first()
+            if not has_bot:
+                try:
+                    send_onboarding_day3_email(u.email, u.full_name or u.email.split("@")[0])
+                except Exception as exc:
+                    logger.debug("day1_no_bot email failed user=%s: %s", u.id, exc)
+
+        # Day 3 — no group linked
+        lo, hi = _window(3)
+        day3 = User.query.filter(
+            User.created_at.between(lo, hi),
+        ).all()
+        for u in day3:
+            has_group = TelegramGroup.query.filter_by(owner_user_id=u.id).first()
+            if not has_group:
+                try:
+                    send_onboarding_day7_email(u.email, u.full_name or u.email.split("@")[0])
+                except Exception as exc:
+                    logger.debug("day3_no_group email failed user=%s: %s", u.id, exc)
+
+        # Day 14 — on free tier (trial ended), Pro feature showcase
+        lo, hi = _window(14)
+        day14 = User.query.filter(
+            User.subscription_tier == "free",
+            User.trial_used == True,  # noqa: E712
+            User.created_at.between(lo, hi),
+        ).all()
+        for u in day14:
+            try:
+                send_subscription_expired(u.email, u.full_name or u.email.split("@")[0], "Pro Trial")
+            except Exception as exc:
+                logger.debug("day14_upgrade email failed user=%s: %s", u.id, exc)
+
+        logger.info("[lifecycle_emails] day1=%d day3=%d day14=%d", len(day1), len(day3), len(day14))
+    except Exception as exc:
+        logger.error("send_lifecycle_emails error: %s", exc)
 
 
 def _get_bot_token_for_chat(chat_id, app):

@@ -108,6 +108,8 @@ export const auth = {
   resendVerification: () => api.post('/api/auth/resend-verification'),
   // 2FA login completion
   verifyTotpLogin: (data) => api.post('/api/auth/verify-totp-login', data),
+  // Onboarding step tracking (2-B-01)
+  markOnboardingStep: (step) => api.patch('/api/auth/onboarding', { step }),
 };
 
 export const totp = {

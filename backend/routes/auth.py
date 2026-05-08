@@ -346,6 +346,13 @@ def register():
                 db.session.add(referral)
                 # Rewards are NOT granted here — only after email verification
 
+    # 2-D-01: start 14-day Pro trial for new users (only if no referral shortcut already set tier)
+    if user.subscription_tier == "free" and not user.trial_used:
+        from datetime import timedelta as _td
+        user.trial_ends_at = datetime.utcnow() + _td(days=14)
+        user.trial_used = True
+        user.subscription_tier = "pro"
+
     db.session.commit()
 
     # Send verification email asynchronously
@@ -986,6 +993,26 @@ def refresh_access_token():
     resp = jsonify({"token": new_token})
     _set_auth_cookies(resp, new_token)  # rotate access cookie; refresh cookie untouched
     return resp, 200
+
+
+@auth_bp.route("/onboarding", methods=["PATCH"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def update_onboarding():
+    """2-B-01: Mark onboarding steps as completed. Body: { "step": "email_verified" }"""
+    user = User.query.get(int(get_jwt_identity()))
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    body = request.get_json(silent=True) or {}
+    step = body.get("step")
+    valid_steps = {"email_verified", "bot_connected", "group_linked", "feature_configured", "ai_enabled"}
+    if step and step in valid_steps:
+        steps = list(user.onboarding_completed_steps or [])
+        if step not in steps:
+            steps.append(step)
+            user.onboarding_completed_steps = steps
+            db.session.commit()
+    return jsonify({"onboarding_completed_steps": user.onboarding_completed_steps or []}), 200
 
 
 @auth_bp.route("/logout", methods=["POST"])

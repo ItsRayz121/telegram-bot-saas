@@ -105,6 +105,11 @@ class User(db.Model):
     # AI cost tracking (1-G-04)
     ai_cost_usd_today    = db.Column(db.Numeric(10, 6), default=0)
     ai_cost_reset_at     = db.Column(db.DateTime, nullable=True)
+    # 14-day Pro trial (2-D-01)
+    trial_ends_at        = db.Column(db.DateTime, nullable=True)
+    trial_used           = db.Column(db.Boolean, default=False)
+    # Onboarding checklist (2-B-01)
+    onboarding_completed_steps = db.Column(db.JSON, nullable=True)  # list of completed step keys
 
     bots = db.relationship("Bot", backref="owner", lazy=True, cascade="all, delete-orphan")
 
@@ -152,6 +157,9 @@ class User(db.Model):
             "telegram_first_name": self.telegram_first_name,
             "telegram_connected_at": self.telegram_connected_at.isoformat() if self.telegram_connected_at else None,
             "timezone": self.timezone or "UTC",
+            "trial_ends_at": self.trial_ends_at.isoformat() if self.trial_ends_at else None,
+            "trial_used": bool(self.trial_used),
+            "onboarding_completed_steps": self.onboarding_completed_steps or [],
         }
 
 
