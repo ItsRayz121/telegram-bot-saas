@@ -302,6 +302,7 @@ export default function GroupManagement() {
                     ))}
                   </TableBody>
                 </Table>
+                </TableContainer>
               )}
             </Box>
           </TabPanel>
