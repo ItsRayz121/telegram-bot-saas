@@ -5,8 +5,12 @@ import {
 } from '@mui/material';
 import { CardGiftcard, ContentCopy, Share, CheckCircle } from '@mui/icons-material';
 import { toast } from 'react-toastify';
-import { referrals as refApi } from '../services/api';
+import { tmaApi } from '../contexts/TelegramContext';
 import { useTelegram } from '../contexts/TelegramContext';
+
+const refApi = {
+  getStats: () => tmaApi.get('/api/referrals/stats'),
+};
 
 const MILESTONES = [
   { count: 3, reward: '7 days Pro free' },

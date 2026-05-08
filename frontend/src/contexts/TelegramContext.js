@@ -1,6 +1,24 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import axios from 'axios';
 import api from '../services/api';
+
+// 2-G-01: TMA-specific axios instance — uses in-memory Bearer token, never localStorage.
+// Token is injected via setTmaToken() after successful miniapp auth.
+const tmaApi = axios.create({
+  baseURL: process.env.REACT_APP_API_URL || '',
+  timeout: 30000,
+  headers: { 'Content-Type': 'application/json' },
+});
+let _tmaToken = null;
+const setTmaToken = (token) => {
+  _tmaToken = token;
+};
+tmaApi.interceptors.request.use((config) => {
+  if (_tmaToken) config.headers['Authorization'] = `Bearer ${_tmaToken}`;
+  return config;
+});
+export { tmaApi };
 
 const TelegramContext = createContext(null);
 
@@ -34,6 +52,9 @@ export function TelegramProvider({ children }) {
 
     webapp.ready();
     webapp.expand();
+    // 2-G-01: match header/bg to Telegizer dark theme
+    try { webapp.setHeaderColor('#0f172a'); } catch {}
+    try { webapp.setBackgroundColor('#0f172a'); } catch {}
     setTg(webapp);
     setTgTheme(extractTgTheme(webapp));
 
@@ -46,11 +67,11 @@ export function TelegramProvider({ children }) {
       return;
     }
 
+    // 2-G-02: TMA auth — token stored in memory only, never localStorage
     api.post('/api/miniapp/auth', { init_data: initData })
       .then(res => {
         const { token, user, groups: grps } = res.data;
-        localStorage.setItem('token', token);
-        localStorage.setItem('user', JSON.stringify(user));
+        setTmaToken(token);   // in-memory only
         setAppUser(user);
         setGroups(grps || []);
         setTgUser(webapp.initDataUnsafe?.user || null);
@@ -63,7 +84,7 @@ export function TelegramProvider({ children }) {
   }, []);
 
   const refetchGroups = useCallback(() => {
-    api.get('/api/miniapp/me')
+    tmaApi.get('/api/miniapp/me')
       .then(res => {
         setAppUser(res.data.user);
         setGroups(res.data.groups || []);

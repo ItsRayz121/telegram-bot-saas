@@ -24,7 +24,7 @@ from datetime import datetime, timedelta
 
 import requests as _http
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand, ChatPermissions
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand, ChatPermissions, WebAppInfo
 from telegram.constants import ChatType, ParseMode
 from telegram.error import Forbidden, BadRequest
 from telegram.ext import (
@@ -312,6 +312,15 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     keyboard = []
+
+    # 2-G-03: Mini App entry point — open dashboard inside Telegram
+    mini_app_url = f"{frontend}/mini-app"
+    keyboard.append([
+        InlineKeyboardButton(
+            "📊 Open Dashboard",
+            web_app=WebAppInfo(url=mini_app_url),
+        )
+    ])
 
     if is_linked:
         keyboard.append([
