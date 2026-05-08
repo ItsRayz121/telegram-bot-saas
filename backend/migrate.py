@@ -176,6 +176,18 @@ def init_db():
             "user_assistant_profiles.user_id index",
         )
 
+        # ── pending_verifications: add forum topic + auto-delete columns ────────
+        _run_alter(
+            db.engine,
+            "ALTER TABLE pending_verifications ADD COLUMN IF NOT EXISTS message_thread_id INTEGER",
+            "pending_verifications.message_thread_id",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE pending_verifications ADD COLUMN IF NOT EXISTS auto_delete_on_timeout BOOLEAN DEFAULT TRUE",
+            "pending_verifications.auto_delete_on_timeout",
+        )
+
         # ── Backfill: create UserTelegramAccount rows for legacy User.telegram_user_id ──
         # Any user with telegram_user_id but no junction row gets a primary record created.
         _backfill_telegram_accounts(app)

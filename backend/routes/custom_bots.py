@@ -51,6 +51,45 @@ def list_custom_bots():
     return jsonify({"bots": result})
 
 
+# ── Validate a bot token (preview before save) ────────────────────────────────
+
+@custom_bots_bp.route("/validate-token", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=10)
+def validate_bot_token():
+    """Verify a bot token with Telegram and return bot info — does NOT save anything."""
+    data = request.get_json() or {}
+    bot_token = (data.get("bot_token") or "").strip()
+
+    if not bot_token:
+        return jsonify({"error": "bot_token is required"}), 400
+    if ":" not in bot_token or len(bot_token) < 30:
+        return jsonify({"error": "Invalid bot token format. Expected format: 1234567890:AAAA..."}), 400
+
+    try:
+        import requests as _req
+        resp = _req.get(
+            f"https://api.telegram.org/bot{bot_token}/getMe",
+            timeout=10,
+        )
+        result = resp.json()
+        if not result.get("ok"):
+            err = result.get("description", "Token rejected by Telegram")
+            return jsonify({"error": f"Telegram rejected this token: {err}"}), 400
+        tg = result.get("result", {})
+        return jsonify({
+            "valid": True,
+            "bot_id": tg.get("id"),
+            "bot_name": tg.get("first_name"),
+            "bot_username": tg.get("username"),
+            "can_join_groups": tg.get("can_join_groups", True),
+            "can_read_all_group_messages": tg.get("can_read_all_group_messages", False),
+            "supports_inline_queries": tg.get("supports_inline_queries", False),
+        })
+    except Exception as exc:
+        return jsonify({"error": f"Could not reach Telegram to verify this token: {exc}"}), 502
+
+
 # ── Add a custom bot ───────────────────────────────────────────────────────────
 
 @custom_bots_bp.route("", methods=["POST"])

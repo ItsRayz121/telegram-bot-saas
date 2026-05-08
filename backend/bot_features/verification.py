@@ -30,19 +30,20 @@ class VerificationSystem:
         chat_id = update.effective_chat.id
         user_id = member_user.id
         group_name = group.group_name or "the group"
+        # Preserve forum topic context so challenge lands in the right topic
+        message_thread_id = getattr(update.message, "message_thread_id", None) if update.message else None
 
         if verify_on == "first_message":
-            # Store user as pending — restrict + challenge on their first message
             self.first_message_pending[f"{chat_id}:{user_id}"] = {
                 "method": method,
                 "timeout": timeout,
                 "group": group,
                 "settings": settings,
                 "user": member_user,
+                "message_thread_id": message_thread_id,
             }
             return
 
-        # Restrict immediately on join
         try:
             await bot.restrict_chat_member(
                 chat_id=chat_id,
@@ -53,7 +54,10 @@ class VerificationSystem:
             logger.error(f"Failed to restrict member {user_id}: {e}")
             return
 
-        await self._send_challenge(bot, chat_id, user_id, member_user, group, method, timeout, settings, group_name)
+        await self._send_challenge(
+            bot, chat_id, user_id, member_user, group, method, timeout, settings, group_name,
+            message_thread_id=message_thread_id,
+        )
 
     async def handle_first_message(self, bot, message, group, settings):
         """Called from bot_manager on every message — triggers challenge if user is first_message pending."""
@@ -85,20 +89,27 @@ class VerificationSystem:
             bot, chat_id, user_id, info["user"], info["group"],
             info["method"], info["timeout"], info["settings"],
             info["group"].group_name or "the group",
+            message_thread_id=info.get("message_thread_id"),
         )
         return True
 
-    async def _send_challenge(self, bot, chat_id, user_id, user, group, method, timeout, settings, group_name):
+    async def _send_challenge(self, bot, chat_id, user_id, user, group, method, timeout, settings, group_name,
+                              message_thread_id=None):
         if method == "button":
-            await self.captcha_button_verification(bot, chat_id, user_id, user, group, timeout, group_name)
+            await self.captcha_button_verification(
+                bot, chat_id, user_id, user, group, timeout, group_name, message_thread_id)
         elif method == "math":
-            await self.math_verification(bot, chat_id, user_id, user, group, timeout, group_name)
+            await self.math_verification(
+                bot, chat_id, user_id, user, group, timeout, group_name, message_thread_id)
         elif method == "word":
-            await self.word_verification(bot, chat_id, user_id, user, group, settings, timeout, group_name)
+            await self.word_verification(
+                bot, chat_id, user_id, user, group, settings, timeout, group_name, message_thread_id)
         else:
-            await self.captcha_button_verification(bot, chat_id, user_id, user, group, timeout, group_name)
+            await self.captcha_button_verification(
+                bot, chat_id, user_id, user, group, timeout, group_name, message_thread_id)
 
-    async def captcha_button_verification(self, bot, chat_id, user_id, user, group, timeout, group_name):
+    async def captcha_button_verification(self, bot, chat_id, user_id, user, group, timeout, group_name,
+                                          message_thread_id=None):
         v_cfg = group.settings.get("verification", {})
         max_attempts = v_cfg.get("max_attempts", 3)
         auto_delete = v_cfg.get("auto_delete_on_timeout", True)
@@ -108,19 +119,23 @@ class VerificationSystem:
                 callback_data=f"verify:button:{group.id}:{user_id}",
             )]
         ])
-        msg = await bot.send_message(
+        send_kwargs = dict(
             chat_id=chat_id,
             text=(
-                f"👋 Welcome to *{group_name}*, {user.first_name}!\n\n"
+                f"👋 Welcome to <b>{group_name}</b>, {user.first_name}!\n\n"
                 f"Please click the button below to verify you're human.\n"
                 f"You have {timeout} seconds."
             ),
             reply_markup=keyboard,
-            parse_mode="Markdown",
+            parse_mode="HTML",
         )
+        if message_thread_id:
+            send_kwargs["message_thread_id"] = message_thread_id
+        msg = await bot.send_message(**send_kwargs)
         self.pending[f"{chat_id}:{user_id}"] = {
             "method": "button",
             "message_id": msg.message_id,
+            "message_thread_id": message_thread_id,
             "expires_at": datetime.utcnow() + timedelta(seconds=timeout),
             "group_id": group.id,
             "bot_type": getattr(group, "bot_type", "custom"),
@@ -135,7 +150,8 @@ class VerificationSystem:
             lambda: asyncio.ensure_future(self._check_verification_timeout(bot, chat_id, user_id, group)),
         )
 
-    async def math_verification(self, bot, chat_id, user_id, user, group, timeout, group_name):
+    async def math_verification(self, bot, chat_id, user_id, user, group, timeout, group_name,
+                               message_thread_id=None):
         v_cfg = group.settings.get("verification", {})
         max_attempts = v_cfg.get("max_attempts", 3)
         auto_delete = v_cfg.get("auto_delete_on_timeout", True)
@@ -167,19 +183,23 @@ class VerificationSystem:
             [InlineKeyboardButton(str(opt), callback_data=f"verify:math:{group.id}:{user_id}:{opt}:{answer}") for opt in options[2:]],
         ])
 
-        msg = await bot.send_message(
+        send_kwargs = dict(
             chat_id=chat_id,
             text=(
-                f"🔢 Welcome to *{group_name}*! {user.first_name}, solve this to verify:\n\n"
-                f"*{a} {op_sym} {b} = ?*\n\n"
+                f"🔢 Welcome to <b>{group_name}</b>! {user.first_name}, solve this to verify:\n\n"
+                f"<b>{a} {op_sym} {b} = ?</b>\n\n"
                 f"You have {timeout} seconds. Attempts: 0/{max_attempts}"
             ),
             reply_markup=keyboard,
-            parse_mode="Markdown",
+            parse_mode="HTML",
         )
+        if message_thread_id:
+            send_kwargs["message_thread_id"] = message_thread_id
+        msg = await bot.send_message(**send_kwargs)
         self.pending[f"{chat_id}:{user_id}"] = {
             "method": "math",
             "message_id": msg.message_id,
+            "message_thread_id": message_thread_id,
             "answer": answer,
             "expires_at": datetime.utcnow() + timedelta(seconds=timeout),
             "group_id": group.id,
@@ -196,23 +216,28 @@ class VerificationSystem:
             lambda: asyncio.ensure_future(self._check_verification_timeout(bot, chat_id, user_id, group)),
         )
 
-    async def word_verification(self, bot, chat_id, user_id, user, group, settings, timeout, group_name):
+    async def word_verification(self, bot, chat_id, user_id, user, group, settings, timeout, group_name,
+                               message_thread_id=None):
         v_cfg = group.settings.get("verification", {})
         max_attempts = v_cfg.get("max_attempts", 3)
         auto_delete = v_cfg.get("auto_delete_on_timeout", True)
         question = settings.get("verification", {}).get("custom_question", "What is the group's main topic?")
-        msg = await bot.send_message(
+        send_kwargs = dict(
             chat_id=chat_id,
             text=(
-                f"❓ Welcome to *{group_name}*! {user.first_name}, answer this to verify:\n\n"
-                f"*{question}*\n\n"
+                f"❓ Welcome to <b>{group_name}</b>! {user.first_name}, answer this to verify:\n\n"
+                f"<b>{question}</b>\n\n"
                 f"Reply with the correct answer. You have {timeout} seconds. Max attempts: {max_attempts}"
             ),
-            parse_mode="Markdown",
+            parse_mode="HTML",
         )
+        if message_thread_id:
+            send_kwargs["message_thread_id"] = message_thread_id
+        msg = await bot.send_message(**send_kwargs)
         self.pending[f"{chat_id}:{user_id}"] = {
             "method": "word",
             "message_id": msg.message_id,
+            "message_thread_id": message_thread_id,
             "answer": settings.get("verification", {}).get("custom_answer", "").lower().strip(),
             "expires_at": datetime.utcnow() + timedelta(seconds=timeout),
             "group_id": group.id,

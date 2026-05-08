@@ -1126,9 +1126,12 @@ class PendingVerification(db.Model):
     user_id = db.Column(db.BigInteger, nullable=False)
     method = db.Column(db.String(20), nullable=False)
     msg_id = db.Column(db.Integer, nullable=True)
+    # Forum topic ID — if set, delete/send in this topic thread
+    message_thread_id = db.Column(db.Integer, nullable=True)
     answer = db.Column(db.String(500), nullable=True)
     expires_at = db.Column(db.DateTime, nullable=False)
     kick_on_fail = db.Column(db.Boolean, default=True)
+    auto_delete_on_timeout = db.Column(db.Boolean, default=True)
     max_attempts = db.Column(db.Integer, default=3)
     attempts = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)

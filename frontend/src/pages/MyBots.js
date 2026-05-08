@@ -55,8 +55,11 @@ export default function MyBots() {
   const [officialGroups, setOfficialGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
-  const [form, setForm] = useState({ bot_token: '', bot_username: '' });
+  const [form, setForm] = useState({ bot_token: '' });
+  const [validating, setValidating] = useState(false);
+  const [preview, setPreview] = useState(null); // bot info from Telegram after validate
   const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
 
   const load = useCallback(async () => {
@@ -79,20 +82,45 @@ export default function MyBots() {
 
   useEffect(() => { load(); }, [load]);
 
-  const handleAdd = async () => {
-    if (!form.bot_token || !form.bot_username) return;
-    setAdding(true);
+  const handleValidate = async () => {
+    if (!form.bot_token) return;
+    setValidating(true);
+    setAddError('');
+    setPreview(null);
     try {
-      await customBots.add(form);
-      toast.success('Custom bot connected!');
+      const res = await customBots.validateToken(form.bot_token);
+      setPreview(res.data);
+    } catch (err) {
+      // Never clear the token field on error — user should be able to correct it
+      setAddError(err.response?.data?.error || 'Could not verify token. Check your connection and try again.');
+    } finally {
+      setValidating(false);
+    }
+  };
+
+  const handleAdd = async () => {
+    if (!preview) return;
+    setAdding(true);
+    setAddError('');
+    try {
+      await customBots.add({ bot_token: form.bot_token, bot_username: preview.bot_username });
+      toast.success(`@${preview.bot_username} connected!`);
       setAddOpen(false);
-      setForm({ bot_token: '', bot_username: '' });
+      setForm({ bot_token: '' });
+      setPreview(null);
       load();
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to connect bot');
+      setAddError(err.response?.data?.error || 'Failed to connect bot');
     } finally {
       setAdding(false);
     }
+  };
+
+  const handleCloseAddDialog = () => {
+    setAddOpen(false);
+    setPreview(null);
+    setAddError('');
+    // Do NOT clear bot_token so user can re-open and try again
   };
 
   const handleDelete = async () => {
@@ -400,45 +428,72 @@ export default function MyBots() {
         )}
       </Container>
 
-      {/* Connect bot dialog */}
-      <Dialog open={addOpen} onClose={() => setAddOpen(false)} maxWidth="sm" fullWidth>
+      {/* Connect bot dialog — two-step: validate → preview → save */}
+      <Dialog open={addOpen} onClose={handleCloseAddDialog} maxWidth="sm" fullWidth>
         <DialogTitle>Connect Your Own Bot</DialogTitle>
         <DialogContent sx={{ pt: '16px !important' }}>
           <Alert severity="info" sx={{ mb: 2 }}>
-            <strong>Tip:</strong> If your Telegram account is linked, you can paste your token directly
-            in <strong>@{BOT_USERNAME} → Advanced → Connect Own Bot</strong>. The token is deleted immediately.
-          </Alert>
-          <Alert severity="success" sx={{ mb: 2 }}>
             Create a bot via <strong>@BotFather</strong> on Telegram, then paste the token below.
-            It is encrypted and never exposed.
+            Your token is encrypted and never exposed.
           </Alert>
+
+          {addError && (
+            <Alert severity="error" sx={{ mb: 2 }}>{addError}</Alert>
+          )}
+
+          {/* Step 1 — enter token */}
           <TextField
             fullWidth
             label="Bot Token"
             value={form.bot_token}
-            onChange={(e) => setForm({ ...form, bot_token: e.target.value.trim() })}
+            onChange={(e) => {
+              setForm({ bot_token: e.target.value.trim() });
+              setPreview(null);   // reset preview if token changes
+              setAddError('');
+            }}
             placeholder="1234567890:AAAA..."
-            type="password"
+            type="text"
+            autoComplete="off"
             sx={{ mb: 2 }}
+            disabled={validating || adding}
           />
-          <TextField
-            fullWidth
-            label="Bot Username"
-            value={form.bot_username}
-            onChange={(e) => setForm({ ...form, bot_username: e.target.value.trim().replace('@', '') })}
-            placeholder="mybot"
-            InputProps={{ startAdornment: <Typography color="text.secondary" mr={0.5}>@</Typography> }}
-          />
+
+          {/* Step 2 — preview after validation */}
+          {preview && (
+            <Alert severity="success" sx={{ mb: 2 }}>
+              <Typography variant="body2" fontWeight={600}>✅ Bot verified!</Typography>
+              <Typography variant="body2">Name: <strong>{preview.bot_name}</strong></Typography>
+              <Typography variant="body2">Username: <strong>@{preview.bot_username}</strong></Typography>
+              {!preview.can_join_groups && (
+                <Typography variant="body2" color="warning.main" mt={0.5}>
+                  ⚠️ This bot cannot join groups. Enable "Allow Groups &amp; Channels" in @BotFather settings.
+                </Typography>
+              )}
+            </Alert>
+          )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setAddOpen(false)}>Cancel</Button>
-          <Button
-            variant="contained"
-            onClick={handleAdd}
-            disabled={adding || !form.bot_token || !form.bot_username}
-          >
-            {adding ? <CircularProgress size={20} /> : 'Connect Bot'}
-          </Button>
+          <Button onClick={handleCloseAddDialog}>Cancel</Button>
+
+          {/* Show Verify button until preview is ready */}
+          {!preview ? (
+            <Button
+              variant="contained"
+              onClick={handleValidate}
+              disabled={validating || !form.bot_token}
+            >
+              {validating ? <CircularProgress size={20} /> : 'Verify Token'}
+            </Button>
+          ) : (
+            <Button
+              variant="contained"
+              color="success"
+              onClick={handleAdd}
+              disabled={adding}
+            >
+              {adding ? <CircularProgress size={20} /> : 'Connect Bot'}
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
 

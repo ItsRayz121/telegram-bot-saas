@@ -82,16 +82,74 @@ class BotInstance:
 
     async def handle_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if update.effective_chat.type == "private":
+            with self.app_context.app_context():
+                from .models import Bot
+                frontend_url = self.app_context.config.get("FRONTEND_URL", "https://app.telegizer.com")
+                bot_rec = Bot.query.get(self.bot_id)
+                owner_name = (bot_rec.owner.full_name if bot_rec and bot_rec.owner else None)
+
+            owner_line = f"\n👤 Managed by <b>{owner_name}</b>" if owner_name else ""
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🌐 Open Dashboard", url=f"{frontend_url}/dashboard")],
+                [InlineKeyboardButton("📋 My Linked Groups", url=f"{frontend_url}/bots")],
+            ])
             await update.message.reply_text(
-                "👋 Hello! I'm a Telegram Group Manager Bot.\n\n"
-                "Add me to your group and I'll help you manage it!\n\n"
-                "Use /settings in a group to configure me.",
-                parse_mode="Markdown",
+                f"👋 <b>Welcome!</b>{owner_line}\n\n"
+                "This bot is powered by <b>Telegizer</b> — a professional Telegram group management platform.\n\n"
+                "<b>✨ What I can do in your group:</b>\n"
+                "• 🛡 <b>AutoMod</b> — filter links, spam, bad words, caps\n"
+                "• ✅ <b>Verification</b> — protect your group from bots &amp; raiders\n"
+                "• 📊 <b>XP &amp; Levels</b> — reward your most active members\n"
+                "• 🤖 <b>AI Assistant</b> — auto-answer questions from a knowledge base\n"
+                "• 📅 <b>Scheduler</b> — post announcements on a schedule\n"
+                "• 📈 <b>Analytics</b> — track member growth and engagement\n"
+                "• 🔗 <b>Automation</b> — auto-responses and custom commands\n"
+                "• 📣 <b>Welcome Messages</b> — greet new members automatically\n\n"
+                "<b>How to get started:</b>\n"
+                "1. Add this bot to your group as an <b>admin</b>\n"
+                "2. Use <code>/settings</code> in the group to open your dashboard\n"
+                "3. Configure any features you need\n\n"
+                "Use /status to see your linked groups.",
+                parse_mode="HTML",
+                reply_markup=keyboard,
             )
         else:
             await update.message.reply_text(
                 "✅ I'm active in this group! Use /settings to configure me.",
             )
+
+    async def handle_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if update.effective_chat.type != "private":
+            return
+
+        with self.app_context.app_context():
+            from .models import Bot, Group
+            frontend_url = self.app_context.config.get("FRONTEND_URL", "https://app.telegizer.com")
+            groups = Group.query.filter_by(bot_id=self.bot_id).order_by(Group.created_at.desc()).all()
+            group_data = [{"id": g.id, "name": g.group_name or "Unnamed Group"} for g in groups]
+
+        if not group_data:
+            await update.message.reply_text(
+                "📋 <b>No groups linked yet.</b>\n\n"
+                "Add this bot to a group as admin and use /settings there to connect it.",
+                parse_mode="HTML",
+            )
+            return
+
+        lines = [f"📋 <b>Linked Groups ({len(group_data)})</b>\n"]
+        buttons = []
+        for g in group_data[:10]:
+            lines.append(f"• <b>{g['name']}</b>")
+            buttons.append([InlineKeyboardButton(
+                f"⚙️ {g['name']}",
+                url=f"{frontend_url}/bot/{self.bot_id}/group/{g['id']}",
+            )])
+
+        await update.message.reply_text(
+            "\n".join(lines),
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(buttons),
+        )
 
     async def handle_settings(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if update.effective_chat.type == "private":
@@ -1395,6 +1453,7 @@ class BotInstance:
 
         app = self.application
         app.add_handler(CommandHandler("start", self.handle_start))
+        app.add_handler(CommandHandler("status", self.handle_status))
         app.add_handler(CommandHandler("settings", self.handle_settings))
         app.add_handler(CommandHandler("rank", self.handle_rank))
         app.add_handler(CommandHandler("leaderboard", self.handle_leaderboard))

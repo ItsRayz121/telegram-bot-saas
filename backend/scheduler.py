@@ -65,6 +65,11 @@ def make_celery(app=None):
                 "task": "backend.scheduler.check_inactive_groups",
                 "schedule": crontab(hour=9, minute=30),  # daily at 09:30 UTC
             },
+            # ── Verification expiry cleanup ────────────────────────────────
+            "expire-pending-verifications": {
+                "task": "backend.scheduler.expire_pending_verifications",
+                "schedule": 300.0,  # every 5 minutes
+            },
             # ── Maintenance (Phase 6) ───────────────────────────────────────
             "cleanup-message-buffer": {
                 "task": "backend.scheduler.cleanup_message_buffer",
@@ -781,3 +786,85 @@ def cleanup_message_buffer():
         logger.info("[celery:cleanup_message_buffer] deleted=%d rows older than 7d", deleted)
     except Exception as exc:
         logger.error("cleanup_message_buffer error: %s", exc)
+
+
+@celery.task(name="backend.scheduler.expire_pending_verifications")
+def expire_pending_verifications():
+    """
+    Find expired pending verifications, kick the user if kick_on_fail is set,
+    delete the challenge message, and remove the DB row. Runs every 5 minutes.
+    """
+    try:
+        from .models import db, PendingVerification
+        from datetime import datetime
+        import asyncio
+        import telegram
+
+        now = datetime.utcnow()
+        expired = PendingVerification.query.filter(
+            PendingVerification.expires_at <= now
+        ).all()
+
+        if not expired:
+            return
+
+        from .app import create_app as _ca
+        _app = _ca()
+
+        async def _process(records):
+            for rec in records:
+                try:
+                    bot = telegram.Bot(token=_get_bot_token_for_chat(rec.chat_id, _app))
+                except Exception:
+                    continue
+
+                # Delete challenge message from group
+                if rec.msg_id and rec.auto_delete_on_timeout:
+                    try:
+                        await bot.delete_message(chat_id=rec.chat_id, message_id=rec.msg_id)
+                    except Exception as e:
+                        logger.debug("expire_verif: delete msg failed chat=%s msg=%s: %s",
+                                     rec.chat_id, rec.msg_id, e)
+
+                # Kick the user if configured
+                if rec.kick_on_fail:
+                    try:
+                        await bot.ban_chat_member(chat_id=rec.chat_id, user_id=rec.user_id)
+                        await bot.unban_chat_member(chat_id=rec.chat_id, user_id=rec.user_id)
+                        logger.info("expire_verif: kicked user=%s from chat=%s", rec.user_id, rec.chat_id)
+                    except Exception as e:
+                        logger.warning("expire_verif: kick failed chat=%s user=%s: %s",
+                                       rec.chat_id, rec.user_id, e)
+
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(_process(expired))
+        finally:
+            loop.close()
+
+        # Remove expired rows
+        ids = [r.id for r in expired]
+        PendingVerification.query.filter(PendingVerification.id.in_(ids)).delete(synchronize_session=False)
+        db.session.commit()
+        logger.info("[celery:expire_pending_verifications] expired=%d", len(ids))
+
+    except Exception as exc:
+        logger.error("expire_pending_verifications error: %s", exc, exc_info=True)
+
+
+def _get_bot_token_for_chat(chat_id, app):
+    """Return the decrypted bot token for whichever bot manages this chat. Raises if not found."""
+    with app.app_context():
+        from .models import Group, Bot, CustomBot, TelegramGroup
+        # Check custom bot runner
+        group = Group.query.filter_by(telegram_group_id=str(chat_id)).first()
+        if group:
+            bot = Bot.query.get(group.bot_id)
+            if bot:
+                return bot.get_token()
+        # Check official bot
+        import os
+        token = os.environ.get("TELEGRAM_BOT_TOKEN")
+        if token:
+            return token
+    raise ValueError(f"No bot token found for chat_id={chat_id}")

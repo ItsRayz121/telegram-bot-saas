@@ -501,6 +501,7 @@ export const telegramGroups = {
 
 export const customBots = {
   list: () => api.get('/api/custom-bots'),
+  validateToken: (bot_token) => api.post('/api/custom-bots/validate-token', { bot_token }),
   add: (data) => api.post('/api/custom-bots', data),
   get: (id) => api.get(`/api/custom-bots/${id}`),
   delete: (id) => api.delete(`/api/custom-bots/${id}`),
