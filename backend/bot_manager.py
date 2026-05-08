@@ -80,76 +80,563 @@ class BotInstance:
                 return None
             return GroupContext.from_group(group)
 
-    async def handle_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        if update.effective_chat.type == "private":
-            with self.app_context.app_context():
-                from .models import Bot
-                frontend_url = self.app_context.config.get("FRONTEND_URL", "https://app.telegizer.com")
-                bot_rec = Bot.query.get(self.bot_id)
-                owner_name = (bot_rec.owner.full_name if bot_rec and bot_rec.owner else None)
+    # ── internal helpers ───────────────────────────────────────────────────────
 
-            owner_line = f"\n👤 Managed by <b>{owner_name}</b>" if owner_name else ""
-            keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("🌐 Open Dashboard", url=f"{frontend_url}/dashboard")],
-                [InlineKeyboardButton("📋 My Linked Groups", url=f"{frontend_url}/bots")],
-            ])
-            await update.message.reply_text(
-                f"👋 <b>Welcome!</b>{owner_line}\n\n"
-                "This bot is powered by <b>Telegizer</b> — a professional Telegram group management platform.\n\n"
-                "<b>✨ What I can do in your group:</b>\n"
-                "• 🛡 <b>AutoMod</b> — filter links, spam, bad words, caps\n"
-                "• ✅ <b>Verification</b> — protect your group from bots &amp; raiders\n"
-                "• 📊 <b>XP &amp; Levels</b> — reward your most active members\n"
-                "• 🤖 <b>AI Assistant</b> — auto-answer questions from a knowledge base\n"
-                "• 📅 <b>Scheduler</b> — post announcements on a schedule\n"
-                "• 📈 <b>Analytics</b> — track member growth and engagement\n"
-                "• 🔗 <b>Automation</b> — auto-responses and custom commands\n"
-                "• 📣 <b>Welcome Messages</b> — greet new members automatically\n\n"
-                "<b>How to get started:</b>\n"
-                "1. Add this bot to your group as an <b>admin</b>\n"
-                "2. Use <code>/settings</code> in the group to open your dashboard\n"
-                "3. Configure any features you need\n\n"
-                "Use /status to see your linked groups.",
-                parse_mode="HTML",
-                reply_markup=keyboard,
-            )
+    def _frontend(self):
+        return self.app_context.config.get("FRONTEND_URL", "https://telegizer.xyz")
+
+    def _official_bot_username(self):
+        raw = self.app_context.config.get("TELEGRAM_BOT_USERNAME", "telegizer_bot")
+        return raw.strip().lstrip("@").split("/")[-1]
+
+    def _find_website_user(self, tg_user_id):
+        """Safe wrapper: return User linked to Telegram ID or None."""
+        try:
+            from .models import User, UserTelegramAccount
+            tg_id_str = str(tg_user_id)
+            # Check primary column first
+            u = User.query.filter_by(telegram_user_id=tg_id_str).first()
+            if u:
+                return u
+            # Check junction table
+            ta = UserTelegramAccount.query.filter_by(telegram_user_id=tg_id_str).first()
+            if ta:
+                return User.query.get(ta.user_id)
+        except Exception as e:
+            logger.debug("_find_website_user tg=%s: %s", tg_user_id, e)
+        return None
+
+    def _build_main_menu_keyboard(self, frontend, bot_username, is_linked, pending_count=0):
+        """Build the standard main menu InlineKeyboardMarkup."""
+        keyboard = []
+        if is_linked:
+            keyboard.append([InlineKeyboardButton("✅ Account Connected", callback_data="menu:account_info")])
         else:
-            await update.message.reply_text(
-                "✅ I'm active in this group! Use /settings to configure me.",
-            )
+            keyboard.append([InlineKeyboardButton("🔗 Connect Account", url=f"{frontend}/settings")])
 
-    async def handle_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        if update.effective_chat.type != "private":
-            return
-
-        with self.app_context.app_context():
-            from .models import Bot, Group
-            frontend_url = self.app_context.config.get("FRONTEND_URL", "https://app.telegizer.com")
-            groups = Group.query.filter_by(bot_id=self.bot_id).order_by(Group.created_at.desc()).all()
-            group_data = [{"id": g.id, "name": g.group_name or "Unnamed Group"} for g in groups]
-
-        if not group_data:
-            await update.message.reply_text(
-                "📋 <b>No groups linked yet.</b>\n\n"
-                "Add this bot to a group as admin and use /settings there to connect it.",
-                parse_mode="HTML",
-            )
-            return
-
-        lines = [f"📋 <b>Linked Groups ({len(group_data)})</b>\n"]
-        buttons = []
-        for g in group_data[:10]:
-            lines.append(f"• <b>{g['name']}</b>")
-            buttons.append([InlineKeyboardButton(
-                f"⚙️ {g['name']}",
-                url=f"{frontend_url}/bot/{self.bot_id}/group/{g['id']}",
+        if pending_count:
+            keyboard.append([InlineKeyboardButton(
+                f"⚠️ {pending_count} Group(s) Awaiting Setup",
+                callback_data="menu:pending_groups",
             )])
 
-        await update.message.reply_text(
-            "\n".join(lines),
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(buttons),
+        keyboard += [
+            [
+                InlineKeyboardButton("➕ Add Group", callback_data="menu:add_group"),
+                InlineKeyboardButton("📋 My Groups", callback_data="menu:my_groups"),
+            ],
+            [
+                InlineKeyboardButton("🧠 AI Assistant", callback_data="menu:ai_assistant"),
+                InlineKeyboardButton("⚡ Automations", url=f"{frontend}/workspace/automations"),
+            ],
+            [
+                InlineKeyboardButton("💬 Support", callback_data="menu:support"),
+                InlineKeyboardButton("⚙️ Settings", url=f"{frontend}/settings"),
+            ],
+            [
+                InlineKeyboardButton("🌐 Open Telegizer App", url=frontend),
+            ],
+        ]
+        return InlineKeyboardMarkup(keyboard)
+
+    # ── /start ─────────────────────────────────────────────────────────────────
+
+    async def handle_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if update.effective_chat.type != "private":
+            await update.message.reply_text(
+                "✅ I'm active here! Use /linkgroup to connect this group to your dashboard, "
+                "or /settings to manage it.",
+            )
+            return
+
+        user = update.effective_user
+        first = user.first_name or "there"
+        frontend = self._frontend()
+        official_un = self._official_bot_username()
+        bot_username = context.bot.username or official_un
+
+        is_linked = False
+        owner_name = None
+        pending_count = 0
+
+        with self.app_context.app_context():
+            from .models import Bot, TelegramGroupLinkCode, TelegramGroup
+            from datetime import datetime as _dt
+            bot_rec = Bot.query.get(self.bot_id)
+            owner_name = bot_rec.owner.full_name if bot_rec and bot_rec.owner else None
+            website_user = self._find_website_user(user.id)
+            is_linked = website_user is not None
+
+            if website_user:
+                pending_count = TelegramGroupLinkCode.query.filter_by(
+                    created_by_telegram_user_id=str(user.id),
+                    used_at=None,
+                ).filter(TelegramGroupLinkCode.expires_at > _dt.utcnow()).count()
+
+        managed_by = f"\n👤 Managed by <b>{owner_name}</b>" if owner_name else ""
+        text = (
+            f"👋 <b>Welcome, {first}!</b>{managed_by}\n\n"
+            f"⚡ Powered by <b>Telegizer</b> · @{official_un}\n\n"
+            "<b>What I can do in your groups:</b>\n"
+            "• 🛡 AutoMod — links, spam, bad words, caps filter\n"
+            "• ✅ Verification — protect against bots &amp; raiders\n"
+            "• 📊 XP &amp; Levels — reward active members\n"
+            "• 🤖 AI Assistant — auto-answer from knowledge base\n"
+            "• 📅 Scheduler — timed announcements\n"
+            "• 📈 Analytics — member &amp; engagement tracking\n"
+            "• ⚡ Automations — triggers, custom commands\n"
+            "• 📣 Welcome Messages — greet new members\n\n"
+            "<i>Add me to a group as admin, then run /linkgroup there.</i>"
         )
+
+        keyboard = self._build_main_menu_keyboard(frontend, bot_username, is_linked, pending_count)
+        await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+    # ── /status ────────────────────────────────────────────────────────────────
+
+    async def handle_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if update.effective_chat.type == "private":
+            # DM: show linked groups for this bot
+            frontend = self._frontend()
+            with self.app_context.app_context():
+                from .models import Group
+                groups = Group.query.filter_by(bot_id=self.bot_id).order_by(Group.created_at.desc()).all()
+                group_data = [{"id": g.id, "name": g.group_name or "Unnamed Group"} for g in groups]
+
+            if not group_data:
+                await update.message.reply_text(
+                    "📋 <b>No groups linked yet.</b>\n\n"
+                    "Add this bot to a group as admin and run /linkgroup there.",
+                    parse_mode="HTML",
+                )
+                return
+
+            lines = [f"📋 <b>Linked Groups ({len(group_data)})</b>\n"]
+            buttons = []
+            for g in group_data[:10]:
+                lines.append(f"• <b>{g['name']}</b>")
+                buttons.append([InlineKeyboardButton(
+                    f"⚙️ {g['name']}",
+                    url=f"{frontend}/bot/{self.bot_id}/group/{g['id']}",
+                )])
+
+            await update.message.reply_text(
+                "\n".join(lines),
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup(buttons),
+            )
+        else:
+            # Group: show group link status
+            chat = update.effective_chat
+            frontend = self._frontend()
+            with self.app_context.app_context():
+                from .models import Group
+                grp = Group.query.filter_by(
+                    bot_id=self.bot_id,
+                    telegram_group_id=str(chat.id),
+                ).first()
+                linked = grp is not None
+
+            if linked:
+                kb = InlineKeyboardMarkup([[
+                    InlineKeyboardButton("⚙️ Open Dashboard", url=f"{frontend}/bot/{self.bot_id}/group/{grp.id}"),
+                ]])
+                await update.message.reply_text(
+                    f"✅ <b>{chat.title}</b> is linked to Telegizer.\nUse the button to manage it.",
+                    parse_mode="HTML", reply_markup=kb,
+                )
+            else:
+                await update.message.reply_text(
+                    "⏳ This group is not linked yet.\nRun /linkgroup to connect it to your dashboard.",
+                )
+
+    # ── /linkgroup ─────────────────────────────────────────────────────────────
+
+    async def handle_linkgroup(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Link this group to the user's Telegizer dashboard account."""
+        chat = update.effective_chat
+        user = update.effective_user
+        frontend = self._frontend()
+        official_un = self._official_bot_username()
+        bot_username = context.bot.username or official_un
+
+        if chat.type == "private":
+            await update.message.reply_text(
+                "⚠️ Use /linkgroup <b>inside your Telegram group</b>, not here.",
+                parse_mode="HTML",
+            )
+            return
+
+        try:
+            cm = await context.bot.get_chat_member(chat.id, user.id)
+            if cm.status not in ("creator", "administrator"):
+                await update.message.reply_text("❌ Only group admins can link this group.")
+                return
+        except Exception:
+            pass
+
+        group_id = str(chat.id)
+        group_title = chat.title or "Untitled Group"
+
+        already_linked = False
+        linked_user_id = None
+        code = None
+        limit_hit = None
+
+        with self.app_context.app_context():
+            from .models import db, Group, TelegramGroup, TelegramGroupLinkCode
+            from datetime import datetime as _dt, timedelta as _td
+
+            website_user = self._find_website_user(user.id)
+
+            # Get or create the TelegramGroup record
+            tg = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
+            if not tg:
+                tg = TelegramGroup(
+                    telegram_group_id=group_id,
+                    title=group_title,
+                    username=chat.username,
+                    bot_status="pending",
+                )
+                db.session.add(tg)
+                db.session.flush()
+
+            if tg.owner_user_id and tg.bot_status == "active":
+                already_linked = True
+                db.session.commit()
+            elif website_user:
+                from .config import Config
+                max_groups = Config.MAX_OFFICIAL_GROUPS.get(website_user.subscription_tier, 3)
+                current_count = TelegramGroup.query.filter_by(
+                    owner_user_id=website_user.id, is_disabled=False,
+                ).count()
+                if max_groups != -1 and current_count >= max_groups:
+                    limit_hit = (max_groups, website_user.subscription_tier)
+                    db.session.commit()
+                else:
+                    tg.owner_user_id = website_user.id
+                    tg.bot_status = "active"
+                    tg.linked_at = _dt.utcnow()
+                    tg.linked_via_bot_type = "custom"
+                    tg.linked_bot_id = None
+                    TelegramGroupLinkCode.query.filter_by(
+                        telegram_group_id=group_id,
+                        created_by_telegram_user_id=str(user.id),
+                        used_at=None,
+                    ).update({"expires_at": _dt.utcnow()})
+                    db.session.commit()
+                    linked_user_id = website_user.id
+            else:
+                # Code flow — no website account linked yet
+                TelegramGroupLinkCode.query.filter_by(
+                    telegram_group_id=group_id,
+                    used_at=None,
+                ).filter(
+                    TelegramGroupLinkCode.expires_at > _dt.utcnow()
+                ).update({"expires_at": _dt.utcnow()})
+
+                code = TelegramGroupLinkCode.generate_code()
+                while TelegramGroupLinkCode.query.filter_by(code=code).first():
+                    code = TelegramGroupLinkCode.generate_code()
+
+                link_code = TelegramGroupLinkCode(
+                    code=code,
+                    telegram_group_id=group_id,
+                    telegram_group_title=group_title,
+                    created_by_telegram_user_id=str(user.id),
+                    expires_at=_dt.utcnow() + _td(minutes=15),
+                )
+                db.session.add(link_code)
+                db.session.commit()
+
+        if limit_hit:
+            max_n, tier = limit_hit
+            await update.message.reply_text(
+                f"⚠️ Your {tier.capitalize()} plan allows {max_n} linked group(s).\n\n"
+                f"Upgrade to Pro for unlimited groups at {frontend}/billing",
+            )
+            return
+
+        if already_linked:
+            await update.message.reply_text(
+                "✅ This group is already linked to a Telegizer account.\nUse /status to view details.",
+            )
+            return
+
+        if linked_user_id:
+            await update.message.reply_text(
+                f"✅ <b>{group_title}</b> has been linked to your Telegizer account!\n\nView it in your dashboard.",
+                parse_mode="HTML",
+            )
+            try:
+                await context.bot.send_message(
+                    chat_id=user.id,
+                    text=f"✅ <b>Group linked!</b>\n\n<b>{group_title}</b> is now in your dashboard.",
+                    parse_mode="HTML",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("📋 My Groups", url=f"{frontend}/my-groups")],
+                    ]),
+                )
+            except Exception:
+                pass
+            return
+
+        # Code flow
+        await update.message.reply_text(
+            f"✅ Link request created.\n\nOpen @{bot_username} privately to get your secure code.",
+        )
+        private_text = (
+            f"🔐 <b>Group Link Code</b>\n\n"
+            f"Group: <b>{group_title}</b>\n\n"
+            f"<code>{code}</code>\n\n"
+            f"⏱ Expires in 15 minutes — single use only.\n\n"
+            f"Paste at: {frontend}/my-groups\n\n"
+            f"<i>Connect your Telegram account in Settings to skip codes in future.</i>"
+        )
+        try:
+            await context.bot.send_message(
+                chat_id=user.id, text=private_text, parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🖥️ Open My Groups", url=f"{frontend}/my-groups")],
+                ]),
+            )
+        except Exception:
+            try:
+                await context.bot.send_message(
+                    chat_id=chat.id,
+                    text=f"⚠️ @{user.username or user.first_name}, I couldn't DM you.\n"
+                         f"Start a private chat with @{bot_username} first, then run /linkgroup again.",
+                )
+            except Exception:
+                pass
+
+    # ── menu callback dispatcher ────────────────────────────────────────────────
+
+    async def _handle_menu_callback(self, query, user, data):
+        """Handle all menu:* callback queries from the /start menu."""
+        frontend = self._frontend()
+        official_un = self._official_bot_username()
+
+        # ── Back to main menu ─────────────────────────────────────────────────
+        if data == "menu:main":
+            is_linked = False
+            pending_count = 0
+            with self.app_context.app_context():
+                from datetime import datetime as _dt
+                from .models import TelegramGroupLinkCode
+                website_user = self._find_website_user(user.id)
+                is_linked = website_user is not None
+                if website_user:
+                    pending_count = TelegramGroupLinkCode.query.filter_by(
+                        created_by_telegram_user_id=str(user.id), used_at=None,
+                    ).filter(TelegramGroupLinkCode.expires_at > _dt.utcnow()).count()
+
+            keyboard = self._build_main_menu_keyboard(frontend, official_un, is_linked, pending_count)
+            await query.edit_message_text(
+                "👋 <b>Telegizer Hub</b>\n\nChoose an option below:",
+                parse_mode="HTML", reply_markup=keyboard,
+            )
+            return
+
+        # ── Account info ──────────────────────────────────────────────────────
+        if data == "menu:account_info":
+            email = None
+            with self.app_context.app_context():
+                u = self._find_website_user(user.id)
+                if u:
+                    email = u.email
+            text = (
+                f"✅ <b>Account Connected</b>\n\nLinked to: <code>{email}</code>\n\n"
+                "Groups you add will appear in your dashboard automatically."
+            ) if email else (
+                f"ℹ️ No Telegizer account linked.\n\nVisit {frontend}/settings to connect."
+            )
+            await query.edit_message_text(
+                text, parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🖥️ Open Dashboard", url=frontend)],
+                    [InlineKeyboardButton("⚙️ Settings", url=f"{frontend}/settings")],
+                    [InlineKeyboardButton("« Back", callback_data="menu:main")],
+                ]),
+            )
+            return
+
+        # ── My Groups ─────────────────────────────────────────────────────────
+        if data == "menu:my_groups":
+            groups = []
+            is_linked = False
+            with self.app_context.app_context():
+                from .models import TelegramGroup
+                u = self._find_website_user(user.id)
+                is_linked = u is not None
+                if u:
+                    gs = TelegramGroup.query.filter_by(
+                        owner_user_id=u.id, is_disabled=False,
+                    ).order_by(TelegramGroup.linked_at.desc()).limit(10).all()
+                    groups = [{"title": g.title, "status": g.bot_status} for g in gs]
+
+            if not is_linked:
+                await query.edit_message_text(
+                    "📋 <b>My Groups</b>\n\nConnect your Telegizer account to see your groups here.",
+                    parse_mode="HTML",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔗 Connect Account", url=f"{frontend}/settings")],
+                        [InlineKeyboardButton("« Back", callback_data="menu:main")],
+                    ]),
+                )
+                return
+
+            if not groups:
+                text = "📋 <b>My Groups</b>\n\nNo linked groups yet.\nAdd me to a group and run /linkgroup."
+                kb = [
+                    [InlineKeyboardButton("➕ Add Group", callback_data="menu:add_group")],
+                    [InlineKeyboardButton("🖥️ Open Dashboard", url=f"{frontend}/my-groups")],
+                    [InlineKeyboardButton("« Back", callback_data="menu:main")],
+                ]
+            else:
+                icons = {"active": "🟢", "pending": "🟡", "removed": "🔴"}
+                lines = ["📋 <b>My Linked Groups</b>\n"]
+                for g in groups:
+                    lines.append(f"{icons.get(g['status'], '⚪')} {g['title']}")
+                text = "\n".join(lines)
+                kb = [
+                    [InlineKeyboardButton("🖥️ Manage on Dashboard", url=f"{frontend}/my-groups")],
+                    [InlineKeyboardButton("➕ Add Another Group", callback_data="menu:add_group")],
+                    [InlineKeyboardButton("« Back", callback_data="menu:main")],
+                ]
+            await query.edit_message_text(text, parse_mode="HTML",
+                                          reply_markup=InlineKeyboardMarkup(kb))
+            return
+
+        # ── Add Group ─────────────────────────────────────────────────────────
+        if data == "menu:add_group":
+            bot_username = query.message.reply_markup and official_un
+            add_url = f"https://t.me/{official_un}?startgroup=setup"
+            await query.edit_message_text(
+                "<b>Add Group to Telegizer</b>\n\n"
+                "1️⃣ Add me to your group using the button below\n"
+                "2️⃣ In the group, run /linkgroup\n"
+                "3️⃣ If your account is connected, it links automatically\n"
+                "   Otherwise paste the code from here into the dashboard",
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("➕ Add Bot to Group", url=add_url)],
+                    [InlineKeyboardButton("🖥️ Dashboard → My Groups", url=f"{frontend}/my-groups")],
+                    [InlineKeyboardButton("« Back", callback_data="menu:main")],
+                ]),
+            )
+            return
+
+        # ── AI Assistant ──────────────────────────────────────────────────────
+        if data == "menu:ai_assistant":
+            await query.edit_message_text(
+                "🧠 <b>Telegizer AI Assistant</b>\n\n"
+                "I'm your AI co-pilot — type anything naturally in this chat!\n\n"
+                "<b>Examples:</b>\n"
+                "• \"Schedule a meeting Friday 3pm\"\n"
+                "• \"Remind me tomorrow morning about the proposal\"\n"
+                "• \"What's happening in my groups?\"\n"
+                "• \"Create task: review analytics — high priority\"\n\n"
+                "<b>Group Management:</b>\n"
+                "• \"Any moderation issues today?\"\n"
+                "• \"Show me top members this week\"\n"
+                "• \"Analyze my group's activity\"\n\n"
+                "<i>Just send me a message below to get started!</i>",
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🖥️ Open AI Workspace", url=f"{frontend}/workspace")],
+                    [InlineKeyboardButton("« Back", callback_data="menu:main")],
+                ]),
+            )
+            return
+
+        # ── Support ───────────────────────────────────────────────────────────
+        if data == "menu:support":
+            await query.edit_message_text(
+                "<b>Telegizer Support</b>\n\n"
+                "📢 <b>Official Channel</b> — updates &amp; announcements\n"
+                "👥 <b>Community Group</b> — help from other users\n"
+                "✉️ <b>Email</b> — fazalelahi5577@gmail.com",
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📢 Official Channel", url="https://t.me/telegizer")],
+                    [InlineKeyboardButton("👥 Community Group", url="https://t.me/telegizer_community")],
+                    [InlineKeyboardButton("✉️ Email Support", url="mailto:fazalelahi5577@gmail.com")],
+                    [InlineKeyboardButton("« Back", callback_data="menu:main")],
+                ]),
+            )
+            return
+
+        # ── Pending groups ────────────────────────────────────────────────────
+        if data == "menu:pending_groups":
+            pending = []
+            with self.app_context.app_context():
+                from datetime import datetime as _dt
+                from .models import TelegramGroupLinkCode, TelegramGroup
+                codes = TelegramGroupLinkCode.query.filter_by(
+                    created_by_telegram_user_id=str(user.id), used_at=None,
+                ).filter(TelegramGroupLinkCode.expires_at > _dt.utcnow()).all()
+                for c in codes:
+                    tg = TelegramGroup.query.filter_by(telegram_group_id=c.telegram_group_id).first()
+                    if tg and not tg.owner_user_id:
+                        pending.append({"title": tg.title or c.telegram_group_title, "code": c.code})
+
+            if not pending:
+                text = "✅ <b>No groups awaiting setup.</b>\n\nRun /linkgroup in a group to generate a code."
+                kb = [[InlineKeyboardButton("« Back", callback_data="menu:main")]]
+            else:
+                lines = ["<b>Groups Awaiting Setup</b>\n"]
+                for p in pending:
+                    lines.append(f"• {p['title']}")
+                text = "\n".join(lines)
+                kb = (
+                    [[InlineKeyboardButton(f"📋 {p['title']}", callback_data=f"show_code:{p['code']}")] for p in pending[:5]]
+                    + [[InlineKeyboardButton("🖥️ Open Dashboard", url=f"{frontend}/my-groups")],
+                       [InlineKeyboardButton("« Back", callback_data="menu:main")]]
+                )
+            await query.edit_message_text(text, parse_mode="HTML",
+                                          reply_markup=InlineKeyboardMarkup(kb))
+            return
+
+        # ── Show individual link code ─────────────────────────────────────────
+        if data.startswith("show_code:"):
+            code = data.split(":", 1)[1]
+            valid = False
+            group_title = ""
+            with self.app_context.app_context():
+                from datetime import datetime as _dt
+                from .models import TelegramGroupLinkCode
+                lc = TelegramGroupLinkCode.query.filter_by(
+                    code=code,
+                    created_by_telegram_user_id=str(user.id),
+                    used_at=None,
+                ).filter(TelegramGroupLinkCode.expires_at > _dt.utcnow()).first()
+                if lc:
+                    valid = True
+                    group_title = lc.telegram_group_title or ""
+
+            if not valid:
+                await query.edit_message_text(
+                    "⚠️ This code has expired or already been used.\nRun /linkgroup in the group again.",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("« Back", callback_data="menu:pending_groups")],
+                    ]),
+                )
+                return
+
+            frontend = self._frontend()
+            await query.edit_message_text(
+                f"🔐 <b>Link Code for {group_title}</b>\n\n"
+                f"<code>{code}</code>\n\n"
+                f"Paste at: {frontend}/my-groups\n\n"
+                "<i>Single use · expires in 15 min</i>",
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🖥️ Open My Groups", url=f"{frontend}/my-groups")],
+                    [InlineKeyboardButton("« Back", callback_data="menu:pending_groups")],
+                ]),
+            )
+            return
 
     async def handle_settings(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if update.effective_chat.type == "private":
@@ -1354,8 +1841,10 @@ class BotInstance:
         if not query:
             return
 
+        await query.answer()
         data = query.data or ""
         parts = data.split(":")
+        user = query.from_user
 
         if parts[0] == "verify":
             method = parts[1]
@@ -1363,8 +1852,8 @@ class BotInstance:
             user_id = int(parts[3])
             chat_id = query.message.chat.id
 
-            if query.from_user.id != user_id:
-                await query.answer("This verification is not for you.")
+            if user.id != user_id:
+                await query.answer("This verification is not for you.", show_alert=True)
                 return
 
             extra_data = parts[4:] if len(parts) > 4 else []
@@ -1379,11 +1868,17 @@ class BotInstance:
                 group = Group.query.get(group_id)
                 if group:
                     rules = group.settings.get("welcome", {}).get("rules_text", "No rules set.")
-                    await query.answer()
-                    await query.message.reply_text(f"📜 *Rules:*\n{rules}", parse_mode="Markdown")
+                    await query.message.reply_text(f"📜 <b>Rules:</b>\n{rules}", parse_mode="HTML")
 
-        else:
-            await query.answer()
+        elif data.startswith("menu:") or data.startswith("show_code:"):
+            try:
+                await self._handle_menu_callback(query, user, data)
+            except Exception as e:
+                logger.error(f"Menu callback error bot={self.bot_id} data={data}: {e}", exc_info=True)
+                try:
+                    await query.edit_message_text("⚠️ Something went wrong. Please try again.")
+                except Exception:
+                    pass
 
     async def handle_my_chat_member(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Fires when the bot is added to or removed from a group."""
@@ -1454,6 +1949,7 @@ class BotInstance:
         app = self.application
         app.add_handler(CommandHandler("start", self.handle_start))
         app.add_handler(CommandHandler("status", self.handle_status))
+        app.add_handler(CommandHandler("linkgroup", self.handle_linkgroup))
         app.add_handler(CommandHandler("settings", self.handle_settings))
         app.add_handler(CommandHandler("rank", self.handle_rank))
         app.add_handler(CommandHandler("leaderboard", self.handle_leaderboard))
