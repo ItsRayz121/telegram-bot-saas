@@ -238,6 +238,17 @@ export const settings = {
       : api.get(`/api/bots/${botId}/groups/${groupId}/admins`),
   getBotPermissions: (groupId) =>
     api.get(`/api/official-groups/${groupId}/permissions`),
+
+  getCommandRouting: (botId, groupId) =>
+    api.get(`/api/official-groups/${groupId}/command-routing`),
+  updateCommandRouting: (botId, groupId, data) =>
+    api.put(`/api/official-groups/${groupId}/command-routing`, data),
+  refreshForumTopics: (botId, groupId) =>
+    api.post(`/api/official-groups/${groupId}/command-routing/refresh-topics`),
+  getCustomCommandRouting: (botId, groupId) =>
+    api.get(`/api/bots/${botId}/groups/${groupId}/command-routing`),
+  updateCustomCommandRouting: (botId, groupId, data) =>
+    api.put(`/api/bots/${botId}/groups/${groupId}/command-routing`, data),
 };
 
 // Official groups: real knowledge-base endpoints via /api/telegram-groups

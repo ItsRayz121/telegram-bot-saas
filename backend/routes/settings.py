@@ -867,3 +867,77 @@ def set_primary_telegram_account(account_id):
         return jsonify({"error": "Could not update primary account"}), 500
 
     return jsonify({"account": account.to_dict(), "message": "Primary account updated"})
+
+
+# ── Command Routing / Topic Access Control (custom bots) ──────────────────────
+
+_ROUTABLE_COMMANDS = ["/xp", "/rank", "/leaderboard", "/level", "/rules", "/help", "/stats"]
+
+
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/command-routing", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def get_custom_command_routing(bot_id, group_id):
+    try:
+        user = _get_current_user()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        bot, group, err = _get_bot_and_group(user, bot_id, group_id)
+        if err:
+            return err
+        routing = (group.settings or {}).get("command_routing", {
+            "topics": [], "commands": {}, "restricted_reply": "silent",
+            "restricted_message": "⚠️ This command is only available in the {topic} topic.",
+        })
+        return jsonify({"routing": routing, "routable_commands": _ROUTABLE_COMMANDS})
+    except Exception as e:
+        logger.error(f"get_custom_command_routing error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/command-routing", methods=["PUT"])
+@jwt_required()
+@rate_limit(requests_per_minute=20)
+def update_custom_command_routing(bot_id, group_id):
+    try:
+        from sqlalchemy.orm.attributes import flag_modified
+        user = _get_current_user()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        bot, group, err = _get_bot_and_group(user, bot_id, group_id)
+        if err:
+            return err
+        data = request.get_json() or {}
+
+        current = dict(group.settings or {})
+        routing = dict(current.get("command_routing", {}))
+
+        if "commands" in data and isinstance(data["commands"], dict):
+            existing_cmds = dict(routing.get("commands") or {})
+            for cmd, rule in data["commands"].items():
+                if not isinstance(rule, dict):
+                    continue
+                scope = rule.get("scope", "all_group")
+                if scope not in ("all_group", "specific_topics", "disabled"):
+                    continue
+                topic_ids = [str(t) for t in (rule.get("topic_ids") or [])]
+                existing_cmds[cmd] = {"scope": scope, "topic_ids": topic_ids}
+            routing["commands"] = existing_cmds
+
+        if "restricted_reply" in data:
+            val = data["restricted_reply"]
+            if val in ("silent", "message"):
+                routing["restricted_reply"] = val
+
+        if "restricted_message" in data and isinstance(data["restricted_message"], str):
+            routing["restricted_message"] = data["restricted_message"][:300]
+
+        current["command_routing"] = routing
+        group.settings = current
+        flag_modified(group, "settings")
+        db.session.commit()
+        return jsonify({"routing": routing, "message": "Command routing updated"})
+    except Exception as e:
+        logger.error(f"update_custom_command_routing error: {e}", exc_info=True)
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500

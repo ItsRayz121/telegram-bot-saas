@@ -2219,12 +2219,19 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     group_id = str(chat.id)
     text = (message.text or "").strip()
 
+    thread_id = getattr(message, "message_thread_id", None)
+
+    tg = None
     try:
         with flask_app.app_context():
             from .models import db, TelegramGroup
+            from sqlalchemy.orm.attributes import flag_modified
             tg = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
             if tg:
                 tg.last_activity = datetime.utcnow()
+                # Passively discover forum topics from any message.
+                if thread_id and _capture_topic_official(tg, thread_id, None):
+                    flag_modified(tg, "settings")
                 db.session.commit()
     except Exception:
         pass
@@ -2250,6 +2257,9 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
 
         if cmd_data:
+            if not _routing_allowed(tg, f"/{cmd_raw}", thread_id):
+                await _routing_reject(update, tg, f"/{cmd_raw}")
+                return
             keyboard = None
             if cmd_data["buttons"]:
                 rows = [
@@ -3345,6 +3355,77 @@ def _is_group_chat(update: Update) -> bool:
     return update.effective_chat and update.effective_chat.type in (ChatType.GROUP, ChatType.SUPERGROUP)
 
 
+# ── Command routing helpers (official bot) ────────────────────────────────────
+
+def _routing_allowed(tg_group, command: str, thread_id) -> bool:
+    """Check command_routing config. Returns True if command is allowed in this thread."""
+    settings = (tg_group.settings or {}) if tg_group else {}
+    routing = settings.get("command_routing")
+    if not routing:
+        return True
+    commands_cfg = routing.get("commands") or {}
+    cmd_rule = commands_cfg.get(command) or commands_cfg.get(command.lstrip("/"))
+    if not cmd_rule:
+        return True
+    scope = cmd_rule.get("scope", "all_group")
+    if scope == "all_group":
+        return True
+    if scope == "disabled":
+        return False
+    allowed_ids = [str(t) for t in (cmd_rule.get("topic_ids") or [])]
+    if not allowed_ids:
+        return False
+    return str(thread_id) in allowed_ids if thread_id is not None else False
+
+
+async def _routing_reject(update, tg_group, command: str):
+    """Send rejection reply or stay silent based on restricted_reply setting."""
+    settings = (tg_group.settings or {}) if tg_group else {}
+    routing = settings.get("command_routing") or {}
+    if routing.get("restricted_reply", "silent") != "message":
+        return
+    msg_tpl = routing.get(
+        "restricted_message",
+        "⚠️ This command is only available in the {topic} topic.",
+    )
+    commands_cfg = routing.get("commands") or {}
+    cmd_rule = commands_cfg.get(command) or commands_cfg.get(command.lstrip("/")) or {}
+    topic_ids = cmd_rule.get("topic_ids") or []
+    topics = routing.get("topics") or []
+    topic_names = [
+        t["name"] for t in topics if str(t.get("thread_id")) in [str(x) for x in topic_ids]
+    ]
+    topic_label = ", ".join(topic_names) if topic_names else "a specific topic"
+    try:
+        await update.message.reply_text(msg_tpl.format(topic=topic_label))
+    except Exception:
+        pass
+
+
+def _capture_topic_official(tg_group, thread_id, topic_name=None) -> bool:
+    """Upsert a known forum topic into tg_group.settings['command_routing']['topics'].
+
+    Returns True if settings was mutated (caller must flag_modified + commit).
+    """
+    if not tg_group or thread_id is None:
+        return False
+    settings = tg_group.settings or {}
+    routing = settings.setdefault("command_routing", {
+        "topics": [], "commands": {}, "restricted_reply": "silent",
+        "restricted_message": "⚠️ This command is only available in the {topic} topic.",
+    })
+    topics = routing.setdefault("topics", [])
+    tid = str(thread_id)
+    for t in topics:
+        if str(t.get("thread_id")) == tid:
+            if topic_name and t.get("name") != topic_name:
+                t["name"] = topic_name
+                return True
+            return False
+    topics.append({"thread_id": tid, "name": topic_name or f"Topic {tid}"})
+    return True
+
+
 async def _resolve_target(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Return (user_id, username, display_name) for the moderation target.
@@ -3838,6 +3919,19 @@ async def cmd_xp(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     flask_app = context.bot_data.get("flask_app")
     group_id = str(update.effective_chat.id)
+    thread_id = getattr(update.message, "message_thread_id", None)
+
+    tg_group = None
+    if flask_app:
+        try:
+            with flask_app.app_context():
+                from .models import TelegramGroup
+                tg_group = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
+        except Exception:
+            pass
+    if not _routing_allowed(tg_group, "/xp", thread_id):
+        await _routing_reject(update, tg_group, "/xp")
+        return
 
     target_id, _, target_name = await _resolve_target(update, context)
     if not target_id:
@@ -3888,6 +3982,19 @@ async def cmd_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     flask_app = context.bot_data.get("flask_app")
     group_id = str(update.effective_chat.id)
+    thread_id = getattr(update.message, "message_thread_id", None)
+
+    tg_group = None
+    if flask_app:
+        try:
+            with flask_app.app_context():
+                from .models import TelegramGroup
+                tg_group = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
+        except Exception:
+            pass
+    if not _routing_allowed(tg_group, "/leaderboard", thread_id):
+        await _routing_reject(update, tg_group, "/leaderboard")
+        return
 
     leaders = []
     if flask_app:
@@ -4079,6 +4186,22 @@ async def cmd_rank(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show rank and level for self or a mentioned user."""
     if not _is_group_chat(update):
         return
+
+    flask_app = context.bot_data.get("flask_app")
+    group_id = str(update.effective_chat.id)
+    thread_id = getattr(update.message, "message_thread_id", None)
+    tg_group = None
+    if flask_app:
+        try:
+            with flask_app.app_context():
+                from .models import TelegramGroup
+                tg_group = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
+        except Exception:
+            pass
+    if not _routing_allowed(tg_group, "/rank", thread_id):
+        await _routing_reject(update, tg_group, "/rank")
+        return
+
     await _show_rank(update, context)
 
 
@@ -4605,14 +4728,22 @@ async def on_service_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
     group_id = str(chat.id)
 
     auto_clean = {}
+    tg_svc = None
     try:
         with flask_app.app_context():
-            from .models import TelegramGroup
-            tg = TelegramGroup.query.filter_by(
+            from .models import db, TelegramGroup
+            from sqlalchemy.orm.attributes import flag_modified
+            tg_svc = TelegramGroup.query.filter_by(
                 telegram_group_id=group_id, is_disabled=False
             ).first()
-            if tg:
-                auto_clean = (tg.settings or {}).get("auto_clean", {})
+            if tg_svc:
+                auto_clean = (tg_svc.settings or {}).get("auto_clean", {})
+                # Capture forum_topic_created for topic routing config.
+                if message.forum_topic_created and message.message_thread_id:
+                    topic_name = getattr(message.forum_topic_created, "name", None)
+                    if _capture_topic_official(tg_svc, message.message_thread_id, topic_name):
+                        flag_modified(tg_svc, "settings")
+                        db.session.commit()
     except Exception:
         return
 

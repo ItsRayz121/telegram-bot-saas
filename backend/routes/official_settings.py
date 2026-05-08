@@ -662,3 +662,144 @@ def get_official_analytics_overview():
     except Exception as e:
         logger.error(f"get_official_analytics_overview error: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
+
+
+# ── Command Routing / Topic Access Control ─────────────────────────────────────
+
+_ROUTABLE_COMMANDS = ["/xp", "/rank", "/leaderboard", "/level", "/rules", "/help", "/stats"]
+
+
+@official_settings_bp.route("/<group_id>/command-routing", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def get_command_routing(group_id):
+    """Return current command routing config and known forum topics."""
+    try:
+        user = _get_current_user()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        tg, err = _get_official_group(user, group_id)
+        if err:
+            return err
+        routing = (tg.settings or {}).get("command_routing", {
+            "topics": [], "commands": {}, "restricted_reply": "silent",
+            "restricted_message": "⚠️ This command is only available in the {topic} topic.",
+        })
+        return jsonify({
+            "routing": routing,
+            "routable_commands": _ROUTABLE_COMMANDS,
+        })
+    except Exception as e:
+        logger.error(f"get_command_routing error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@official_settings_bp.route("/<group_id>/command-routing", methods=["PUT"])
+@jwt_required()
+@rate_limit(requests_per_minute=20)
+def update_command_routing(group_id):
+    """Update command routing rules for this group."""
+    try:
+        user = _get_current_user()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        tg, err = _get_official_group(user, group_id)
+        if err:
+            return err
+        data = request.get_json() or {}
+
+        current = dict(tg.settings or {})
+        routing = dict(current.get("command_routing", {}))
+
+        if "commands" in data and isinstance(data["commands"], dict):
+            existing_cmds = dict(routing.get("commands") or {})
+            for cmd, rule in data["commands"].items():
+                if not isinstance(rule, dict):
+                    continue
+                scope = rule.get("scope", "all_group")
+                if scope not in ("all_group", "specific_topics", "disabled"):
+                    continue
+                topic_ids = [str(t) for t in (rule.get("topic_ids") or [])]
+                existing_cmds[cmd] = {"scope": scope, "topic_ids": topic_ids}
+            routing["commands"] = existing_cmds
+
+        if "restricted_reply" in data:
+            val = data["restricted_reply"]
+            if val in ("silent", "message"):
+                routing["restricted_reply"] = val
+
+        if "restricted_message" in data and isinstance(data["restricted_message"], str):
+            routing["restricted_message"] = data["restricted_message"][:300]
+
+        current["command_routing"] = routing
+        tg.settings = current
+        flag_modified(tg, "settings")
+        db.session.commit()
+        return jsonify({"routing": routing, "message": "Command routing updated"})
+    except Exception as e:
+        logger.error(f"update_command_routing error: {e}", exc_info=True)
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
+@official_settings_bp.route("/<group_id>/command-routing/refresh-topics", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=10)
+def refresh_forum_topics(group_id):
+    """Call Telegram getForumTopics API to discover all topics for this group."""
+    try:
+        user = _get_current_user()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        tg, err = _get_official_group(user, group_id)
+        if err:
+            return err
+
+        token = Config.TELEGRAM_BOT_TOKEN
+        if not token:
+            return jsonify({"error": "Bot token not configured"}), 500
+
+        result = _tg_api("getForumTopics", token, chat_id=group_id)
+        if not result.get("ok"):
+            desc = result.get("description", "")
+            if "not a supergroup" in desc.lower() or "FORUM_DISABLED" in desc:
+                return jsonify({
+                    "topics": [],
+                    "message": "This group does not have forum topics enabled.",
+                    "forum_enabled": False,
+                })
+            return jsonify({"error": desc, "topics": []}), 200
+
+        topics_raw = result.get("result", {}).get("topics", [])
+        topics = []
+        for t in topics_raw:
+            topics.append({
+                "thread_id": str(t.get("message_thread_id", "")),
+                "name": t.get("name", ""),
+                "icon_color": t.get("icon_color"),
+            })
+
+        # Merge discovered topics into settings
+        current = dict(tg.settings or {})
+        routing = dict(current.get("command_routing", {}))
+        existing = {str(t["thread_id"]): t for t in routing.get("topics", [])}
+        for t in topics:
+            tid = t["thread_id"]
+            if tid not in existing:
+                existing[tid] = t
+            else:
+                existing[tid]["name"] = t["name"]
+        routing["topics"] = list(existing.values())
+        current["command_routing"] = routing
+        tg.settings = current
+        flag_modified(tg, "settings")
+        db.session.commit()
+
+        return jsonify({
+            "topics": routing["topics"],
+            "forum_enabled": True,
+            "message": f"Found {len(topics)} topics",
+        })
+    except Exception as e:
+        logger.error(f"refresh_forum_topics error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500

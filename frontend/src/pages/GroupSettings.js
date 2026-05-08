@@ -42,7 +42,7 @@ const PRO_GATED_LABELS = {
 };
 
 const buildCategories = (isOfficial) => [
-  { id: 'members',    label: 'Members',    icon: Group,  subTabs: ['Verification', 'Welcome', 'XP & Roles'] },
+  { id: 'members',    label: 'Members',    icon: Group,  subTabs: ['Verification', 'Welcome', 'XP & Roles', 'Command Routing'] },
   { id: 'moderation', label: 'Moderation', icon: Shield, subTabs: ['AutoMod', 'Behavior', 'Reports'] },
   { id: 'community',  label: 'Engagement', icon: People, subTabs: ['Raids', 'Invite Links'] },
   { id: 'ai',         label: 'AI & Integrations', icon: AutoAwesome, subTabs: ['Knowledge Base', 'Webhooks'] },
@@ -125,6 +125,183 @@ const LANGUAGE_OPTIONS = [
   { value: 'japanese', label: 'Japanese' },
 ];
 
+// ── Command Routing Tab Component ─────────────────────────────────────────────
+
+const SCOPE_OPTIONS = [
+  { value: 'all_group', label: 'Works everywhere' },
+  { value: 'specific_topics', label: 'Only selected topics' },
+  { value: 'disabled', label: 'Disabled' },
+];
+
+function CommandRoutingTab({
+  isOfficial, cmdRouting, setCmdRouting, routableCommands,
+  loading, saving, topicsRefreshing, onSave, onRefreshTopics,
+}) {
+  const topics = cmdRouting.topics || [];
+  const commands = cmdRouting.commands || {};
+
+  const getRule = (cmd) => commands[cmd] || { scope: 'all_group', topic_ids: [] };
+
+  const setScope = (cmd, scope) => {
+    setCmdRouting((prev) => ({
+      ...prev,
+      commands: {
+        ...prev.commands,
+        [cmd]: { ...getRule(cmd), scope },
+      },
+    }));
+  };
+
+  const toggleTopicForCmd = (cmd, threadId, checked) => {
+    const rule = getRule(cmd);
+    const current = rule.topic_ids || [];
+    const updated = checked
+      ? [...new Set([...current, String(threadId)])]
+      : current.filter((id) => id !== String(threadId));
+    setCmdRouting((prev) => ({
+      ...prev,
+      commands: {
+        ...prev.commands,
+        [cmd]: { ...rule, topic_ids: updated },
+      },
+    }));
+  };
+
+  if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}><CircularProgress /></Box>;
+
+  return (
+    <Box>
+      <Card sx={{ mb: 2 }}>
+        <CardContent>
+          <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
+            <Typography variant="h6" fontWeight={600}>Command Routing</Typography>
+            {isOfficial && (
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={onRefreshTopics}
+                disabled={topicsRefreshing}
+                startIcon={topicsRefreshing ? <CircularProgress size={14} /> : null}
+              >
+                Refresh Topics
+              </Button>
+            )}
+          </Stack>
+          <Typography variant="body2" color="text.secondary" mb={2}>
+            Control which forum topics each command is allowed in. Only applies when the group has Telegram forum topics enabled.
+            Default is "Works everywhere" — existing groups are unaffected.
+          </Typography>
+
+          {topics.length === 0 && (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              No forum topics detected yet.{isOfficial ? ' Click "Refresh Topics" to fetch them from Telegram, or they will be discovered automatically as messages arrive.' : ' Topics are discovered automatically as messages arrive in the group.'}
+            </Alert>
+          )}
+
+          {topics.length > 0 && (
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>Known Topics</Typography>
+              <Stack direction="row" flexWrap="wrap" gap={1}>
+                {topics.map((t) => (
+                  <Chip key={t.thread_id} label={`${t.name} (#${t.thread_id})`} size="small" />
+                ))}
+              </Stack>
+            </Box>
+          )}
+        </CardContent>
+      </Card>
+
+      {routableCommands.map((cmd) => {
+        const rule = getRule(cmd);
+        return (
+          <Card key={cmd} sx={{ mb: 1.5 }}>
+            <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+              <Stack direction="row" alignItems="center" spacing={2} flexWrap="wrap">
+                <Typography fontWeight={600} sx={{ minWidth: 130, fontFamily: 'monospace' }}>{cmd}</Typography>
+                <FormControl size="small" sx={{ minWidth: 200 }}>
+                  <InputLabel>Access</InputLabel>
+                  <Select
+                    value={rule.scope}
+                    label="Access"
+                    onChange={(e) => setScope(cmd, e.target.value)}
+                  >
+                    {SCOPE_OPTIONS.map((o) => (
+                      <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Stack>
+
+              {rule.scope === 'specific_topics' && (
+                <Box sx={{ mt: 1, ml: 0.5 }}>
+                  {topics.length === 0 ? (
+                    <Typography variant="caption" color="text.secondary">
+                      No topics discovered yet. Topics are detected automatically from incoming messages.
+                    </Typography>
+                  ) : (
+                    <Stack direction="row" flexWrap="wrap" gap={1} mt={0.5}>
+                      {topics.map((t) => {
+                        const checked = (rule.topic_ids || []).includes(String(t.thread_id));
+                        return (
+                          <FormControlLabel
+                            key={t.thread_id}
+                            control={
+                              <Switch
+                                size="small"
+                                checked={checked}
+                                onChange={(e) => toggleTopicForCmd(cmd, t.thread_id, e.target.checked)}
+                              />
+                            }
+                            label={t.name}
+                          />
+                        );
+                      })}
+                    </Stack>
+                  )}
+                </Box>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })}
+
+      <Card sx={{ mt: 2, mb: 2 }}>
+        <CardContent>
+          <Typography variant="subtitle2" fontWeight={600} mb={1}>When command is blocked</Typography>
+          <FormControl size="small" sx={{ minWidth: 200, mb: 2 }}>
+            <InputLabel>Rejection behavior</InputLabel>
+            <Select
+              value={cmdRouting.restricted_reply || 'silent'}
+              label="Rejection behavior"
+              onChange={(e) => setCmdRouting((prev) => ({ ...prev, restricted_reply: e.target.value }))}
+            >
+              <MenuItem value="silent">Ignore silently</MenuItem>
+              <MenuItem value="message">Send a reply message</MenuItem>
+            </Select>
+          </FormControl>
+          {cmdRouting.restricted_reply === 'message' && (
+            <TextField
+              fullWidth
+              size="small"
+              label="Rejection message"
+              helperText="Use {topic} as a placeholder for the allowed topic name."
+              value={cmdRouting.restricted_message || ''}
+              onChange={(e) => setCmdRouting((prev) => ({ ...prev, restricted_message: e.target.value }))}
+            />
+          )}
+        </CardContent>
+      </Card>
+
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <Button variant="contained" onClick={onSave} disabled={saving} startIcon={saving ? <CircularProgress size={16} /> : <Save />}>
+          Save Routing
+        </Button>
+      </Box>
+    </Box>
+  );
+}
+
+
 export default function GroupSettings() {
   const navigate = useNavigate();
   const { id: rawBotId, groupId } = useParams();
@@ -183,6 +360,13 @@ export default function GroupSettings() {
   // Admin list for reports / digest recipient selection
   const [groupAdmins, setGroupAdmins] = useState([]);
   const [adminsLoading, setAdminsLoading] = useState(false);
+
+  // Command routing / topic access control
+  const [cmdRouting, setCmdRouting] = useState({ topics: [], commands: {}, restricted_reply: 'silent', restricted_message: '⚠️ This command is only available in the {topic} topic.' });
+  const [routingLoading, setRoutingLoading] = useState(false);
+  const [routingSaving, setRoutingSaving] = useState(false);
+  const [topicsRefreshing, setTopicsRefreshing] = useState(false);
+  const [routableCommands, setRoutableCommands] = useState(['/xp', '/rank', '/leaderboard', '/level', '/rules', '/help', '/stats']);
 
   const isMounted = React.useRef(true);
   React.useEffect(() => {
@@ -351,6 +535,58 @@ export default function GroupSettings() {
     }
   };
 
+  const fetchCmdRouting = useCallback(async () => {
+    setRoutingLoading(true);
+    try {
+      let res;
+      if (isOfficial) {
+        res = await settings.getCommandRouting(botId, groupId);
+      } else {
+        res = await settings.getCustomCommandRouting(botId, groupId);
+      }
+      setCmdRouting(res.data.routing || { topics: [], commands: {}, restricted_reply: 'silent', restricted_message: '⚠️ This command is only available in the {topic} topic.' });
+      if (res.data.routable_commands) setRoutableCommands(res.data.routable_commands);
+    } catch {
+      // silently ignore — feature just won't show routing data
+    } finally {
+      setRoutingLoading(false);
+    }
+  }, [botId, groupId, isOfficial]);
+
+  const handleSaveCmdRouting = async () => {
+    setRoutingSaving(true);
+    try {
+      if (isOfficial) {
+        await settings.updateCommandRouting(botId, groupId, cmdRouting);
+      } else {
+        await settings.updateCustomCommandRouting(botId, groupId, cmdRouting);
+      }
+      toast.success('Command routing saved!');
+    } catch {
+      toast.error('Failed to save command routing');
+    } finally {
+      setRoutingSaving(false);
+    }
+  };
+
+  const handleRefreshTopics = async () => {
+    setTopicsRefreshing(true);
+    try {
+      const res = await settings.refreshForumTopics(botId, groupId);
+      const data = res.data;
+      if (data.forum_enabled === false) {
+        toast.info('This group does not have forum topics enabled.');
+      } else {
+        setCmdRouting((prev) => ({ ...prev, topics: data.topics || prev.topics }));
+        toast.success(data.message || 'Topics refreshed');
+      }
+    } catch {
+      toast.error('Failed to refresh topics');
+    } finally {
+      setTopicsRefreshing(false);
+    }
+  };
+
   // official: ['Members', 'Leaderboard', 'Audit Log', 'Warnings', 'Digest']
   // custom:   ['Members', 'Audit Log', 'Digest']
   const leaderboardSubTabIdx = isOfficial ? 1 : -1;
@@ -371,6 +607,8 @@ export default function GroupSettings() {
       fetchAdmins();
     }
   }, [cat, subTab, digestSubTabIdx, fetchAdmins]);
+  // members tab index 3 = Command Routing
+  useEffect(() => { if (cat === 'members' && subTab === 3) fetchCmdRouting(); }, [cat, subTab, fetchCmdRouting]);
 
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
   const [upgradeFeature, setUpgradeFeature] = useState('');
@@ -1536,6 +1774,21 @@ export default function GroupSettings() {
             />
             <PollCreator botId={botId} groupId={groupId} defaultTimezone={settingsData?.timezone || 'UTC'} />
           </>
+        )}
+
+        {/* MEMBERS › Command Routing */}
+        {cat === 'members' && subTab === 3 && (
+          <CommandRoutingTab
+            isOfficial={isOfficial}
+            cmdRouting={cmdRouting}
+            setCmdRouting={setCmdRouting}
+            routableCommands={routableCommands}
+            loading={routingLoading}
+            saving={routingSaving}
+            topicsRefreshing={topicsRefreshing}
+            onSave={handleSaveCmdRouting}
+            onRefreshTopics={handleRefreshTopics}
+          />
         )}
 
         {/* ══════════════════════════════════════════════════════════

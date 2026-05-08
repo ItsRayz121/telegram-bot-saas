@@ -69,6 +69,84 @@ def _html_escape(text: str) -> str:
             .replace(">", "&gt;"))
 
 
+# ── Command routing helpers ───────────────────────────────────────────────────
+
+def _is_command_allowed(settings: dict, command: str, thread_id) -> bool:
+    """Return True if `command` may be used in the given forum thread_id.
+
+    Logic:
+    - No command_routing config → always allowed (safe default).
+    - scope "all_group" → allowed everywhere.
+    - scope "disabled" → never allowed.
+    - scope "specific_topics" → allowed only when thread_id is in topic_ids list.
+    - General Chat messages have thread_id == None; a topic rule with no ids
+      blocks them too.
+    """
+    routing = settings.get("command_routing") if settings else None
+    if not routing:
+        return True
+    commands_cfg = routing.get("commands") or {}
+    cmd_rule = commands_cfg.get(command) or commands_cfg.get(command.lstrip("/"))
+    if not cmd_rule:
+        return True
+    scope = cmd_rule.get("scope", "all_group")
+    if scope == "all_group":
+        return True
+    if scope == "disabled":
+        return False
+    # specific_topics
+    allowed_ids = [str(t) for t in (cmd_rule.get("topic_ids") or [])]
+    if not allowed_ids:
+        return False
+    return str(thread_id) in allowed_ids if thread_id is not None else False
+
+
+async def _send_routing_rejection(update, settings: dict, command: str):
+    """Send the configured rejection reply (or stay silent) for a blocked command."""
+    routing = (settings or {}).get("command_routing", {})
+    if routing.get("restricted_reply", "silent") == "message":
+        msg_tpl = routing.get(
+            "restricted_message",
+            "⚠️ This command is only available in the {topic} topic.",
+        )
+        commands_cfg = routing.get("commands") or {}
+        cmd_rule = commands_cfg.get(command) or commands_cfg.get(command.lstrip("/")) or {}
+        topic_ids = cmd_rule.get("topic_ids") or []
+        topics = routing.get("topics") or []
+        topic_names = [
+            t["name"] for t in topics if str(t.get("thread_id")) in [str(x) for x in topic_ids]
+        ]
+        topic_label = ", ".join(topic_names) if topic_names else "a specific topic"
+        try:
+            await update.message.reply_text(msg_tpl.format(topic=topic_label))
+        except Exception:
+            pass
+
+
+def _capture_topic(group, thread_id, topic_name):
+    """Upsert a topic entry in group.settings['command_routing']['topics'].
+
+    Returns True if the settings dict was mutated (caller must flag_modified / commit).
+    """
+    if not group or thread_id is None:
+        return False
+    settings = group.settings or {}
+    routing = settings.setdefault("command_routing", {
+        "topics": [], "commands": {}, "restricted_reply": "silent",
+        "restricted_message": "⚠️ This command is only available in the {topic} topic.",
+    })
+    topics = routing.setdefault("topics", [])
+    tid = str(thread_id)
+    for t in topics:
+        if str(t.get("thread_id")) == tid:
+            if topic_name and t.get("name") != topic_name:
+                t["name"] = topic_name
+                return True
+            return False
+    topics.append({"thread_id": tid, "name": topic_name or f"Topic {tid}"})
+    return True
+
+
 async def _auto_delete(bot, chat_id, message_id, delay):
     """Delete a message after `delay` seconds. Logs but does not raise on failure."""
     await asyncio.sleep(delay)
@@ -861,8 +939,13 @@ class BotInstance:
         if update.effective_chat.type == "private":
             return
 
+        thread_id = getattr(update.message, "message_thread_id", None)
         user = update.effective_user
         group = await self._get_or_create_group(update.effective_chat.id, update.effective_chat.title, context.bot)
+
+        if not _is_command_allowed(group.settings, "/rank", thread_id):
+            await _send_routing_rejection(update, group.settings, "/rank")
+            return
 
         with self.app_context.app_context():
             from .models import Member
@@ -901,7 +984,12 @@ class BotInstance:
         if update.effective_chat.type == "private":
             return
 
+        thread_id = getattr(update.message, "message_thread_id", None)
         group = await self._get_or_create_group(update.effective_chat.id, update.effective_chat.title, context.bot)
+
+        if not _is_command_allowed(group.settings, "/leaderboard", thread_id):
+            await _send_routing_rejection(update, group.settings, "/leaderboard")
+            return
 
         with self.app_context.app_context():
             from .models import Member
@@ -1804,6 +1892,17 @@ class BotInstance:
         ):
             should_delete = True
 
+        # Capture new topics so the dashboard can show them for routing config.
+        if message.forum_topic_created and message.message_thread_id:
+            topic_name = getattr(message.forum_topic_created, "name", None)
+            changed = _capture_topic(group, message.message_thread_id, topic_name)
+            if changed:
+                with self.app_context.app_context():
+                    from .models import db
+                    from sqlalchemy.orm.attributes import flag_modified
+                    flag_modified(group, "settings")
+                    db.session.commit()
+
         if should_delete:
             try:
                 await context.bot.delete_message(chat_id=chat_id, message_id=message.message_id)
@@ -1852,6 +1951,18 @@ class BotInstance:
                 group.id, user.id, user.username, user.first_name, user.last_name
             )
 
+        # Passively capture forum topics from any message so the dashboard has
+        # routing options even if the bot was added after topic creation.
+        thread_id = getattr(update.message, "message_thread_id", None)
+        if thread_id:
+            changed = _capture_topic(group, thread_id, None)
+            if changed:
+                with self.app_context.app_context():
+                    from .models import db
+                    from sqlalchemy.orm.attributes import flag_modified
+                    flag_modified(group, "settings")
+                    db.session.commit()
+
         # Custom command dispatch
         msg_text = (update.message.text or "").strip()
         if msg_text.startswith("/"):
@@ -1875,6 +1986,9 @@ class BotInstance:
                 pass
 
             if cmd_data:
+                if not _is_command_allowed(group.settings, f"/{cmd_raw}", thread_id):
+                    await _send_routing_rejection(update, group.settings, f"/{cmd_raw}")
+                    return
                 keyboard = None
                 if cmd_data["buttons"]:
                     from telegram import InlineKeyboardButton, InlineKeyboardMarkup

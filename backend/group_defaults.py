@@ -297,4 +297,18 @@ _DEFAULTS: dict = {
         "on_report": True,    # pre-wired: fires when master switch enabled
         "on_spam_burst": False,
     },
+
+    # ── Command routing / topic access control ────────────────────────────────
+    # Applies to forum groups (supergroups with topics enabled).
+    # topics: list of known forum topics discovered from incoming messages.
+    # commands: per-command access rules. scope = "all_group" | "specific_topics" | "disabled"
+    # Default scope "all_group" means commands work everywhere — existing groups unaffected.
+    "command_routing": {
+        "topics": [],
+        # {"/leaderboard": {"scope": "all_group", "topic_ids": []}, ...}
+        "commands": {},
+        # "silent" = ignore the command; "message" = send restricted_message text
+        "restricted_reply": "silent",
+        "restricted_message": "⚠️ This command is only available in the {topic} topic.",
+    },
 }
