@@ -4932,6 +4932,16 @@ class OfficialBotRunner:
             ])
         except Exception as exc:
             _log.warning("[OfficialBot] set_my_commands: %s", exc)
+        # 1-E-02: Set bot description/branding
+        try:
+            await a.bot.set_my_description(
+                "Telegizer — the all-in-one Telegram community platform. "
+                "Moderation, welcome messages, AI digests, XP levels and more. "
+                "Visit telegizer.com to connect your group."
+            )
+            await a.bot.set_my_short_description("All-in-one Telegram community manager")
+        except Exception as exc:
+            _log.warning("[OfficialBot] set_my_description: %s", exc)
         # Register the webhook with Telegram so updates are POSTed to our endpoint
         # rather than using long-polling (more efficient, scales to any concurrency).
         webhook_url = f"{Config.BACKEND_URL}/api/official-bot-update"
@@ -5065,11 +5075,15 @@ async def _send_official_digest(bot, tg, days: int = 7):
         except Exception as ai_exc:
             _log.debug("AI digest summary failed for group %s: %s", group_id, ai_exc)
 
-        await bot.send_message(
-            chat_id=chat_id,
-            text="\n".join(lines),
-            parse_mode=ParseMode.MARKDOWN,
-        )
+        send_kw: dict = {
+            "chat_id": chat_id,
+            "text": "\n".join(lines),
+            "parse_mode": ParseMode.MARKDOWN,
+        }
+        if tg.is_forum:
+            topic_id = (tg.settings or {}).get("default_topic_id") or 1
+            send_kw["message_thread_id"] = int(topic_id)
+        await bot.send_message(**send_kw)
     except Exception as exc:
         _log.error("[OfficialBot] Digest send failed for group %s: %s", group_id, exc)
         raise

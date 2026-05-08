@@ -90,6 +90,11 @@ def make_celery(app=None):
                 "task": "backend.scheduler.cleanup_message_buffer",
                 "schedule": crontab(hour=3, minute=0),  # daily at 03:00 UTC
             },
+            # ── 1-I-01: Payment recovery ────────────────────────────────────
+            "recover-missed-payments": {
+                "task": "backend.scheduler.recover_missed_payments",
+                "schedule": 1800.0,  # every 30 minutes
+            },
         },
     )
 
@@ -323,11 +328,15 @@ def check_raid_reminders():
 
                 async def _remind(txt=reminder_text, g=group, b=instance):
                     try:
-                        await b.application.bot.send_message(
-                            chat_id=g.telegram_group_id,
-                            text=txt,
-                            parse_mode="Markdown",
-                        )
+                        send_kw = {
+                            "chat_id": g.telegram_group_id,
+                            "text": txt,
+                            "parse_mode": "Markdown",
+                        }
+                        topic_id = (g.settings or {}).get("default_topic_id") if g.is_forum else None
+                        if topic_id:
+                            send_kw["message_thread_id"] = int(topic_id)
+                        await b.application.bot.send_message(**send_kw)
                     except Exception as e:
                         logger.error(f"Raid reminder error: {e}")
 
@@ -996,6 +1005,79 @@ def send_renewal_reminders():
             logger.info("[celery:send_renewal_reminders] done")
     except Exception as exc:
         logger.error("send_renewal_reminders error: %s", exc)
+
+
+@celery.task(name="backend.scheduler.recover_missed_payments")
+def recover_missed_payments():
+    """
+    1-I-01: Re-check stale unprocessed NOWPayments invoices every 30 minutes.
+    Covers the case where the IPN was not delivered (server downtime, network error).
+    """
+    try:
+        from .models import db, User, PendingInvoice, ProcessedPayment
+        from .config import Config
+        from .routes.billing import _activate_subscription, _claim_dedup
+        import requests as _req
+        from datetime import timedelta
+        from sqlalchemy.exc import IntegrityError
+
+        if not Config.NOWPAYMENTS_API_KEY:
+            return
+
+        cutoff = datetime.utcnow() - timedelta(minutes=5)
+        stale = PendingInvoice.query.filter(
+            PendingInvoice.processed == False,  # noqa: E712
+            PendingInvoice.created_at < cutoff,
+        ).all()
+
+        recovered = 0
+        for invoice in stale:
+            try:
+                resp = _req.get(
+                    f"https://api.nowpayments.io/v1/invoice/{invoice.invoice_id}",
+                    headers={"x-api-key": Config.NOWPAYMENTS_API_KEY},
+                    timeout=10,
+                )
+                if not resp.ok:
+                    continue
+                data = resp.json()
+                status = data.get("status", data.get("payment_status", ""))
+                if status not in ("finished", "confirmed"):
+                    continue
+
+                dedup_key = f"np:invoice:{invoice.invoice_id}:recovery"
+                if not _claim_dedup(dedup_key):
+                    invoice.processed = True
+                    db.session.commit()
+                    continue
+
+                user = User.query.get(invoice.user_id)
+                if not user:
+                    continue
+
+                try:
+                    amount = float(invoice.amount_usd) if invoice.amount_usd else None
+                except Exception:
+                    amount = None
+
+                invoice.processed = True
+                _activate_subscription(
+                    user,
+                    invoice.tier or "pro",
+                    provider="nowpayments_recovery",
+                    payment_id=str(invoice.invoice_id),
+                    amount_usd=amount,
+                    billing_period=invoice.billing_period or "monthly",
+                )
+                recovered += 1
+                logger.info("[recover_missed_payments] Recovered invoice %s for user %d", invoice.invoice_id, user.id)
+            except Exception as exc:
+                logger.error("[recover_missed_payments] Error for invoice %s: %s", invoice.invoice_id, exc)
+
+        if recovered:
+            logger.info("[recover_missed_payments] Total recovered=%d", recovered)
+    except Exception as exc:
+        logger.error("recover_missed_payments error: %s", exc)
 
 
 def _get_bot_token_for_chat(chat_id, app):

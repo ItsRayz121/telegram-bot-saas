@@ -8,6 +8,7 @@ Key resolution order:
 """
 from __future__ import annotations
 import logging
+import re
 
 _log = logging.getLogger(__name__)
 
@@ -98,6 +99,74 @@ def _call_anthropic(api_key: str, model: str, user_message: str) -> str | None:
     with urllib.request.urlopen(req, timeout=30) as resp:
         data = json.loads(resp.read())
     return data["content"][0]["text"].strip()
+
+
+# ── Content Safety (1-G-02) ────────────────────────────────────────────────────
+
+_HARD_BLOCK_PATTERNS = [
+    re.compile(r"(how to.*(harm|hurt|attack|kill))", re.IGNORECASE),
+    re.compile(r"(bomb|explosive|weapon).*(make|build|create)", re.IGNORECASE),
+]
+_DISCLAIMER_PATTERNS = {
+    "medical":   (re.compile(r"(medical|health|diagnos|treatment|medication|dosage|prescri)", re.IGNORECASE),
+                  "⚠️ This is general information only. Consult a healthcare professional."),
+    "legal":     (re.compile(r"(legal|lawsuit|sue|court|attorney|lawyer)", re.IGNORECASE),
+                  "⚠️ This is general information only. Consult a qualified lawyer."),
+    "financial": (re.compile(r"(financial advice|invest|buy.*stock|portfolio|trading signal)", re.IGNORECASE),
+                  "⚠️ This is general information only. Not financial advice."),
+}
+
+
+def content_safety_check(text: str) -> tuple[bool, str]:
+    """
+    Return (is_safe, modified_text).
+    is_safe=False means the text must not be sent.
+    modified_text may have a disclaimer appended for sensitive topics.
+    """
+    for pattern in _HARD_BLOCK_PATTERNS:
+        if pattern.search(text):
+            return False, ""
+
+    for _topic, (pattern, disclaimer) in _DISCLAIMER_PATTERNS.items():
+        if pattern.search(text):
+            return True, text + f"\n\n{disclaimer}"
+
+    return True, text
+
+
+# ── AI Cost Tracking (1-G-04) ──────────────────────────────────────────────────
+
+_MODEL_COSTS_PER_1K = {
+    "gpt-3.5-turbo":              {"input": 0.0005, "output": 0.0015},
+    "gpt-4o":                     {"input": 0.005,  "output": 0.015},
+    "gpt-4o-mini":                {"input": 0.00015,"output": 0.0006},
+    "gemini-2.0-flash":           {"input": 0.00035,"output": 0.00105},
+    "gemini-1.5-flash":           {"input": 0.00035,"output": 0.00105},
+    "claude-haiku-4-5-20251001":  {"input": 0.0008, "output": 0.004},
+    "claude-sonnet-4-6":          {"input": 0.003,  "output": 0.015},
+}
+
+
+def track_ai_cost(user_id: int, model: str, input_tokens: int, output_tokens: int) -> None:
+    """Increment the user's daily AI cost counter. Silently ignored on any error."""
+    try:
+        costs = _MODEL_COSTS_PER_1K.get(model, {"input": 0.001, "output": 0.002})
+        cost = (input_tokens / 1000 * costs["input"]) + (output_tokens / 1000 * costs["output"])
+        from ..models import db, User
+        from decimal import Decimal
+        from datetime import datetime, date
+        user = User.query.get(user_id)
+        if user is None:
+            return
+        today = date.today()
+        reset_at = getattr(user, "ai_cost_reset_at", None)
+        if reset_at is None or (hasattr(reset_at, "date") and reset_at.date() < today):
+            user.ai_cost_usd_today = Decimal("0")
+            user.ai_cost_reset_at = datetime.utcnow()
+        user.ai_cost_usd_today = (user.ai_cost_usd_today or Decimal("0")) + Decimal(str(round(cost, 6)))
+        db.session.commit()
+    except Exception as exc:
+        _log.debug("track_ai_cost error for user %s: %s", user_id, exc)
 
 
 def _resolve_ai_key(user_id: int, group_id: str) -> dict | None:

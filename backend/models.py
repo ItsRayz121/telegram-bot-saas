@@ -102,6 +102,9 @@ class User(db.Model):
     # ToS acceptance tracking (1-D-05)
     tos_version_accepted = db.Column(db.String(20), nullable=True)  # e.g. "2.0"
     tos_accepted_at      = db.Column(db.DateTime, nullable=True)
+    # AI cost tracking (1-G-04)
+    ai_cost_usd_today    = db.Column(db.Numeric(10, 6), default=0)
+    ai_cost_reset_at     = db.Column(db.DateTime, nullable=True)
 
     bots = db.relationship("Bot", backref="owner", lazy=True, cascade="all, delete-orphan")
 

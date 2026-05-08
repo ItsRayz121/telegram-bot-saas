@@ -4,11 +4,11 @@ import {
   Chip, Stack, Divider, Alert, IconButton,
   Grid, Table, TableBody, TableCell, TableContainer, TableHead,
   TableRow, TablePagination, Dialog, DialogTitle, DialogContent,
-  DialogContentText, DialogActions,
+  DialogContentText, DialogActions, CircularProgress,
 } from '@mui/material';
 import {
   ArrowBack, Upgrade, CheckCircle,
-  CurrencyBitcoin, Refresh, ReceiptLong, Cancel,
+  CurrencyBitcoin, Refresh, ReceiptLong, Cancel, CreditCard,
 } from '@mui/icons-material';
 import Skeleton from '@mui/material/Skeleton';
 import { useNavigate } from 'react-router-dom';
@@ -38,6 +38,8 @@ export default function Billing() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [cardLoading, setCardLoading] = useState(false);
 
   const fetchSub = useCallback(async () => {
     try {
@@ -89,6 +91,37 @@ export default function Billing() {
       setCancelling(false);
     }
   }, [fetchSub]);
+
+  const handleVerifyPayment = useCallback(async () => {
+    setVerifying(true);
+    try {
+      const res = await billing.verifyPayment();
+      if (res.data.upgraded) {
+        toast.success(`Payment confirmed! Your ${res.data.plan} plan is now active.`);
+        await fetchSub();
+      } else {
+        toast.info(`Payment status: ${res.data.status || 'pending'}. Please wait a few minutes and try again.`);
+      }
+    } catch {
+      toast.error('Failed to verify payment. Please try again.');
+    } finally {
+      setVerifying(false);
+    }
+  }, [fetchSub]);
+
+  const handleCardCheckout = useCallback(async (tier, interval = 'monthly') => {
+    setCardLoading(true);
+    try {
+      const res = await billing.createLsCheckout({ tier, interval });
+      if (res.data.checkout_url) {
+        window.location.href = res.data.checkout_url;
+      }
+    } catch (err) {
+      const msg = err?.response?.data?.error || 'Failed to start checkout';
+      toast.error(msg);
+      setCardLoading(false);
+    }
+  }, []);
 
   useEffect(() => { fetchSub(); fetchHistory(0); }, [fetchSub, fetchHistory]);
 
@@ -257,16 +290,57 @@ export default function Billing() {
                 <Typography variant="subtitle1" fontWeight={700} mb={2}>
                   Payment Methods
                 </Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+                <Stack spacing={2}>
+                  {/* Card payments — primary */}
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, p: 2, border: '2px solid', borderColor: 'primary.main', borderRadius: 2 }}>
+                    <CreditCard color="primary" />
+                    <Box sx={{ flexGrow: 1 }}>
+                      <Typography variant="body2" fontWeight={600}>Pay with Card</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Visa, Mastercard, Apple Pay and more via Lemon Squeezy
+                      </Typography>
+                    </Box>
+                    <Button
+                      variant="contained"
+                      size="small"
+                      onClick={() => handleCardCheckout(tier === 'free' ? 'pro' : tier)}
+                      disabled={cardLoading}
+                      startIcon={cardLoading ? <CircularProgress size={14} /> : null}
+                    >
+                      {cardLoading ? 'Loading…' : 'Upgrade'}
+                    </Button>
+                  </Box>
+                  {/* Crypto — secondary */}
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
                     <CurrencyBitcoin color="warning" />
                     <Box sx={{ flexGrow: 1 }}>
-                      <Typography variant="body2" fontWeight={600}>Crypto</Typography>
+                      <Typography variant="body2" fontWeight={600}>Pay with Crypto</Typography>
                       <Typography variant="caption" color="text.secondary">
                         USDT, BTC, ETH, BNB and 300+ coins via NOWPayments
                       </Typography>
                     </Box>
                     <Chip label="Available" color="success" size="small" />
                   </Box>
+                  {/* Verify pending crypto payment */}
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, p: 2, bgcolor: 'action.hover', borderRadius: 2 }}>
+                    <Refresh color="action" />
+                    <Box sx={{ flexGrow: 1 }}>
+                      <Typography variant="body2" fontWeight={600}>Already paid with crypto?</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        If your plan hasn't activated yet, click to manually verify your payment.
+                      </Typography>
+                    </Box>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={handleVerifyPayment}
+                      disabled={verifying}
+                      startIcon={verifying ? <CircularProgress size={14} /> : <Refresh fontSize="small" />}
+                    >
+                      {verifying ? 'Checking…' : 'Verify'}
+                    </Button>
+                  </Box>
+                </Stack>
               </CardContent>
             </Card>
 

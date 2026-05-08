@@ -356,6 +356,10 @@ export const billing = {
   getHistory: (params) => api.get('/api/billing/history', { params }),
   // NOWPayments — crypto (USDT, BTC, ETH, etc.)
   cryptoCheckout: (data) => api.post('/api/billing/crypto/checkout', data),
+  // Lemon Squeezy — card payments (1-H-01)
+  createLsCheckout: (data) => api.post('/api/billing/lemon-squeezy/checkout', data),
+  // Manual payment verification (1-I-02)
+  verifyPayment: () => api.post('/api/billing/verify-payment'),
   cancelSubscription: () => api.delete('/api/billing/subscription'),
 };
 

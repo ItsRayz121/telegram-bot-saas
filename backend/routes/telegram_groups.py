@@ -649,6 +649,78 @@ def delete_official_scheduled_message(group_id, msg_id):
     return jsonify({"message": "Deleted"}), 200
 
 
+# ── Forum Topics (1-F-02) ──────────────────────────────────────────────────────
+
+@tg_groups_bp.route("/<group_id>/topics", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def get_group_topics(group_id):
+    """Return forum topics for a forum group. Cached in group.settings['topics']."""
+    user = _current_user()
+    tg = _owns_group(user.id, group_id)
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+
+    if not tg.is_forum:
+        return jsonify({"error": "Not a forum group"}), 400
+
+    # Return cached topics if available
+    cached = (tg.settings or {}).get("topics")
+    if cached:
+        return jsonify({"topics": cached}), 200
+
+    # Try to fetch live from Telegram bot
+    import requests as _req
+    from ..config import Config
+    token = Config.TELEGRAM_BOT_TOKEN
+    if not token:
+        return jsonify({"topics": [{"id": 1, "name": "General"}]}), 200
+
+    try:
+        resp = _req.get(
+            f"https://api.telegram.org/bot{token}/getForumTopics",
+            params={"chat_id": tg.telegram_chat_id},
+            timeout=5,
+        )
+        data = resp.json()
+        if data.get("ok"):
+            raw = data.get("result", {}).get("topics", [])
+            topics = [{"id": t["message_thread_id"], "name": t["name"]} for t in raw]
+        else:
+            topics = [{"id": 1, "name": "General"}]
+    except Exception:
+        topics = [{"id": 1, "name": "General"}]
+
+    # Cache in settings
+    settings = dict(tg.settings or {})
+    settings["topics"] = topics
+    tg.settings = settings
+    db.session.commit()
+
+    return jsonify({"topics": topics}), 200
+
+
+@tg_groups_bp.route("/<group_id>/topics/default", methods=["PUT"])
+@jwt_required()
+@rate_limit(requests_per_minute=20)
+def set_default_topic(group_id):
+    """Set the default forum topic ID for group messages."""
+    user = _current_user()
+    tg = _owns_group(user.id, group_id)
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+
+    topic_id = request.json.get("topic_id")
+    if not isinstance(topic_id, int):
+        return jsonify({"error": "topic_id must be an integer"}), 400
+
+    settings = dict(tg.settings or {})
+    settings["default_topic_id"] = topic_id
+    tg.settings = settings
+    db.session.commit()
+    return jsonify({"default_topic_id": topic_id}), 200
+
+
 # ── Official Polls ─────────────────────────────────────────────────────────────
 
 @tg_groups_bp.route("/<group_id>/polls", methods=["GET"])

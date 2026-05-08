@@ -269,6 +269,18 @@ def init_db():
             "members.last_name",
         )
 
+        # ── 1-G-04: AI cost tracking columns ─────────────────────────────────────
+        _run_alter(
+            db.engine,
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_cost_usd_today NUMERIC(10,6) DEFAULT 0",
+            "users.ai_cost_usd_today",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_cost_reset_at TIMESTAMP",
+            "users.ai_cost_reset_at",
+        )
+
         # ── Backfill: create UserTelegramAccount rows for legacy User.telegram_user_id ──
         # Any user with telegram_user_id but no junction row gets a primary record created.
         _backfill_telegram_accounts(app)

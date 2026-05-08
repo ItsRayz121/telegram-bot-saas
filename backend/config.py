@@ -64,6 +64,15 @@ class Config:
     # NOWPayments (crypto — USDT, BTC, ETH, etc.)
     NOWPAYMENTS_API_KEY = os.environ.get("NOWPAYMENTS_API_KEY", "")
     NOWPAYMENTS_IPN_SECRET = os.environ.get("NOWPAYMENTS_IPN_SECRET", "")
+
+    # Lemon Squeezy (card payments — 1-H-01)
+    LS_API_KEY                      = os.environ.get("LS_API_KEY", "")
+    LS_STORE_ID                     = os.environ.get("LS_STORE_ID", "")
+    LS_WEBHOOK_SECRET               = os.environ.get("LS_WEBHOOK_SECRET", "")
+    LS_PRO_MONTHLY_VARIANT_ID       = os.environ.get("LS_PRO_MONTHLY_VARIANT_ID", "")
+    LS_PRO_YEARLY_VARIANT_ID        = os.environ.get("LS_PRO_YEARLY_VARIANT_ID", "")
+    LS_ENTERPRISE_MONTHLY_VARIANT_ID = os.environ.get("LS_ENTERPRISE_MONTHLY_VARIANT_ID", "")
+    LS_ENTERPRISE_YEARLY_VARIANT_ID  = os.environ.get("LS_ENTERPRISE_YEARLY_VARIANT_ID", "")
     BACKEND_URL = os.environ.get("BACKEND_URL", "https://api.telegizer.xyz")
 
     # Email provider: "resend" (preferred) or "smtp"

@@ -443,3 +443,232 @@ def crypto_webhook():
                            currency=pay_currency, billing_period=billing_period)
     logger.info("[NOWPAYMENTS] Upgraded user %d to %s (status=%s)", user.id, tier, payment_status)
     return jsonify({"status": "ok"})
+
+
+# ─── Lemon Squeezy card payments (1-H-01) ─────────────────────────────────────
+
+_LS_VARIANT_MAP: dict | None = None  # built lazily from Config
+
+
+def _ls_variant_map() -> dict:
+    """Maps (tier, interval) → variant_id string."""
+    global _LS_VARIANT_MAP
+    if _LS_VARIANT_MAP is None:
+        _LS_VARIANT_MAP = {
+            ("pro",        "monthly"): Config.LS_PRO_MONTHLY_VARIANT_ID,
+            ("pro",        "annual"):  Config.LS_PRO_YEARLY_VARIANT_ID,
+            ("enterprise", "monthly"): Config.LS_ENTERPRISE_MONTHLY_VARIANT_ID,
+            ("enterprise", "annual"):  Config.LS_ENTERPRISE_YEARLY_VARIANT_ID,
+        }
+    return _LS_VARIANT_MAP
+
+
+@billing_bp.route("/lemon-squeezy/checkout", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=10)
+def ls_create_checkout():
+    """Create a Lemon Squeezy checkout session and return the hosted checkout URL."""
+    if not Config.LS_API_KEY or not Config.LS_STORE_ID:
+        return jsonify({"error": "Card payments are not configured"}), 503
+
+    user = _get_current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    body = request.get_json(silent=True) or {}
+    tier = body.get("tier", "pro")
+    interval = body.get("interval", "monthly")
+
+    if tier not in ("pro", "enterprise"):
+        return jsonify({"error": "Invalid plan"}), 400
+    if interval not in ("monthly", "annual"):
+        return jsonify({"error": "Invalid interval"}), 400
+
+    variant_id = _ls_variant_map().get((tier, interval))
+    if not variant_id:
+        return jsonify({"error": f"Variant not configured for {tier}/{interval}"}), 503
+
+    payload = {
+        "data": {
+            "type": "checkouts",
+            "attributes": {
+                "checkout_data": {
+                    "email": user.email,
+                    "custom": {
+                        "user_id":  str(user.id),
+                        "tier":     tier,
+                        "interval": interval,
+                    },
+                },
+                "product_options": {
+                    "redirect_url": f"{Config.FRONTEND_URL}/billing?payment=success",
+                },
+            },
+            "relationships": {
+                "store":   {"data": {"type": "stores",   "id": str(Config.LS_STORE_ID)}},
+                "variant": {"data": {"type": "variants", "id": str(variant_id)}},
+            },
+        }
+    }
+
+    try:
+        resp = requests.post(
+            "https://api.lemonsqueezy.com/v1/checkouts",
+            headers={
+                "Authorization": f"Bearer {Config.LS_API_KEY}",
+                "Accept":        "application/vnd.api+json",
+                "Content-Type":  "application/vnd.api+json",
+            },
+            json=payload,
+            timeout=15,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        checkout_url = data["data"]["attributes"]["url"]
+        logger.info("[LS] Checkout created for user %d tier=%s interval=%s", user.id, tier, interval)
+        return jsonify({"checkout_url": checkout_url}), 200
+    except requests.HTTPError as e:
+        logger.error("[LS] Checkout creation failed: %s — %s", e, resp.text[:500])
+        return jsonify({"error": "Failed to create checkout session"}), 502
+    except Exception as e:
+        logger.error("[LS] Checkout error: %s", e)
+        return jsonify({"error": "Internal error"}), 500
+
+
+@billing_bp.route("/lemon-squeezy/webhook", methods=["POST"])
+def ls_webhook():
+    """Handle Lemon Squeezy order webhooks."""
+    raw_body = request.get_data()
+    signature = request.headers.get("X-Signature", "")
+
+    if not Config.LS_WEBHOOK_SECRET:
+        logger.error("[LS] Webhook received but LS_WEBHOOK_SECRET not configured")
+        return jsonify({"error": "Webhook not configured"}), 500
+
+    expected = hmac.new(
+        Config.LS_WEBHOOK_SECRET.encode(),
+        raw_body,
+        hashlib.sha256,
+    ).hexdigest()
+
+    if not hmac.compare_digest(expected, signature):
+        logger.warning("[LS] Invalid webhook signature")
+        return jsonify({"error": "Invalid signature"}), 400
+
+    try:
+        event = json.loads(raw_body)
+    except Exception:
+        return jsonify({"error": "Bad JSON"}), 400
+
+    event_name = event.get("meta", {}).get("event_name", "")
+    if event_name not in ("order_created",):
+        return jsonify({"status": "ignored"}), 200
+
+    order = event.get("data", {}).get("attributes", {})
+    if order.get("status") != "paid":
+        return jsonify({"status": "not_paid"}), 200
+
+    custom = event.get("meta", {}).get("custom_data", {})
+    user_id = custom.get("user_id")
+    tier     = custom.get("tier", "pro")
+    interval = custom.get("interval", "monthly")
+
+    if not user_id:
+        logger.error("[LS] Webhook missing user_id in custom_data")
+        return jsonify({"error": "Missing user_id"}), 400
+
+    user = User.query.get(int(user_id))
+    if not user:
+        logger.error("[LS] Webhook user_id %s not found", user_id)
+        return jsonify({"error": "User not found"}), 404
+
+    order_id = str(event.get("data", {}).get("id", ""))
+    dedup_key = f"ls:{order_id}"
+    if not _claim_dedup(dedup_key):
+        logger.info("[LS] Duplicate webhook for order %s — skipped", order_id)
+        return jsonify({"status": "duplicate"}), 200
+
+    amount_usd = None
+    try:
+        cents = order.get("total")
+        if cents:
+            amount_usd = int(cents) / 100
+    except Exception:
+        pass
+
+    _activate_subscription(
+        user, tier,
+        provider="lemonsqueezy",
+        payment_id=order_id,
+        amount_usd=amount_usd,
+        currency="USD",
+        billing_period=interval,
+    )
+    logger.info("[LS] Upgraded user %d to %s/%s via order %s", user.id, tier, interval, order_id)
+    return jsonify({"status": "ok"}), 200
+
+
+# ─── Payment recovery (1-I-02) ────────────────────────────────────────────────
+
+@billing_bp.route("/verify-payment", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=5)
+def verify_payment():
+    """
+    Manually re-check the most recent NOWPayments pending invoice for the current user.
+    Returns { upgraded: true, plan } if successful, or { upgraded: false, status }.
+    """
+    user = _get_current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    pending = (
+        PendingInvoice.query
+        .filter(PendingInvoice.user_id == user.id, PendingInvoice.processed == False)  # noqa: E712
+        .order_by(PendingInvoice.created_at.desc())
+        .first()
+    )
+    if not pending:
+        return jsonify({"upgraded": False, "status": "no_pending_invoice"}), 200
+
+    if not Config.NOWPAYMENTS_API_KEY:
+        return jsonify({"upgraded": False, "status": "crypto_not_configured"}), 200
+
+    try:
+        resp = requests.get(
+            f"https://api.nowpayments.io/v1/invoice/{pending.invoice_id}",
+            headers={"x-api-key": Config.NOWPAYMENTS_API_KEY},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        logger.error("[verify-payment] NOWPayments API error: %s", e)
+        return jsonify({"upgraded": False, "status": "api_error"}), 200
+
+    # NOWPayments invoice status
+    status = data.get("status", data.get("payment_status", "unknown"))
+    if status in ("finished", "confirmed", "partially_paid"):
+        dedup_key = f"np:invoice:{pending.invoice_id}:verify"
+        if not _claim_dedup(dedup_key):
+            return jsonify({"upgraded": True, "plan": user.subscription_tier}), 200
+
+        tier     = pending.tier or "pro"
+        interval = pending.billing_period or "monthly"
+        try:
+            amount = float(pending.amount_usd) if pending.amount_usd else None
+        except Exception:
+            amount = None
+
+        pending.processed = True
+        _activate_subscription(
+            user, tier,
+            provider="nowpayments_recovery",
+            payment_id=str(pending.invoice_id),
+            amount_usd=amount,
+            billing_period=interval,
+        )
+        logger.info("[verify-payment] Recovered payment for user %d invoice %s", user.id, pending.invoice_id)
+        return jsonify({"upgraded": True, "plan": tier}), 200
+
+    return jsonify({"upgraded": False, "status": status}), 200

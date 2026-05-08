@@ -2253,6 +2253,42 @@ class BotInstance:
 
         await app.initialize()
         await app.start()
+
+        # 1-E-02: Register bot identity (commands + branding)
+        try:
+            await app.bot.set_my_commands([
+                BotCommand("start",       "Open dashboard"),
+                BotCommand("help",        "Show available commands"),
+                BotCommand("rules",       "Show group rules"),
+                BotCommand("stats",       "Show group statistics"),
+                BotCommand("leaderboard", "Show XP leaderboard"),
+                BotCommand("rank",        "Check your XP and level"),
+                BotCommand("report",      "Report a message (use as reply)"),
+                BotCommand("warn",        "Warn a user (admins only)"),
+                BotCommand("ban",         "Ban a user (admins only)"),
+                BotCommand("mute",        "Mute a user (admins only)"),
+            ])
+        except Exception as _e:
+            logger.warning(f"Bot {self.bot_id}: set_my_commands failed: {_e}")
+
+        try:
+            with self.app_context.app_context():
+                from .models import Bot, User
+                bot_rec = Bot.query.get(self.bot_id)
+                owner = User.query.get(bot_rec.user_id) if bot_rec else None
+                tier = getattr(owner, "subscription_tier", "free") if owner else "free"
+                if tier == "free":
+                    await app.bot.set_my_description(
+                        "This group is managed with Telegizer — the all-in-one Telegram community platform. "
+                        "Visit telegizer.com to set up your own."
+                    )
+                    await app.bot.set_my_short_description("Powered by Telegizer")
+                else:
+                    custom_desc = (bot_rec.settings or {}).get("bot_description") if bot_rec else None
+                    await app.bot.set_my_description(custom_desc or "Community Manager Bot")
+        except Exception as _e:
+            logger.warning(f"Bot {self.bot_id}: set_my_description failed: {_e}")
+
         await app.updater.start_polling(drop_pending_updates=True)
 
         while not self._stop_event.is_set():
