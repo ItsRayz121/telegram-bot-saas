@@ -809,15 +809,15 @@ def check_inactive_groups():
 
 @celery.task(name="backend.scheduler.cleanup_message_buffer")
 def cleanup_message_buffer():
-    """Delete MessageBuffer records older than 7 days. Runs nightly at 03:00 UTC."""
+    """Delete MessageBuffer records older than 72 hours per privacy policy. Runs nightly at 03:00 UTC."""
     try:
         from .models import db, MessageBuffer
         from datetime import datetime, timedelta
 
-        cutoff = datetime.utcnow() - timedelta(days=7)
+        cutoff = datetime.utcnow() - timedelta(hours=72)
         deleted = MessageBuffer.query.filter(MessageBuffer.created_at < cutoff).delete()
         db.session.commit()
-        logger.info("[celery:cleanup_message_buffer] deleted=%d rows older than 7d", deleted)
+        logger.info("[celery:cleanup_message_buffer] deleted=%d rows older than 72h", deleted)
     except Exception as exc:
         logger.error("cleanup_message_buffer error: %s", exc)
 

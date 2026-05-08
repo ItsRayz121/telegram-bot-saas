@@ -40,6 +40,7 @@ export default function GroupManagement() {
   const [editCmd, setEditCmd] = useState(null);
   const [form, setForm] = useState({ command: '', response_text: '', response_type: 'text', enabled: true });
   const [saving, setSaving] = useState(false);
+  const [storageToggling, setStorageToggling] = useState(false);
 
   const loadGroup = useCallback(async () => {
     try {
@@ -126,6 +127,20 @@ export default function GroupManagement() {
     }
   };
 
+  const toggleAiStorage = async () => {
+    setStorageToggling(true);
+    const current = !!(group.settings?.ai_message_storage_enabled);
+    try {
+      await telegramGroups.update(groupId, { settings: { ...group.settings, ai_message_storage_enabled: !current } });
+      await loadGroup();
+      toast.success(`AI message storage ${!current ? 'enabled' : 'disabled'}`);
+    } catch {
+      toast.error('Failed to update setting');
+    } finally {
+      setStorageToggling(false);
+    }
+  };
+
   const toggleCmd = async (cmd) => {
     try {
       await telegramGroups.updateCommand(groupId, cmd.id, { enabled: !cmd.enabled });
@@ -173,6 +188,41 @@ export default function GroupManagement() {
             Grant admin rights to the bot in Telegram.
           </Alert>
         )}
+
+        {/* AI Data Storage toggle (GDPR opt-in) */}
+        <Card sx={{ mb: 3 }}>
+          <CardContent sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+            <Settings color="action" sx={{ mt: 0.5 }} />
+            <Box sx={{ flex: 1 }}>
+              <Typography variant="subtitle2" fontWeight={600}>Store Messages for AI Features</Typography>
+              <Typography variant="body2" color="text.secondary" mt={0.5}>
+                Required for AI Daily Digest and Auto-Reply. Messages are stored for up to 72 hours,
+                encrypted at rest, and never shared. See our{' '}
+                <Typography
+                  component="a"
+                  href="/privacy"
+                  target="_blank"
+                  variant="body2"
+                  color="primary.main"
+                >
+                  Privacy Policy
+                </Typography>
+                .
+              </Typography>
+            </Box>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={!!(group.settings?.ai_message_storage_enabled)}
+                  onChange={toggleAiStorage}
+                  disabled={storageToggling}
+                />
+              }
+              label=""
+              sx={{ m: 0 }}
+            />
+          </CardContent>
+        </Card>
 
         {/* Tabs */}
         <Paper sx={{ mb: 3 }}>

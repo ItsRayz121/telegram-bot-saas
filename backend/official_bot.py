@@ -2355,7 +2355,8 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             with flask_app.app_context():
                 from .models import TelegramGroup, MessageBuffer, db as _db
                 _tg_buf = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
-                if _tg_buf and (_tg_buf.settings or {}).get("assistant", {}).get("ai_digest_enabled"):
+                _settings = _tg_buf.settings or {} if _tg_buf else {}
+                if _tg_buf and _settings.get("ai_message_storage_enabled") and _settings.get("assistant", {}).get("ai_digest_enabled"):
                     sender = message.from_user
                     sender_name = None
                     if sender:

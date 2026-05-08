@@ -194,7 +194,24 @@ export default function Privacy() {
           </P>
         </Section>
 
-        <Section title="9. Changes to This Policy">
+        <Section title="9. Data Collected by AI Features">
+          <P>
+            When you enable AI digest or auto-reply features, Telegizer temporarily stores
+            message content from your linked Telegram groups for up to 72 hours for the
+            purpose of generating AI summaries and responses. This data is:
+          </P>
+          <P>• Encrypted at rest using AES-128</P>
+          <P>• Automatically deleted after 72 hours</P>
+          <P>• Never shared with third parties</P>
+          <P>• Stored in EU/US servers (Railway infrastructure)</P>
+          <P>
+            Legal basis: Legitimate interests (providing the contracted AI service).
+            You can disable message storage by turning off digest/auto-reply features in
+            group settings. For GDPR data deletion requests, contact: privacy@telegizer.com
+          </P>
+        </Section>
+
+        <Section title="10. Changes to This Policy">
           <P>
             We may update this Privacy Policy from time to time. We will notify you of material
             changes via email or an in-app notice at least 14 days before they take effect.
@@ -202,7 +219,7 @@ export default function Privacy() {
           </P>
         </Section>
 
-        <Section title="10. Contact">
+        <Section title="11. Contact">
           <P>
             For privacy-related questions or requests, contact us at{' '}
             <Typography component="span" variant="body2" color="primary.main">
