@@ -2268,9 +2268,14 @@ class BotInstance:
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
         max_retries = 10
+        # Capture the token once before the retry loop — _start_polling() clears
+        # self.token to avoid holding it in a long-lived attribute, but that means
+        # any retry attempt would see None.  We restore it at the top of each loop.
+        _saved_token = self.token
         for attempt in range(max_retries):
             if self._stop_event.is_set():
                 break
+            self.token = _saved_token  # restore so _start_polling() can consume it
             try:
                 self.loop.run_until_complete(self._start_polling())
                 break  # clean / stop-event exit
@@ -2405,12 +2410,24 @@ class BotInstance:
 
         await app.updater.start_polling(drop_pending_updates=True)
 
-        while not self._stop_event.is_set():
-            await asyncio.sleep(1)
-
-        await app.updater.stop()
-        await app.stop()
-        await app.shutdown()
+        try:
+            while not self._stop_event.is_set():
+                await asyncio.sleep(1)
+        finally:
+            # Always shut down the Application cleanly so the next polling attempt
+            # does not get a Telegram Conflict error (409).
+            try:
+                await app.updater.stop()
+            except Exception:
+                pass
+            try:
+                await app.stop()
+            except Exception:
+                pass
+            try:
+                await app.shutdown()
+            except Exception:
+                pass
 
 
 class BotManager:
