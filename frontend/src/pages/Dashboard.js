@@ -536,13 +536,23 @@ export default function Dashboard() {
   const tgPollRef = React.useRef(null);
 
   const fetchBots = useCallback(async () => {
-    try {
-      const res = await bots.getAll();
-      setBotList(res.data.bots);
-    } catch {
-      toast.error('Failed to load bots');
-    } finally {
-      setLoading(false);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const res = await bots.getAll();
+        setBotList(res.data.bots);
+        setLoading(false);
+        return;
+      } catch (err) {
+        if (attempt === 0) {
+          await new Promise((r) => setTimeout(r, 1500));
+        } else {
+          const msg = !err.response
+            ? 'Server is starting up — bots will appear shortly. Refresh in 30s.'
+            : `Failed to load bots (${err.response.status})`;
+          toast.error(msg);
+          setLoading(false);
+        }
+      }
     }
   }, []);
 

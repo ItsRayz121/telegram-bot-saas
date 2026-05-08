@@ -45,7 +45,12 @@ export default function Login() {
         }
       }
     } catch (err) {
-      setError(err.response?.data?.error || 'Login failed. Please try again.');
+      if (!err.response) {
+        // No response = backend is down / network error / CORS block
+        setError('Cannot reach the server. It may be starting up — please wait 30 seconds and try again.');
+      } else {
+        setError(err.response.data?.error || `Login failed (${err.response.status}). Please try again.`);
+      }
     } finally {
       setLoading(false);
     }
