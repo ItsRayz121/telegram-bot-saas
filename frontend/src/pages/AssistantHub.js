@@ -16,7 +16,7 @@ import Switch from '@mui/material/Switch';
 import GroupTrendsDashboard from '../components/GroupTrendsDashboard';
 import { useMediaQuery, useTheme } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import { assistant, assistantBot as assistantBotApi, meetings as meetingsApi } from '../services/api';
+import { assistant, assistantBot as assistantBotApi, meetings as meetingsApi, hub } from '../services/api';
 
 
 const DISMISS_KEY = 'hub_connect_banner_dismissed';
@@ -485,7 +485,7 @@ function FollowUpsCard() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await assistant.listFollowUps('open');
+      const { data } = await hub.listFollowUps('open');
       setItems(data.follow_ups || []);
     } catch {
       // silent — not critical
@@ -499,8 +499,8 @@ function FollowUpsCard() {
   const act = async (id, action) => {
     setActioning(a => ({ ...a, [id]: true }));
     try {
-      if (action === 'resolve') await assistant.resolveFollowUp(id);
-      else await assistant.dismissFollowUp(id);
+      if (action === 'resolve') await hub.resolveFollowUp(id);
+      else await hub.dismissFollowUp(id);
       setItems(prev => prev.filter(f => f.id !== id));
     } catch {
       // silent
@@ -607,7 +607,7 @@ function HubAutomationsCard() {
   const [saving, setSaving] = useState({});
 
   useEffect(() => {
-    assistant.getAutomations()
+    hub.getAutomations()
       .then(r => setAutomations(r.data.automations || []))
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -618,7 +618,7 @@ function HubAutomationsCard() {
     const next = !current;
     setAutomations(prev => prev.map(a => a.code === code ? { ...a, is_enabled: next } : a));
     try {
-      await assistant.updateAutomations({ [code]: next });
+      await hub.updateAutomations({ [code]: next });
     } catch {
       // revert on failure
       setAutomations(prev => prev.map(a => a.code === code ? { ...a, is_enabled: current } : a));
@@ -715,7 +715,7 @@ function CrossGroupSummary() {
     setError('');
     setResult(null);
     try {
-      const { data } = await assistant.crossGroupSummary(
+      const { data } = await hub.crossGroupSummary(
         range,
         range === 'custom' ? startDate : undefined,
         range === 'custom' ? endDate : undefined,

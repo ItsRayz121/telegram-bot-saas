@@ -16,7 +16,7 @@ import {
   Chip, Alert, Stepper, Step, StepLabel,
 } from '@mui/material';
 import { Close, ContentCopy, Check, SmartToy } from '@mui/icons-material';
-import hub from '../../services/hubApi';
+import { hub } from '../../services/api';
 
 const BOT_USERNAME = process.env.REACT_APP_TELEGRAM_BOT_USERNAME || 'telegizer_bot';
 const POLL_INTERVAL_MS = 4000;

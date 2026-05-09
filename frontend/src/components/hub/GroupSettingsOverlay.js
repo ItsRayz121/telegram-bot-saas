@@ -15,7 +15,7 @@ import {
   Switch, CircularProgress, Alert,
 } from '@mui/material';
 import { Close } from '@mui/icons-material';
-import hub from '../../services/hubApi';
+import { hub } from '../../services/api';
 
 const CATEGORIES = ['work', 'family', 'project', 'community', 'other'];
 const HOURS = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, '0')}:00`);

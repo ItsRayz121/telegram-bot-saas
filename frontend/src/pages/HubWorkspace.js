@@ -14,7 +14,7 @@ import {
   ArrowBack, SmartToy, Add, Delete, Edit, CheckCircleOutline,
   AccessTime, CalendarToday,
 } from '@mui/icons-material';
-import hub from '../services/hubApi';
+import { hub } from '../services/api';
 import AddToGroupFlow from '../components/hub/AddToGroupFlow';
 import GroupSettingsOverlay from '../components/hub/GroupSettingsOverlay';
 

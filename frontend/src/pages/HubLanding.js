@@ -7,7 +7,7 @@ import {
 import {
   SmartToy, Add, Settings, GroupAdd, AutoMode, Lock, Psychology,
 } from '@mui/icons-material';
-import hub from '../services/hubApi';
+import { hub } from '../services/api';
 import { PALETTE } from '../theme';
 
 export default function HubLanding() {

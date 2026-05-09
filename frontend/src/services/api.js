@@ -564,17 +564,6 @@ export const assistant = {
   search: (q, types = 'meetings,reminders,notes,tasks,groups') => api.get('/api/assistant/search', { params: { q, types } }),
   // Learned user preferences
   getProfile: () => api.get('/api/assistant/profile'),
-  // Cross-group AI executive summary
-  crossGroupSummary: (range, startDate, endDate) =>
-    api.post('/api/hub/cross-group-summary', { range, start_date: startDate, end_date: endDate }),
-  // Follow-ups
-  listFollowUps: (status = 'open', groupId = null) =>
-    api.get('/api/hub/follow-ups', { params: { status, group_id: groupId } }),
-  resolveFollowUp: (id) => api.patch(`/api/hub/follow-ups/${id}/resolve`),
-  dismissFollowUp: (id) => api.patch(`/api/hub/follow-ups/${id}/dismiss`),
-  // Pre-built automations
-  getAutomations: () => api.get('/api/hub/bots/official/automations'),
-  updateAutomations: (automations) => api.patch('/api/hub/bots/official/automations', { automations }),
 };
 
 export const meetings = {
@@ -688,6 +677,76 @@ export const channels = {
   posts: (id, params) => api.get(`/api/channels/${id}/posts`, { params }),
   refresh: (id) => api.post(`/api/channels/${id}/refresh`),
   computeTcs: (id) => api.post(`/api/channels/${id}/tcs`),
+};
+
+// ── Hub API (consolidated from hubApi.js — uses same auth as all other calls) ─
+export const hub = {
+  getStatus:            ()           => api.get('/api/hub/status'),
+  listBots:             ()           => api.get('/api/hub/bots'),
+  getOfficialBot:       ()           => api.get('/api/hub/bots/official'),
+  getOfficialSettings:  ()           => api.get('/api/hub/bots/official/settings'),
+  updateOfficialSettings: (data)     => api.patch('/api/hub/bots/official/settings', data),
+  listOfficialGroups:   ()           => api.get('/api/hub/bots/official/groups'),
+  updateGroupSettings:  (id, data)   => api.patch(`/api/hub/bots/official/groups/${id}`, data),
+  deleteGroupData:      (id)         => api.delete(`/api/hub/bots/official/groups/${id}/data`),
+  getOfficialStats:     ()           => api.get('/api/hub/bots/official/stats'),
+  getLimits:            ()           => api.get('/api/hub/limits'),
+  disconnectGroup:      (id)         => api.delete(`/api/hub/bots/official/groups/${id}/disconnect`),
+  pauseGroup:           (id)         => api.post(`/api/hub/bots/official/groups/${id}/pause`),
+  resumeGroup:          (id)         => api.post(`/api/hub/bots/official/groups/${id}/resume`),
+  exportData:           ()           => api.get('/api/hub/export'),
+  deleteAll:            ()           => api.delete('/api/hub/delete-all', { headers: { 'X-Hub-Confirm': 'DELETE' } }),
+  updateRetention:      (ttl)        => api.patch('/api/hub/bots/official/settings/retention', { buffer_ttl_hours: ttl }),
+  getOverview:          (groupId)    => api.get('/api/hub/overview', { params: groupId ? { group_id: groupId } : {} }),
+  listInbox:            (params)     => api.get('/api/hub/inbox', { params }),
+  confirmInboxItem:     (id)         => api.patch(`/api/hub/inbox/${id}/confirm`),
+  dismissInboxItem:     (id)         => api.patch(`/api/hub/inbox/${id}/dismiss`),
+  listTasks:            (params)     => api.get('/api/hub/tasks', { params }),
+  createTask:           (data)       => api.post('/api/hub/tasks', data),
+  updateTask:           (id, data)   => api.patch(`/api/hub/tasks/${id}`, data),
+  deleteTask:           (id)         => api.delete(`/api/hub/tasks/${id}`),
+  listReminders:        (params)     => api.get('/api/hub/reminders', { params }),
+  createReminder:       (data)       => api.post('/api/hub/reminders', data),
+  updateReminder:       (id, data)   => api.patch(`/api/hub/reminders/${id}`, data),
+  deleteReminder:       (id)         => api.delete(`/api/hub/reminders/${id}`),
+  listNotes:            (params)     => api.get('/api/hub/notes', { params }),
+  createNote:           (data)       => api.post('/api/hub/notes', data),
+  updateNote:           (id, data)   => api.patch(`/api/hub/notes/${id}`, data),
+  deleteNote:           (id)         => api.delete(`/api/hub/notes/${id}`),
+  listDecisions:        (params)     => api.get('/api/hub/decisions', { params }),
+  dismissDecision:      (id)         => api.patch(`/api/hub/decisions/${id}/dismiss`),
+  listMeetings:         (params)     => api.get('/api/hub/meetings', { params }),
+  dismissMeeting:       (id)         => api.patch(`/api/hub/meetings/${id}/dismiss`),
+  getAutomations:       ()           => api.get('/api/hub/bots/official/automations'),
+  updateAutomations:    (data)       => api.patch('/api/hub/bots/official/automations', data),
+  listTemplates:        ()           => api.get('/api/hub/templates'),
+  createTemplate:       (data)       => api.post('/api/hub/templates', data),
+  updateTemplate:       (id, data)   => api.patch(`/api/hub/templates/${id}`, data),
+  deleteTemplate:       (id)         => api.delete(`/api/hub/templates/${id}`),
+  createBot:            (data)       => api.post('/api/hub/bots', data),
+  updateBot:            (id, data)   => api.patch(`/api/hub/bots/${id}`, data),
+  deleteBot:            (id)         => api.delete(`/api/hub/bots/${id}`),
+  listKnowledge:        (botId)      => api.get('/api/hub/knowledge', { params: botId ? { bot_id: botId } : {} }),
+  createKnowledge:      (data)       => api.post('/api/hub/knowledge', data),
+  updateKnowledge:      (id, data)   => api.patch(`/api/hub/knowledge/${id}`, data),
+  deleteKnowledge:      (id)         => api.delete(`/api/hub/knowledge/${id}`),
+  useKnowledge:         (id)         => api.post(`/api/hub/knowledge/${id}/use`),
+  getMemoryGlobal:      ()           => api.get('/api/hub/memory/global'),
+  updateMemoryGlobal:   (data)       => api.patch('/api/hub/memory/global', data),
+  listMemoryPeople:     ()           => api.get('/api/hub/memory/people'),
+  createMemoryPerson:   (data)       => api.post('/api/hub/memory/people', data),
+  updateMemoryPerson:   (id, data)   => api.patch(`/api/hub/memory/people/${id}`, data),
+  deleteMemoryPerson:   (id)         => api.delete(`/api/hub/memory/people/${id}`),
+  listMemoryProjects:   ()           => api.get('/api/hub/memory/projects'),
+  createMemoryProject:  (data)       => api.post('/api/hub/memory/projects', data),
+  updateMemoryProject:  (id, data)   => api.patch(`/api/hub/memory/projects/${id}`, data),
+  deleteMemoryProject:  (id)         => api.delete(`/api/hub/memory/projects/${id}`),
+  // Follow-ups (Sprint 8)
+  listFollowUps:        (status, groupId) => api.get('/api/hub/follow-ups', { params: { status, group_id: groupId } }),
+  resolveFollowUp:      (id)         => api.patch(`/api/hub/follow-ups/${id}/resolve`),
+  dismissFollowUp:      (id)         => api.patch(`/api/hub/follow-ups/${id}/dismiss`),
+  // Cross-group AI summary (Sprint 8)
+  crossGroupSummary:    (range, startDate, endDate) => api.post('/api/hub/cross-group-summary', { range, start_date: startDate, end_date: endDate }),
 };
 
 export default api;
