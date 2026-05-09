@@ -31,7 +31,7 @@ export default function MiniAppReferrals() {
   }, []);
 
   const referralCode = appUser?.referral_code || '';
-  const referralUrl = `https://opencalwtest.online/join?ref=${referralCode}`;
+  const referralUrl = `https://telegizer.com/join?ref=${referralCode}`;
   const referralCount = stats?.referral_count ?? 0;
 
   const handleCopy = () => {

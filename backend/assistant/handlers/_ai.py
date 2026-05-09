@@ -103,7 +103,7 @@ def _openai_compat_post(key_info: dict, api_key: str, preferred_model: str,
                 f"{base}/chat/completions",
                 headers={
                     "Authorization": f"Bearer {api_key}",
-                    "HTTP-Referer": "https://opencalwtest.online",
+                    "HTTP-Referer": "https://telegizer.com",
                     "X-Title": "Telegizer",
                 },
                 json={**body_base, "model": model_id},

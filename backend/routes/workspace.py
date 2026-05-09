@@ -361,7 +361,7 @@ def _test_provider_key(provider: str, api_key: str, model: str, base_url: str = 
             headers = {
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
-                "HTTP-Referer": "https://opencalwtest.online",
+                "HTTP-Referer": "https://telegizer.com",
             }
             r = _req.post(
                 "https://openrouter.ai/api/v1/chat/completions",

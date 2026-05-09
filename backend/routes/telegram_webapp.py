@@ -108,7 +108,7 @@ def miniapp_auth():
         return jsonify({
             "error": "No Telegizer account linked to this Telegram account.",
             "code": "NOT_LINKED",
-            "link_url": "https://telegizer.xyz/settings",
+            "link_url": "https://telegizer.com/settings",
         }), 404
 
     if user.is_banned:

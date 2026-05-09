@@ -73,7 +73,7 @@ class Config:
     LS_PRO_YEARLY_VARIANT_ID        = os.environ.get("LS_PRO_YEARLY_VARIANT_ID", "")
     LS_ENTERPRISE_MONTHLY_VARIANT_ID = os.environ.get("LS_ENTERPRISE_MONTHLY_VARIANT_ID", "")
     LS_ENTERPRISE_YEARLY_VARIANT_ID  = os.environ.get("LS_ENTERPRISE_YEARLY_VARIANT_ID", "")
-    BACKEND_URL = os.environ.get("BACKEND_URL", "https://api.opencalwtest.online")
+    BACKEND_URL = os.environ.get("BACKEND_URL", "https://api.telegizer.com")
 
     # Email provider: "resend" (preferred) or "smtp"
     EMAIL_PROVIDER = os.environ.get("EMAIL_PROVIDER", "")

@@ -306,7 +306,7 @@ export default function Landing() {
                 <Box key={c} sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: c }} />
               ))}
               <Box sx={{ flexGrow: 1, mx: 2, bgcolor: 'rgba(255,255,255,0.04)', borderRadius: 1, height: 22, display: 'flex', alignItems: 'center', px: 1.5 }}>
-                <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.65rem' }}>telegizer.xyz/dashboard</Typography>
+                <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.65rem' }}>telegizer.com/dashboard</Typography>
               </Box>
             </Box>
             {/* Dashboard body */}

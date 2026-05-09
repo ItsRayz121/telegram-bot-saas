@@ -8,4 +8,4 @@ Disallow: /my-bots
 Disallow: /admin
 Disallow: /api/
 
-Sitemap: https://opencalwtest.online/sitemap.xml
+Sitemap: https://telegizer.com/sitemap.xml
