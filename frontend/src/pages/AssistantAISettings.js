@@ -64,13 +64,27 @@ function PlatformAIPanel({ settings, userTier }) {
             <Chip icon={<CheckCircle sx={{ fontSize: 14 }} />} label="Active" color="success" size="small" />
           )
         ) : (
-          <Chip icon={<Cancel sx={{ fontSize: 14 }} />} label={!platformActive ? "Not available" : "Subscription inactive"} color="default" size="small" />
+          <Chip
+            icon={<Cancel sx={{ fontSize: 14 }} />}
+            label={
+              !platformActive
+                ? (plan.platform_ai_included ? 'Pending activation' : 'Not included in plan')
+                : 'Subscription inactive'
+            }
+            color={plan.platform_ai_included && !platformActive ? 'warning' : 'default'}
+            size="small"
+          />
         )}
       </Stack>
 
       {!platformActive && (
-        <Alert severity="info" sx={{ mb: 2, fontSize: '0.82rem' }}>
-          Platform AI is not available on this server. Use your own API key below, or contact support.
+        <Alert
+          severity={plan.platform_ai_included ? 'warning' : 'info'}
+          sx={{ mb: 2, fontSize: '0.82rem' }}
+        >
+          {plan.platform_ai_included
+            ? 'Telegizer AI is included in your plan but is not yet activated on this server. No action needed on your end — contact support@telegizer.com to enable it, or use your own API key below in the meantime.'
+            : 'Platform AI is not available on the free plan. Upgrade to Pro or Enterprise, or add your own API key below.'}
         </Alert>
       )}
 

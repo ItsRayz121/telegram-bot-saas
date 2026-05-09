@@ -77,6 +77,29 @@ _scheduler_log = logging.getLogger(__name__)
 
 bot_manager = BotManager()
 
+# ── Graceful shutdown — stops all polling threads before the process exits ────
+# Railway rolling deploys start the new container before killing the old one.
+# Without a clean shutdown, Telegram holds the long-poll session open and the
+# new container receives 409 Conflict errors for up to 60 seconds.
+import atexit as _atexit
+import signal as _signal
+
+
+def _graceful_bot_shutdown(*_):
+    """Stop all custom bot pollers so Telegram releases their sessions."""
+    try:
+        bot_manager.stop_all(timeout_per_bot=8)
+    except Exception as exc:
+        logging.getLogger("shutdown").error("Graceful bot shutdown error: %s", exc)
+
+
+_atexit.register(_graceful_bot_shutdown)
+# Also handle SIGTERM directly (gunicorn sends this on graceful restart)
+try:
+    _signal.signal(_signal.SIGTERM, _graceful_bot_shutdown)
+except (OSError, ValueError):
+    pass  # SIGTERM cannot be set in some environments (Windows dev)
+
 
 def _init_sentry():
     """Initialize Sentry error monitoring if SENTRY_DSN is configured."""

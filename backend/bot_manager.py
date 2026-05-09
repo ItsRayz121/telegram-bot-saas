@@ -2488,6 +2488,19 @@ class BotManager:
                 return False
         return True
 
+    def stop_all(self, timeout_per_bot: int = 8):
+        """Gracefully stop every running bot. Called on process shutdown so
+        Telegram releases the long-poll connection before the new container
+        starts — prevents 409 Conflict errors on Railway rolling deploys."""
+        with self._lock:
+            bot_ids = list(self.active_bots.keys())
+        logger.info("[BotManager] Stopping %d bot(s) for graceful shutdown…", len(bot_ids))
+        for bot_id in bot_ids:
+            try:
+                self.stop_bot(bot_id)
+            except Exception as exc:
+                logger.error("[BotManager] stop_all: error stopping bot %s: %s", bot_id, exc)
+
     def get_knowledge_base(self):
         with self._lock:
             instances = list(self.active_bots.values())
