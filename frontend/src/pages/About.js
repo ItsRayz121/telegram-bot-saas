@@ -5,7 +5,7 @@ import {
 } from '@mui/material';
 import {
   AutoFixHigh, Security, BarChart, SmartToy, Groups, Bolt,
-  CheckCircle, Favorite, OpenInNew,
+  CheckCircle, Favorite, OpenInNew, Email, Telegram,
 } from '@mui/icons-material';
 import TelegizerLogo from '../components/TelegizerLogo';
 import { useNavigate } from 'react-router-dom';
@@ -235,6 +235,62 @@ export default function About() {
 
         <Divider sx={{ mb: 8 }} />
 
+        {/* Founder */}
+        <Box sx={{ textAlign: 'center', mb: 5 }}>
+          <Chip label="The Founder" size="small" color="primary" sx={{ mb: 2 }} />
+          <Typography variant="h4" fontWeight={800} mb={1}>Built by someone who gets it</Typography>
+          <Typography variant="body1" color="text.secondary" maxWidth={500} mx="auto" mb={6}>
+            Telegizer is an independent product, built and maintained by one person who was tired of
+            patching together five different bots to run a Telegram community.
+          </Typography>
+        </Box>
+        <Box sx={{ display: 'flex', justifyContent: 'center', mb: 10 }}>
+          <Card sx={{ maxWidth: 360, width: '100%', border: '1px solid', borderColor: 'divider' }}>
+            <CardContent sx={{ textAlign: 'center', p: '28px !important' }}>
+              <Avatar
+                src="/founder.jpg"
+                alt="Fazal Elahi — Founder of Telegizer"
+                sx={{ width: 120, height: 120, mx: 'auto', mb: 2.5, border: '3px solid', borderColor: 'primary.main' }}
+              />
+              <Typography variant="h6" fontWeight={700} mb={0.5}>Fazal Elahi</Typography>
+              <Typography variant="body2" color="text.secondary" mb={0.5}>Founder & Developer</Typography>
+              <Typography variant="caption" color="text.disabled" display="block" mb={2.5}>
+                Building Telegizer since 2024
+              </Typography>
+              <Typography variant="body2" color="text.secondary" lineHeight={1.8} mb={3} textAlign="left">
+                I started Telegizer because I was managing multiple Telegram communities and spending
+                hours every day on moderation, scheduling, and answering the same questions.
+                I built the tool I needed — and made it available to every community manager who
+                feels the same pain.
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 1.5, justifyContent: 'center' }}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<Email fontSize="small" />}
+                  href="mailto:support@telegizer.com"
+                  sx={{ fontSize: '0.75rem' }}
+                >
+                  Email Me
+                </Button>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<Telegram fontSize="small" />}
+                  href="https://t.me/telegizer_support"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  sx={{ fontSize: '0.75rem' }}
+                >
+                  Telegram
+                </Button>
+              </Box>
+            </CardContent>
+          </Card>
+        </Box>
+
+        <Divider sx={{ mb: 8 }} />
+
         {/* CTA */}
         <Box sx={{
           textAlign: 'center', py: 8,
@@ -246,7 +302,8 @@ export default function About() {
             Ready to grow your Telegram community?
           </Typography>
           <Typography variant="body1" color="text.secondary" mb={4} maxWidth={480} mx="auto">
-            Join thousands of community managers who use Telegizer to run their Telegram groups on autopilot.
+            Connect your first bot for free and see what automated community management looks like.
+            No credit card. No code. No complexity.
           </Typography>
           <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
             <Button variant="contained" size="large" onClick={() => navigate('/register')}>

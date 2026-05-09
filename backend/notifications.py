@@ -10,17 +10,26 @@ logger = logging.getLogger(__name__)
 # ── Low-level transport helpers ────────────────────────────────────────────────
 
 def _send_via_resend(api_key: str, from_email: str, to_email: str,
-                     subject: str, html_body: str) -> None:
+                     subject: str, html_body: str, text_body: str = None,
+                     unsubscribe_url: str = None) -> None:
     """POST to Resend API. Raises RuntimeError on non-2xx response.
     The api_key is passed in but never logged."""
     import requests as _req
+    payload = {"from": from_email, "to": [to_email], "subject": subject, "html": html_body}
+    if text_body:
+        payload["text"] = text_body
+    if unsubscribe_url:
+        payload["headers"] = {
+            "List-Unsubscribe": f"<{unsubscribe_url}>",
+            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+        }
     resp = _req.post(
         "https://api.resend.com/emails",
         headers={
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         },
-        json={"from": from_email, "to": [to_email], "subject": subject, "html": html_body},
+        json=payload,
         timeout=10,
     )
     if not resp.ok:
@@ -32,12 +41,16 @@ def _send_via_resend(api_key: str, from_email: str, to_email: str,
 
 
 def _send_via_smtp(cfg, from_email: str, to_email: str, subject: str,
-                   html_body: str, text_body: str = None) -> None:
+                   html_body: str, text_body: str = None,
+                   unsubscribe_url: str = None) -> None:
     """Send via SMTP/TLS. SMTP credentials are never logged."""
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"] = from_email
     msg["To"] = to_email
+    if unsubscribe_url:
+        msg["List-Unsubscribe"] = f"<{unsubscribe_url}>"
+        msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
     if text_body:
         msg.attach(MIMEText(text_body, "plain"))
     msg.attach(MIMEText(html_body, "html"))
@@ -51,7 +64,8 @@ def _send_via_smtp(cfg, from_email: str, to_email: str, subject: str,
 
 # ── Public dispatcher ──────────────────────────────────────────────────────────
 
-def send_email(to_email: str, subject: str, html_body: str, text_body: str = None) -> bool:
+def send_email(to_email: str, subject: str, html_body: str, text_body: str = None,
+               unsubscribe_url: str = None) -> bool:
     """Send an email via the configured provider (Resend or SMTP).
 
     Returns True on success.
@@ -75,12 +89,14 @@ def send_email(to_email: str, subject: str, html_body: str, text_body: str = Non
             api_key = cfg.get("RESEND_API_KEY", "")
             if not api_key:
                 raise RuntimeError("RESEND_API_KEY is not configured.")
-            _send_via_resend(api_key, from_email, to_email, subject, html_body)
+            _send_via_resend(api_key, from_email, to_email, subject, html_body,
+                             text_body=text_body, unsubscribe_url=unsubscribe_url)
 
         elif provider == "smtp":
             if not cfg.get("SMTP_USERNAME"):
                 raise RuntimeError("SMTP credentials are not configured.")
-            _send_via_smtp(cfg, from_email, to_email, subject, html_body, text_body)
+            _send_via_smtp(cfg, from_email, to_email, subject, html_body,
+                           text_body=text_body, unsubscribe_url=unsubscribe_url)
 
         else:
             raise RuntimeError(
@@ -102,7 +118,21 @@ def send_email(to_email: str, subject: str, html_body: str, text_body: str = Non
 
 # ── HTML template ──────────────────────────────────────────────────────────────
 
-def _base_template(content, title):
+def _base_template(content, title, unsubscribe_url: str = None):
+    frontend_url = "https://telegizer.com"
+    try:
+        from flask import current_app
+        frontend_url = current_app.config.get("FRONTEND_URL", frontend_url)
+    except RuntimeError:
+        pass
+
+    unsubscribe_line = ""
+    if unsubscribe_url:
+        unsubscribe_line = (
+            f'<p>Don\'t want these emails? '
+            f'<a href="{unsubscribe_url}" style="color:#667eea;">Unsubscribe</a></p>'
+        )
+
     return f"""<!DOCTYPE html>
 <html>
 <head>
@@ -114,19 +144,19 @@ def _base_template(content, title):
            background: #0f0f0f; color: #e0e0e0; margin: 0; padding: 0; }}
     .container {{ max-width: 600px; margin: 40px auto; background: #1a1a2e;
                   border-radius: 12px; overflow: hidden; border: 1px solid #2a2a4a; }}
-    .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    .header {{ background: linear-gradient(135deg, #2563EB 0%, #7C3AED 100%);
                padding: 32px; text-align: center; }}
-    .header h1 {{ margin: 0; color: white; font-size: 28px; }}
+    .header h1 {{ margin: 0; color: white; font-size: 28px; font-weight: 800; }}
     .header p {{ margin: 8px 0 0; color: rgba(255,255,255,0.85); font-size: 14px; }}
     .body {{ padding: 32px; }}
     .body p {{ line-height: 1.6; color: #c0c0d0; margin: 0 0 16px; }}
-    .btn {{ display: inline-block; padding: 14px 28px; background: #667eea;
+    .btn {{ display: inline-block; padding: 14px 28px; background: #2563EB;
             color: white; text-decoration: none; border-radius: 8px;
             font-weight: 600; margin: 16px 0; }}
     .feature-list {{ list-style: none; padding: 0; margin: 16px 0; }}
     .feature-list li {{ padding: 8px 0; border-bottom: 1px solid #2a2a4a; color: #c0c0d0; }}
-    .feature-list li:before {{ content: "✓ "; color: #667eea; font-weight: bold; }}
-    .tip {{ background: #0d1117; border-left: 3px solid #667eea; padding: 12px 16px;
+    .feature-list li:before {{ content: "✓ "; color: #2563EB; font-weight: bold; }}
+    .tip {{ background: #0d1117; border-left: 3px solid #2563EB; padding: 12px 16px;
             border-radius: 4px; font-size: 13px; color: #909090; margin-top: 24px; }}
     .footer {{ padding: 24px; text-align: center; border-top: 1px solid #2a2a4a;
                color: #606070; font-size: 12px; }}
@@ -135,13 +165,14 @@ def _base_template(content, title):
 <body>
   <div class="container">
     <div class="header">
-      <h1>🤖 Telegizer</h1>
-      <p>Your Telegram community management platform</p>
+      <h1>Telegizer</h1>
+      <p>Telegram community management platform</p>
     </div>
     <div class="body">{content}</div>
     <div class="footer">
-      <p>© 2025 Telegizer. All rights reserved.</p>
-      <p>You're receiving this because you have an account with us.</p>
+      <p>© 2026 Telegizer · <a href="{frontend_url}/privacy" style="color:#667eea;">Privacy Policy</a></p>
+      <p>You're receiving this because you have an account at telegizer.com.</p>
+      {unsubscribe_line}
     </div>
   </div>
 </body>
@@ -217,90 +248,118 @@ def send_welcome_email(to_email, full_name):
 
 
 def send_onboarding_day3_email(to_email, full_name):
+    dashboard_url = f"{current_app.config['FRONTEND_URL']}/dashboard"
+    unsub_url = f"{current_app.config['FRONTEND_URL']}/settings?unsubscribe=onboarding"
     content = f"""
     <p>Hi <strong>{full_name}</strong>,</p>
     <p>It's been 3 days since you joined Telegizer — hope you're settling in!</p>
     <p>Here are a few power features worth trying:</p>
     <ul class="feature-list">
-      <li><strong>AI Moderation</strong> — auto-remove spam and toxic messages</li>
-      <li><strong>Smart Reminders</strong> — schedule recurring announcements</li>
+      <li><strong>AutoMod</strong> — auto-remove spam, links, and bad words</li>
+      <li><strong>Scheduled Messages</strong> — post content on a recurring schedule</li>
       <li><strong>Welcome Messages</strong> — greet new members automatically</li>
       <li><strong>Group Analytics</strong> — see who's active and when</li>
     </ul>
-    <p>Any questions? Reply to this email or join our support group.</p>
-    <a href="{current_app.config['FRONTEND_URL']}/dashboard" class="btn">Open Dashboard</a>
+    <p>Any questions? Reply to this email — I read every message personally.</p>
+    <a href="{dashboard_url}" class="btn">Open Dashboard</a>
     """
     return send_email(
         to_email,
         "Quick tips to get more from Telegizer",
-        _base_template(content, "3-Day Tips"),
-        f"Hi {full_name}, here are some power features to try in Telegizer.",
+        _base_template(content, "3-Day Tips", unsubscribe_url=unsub_url),
+        text_body=f"Hi {full_name}, here are some power features to try in Telegizer: "
+                  f"AutoMod, Scheduled Messages, Welcome Messages, Group Analytics. "
+                  f"Open your dashboard at {dashboard_url}",
+        unsubscribe_url=unsub_url,
     )
 
 
 def send_onboarding_day7_email(to_email, full_name):
+    pricing_url = f"{current_app.config['FRONTEND_URL']}/pricing"
+    unsub_url = f"{current_app.config['FRONTEND_URL']}/settings?unsubscribe=onboarding"
     content = f"""
     <p>Hi <strong>{full_name}</strong>,</p>
     <p>You've been on Telegizer for a week — great to have you!</p>
-    <p>If you're managing an active community, upgrading to <strong>Pro</strong> unlocks:</p>
+    <p>If you're managing an active community, upgrading to <strong>Pro ($19/mo)</strong> unlocks:</p>
     <ul class="feature-list">
-      <li>Unlimited bots &amp; groups</li>
-      <li>AI-powered auto-replies &amp; digests</li>
-      <li>Advanced analytics dashboard</li>
+      <li>3 custom bots &amp; unlimited groups</li>
+      <li>AI-powered auto-replies &amp; daily digests</li>
+      <li>90-day analytics dashboard</li>
+      <li>Webhook integrations &amp; automations</li>
       <li>Priority support</li>
     </ul>
-    <a href="{current_app.config['FRONTEND_URL']}/pricing" class="btn">View Pricing</a>
+    <a href="{pricing_url}" class="btn">View Pricing</a>
     <p style="margin-top:16px;font-size:0.85em;color:#94a3b8;">
-      Not interested? No worries — your free account stays active forever.
+      Not ready? No worries — your free account stays active forever, no credit card needed.
     </p>
     """
     return send_email(
         to_email,
         "Ready to level up your Telegram community?",
-        _base_template(content, "Upgrade to Pro"),
-        f"Hi {full_name}, upgrade to Telegizer Pro for unlimited bots and AI features.",
+        _base_template(content, "Upgrade to Pro", unsubscribe_url=unsub_url),
+        text_body=f"Hi {full_name}, upgrade to Telegizer Pro ($19/mo) for unlimited bots, "
+                  f"AI features, and advanced analytics. View pricing at {pricing_url}",
+        unsubscribe_url=unsub_url,
     )
 
 
 def send_subscription_confirmation(to_email, full_name, plan_name, expires_at):
+    dashboard_url = f"{current_app.config['FRONTEND_URL']}/dashboard"
+    billing_url = f"{current_app.config['FRONTEND_URL']}/billing"
     content = f"""
     <p>Hi <strong>{full_name}</strong>,</p>
     <p>Your <strong>{plan_name}</strong> plan has been activated!</p>
     <p>Active until: <strong>{expires_at}</strong></p>
-    <a href="{current_app.config['FRONTEND_URL']}/dashboard" class="btn">Go to Dashboard</a>
-    <p>Thank you for your support!</p>
+    <a href="{dashboard_url}" class="btn">Go to Dashboard</a>
+    <p>Thank you for supporting Telegizer!</p>
+    <p style="margin-top:24px;font-size:12px;color:#606070;">
+      Manage or cancel your subscription at any time from
+      <a href="{billing_url}" style="color:#667eea;">your billing page</a>.
+    </p>
     """
     return send_email(
         to_email,
         f"Subscription Confirmed — {plan_name} Plan",
         _base_template(content, "Subscription Confirmed"),
+        text_body=f"Hi {full_name}, your {plan_name} plan is now active until {expires_at}. "
+                  f"Manage your subscription at {billing_url}",
     )
 
 
 def send_subscription_cancelled(to_email, full_name):
+    pricing_url = f"{current_app.config['FRONTEND_URL']}/pricing"
     content = f"""
     <p>Hi <strong>{full_name}</strong>,</p>
-    <p>Your subscription has been cancelled. You'll retain access until the end of your current period,
-    then your account will revert to the Free tier.</p>
-    <a href="{current_app.config['FRONTEND_URL']}/pricing" class="btn">Resubscribe</a>
+    <p>Your subscription has been cancelled. You'll retain paid-plan access until the end of your
+    current period, then your account reverts to the Free tier automatically.</p>
+    <p>Your data and bots are safe — the Free plan remains active indefinitely.</p>
+    <a href="{pricing_url}" class="btn">Resubscribe anytime</a>
     """
     return send_email(
         to_email,
         "Telegizer Subscription Cancelled",
         _base_template(content, "Subscription Cancelled"),
+        text_body=f"Hi {full_name}, your Telegizer subscription has been cancelled. "
+                  f"Your account reverts to the Free tier at the end of your billing period. "
+                  f"Resubscribe at {pricing_url}",
     )
 
 
 def send_payment_failed(to_email, full_name):
+    pricing_url = f"{current_app.config['FRONTEND_URL']}/pricing"
     content = f"""
     <p>Hi <strong>{full_name}</strong>,</p>
-    <p>We were unable to process your payment. Please update your payment method to avoid service interruption.</p>
-    <a href="{current_app.config['FRONTEND_URL']}/pricing" class="btn">Update Payment Method</a>
+    <p>We were unable to process your payment. Please retry or contact
+    <a href="mailto:support@telegizer.com" style="color:#667eea;">support@telegizer.com</a>
+    if you believe this is an error.</p>
+    <a href="{pricing_url}" class="btn">Retry Payment</a>
     """
     return send_email(
         to_email,
         "Telegizer Payment Failed — Action Required",
         _base_template(content, "Payment Failed"),
+        text_body=f"Hi {full_name}, we couldn't process your payment. "
+                  f"Please retry at {pricing_url} or contact support@telegizer.com",
     )
 
 
@@ -388,14 +447,17 @@ def send_subscription_expired(to_email: str, full_name: str, plan_name: str) -> 
 
 
 def send_bot_added_notification(to_email, full_name, bot_name, bot_username):
+    dashboard_url = f"{current_app.config['FRONTEND_URL']}/dashboard"
     content = f"""
     <p>Hi <strong>{full_name}</strong>,</p>
-    <p>Your bot <strong>{bot_name}</strong> (@{bot_username}) has been added to Telegizer!</p>
-    <p>Add your bot to Telegram groups to start managing them.</p>
-    <a href="{current_app.config['FRONTEND_URL']}/dashboard" class="btn">Manage Bots</a>
+    <p>Your bot <strong>{bot_name}</strong> (@{bot_username}) has been connected to Telegizer.</p>
+    <p>Add your bot as an admin to any Telegram group to start managing it from your dashboard.</p>
+    <a href="{dashboard_url}" class="btn">Go to Dashboard</a>
     """
     return send_email(
         to_email,
-        f"Bot Added: {bot_name}",
-        _base_template(content, "Bot Added"),
+        f"Bot Connected: {bot_name}",
+        _base_template(content, "Bot Connected"),
+        text_body=f"Hi {full_name}, your bot {bot_name} (@{bot_username}) is now connected to Telegizer. "
+                  f"Add it as admin to a Telegram group and manage it at {dashboard_url}",
     )

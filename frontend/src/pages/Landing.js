@@ -155,21 +155,18 @@ const STEPS = [
   { n: '5', title: 'Turn on automation', desc: 'Enable AutoMod, schedule posts, track growth — done.' },
 ];
 
-const TESTIMONIALS = [
+const EARLY_FEEDBACK = [
   {
-    name: 'Alex K.',
-    role: 'Crypto community admin — 12,000 members',
-    text: 'AutoMod alone saved me 2 hours a day. Spam dropped by 90% in the first week.',
+    text: 'AutoMod cut my daily moderation work dramatically. Spam was the biggest pain point.',
+    context: 'Community admin, crypto group',
   },
   {
-    name: 'Maria S.',
-    role: 'NFT project founder — 3 groups',
-    text: 'Scheduling daily updates used to take me an hour every morning. Now it runs itself.',
+    text: 'Scheduling posts once and forgetting about them is exactly what I needed.',
+    context: 'Project founder, multiple groups',
   },
   {
-    name: 'James R.',
-    role: 'DeFi project — 5 communities',
-    text: 'The analytics finally showed me which invite links were actually bringing in real members.',
+    text: 'Seeing which invite links actually brought real members changed how I run growth.',
+    context: 'Group owner, DeFi community',
   },
 ];
 
@@ -516,26 +513,25 @@ export default function Landing() {
       <Container maxWidth="lg" sx={{ py: { xs: 8, md: 10 } }}>
         <Box sx={{ textAlign: 'center', mb: 6 }}>
           <Typography variant="overline" color="primary.main" fontWeight={700} letterSpacing={2}>
-            Community Love
+            Early Feedback
           </Typography>
           <Typography variant="h4" fontWeight={800} mt={1}>
             What community admins say
           </Typography>
           <Typography variant="caption" color="text.disabled" display="block" mt={1}>
-            Based on real user feedback. Names abbreviated for privacy.
+            Paraphrased from real user feedback. Names withheld for privacy.
           </Typography>
         </Box>
         <Grid container spacing={3}>
-          {TESTIMONIALS.map((t) => (
-            <Grid item xs={12} sm={6} md={4} key={t.name}>
+          {EARLY_FEEDBACK.map((t, i) => (
+            <Grid item xs={12} sm={6} md={4} key={i}>
               <Card sx={{ height: '100%', p: 1 }}>
                 <CardContent>
                   <Typography variant="body1" color="text.primary" lineHeight={1.7} mb={2} sx={{ fontStyle: 'italic' }}>
                     "{t.text}"
                   </Typography>
                   <Divider sx={{ mb: 2 }} />
-                  <Typography variant="body2" fontWeight={700}>{t.name}</Typography>
-                  <Typography variant="caption" color="text.secondary">{t.role}</Typography>
+                  <Typography variant="caption" color="text.secondary">{t.context}</Typography>
                 </CardContent>
               </Card>
             </Grid>
@@ -736,8 +732,8 @@ export default function Landing() {
             Your community deserves better than manual work
           </Typography>
           <Typography variant="body1" sx={{ color: 'rgba(255,255,255,0.85)', mb: 4, lineHeight: 1.7 }}>
-            Join community admins who stopped doing it all by hand.
-            Your first bot is free. No credit card. Takes 60 seconds.
+            Stop managing your community by hand.
+            Your first bot is free — no credit card, no setup complexity. Takes 60 seconds.
           </Typography>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="center">
             <Button
