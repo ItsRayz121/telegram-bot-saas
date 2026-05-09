@@ -110,6 +110,18 @@ export const hub = {
   createTemplate: (data) => api.post('/api/hub/templates', data),
   updateTemplate: (id, data) => api.patch(`/api/hub/templates/${id}`, data),
   deleteTemplate: (id) => api.delete(`/api/hub/templates/${id}`),
+
+  // ── Memory ─────────────────────────────────────────────────────────────────
+  getMemoryGlobal: () => api.get('/api/hub/memory/global'),
+  updateMemoryGlobal: (data) => api.patch('/api/hub/memory/global', data),
+  listMemoryPeople: () => api.get('/api/hub/memory/people'),
+  createMemoryPerson: (data) => api.post('/api/hub/memory/people', data),
+  updateMemoryPerson: (id, data) => api.patch(`/api/hub/memory/people/${id}`, data),
+  deleteMemoryPerson: (id) => api.delete(`/api/hub/memory/people/${id}`),
+  listMemoryProjects: () => api.get('/api/hub/memory/projects'),
+  createMemoryProject: (data) => api.post('/api/hub/memory/projects', data),
+  updateMemoryProject: (id, data) => api.patch(`/api/hub/memory/projects/${id}`, data),
+  deleteMemoryProject: (id) => api.delete(`/api/hub/memory/projects/${id}`),
 };
 
 export default hub;

@@ -59,6 +59,7 @@ export default function HubWorkspace() {
   const [botData, setBotData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [groups, setGroups] = useState([]);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
 
   useEffect(() => {
     hub.getOfficialBot()
@@ -66,7 +67,14 @@ export default function HubWorkspace() {
       .catch(() => {})
       .finally(() => setLoading(false));
     hub.listOfficialGroups()
-      .then(r => setGroups(r.data.groups || []))
+      .then(r => {
+        const g = r.data.groups || [];
+        setGroups(g);
+        // Show onboarding only once, if no groups yet
+        if (g.length === 0 && !localStorage.getItem('hub_onboarding_done')) {
+          setOnboardingOpen(true);
+        }
+      })
       .catch(() => {});
   }, []);
 
@@ -105,6 +113,14 @@ export default function HubWorkspace() {
       <Box sx={{ flex: 1, overflow: 'auto', p: { xs: 2, sm: 3 } }}>
         <TabContent tab={tab} botData={botData} groups={groups} setGroups={setGroups} />
       </Box>
+
+      <OnboardingFlow
+        open={onboardingOpen}
+        onClose={() => {
+          localStorage.setItem('hub_onboarding_done', '1');
+          setOnboardingOpen(false);
+        }}
+      />
     </Box>
   );
 }
@@ -649,16 +665,24 @@ function HubTemplates() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [limits, setLimits] = useState(null);
 
   const load = useCallback(() => {
     setLoading(true);
-    hub.listTemplates()
-      .then(r => setTemplates(r.data.templates || []))
+    Promise.all([hub.listTemplates(), hub.getLimits()])
+      .then(([tRes, lRes]) => {
+        setTemplates(tRes.data.templates || []);
+        setLimits(lRes.data);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  const planLimit = limits?.limits?.templates_per_bot ?? 5;
+  const unlimited = planLimit === -1;
+  const atLimit = !unlimited && templates.length >= planLimit;
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -677,10 +701,20 @@ function HubTemplates() {
     <Box sx={{ maxWidth: 700 }}>
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
 
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
-        <Button variant="contained" size="small" startIcon={<Add />} onClick={() => setCreateOpen(true)}>
-          New Template
-        </Button>
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 1 }}>
+        {!unlimited && (
+          <Typography variant="caption" color={atLimit ? 'error.main' : 'text.secondary'} sx={{ flex: 1 }}>
+            {templates.length} / {planLimit} templates{atLimit ? ' — limit reached' : ''}
+            {atLimit && <Typography component="span" variant="caption" sx={{ ml: 1, color: 'primary.main', cursor: 'pointer' }} onClick={() => window.open('/pricing', '_blank')}>Upgrade</Typography>}
+          </Typography>
+        )}
+        {!atLimit ? (
+          <Button variant="contained" size="small" startIcon={<Add />} onClick={() => setCreateOpen(true)}>
+            New Template
+          </Button>
+        ) : (
+          <Button variant="outlined" size="small" disabled>New Template</Button>
+        )}
       </Box>
 
       {loading ? (
@@ -962,6 +996,9 @@ function HubSettings({ botData, groups, setGroups }) {
   const [deleteAllLoading, setDeleteAllLoading] = useState(false);
   const [deleteAllError, setDeleteAllError] = useState(null);
   const [exportLoading, setExportLoading] = useState(false);
+  const [memoryOpen, setMemoryOpen] = useState(false);
+  const [memoryCounts, setMemoryCounts] = useState({ people: 0, projects: 0 });
+  const [limits, setLimits] = useState(null);
 
   useEffect(() => {
     hub.getOfficialSettings()
@@ -972,6 +1009,16 @@ function HubSettings({ botData, groups, setGroups }) {
         setLanguage(s.response_language || 'en');
         setSensitivity(s.extraction_sensitivity || 'standard');
         setRetention(String(s.buffer_retention_hours || s.buffer_ttl_hours || 72));
+      })
+      .catch(() => {});
+    // Load memory counts + plan limits
+    Promise.all([hub.getLimits(), hub.listMemoryPeople(), hub.listMemoryProjects()])
+      .then(([limRes, peopleRes, projectsRes]) => {
+        setLimits(limRes.data);
+        setMemoryCounts({
+          people: (peopleRes.data.people || []).length,
+          projects: (projectsRes.data.projects || []).length,
+        });
       })
       .catch(() => {});
   }, []);
@@ -1083,8 +1130,34 @@ function HubSettings({ botData, groups, setGroups }) {
       <SectionHeader label="Memory" />
       <Card variant="outlined" sx={{ mb: 3 }}>
         <CardContent>
-          <Typography variant="body2" color="text.secondary" mb={1.5}>Global memory is shared across all your bots.</Typography>
-          <Button variant="outlined" size="small">Edit Memory →</Button>
+          <Typography variant="body2" color="text.secondary" mb={1.5}>
+            Global memory is shared across all your bots and injected into every extraction.
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 2, mb: 1.5, flexWrap: 'wrap' }}>
+            <Box>
+              <Typography variant="caption" color="text.secondary">People</Typography>
+              <Typography variant="body2" fontWeight={500}>
+                {memoryCounts.people}
+                {limits && limits.limits?.memory_people !== -1 && (
+                  <Typography component="span" variant="caption" color={memoryCounts.people >= (limits.limits?.memory_people || 5) ? 'error.main' : 'text.secondary'}>
+                    {' '}/ {limits.limits?.memory_people}
+                  </Typography>
+                )}
+              </Typography>
+            </Box>
+            <Box>
+              <Typography variant="caption" color="text.secondary">Projects</Typography>
+              <Typography variant="body2" fontWeight={500}>
+                {memoryCounts.projects}
+                {limits && limits.limits?.memory_projects !== -1 && (
+                  <Typography component="span" variant="caption" color={memoryCounts.projects >= (limits.limits?.memory_projects || 3) ? 'error.main' : 'text.secondary'}>
+                    {' '}/ {limits.limits?.memory_projects}
+                  </Typography>
+                )}
+              </Typography>
+            </Box>
+          </Box>
+          <Button variant="outlined" size="small" onClick={() => setMemoryOpen(true)}>Edit Memory →</Button>
         </CardContent>
       </Card>
 
@@ -1121,6 +1194,19 @@ function HubSettings({ botData, groups, setGroups }) {
       <AddToGroupFlow open={addFlowOpen} onClose={() => setAddFlowOpen(false)} onGroupConnected={handleGroupConnected} />
       <GroupSettingsOverlay open={Boolean(overlayGroup)} group={overlayGroup} onClose={() => setOverlayGroup(null)}
         onUpdated={handleGroupUpdated} onDisconnected={handleGroupDisconnected} />
+      <MemoryOverlay
+        open={memoryOpen}
+        onClose={() => {
+          setMemoryOpen(false);
+          // Refresh counts after closing
+          Promise.all([hub.listMemoryPeople(), hub.listMemoryProjects()])
+            .then(([pRes, prRes]) => setMemoryCounts({
+              people: (pRes.data.people || []).length,
+              projects: (prRes.data.projects || []).length,
+            })).catch(() => {});
+        }}
+        limits={limits}
+      />
 
       <Dialog open={deleteAllOpen} onClose={() => setDeleteAllOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle>Delete all Hub data?</DialogTitle>
@@ -1359,5 +1445,406 @@ function EmptyState({ icon, title, body, action }) {
       {body && <Typography variant="body2" color="text.secondary" mb={action ? 3 : 0}>{body}</Typography>}
       {action}
     </Box>
+  );
+}
+
+// ── MemoryOverlay ──────────────────────────────────────────────────────────────
+function MemoryOverlay({ open, onClose, limits }) {
+  const [activeSection, setActiveSection] = useState('global');
+  const [globalData, setGlobalData] = useState({ preferred_name: '', company_name: '', role: '', timezone: 'UTC', current_priorities: [], free_notes: '' });
+  const [people, setPeople] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [editPerson, setEditPerson] = useState(null);
+  const [editProject, setEditProject] = useState(null);
+  const [personFormOpen, setPersonFormOpen] = useState(false);
+  const [projectFormOpen, setProjectFormOpen] = useState(false);
+  const [prioritiesText, setPrioritiesText] = useState('');
+
+  const planPeopleLimit = limits?.limits?.memory_people ?? 5;
+  const planProjectsLimit = limits?.limits?.memory_projects ?? 3;
+  const unlimitedPeople = planPeopleLimit === -1;
+  const unlimitedProjects = planProjectsLimit === -1;
+
+  useEffect(() => {
+    if (!open) return;
+    setLoading(true);
+    setError('');
+    Promise.all([hub.getMemoryGlobal(), hub.listMemoryPeople(), hub.listMemoryProjects()])
+      .then(([gRes, pRes, prRes]) => {
+        const g = gRes.data.global || {};
+        setGlobalData({
+          preferred_name: g.preferred_name || '',
+          company_name: g.company_name || '',
+          role: g.role || '',
+          timezone: g.timezone || 'UTC',
+          current_priorities: g.current_priorities || [],
+          free_notes: g.free_notes || '',
+        });
+        setPrioritiesText((g.current_priorities || []).join('\n'));
+        setPeople(pRes.data.people || []);
+        setProjects(prRes.data.projects || []);
+      })
+      .catch(() => setError('Failed to load memory.'))
+      .finally(() => setLoading(false));
+  }, [open]);
+
+  const handleSaveGlobal = async () => {
+    setSaving(true); setError('');
+    try {
+      const priorities = prioritiesText.split('\n').map(s => s.trim()).filter(Boolean);
+      await hub.updateMemoryGlobal({ ...globalData, current_priorities: priorities });
+    } catch (e) { setError(e?.response?.data?.error || 'Failed to save.'); }
+    setSaving(false);
+  };
+
+  const handleDeletePerson = async (id) => {
+    await hub.deleteMemoryPerson(id);
+    setPeople(prev => prev.filter(p => p.id !== id));
+  };
+
+  const handleDeleteProject = async (id) => {
+    await hub.deleteMemoryProject(id);
+    setProjects(prev => prev.filter(p => p.id !== id));
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth PaperProps={{ sx: { height: '80vh', maxHeight: 640 } }}>
+      <DialogTitle>
+        Memory
+        <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+          Injected into every AI extraction
+        </Typography>
+      </DialogTitle>
+      <DialogContent dividers sx={{ display: 'flex', p: 0, overflow: 'hidden' }}>
+        {/* Left nav */}
+        <Box sx={{ width: 150, flexShrink: 0, borderRight: '1px solid', borderColor: 'divider', py: 1 }}>
+          {[['global', 'Context'], ['people', 'People'], ['projects', 'Projects']].map(([k, label]) => (
+            <Box key={k} onClick={() => setActiveSection(k)} sx={{
+              px: 2, py: 1, cursor: 'pointer', fontSize: '0.85rem', fontWeight: activeSection === k ? 600 : 400,
+              bgcolor: activeSection === k ? 'action.selected' : 'transparent',
+              '&:hover': { bgcolor: 'action.hover' },
+            }}>
+              {label}
+            </Box>
+          ))}
+        </Box>
+
+        {/* Right content */}
+        <Box sx={{ flex: 1, overflow: 'auto', p: 2.5 }}>
+          {loading ? (
+            <Box sx={{ textAlign: 'center', pt: 6 }}><CircularProgress /></Box>
+          ) : error ? (
+            <Alert severity="error">{error}</Alert>
+          ) : activeSection === 'global' ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Typography variant="body2" color="text.secondary">
+                Tell the assistant who you are and what matters to you. This context is included in every extraction prompt.
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                <TextField label="Your name" size="small" sx={{ flex: 1, minWidth: 140 }} value={globalData.preferred_name}
+                  onChange={e => setGlobalData(p => ({ ...p, preferred_name: e.target.value }))} />
+                <TextField label="Company" size="small" sx={{ flex: 1, minWidth: 140 }} value={globalData.company_name}
+                  onChange={e => setGlobalData(p => ({ ...p, company_name: e.target.value }))} />
+              </Box>
+              <TextField label="Your role" size="small" fullWidth value={globalData.role}
+                onChange={e => setGlobalData(p => ({ ...p, role: e.target.value }))} />
+              <TextField label="Timezone" size="small" fullWidth value={globalData.timezone}
+                onChange={e => setGlobalData(p => ({ ...p, timezone: e.target.value }))}
+                helperText="e.g. Asia/Dubai, Europe/London, America/New_York" />
+              <TextField label="Current priorities (one per line)" multiline minRows={3} size="small" fullWidth
+                value={prioritiesText} onChange={e => setPrioritiesText(e.target.value)}
+                helperText="e.g. Product launch Q3, Hiring engineering lead" />
+              <TextField label="Free notes" multiline minRows={2} size="small" fullWidth value={globalData.free_notes}
+                onChange={e => setGlobalData(p => ({ ...p, free_notes: e.target.value }))}
+                inputProps={{ maxLength: 500 }} helperText="Max 500 chars" />
+              <Box>
+                <Button variant="contained" size="small" onClick={handleSaveGlobal} disabled={saving}>
+                  {saving ? <CircularProgress size={14} sx={{ mr: 0.5 }} /> : null}Save context
+                </Button>
+              </Box>
+            </Box>
+          ) : activeSection === 'people' ? (
+            <Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  People the assistant should know about.
+                  {!unlimitedPeople && ` ${people.length} / ${planPeopleLimit}`}
+                </Typography>
+                <Button variant="outlined" size="small" startIcon={<Add />}
+                  disabled={!unlimitedPeople && people.length >= planPeopleLimit}
+                  onClick={() => { setEditPerson(null); setPersonFormOpen(true); }}>
+                  Add person
+                </Button>
+              </Box>
+              {!unlimitedPeople && people.length >= planPeopleLimit && (
+                <Alert severity="warning" sx={{ mb: 2 }}>Plan limit reached. Upgrade to add more people.</Alert>
+              )}
+              {people.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">No people saved yet.</Typography>
+              ) : (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  {people.map(p => (
+                    <Box key={p.id} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.75, px: 1.5, bgcolor: 'action.hover', borderRadius: 1 }}>
+                      <Box sx={{ flex: 1 }}>
+                        <Typography variant="body2" fontWeight={500}>{p.name}</Typography>
+                        {p.role && <Typography variant="caption" color="text.secondary">{p.role}</Typography>}
+                      </Box>
+                      <IconButton size="small" onClick={() => { setEditPerson(p); setPersonFormOpen(true); }}><Edit sx={{ fontSize: 14 }} /></IconButton>
+                      <IconButton size="small" onClick={() => handleDeletePerson(p.id)}><Delete sx={{ fontSize: 14 }} /></IconButton>
+                    </Box>
+                  ))}
+                </Box>
+              )}
+              <PersonFormDialog
+                open={personFormOpen}
+                person={editPerson}
+                onClose={() => setPersonFormOpen(false)}
+                onSaved={(saved) => {
+                  if (editPerson) {
+                    setPeople(prev => prev.map(p => p.id === saved.id ? saved : p));
+                  } else {
+                    setPeople(prev => [...prev, saved]);
+                  }
+                  setPersonFormOpen(false);
+                }}
+              />
+            </Box>
+          ) : (
+            <Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  Active projects the assistant should be aware of.
+                  {!unlimitedProjects && ` ${projects.length} / ${planProjectsLimit}`}
+                </Typography>
+                <Button variant="outlined" size="small" startIcon={<Add />}
+                  disabled={!unlimitedProjects && projects.length >= planProjectsLimit}
+                  onClick={() => { setEditProject(null); setProjectFormOpen(true); }}>
+                  Add project
+                </Button>
+              </Box>
+              {!unlimitedProjects && projects.length >= planProjectsLimit && (
+                <Alert severity="warning" sx={{ mb: 2 }}>Plan limit reached. Upgrade to add more projects.</Alert>
+              )}
+              {projects.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">No projects saved yet.</Typography>
+              ) : (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  {projects.map(pj => (
+                    <Box key={pj.id} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.75, px: 1.5, bgcolor: 'action.hover', borderRadius: 1 }}>
+                      <Box sx={{ flex: 1 }}>
+                        <Typography variant="body2" fontWeight={500}>{pj.name}</Typography>
+                        {pj.status && <Typography variant="caption" color="text.secondary">{pj.status}</Typography>}
+                        {pj.deadline && <Typography variant="caption" color="text.secondary" sx={{ ml: pj.status ? 1 : 0 }}>· Due {pj.deadline}</Typography>}
+                      </Box>
+                      <IconButton size="small" onClick={() => { setEditProject(pj); setProjectFormOpen(true); }}><Edit sx={{ fontSize: 14 }} /></IconButton>
+                      <IconButton size="small" onClick={() => handleDeleteProject(pj.id)}><Delete sx={{ fontSize: 14 }} /></IconButton>
+                    </Box>
+                  ))}
+                </Box>
+              )}
+              <ProjectFormDialog
+                open={projectFormOpen}
+                project={editProject}
+                onClose={() => setProjectFormOpen(false)}
+                onSaved={(saved) => {
+                  if (editProject) {
+                    setProjects(prev => prev.map(p => p.id === saved.id ? saved : p));
+                  } else {
+                    setProjects(prev => [...prev, saved]);
+                  }
+                  setProjectFormOpen(false);
+                }}
+              />
+            </Box>
+          )}
+        </Box>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} size="small">Done</Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+function PersonFormDialog({ open, person, onClose, onSaved }) {
+  const [name, setName] = useState('');
+  const [role, setRole] = useState('');
+  const [notes, setNotes] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (open) {
+      setName(person?.name || '');
+      setRole(person?.role || '');
+      setNotes(person?.notes || '');
+      setError('');
+    }
+  }, [open, person]);
+
+  const handleSave = async () => {
+    if (!name.trim()) { setError('Name is required.'); return; }
+    setSaving(true); setError('');
+    try {
+      let res;
+      if (person) {
+        res = await hub.updateMemoryPerson(person.id, { name: name.trim(), role: role.trim() || null, notes: notes.trim() || null });
+        onSaved(res.data.person);
+      } else {
+        res = await hub.createMemoryPerson({ name: name.trim(), role: role.trim() || null, notes: notes.trim() || null });
+        onSaved(res.data.person);
+      }
+    } catch (e) { setError(e?.response?.data?.error || 'Failed to save.'); }
+    setSaving(false);
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+      <DialogTitle>{person ? 'Edit person' : 'Add person'}</DialogTitle>
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: '12px !important' }}>
+        {error && <Alert severity="error">{error}</Alert>}
+        <TextField label="Name" size="small" fullWidth value={name} onChange={e => setName(e.target.value)} />
+        <TextField label="Role" size="small" fullWidth value={role} onChange={e => setRole(e.target.value)} placeholder="e.g. CTO, Client, Investor" />
+        <TextField label="Notes" size="small" fullWidth multiline minRows={2} value={notes} onChange={e => setNotes(e.target.value)} />
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} color="inherit" size="small">Cancel</Button>
+        <Button onClick={handleSave} variant="contained" size="small" disabled={saving}>
+          {saving ? <CircularProgress size={14} sx={{ mr: 0.5 }} /> : null}Save
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+function ProjectFormDialog({ open, project, onClose, onSaved }) {
+  const [name, setName] = useState('');
+  const [status, setStatus] = useState('');
+  const [contextNotes, setContextNotes] = useState('');
+  const [deadline, setDeadline] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (open) {
+      setName(project?.name || '');
+      setStatus(project?.status || '');
+      setContextNotes(project?.context_notes || '');
+      setDeadline(project?.deadline || '');
+      setError('');
+    }
+  }, [open, project]);
+
+  const handleSave = async () => {
+    if (!name.trim()) { setError('Name is required.'); return; }
+    setSaving(true); setError('');
+    try {
+      const payload = { name: name.trim(), status: status.trim() || null, context_notes: contextNotes.trim() || null, deadline: deadline || null };
+      let res;
+      if (project) {
+        res = await hub.updateMemoryProject(project.id, payload);
+        onSaved(res.data.project);
+      } else {
+        res = await hub.createMemoryProject(payload);
+        onSaved(res.data.project);
+      }
+    } catch (e) { setError(e?.response?.data?.error || 'Failed to save.'); }
+    setSaving(false);
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+      <DialogTitle>{project ? 'Edit project' : 'Add project'}</DialogTitle>
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: '12px !important' }}>
+        {error && <Alert severity="error">{error}</Alert>}
+        <TextField label="Project name" size="small" fullWidth value={name} onChange={e => setName(e.target.value)} />
+        <FormControl size="small" fullWidth>
+          <InputLabel>Status</InputLabel>
+          <Select value={status} label="Status" onChange={e => setStatus(e.target.value)}>
+            <MenuItem value="">None</MenuItem>
+            <MenuItem value="active">Active</MenuItem>
+            <MenuItem value="in progress">In Progress</MenuItem>
+            <MenuItem value="on hold">On Hold</MenuItem>
+            <MenuItem value="completed">Completed</MenuItem>
+          </Select>
+        </FormControl>
+        <TextField label="Context notes" size="small" fullWidth multiline minRows={2} value={contextNotes} onChange={e => setContextNotes(e.target.value)} />
+        <TextField label="Deadline" type="date" size="small" fullWidth value={deadline} onChange={e => setDeadline(e.target.value)} InputLabelProps={{ shrink: true }} />
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} color="inherit" size="small">Cancel</Button>
+        <Button onClick={handleSave} variant="contained" size="small" disabled={saving}>
+          {saving ? <CircularProgress size={14} sx={{ mr: 0.5 }} /> : null}Save
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+// ── OnboardingFlow ─────────────────────────────────────────────────────────────
+function OnboardingFlow({ open, onClose }) {
+  const navigate = useNavigate();
+  const [step, setStep] = useState(0);
+
+  useEffect(() => { if (open) setStep(0); }, [open]);
+
+  const steps = [
+    {
+      emoji: '👋',
+      title: 'Welcome to Assistant Hub',
+      body: 'Your AI-powered team memory. Connect a Telegram group and the assistant will quietly extract tasks, reminders, decisions, and meetings from every conversation — automatically.',
+    },
+    {
+      emoji: '🧠',
+      title: 'Give it context',
+      body: 'Tell the assistant who you are and what projects you\'re working on. The more context it has, the more accurate the extractions. You can update this anytime in Settings → Memory.',
+    },
+    {
+      emoji: '📡',
+      title: 'Connect your first group',
+      body: 'Add the official Telegizer bot to a Telegram group. It will send you a consent message before starting to observe. You can pause or disconnect at any time.',
+    },
+    {
+      emoji: '✅',
+      title: "You're all set",
+      body: 'Once your first group is connected, items will start appearing in Tasks, Reminders, and Notes within a few minutes of activity. Check the Overview tab anytime.',
+    },
+  ];
+
+  const current = steps[step];
+  const isLast = step === steps.length - 1;
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+      <DialogContent sx={{ textAlign: 'center', pt: 4, pb: 2 }}>
+        <Typography fontSize="3rem" mb={2}>{current.emoji}</Typography>
+        <Typography variant="h6" fontWeight={700} gutterBottom>{current.title}</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 3, lineHeight: 1.7 }}>{current.body}</Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'center', gap: 0.75, mb: 1 }}>
+          {steps.map((_, i) => (
+            <Box key={i} sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: i === step ? 'primary.main' : 'divider', transition: 'background 0.2s' }} />
+          ))}
+        </Box>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 3, justifyContent: 'space-between' }}>
+        <Button onClick={onClose} color="inherit" size="small">Skip</Button>
+        <Button
+          variant="contained" size="small"
+          onClick={() => {
+            if (isLast) {
+              onClose();
+              navigate('/hub/official/settings');
+            } else {
+              setStep(s => s + 1);
+            }
+          }}
+        >
+          {isLast ? 'Go to Settings' : 'Next'}
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }

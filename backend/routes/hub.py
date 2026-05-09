@@ -16,7 +16,7 @@ from ..assistant.hub_models import (
     HubConnectedGroup, HubTask, HubReminder, HubDecision,
     HubMeeting, HubNote, HubSystemAutomation, HubBotAutomationSetting,
     HubInboxItem, HubMemoryPerson, HubMemoryProject, HubMemoryGroupContext,
-    HubKnowledgeCard,
+    HubMemoryGlobal, HubKnowledgeCard,
 )
 from ..assistant.hub_settings_resolver import get_effective_settings
 from ..assistant.hub_plan_limits import get_limits_for_plan, PlanLimitError
@@ -1413,5 +1413,201 @@ def _parse_datetime_str(value):
         s = str(value).replace("Z", "+00:00")
         dt = datetime.fromisoformat(s)
         return dt.replace(tzinfo=None)
+    except (ValueError, TypeError):
+        return None
+
+
+# ── Sprint 6: Memory CRUD ─────────────────────────────────────────────────────
+
+@hub_bp.route("/memory/global", methods=["GET"])
+@jwt_required()
+def get_memory_global():
+    user = _current_user()
+    mg = HubMemoryGlobal.query.filter_by(user_id=user.id).first()
+    if not mg:
+        return jsonify({"global": None})
+    return jsonify({"global": {
+        "preferred_name": mg.preferred_name,
+        "company_name": mg.company_name,
+        "role": mg.role,
+        "timezone": mg.timezone,
+        "current_priorities": mg.current_priorities or [],
+        "free_notes": mg.free_notes,
+        "updated_at": mg.updated_at.isoformat() if mg.updated_at else None,
+    }})
+
+
+@hub_bp.route("/memory/global", methods=["PATCH"])
+@jwt_required()
+def update_memory_global():
+    user = _current_user()
+    data = request.get_json(silent=True) or {}
+    mg = HubMemoryGlobal.query.filter_by(user_id=user.id).first()
+    if not mg:
+        mg = HubMemoryGlobal(id=str(uuid.uuid4()), user_id=user.id)
+        db.session.add(mg)
+    allowed = ["preferred_name", "company_name", "role", "timezone", "current_priorities", "free_notes"]
+    for k in allowed:
+        if k in data:
+            setattr(mg, k, data[k])
+    mg.updated_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@hub_bp.route("/memory/people", methods=["GET"])
+@jwt_required()
+def list_memory_people():
+    user = _current_user()
+    people = HubMemoryPerson.query.filter_by(user_id=user.id).order_by(HubMemoryPerson.name.asc()).all()
+    return jsonify({"people": [_person_dict(p) for p in people]})
+
+
+@hub_bp.route("/memory/people", methods=["POST"])
+@jwt_required()
+def create_memory_person():
+    user = _current_user()
+    from ..assistant.hub_plan_limits import check_memory_people, PlanLimitError
+    try:
+        check_memory_people(user.id, plan=user.subscription_tier or "free")
+    except PlanLimitError as e:
+        return jsonify({"error": "plan_limit", **e.to_dict()}), 402
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "name is required"}), 400
+    p = HubMemoryPerson(
+        id=str(uuid.uuid4()),
+        user_id=user.id,
+        name=name,
+        role=data.get("role") or None,
+        notes=data.get("notes") or None,
+        group_associations=data.get("group_associations") or [],
+        source="manual",
+    )
+    db.session.add(p)
+    db.session.commit()
+    return jsonify({"person": _person_dict(p)}), 201
+
+
+@hub_bp.route("/memory/people/<person_id>", methods=["PATCH"])
+@jwt_required()
+def update_memory_person(person_id):
+    user = _current_user()
+    p = HubMemoryPerson.query.filter_by(id=person_id, user_id=user.id).first_or_404()
+    data = request.get_json(silent=True) or {}
+    for k in ["name", "role", "notes", "group_associations"]:
+        if k in data:
+            setattr(p, k, data[k] if data[k] != "" else None)
+    p.updated_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"person": _person_dict(p)})
+
+
+@hub_bp.route("/memory/people/<person_id>", methods=["DELETE"])
+@jwt_required()
+def delete_memory_person(person_id):
+    user = _current_user()
+    p = HubMemoryPerson.query.filter_by(id=person_id, user_id=user.id).first_or_404()
+    db.session.delete(p)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@hub_bp.route("/memory/projects", methods=["GET"])
+@jwt_required()
+def list_memory_projects():
+    user = _current_user()
+    projects = HubMemoryProject.query.filter_by(user_id=user.id).order_by(HubMemoryProject.name.asc()).all()
+    return jsonify({"projects": [_project_dict(pj) for pj in projects]})
+
+
+@hub_bp.route("/memory/projects", methods=["POST"])
+@jwt_required()
+def create_memory_project():
+    user = _current_user()
+    from ..assistant.hub_plan_limits import check_memory_projects, PlanLimitError
+    try:
+        check_memory_projects(user.id, plan=user.subscription_tier or "free")
+    except PlanLimitError as e:
+        return jsonify({"error": "plan_limit", **e.to_dict()}), 402
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "name is required"}), 400
+    pj = HubMemoryProject(
+        id=str(uuid.uuid4()),
+        user_id=user.id,
+        name=name,
+        status=data.get("status") or None,
+        context_notes=data.get("context_notes") or None,
+        group_associations=data.get("group_associations") or [],
+        deadline=_parse_date_str(data.get("deadline")),
+        source="manual",
+    )
+    db.session.add(pj)
+    db.session.commit()
+    return jsonify({"project": _project_dict(pj)}), 201
+
+
+@hub_bp.route("/memory/projects/<project_id>", methods=["PATCH"])
+@jwt_required()
+def update_memory_project(project_id):
+    user = _current_user()
+    pj = HubMemoryProject.query.filter_by(id=project_id, user_id=user.id).first_or_404()
+    data = request.get_json(silent=True) or {}
+    for k in ["name", "status", "context_notes", "group_associations"]:
+        if k in data:
+            setattr(pj, k, data[k] if data[k] != "" else None)
+    if "deadline" in data:
+        pj.deadline = _parse_date_str(data["deadline"])
+    pj.updated_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"project": _project_dict(pj)})
+
+
+@hub_bp.route("/memory/projects/<project_id>", methods=["DELETE"])
+@jwt_required()
+def delete_memory_project(project_id):
+    user = _current_user()
+    pj = HubMemoryProject.query.filter_by(id=project_id, user_id=user.id).first_or_404()
+    db.session.delete(pj)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+def _person_dict(p) -> dict:
+    return {
+        "id": p.id,
+        "name": p.name,
+        "role": p.role,
+        "notes": p.notes,
+        "group_associations": p.group_associations or [],
+        "source": p.source,
+        "created_at": p.created_at.isoformat() if p.created_at else None,
+        "updated_at": p.updated_at.isoformat() if p.updated_at else None,
+    }
+
+
+def _project_dict(pj) -> dict:
+    return {
+        "id": pj.id,
+        "name": pj.name,
+        "status": pj.status,
+        "context_notes": pj.context_notes,
+        "group_associations": pj.group_associations or [],
+        "deadline": pj.deadline.isoformat() if pj.deadline else None,
+        "source": pj.source,
+        "created_at": pj.created_at.isoformat() if pj.created_at else None,
+        "updated_at": pj.updated_at.isoformat() if pj.updated_at else None,
+    }
+
+
+def _parse_date_str(value):
+    if not value:
+        return None
+    try:
+        from datetime import date
+        return date.fromisoformat(str(value)[:10])
     except (ValueError, TypeError):
         return None
