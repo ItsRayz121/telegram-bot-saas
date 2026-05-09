@@ -32,6 +32,14 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
   const fileRef = useRef();
   const kb = settings?.knowledge_base || {};
 
+  // Determine whether the platform AI key is available (Pro/Enterprise plan).
+  // The server uses PLATFORM_OPENROUTER_API_KEY as a fallback for all groups
+  // whose owner hasn't set a per-group key — Pro/Enterprise plans include this.
+  const userTier = (() => {
+    try { return JSON.parse(localStorage.getItem('user') || '{}').subscription_tier || 'free'; } catch { return 'free'; }
+  })();
+  const platformAiIncluded = userTier === 'pro' || userTier === 'enterprise';
+
   // API Key state
   const [apiKeyOpen, setApiKeyOpen] = useState(false);
   const [savedApiKey, setSavedApiKey] = useState(null);
@@ -200,7 +208,17 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
           >
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <Key color="secondary" />
-              <Typography variant="subtitle1" fontWeight={600}>AI Provider & API Key</Typography>
+              <Typography variant="subtitle1" fontWeight={600}>
+                AI Provider & API Key{platformAiIncluded ? ' (Optional Override)' : ''}
+              </Typography>
+              {platformAiIncluded && !savedApiKey && (
+                <Chip
+                  icon={<CheckCircle />}
+                  label="Platform AI Active"
+                  color="success"
+                  size="small"
+                />
+              )}
               {savedApiKey && (
                 <Chip
                   icon={<CheckCircle />}
@@ -215,10 +233,17 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
 
           <Collapse in={apiKeyOpen}>
             <Box sx={{ mt: 2 }}>
-              <Alert severity="info" sx={{ mb: 2 }}>
-                Add your own AI provider key. This overrides the server's default OpenAI key for this group.
-                Keys are encrypted before storage and never returned in full.
-              </Alert>
+              {platformAiIncluded ? (
+                <Alert severity="success" sx={{ mb: 2 }}>
+                  <strong>Platform AI (OpenRouter) is active</strong> for this group via your {userTier.charAt(0).toUpperCase() + userTier.slice(1)} plan — no API key needed.
+                  Add a custom key below only if you want to use a specific provider or model instead.
+                </Alert>
+              ) : (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  Add your own AI provider key to enable AI Q&A for this group.
+                  Keys are encrypted before storage and never returned in full.
+                </Alert>
+              )}
 
               {savedApiKey && (
                 <Alert severity="success" sx={{ mb: 2 }}>
