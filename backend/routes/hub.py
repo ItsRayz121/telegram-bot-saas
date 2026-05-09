@@ -658,6 +658,106 @@ def _note_dict(n):
             "source": n.source, "created_at": n.created_at.isoformat()}
 
 
+# ── Sprint 5: Templates CRUD ──────────────────────────────────────────────────
+
+@hub_bp.route("/templates", methods=["GET"])
+@jwt_required()
+def list_templates():
+    user = _current_user()
+    bot = _get_or_create_official_bot(user.id)
+    from ..assistant.hub_models import HubTemplate
+    templates = HubTemplate.query.filter_by(
+        bot_id=bot.id, user_id=user.id
+    ).order_by(HubTemplate.name.asc()).all()
+    return jsonify({"templates": [_template_dict(t) for t in templates]})
+
+
+@hub_bp.route("/templates", methods=["POST"])
+@jwt_required()
+def create_template():
+    user = _current_user()
+    bot = _get_or_create_official_bot(user.id)
+    from ..assistant.hub_models import HubTemplate
+    from ..assistant.hub_plan_limits import check_templates, PlanLimitError
+
+    try:
+        check_templates(user_id=user.id, bot_id=bot.id, plan=user.subscription_tier or "free")
+    except PlanLimitError as e:
+        return jsonify({"error": "plan_limit", **e.to_dict()}), 402
+
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    content = (data.get("content") or "").strip()
+    if not name or not content:
+        return jsonify({"error": "name and content required"}), 400
+    if len(content) > 4096:
+        return jsonify({"error": "content exceeds 4096 characters"}), 400
+
+    # Unique name per bot
+    existing = HubTemplate.query.filter_by(bot_id=bot.id, name=name).first()
+    if existing:
+        return jsonify({"error": f"A template named '{name}' already exists"}), 409
+
+    template = HubTemplate(
+        bot_id=bot.id,
+        user_id=user.id,
+        name=name[:100],
+        content=content,
+    )
+    db.session.add(template)
+    db.session.commit()
+    return jsonify({"template": _template_dict(template)}), 201
+
+
+@hub_bp.route("/templates/<template_id>", methods=["PATCH"])
+@jwt_required()
+def update_template(template_id):
+    user = _current_user()
+    from ..assistant.hub_models import HubTemplate
+    template = HubTemplate.query.filter_by(id=template_id, user_id=user.id).first_or_404()
+    data = request.get_json(silent=True) or {}
+
+    if "name" in data:
+        new_name = (data["name"] or "").strip()
+        if new_name and new_name != template.name:
+            existing = HubTemplate.query.filter_by(bot_id=template.bot_id, name=new_name).first()
+            if existing and existing.id != template_id:
+                return jsonify({"error": f"A template named '{new_name}' already exists"}), 409
+            template.name = new_name[:100]
+    if "content" in data:
+        content = (data["content"] or "").strip()
+        if len(content) > 4096:
+            return jsonify({"error": "content exceeds 4096 characters"}), 400
+        template.content = content
+    template.updated_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"template": _template_dict(template)})
+
+
+@hub_bp.route("/templates/<template_id>", methods=["DELETE"])
+@jwt_required()
+def delete_template(template_id):
+    user = _current_user()
+    from ..assistant.hub_models import HubTemplate
+    template = HubTemplate.query.filter_by(id=template_id, user_id=user.id).first_or_404()
+    db.session.delete(template)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+def _template_dict(t) -> dict:
+    return {
+        "id": t.id,
+        "bot_id": t.bot_id,
+        "name": t.name,
+        "content": t.content,
+        "use_count": t.use_count,
+        "last_used_at": t.last_used_at.isoformat() if t.last_used_at else None,
+        "created_at": t.created_at.isoformat(),
+        "updated_at": t.updated_at.isoformat() if t.updated_at else None,
+    }
+
+
 # ── Sprint 4: Overview aggregation ───────────────────────────────────────────
 
 @hub_bp.route("/overview", methods=["GET"])

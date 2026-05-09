@@ -275,6 +275,8 @@ function HubTasks({ groups }) {
   const [groupFilter, setGroupFilter] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const [editTask, setEditTask] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -286,8 +288,12 @@ function HubTasks({ groups }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const handleDelete = async (id) => {
-    await hub.deleteTask(id);
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
+    await hub.deleteTask(deleteTarget.id);
+    setDeleteLoading(false);
+    setDeleteTarget(null);
     load();
   };
 
@@ -368,7 +374,7 @@ function HubTasks({ groups }) {
                   <IconButton size="small" title="Edit" onClick={() => setEditTask(t)}>
                     <Edit sx={{ fontSize: 15 }} />
                   </IconButton>
-                  <IconButton size="small" title="Delete" onClick={() => handleDelete(t.id)}>
+                  <IconButton size="small" title="Delete" onClick={() => setDeleteTarget(t)}>
                     <Delete sx={{ fontSize: 15 }} />
                   </IconButton>
                 </Box>
@@ -384,6 +390,19 @@ function HubTasks({ groups }) {
         onSaved={() => { setCreateOpen(false); setEditTask(null); load(); }}
         groups={groups}
       />
+
+      <Dialog open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Delete task?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">Delete <strong>{deleteTarget?.title}</strong>? This cannot be undone.</Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setDeleteTarget(null)} color="inherit" size="small">Cancel</Button>
+          <Button onClick={handleDelete} variant="contained" color="error" size="small" disabled={deleteLoading}>
+            {deleteLoading ? <CircularProgress size={14} sx={{ mr: 0.5 }} /> : null}Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
@@ -402,6 +421,8 @@ function HubReminders({ groups }) {
   const [groupFilter, setGroupFilter] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const [editReminder, setEditReminder] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -413,8 +434,12 @@ function HubReminders({ groups }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const handleDelete = async (id) => {
-    await hub.deleteReminder(id);
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
+    await hub.deleteReminder(deleteTarget.id);
+    setDeleteLoading(false);
+    setDeleteTarget(null);
     load();
   };
 
@@ -468,7 +493,7 @@ function HubReminders({ groups }) {
                 </Box>
                 <Box sx={{ display: 'flex', gap: 0.25, flexShrink: 0 }}>
                   <IconButton size="small" onClick={() => setEditReminder(r)}><Edit sx={{ fontSize: 15 }} /></IconButton>
-                  <IconButton size="small" onClick={() => handleDelete(r.id)}><Delete sx={{ fontSize: 15 }} /></IconButton>
+                  <IconButton size="small" onClick={() => setDeleteTarget(r)}><Delete sx={{ fontSize: 15 }} /></IconButton>
                 </Box>
               </Box>
               {i < reminders.length - 1 && <Divider />}
@@ -482,6 +507,19 @@ function HubReminders({ groups }) {
         onSaved={() => { setCreateOpen(false); setEditReminder(null); load(); }}
         groups={groups}
       />
+
+      <Dialog open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Delete reminder?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">Delete this reminder? This cannot be undone.</Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setDeleteTarget(null)} color="inherit" size="small">Cancel</Button>
+          <Button onClick={handleDelete} variant="contained" color="error" size="small" disabled={deleteLoading}>
+            {deleteLoading ? <CircularProgress size={14} sx={{ mr: 0.5 }} /> : null}Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
@@ -494,6 +532,8 @@ function HubNotes({ groups }) {
   const [groupFilter, setGroupFilter] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const [editNote, setEditNote] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -505,8 +545,12 @@ function HubNotes({ groups }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const handleDelete = async (id) => {
-    await hub.deleteNote(id);
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
+    await hub.deleteNote(deleteTarget.id);
+    setDeleteLoading(false);
+    setDeleteTarget(null);
     load();
   };
 
@@ -565,7 +609,7 @@ function HubNotes({ groups }) {
                   </Box>
                   <Box sx={{ display: 'flex', gap: 0.25, flexShrink: 0 }}>
                     <IconButton size="small" onClick={() => setEditNote(n)}><Edit sx={{ fontSize: 15 }} /></IconButton>
-                    <IconButton size="small" onClick={() => handleDelete(n.id)}><Delete sx={{ fontSize: 15 }} /></IconButton>
+                    <IconButton size="small" onClick={() => setDeleteTarget(n)}><Delete sx={{ fontSize: 15 }} /></IconButton>
                   </Box>
                 </Box>
               </CardContent>
@@ -579,17 +623,210 @@ function HubNotes({ groups }) {
         onSaved={() => { setCreateOpen(false); setEditNote(null); load(); }}
         groups={groups}
       />
+
+      <Dialog open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Delete note?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">Delete this note? This cannot be undone.</Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setDeleteTarget(null)} color="inherit" size="small">Cancel</Button>
+          <Button onClick={handleDelete} variant="contained" color="error" size="small" disabled={deleteLoading}>
+            {deleteLoading ? <CircularProgress size={14} sx={{ mr: 0.5 }} /> : null}Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
 
 // ── Templates tab ──────────────────────────────────────────────────────────────
 function HubTemplates() {
+  const [templates, setTemplates] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editTemplate, setEditTemplate] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    hub.listTemplates()
+      .then(r => setTemplates(r.data.templates || []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
+    try {
+      await hub.deleteTemplate(deleteTarget.id);
+      setDeleteTarget(null);
+      load();
+    } catch (e) {
+      setError(e?.response?.data?.error || 'Failed to delete.');
+    }
+    setDeleteLoading(false);
+  };
+
   return (
-    <EmptyState icon="📋" title="No templates yet."
-      body="Create reusable content blocks and dispatch them into groups with /assist [name]."
-      action={<Button variant="outlined" size="small">+ New Template</Button>}
-    />
+    <Box sx={{ maxWidth: 700 }}>
+      {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
+
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+        <Button variant="contained" size="small" startIcon={<Add />} onClick={() => setCreateOpen(true)}>
+          New Template
+        </Button>
+      </Box>
+
+      {loading ? (
+        <Box sx={{ textAlign: 'center', py: 6 }}><CircularProgress /></Box>
+      ) : templates.length === 0 ? (
+        <EmptyState icon="📋" title="No templates yet."
+          body="Create reusable content blocks and dispatch them into groups with /assist [name]."
+          action={<Button variant="outlined" size="small" onClick={() => setCreateOpen(true)}>+ New Template</Button>}
+        />
+      ) : (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          {templates.map(t => (
+            <Card key={t.id} variant="outlined">
+              <CardContent sx={{ p: '12px 16px !important' }}>
+                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                      <Typography variant="body2" fontWeight={700} sx={{ fontFamily: 'monospace', bgcolor: 'action.selected', px: 0.75, py: 0.25, borderRadius: 0.75, fontSize: '0.78rem' }}>
+                        /assist {t.name}
+                      </Typography>
+                      <Chip
+                        label={`Used ${t.use_count} time${t.use_count !== 1 ? 's' : ''}`}
+                        size="small"
+                        variant="outlined"
+                        sx={{ height: 18, fontSize: '0.6rem' }}
+                      />
+                      {t.last_used_at && (
+                        <Typography variant="caption" color="text.secondary">
+                          Last used {fmtDate(t.last_used_at)}
+                        </Typography>
+                      )}
+                    </Box>
+                    <Typography variant="body2" color="text.secondary"
+                      sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', mt: 0.5,
+                        display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                      {t.content}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', gap: 0.25, flexShrink: 0 }}>
+                    <IconButton size="small" title="Edit" onClick={() => setEditTemplate(t)}>
+                      <Edit sx={{ fontSize: 15 }} />
+                    </IconButton>
+                    <IconButton size="small" title="Delete" onClick={() => setDeleteTarget(t)}>
+                      <Delete sx={{ fontSize: 15 }} />
+                    </IconButton>
+                  </Box>
+                </Box>
+              </CardContent>
+            </Card>
+          ))}
+        </Box>
+      )}
+
+      <TemplateModal
+        open={createOpen || Boolean(editTemplate)}
+        template={editTemplate}
+        onClose={() => { setCreateOpen(false); setEditTemplate(null); }}
+        onSaved={() => { setCreateOpen(false); setEditTemplate(null); load(); }}
+      />
+
+      {/* Delete confirmation */}
+      <Dialog open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Delete template?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            Delete <strong>/assist {deleteTarget?.name}</strong>? This cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setDeleteTarget(null)} size="small" color="inherit">Cancel</Button>
+          <Button onClick={handleDelete} variant="contained" color="error" size="small" disabled={deleteLoading}>
+            {deleteLoading ? <CircularProgress size={14} sx={{ mr: 0.5 }} /> : null}Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+}
+
+// ── TemplateModal ──────────────────────────────────────────────────────────────
+function TemplateModal({ open, template, onClose, onSaved }) {
+  const [name, setName] = useState('');
+  const [content, setContent] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (open) {
+      setName(template?.name || '');
+      setContent(template?.content || '');
+      setError('');
+    }
+  }, [open, template]);
+
+  async function handleSave() {
+    if (!name.trim()) { setError('Name is required.'); return; }
+    if (!content.trim()) { setError('Content is required.'); return; }
+    setSaving(true);
+    setError('');
+    try {
+      if (template) {
+        await hub.updateTemplate(template.id, { name: name.trim(), content: content.trim() });
+      } else {
+        await hub.createTemplate({ name: name.trim(), content: content.trim() });
+      }
+      onSaved();
+    } catch (e) {
+      setError(e?.response?.data?.error || 'Failed to save template.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>{template ? 'Edit Template' : 'New Template'}</DialogTitle>
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '16px !important' }}>
+        {error && <Alert severity="error" sx={{ mb: 1 }}>{error}</Alert>}
+        <TextField
+          label="Template name"
+          value={name}
+          onChange={e => setName(e.target.value)}
+          placeholder="e.g. standup, agenda, weekly-update"
+          helperText='Used as /assist {name} in your group'
+          fullWidth
+          size="small"
+        />
+        <TextField
+          label="Content"
+          value={content}
+          onChange={e => setContent(e.target.value)}
+          multiline
+          minRows={5}
+          fullWidth
+          size="small"
+          placeholder="Enter the template text that will be sent to the group…"
+        />
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} color="inherit" size="small">Cancel</Button>
+        <Button onClick={handleSave} variant="contained" size="small" disabled={saving}>
+          {saving ? <CircularProgress size={14} sx={{ mr: 0.5 }} /> : null}
+          {template ? 'Save changes' : 'Create'}
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }
 

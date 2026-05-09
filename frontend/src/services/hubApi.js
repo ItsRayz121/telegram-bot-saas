@@ -104,6 +104,12 @@ export const hub = {
   // ── Automations ───────────────────────────────────────────────────────────
   getAutomations: () => api.get('/api/hub/bots/official/automations'),
   updateAutomations: (data) => api.patch('/api/hub/bots/official/automations', data),
+
+  // ── Templates ─────────────────────────────────────────────────────────────
+  listTemplates: () => api.get('/api/hub/templates'),
+  createTemplate: (data) => api.post('/api/hub/templates', data),
+  updateTemplate: (id, data) => api.patch(`/api/hub/templates/${id}`, data),
+  deleteTemplate: (id) => api.delete(`/api/hub/templates/${id}`),
 };
 
 export default hub;

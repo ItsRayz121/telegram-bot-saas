@@ -4700,6 +4700,85 @@ async def cmd_remind(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await message.reply_text("Sorry, couldn't save the reminder. Try again.")
 
 
+async def cmd_assist(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /assist [template_name] — dispatch a Hub template into the current group.
+
+    Looks up the template by name for the bot identity connected to this group.
+    If found: sends template content and increments use_count.
+    If not found: replies with a helpful error.
+    If no name given: lists available template names.
+    """
+    if not _is_group_chat(update):
+        return
+
+    message = update.message
+    chat = update.effective_chat
+    flask_app = context.bot_data.get("flask_app")
+    if not flask_app or not message:
+        return
+
+    # Extract template name from command args
+    args = (message.text or "").split(maxsplit=1)
+    template_name = args[1].strip() if len(args) > 1 else ""
+
+    group_id = str(chat.id)
+
+    try:
+        with flask_app.app_context():
+            from .assistant.hub_models import HubConnectedGroup, HubTemplate
+            from .models import db
+
+            # Find the connected group record for this Telegram group
+            connected = HubConnectedGroup.query.filter_by(
+                telegram_group_id=chat.id,
+                is_active=True,
+            ).filter(
+                HubConnectedGroup.consent_confirmed_at.isnot(None)
+            ).first()
+
+            if not connected:
+                return  # group not in Hub — silently ignore
+
+            if not template_name:
+                # List available template names
+                templates = HubTemplate.query.filter_by(
+                    bot_id=connected.bot_id, user_id=connected.user_id
+                ).order_by(HubTemplate.name.asc()).all()
+                if not templates:
+                    await message.reply_text(
+                        "No templates yet. Create some at your Telegizer dashboard."
+                    )
+                else:
+                    names = "\n".join(f"• /assist {t.name}" for t in templates)
+                    await message.reply_text(f"Available templates:\n{names}")
+                return
+
+            # Look up the template by name (case-insensitive)
+            template = HubTemplate.query.filter(
+                HubTemplate.bot_id == connected.bot_id,
+                HubTemplate.user_id == connected.user_id,
+                db.func.lower(HubTemplate.name) == template_name.lower(),
+            ).first()
+
+            if not template:
+                await message.reply_text(
+                    f"Template '{template_name}' not found. Check your dashboard."
+                )
+                return
+
+            # Send template content
+            await message.reply_text(template.content)
+
+            # Increment use_count
+            template.use_count = (template.use_count or 0) + 1
+            template.last_used_at = datetime.utcnow()
+            db.session.commit()
+
+    except Exception as exc:
+        _log.debug("cmd_assist error group=%s: %s", group_id, exc)
+
+
 async def cmd_invitelink(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Generate a Telegram invite link for this group (admins only)."""
     if not _is_group_chat(update):
@@ -5045,6 +5124,7 @@ class OfficialBotRunner:
         a.add_handler(CommandHandler("ask",            cmd_ask))
         a.add_handler(CommandHandler("invitelink",     cmd_invitelink))
         a.add_handler(CommandHandler("remind",         cmd_remind))
+        a.add_handler(CommandHandler("assist",         cmd_assist))
         a.add_handler(CallbackQueryHandler(on_assistant_pick, pattern=r"^assist_"))
         a.add_handler(CallbackQueryHandler(callback_handler))
         # Bot's own membership changes (added/removed from groups)
