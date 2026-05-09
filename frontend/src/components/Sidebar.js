@@ -222,16 +222,7 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
 
   const assistantActive = isActive('/hub') || isActive('/workspace');
 
-  const automationActive = isActive('/workspace/forwarding') || isActive('/workspace/automations') || isActive('/workflow-builder');
-  const [automationOpen, setAutomationOpen] = useState(() => {
-    const stored = localStorage.getItem('sidebar_automation_open');
-    return stored === null ? true : stored === '1';
-  });
-
-  const toggleAutomation = () => setAutomationOpen(o => {
-    localStorage.setItem('sidebar_automation_open', !o ? '1' : '0');
-    return !o;
-  });
+  const automationActive = isActive('/automation') || isActive('/workspace/forwarding') || isActive('/workspace/automations') || isActive('/workflow-builder');
 
   const analyticsActive = isActive('/analytics');
   const [analyticsOpen, setAnalyticsOpen] = useState(() => {
@@ -540,20 +531,7 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
 
         {/* ── AUTOMATION ── */}
         <SectionLabel label="Automation" />
-        <ExpandableHeader
-          label="Automation"
-          icon={AutoMode}
-          path="/workspace/automations"
-          active={automationActive}
-          open={automationOpen}
-          onToggle={toggleAutomation}
-          onNavigate={() => nav('/workspace/automations')}
-        />
-        <Collapse in={automationOpen} timeout={160} unmountOnExit>
-          <NavItem label="Forwarding"   path="/workspace/forwarding"   icon={Send}     active={isActive('/workspace/forwarding')}   onClick={() => nav('/workspace/forwarding')} indent />
-          <NavItem label="Workflows"    path="/workspace/automations"  icon={AutoMode} active={isActive('/workspace/automations')}  onClick={() => nav('/workspace/automations')} indent />
-          {/* Flow Builder hidden — duplicate of Workflows; route and page intact for future reactivation */}
-        </Collapse>
+        <NavItem label="Automation" icon={AutoMode} path="/automation" active={automationActive} onClick={() => nav('/automation')} />
 
         {/* Analytics hidden from sidebar — accessible via group/channel pages */}
 

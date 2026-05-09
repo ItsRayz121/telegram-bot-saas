@@ -51,6 +51,7 @@ import WorkspaceSmartLinks from './pages/WorkspaceSmartLinks';
 import WorkspaceReminders from './pages/WorkspaceReminders';
 import WorkspaceForwarding from './pages/WorkspaceForwarding';
 import WorkspaceAutomations from './pages/WorkspaceAutomations';
+import AutomationHub from './pages/AutomationHub';
 import MiniApp from './pages/MiniApp';
 import MiniAppLayout from './layouts/MiniAppLayout';
 import Directory from './pages/Directory';
@@ -283,6 +284,7 @@ export default function App() {
             <Route path="/workspace"               element={<AppRoute><Workspace /></AppRoute>} />
             <Route path="/workspace/smart-links"   element={<AppRoute><WorkspaceSmartLinks /></AppRoute>} />
             <Route path="/workspace/reminders"     element={<AppRoute><WorkspaceReminders /></AppRoute>} />
+            <Route path="/automation"              element={<AppRoute><AutomationHub /></AppRoute>} />
             <Route path="/workspace/forwarding"    element={<AppRoute><WorkspaceForwarding /></AppRoute>} />
             <Route path="/workspace/automations"   element={<AppRoute><WorkspaceAutomations /></AppRoute>} />
             <Route path="/workspace/notes"         element={<AppRoute><React.Suspense fallback={null}><AssistantNotes /></React.Suspense></AppRoute>} />
