@@ -540,7 +540,7 @@ function HubNotes({ groups }) {
         <Box sx={{ textAlign: 'center', py: 6 }}><CircularProgress /></Box>
       ) : notes.length === 0 ? (
         <EmptyState icon="📝" title="No notes yet."
-          body='I\'ll extract them from group discussions. You can also add notes manually.'
+          body="I'll extract them from group discussions. You can also add notes manually."
           action={<Button variant="outlined" size="small" onClick={() => setCreateOpen(true)}>+ New Note</Button>}
         />
       ) : (
