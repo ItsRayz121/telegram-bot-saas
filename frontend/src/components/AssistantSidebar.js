@@ -439,6 +439,7 @@ export function DesktopAssistantSidebar() {
             alignItems: 'center', pt: 2, gap: 1,
             borderLeft: '1px solid', borderColor: 'divider',
             bgcolor: 'background.paper', cursor: 'pointer',
+            height: '100vh', position: 'sticky', top: 0, overflowY: 'hidden',
           }}
           onClick={toggle}
         >

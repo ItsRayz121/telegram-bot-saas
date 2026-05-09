@@ -30,7 +30,7 @@ export default function AppLayout({ children }) {
   );
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
+    <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden', bgcolor: 'background.default' }}>
 
       {/* ── Desktop: persistent sidebar ── */}
       {!isMobile && (
