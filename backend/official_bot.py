@@ -2640,6 +2640,13 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 except Exception:
                     pass
 
+    # ── Assistant Hub: buffer this message for extraction ─────────────────────
+    try:
+        from .assistant.hub_message_router import buffer_hub_message
+        buffer_hub_message(flask_app, chat.id, message)
+    except Exception:
+        pass
+
 
 # ─── New member join handler ──────────────────────────────────────────────────
 

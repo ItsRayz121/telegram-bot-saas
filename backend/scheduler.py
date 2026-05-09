@@ -110,6 +110,15 @@ def make_celery(app=None):
                 "task": "backend.scheduler.hub_enforce_retention",
                 "schedule": crontab(hour=3, minute=15),  # daily at 03:15 UTC
             },
+            # ── Assistant Hub extraction pipeline ─────────────────────────────
+            "hub-batch-extraction": {
+                "task": "backend.scheduler.hub_run_batch_extraction",
+                "schedule": 1800.0,   # every 30 minutes
+            },
+            "hub-priority-extraction": {
+                "task": "backend.scheduler.hub_run_priority_extraction",
+                "schedule": 120.0,    # every 2 minutes
+            },
         },
     )
 
@@ -1182,6 +1191,7 @@ def send_lifecycle_emails():
         logger.error("send_lifecycle_emails error: %s", exc)
 
 
+@celery.task(name="backend.scheduler.hub_enforce_retention")
 def hub_enforce_retention():
     """Assistant Hub: daily data retention enforcement at 03:15 UTC."""
     try:
@@ -1189,6 +1199,44 @@ def hub_enforce_retention():
         enforce_retention()
     except Exception as exc:
         logger.error("hub_enforce_retention error: %s", exc)
+
+
+@celery.task(name="backend.scheduler.hub_run_batch_extraction")
+def hub_run_batch_extraction():
+    """Assistant Hub: standard extraction — all groups with buffered messages (every 30 min)."""
+    try:
+        from .assistant.hub_message_router import get_groups_with_buffered_messages
+        from .assistant.hub_extraction import run_extraction
+        from .app import create_app
+        flask_app = create_app()
+        pairs = get_groups_with_buffered_messages(priority_only=False)
+        for bot_id, group_id in pairs:
+            try:
+                run_extraction(bot_id, group_id, flask_app)
+            except Exception as exc:
+                logger.error("hub_run_batch_extraction bot=%s group=%s: %s", bot_id, group_id, exc)
+        logger.info("hub_run_batch_extraction: processed %d groups", len(pairs))
+    except Exception as exc:
+        logger.error("hub_run_batch_extraction error: %s", exc)
+
+
+@celery.task(name="backend.scheduler.hub_run_priority_extraction")
+def hub_run_priority_extraction():
+    """Assistant Hub: priority extraction — groups with urgent messages (every 2 min)."""
+    try:
+        from .assistant.hub_message_router import get_groups_with_buffered_messages
+        from .assistant.hub_extraction import run_extraction
+        from .app import create_app
+        flask_app = create_app()
+        pairs = get_groups_with_buffered_messages(priority_only=True)
+        for bot_id, group_id in pairs:
+            try:
+                run_extraction(bot_id, group_id, flask_app)
+            except Exception as exc:
+                logger.error("hub_run_priority_extraction bot=%s group=%s: %s", bot_id, group_id, exc)
+        logger.info("hub_run_priority_extraction: processed %d priority groups", len(pairs))
+    except Exception as exc:
+        logger.error("hub_run_priority_extraction error: %s", exc)
 
 
 def _get_bot_token_for_chat(chat_id, app):
