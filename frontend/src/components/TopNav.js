@@ -17,7 +17,7 @@ const SUPPORT_MAILTO = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Te
 const SUPPORT_LINKS = [
   { label: 'Official Channel',  sub: 'Updates & announcements',    href: 'https://t.me/telegizer',           icon: Campaign, external: true },
   { label: 'Community Group',   sub: 'Help from other users',      href: 'https://t.me/telegizer_community', icon: People,   external: true },
-  { label: 'Email Support',     sub: SUPPORT_EMAIL,                href: SUPPORT_MAILTO,                     icon: Email,    external: true, isEmail: true },
+  { label: 'Email Support',     sub: 'Contact us by email',        href: SUPPORT_MAILTO,                     icon: Email,    external: true, isEmail: true },
 ];
 
 function SupportPopover() {
