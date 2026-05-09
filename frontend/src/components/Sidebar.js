@@ -10,13 +10,14 @@ import {
   Explore, BarChart, SmartToy, CreditCard, Settings, Add, Handshake,
   AccountCircle, Logout, AdminPanelSettings, ExpandMore, ExpandLess,
   Psychology, Reply, EditNote, Summarize, Tune, CheckBox, LibraryBooks,
-  CardGiftcard,
+  CardGiftcard, ChevronLeft, ChevronRight,
 } from '@mui/icons-material';
 import TelegizerLogo from './TelegizerLogo';
 import { telegramGroups as tgApi, auth as authApi, channels as chApi } from '../services/api';
 import { APP_VERSION, BUILD_TIME } from '../version';
 
 const SIDEBAR_WIDTH = 240;
+const SIDEBAR_COLLAPSED_WIDTH = 56;
 
 // ── Status dot ────────────────────────────────────────────────────────────────
 
@@ -48,9 +49,30 @@ function SectionLabel({ label }) {
 
 // ── Single nav item ───────────────────────────────────────────────────────────
 
-function NavItem({ label, path, icon: Icon, badge, badgeCount, active, onClick, indent, dimmed }) {
+function NavItem({ label, path, icon: Icon, badge, badgeCount, active, onClick, indent, dimmed, collapsed }) {
   const navigate = useNavigate();
   const handleClick = onClick || (() => navigate(path));
+
+  if (collapsed) {
+    return (
+      <Tooltip title={label} placement="right">
+        <ListItem disablePadding sx={{ display: 'block' }}>
+          <ListItemButton
+            onClick={handleClick}
+            sx={{
+              justifyContent: 'center', px: 0, py: 0.6, mx: 0.5, mb: 0.15,
+              borderRadius: 1.5, minHeight: 34,
+              bgcolor: active ? 'primary.main' : 'transparent',
+              color: active ? '#fff' : 'text.secondary',
+              '&:hover': { bgcolor: active ? 'primary.dark' : 'rgba(255,255,255,0.05)', color: active ? '#fff' : 'text.primary' },
+            }}
+          >
+            {Icon && <Icon sx={{ fontSize: 18 }} />}
+          </ListItemButton>
+        </ListItem>
+      </Tooltip>
+    );
+  }
 
   return (
     <ListItem disablePadding sx={{ display: 'block' }}>
@@ -173,7 +195,7 @@ function ExpandableHeader({ label, icon: Icon, path, active, open, onToggle, onN
 
 // ── Sidebar content ───────────────────────────────────────────────────────────
 
-export default function Sidebar({ onClose }) {
+export default function Sidebar({ onClose, collapsed, onToggle }) {
   const navigate = useNavigate();
   const { pathname, search } = useLocation();
 
@@ -290,10 +312,51 @@ export default function Sidebar({ onClose }) {
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
+  // ── Collapsed (icon-only) view ────────────────────────────────────────────
+  if (collapsed) {
+    const COLLAPSED_ITEMS = [
+      { label: 'Dashboard', icon: Home, path: '/dashboard', exact: true },
+      { label: 'Groups',    icon: Groups, path: '/groups' },
+      { label: 'Channels',  icon: Campaign, path: '/channels' },
+      { label: 'Hub',       icon: Psychology, path: '/workspace' },
+      { label: 'Automation',icon: AutoMode, path: '/workspace/automations' },
+      { label: 'Billing',   icon: CreditCard, path: '/billing' },
+      { label: 'Settings',  icon: Settings, path: '/settings' },
+    ];
+    return (
+      <Box sx={{
+        width: '100%', height: '100vh', display: 'flex', flexDirection: 'column',
+        bgcolor: 'background.paper', borderRight: '1px solid', borderColor: 'divider',
+        overflowY: 'auto', overflowX: 'hidden', alignItems: 'center', pt: 1,
+        '&::-webkit-scrollbar': { width: 0 },
+      }}>
+        <Tooltip title="Expand sidebar" placement="right">
+          <IconButton size="small" onClick={onToggle} sx={{ mb: 1 }}>
+            <ChevronRight fontSize="small" />
+          </IconButton>
+        </Tooltip>
+        <Divider sx={{ width: '100%', mb: 0.5 }} />
+        <List dense disablePadding sx={{ width: '100%' }}>
+          {COLLAPSED_ITEMS.map(item => (
+            <NavItem
+              key={item.path}
+              label={item.label}
+              path={item.path}
+              icon={item.icon}
+              active={isActive(item.path, item.exact)}
+              onClick={() => nav(item.path)}
+              collapsed
+            />
+          ))}
+        </List>
+      </Box>
+    );
+  }
+
   return (
     <Box
       sx={{
-        width: SIDEBAR_WIDTH,
+        width: '100%',
         height: '100vh',
         display: 'flex',
         flexDirection: 'column',
@@ -307,13 +370,19 @@ export default function Sidebar({ onClose }) {
         '&::-webkit-scrollbar-thumb': { bgcolor: 'divider', borderRadius: 2 },
       }}
     >
-      {/* ── Logo ── */}
-      <Box
-        sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer' }}
-        onClick={() => nav('/dashboard')}
-      >
-        <TelegizerLogo size="sm" variant="icon" />
-        <Typography fontWeight={700} fontSize="0.95rem" color="text.primary">Telegizer</Typography>
+      {/* ── Logo + collapse toggle ── */}
+      <Box sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, cursor: 'pointer' }} onClick={() => nav('/dashboard')}>
+          <TelegizerLogo size="sm" variant="icon" />
+          <Typography fontWeight={700} fontSize="0.95rem" color="text.primary">Telegizer</Typography>
+        </Box>
+        {onToggle && (
+          <Tooltip title="Collapse sidebar" placement="right">
+            <IconButton size="small" onClick={onToggle} sx={{ color: 'text.disabled' }}>
+              <ChevronLeft sx={{ fontSize: 16 }} />
+            </IconButton>
+          </Tooltip>
+        )}
       </Box>
 
       <Divider />
@@ -559,4 +628,4 @@ export default function Sidebar({ onClose }) {
   );
 }
 
-export { SIDEBAR_WIDTH };
+export { SIDEBAR_WIDTH, SIDEBAR_COLLAPSED_WIDTH };

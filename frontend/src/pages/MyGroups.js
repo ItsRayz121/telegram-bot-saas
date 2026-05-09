@@ -5,11 +5,12 @@ import {
   Chip, CircularProgress, Alert, Dialog, DialogTitle,
   DialogContent, DialogActions, TextField, IconButton,
   Tooltip, Grid, Divider, Paper, List, ListItem,
-  ListItemIcon, ListItemText, LinearProgress,
+  ListItemIcon, ListItemText, LinearProgress, Collapse,
 } from '@mui/material';
 import {
   Add, Groups, CheckCircle, LinkOff, Settings, Refresh,
   OpenInNew, Warning, Lock, Security, Cancel, BarChart,
+  HelpOutline, ExpandMore, ExpandLess,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { telegramGroups, settings as settingsApi } from '../services/api';
@@ -39,8 +40,8 @@ function StatusChip({ status }) {
   return <Chip label={label} color={color} size="small" />;
 }
 
-function PermScoreBadge({ perms, liveScore, liveTotal }) {
-  // Use live data when available, else fall back to cached perms
+function PermScoreBadge({ perms, liveScore, liveTotal, isCustomBot, botStatus }) {
+  // Use live data when available
   if (liveScore !== undefined && liveTotal !== undefined) {
     if (liveScore === liveTotal) {
       return <Chip label="Full Access" color="success" size="small" icon={<CheckCircle sx={{ fontSize: '14px !important' }} />} />;
@@ -55,23 +56,28 @@ function PermScoreBadge({ perms, liveScore, liveTotal }) {
       />
     );
   }
-  if (!perms || Object.keys(perms).length === 0) {
-    return <Chip label="Check permissions" color="default" size="small" />;
+  // Cached perms present
+  if (perms && Object.keys(perms).length > 0) {
+    const granted = Object.values(perms).filter(Boolean).length;
+    const total = Object.keys(perms).length;
+    if (granted === total) {
+      return <Chip label="Full Access" color="success" size="small" icon={<CheckCircle sx={{ fontSize: '14px !important' }} />} />;
+    }
+    const missing = total - granted;
+    return (
+      <Chip
+        label={`Missing ${missing}`}
+        color={missing > 2 ? 'error' : 'warning'}
+        size="small"
+        icon={<Warning sx={{ fontSize: '14px !important' }} />}
+      />
+    );
   }
-  const granted = Object.values(perms).filter(Boolean).length;
-  const total = Object.keys(perms).length;
-  if (granted === total) {
-    return <Chip label="Full Access" color="success" size="small" icon={<CheckCircle sx={{ fontSize: '14px !important' }} />} />;
+  // Custom bot with active status — permissions managed by the bot itself
+  if (isCustomBot && botStatus === 'active') {
+    return <Chip label="Bot Active" color="success" size="small" icon={<CheckCircle sx={{ fontSize: '14px !important' }} />} />;
   }
-  const missing = total - granted;
-  return (
-    <Chip
-      label={`Missing ${missing}`}
-      color={missing > 2 ? 'error' : 'warning'}
-      size="small"
-      icon={<Warning sx={{ fontSize: '14px !important' }} />}
-    />
-  );
+  return <Chip label="Check permissions" color="default" size="small" />;
 }
 
 export default function MyGroups() {
@@ -90,6 +96,9 @@ export default function MyGroups() {
 
   // Per-card live permission state: { [groupId]: { loading, data } }
   const [permsState, setPermsState] = useState({});
+
+  // Guide collapsed by default when groups exist, expanded when empty
+  const [guideOpen, setGuideOpen] = useState(false);
 
   // Full-screen permissions modal
   const [permsModalGroup, setPermsModalGroup] = useState(null);
@@ -204,7 +213,7 @@ export default function MyGroups() {
   const addToGroupUrl = `https://t.me/${BOT_USERNAME}?startgroup=setup`;
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
+    <Box sx={{ bgcolor: 'background.default' }}>
       <TopNav hasSidebar
         breadcrumb={[
           { label: 'Dashboard', path: '/dashboard' },
@@ -234,35 +243,34 @@ export default function MyGroups() {
         }
       />
 
-      <Container maxWidth="lg" sx={{ py: 4 }}>
-        {/* Header */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-          <Box>
-            <Typography variant="h4" fontWeight={700}>
-              {botIdFilter ? 'Bot Groups' : botTypeFilter === 'official' ? 'Official Bot Groups' : 'My Groups'}
-            </Typography>
-            <Typography variant="body2" color="text.secondary" mt={0.5}>
-              {botIdFilter
-                ? 'Groups linked to this custom bot'
-                : botTypeFilter === 'official'
-                ? 'Groups linked via the Official Telegizer Bot'
-                : 'All Telegram groups linked to Telegizer'}
-            </Typography>
-          </Box>
-          <IconButton onClick={load} disabled={loading}><Refresh /></IconButton>
+      <Container maxWidth="xl" sx={{ py: 2.5 }}>
+        {/* Compact toolbar row: refresh + collapsible guide */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+          <IconButton size="small" onClick={load} disabled={loading}>
+            <Refresh fontSize="small" />
+          </IconButton>
+          <Button
+            size="small"
+            variant="text"
+            startIcon={<HelpOutline fontSize="small" />}
+            endIcon={guideOpen ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
+            onClick={() => setGuideOpen(o => !o)}
+            sx={{ color: 'text.secondary', textTransform: 'none', fontSize: '0.8rem' }}
+          >
+            How to link a group?
+          </Button>
         </Box>
 
-        {/* Setup banner */}
-        <Paper sx={{ p: 2.5, mb: 3, background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)', border: '1px solid #334155' }}>
-          <Typography variant="subtitle2" fontWeight={600} gutterBottom>
-            How to link a group
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            1. Add <strong>@{BOT_USERNAME}</strong> as admin &nbsp;
-            2. Run <code>/linkgroup</code> inside the group &nbsp;
-            3. Click <strong>Link Group</strong> above and paste the code
-          </Typography>
-        </Paper>
+        {/* Collapsible guide */}
+        <Collapse in={guideOpen || (!loading && groups.length === 0 && !loadError)}>
+          <Paper sx={{ px: 2, py: 1.5, mb: 2, background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)', border: '1px solid #334155' }}>
+            <Typography variant="body2" color="text.secondary">
+              1. Add <strong>@{BOT_USERNAME}</strong> as admin &nbsp;·&nbsp;
+              2. Run <code>/linkgroup</code> inside the group &nbsp;·&nbsp;
+              3. Click <strong>Link Group</strong> above and paste the code
+            </Typography>
+          </Paper>
+        </Collapse>
 
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
@@ -297,9 +305,10 @@ export default function MyGroups() {
               const ps = permsState[gid];
               const liveData = ps?.data;
               const liveLoading = ps?.loading;
+              const isCustomBot = !!(g.linked_bot_id || g.linked_via_bot_type === 'custom');
 
               return (
-                <Grid item xs={12} md={6} key={gid}>
+                <Grid item xs={12} sm={6} lg={groups.length > 2 ? 4 : 6} key={gid}>
                   <Card sx={{ height: '100%' }}>
                     <CardContent>
                       {/* Title + status */}
@@ -338,23 +347,29 @@ export default function MyGroups() {
                                 perms={g.bot_permissions}
                                 liveScore={liveData && !liveData.error ? liveData.score : undefined}
                                 liveTotal={liveData && !liveData.error ? liveData.total : undefined}
+                                isCustomBot={isCustomBot}
+                                botStatus={g.bot_status}
                               />
                             )}
-                            <Tooltip title="Refresh live permissions">
-                              <IconButton
-                                size="small"
-                                onClick={() => refreshPermsForGroup(gid)}
-                                disabled={liveLoading}
-                                sx={{ p: 0.25 }}
-                              >
-                                {liveLoading ? <CircularProgress size={14} /> : <Refresh fontSize="small" />}
-                              </IconButton>
-                            </Tooltip>
-                            <Tooltip title="View detailed permissions">
-                              <IconButton size="small" onClick={() => openPermissionsModal(g)} sx={{ p: 0.25 }}>
-                                <Security fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
+                            {!isCustomBot && (
+                              <Tooltip title="Refresh live permissions">
+                                <IconButton
+                                  size="small"
+                                  onClick={() => refreshPermsForGroup(gid)}
+                                  disabled={liveLoading}
+                                  sx={{ p: 0.25 }}
+                                >
+                                  {liveLoading ? <CircularProgress size={14} /> : <Refresh fontSize="small" />}
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                            {!isCustomBot && (
+                              <Tooltip title="View detailed permissions">
+                                <IconButton size="small" onClick={() => openPermissionsModal(g)} sx={{ p: 0.25 }}>
+                                  <Security fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            )}
                           </Box>
                         </Box>
                       </Box>

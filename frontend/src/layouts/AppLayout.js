@@ -4,7 +4,7 @@ import {
   useMediaQuery, useTheme, Paper, BottomNavigation, BottomNavigationAction,
 } from '@mui/material';
 import { Menu as MenuIcon, Home, Groups, AutoMode, Psychology, AccountCircle } from '@mui/icons-material';
-import Sidebar, { SIDEBAR_WIDTH } from '../components/Sidebar';
+import Sidebar, { SIDEBAR_WIDTH, SIDEBAR_COLLAPSED_WIDTH } from '../components/Sidebar';
 import { DesktopAssistantSidebar, MobileAssistantFab } from '../components/AssistantSidebar';
 import TelegizerLogo from '../components/TelegizerLogo';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -20,9 +20,24 @@ const BOTTOM_NAV_ITEMS = [
 export default function AppLayout({ children }) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const isSmallDesktop = useMediaQuery(theme.breakpoints.down('lg'));
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try { return localStorage.getItem('sidebar_collapsed') === 'true'; } catch { return false; }
+  });
   const navigate = useNavigate();
   const { pathname } = useLocation();
+
+  // Auto-collapse on small desktop screens (md-lg range)
+  React.useEffect(() => {
+    if (!isMobile && isSmallDesktop) setSidebarCollapsed(true);
+  }, [isMobile, isSmallDesktop]);
+
+  const toggleSidebar = () => {
+    const next = !sidebarCollapsed;
+    setSidebarCollapsed(next);
+    try { localStorage.setItem('sidebar_collapsed', String(next)); } catch {}
+  };
 
   // Map current path to the matching bottom nav index (or -1 for none)
   const bottomNavValue = BOTTOM_NAV_ITEMS.findIndex(
@@ -34,8 +49,17 @@ export default function AppLayout({ children }) {
 
       {/* ── Desktop: persistent sidebar ── */}
       {!isMobile && (
-        <Box sx={{ width: SIDEBAR_WIDTH, flexShrink: 0, position: 'sticky', top: 0, height: '100vh' }}>
-          <Sidebar />
+        <Box
+          sx={{
+            width: sidebarCollapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_WIDTH,
+            flexShrink: 0,
+            position: 'sticky',
+            top: 0,
+            height: '100vh',
+            transition: 'width 0.2s ease',
+          }}
+        >
+          <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
         </Box>
       )}
 
