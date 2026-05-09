@@ -17,12 +17,12 @@ import { toast } from 'react-toastify';
 import { billing } from '../services/api';
 
 const TIER_FEATURES = {
-  free: ['1 bot', '1 group per bot', 'Basic moderation', 'Welcome messages', 'XP system'],
-  pro: ['5 bots', 'Unlimited groups', 'Advanced AutoMod', 'Scheduled messages', 'Analytics dashboard', 'Priority support'],
+  free: ['1 bot', '3 groups per bot', 'Basic moderation', 'Welcome messages', 'XP system'],
+  pro: ['3 bots', 'Unlimited groups', 'Advanced AutoMod', 'Scheduled messages', 'Analytics dashboard', 'Priority support'],
   enterprise: ['50 bots', 'Unlimited groups', 'All Pro features', 'API access', 'SLA guarantee', 'Dedicated support'],
 };
 
-const TIER_PRICES = { free: '$0', pro: '$9/mo', enterprise: '$49/mo' };
+const TIER_PRICES = { free: '$0', pro: '$19/mo', enterprise: '$49/mo' };
 
 const PROVIDER_LABELS = { nowpayments: 'Crypto (NOWPayments)' };
 const STATUS_COLORS = { confirmed: 'success', pending: 'warning', failed: 'error' };

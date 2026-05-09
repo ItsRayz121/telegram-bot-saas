@@ -81,7 +81,7 @@ const VALUES = [
   'We never sell your data or show ads — ever',
   'We keep the free tier genuinely useful',
   "We reply to every support email personally",
-  'We build in public: changelog is always up to date',
+  'We document decisions and changes as we build',
   'We take security seriously: tokens encrypted, passwords hashed, HTTPS everywhere',
 ];
 
