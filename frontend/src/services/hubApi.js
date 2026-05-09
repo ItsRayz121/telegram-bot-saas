@@ -111,6 +111,18 @@ export const hub = {
   updateTemplate: (id, data) => api.patch(`/api/hub/templates/${id}`, data),
   deleteTemplate: (id) => api.delete(`/api/hub/templates/${id}`),
 
+  // ── Custom Bots ────────────────────────────────────────────────────────────
+  createBot: (data) => api.post('/api/hub/bots', data),
+  updateBot: (id, data) => api.patch(`/api/hub/bots/${id}`, data),
+  deleteBot: (id) => api.delete(`/api/hub/bots/${id}`),
+
+  // ── Knowledge Cards ────────────────────────────────────────────────────────
+  listKnowledge: (botId) => api.get('/api/hub/knowledge', { params: botId ? { bot_id: botId } : {} }),
+  createKnowledge: (data) => api.post('/api/hub/knowledge', data),
+  updateKnowledge: (id, data) => api.patch(`/api/hub/knowledge/${id}`, data),
+  deleteKnowledge: (id) => api.delete(`/api/hub/knowledge/${id}`),
+  useKnowledge: (id) => api.post(`/api/hub/knowledge/${id}/use`),
+
   // ── Memory ─────────────────────────────────────────────────────────────────
   getMemoryGlobal: () => api.get('/api/hub/memory/global'),
   updateMemoryGlobal: (data) => api.patch('/api/hub/memory/global', data),

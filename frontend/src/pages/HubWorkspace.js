@@ -25,6 +25,7 @@ const TABS = [
   { label: 'Reminders',  value: 'reminders' },
   { label: 'Tasks',      value: 'tasks' },
   { label: 'Templates',  value: 'templates' },
+  { label: 'Knowledge',  value: 'knowledge' },
   { label: 'Automation', value: 'automation' },
   { label: 'Settings',   value: 'settings' },
 ];
@@ -60,6 +61,9 @@ export default function HubWorkspace() {
   const [loading, setLoading] = useState(true);
   const [groups, setGroups] = useState([]);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [allBots, setAllBots] = useState([]);
+  const [plan, setPlan] = useState('free');
+  const [botRegOpen, setBotRegOpen] = useState(false);
 
   useEffect(() => {
     hub.getOfficialBot()
@@ -70,10 +74,15 @@ export default function HubWorkspace() {
       .then(r => {
         const g = r.data.groups || [];
         setGroups(g);
-        // Show onboarding only once, if no groups yet
         if (g.length === 0 && !localStorage.getItem('hub_onboarding_done')) {
           setOnboardingOpen(true);
         }
+      })
+      .catch(() => {});
+    hub.listBots()
+      .then(r => {
+        setAllBots(r.data.bots || []);
+        setPlan(r.data.plan || 'free');
       })
       .catch(() => {});
   }, []);
@@ -101,6 +110,30 @@ export default function HubWorkspace() {
               </>
             )}
           </Box>
+          {/* Context Switcher / Add Bot */}
+          {!loading && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+              {allBots.filter(b => b.bot_type === 'custom').map(b => (
+                <Chip
+                  key={b.id}
+                  label={`@${b.telegram_bot_username || b.display_name}`}
+                  size="small"
+                  variant="outlined"
+                  icon={<SmartToy sx={{ fontSize: '14px !important' }} />}
+                  sx={{ height: 22, fontSize: '0.65rem', cursor: 'default' }}
+                />
+              ))}
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<Add sx={{ fontSize: 14 }} />}
+                onClick={() => setBotRegOpen(true)}
+                sx={{ height: 26, fontSize: '0.7rem', px: 1, textTransform: 'none' }}
+              >
+                Add Bot
+              </Button>
+            </Box>
+          )}
         </Box>
         <Tabs value={TABS.find(t => t.value === tab) ? tab : 'overview'} onChange={handleTabChange}
           variant="scrollable" scrollButtons="auto"
@@ -113,6 +146,16 @@ export default function HubWorkspace() {
       <Box sx={{ flex: 1, overflow: 'auto', p: { xs: 2, sm: 3 } }}>
         <TabContent tab={tab} botData={botData} groups={groups} setGroups={setGroups} />
       </Box>
+
+      <BotRegistrationDialog
+        open={botRegOpen}
+        plan={plan}
+        onClose={() => setBotRegOpen(false)}
+        onRegistered={(newBot) => {
+          setAllBots(prev => [...prev, newBot]);
+          setBotRegOpen(false);
+        }}
+      />
 
       <OnboardingFlow
         open={onboardingOpen}
@@ -133,6 +176,7 @@ function TabContent({ tab, botData, groups, setGroups }) {
     case 'reminders':  return <HubReminders groups={groups} />;
     case 'tasks':      return <HubTasks groups={groups} />;
     case 'templates':  return <HubTemplates />;
+    case 'knowledge':  return <HubKnowledge />;
     case 'automation': return <HubAutomation />;
     case 'settings':   return <HubSettings botData={botData} groups={groups} setGroups={setGroups} />;
     default:           return <HubOverview botData={botData} groups={groups} />;
@@ -858,6 +902,266 @@ function TemplateModal({ open, template, onClose, onSaved }) {
         <Button onClick={handleSave} variant="contained" size="small" disabled={saving}>
           {saving ? <CircularProgress size={14} sx={{ mr: 0.5 }} /> : null}
           {template ? 'Save changes' : 'Create'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+// ── Knowledge Cards tab ────────────────────────────────────────────────────────
+function HubKnowledge() {
+  const [cards, setCards] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [limits, setLimits] = useState(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editCard, setEditCard] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    Promise.all([hub.listKnowledge(), hub.getLimits()])
+      .then(([cRes, lRes]) => {
+        setCards(cRes.data.cards || []);
+        setLimits(lRes.data);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const planLimit = limits?.limits?.knowledge_cards_per_bot ?? 10;
+  const unlimited = planLimit === -1;
+  const atLimit = !unlimited && cards.length >= planLimit;
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
+    try {
+      await hub.deleteKnowledge(deleteTarget.id);
+      setCards(prev => prev.filter(c => c.id !== deleteTarget.id));
+      setDeleteTarget(null);
+    } catch { setError('Delete failed'); }
+    finally { setDeleteLoading(false); }
+  };
+
+  return (
+    <Box sx={{ maxWidth: 700 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+        <Box>
+          <Typography variant="subtitle1" fontWeight={700}>Knowledge Cards</Typography>
+          <Typography variant="caption" color="text.secondary">
+            Answers your bot can give when @mentioned in groups.
+            {!unlimited && ` ${cards.length}/${planLimit} used`}
+          </Typography>
+        </Box>
+        <Button
+          variant="contained" size="small" startIcon={<Add />}
+          disabled={atLimit}
+          onClick={() => { setEditCard(null); setModalOpen(true); }}
+        >
+          New Card
+        </Button>
+      </Box>
+
+      {atLimit && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Plan limit reached ({planLimit} cards). Upgrade to add more.
+        </Alert>
+      )}
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
+      {loading ? (
+        <Box sx={{ textAlign: 'center', py: 6 }}><CircularProgress /></Box>
+      ) : cards.length === 0 ? (
+        <EmptyState icon="🧠" title="No knowledge cards yet."
+          body="Add cards with answers your bot can use when someone @mentions it in a group."
+          action={<Button variant="contained" size="small" onClick={() => setModalOpen(true)}>+ Add Card</Button>}
+        />
+      ) : (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          {cards.map(card => (
+            <Card key={card.id} variant="outlined">
+              <CardContent sx={{ pb: '12px !important' }}>
+                <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography variant="subtitle2" fontWeight={700} noWrap>{card.title}</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{
+                      mt: 0.5, overflow: 'hidden', display: '-webkit-box',
+                      WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+                    }}>
+                      {card.content}
+                    </Typography>
+                    {card.tags?.length > 0 && (
+                      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 1 }}>
+                        {card.tags.map(tag => (
+                          <Chip key={tag} label={tag} size="small" variant="outlined" sx={{ height: 18, fontSize: '0.65rem' }} />
+                        ))}
+                      </Box>
+                    )}
+                  </Box>
+                  <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
+                    <Chip label={`${card.use_count} uses`} size="small" sx={{ height: 20, fontSize: '0.65rem' }} />
+                    <IconButton size="small" onClick={() => { setEditCard(card); setModalOpen(true); }}>
+                      <Edit sx={{ fontSize: 16 }} />
+                    </IconButton>
+                    <IconButton size="small" color="error" onClick={() => setDeleteTarget(card)}>
+                      <Delete sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  </Box>
+                </Box>
+              </CardContent>
+            </Card>
+          ))}
+        </Box>
+      )}
+
+      <KnowledgeCardModal
+        open={modalOpen}
+        card={editCard}
+        onClose={() => { setModalOpen(false); setEditCard(null); }}
+        onSaved={(saved) => {
+          if (editCard) {
+            setCards(prev => prev.map(c => c.id === saved.id ? saved : c));
+          } else {
+            setCards(prev => [saved, ...prev]);
+          }
+          setModalOpen(false);
+          setEditCard(null);
+        }}
+      />
+
+      {/* Delete confirmation */}
+      <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Delete Knowledge Card?</DialogTitle>
+        <DialogContent>
+          <Typography>Delete <strong>{deleteTarget?.title}</strong>? This cannot be undone.</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteTarget(null)}>Cancel</Button>
+          <Button onClick={handleDelete} color="error" disabled={deleteLoading} variant="contained">
+            {deleteLoading ? <CircularProgress size={16} /> : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+}
+
+function KnowledgeCardModal({ open, card, onClose, onSaved }) {
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
+  const [tagsInput, setTagsInput] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (open) {
+      setTitle(card?.title || '');
+      setContent(card?.content || '');
+      setTagsInput((card?.tags || []).join(', '));
+      setError(null);
+    }
+  }, [open, card]);
+
+  const handleSave = async () => {
+    if (!title.trim()) { setError('Title is required'); return; }
+    if (!content.trim()) { setError('Content is required'); return; }
+    setSaving(true);
+    setError(null);
+    const tags = tagsInput.split(',').map(t => t.trim()).filter(Boolean);
+    try {
+      let res;
+      if (card) {
+        res = await hub.updateKnowledge(card.id, { title, content, tags });
+        onSaved(res.data.card);
+      } else {
+        res = await hub.createKnowledge({ title, content, tags });
+        onSaved(res.data.card);
+      }
+    } catch (e) {
+      const detail = e.response?.data?.error;
+      setError(detail === 'plan_limit' ? 'Plan limit reached. Upgrade to add more cards.' : 'Save failed.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>{card ? 'Edit Knowledge Card' : 'New Knowledge Card'}</DialogTitle>
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '12px !important' }}>
+        {error && <Alert severity="error">{error}</Alert>}
+        <TextField label="Title" value={title} onChange={e => setTitle(e.target.value)}
+          size="small" required inputProps={{ maxLength: 100 }}
+          helperText="e.g. Refund Policy, Pricing, Hours" />
+        <TextField label="Answer / Content" value={content} onChange={e => setContent(e.target.value)}
+          multiline rows={5} size="small" required inputProps={{ maxLength: 2000 }}
+          helperText={`${content.length}/2000`} />
+        <TextField label="Tags (comma separated)" value={tagsInput} onChange={e => setTagsInput(e.target.value)}
+          size="small" helperText="e.g. pricing, support, faq" />
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button onClick={handleSave} variant="contained" disabled={saving}>
+          {saving ? <CircularProgress size={16} /> : (card ? 'Save' : 'Create')}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+// ── Bot Registration Dialog ────────────────────────────────────────────────────
+function BotRegistrationDialog({ open, onClose, onRegistered, plan }) {
+  const [displayName, setDisplayName] = useState('');
+  const [token, setToken] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (open) { setDisplayName(''); setToken(''); setError(null); }
+  }, [open]);
+
+  const handleCreate = async () => {
+    if (!displayName.trim()) { setError('Display name is required'); return; }
+    if (!token.trim()) { setError('Bot token is required'); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await hub.createBot({ display_name: displayName, telegram_bot_token: token });
+      onRegistered(res.data.bot);
+    } catch (e) {
+      const err = e.response?.data?.error;
+      if (err === 'plan_limit') setError('Custom bot limit reached. Upgrade your plan.');
+      else if (err === 'invalid_token') setError('Invalid bot token. Check it in @BotFather.');
+      else if (err === 'already_registered') setError('This bot is already registered.');
+      else setError('Registration failed. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Connect Custom Bot</DialogTitle>
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '12px !important' }}>
+        {plan === 'free' && (
+          <Alert severity="warning">Custom bots require a Pro or Enterprise plan.</Alert>
+        )}
+        {error && <Alert severity="error">{error}</Alert>}
+        <TextField label="Display Name" value={displayName} onChange={e => setDisplayName(e.target.value)}
+          size="small" disabled={plan === 'free'} helperText="How it appears in your Hub" />
+        <TextField label="Bot Token" value={token} onChange={e => setToken(e.target.value)}
+          size="small" disabled={plan === 'free'}
+          helperText="Get this from @BotFather → /mybots → API Token"
+          type="password" />
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button onClick={handleCreate} variant="contained" disabled={saving || plan === 'free'}>
+          {saving ? <CircularProgress size={16} /> : 'Connect Bot'}
         </Button>
       </DialogActions>
     </Dialog>

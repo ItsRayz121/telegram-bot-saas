@@ -1640,11 +1640,231 @@ def _project_dict(pj) -> dict:
     }
 
 
-def _parse_date_str(value):
-    if not value:
-        return None
+# ── Sprint 7: Custom Bot Management ──────────────────────────────────────────
+
+@hub_bp.route("/bots", methods=["POST"])
+@jwt_required()
+def create_custom_bot():
+    """Register a new custom Telegram bot (Pro+ only)."""
+    import requests as _req
+    from ..assistant.hub_crypto import _enc
+    from ..assistant.hub_plan_limits import _limit, _unlimited
+
+    user = _current_user()
+    plan = user.subscription_tier or "free"
+    if plan == "free":
+        return jsonify({"error": "plan_limit", "resource": "custom_bots", "plan": plan}), 402
+
+    data = request.get_json(silent=True) or {}
+    display_name = (data.get("display_name") or "").strip()
+    token = (data.get("telegram_bot_token") or "").strip()
+
+    if not display_name:
+        return jsonify({"error": "display_name required"}), 400
+    if not token:
+        return jsonify({"error": "telegram_bot_token required"}), 400
+
+    max_bots = _limit(plan, "custom_bots")
+    if not _unlimited(plan, "custom_bots"):
+        current_count = HubBotIdentity.query.filter_by(
+            user_id=user.id, bot_type="custom", is_active=True
+        ).count()
+        if current_count >= max_bots:
+            return jsonify({"error": "plan_limit", "resource": "custom_bots",
+                            "current": current_count, "max_allowed": max_bots, "plan": plan}), 402
+
+    # Validate token against Telegram
     try:
-        from datetime import date
-        return date.fromisoformat(str(value)[:10])
-    except (ValueError, TypeError):
-        return None
+        resp = _req.get(f"https://api.telegram.org/bot{token}/getMe", timeout=5)
+        resp.raise_for_status()
+        tg_data = resp.json().get("result", {})
+    except Exception as exc:
+        _log.warning("create_custom_bot: getMe failed: %s", exc)
+        return jsonify({"error": "invalid_token", "detail": "Telegram rejected the bot token"}), 400
+
+    bot_username = tg_data.get("username")
+    bot_tg_id = tg_data.get("id")
+
+    existing = HubBotIdentity.query.filter_by(
+        user_id=user.id, telegram_bot_id=bot_tg_id, is_active=True
+    ).first()
+    if existing:
+        return jsonify({"error": "already_registered", "bot_id": existing.id}), 409
+
+    bot = HubBotIdentity(
+        id=str(uuid.uuid4()),
+        user_id=user.id,
+        bot_type="custom",
+        display_name=display_name,
+        telegram_bot_token=_enc(token),
+        telegram_bot_username=bot_username,
+        telegram_bot_id=bot_tg_id,
+        is_active=True,
+    )
+    db.session.add(bot)
+    db.session.flush()
+
+    settings = HubBotSettings(
+        id=str(uuid.uuid4()),
+        bot_id=bot.id,
+        user_id=user.id,
+    )
+    db.session.add(settings)
+    db.session.commit()
+    _log.info("create_custom_bot: user=%s registered @%s", user.id, bot_username)
+    return jsonify({"bot": _bot_card_data(bot, user.id)}), 201
+
+
+@hub_bp.route("/bots/<bot_id>", methods=["PATCH"])
+@jwt_required()
+def update_custom_bot(bot_id):
+    """Update display_name / personality / language for a custom bot."""
+    user = _current_user()
+    bot = HubBotIdentity.query.filter_by(
+        id=bot_id, user_id=user.id, bot_type="custom"
+    ).first_or_404()
+    data = request.get_json(silent=True) or {}
+
+    if "display_name" in data:
+        bot.display_name = (data["display_name"] or "").strip() or bot.display_name
+
+    settings = HubBotSettings.query.filter_by(bot_id=bot.id).first()
+    if settings:
+        for field in ("ai_personality_note", "response_language",
+                      "extraction_sensitivity", "digest_enabled",
+                      "digest_format", "notification_prefs"):
+            if field in data:
+                setattr(settings, field, data[field])
+        settings.updated_at = datetime.utcnow()
+
+    db.session.commit()
+    return jsonify({"ok": True, "bot": _bot_card_data(bot, user.id)})
+
+
+@hub_bp.route("/bots/<bot_id>", methods=["DELETE"])
+@jwt_required()
+def delete_custom_bot(bot_id):
+    """Soft-delete a custom bot (official bot cannot be deleted)."""
+    user = _current_user()
+    bot = HubBotIdentity.query.filter_by(
+        id=bot_id, user_id=user.id, bot_type="custom"
+    ).first_or_404()
+    bot.is_active = False
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+# ── Sprint 7: Knowledge Cards ─────────────────────────────────────────────────
+
+def _card_dict(c) -> dict:
+    from ..assistant.hub_crypto import _dec
+    return {
+        "id": c.id,
+        "bot_id": c.bot_id,
+        "title": _dec(c.title),
+        "content": _dec(c.content),
+        "tags": c.tags or [],
+        "use_count": c.use_count,
+        "last_used_at": c.last_used_at.isoformat() if c.last_used_at else None,
+        "created_at": c.created_at.isoformat(),
+        "updated_at": c.updated_at.isoformat() if c.updated_at else None,
+    }
+
+
+@hub_bp.route("/knowledge", methods=["GET"])
+@jwt_required()
+def list_knowledge_cards():
+    user = _current_user()
+    bot_id = request.args.get("bot_id")
+    if not bot_id:
+        bot = _get_or_create_official_bot(user.id)
+        bot_id = bot.id
+    else:
+        HubBotIdentity.query.filter_by(id=bot_id, user_id=user.id).first_or_404()
+
+    cards = HubKnowledgeCard.query.filter_by(
+        bot_id=bot_id, user_id=user.id
+    ).order_by(HubKnowledgeCard.use_count.desc(), HubKnowledgeCard.created_at.desc()).all()
+    return jsonify({"cards": [_card_dict(c) for c in cards]})
+
+
+@hub_bp.route("/knowledge", methods=["POST"])
+@jwt_required()
+def create_knowledge_card():
+    from ..assistant.hub_crypto import _enc
+    from ..assistant.hub_plan_limits import check_knowledge_cards, PlanLimitError
+
+    user = _current_user()
+    plan = user.subscription_tier or "free"
+    data = request.get_json(silent=True) or {}
+
+    bot_id = data.get("bot_id")
+    if not bot_id:
+        bot = _get_or_create_official_bot(user.id)
+        bot_id = bot.id
+    else:
+        HubBotIdentity.query.filter_by(id=bot_id, user_id=user.id).first_or_404()
+
+    try:
+        check_knowledge_cards(user.id, bot_id, plan)
+    except PlanLimitError as e:
+        return jsonify(e.to_dict()), 402
+
+    title = (data.get("title") or "").strip()
+    content = (data.get("content") or "").strip()
+    if not title:
+        return jsonify({"error": "title required"}), 400
+    if not content:
+        return jsonify({"error": "content required"}), 400
+
+    card = HubKnowledgeCard(
+        id=str(uuid.uuid4()),
+        bot_id=bot_id,
+        user_id=user.id,
+        title=_enc(title[:100]),
+        content=_enc(content[:2000]),
+        tags=data.get("tags") or [],
+    )
+    db.session.add(card)
+    db.session.commit()
+    return jsonify({"card": _card_dict(card)}), 201
+
+
+@hub_bp.route("/knowledge/<card_id>", methods=["PATCH"])
+@jwt_required()
+def update_knowledge_card(card_id):
+    from ..assistant.hub_crypto import _enc
+    user = _current_user()
+    card = HubKnowledgeCard.query.filter_by(id=card_id, user_id=user.id).first_or_404()
+    data = request.get_json(silent=True) or {}
+
+    if "title" in data and data["title"]:
+        card.title = _enc(data["title"][:100])
+    if "content" in data and data["content"]:
+        card.content = _enc(data["content"][:2000])
+    if "tags" in data:
+        card.tags = data["tags"] or []
+    card.updated_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"card": _card_dict(card)})
+
+
+@hub_bp.route("/knowledge/<card_id>", methods=["DELETE"])
+@jwt_required()
+def delete_knowledge_card(card_id):
+    user = _current_user()
+    card = HubKnowledgeCard.query.filter_by(id=card_id, user_id=user.id).first_or_404()
+    db.session.delete(card)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@hub_bp.route("/knowledge/<card_id>/use", methods=["POST"])
+@jwt_required()
+def use_knowledge_card(card_id):
+    user = _current_user()
+    card = HubKnowledgeCard.query.filter_by(id=card_id, user_id=user.id).first_or_404()
+    card.use_count = (card.use_count or 0) + 1
+    card.last_used_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"ok": True, "use_count": card.use_count})
