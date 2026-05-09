@@ -189,7 +189,7 @@ export default function PaymentSuccess() {
                 If you believe your payment was sent but your plan did not activate,{' '}
                 <Typography
                   component="a"
-                  href="mailto:support@telegizer.com"
+                  href="mailto:fazalelahi5577@gmail.com?subject=Telegizer%20Payment%20Issue"
                   variant="body2"
                   color="primary.main"
                   sx={{ textDecoration: 'none' }}

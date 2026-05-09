@@ -11,10 +11,13 @@ import {
 import TelegizerLogo from './TelegizerLogo';
 import UniversalSearchBar from './UniversalSearchBar';
 
+const SUPPORT_EMAIL = 'fazalelahi5577@gmail.com';
+const SUPPORT_MAILTO = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Telegizer Support Request')}&body=${encodeURIComponent('Hi Telegizer team,\n\nI need help with:\n\n[describe your issue]\n\n---\nAccount email: ')}`;
+
 const SUPPORT_LINKS = [
-  { label: 'Official Channel',  sub: 'Updates & announcements', href: 'https://t.me/telegizer',           icon: Campaign, external: true },
-  { label: 'Community Group',   sub: 'Help from other users',   href: 'https://t.me/telegizer_community', icon: People,   external: true },
-  { label: 'Email Support',     sub: 'Contact the team',        href: 'mailto:fazalelahi5577@gmail.com',  icon: Email,    external: false },
+  { label: 'Official Channel',  sub: 'Updates & announcements',    href: 'https://t.me/telegizer',           icon: Campaign, external: true },
+  { label: 'Community Group',   sub: 'Help from other users',      href: 'https://t.me/telegizer_community', icon: People,   external: true },
+  { label: 'Email Support',     sub: SUPPORT_EMAIL,                href: SUPPORT_MAILTO,                     icon: Email,    external: true, isEmail: true },
 ];
 
 function SupportPopover() {
@@ -41,24 +44,28 @@ function SupportPopover() {
         </Box>
         <Divider />
         <List dense disablePadding>
-          {SUPPORT_LINKS.map(({ label, sub, href, icon: Icon, external }) => (
+          {SUPPORT_LINKS.map(({ label, sub, href, icon: Icon, external, isEmail }) => (
             <ListItemButton
               key={label}
-              component="a"
-              href={href}
-              target={external ? '_blank' : '_self'}
-              rel="noopener noreferrer"
-              onClick={() => setAnchor(null)}
-              sx={{ px: 2, py: 1 }}
+              onClick={() => {
+                setAnchor(null);
+                if (isEmail) {
+                  // Use window.open for mailto — more reliable than anchor href in SPAs
+                  window.open(href, '_blank', 'noopener,noreferrer');
+                } else {
+                  window.open(href, '_blank', 'noopener,noreferrer');
+                }
+              }}
+              sx={{ px: 2, py: 1, cursor: 'pointer' }}
             >
               <ListItemIcon sx={{ minWidth: 34 }}>
-                <Icon fontSize="small" sx={{ color: 'text.secondary' }} />
+                <Icon fontSize="small" sx={{ color: isEmail ? 'primary.main' : 'text.secondary' }} />
               </ListItemIcon>
               <ListItemText
                 primary={label}
                 secondary={sub}
                 primaryTypographyProps={{ fontSize: '0.82rem', fontWeight: 600 }}
-                secondaryTypographyProps={{ fontSize: '0.72rem' }}
+                secondaryTypographyProps={{ fontSize: '0.72rem', color: isEmail ? 'primary.main' : 'text.secondary' }}
               />
               {external && <OpenInNew sx={{ fontSize: 13, color: 'text.disabled', ml: 0.5 }} />}
             </ListItemButton>

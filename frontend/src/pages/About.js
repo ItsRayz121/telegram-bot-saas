@@ -268,7 +268,7 @@ export default function About() {
                   size="small"
                   variant="outlined"
                   startIcon={<Email fontSize="small" />}
-                  href="mailto:support@telegizer.com"
+                  href="mailto:fazalelahi5577@gmail.com?subject=Telegizer%20Support%20Request"
                   sx={{ fontSize: '0.75rem' }}
                 >
                   Email Me

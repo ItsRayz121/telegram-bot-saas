@@ -31,8 +31,8 @@ const CONTACT_CHANNELS = [
     icon: <Email />,
     title: 'General Support',
     desc: 'Account issues, billing questions, feature help',
-    value: 'support@telegizer.com',
-    href: 'mailto:support@telegizer.com',
+    value: 'fazalelahi5577@gmail.com',
+    href: 'mailto:fazalelahi5577@gmail.com?subject=Telegizer%20Support%20Request',
     color: '#2563EB',
     responseTime: '< 24 hours',
   },
@@ -103,7 +103,7 @@ const FAQ = [
   },
   {
     q: 'How do I request a refund?',
-    a: 'Email support@telegizer.com within 14 days of your first purchase with your account email and payment reference. We process refunds within 3 business days.',
+    a: 'Email fazalelahi5577@gmail.com within 14 days of your first purchase with your account email and payment reference. We process refunds within 3 business days.',
   },
   {
     q: 'Do you support the Telegram Mini App?',
@@ -122,7 +122,7 @@ function ContactForm() {
     setSending(true);
     // Opens mailto as a fallback — replace with a real form endpoint if needed
     const body = encodeURIComponent(`From: ${form.name} <${form.email}>\nSubject: ${form.subject}\n\n${form.message}`);
-    window.location.href = `mailto:support@telegizer.com?subject=${encodeURIComponent(form.subject || 'Contact from telegizer.com')}&body=${body}`;
+    window.open(`mailto:fazalelahi5577@gmail.com?subject=${encodeURIComponent(form.subject || 'Contact from telegizer.com')}&body=${body}`, '_blank');
     setTimeout(() => {
       setSending(false);
       setSent(true);
@@ -260,8 +260,8 @@ export default function Contact() {
             <Typography variant="body2" color="text.secondary" mb={2}>
               Fill in the form and we'll open your email client with everything pre-filled.
               You can also email us directly at{' '}
-              <Link href="mailto:support@telegizer.com" color="primary.main" underline="hover">
-                support@telegizer.com
+              <Link href="mailto:fazalelahi5577@gmail.com?subject=Telegizer%20Support%20Request" color="primary.main" underline="hover">
+                fazalelahi5577@gmail.com
               </Link>.
             </Typography>
             <ContactForm />

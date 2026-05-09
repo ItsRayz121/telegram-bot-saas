@@ -471,7 +471,7 @@ export default function Billing() {
                   variant="caption"
                   color="primary.main"
                   sx={{ cursor: 'pointer' }}
-                  onClick={() => window.open('mailto:support@Telegizer.app')}
+                  onClick={() => window.open('mailto:fazalelahi5577@gmail.com?subject=Telegizer%20Support%20Request', '_blank')}
                 >
                   Contact support
                 </Typography>
