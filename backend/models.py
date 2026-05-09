@@ -216,6 +216,10 @@ class PasswordResetToken(db.Model):
         row = PasswordResetToken(
             user_id=user_id,
             token_hash=PasswordResetToken._hash(raw),
+            # Production DB has token NOT NULL (migration pending).
+            # Populate with the raw token so the constraint is satisfied.
+            # find_valid() prefers token_hash; falls back to this for old rows.
+            token=raw,
             expires_at=expires_at,
         )
         return raw, row
