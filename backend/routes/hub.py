@@ -1712,6 +1712,16 @@ def create_custom_bot():
     db.session.add(settings)
     db.session.commit()
     _log.info("create_custom_bot: user=%s registered @%s", user.id, bot_username)
+
+    # Register Telegram webhook (best-effort — don't fail if BASE_URL not set)
+    base_url = Config.BACKEND_URL
+    if base_url:
+        try:
+            from ..assistant.hub_custom_bot_runner import register_webhook
+            register_webhook(bot.id, token, base_url)
+        except Exception as exc:
+            _log.warning("create_custom_bot: webhook registration failed: %s", exc)
+
     return jsonify({"bot": _bot_card_data(bot, user.id)}), 201
 
 
@@ -1745,10 +1755,20 @@ def update_custom_bot(bot_id):
 @jwt_required()
 def delete_custom_bot(bot_id):
     """Soft-delete a custom bot (official bot cannot be deleted)."""
+    from ..assistant.hub_crypto import _dec
     user = _current_user()
     bot = HubBotIdentity.query.filter_by(
         id=bot_id, user_id=user.id, bot_type="custom"
     ).first_or_404()
+
+    # Unregister webhook before soft-deleting
+    if bot.telegram_bot_token:
+        try:
+            from ..assistant.hub_custom_bot_runner import unregister_webhook
+            unregister_webhook(_dec(bot.telegram_bot_token))
+        except Exception as exc:
+            _log.warning("delete_custom_bot: webhook removal failed bot=%s: %s", bot_id, exc)
+
     bot.is_active = False
     db.session.commit()
     return jsonify({"ok": True})
@@ -1868,3 +1888,62 @@ def use_knowledge_card(card_id):
     card.last_used_at = datetime.utcnow()
     db.session.commit()
     return jsonify({"ok": True, "use_count": card.use_count})
+
+
+# ── Sprint 7C: Custom bot webhook receiver ────────────────────────────────────
+
+@hub_bp.route("/webhook/<bot_id>", methods=["POST"])
+def custom_bot_webhook(bot_id):
+    """
+    Receive Telegram updates for a custom bot via webhook.
+    Dispatches @mention messages to hub_reply.handle_mention.
+    No JWT — Telegram calls this directly.
+    """
+    from ..assistant.hub_crypto import _dec
+    from ..assistant.hub_reply import handle_mention
+    from ..app import create_app as _create_app
+
+    # Verify the bot exists and is active
+    bot = HubBotIdentity.query.filter_by(id=bot_id, bot_type="custom", is_active=True).first()
+    if not bot:
+        return jsonify({"ok": False}), 404
+
+    payload = request.get_json(force=True, silent=True) or {}
+    message = payload.get("message") or payload.get("edited_message")
+    if not message:
+        return jsonify({"ok": True}), 200
+
+    chat = message.get("chat", {})
+    chat_type = chat.get("type", "")
+    if chat_type not in ("group", "supergroup"):
+        return jsonify({"ok": True}), 200
+
+    text = message.get("text") or ""
+    bot_username = bot.telegram_bot_username or ""
+
+    # Only handle messages that @mention this bot
+    if f"@{bot_username}" not in text:
+        return jsonify({"ok": True}), 200
+
+    chat_id = chat.get("id")
+    message_id = message.get("message_id")
+    token = _dec(bot.telegram_bot_token) if bot.telegram_bot_token else None
+    if not token:
+        return jsonify({"ok": True}), 200
+
+    try:
+        flask_app = _create_app()
+        handle_mention(
+            bot_token=token,
+            bot_username=bot_username,
+            message_text=text,
+            chat_id=chat_id,
+            message_id=message_id,
+            bot_id=bot_id,
+            user_id=bot.user_id,
+            flask_app=flask_app,
+        )
+    except Exception as exc:
+        _log.warning("custom_bot_webhook: dispatch error bot=%s: %s", bot_id, exc)
+
+    return jsonify({"ok": True}), 200

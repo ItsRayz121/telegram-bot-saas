@@ -2647,6 +2647,38 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         pass
 
+    # ── Assistant Hub: @mention reply engine ──────────────────────────────────
+    msg_text = update.effective_message.text if update.effective_message else None
+    if msg_text and flask_app:
+        try:
+            bot_username = context.bot.username
+            if bot_username and f"@{bot_username}" in msg_text:
+                from .assistant.hub_models import HubBotIdentity, HubConnectedGroup
+                from .assistant.hub_reply import handle_mention_async
+                with flask_app.app_context():
+                    group_rec = HubConnectedGroup.query.filter_by(
+                        telegram_group_id=chat.id,
+                        is_active=True,
+                    ).first()
+                    if group_rec and group_rec.consent_confirmed_at:
+                        bot_rec = HubBotIdentity.query.filter_by(
+                            id=group_rec.bot_id, is_active=True
+                        ).first()
+                        if bot_rec:
+                            token = Config.TELEGRAM_BOT_TOKEN
+                            asyncio.ensure_future(handle_mention_async(
+                                bot_token=token,
+                                bot_username=bot_username,
+                                message_text=msg_text,
+                                chat_id=chat.id,
+                                message_id=update.effective_message.message_id,
+                                bot_id=group_rec.bot_id,
+                                user_id=bot_rec.user_id,
+                                flask_app=flask_app,
+                            ))
+        except Exception as _exc:
+            _log.debug("hub_reply mention handler error: %s", _exc)
+
 
 # ─── New member join handler ──────────────────────────────────────────────────
 
