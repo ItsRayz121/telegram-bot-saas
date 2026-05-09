@@ -1,21 +1,14 @@
-/**
- * /hub — Assistant Hub landing page.
- *
- * Shows the Official Telegizer Assistant card and a Custom Bots section
- * (plan-gated; custom bots are V1.5+).
- *
- * Mirrors the existing Groups page card-grid layout exactly.
- */
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box, Typography, Button, Card, CardContent, Chip, Skeleton,
-  Grid, Divider, Alert,
+  Divider, Alert, Avatar,
 } from '@mui/material';
 import {
-  SmartToy, Add, Settings, GroupAdd, AutoMode, Lock,
+  SmartToy, Add, Settings, GroupAdd, AutoMode, Lock, Psychology,
 } from '@mui/icons-material';
 import hub from '../services/hubApi';
+import { PALETTE } from '../theme';
 
 export default function HubLanding() {
   const navigate = useNavigate();
@@ -34,31 +27,60 @@ export default function HubLanding() {
   const plan = status?.plan || 'free';
 
   return (
-    <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 900, mx: 'auto' }}>
-      {/* Header */}
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="h5" fontWeight={700}>AI Assistant Hub</Typography>
-        <Typography variant="body2" color="text.secondary" mt={0.5}>
-          Quietly observes your groups. Surfaces what matters.
-        </Typography>
+    <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 920, mx: 'auto' }}>
+
+      {/* ── Hero header ── */}
+      <Box
+        sx={{
+          mb: 4, p: { xs: 2.5, sm: 3.5 }, borderRadius: 3, position: 'relative', overflow: 'hidden',
+          background: `linear-gradient(135deg, rgba(157,108,247,0.12) 0%, rgba(61,142,248,0.08) 50%, transparent 100%)`,
+          border: `1px solid rgba(157,108,247,0.2)`,
+          boxShadow: '0 4px 24px rgba(0,0,0,0.35)',
+        }}
+      >
+        {/* Ambient glow orb */}
+        <Box sx={{
+          position: 'absolute', top: -40, right: -40, width: 200, height: 200,
+          borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(157,108,247,0.18) 0%, transparent 70%)',
+          pointerEvents: 'none',
+        }} />
+        <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Avatar
+            sx={{
+              width: 48, height: 48, flexShrink: 0,
+              background: `linear-gradient(135deg, ${PALETTE.purple}, ${PALETTE.blue})`,
+              boxShadow: `0 0 20px ${PALETTE.glowPurple}`,
+            }}
+          >
+            <Psychology fontSize="medium" />
+          </Avatar>
+          <Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.25 }}>
+              <Typography variant="h5" fontWeight={800} letterSpacing="-0.02em">
+                AI Assistant Hub
+              </Typography>
+              <Box className="ai-pulse-dot" />
+            </Box>
+            <Typography variant="body2" color="text.secondary">
+              Quietly observes your groups. Surfaces what matters.
+            </Typography>
+          </Box>
+        </Box>
       </Box>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
-      )}
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-      {/* Official Bot Card */}
+      {/* ── Official Bot Card ── */}
       <Box sx={{ mb: 3 }}>
-        {loading ? (
-          <OfficialBotSkeleton />
-        ) : (
+        {loading ? <OfficialBotSkeleton /> : (
           <OfficialBotCard bot={officialBot} onManage={() => navigate('/hub/official/overview')} />
         )}
       </Box>
 
-      <Divider sx={{ mb: 3 }} />
+      <Divider sx={{ mb: 3, borderColor: PALETTE.border1 }} />
 
-      {/* Custom Bots section — V1.5+ */}
+      {/* ── Custom Bots section ── */}
       <CustomBotsSection plan={plan} />
     </Box>
   );
@@ -67,38 +89,51 @@ export default function HubLanding() {
 
 function OfficialBotCard({ bot, onManage }) {
   const navigate = useNavigate();
-
   if (!bot) return null;
 
   return (
-    <Card variant="outlined" sx={{ borderColor: 'primary.main', borderWidth: 1.5 }}>
+    <Card
+      sx={{
+        borderColor: 'rgba(61,142,248,0.35)',
+        borderWidth: 1.5,
+        background: `linear-gradient(135deg, rgba(61,142,248,0.07) 0%, rgba(15,29,53,0.9) 100%)`,
+        boxShadow: `0 4px 28px rgba(0,0,0,0.4), 0 0 0 1px rgba(61,142,248,0.18)`,
+        transition: 'box-shadow 0.2s ease',
+        '&:hover': { boxShadow: `0 8px 36px rgba(0,0,0,0.5), 0 0 0 1px rgba(61,142,248,0.32)` },
+      }}
+    >
       <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
         <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <Box
+            <Avatar
               sx={{
-                width: 44, height: 44, borderRadius: 2,
-                bgcolor: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                flexShrink: 0,
+                width: 48, height: 48, borderRadius: 2, flexShrink: 0,
+                background: `linear-gradient(135deg, ${PALETTE.blue}, ${PALETTE.cyan})`,
+                boxShadow: `0 0 16px ${PALETTE.glowBlue}`,
               }}
             >
               <SmartToy sx={{ color: '#fff', fontSize: 22 }} />
-            </Box>
+            </Avatar>
             <Box>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                <Typography variant="subtitle1" fontWeight={700}>
+                <Typography variant="subtitle1" fontWeight={700} letterSpacing="-0.01em">
                   {bot.display_name || 'Official Telegizer Assistant'}
                 </Typography>
                 <Chip
                   label="Active"
                   size="small"
-                  sx={{ bgcolor: 'success.main', color: '#fff', height: 18, fontSize: '0.65rem' }}
+                  sx={{
+                    bgcolor: 'rgba(34,197,94,0.15)', color: '#22c55e',
+                    border: '1px solid rgba(34,197,94,0.35)',
+                    height: 18, fontSize: '0.65rem', fontWeight: 600,
+                    boxShadow: '0 0 8px rgba(34,197,94,0.25)',
+                  }}
                 />
                 <Chip
                   label="Shared"
                   size="small"
                   variant="outlined"
-                  sx={{ height: 18, fontSize: '0.65rem', borderColor: 'divider', color: 'text.secondary' }}
+                  sx={{ height: 18, fontSize: '0.65rem', borderColor: PALETTE.border2, color: 'text.secondary' }}
                 />
               </Box>
               <Typography variant="caption" color="text.secondary">
@@ -108,12 +143,25 @@ function OfficialBotCard({ bot, onManage }) {
           </Box>
         </Box>
 
-        <Box sx={{ mt: 2, display: 'flex', gap: 3, flexWrap: 'wrap' }}>
-          <StatItem label="Groups connected" value={bot.group_count ?? 0} />
+        {/* Stats row */}
+        <Box
+          sx={{
+            mt: 2.5, display: 'flex', gap: 0,
+            bgcolor: 'rgba(0,0,0,0.2)', borderRadius: 2,
+            border: `1px solid ${PALETTE.border1}`,
+            overflow: 'hidden',
+          }}
+        >
+          <StatItem label="Groups" value={bot.group_count ?? 0} />
+          <Divider orientation="vertical" flexItem sx={{ borderColor: PALETTE.border1 }} />
           <StatItem label="Pending tasks" value={bot.pending_tasks ?? 0} />
+          <Divider orientation="vertical" flexItem sx={{ borderColor: PALETTE.border1 }} />
           <StatItem label="Meetings today" value={bot.meetings_today ?? 0} />
           {bot.last_summary && (
-            <StatItem label="Last summary" value={formatRelative(bot.last_summary)} />
+            <>
+              <Divider orientation="vertical" flexItem sx={{ borderColor: PALETTE.border1 }} />
+              <StatItem label="Last summary" value={formatRelative(bot.last_summary)} />
+            </>
           )}
         </Box>
 
@@ -124,7 +172,7 @@ function OfficialBotCard({ bot, onManage }) {
             startIcon={<GroupAdd />}
             onClick={() => navigate('/hub/official/settings')}
           >
-            + Add to Group
+            Add to Group
           </Button>
           <Button
             variant="contained"
@@ -147,7 +195,10 @@ function CustomBotsSection({ plan }) {
   return (
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-        <Typography variant="subtitle1" fontWeight={600}>Custom Bots</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography variant="subtitle1" fontWeight={700} letterSpacing="-0.01em">Custom Bots</Typography>
+          <Box className="ai-pulse-dot" sx={{ width: 5, height: 5 }} />
+        </Box>
         {!isFree && (
           <Typography variant="caption" color="text.secondary">
             {plan === 'pro' ? '2 slots' : 'Unlimited'}
@@ -156,29 +207,59 @@ function CustomBotsSection({ plan }) {
       </Box>
 
       {isFree ? (
-        <Card variant="outlined" sx={{ borderStyle: 'dashed', borderColor: 'divider', bgcolor: 'transparent' }}>
-          <CardContent sx={{ textAlign: 'center', py: 4 }}>
-            <Lock sx={{ fontSize: 32, color: 'text.disabled', mb: 1 }} />
-            <Typography variant="body2" fontWeight={600} gutterBottom>
+        <Card
+          sx={{
+            borderStyle: 'dashed', borderColor: PALETTE.border2,
+            background: 'transparent',
+            transition: 'border-color 0.2s, box-shadow 0.2s',
+            '&:hover': { borderColor: `${PALETTE.purple}66`, boxShadow: `0 0 20px rgba(157,108,247,0.1)` },
+          }}
+        >
+          <CardContent sx={{ textAlign: 'center', py: 5 }}>
+            <Box
+              sx={{
+                width: 52, height: 52, borderRadius: 2, mx: 'auto', mb: 1.5,
+                background: 'rgba(157,108,247,0.08)',
+                border: `1px solid rgba(157,108,247,0.2)`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <Lock sx={{ fontSize: 22, color: PALETTE.purple + '99' }} />
+            </Box>
+            <Typography variant="body2" fontWeight={700} gutterBottom letterSpacing="-0.01em">
               Custom Bots — Pro &amp; Enterprise
             </Typography>
-            <Typography variant="caption" color="text.secondary" display="block" mb={2}>
+            <Typography variant="caption" color="text.secondary" display="block" mb={2.5} sx={{ maxWidth: 360, mx: 'auto' }}>
               Connect your own @bot to observe specific groups with a custom identity.
-              Available in V1.5 on Pro and Enterprise plans.
+              Available on Pro and Enterprise plans.
             </Typography>
-            <Button variant="outlined" size="small" href="/billing">
+            <Button variant="contained" size="small" color="secondary" href="/billing">
               Upgrade to Pro
             </Button>
           </CardContent>
         </Card>
       ) : (
-        <Card variant="outlined" sx={{ borderStyle: 'dashed', borderColor: 'divider', bgcolor: 'transparent' }}>
-          <CardContent sx={{ textAlign: 'center', py: 4 }}>
-            <AutoMode sx={{ fontSize: 32, color: 'text.disabled', mb: 1 }} />
-            <Typography variant="body2" fontWeight={600} gutterBottom>
-              Custom Bots — Coming in V1.5
+        <Card
+          sx={{
+            borderStyle: 'dashed', borderColor: PALETTE.border2,
+            background: 'transparent',
+          }}
+        >
+          <CardContent sx={{ textAlign: 'center', py: 5 }}>
+            <Box
+              sx={{
+                width: 52, height: 52, borderRadius: 2, mx: 'auto', mb: 1.5,
+                background: 'rgba(61,142,248,0.08)',
+                border: `1px solid rgba(61,142,248,0.2)`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <AutoMode sx={{ fontSize: 22, color: `${PALETTE.blue}99` }} />
+            </Box>
+            <Typography variant="body2" fontWeight={700} gutterBottom letterSpacing="-0.01em">
+              Custom Bots — Coming Soon
             </Typography>
-            <Typography variant="caption" color="text.secondary" display="block" mb={2}>
+            <Typography variant="caption" color="text.secondary" display="block" mb={2.5}>
               Connect your own bots from the Custom Bots section to Assistant Hub.
             </Typography>
             <Button variant="outlined" size="small" disabled startIcon={<Add />}>
@@ -194,9 +275,13 @@ function CustomBotsSection({ plan }) {
 
 function StatItem({ label, value }) {
   return (
-    <Box>
-      <Typography variant="h6" fontWeight={700} lineHeight={1}>{value}</Typography>
-      <Typography variant="caption" color="text.secondary">{label}</Typography>
+    <Box sx={{ flex: 1, px: 2, py: 1.5, textAlign: 'center' }}>
+      <Typography variant="h6" fontWeight={800} lineHeight={1} letterSpacing="-0.02em">
+        {value}
+      </Typography>
+      <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.68rem' }}>
+        {label}
+      </Typography>
     </Box>
   );
 }
@@ -204,23 +289,23 @@ function StatItem({ label, value }) {
 
 function OfficialBotSkeleton() {
   return (
-    <Card variant="outlined">
+    <Card>
       <CardContent sx={{ p: 3 }}>
         <Box sx={{ display: 'flex', gap: 1.5, mb: 2 }}>
-          <Skeleton variant="rounded" width={44} height={44} />
+          <Skeleton variant="rounded" width={48} height={48} sx={{ borderRadius: 2, bgcolor: 'rgba(255,255,255,0.06)' }} />
           <Box sx={{ flex: 1 }}>
-            <Skeleton width="50%" height={22} />
-            <Skeleton width="35%" height={16} sx={{ mt: 0.5 }} />
+            <Skeleton width="50%" height={22} sx={{ bgcolor: 'rgba(255,255,255,0.06)' }} />
+            <Skeleton width="35%" height={16} sx={{ mt: 0.5, bgcolor: 'rgba(255,255,255,0.04)' }} />
           </Box>
         </Box>
         <Box sx={{ display: 'flex', gap: 3 }}>
-          <Skeleton width={80} height={40} />
-          <Skeleton width={80} height={40} />
-          <Skeleton width={80} height={40} />
+          <Skeleton width={80} height={40} sx={{ bgcolor: 'rgba(255,255,255,0.05)' }} />
+          <Skeleton width={80} height={40} sx={{ bgcolor: 'rgba(255,255,255,0.05)' }} />
+          <Skeleton width={80} height={40} sx={{ bgcolor: 'rgba(255,255,255,0.05)' }} />
         </Box>
         <Box sx={{ display: 'flex', gap: 1, mt: 2.5 }}>
-          <Skeleton variant="rounded" width={130} height={32} />
-          <Skeleton variant="rounded" width={150} height={32} />
+          <Skeleton variant="rounded" width={130} height={32} sx={{ bgcolor: 'rgba(255,255,255,0.05)' }} />
+          <Skeleton variant="rounded" width={150} height={32} sx={{ bgcolor: 'rgba(255,255,255,0.05)' }} />
         </Box>
       </CardContent>
     </Card>

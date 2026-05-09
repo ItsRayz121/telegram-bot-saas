@@ -6,52 +6,73 @@ import {
   Menu, MenuItem, IconButton, Collapse,
 } from '@mui/material';
 import {
-  Home, Groups, Campaign, AccessTime, Send, AutoMode,
-  Explore, BarChart, SmartToy, CreditCard, Settings, Add, Handshake,
-  AccountCircle, Logout, AdminPanelSettings, ExpandMore, ExpandLess,
-  Psychology, Reply, EditNote, Summarize, Tune, CheckBox, LibraryBooks,
-  CardGiftcard, ChevronLeft, ChevronRight,
+  Home, Groups, Campaign, AutoMode, Explore, BarChart,
+  CreditCard, Settings, Add, AccountCircle, Logout,
+  AdminPanelSettings, ExpandMore, ExpandLess,
+  Psychology, ChevronLeft, ChevronRight,
 } from '@mui/icons-material';
 import TelegizerLogo from './TelegizerLogo';
 import { telegramGroups as tgApi, auth as authApi, channels as chApi } from '../services/api';
 import { APP_VERSION, BUILD_TIME } from '../version';
+import { PALETTE } from '../theme';
 
 const SIDEBAR_WIDTH = 240;
 const SIDEBAR_COLLAPSED_WIDTH = 56;
 
-// ── Status dot ────────────────────────────────────────────────────────────────
-
+// ── Status dot ─────────────────────────────────────────────────────────────────
 function StatusDot({ status, permissions }) {
   const hasPerm = permissions && Object.values(permissions).some(Boolean);
   const color =
-    status === 'active' && hasPerm ? '#22c55e'
+    status === 'active' && hasPerm  ? '#22c55e'
     : status === 'active' && !hasPerm ? '#f59e0b'
     : '#ef4444';
   return (
-    <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: color, flexShrink: 0, ml: 0.5 }} />
+    <Box
+      sx={{
+        width: 7, height: 7, borderRadius: '50%', bgcolor: color,
+        flexShrink: 0, ml: 0.5,
+        boxShadow: color === '#22c55e'
+          ? '0 0 6px rgba(34,197,94,0.6)'
+          : color === '#f59e0b'
+          ? '0 0 6px rgba(245,158,11,0.5)'
+          : '0 0 6px rgba(239,68,68,0.5)',
+        animation: 'breathe 2.8s ease-in-out infinite',
+      }}
+    />
   );
 }
 
-// ── Section label ─────────────────────────────────────────────────────────────
-
+// ── Section label ──────────────────────────────────────────────────────────────
 function SectionLabel({ label }) {
   return (
     <Typography
       variant="caption"
-      fontWeight={700}
-      color="text.disabled"
-      sx={{ px: 2, pt: 1.5, pb: 0.25, display: 'block', textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.65rem' }}
+      sx={{
+        px: 2, pt: 1.5, pb: 0.25, display: 'block',
+        textTransform: 'uppercase', letterSpacing: '0.1em',
+        fontSize: '0.6rem', fontWeight: 700,
+        color: PALETTE.text3,
+      }}
     >
       {label}
     </Typography>
   );
 }
 
-// ── Single nav item ───────────────────────────────────────────────────────────
-
-function NavItem({ label, path, icon: Icon, badge, badgeCount, active, onClick, indent, dimmed, collapsed }) {
+// ── Single nav item ────────────────────────────────────────────────────────────
+function NavItem({ label, path, icon: Icon, badge, badgeCount, active, onClick, indent, dimmed, collapsed, aiAccent }) {
   const navigate = useNavigate();
   const handleClick = onClick || (() => navigate(path));
+
+  const activeStyles = active ? {
+    bgcolor: aiAccent
+      ? 'rgba(157,108,247,0.16)'
+      : 'rgba(61,142,248,0.14)',
+    color: aiAccent ? PALETTE.purpleLt : PALETTE.blueLt,
+    boxShadow: aiAccent
+      ? `inset 3px 0 0 ${PALETTE.purple}, 0 0 12px rgba(157,108,247,0.12)`
+      : `inset 3px 0 0 ${PALETTE.blue}, 0 0 12px rgba(61,142,248,0.12)`,
+  } : {};
 
   if (collapsed) {
     return (
@@ -60,11 +81,20 @@ function NavItem({ label, path, icon: Icon, badge, badgeCount, active, onClick, 
           <ListItemButton
             onClick={handleClick}
             sx={{
-              justifyContent: 'center', px: 0, py: 0.6, mx: 0.5, mb: 0.15,
-              borderRadius: 1.5, minHeight: 34,
-              bgcolor: active ? 'primary.main' : 'transparent',
-              color: active ? '#fff' : 'text.secondary',
-              '&:hover': { bgcolor: active ? 'primary.dark' : 'rgba(255,255,255,0.05)', color: active ? '#fff' : 'text.primary' },
+              justifyContent: 'center', px: 0, py: 0.65, mx: 0.5, mb: 0.2,
+              borderRadius: 1.5, minHeight: 36,
+              ...activeStyles,
+              bgcolor: active
+                ? (aiAccent ? 'rgba(157,108,247,0.16)' : 'rgba(61,142,248,0.14)')
+                : 'transparent',
+              color: active ? (aiAccent ? PALETTE.purpleLt : PALETTE.blueLt) : 'text.secondary',
+              transition: 'all 0.18s ease',
+              '&:hover': {
+                bgcolor: active
+                  ? (aiAccent ? 'rgba(157,108,247,0.22)' : 'rgba(61,142,248,0.2)')
+                  : 'rgba(255,255,255,0.05)',
+                color: active ? undefined : 'text.primary',
+              },
             }}
           >
             {Icon && <Icon sx={{ fontSize: 18 }} />}
@@ -81,18 +111,27 @@ function NavItem({ label, path, icon: Icon, badge, badgeCount, active, onClick, 
         sx={{
           pl: indent ? 3.5 : 1.5,
           pr: 1.5,
-          py: 0.6,
+          py: 0.65,
           borderRadius: 1.5,
           mx: 0.75,
-          mb: 0.15,
-          minHeight: 34,
-          bgcolor: active ? 'primary.main' : 'transparent',
-          color: active ? '#fff' : dimmed ? 'text.disabled' : 'text.secondary',
+          mb: 0.2,
+          minHeight: 36,
+          position: 'relative',
+          ...activeStyles,
+          bgcolor: active
+            ? (aiAccent ? 'rgba(157,108,247,0.14)' : 'rgba(61,142,248,0.12)')
+            : 'transparent',
+          color: active
+            ? (aiAccent ? PALETTE.purpleLt : PALETTE.blueLt)
+            : dimmed ? 'text.disabled' : 'text.secondary',
+          transition: 'all 0.18s ease',
           '&:hover': {
-            bgcolor: active ? 'primary.dark' : 'rgba(255,255,255,0.05)',
-            color: active ? '#fff' : 'text.primary',
+            bgcolor: active
+              ? (aiAccent ? 'rgba(157,108,247,0.2)' : 'rgba(61,142,248,0.18)')
+              : 'rgba(255,255,255,0.05)',
+            color: active ? undefined : 'text.primary',
+            transform: 'translateX(1px)',
           },
-          transition: 'background 0.12s, color 0.12s',
         }}
       >
         {Icon && (
@@ -113,14 +152,24 @@ function NavItem({ label, path, icon: Icon, badge, badgeCount, active, onClick, 
           <Chip
             label={badgeCount}
             size="small"
-            sx={{ height: 17, fontSize: '0.62rem', bgcolor: active ? 'rgba(255,255,255,0.25)' : 'error.main', color: '#fff', ml: 0.5 }}
+            sx={{
+              height: 17, fontSize: '0.62rem', ml: 0.5,
+              bgcolor: active ? 'rgba(255,255,255,0.18)' : 'error.main',
+              color: '#fff',
+            }}
           />
         )}
         {badge && !badgeCount && (
           <Chip
             label={badge}
             size="small"
-            sx={{ height: 17, fontSize: '0.62rem', bgcolor: active ? 'rgba(255,255,255,0.25)' : 'primary.main', color: '#fff', ml: 0.5 }}
+            sx={{
+              height: 17, fontSize: '0.62rem', ml: 0.5,
+              bgcolor: active
+                ? 'rgba(255,255,255,0.18)'
+                : aiAccent ? PALETTE.purple : PALETTE.blue,
+              color: '#fff',
+            }}
           />
         )}
       </ListItemButton>
@@ -128,38 +177,30 @@ function NavItem({ label, path, icon: Icon, badge, badgeCount, active, onClick, 
   );
 }
 
-// ── Expandable section header (text navigates, chevron toggles) ───────────────
-
+// ── Expandable section header ──────────────────────────────────────────────────
 function ExpandableHeader({ label, icon: Icon, path, active, open, onToggle, onNavigate }) {
   return (
     <ListItem disablePadding sx={{ display: 'block' }}>
       <Box
         sx={{
-          display: 'flex',
-          alignItems: 'center',
-          mx: 0.75,
-          mb: 0.15,
-          borderRadius: 1.5,
-          bgcolor: active ? 'rgba(37,99,235,0.12)' : 'transparent',
-          '&:hover': { bgcolor: active ? 'rgba(37,99,235,0.18)' : 'rgba(255,255,255,0.04)' },
-          transition: 'background 0.12s',
+          display: 'flex', alignItems: 'center',
+          mx: 0.75, mb: 0.2, borderRadius: 1.5,
+          bgcolor: active ? 'rgba(61,142,248,0.1)' : 'transparent',
+          boxShadow: active ? `inset 3px 0 0 ${PALETTE.blue}` : 'none',
+          transition: 'all 0.18s ease',
+          '&:hover': { bgcolor: active ? 'rgba(61,142,248,0.16)' : 'rgba(255,255,255,0.04)' },
         }}
       >
-        {/* Main clickable area — navigates to section page */}
         <ListItemButton
           onClick={onNavigate}
           sx={{
-            flex: 1,
-            pl: 1.5,
-            pr: 0.5,
-            py: 0.6,
-            minHeight: 34,
+            flex: 1, pl: 1.5, pr: 0.5, py: 0.65, minHeight: 36,
             borderRadius: 1.5,
             '&:hover': { bgcolor: 'transparent' },
           }}
         >
           {Icon && (
-            <ListItemIcon sx={{ minWidth: 30, color: active ? 'primary.light' : 'text.secondary' }}>
+            <ListItemIcon sx={{ minWidth: 30, color: active ? PALETTE.blueLt : 'text.secondary' }}>
               <Icon sx={{ fontSize: 17 }} />
             </ListItemIcon>
           )}
@@ -169,35 +210,50 @@ function ExpandableHeader({ label, icon: Icon, path, active, open, onToggle, onN
               fontSize: '0.82rem',
               fontWeight: active ? 600 : 400,
               noWrap: true,
-              color: active ? 'primary.light' : 'text.secondary',
+              color: active ? PALETTE.blueLt : 'text.secondary',
             }}
           />
         </ListItemButton>
-
-        {/* Chevron — only toggles, does not navigate */}
         <IconButton
           size="small"
           onClick={(e) => { e.stopPropagation(); onToggle(); }}
           sx={{
-            mr: 0.5,
-            width: 22,
-            height: 22,
+            mr: 0.5, width: 22, height: 22,
             color: 'text.disabled',
+            transition: 'transform 0.18s ease, color 0.15s',
+            transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
             '&:hover': { color: 'text.secondary', bgcolor: 'rgba(255,255,255,0.06)' },
           }}
         >
-          {open ? <ExpandLess sx={{ fontSize: 15 }} /> : <ExpandMore sx={{ fontSize: 15 }} />}
+          <ExpandMore sx={{ fontSize: 15 }} />
         </IconButton>
       </Box>
     </ListItem>
   );
 }
 
-// ── Sidebar content ───────────────────────────────────────────────────────────
+// ── AI Hub label with pulse dot ────────────────────────────────────────────────
+function HubSectionLabel() {
+  return (
+    <Box sx={{ px: 2, pt: 1.5, pb: 0.25, display: 'flex', alignItems: 'center', gap: 0.75 }}>
+      <Typography
+        variant="caption"
+        sx={{
+          textTransform: 'uppercase', letterSpacing: '0.1em',
+          fontSize: '0.6rem', fontWeight: 700, color: PALETTE.text3,
+        }}
+      >
+        Assistant Hub
+      </Typography>
+      <Box className="ai-pulse-dot" sx={{ width: 5, height: 5 }} />
+    </Box>
+  );
+}
 
+// ── Sidebar content ────────────────────────────────────────────────────────────
 export default function Sidebar({ onClose, collapsed, onToggle }) {
   const navigate = useNavigate();
-  const { pathname, search } = useLocation();
+  const { pathname } = useLocation();
 
   const [groups, setGroups] = useState([]);
   const [groupsLoading, setGroupsLoading] = useState(true);
@@ -213,44 +269,20 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
     [pathname]
   );
 
-  // Derive initial open states from current URL so deep-linking opens the right section
-  const groupActive = isActive('/groups');
+  const groupActive   = isActive('/groups');
   const channelActive = isActive('/channels');
-
-  const [groupsOpen, setGroupsOpen] = useState(groupActive);
+  const [groupsOpen, setGroupsOpen]     = useState(groupActive);
   const [channelsOpen, setChannelsOpen] = useState(channelActive);
 
   const assistantActive = isActive('/hub') || isActive('/workspace');
-
   const automationActive = isActive('/automation') || isActive('/workspace/forwarding') || isActive('/workspace/automations') || isActive('/workflow-builder');
 
-  const analyticsActive = isActive('/analytics');
-  const [analyticsOpen, setAnalyticsOpen] = useState(() => {
-    const stored = localStorage.getItem('sidebar_analytics_open');
-    return stored === null ? isActive('/analytics') : stored === '1';
-  });
-
-  const toggleAnalytics = () => setAnalyticsOpen(o => {
-    localStorage.setItem('sidebar_analytics_open', !o ? '1' : '0');
-    return !o;
-  });
-
-  // Keep sections open when navigating within them
-  useEffect(() => {
-    if (isActive('/groups')) setGroupsOpen(true);
-  }, [pathname, isActive]);
-
-  useEffect(() => {
-    if (isActive('/channels')) setChannelsOpen(true);
-  }, [pathname, isActive]);
-
-  // ── Load user and groups ───────────────────────────────────────────────────
+  useEffect(() => { if (isActive('/groups'))   setGroupsOpen(true);   }, [pathname, isActive]);
+  useEffect(() => { if (isActive('/channels')) setChannelsOpen(true); }, [pathname, isActive]);
 
   useEffect(() => {
     const stored = localStorage.getItem('user');
-    if (stored) {
-      try { setUser(JSON.parse(stored)); } catch {}
-    }
+    if (stored) { try { setUser(JSON.parse(stored)); } catch {} }
     authApi.getMe().then(r => {
       setUser(r.data.user);
       localStorage.setItem('user', JSON.stringify(r.data.user));
@@ -258,26 +290,17 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
   }, []);
 
   useEffect(() => {
-    tgApi.list().then(r => {
-      setGroups(r.data.groups || []);
-    }).catch(() => {}).finally(() => setGroupsLoading(false));
+    tgApi.list().then(r => setGroups(r.data.groups || [])).catch(() => {}).finally(() => setGroupsLoading(false));
   }, []);
 
   useEffect(() => {
-    chApi.list().then(r => {
-      setChannels(r.data.channels || []);
-    }).catch(() => {}).finally(() => setChannelsLoading(false));
+    chApi.list().then(r => setChannels(r.data.channels || [])).catch(() => {}).finally(() => setChannelsLoading(false));
   }, []);
 
-  // ── Derived state ─────────────────────────────────────────────────────────
-
-  const plan = user?.subscription_tier || 'free';
+  const plan      = user?.subscription_tier || 'free';
   const planLabel = plan === 'enterprise' ? 'Enterprise' : plan === 'pro' ? 'Pro' : 'Free';
-  const planColor = plan === 'enterprise' ? 'secondary' : plan === 'pro' ? 'primary' : 'default';
-
-  const isAdmin = user?.is_admin;
-  const visibleGroups = showAllGroups ? groups : groups.slice(0, 8);
-  const hasMoreGroups = groups.length > 8;
+  const planColor = plan === 'enterprise' ? '#9d6cf7' : plan === 'pro' ? '#3d8ef8' : PALETTE.text3;
+  const isAdmin   = user?.is_admin;
   const hasChannels = channels.length > 0;
 
   const handleLogout = () => {
@@ -292,32 +315,35 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
     navigate(path);
   };
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ── Sidebar shell styles ───────────────────────────────────────────────────
+  const shellSx = {
+    width: '100%', height: '100vh', display: 'flex', flexDirection: 'column',
+    bgcolor: PALETTE.bg1,
+    borderRight: `1px solid ${PALETTE.border1}`,
+    overflowY: 'auto', overflowX: 'hidden', flexShrink: 0,
+    '&::-webkit-scrollbar': { width: 3 },
+    '&::-webkit-scrollbar-thumb': { bgcolor: 'rgba(61,142,248,0.15)', borderRadius: 2 },
+  };
 
-  // ── Collapsed (icon-only) view ────────────────────────────────────────────
+  // ── Collapsed view ────────────────────────────────────────────────────────
   if (collapsed) {
     const COLLAPSED_ITEMS = [
-      { label: 'Dashboard', icon: Home, path: '/dashboard', exact: true },
-      { label: 'Groups',    icon: Groups, path: '/groups' },
-      { label: 'Channels',  icon: Campaign, path: '/channels' },
-      { label: 'Hub',       icon: Psychology, path: '/hub' },
-      { label: 'Automation',icon: AutoMode, path: '/workspace/automations' },
+      { label: 'Dashboard', icon: Home,       path: '/dashboard', exact: true },
+      { label: 'Groups',    icon: Groups,     path: '/groups' },
+      { label: 'Channels',  icon: Campaign,   path: '/channels' },
+      { label: 'Hub',       icon: Psychology, path: '/hub', ai: true },
+      { label: 'Automation',icon: AutoMode,   path: '/automation' },
       { label: 'Billing',   icon: CreditCard, path: '/billing' },
-      { label: 'Settings',  icon: Settings, path: '/settings' },
+      { label: 'Settings',  icon: Settings,   path: '/settings' },
     ];
     return (
-      <Box sx={{
-        width: '100%', height: '100vh', display: 'flex', flexDirection: 'column',
-        bgcolor: 'background.paper', borderRight: '1px solid', borderColor: 'divider',
-        overflowY: 'auto', overflowX: 'hidden', alignItems: 'center', pt: 1,
-        '&::-webkit-scrollbar': { width: 0 },
-      }}>
+      <Box sx={{ ...shellSx, alignItems: 'center', pt: 1 }}>
         <Tooltip title="Expand sidebar" placement="right">
-          <IconButton size="small" onClick={onToggle} sx={{ mb: 1 }}>
+          <IconButton size="small" onClick={onToggle} sx={{ mb: 1, color: 'text.disabled' }}>
             <ChevronRight fontSize="small" />
           </IconButton>
         </Tooltip>
-        <Divider sx={{ width: '100%', mb: 0.5 }} />
+        <Divider sx={{ width: '100%', mb: 0.5, borderColor: PALETTE.border1 }} />
         <List dense disablePadding sx={{ width: '100%' }}>
           {COLLAPSED_ITEMS.map(item => (
             <NavItem
@@ -327,6 +353,7 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
               icon={item.icon}
               active={isActive(item.path, item.exact)}
               onClick={() => nav(item.path)}
+              aiAccent={item.ai}
               collapsed
             />
           ))}
@@ -335,64 +362,86 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
     );
   }
 
+  // ── Full view ─────────────────────────────────────────────────────────────
   return (
-    <Box
-      sx={{
-        width: '100%',
-        height: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        bgcolor: 'background.paper',
-        borderRight: '1px solid',
-        borderColor: 'divider',
-        overflowY: 'auto',
-        overflowX: 'hidden',
-        flexShrink: 0,
-        '&::-webkit-scrollbar': { width: 4 },
-        '&::-webkit-scrollbar-thumb': { bgcolor: 'divider', borderRadius: 2 },
-      }}
-    >
+    <Box sx={shellSx}>
+
       {/* ── Logo + collapse toggle ── */}
       <Box sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, cursor: 'pointer' }} onClick={() => nav('/dashboard')}>
+        <Box
+          sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, cursor: 'pointer' }}
+          onClick={() => nav('/dashboard')}
+        >
           <TelegizerLogo size="sm" variant="icon" />
-          <Typography fontWeight={700} fontSize="0.95rem" color="text.primary">Telegizer</Typography>
+          <Typography fontWeight={800} fontSize="0.95rem" letterSpacing="-0.02em" color="text.primary">
+            Telegizer
+          </Typography>
         </Box>
         {onToggle && (
           <Tooltip title="Collapse sidebar" placement="right">
-            <IconButton size="small" onClick={onToggle} sx={{ color: 'text.disabled' }}>
+            <IconButton
+              size="small"
+              onClick={onToggle}
+              sx={{
+                color: 'text.disabled', borderRadius: 1.5,
+                '&:hover': { color: 'text.secondary', bgcolor: 'rgba(255,255,255,0.06)' },
+              }}
+            >
               <ChevronLeft sx={{ fontSize: 16 }} />
             </IconButton>
           </Tooltip>
         )}
       </Box>
 
-      <Divider />
+      <Divider sx={{ borderColor: PALETTE.border1 }} />
 
       {/* ── User card ── */}
       <Box
-        sx={{ px: 1.5, py: 1, display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer' }}
+        sx={{
+          px: 1.5, py: 1, display: 'flex', alignItems: 'center', gap: 1,
+          cursor: 'pointer', borderRadius: 2, mx: 0.5,
+          transition: 'background 0.15s ease',
+          '&:hover': { bgcolor: 'rgba(255,255,255,0.04)' },
+        }}
         onClick={e => setAnchorEl(e.currentTarget)}
       >
-        <Avatar sx={{ width: 28, height: 28, bgcolor: 'primary.main', fontSize: '0.75rem' }}>
+        <Avatar
+          sx={{
+            width: 30, height: 30, fontSize: '0.78rem', fontWeight: 700,
+            background: `linear-gradient(135deg, ${PALETTE.blue}, ${PALETTE.purple})`,
+            boxShadow: `0 0 10px ${PALETTE.glowBlue}`,
+          }}
+        >
           {user?.full_name?.[0]?.toUpperCase() || 'U'}
         </Avatar>
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography fontSize="0.78rem" fontWeight={600} noWrap>{user?.full_name || 'Loading...'}</Typography>
-          <Typography fontSize="0.65rem" color="text.disabled" noWrap>{user?.email || ''}</Typography>
+          <Typography fontSize="0.78rem" fontWeight={600} noWrap letterSpacing="-0.01em">
+            {user?.full_name || 'Loading...'}
+          </Typography>
+          <Typography fontSize="0.65rem" color="text.disabled" noWrap>
+            {user?.email || ''}
+          </Typography>
         </Box>
         <Chip
           label={planLabel}
           size="small"
-          color={planColor}
-          sx={{ height: 16, fontSize: '0.6rem', flexShrink: 0 }}
+          sx={{
+            height: 17, fontSize: '0.6rem', fontWeight: 600, flexShrink: 0,
+            bgcolor: `${planColor}22`,
+            color: planColor,
+            border: `1px solid ${planColor}44`,
+          }}
         />
-        <ExpandMore sx={{ fontSize: 14, color: 'text.disabled', flexShrink: 0 }} />
+        <ExpandMore sx={{ fontSize: 14, color: 'text.disabled', flexShrink: 0, transition: 'transform 0.15s', ...(Boolean(anchorEl) && { transform: 'rotate(180deg)' }) }} />
       </Box>
 
       {/* ── User menu ── */}
-      <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}
-        PaperProps={{ sx: { minWidth: 160 } }}>
+      <Menu
+        anchorEl={anchorEl}
+        open={Boolean(anchorEl)}
+        onClose={() => setAnchorEl(null)}
+        PaperProps={{ sx: { minWidth: 180 } }}
+      >
         <MenuItem onClick={() => { setAnchorEl(null); nav('/settings'); }} dense>
           <ListItemIcon><AccountCircle fontSize="small" /></ListItemIcon>
           Account Settings
@@ -414,43 +463,35 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
         </MenuItem>
       </Menu>
 
-      <Divider />
+      <Divider sx={{ borderColor: PALETTE.border1 }} />
 
       {/* ── Nav list ── */}
       <List dense disablePadding sx={{ flex: 1, py: 0.5 }}>
 
-        {/* Dashboard */}
         <NavItem label="Dashboard" path="/dashboard" icon={Home} active={isActive('/dashboard', true)} onClick={() => nav('/dashboard')} />
 
-        {/* ── COMMUNITIES ── */}
+        {/* Communities */}
         <SectionLabel label="Communities" />
+        <NavItem label="Groups" path="/groups" icon={Groups} active={groupActive} onClick={() => nav('/groups')} />
 
-        {/* Groups — flat link, opens My Groups page */}
-        <NavItem label="Groups" path="/groups" icon={Groups} active={groupActive} />
-
-        {/* Channels — expandable if channels exist, flat with add-icon if not */}
         {hasChannels ? (
           <>
             <ExpandableHeader
-              label="Channels"
-              icon={Campaign}
-              path="/channels"
-              active={channelActive}
-              open={channelsOpen}
+              label="Channels" icon={Campaign} path="/channels"
+              active={channelActive} open={channelsOpen}
               onToggle={() => setChannelsOpen(o => !o)}
               onNavigate={() => nav('/channels')}
             />
-
-            <Collapse in={channelsOpen} timeout={160} unmountOnExit>
+            <Collapse in={channelsOpen} timeout={180} unmountOnExit>
               {channelsLoading ? (
                 [1].map(i => (
                   <ListItem key={i} sx={{ pl: 4, py: 0.3 }}>
-                    <Skeleton width={140} height={14} />
+                    <Skeleton width={140} height={14} sx={{ bgcolor: 'rgba(255,255,255,0.06)' }} />
                   </ListItem>
                 ))
               ) : (
                 channels.map(channel => {
-                  const cPath = `/channels/${channel.id}`;
+                  const cPath   = `/channels/${channel.id}`;
                   const cActive = isActive(cPath);
                   return (
                     <ListItem key={channel.id} disablePadding>
@@ -458,17 +499,16 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
                         onClick={() => nav(cPath)}
                         sx={{
                           pl: 3.5, pr: 1.5, py: 0.4, mx: 0.75, mb: 0.1, borderRadius: 1.5,
-                          bgcolor: cActive ? 'rgba(37,99,235,0.15)' : 'transparent',
+                          bgcolor: cActive ? 'rgba(61,142,248,0.12)' : 'transparent',
+                          transition: 'all 0.15s ease',
                           '&:hover': { bgcolor: 'rgba(255,255,255,0.05)' },
                         }}
                       >
                         <ListItemText
                           primary={channel.title || channel.name}
                           primaryTypographyProps={{
-                            fontSize: '0.78rem',
-                            fontWeight: cActive ? 600 : 400,
-                            noWrap: true,
-                            color: cActive ? 'primary.light' : 'text.secondary',
+                            fontSize: '0.78rem', fontWeight: cActive ? 600 : 400,
+                            noWrap: true, color: cActive ? PALETTE.blueLt : 'text.secondary',
                           }}
                         />
                       </ListItemButton>
@@ -476,8 +516,6 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
                   );
                 })
               )}
-
-              {/* + Add Channel */}
               <ListItem disablePadding>
                 <ListItemButton
                   onClick={() => nav('/channels')}
@@ -486,25 +524,22 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
                   <ListItemIcon sx={{ minWidth: 22 }}>
                     <Add sx={{ fontSize: 14, color: 'text.disabled' }} />
                   </ListItemIcon>
-                  <ListItemText
-                    primary="Add Channel"
-                    primaryTypographyProps={{ fontSize: '0.75rem', color: 'text.disabled' }}
-                  />
+                  <ListItemText primary="Add Channel" primaryTypographyProps={{ fontSize: '0.75rem', color: 'text.disabled' }} />
                 </ListItemButton>
               </ListItem>
             </Collapse>
           </>
         ) : (
-          // No channels yet — flat item with add icon on the right
           <ListItem disablePadding sx={{ display: 'block' }}>
             <ListItemButton
               onClick={() => nav('/channels')}
               sx={{
-                pl: 1.5, pr: 0.5, py: 0.6, mx: 0.75, mb: 0.15, borderRadius: 1.5, minHeight: 34,
-                bgcolor: channelActive ? 'rgba(37,99,235,0.12)' : 'transparent',
-                color: channelActive ? 'primary.light' : 'text.secondary',
+                pl: 1.5, pr: 0.5, py: 0.65, mx: 0.75, mb: 0.2, borderRadius: 1.5, minHeight: 36,
+                bgcolor: channelActive ? 'rgba(61,142,248,0.12)' : 'transparent',
+                boxShadow: channelActive ? `inset 3px 0 0 ${PALETTE.blue}` : 'none',
+                color: channelActive ? PALETTE.blueLt : 'text.secondary',
+                transition: 'all 0.18s ease',
                 '&:hover': { bgcolor: 'rgba(255,255,255,0.05)', color: 'text.primary' },
-                transition: 'background 0.12s, color 0.12s',
               }}
             >
               <ListItemIcon sx={{ minWidth: 30, color: 'inherit' }}>
@@ -525,17 +560,15 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
           </ListItem>
         )}
 
-        {/* ── ASSISTANT HUB ── */}
-        <SectionLabel label="Assistant Hub" />
-        <NavItem label="Hub" icon={Psychology} path="/hub" active={assistantActive} onClick={() => nav('/hub')} />
+        {/* Assistant Hub */}
+        <HubSectionLabel />
+        <NavItem label="Hub" icon={Psychology} path="/hub" active={assistantActive} aiAccent onClick={() => nav('/hub')} />
 
-        {/* ── AUTOMATION ── */}
+        {/* Automation */}
         <SectionLabel label="Automation" />
         <NavItem label="Automation" icon={AutoMode} path="/automation" active={automationActive} onClick={() => nav('/automation')} />
 
-        {/* Analytics hidden from sidebar — accessible via group/channel pages */}
-
-        {/* ── ACCOUNT ── */}
+        {/* Account */}
         <SectionLabel label="Account" />
         <NavItem label="Billing"  path="/billing"  icon={CreditCard} active={isActive('/billing')}  onClick={() => nav('/billing')} />
         <NavItem label="Settings" path="/settings" icon={Settings}   active={isActive('/settings')} onClick={() => nav('/settings')} />
@@ -545,28 +578,37 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
       {/* ── Plan upgrade banner ── */}
       {plan === 'free' && (
         <Box
-          sx={{
-            m: 1, p: 1.5, borderRadius: 2, bgcolor: 'rgba(37,99,235,0.1)',
-            border: '1px solid rgba(37,99,235,0.3)', cursor: 'pointer',
-          }}
           onClick={() => nav('/billing')}
+          sx={{
+            m: 1, p: 1.5, borderRadius: 2, cursor: 'pointer',
+            background: `linear-gradient(135deg, rgba(61,142,248,0.12) 0%, rgba(157,108,247,0.1) 100%)`,
+            border: `1px solid rgba(61,142,248,0.25)`,
+            transition: 'all 0.2s ease',
+            '&:hover': {
+              background: `linear-gradient(135deg, rgba(61,142,248,0.18) 0%, rgba(157,108,247,0.16) 100%)`,
+              borderColor: 'rgba(61,142,248,0.4)',
+              transform: 'translateY(-1px)',
+            },
+          }}
         >
-          <Typography fontSize="0.75rem" fontWeight={600} color="primary.light">Upgrade to Pro</Typography>
-          <Typography fontSize="0.68rem" color="text.disabled" mt={0.25}>
+          <Typography fontSize="0.75rem" fontWeight={700} sx={{ color: PALETTE.blueLt, letterSpacing: '-0.01em' }}>
+            Upgrade to Pro ↗
+          </Typography>
+          <Typography fontSize="0.67rem" color="text.disabled" mt={0.25}>
             5 groups · 3 channels · AI digest
           </Typography>
         </Box>
       )}
 
       {/* Version footer */}
-      <Box sx={{ px: 1.5, pb: 1, pt: 0.5 }}>
+      <Box sx={{ px: 2, pb: 1.5, pt: 0.5 }}>
         <Typography
           variant="caption"
           color="text.disabled"
-          fontSize="0.65rem"
+          fontSize="0.6rem"
           display="block"
           title={`Build: ${BUILD_TIME}`}
-          sx={{ userSelect: 'none' }}
+          sx={{ userSelect: 'none', letterSpacing: '0.04em' }}
         >
           v{APP_VERSION}
         </Typography>

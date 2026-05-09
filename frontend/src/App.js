@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { ThemeProvider } from '@mui/material/styles';
+import telegizer from './theme';
 import CssBaseline from '@mui/material/CssBaseline';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -96,80 +97,6 @@ if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
   });
 }
 
-const darkTheme = createTheme({
-  palette: {
-    mode: 'dark',
-    primary: { main: '#2563EB', light: '#60a5fa', dark: '#1d4ed8' },
-    secondary: { main: '#7C3AED', light: '#a78bfa', dark: '#5b21b6' },
-    info: { main: '#06B6D4' },
-    background: {
-      default: '#0f172a',
-      paper: '#1e293b',
-    },
-    divider: '#334155',
-  },
-  typography: {
-    fontFamily: "'Inter', -apple-system, sans-serif",
-    // Responsive scale: mobile-first sizes, step up at sm (600px) and md (900px).
-    // Fixes 141 h3-h6 usages across 45 pages that previously rendered at desktop
-    // sizes (e.g. h4=34px, h5=24px) on 320-390px screens.
-    h3: {
-      fontSize: '1.6rem',
-      '@media (min-width:600px)': { fontSize: '2rem' },
-      '@media (min-width:900px)': { fontSize: '3rem' },
-    },
-    h4: {
-      fontSize: '1.35rem',
-      '@media (min-width:600px)': { fontSize: '1.65rem' },
-      '@media (min-width:900px)': { fontSize: '2.125rem' },
-    },
-    h5: {
-      fontSize: '1.1rem',
-      '@media (min-width:600px)': { fontSize: '1.25rem' },
-      '@media (min-width:900px)': { fontSize: '1.5rem' },
-    },
-    h6: {
-      fontSize: '0.975rem',
-      '@media (min-width:600px)': { fontSize: '1.05rem' },
-      '@media (min-width:900px)': { fontSize: '1.25rem' },
-    },
-    subtitle1: {
-      fontSize: '0.9rem',
-      '@media (min-width:600px)': { fontSize: '1rem' },
-    },
-  },
-  components: {
-    MuiButton: {
-      styleOverrides: { root: { textTransform: 'none', borderRadius: 8 } },
-    },
-    MuiCard: {
-      styleOverrides: { root: { borderRadius: 12, border: '1px solid #334155' } },
-    },
-    MuiPaper: {
-      styleOverrides: { root: { borderRadius: 12 } },
-    },
-    // Default CardContent padding: 16px on mobile, 20px on sm+, 24px on md+.
-    // Overridden by explicit sx={{ p: N }} props in individual components.
-    MuiCardContent: {
-      styleOverrides: {
-        root: {
-          padding: '14px',
-          '&:last-child': { paddingBottom: '14px' },
-          '@media (min-width:600px)': { padding: '20px', '&:last-child': { paddingBottom: '20px' } },
-          '@media (min-width:900px)': { padding: '24px', '&:last-child': { paddingBottom: '24px' } },
-        },
-      },
-    },
-    // Toolbar minimum height: 52px mobile (keeps header compact), 64px desktop.
-    MuiToolbar: {
-      styleOverrides: {
-        root: {
-          '@media (max-width:599px)': { minHeight: '52px !important' },
-        },
-      },
-    },
-  },
-});
 
 
 function _storedUser() {
@@ -226,7 +153,7 @@ function AdminRoute({ children }) {
 
 export default function App() {
   return (
-    <ThemeProvider theme={darkTheme}>
+    <ThemeProvider theme={telegizer}>
       <CssBaseline />
       {API_CONFIG_ERROR && (
         <Box sx={{ bgcolor: 'error.main', color: '#fff', p: 1.5, textAlign: 'center', fontSize: '0.85rem', fontWeight: 600, zIndex: 9999 }}>

@@ -1,7 +1,6 @@
-// ComingSoonPage — reusable placeholder for temporarily hidden features.
-// Temporarily hidden for future reactivation — no backend logic removed.
 import React from 'react';
 import { Box, Typography, Chip, Card, CardContent } from '@mui/material';
+import { PALETTE } from '../theme';
 
 export default function ComingSoonPage({ icon: Icon, title, subtitle, features = [] }) {
   return (
@@ -15,22 +14,25 @@ export default function ComingSoonPage({ icon: Icon, title, subtitle, features =
       }}
     >
       <Box sx={{ maxWidth: 520, width: '100%', textAlign: 'center' }}>
-        {/* Icon */}
+
+        {/* Icon orb */}
         <Box
           sx={{
-            width: 80,
-            height: 80,
+            width: 84,
+            height: 84,
             borderRadius: '50%',
-            bgcolor: 'rgba(37,99,235,0.12)',
-            border: '1px solid rgba(37,99,235,0.25)',
+            background: `radial-gradient(circle, ${PALETTE.blue}22 0%, ${PALETTE.blue}08 70%)`,
+            border: `1px solid ${PALETTE.blue}35`,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             mx: 'auto',
             mb: 3,
+            boxShadow: `0 0 32px ${PALETTE.glowBlue}`,
+            animation: 'aiPulse 3s ease-in-out infinite',
           }}
         >
-          {Icon && <Icon sx={{ fontSize: 38, color: 'primary.light' }} />}
+          {Icon && <Icon sx={{ fontSize: 38, color: PALETTE.blueLt }} />}
         </Box>
 
         {/* Badge */}
@@ -38,23 +40,23 @@ export default function ComingSoonPage({ icon: Icon, title, subtitle, features =
           label="Coming Soon"
           size="small"
           sx={{
-            mb: 2,
-            bgcolor: 'rgba(37,99,235,0.15)',
-            color: 'primary.light',
-            border: '1px solid rgba(37,99,235,0.35)',
+            mb: 2.5,
+            background: `linear-gradient(135deg, ${PALETTE.blue}20, ${PALETTE.purple}18)`,
+            color: PALETTE.blueLt,
+            border: `1px solid ${PALETTE.blue}40`,
             fontWeight: 700,
-            fontSize: '0.7rem',
-            letterSpacing: '0.06em',
+            fontSize: '0.68rem',
+            letterSpacing: '0.08em',
           }}
         />
 
         {/* Title */}
-        <Typography variant="h4" fontWeight={800} mb={1.5}>
+        <Typography variant="h4" fontWeight={800} mb={1.5} letterSpacing="-0.025em">
           {title}
         </Typography>
 
         {/* Subtitle */}
-        <Typography variant="body1" color="text.secondary" mb={4} sx={{ lineHeight: 1.7 }}>
+        <Typography variant="body1" color="text.secondary" mb={4} sx={{ lineHeight: 1.75 }}>
           {subtitle}
         </Typography>
 
@@ -62,10 +64,27 @@ export default function ComingSoonPage({ icon: Icon, title, subtitle, features =
         {features.length > 0 && (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, textAlign: 'left' }}>
             {features.map((f, i) => (
-              <Card key={i} sx={{ opacity: 0.6, border: '1px dashed', borderColor: 'divider' }}>
+              <Card
+                key={i}
+                sx={{
+                  opacity: 0.65, border: '1px dashed',
+                  borderColor: PALETTE.border2,
+                  background: 'transparent',
+                  transition: 'opacity 0.2s, border-color 0.2s',
+                  '&:hover': { opacity: 0.85, borderColor: `${PALETTE.blue}40` },
+                }}
+              >
                 <CardContent sx={{ py: 1.5, px: 2, '&:last-child': { pb: 1.5 } }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                    {f.icon && <f.icon sx={{ fontSize: 20, color: 'text.disabled', flexShrink: 0 }} />}
+                    {f.icon && (
+                      <Box sx={{
+                        width: 32, height: 32, borderRadius: 1.5, flexShrink: 0,
+                        background: `${PALETTE.blue}12`, border: `1px solid ${PALETTE.blue}20`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        <f.icon sx={{ fontSize: 16, color: `${PALETTE.blue}99` }} />
+                      </Box>
+                    )}
                     <Box>
                       <Typography fontSize="0.85rem" fontWeight={600} color="text.secondary">
                         {f.title}
@@ -79,7 +98,11 @@ export default function ComingSoonPage({ icon: Icon, title, subtitle, features =
                     <Chip
                       label="Soon"
                       size="small"
-                      sx={{ ml: 'auto', height: 18, fontSize: '0.6rem', bgcolor: 'rgba(255,255,255,0.06)', color: 'text.disabled' }}
+                      sx={{
+                        ml: 'auto', height: 18, fontSize: '0.6rem', fontWeight: 600,
+                        bgcolor: 'rgba(255,255,255,0.05)', color: 'text.disabled',
+                        border: `1px solid ${PALETTE.border1}`,
+                      }}
                     />
                   </Box>
                 </CardContent>

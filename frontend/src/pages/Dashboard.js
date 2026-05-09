@@ -475,17 +475,33 @@ function OfficialBotSection({ user, navigate, officialGroupCount }) {
   const botUsername = 'telegizer_bot';
   const addGroupUrl = `https://t.me/${botUsername}?startgroup=setup`;
   return (
-    <Card sx={{ mb: 2, border: '1px solid', borderColor: 'primary.light', bgcolor: 'rgba(33,150,243,0.03)' }}>
+    <Card
+      sx={{
+        mb: 2,
+        border: '1px solid',
+        borderColor: 'rgba(61,142,248,0.3)',
+        background: 'linear-gradient(135deg, rgba(61,142,248,0.06) 0%, rgba(11,22,38,0.9) 100%)',
+        boxShadow: '0 4px 24px rgba(0,0,0,0.4), 0 0 0 1px rgba(61,142,248,0.15)',
+        transition: 'box-shadow 0.2s ease',
+        '&:hover': { boxShadow: '0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(61,142,248,0.3)' },
+      }}
+    >
       <CardContent sx={{ pb: 0 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-          <Avatar sx={{ bgcolor: 'primary.main', mr: 1.5, width: 40, height: 40 }}>
+          <Avatar
+            sx={{
+              mr: 1.5, width: 40, height: 40,
+              background: 'linear-gradient(135deg, #3d8ef8, #22d3ee)',
+              boxShadow: '0 0 14px rgba(61,142,248,0.4)',
+            }}
+          >
             <SmartToy fontSize="small" />
           </Avatar>
           <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-            <Typography variant="subtitle1" fontWeight={700}>Official Telegizer Bot</Typography>
+            <Typography variant="subtitle1" fontWeight={700} letterSpacing="-0.01em">Official Telegizer Bot</Typography>
             <Typography variant="body2" color="text.secondary" noWrap>@{botUsername} · Shared · Always Active</Typography>
           </Box>
-          <Chip label="Active" color="success" size="small" />
+          <Chip label="Active" color="success" size="small" sx={{ boxShadow: '0 0 8px rgba(34,197,94,0.4)' }} />
         </Box>
         {!user?.telegram_connected && (
           <Alert severity="info" sx={{ mb: 1, py: 0.5 }} icon={<Telegram fontSize="small" />}>
@@ -738,7 +754,7 @@ export default function Dashboard() {
   const tierColor = tier === 'enterprise' ? 'secondary' : tier === 'pro' ? 'primary' : 'default';
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
+    <Box sx={{ minHeight: '100vh' }}>
       {/* ── AppBar ── */}
       <AppBar position="sticky" elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
         <Toolbar sx={{ gap: 0.5, minHeight: { xs: 52, sm: 64 }, flexWrap: 'nowrap' }}>
@@ -998,11 +1014,17 @@ export default function Dashboard() {
         {/* ── Custom Bots section ── */}
         {/* Header bar */}
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5, flexWrap: 'wrap', gap: 1 }}>
-          <Avatar sx={{ bgcolor: 'secondary.main', width: 36, height: 36, flexShrink: 0 }}>
+          <Avatar
+            sx={{
+              width: 36, height: 36, flexShrink: 0,
+              background: 'linear-gradient(135deg, #9d6cf7, #5b21b6)',
+              boxShadow: '0 0 12px rgba(157,108,247,0.35)',
+            }}
+          >
             <SmartToy sx={{ fontSize: 18 }} />
           </Avatar>
           <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-            <Typography variant="subtitle1" fontWeight={700} lineHeight={1.2}>Custom Bots</Typography>
+            <Typography variant="subtitle1" fontWeight={700} lineHeight={1.2} letterSpacing="-0.01em">Custom Bots</Typography>
             <Typography variant="caption" color="text.secondary">
               {botCount} / {maxBots} used · {tier} plan
             </Typography>
@@ -1084,10 +1106,27 @@ export default function Dashboard() {
               const colSm = filteredBots.length === 1 ? 12 : 6;
               return (
                 <Grid item xs={12} sm={colSm} md={colMd} key={bot.id} sx={{ display: 'flex' }}>
-                  <Card sx={{ flex: 1, display: 'flex', flexDirection: 'column', border: '1px solid', borderColor: 'divider' }}>
+                  <Card
+                    sx={{
+                      flex: 1, display: 'flex', flexDirection: 'column',
+                      cursor: 'pointer',
+                      transition: 'transform 0.2s cubic-bezier(0.22,1,0.36,1), box-shadow 0.2s ease, border-color 0.2s',
+                      '&:hover': {
+                        transform: 'translateY(-3px)',
+                        boxShadow: '0 12px 40px rgba(0,0,0,0.55), 0 0 0 1px rgba(61,142,248,0.25)',
+                        borderColor: 'rgba(61,142,248,0.3)',
+                      },
+                    }}
+                  >
                     <CardContent sx={{ flex: 1, pb: 1 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                        <Avatar sx={{ bgcolor: 'primary.main', mr: 1.5, width: 38, height: 38, flexShrink: 0 }}>
+                        <Avatar
+                          sx={{
+                            mr: 1.5, width: 38, height: 38, flexShrink: 0,
+                            background: 'linear-gradient(135deg, #3d8ef8, #9d6cf7)',
+                            boxShadow: '0 0 10px rgba(61,142,248,0.3)',
+                          }}
+                        >
                           <SmartToy sx={{ fontSize: 18 }} />
                         </Avatar>
                         <Box sx={{ flexGrow: 1, minWidth: 0 }}>
@@ -1127,21 +1166,41 @@ export default function Dashboard() {
 
         {/* ── Upgrade CTA for free users with bots ── */}
         {!loading && tier === 'free' && botList.length > 0 && (
-          <Card sx={{ mt: 3, background: 'linear-gradient(135deg, #1565c0 0%, #7c4dff 100%)', border: 'none' }}>
-            <CardContent sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2, p: { xs: 2.5, md: 3 } }}>
+          <Card
+            sx={{
+              mt: 3, border: 'none', overflow: 'hidden', position: 'relative',
+              background: 'linear-gradient(135deg, #1a3a6e 0%, #3d1d82 50%, #0d2a5a 100%)',
+              backgroundSize: '200% 200%',
+              animation: 'gradientShift 8s ease infinite',
+              boxShadow: '0 8px 32px rgba(61,142,248,0.25), 0 0 60px rgba(157,108,247,0.15)',
+            }}
+          >
+            {/* Ambient orb */}
+            <Box sx={{
+              position: 'absolute', top: -30, right: -30,
+              width: 180, height: 180, borderRadius: '50%',
+              background: 'radial-gradient(circle, rgba(157,108,247,0.25) 0%, transparent 70%)',
+              pointerEvents: 'none',
+            }} />
+            <CardContent sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2, p: { xs: 2.5, md: 3 }, position: 'relative' }}>
               <Box sx={{ minWidth: 0 }}>
-                <Typography variant="subtitle1" fontWeight={700} color="white">
+                <Typography variant="subtitle1" fontWeight={700} color="white" letterSpacing="-0.01em">
                   Unlock 5 bots, unlimited groups & scheduling
                 </Typography>
-                <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.8)' }}>
-                  Pro plan — just $9/month ($0.30/day). Pay with crypto.
+                <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.7)' }}>
+                  Pro plan — just $9/month. Pay with crypto.
                 </Typography>
               </Box>
               <Button
                 variant="contained"
                 onClick={() => navigate('/pricing')}
                 endIcon={<ArrowForward />}
-                sx={{ bgcolor: 'white', color: 'primary.main', fontWeight: 700, '&:hover': { bgcolor: '#f0f0f0' }, width: { xs: '100%', sm: 'auto' } }}
+                sx={{
+                  bgcolor: 'white', color: '#1a3a6e', fontWeight: 700,
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+                  '&:hover': { bgcolor: '#e8f0ff', transform: 'translateY(-1px)' },
+                  width: { xs: '100%', sm: 'auto' },
+                }}
               >
                 Upgrade to Pro
               </Button>

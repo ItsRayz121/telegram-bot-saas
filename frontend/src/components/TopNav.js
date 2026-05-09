@@ -10,22 +10,31 @@ import {
 } from '@mui/icons-material';
 import TelegizerLogo from './TelegizerLogo';
 import UniversalSearchBar from './UniversalSearchBar';
+import { PALETTE } from '../theme';
 
 const SUPPORT_EMAIL = 'fazalelahi5577@gmail.com';
 const SUPPORT_MAILTO = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Telegizer Support Request')}&body=${encodeURIComponent('Hi Telegizer team,\n\nI need help with:\n\n[describe your issue]\n\n---\nAccount email: ')}`;
 
 const SUPPORT_LINKS = [
-  { label: 'Official Channel',  sub: 'Updates & announcements',    href: 'https://t.me/telegizer',           icon: Campaign, external: true },
-  { label: 'Community Group',   sub: 'Help from other users',      href: 'https://t.me/telegizer_community', icon: People,   external: true },
-  { label: 'Email Support',     sub: 'Contact us by email',        href: SUPPORT_MAILTO,                     icon: Email,    external: true, isEmail: true },
+  { label: 'Official Channel', sub: 'Updates & announcements',    href: 'https://t.me/telegizer',           icon: Campaign, external: true },
+  { label: 'Community Group',  sub: 'Help from other users',      href: 'https://t.me/telegizer_community', icon: People,   external: true },
+  { label: 'Email Support',    sub: 'Contact us by email',        href: SUPPORT_MAILTO,                     icon: Email,    external: true, isEmail: true },
 ];
 
 function SupportPopover() {
   const [anchor, setAnchor] = useState(null);
   return (
     <>
-      <Tooltip title="Help & Support">
-        <IconButton size="small" onClick={e => setAnchor(e.currentTarget)} sx={{ ml: 0.5 }}>
+      <Tooltip title="Help & Support" arrow>
+        <IconButton
+          size="small"
+          onClick={e => setAnchor(e.currentTarget)}
+          sx={{
+            ml: 0.5, color: 'text.secondary',
+            transition: 'color 0.15s, background 0.15s',
+            '&:hover': { color: PALETTE.blue, bgcolor: `${PALETTE.blue}14` },
+          }}
+        >
           <HelpOutline fontSize="small" />
         </IconButton>
       </Tooltip>
@@ -35,39 +44,44 @@ function SupportPopover() {
         onClose={() => setAnchor(null)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-        PaperProps={{ sx: { width: 260, mt: 0.5, border: '1px solid', borderColor: 'divider' } }}
+        PaperProps={{ sx: { width: 270, mt: 1 } }}
       >
         <Box sx={{ px: 2, pt: 1.5, pb: 1 }}>
-          <Typography variant="caption" fontWeight={700} color="text.disabled" sx={{ textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.65rem' }}>
+          <Typography
+            variant="caption"
+            sx={{
+              textTransform: 'uppercase', letterSpacing: '0.1em',
+              fontSize: '0.6rem', fontWeight: 700, color: 'text.disabled',
+            }}
+          >
             Help & Support
           </Typography>
         </Box>
         <Divider />
-        <List dense disablePadding>
+        <List dense disablePadding sx={{ pb: 0.5 }}>
           {SUPPORT_LINKS.map(({ label, sub, href, icon: Icon, external, isEmail }) => (
             <ListItemButton
               key={label}
-              onClick={() => {
-                setAnchor(null);
-                if (isEmail) {
-                  // Use window.open for mailto — more reliable than anchor href in SPAs
-                  window.open(href, '_blank', 'noopener,noreferrer');
-                } else {
-                  window.open(href, '_blank', 'noopener,noreferrer');
-                }
+              onClick={() => { setAnchor(null); window.open(href, '_blank', 'noopener,noreferrer'); }}
+              sx={{
+                px: 2, py: 1, mx: 0.5, my: 0.25, borderRadius: 1.5,
+                transition: 'background 0.15s ease',
+                '&:hover': { bgcolor: isEmail ? `${PALETTE.blue}12` : 'rgba(255,255,255,0.05)' },
               }}
-              sx={{ px: 2, py: 1, cursor: 'pointer' }}
             >
               <ListItemIcon sx={{ minWidth: 34 }}>
-                <Icon fontSize="small" sx={{ color: isEmail ? 'primary.main' : 'text.secondary' }} />
+                <Icon
+                  fontSize="small"
+                  sx={{ color: isEmail ? PALETTE.blue : 'text.secondary' }}
+                />
               </ListItemIcon>
               <ListItemText
                 primary={label}
                 secondary={sub}
                 primaryTypographyProps={{ fontSize: '0.82rem', fontWeight: 600 }}
-                secondaryTypographyProps={{ fontSize: '0.72rem', color: isEmail ? 'primary.main' : 'text.secondary' }}
+                secondaryTypographyProps={{ fontSize: '0.72rem' }}
               />
-              {external && <OpenInNew sx={{ fontSize: 13, color: 'text.disabled', ml: 0.5 }} />}
+              {external && <OpenInNew sx={{ fontSize: 13, color: 'text.disabled', ml: 0.5, flexShrink: 0 }} />}
             </ListItemButton>
           ))}
         </List>
@@ -77,29 +91,24 @@ function SupportPopover() {
 }
 
 const NAV_ITEMS = [
-  { label: 'Home',       path: '/',          icon: Home,      exact: true },
-  { label: 'Dashboard',  path: '/dashboard', icon: Dashboard  },
-  { label: 'My Groups',  path: '/my-groups', icon: Groups     },
-  { label: 'My Bots',    path: '/my-bots',   icon: SmartToy   },
-  { label: 'Billing',    path: '/billing',   icon: CreditCard },
+  { label: 'Home',      path: '/',          icon: Home,      exact: true },
+  { label: 'Dashboard', path: '/dashboard', icon: Dashboard  },
+  { label: 'My Groups', path: '/my-groups', icon: Groups     },
+  { label: 'My Bots',   path: '/my-bots',   icon: SmartToy   },
+  { label: 'Billing',   path: '/billing',   icon: CreditCard },
 ];
 
-// hasSidebar: pass true when this TopNav renders inside AppLayout so the
-// global nav links are hidden (the sidebar already provides navigation).
 export default function TopNav({ title, subtitle, actions, breadcrumb, hasSidebar = false }) {
-  const navigate = useNavigate();
+  const navigate  = useNavigate();
   const { pathname } = useLocation();
 
   const isActive = (path, exact) =>
     exact ? pathname === path : pathname === path || pathname.startsWith(path + '/');
 
   return (
-    <AppBar
-      position="sticky"
-      elevation={0}
-      sx={{ borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}
-    >
-      <Toolbar sx={{ gap: 1, flexWrap: 'wrap', minHeight: { xs: 56, sm: 64 } }}>
+    <AppBar position="sticky" elevation={0}>
+      <Toolbar sx={{ gap: 1, flexWrap: 'wrap', minHeight: { xs: 52, sm: 60 } }}>
+
         {/* Logo */}
         <Box
           sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer', mr: 1 }}
@@ -108,34 +117,36 @@ export default function TopNav({ title, subtitle, actions, breadcrumb, hasSideba
           <TelegizerLogo size="sm" variant="icon" />
         </Box>
 
-        {/* Nav links — hidden when sidebar is present (sidebar handles navigation) */}
+        {/* Nav links — hidden when sidebar handles navigation */}
         {!hasSidebar && (
           <Box sx={{ display: 'flex', gap: 0.5, flex: 1, flexWrap: 'wrap' }}>
-            {NAV_ITEMS.map(({ label, path, icon: Icon, exact }) => (
-              <Button
-                key={path}
-                size="small"
-                startIcon={<Icon sx={{ fontSize: '16px !important' }} />}
-                onClick={() => navigate(path)}
-                color={isActive(path, exact) ? 'primary' : 'inherit'}
-                variant={isActive(path, exact) ? 'contained' : 'text'}
-                sx={{
-                  px: 1.5,
-                  py: 0.5,
-                  fontSize: '0.8rem',
-                  minWidth: 0,
-                  opacity: isActive(path, exact) ? 1 : 0.75,
-                  '&:hover': { opacity: 1 },
-                }}
-              >
-                {label}
-              </Button>
-            ))}
+            {NAV_ITEMS.map(({ label, path, icon: Icon, exact }) => {
+              const active = isActive(path, exact);
+              return (
+                <Button
+                  key={path}
+                  size="small"
+                  startIcon={<Icon sx={{ fontSize: '15px !important' }} />}
+                  onClick={() => navigate(path)}
+                  sx={{
+                    px: 1.5, py: 0.5, fontSize: '0.8rem', minWidth: 0,
+                    color: active ? PALETTE.blue : 'text.secondary',
+                    fontWeight: active ? 600 : 400,
+                    bgcolor: active ? `${PALETTE.blue}14` : 'transparent',
+                    borderRadius: 1.5,
+                    transition: 'all 0.15s ease',
+                    '&:hover': { color: 'text.primary', bgcolor: 'rgba(255,255,255,0.06)' },
+                  }}
+                >
+                  {label}
+                </Button>
+              );
+            })}
           </Box>
         )}
         {hasSidebar && <Box sx={{ flex: 1 }} />}
 
-        {/* Universal search — visible in sidebar layouts */}
+        {/* Universal search */}
         {hasSidebar && (
           <UniversalSearchBar
             placeholder="Search…"
@@ -143,37 +154,43 @@ export default function TopNav({ title, subtitle, actions, breadcrumb, hasSideba
           />
         )}
 
-        {/* Right side: optional actions */}
+        {/* Optional actions slot */}
         {actions && (
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
             {actions}
           </Box>
         )}
 
-        {/* Referrals button */}
-        <Tooltip title="Invite Friends — Earn Free Pro">
+        {/* Referrals */}
+        <Tooltip title="Invite Friends — Earn Free Pro" arrow>
           <Button
             size="small"
             startIcon={<CardGiftcard sx={{ fontSize: '15px !important' }} />}
             onClick={() => navigate('/referrals')}
             variant={pathname === '/referrals' ? 'contained' : 'outlined'}
             color="primary"
-            sx={{ px: 1.5, py: 0.4, fontSize: '0.78rem', borderRadius: 1.5, minWidth: 0, display: { xs: 'none', sm: 'flex' } }}
+            sx={{
+              px: 1.5, py: 0.4, fontSize: '0.78rem', borderRadius: 1.5,
+              minWidth: 0, display: { xs: 'none', sm: 'flex' },
+              transition: 'all 0.18s ease',
+            }}
           >
             Referrals
           </Button>
         </Tooltip>
 
-        {/* Support popover */}
         <SupportPopover />
 
-        {/* Settings icon shortcut */}
-        <Tooltip title="Settings">
+        {/* Settings shortcut */}
+        <Tooltip title="Settings" arrow>
           <IconButton
             size="small"
             onClick={() => navigate('/settings')}
-            color={pathname === '/settings' ? 'primary' : 'default'}
-            sx={{ ml: 0.5 }}
+            sx={{
+              ml: 0.5, color: pathname === '/settings' ? PALETTE.blue : 'text.secondary',
+              transition: 'color 0.15s, background 0.15s',
+              '&:hover': { color: PALETTE.blue, bgcolor: `${PALETTE.blue}14` },
+            }}
           >
             <Settings fontSize="small" />
           </IconButton>
@@ -186,7 +203,7 @@ export default function TopNav({ title, subtitle, actions, breadcrumb, hasSideba
           sx={{
             px: 2, pb: 1,
             display: 'flex', alignItems: 'center', gap: 1,
-            borderTop: '1px solid', borderColor: 'divider',
+            borderTop: `1px solid ${PALETTE.border1}`,
           }}
         >
           {breadcrumb && breadcrumb.map((crumb, idx) => (
@@ -196,8 +213,7 @@ export default function TopNav({ title, subtitle, actions, breadcrumb, hasSideba
               )}
               {crumb.path ? (
                 <Button
-                  size="small"
-                  variant="text"
+                  size="small" variant="text"
                   onClick={() => navigate(crumb.path)}
                   sx={{ p: 0, minWidth: 0, fontSize: '0.75rem', color: 'text.secondary' }}
                 >

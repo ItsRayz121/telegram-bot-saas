@@ -131,10 +131,10 @@ export default function Billing() {
   const daysLeft = expires ? Math.max(0, Math.ceil((expires - Date.now()) / 86400000)) : null;
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
-      <AppBar position="sticky" elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
+    <Box sx={{ minHeight: '100vh' }}>
+      <AppBar position="sticky" elevation={0}>
         <Toolbar>
-          <IconButton edge="start" onClick={() => navigate('/dashboard')} sx={{ mr: 1 }}>
+          <IconButton edge="start" onClick={() => navigate('/dashboard')} sx={{ mr: 1, color: 'text.secondary' }}>
             <ArrowBack />
           </IconButton>
           <Box sx={{ flexGrow: 1 }}>
@@ -168,7 +168,24 @@ export default function Billing() {
         ) : (
           <>
             {/* Current Plan */}
-            <Card sx={{ mb: 3 }}>
+            <Card
+              sx={{
+                mb: 3,
+                background: tier === 'enterprise'
+                  ? 'linear-gradient(135deg, rgba(157,108,247,0.1) 0%, rgba(15,29,53,0.95) 100%)'
+                  : tier === 'pro'
+                  ? 'linear-gradient(135deg, rgba(61,142,248,0.1) 0%, rgba(15,29,53,0.95) 100%)'
+                  : undefined,
+                borderColor: tier === 'enterprise'
+                  ? 'rgba(157,108,247,0.35)'
+                  : tier === 'pro'
+                  ? 'rgba(61,142,248,0.35)'
+                  : undefined,
+                boxShadow: tier !== 'free'
+                  ? `0 4px 24px rgba(0,0,0,0.4), 0 0 0 1px ${tier === 'enterprise' ? 'rgba(157,108,247,0.18)' : 'rgba(61,142,248,0.18)'}`
+                  : undefined,
+              }}
+            >
               <CardContent sx={{ p: { xs: 2, md: 3 } }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 2 }}>
                   <Box>
@@ -266,7 +283,7 @@ export default function Billing() {
             </Card>
 
             {/* Included Features */}
-            <Card sx={{ mb: 3 }}>
+            <Card sx={{ mb: 3, background: 'rgba(11,22,38,0.8)' }}>
               <CardContent sx={{ p: { xs: 2, md: 3 } }}>
                 <Typography variant="subtitle1" fontWeight={700} mb={2}>
                   What's included in your plan

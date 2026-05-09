@@ -213,7 +213,7 @@ export default function MyGroups() {
   const addToGroupUrl = `https://t.me/${BOT_USERNAME}?startgroup=setup`;
 
   return (
-    <Box sx={{ bgcolor: 'background.default' }}>
+    <Box>
       <TopNav hasSidebar
         breadcrumb={[
           { label: 'Dashboard', path: '/dashboard' },
@@ -263,7 +263,7 @@ export default function MyGroups() {
 
         {/* Collapsible guide */}
         <Collapse in={guideOpen || (!loading && groups.length === 0 && !loadError)}>
-          <Paper sx={{ px: 2, py: 1.5, mb: 2, background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)', border: '1px solid #334155' }}>
+          <Paper sx={{ px: 2, py: 1.5, mb: 2, background: 'linear-gradient(135deg, rgba(61,142,248,0.07) 0%, rgba(11,22,38,0.9) 100%)', border: '1px solid rgba(61,142,248,0.2)', borderRadius: 2 }}>
             <Typography variant="body2" color="text.secondary">
               1. Add <strong>@{BOT_USERNAME}</strong> as admin &nbsp;·&nbsp;
               2. Run <code>/linkgroup</code> inside the group &nbsp;·&nbsp;
@@ -288,9 +288,21 @@ export default function MyGroups() {
             </Button>
           </Card>
         ) : groups.length === 0 ? (
-          <Card sx={{ textAlign: 'center', py: 6 }}>
-            <Groups sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
-            <Typography variant="h6" gutterBottom>No groups linked yet</Typography>
+          <Card
+            sx={{
+              textAlign: 'center', py: 7,
+              background: 'linear-gradient(135deg, rgba(61,142,248,0.05) 0%, transparent 100%)',
+              border: '1px dashed rgba(61,142,248,0.25)',
+            }}
+          >
+            <Box sx={{
+              width: 64, height: 64, borderRadius: 3, mx: 'auto', mb: 2,
+              background: 'rgba(61,142,248,0.1)', border: '1px solid rgba(61,142,248,0.2)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <Groups sx={{ fontSize: 30, color: 'rgba(61,142,248,0.7)' }} />
+            </Box>
+            <Typography variant="h6" gutterBottom fontWeight={700} letterSpacing="-0.01em">No groups linked yet</Typography>
             <Typography variant="body2" color="text.secondary" mb={3}>
               Add the Telegizer bot to your group then link it here.
             </Typography>
@@ -309,7 +321,17 @@ export default function MyGroups() {
 
               return (
                 <Grid item xs={12} sm={6} lg={groups.length > 2 ? 4 : 6} key={gid}>
-                  <Card sx={{ height: '100%' }}>
+                  <Card
+                    sx={{
+                      height: '100%',
+                      transition: 'transform 0.2s cubic-bezier(0.22,1,0.36,1), box-shadow 0.2s, border-color 0.2s',
+                      '&:hover': {
+                        transform: 'translateY(-2px)',
+                        boxShadow: '0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(61,142,248,0.22)',
+                        borderColor: 'rgba(61,142,248,0.28)',
+                      },
+                    }}
+                  >
                     <CardContent>
                       {/* Title + status */}
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>

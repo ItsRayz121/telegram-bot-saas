@@ -3,6 +3,8 @@ import {
   Box, AppBar, Toolbar, IconButton, Typography, Drawer,
   useMediaQuery, useTheme, Paper, BottomNavigation, BottomNavigationAction,
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
+import { PALETTE } from '../theme';
 import { Menu as MenuIcon, Home, Groups, AutoMode, Psychology, AccountCircle } from '@mui/icons-material';
 import Sidebar, { SIDEBAR_WIDTH, SIDEBAR_COLLAPSED_WIDTH } from '../components/Sidebar';
 import { DesktopAssistantSidebar, MobileAssistantFab } from '../components/AssistantSidebar';
@@ -45,7 +47,17 @@ export default function AppLayout({ children }) {
   );
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden', bgcolor: 'background.default' }}>
+    <Box
+      sx={{
+        display: 'flex', height: '100vh', overflow: 'hidden',
+        bgcolor: PALETTE.bg0,
+        /* Subtle ambient radial — gives depth without being distracting */
+        backgroundImage: `
+          radial-gradient(ellipse 80% 50% at 50% -10%, rgba(61,142,248,0.07) 0%, transparent 60%),
+          radial-gradient(ellipse 40% 30% at 90% 50%, rgba(157,108,247,0.04) 0%, transparent 55%)
+        `,
+      }}
+    >
 
       {/* ── Desktop: persistent sidebar ── */}
       {!isMobile && (
@@ -80,13 +92,13 @@ export default function AppLayout({ children }) {
 
         {/* Mobile top bar */}
         {isMobile && (
-          <AppBar
-            position="sticky"
-            elevation={0}
-            sx={{ bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider' }}
-          >
+          <AppBar position="sticky" elevation={0}>
             <Toolbar sx={{ gap: 1, minHeight: 52 }}>
-              <IconButton edge="start" size="small" onClick={() => setDrawerOpen(true)}>
+              <IconButton
+                edge="start" size="small"
+                onClick={() => setDrawerOpen(true)}
+                sx={{ color: 'text.secondary', '&:hover': { color: 'text.primary' } }}
+              >
                 <MenuIcon fontSize="small" />
               </IconButton>
               <Box
@@ -94,14 +106,20 @@ export default function AppLayout({ children }) {
                 onClick={() => navigate('/dashboard')}
               >
                 <TelegizerLogo size="sm" variant="icon" />
-                <Typography fontWeight={700} fontSize="0.9rem">Telegizer</Typography>
+                <Typography fontWeight={800} fontSize="0.9rem" letterSpacing="-0.02em">Telegizer</Typography>
               </Box>
             </Toolbar>
           </AppBar>
         )}
 
-        {/* Page content — pad bottom on mobile so content isn't hidden behind nav bar */}
-        <Box sx={{ flex: 1, overflow: 'auto', pb: isMobile ? 'calc(56px + env(safe-area-inset-bottom))' : 0 }}>
+        {/* Page content */}
+        <Box
+          sx={{
+            flex: 1, overflow: 'auto',
+            pb: isMobile ? 'calc(56px + env(safe-area-inset-bottom))' : 0,
+          }}
+          className="page-enter"
+        >
           {children}
         </Box>
 
@@ -128,7 +146,7 @@ export default function AppLayout({ children }) {
               value={bottomNavValue === -1 ? false : bottomNavValue}
               onChange={(_, newValue) => navigate(BOTTOM_NAV_ITEMS[newValue].path)}
               showLabels
-              sx={{ bgcolor: 'background.paper', height: 56 }}
+              sx={{ height: 56 }}
             >
               {BOTTOM_NAV_ITEMS.map((item) => (
                 <BottomNavigationAction
