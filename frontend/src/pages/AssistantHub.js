@@ -1,20 +1,19 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, Chip, CircularProgress,
-  Alert, Grid, LinearProgress,
-  IconButton, Tooltip, Collapse, TextField, Paper, Tabs, Tab,
+  Alert, LinearProgress,
+  IconButton, Tooltip, Collapse, Tabs, Tab,
 } from '@mui/material';
 import {
-  Psychology, AccessTime, EditNote, Summarize, AutoMode, Reply,
-  OpenInNew, ContentCopy, CheckCircle, RadioButtonUnchecked, Close,
-  ArrowForward, Chat, Send, ExpandMore, ExpandLess, QuestionAnswer,
-  CalendarMonth, SmartToy, Lock, Groups, Person,
-  NotificationsActive, MenuBook, BarChart, TrendingUp,
+  Psychology, OpenInNew, ContentCopy, CheckCircle, RadioButtonUnchecked, Close,
+  ArrowForward, ExpandMore, ExpandLess,
+  CalendarMonth, SmartToy, Lock, Groups, Person, TrendingUp,
 } from '@mui/icons-material';
 import GroupTrendsDashboard from '../components/GroupTrendsDashboard';
 import { useMediaQuery, useTheme } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { assistant, assistantBot as assistantBotApi, meetings as meetingsApi } from '../services/api';
+
 
 const DISMISS_KEY = 'hub_connect_banner_dismissed';
 
@@ -28,11 +27,6 @@ function relTime(isoStr) {
   if (hrs < 24) return `${hrs}h ago`;
   if (Math.floor(hrs / 24) === 1) return 'Yesterday';
   return `${Math.floor(hrs / 24)}d ago`;
-}
-
-function upcomingTime(isoStr) {
-  if (!isoStr) return '';
-  return new Date(isoStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 // ── Connect Bot Banner ────────────────────────────────────────────────────────
@@ -199,7 +193,7 @@ function OnboardingCard({ onboarding }) {
   );
 }
 
-// ── Data Cards ────────────────────────────────────────────────────────────────
+// ── Calendar Helpers ──────────────────────────────────────────────────────────
 
 function _gcalUrl({ title, startIso, durationMins = 30, description = '' }) {
   const dt = new Date(startIso);
@@ -239,389 +233,12 @@ function GCalButton({ title, startIso, durationMins, description, compact = fals
   );
 }
 
-function RemindersCard({ reminders }) {
-  const navigate = useNavigate();
-  return (
-    <Card variant="outlined" sx={{ height: '100%' }}>
-      <CardContent>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <AccessTime fontSize="small" color="primary" />
-            <Typography fontWeight={600} fontSize="0.95rem">Reminders Today</Typography>
-          </Box>
-          <Button size="small" endIcon={<ArrowForward sx={{ fontSize: 13 }} />}
-            onClick={() => navigate('/workspace/reminders')} sx={{ fontSize: '0.75rem' }}>
-            View All
-          </Button>
-        </Box>
-        {reminders.length === 0 ? (
-          <Typography fontSize="0.84rem" color="text.secondary">No reminders for today.</Typography>
-        ) : (
-          reminders.map(r => (
-            <Box key={r.id} sx={{ mb: 1, pb: 1, borderBottom: '1px solid', borderColor: 'divider', '&:last-child': { mb: 0, pb: 0, border: 'none' } }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
-                <Typography fontSize="0.84rem" noWrap sx={{ flex: 1 }}>{r.reminder_text}</Typography>
-                <GCalButton title={r.reminder_text} startIso={r.remind_at} compact />
-              </Box>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Typography fontSize="0.72rem" color={r.is_delivered ? 'success.main' : 'text.disabled'}>
-                  {upcomingTime(r.remind_at)}{r.is_delivered ? ' · Done' : ''}
-                </Typography>
-              </Box>
-            </Box>
-          ))
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function NotesCard({ recentNotes }) {
-  const navigate = useNavigate();
-  const TAG_COLORS = { decision: 'primary', task: 'warning', link: 'info', question: 'secondary' };
-  return (
-    <Card variant="outlined" sx={{ height: '100%' }}>
-      <CardContent>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <EditNote fontSize="small" color="primary" />
-            <Typography fontWeight={600} fontSize="0.95rem">Recent Notes</Typography>
-          </Box>
-          <Button size="small" endIcon={<ArrowForward sx={{ fontSize: 13 }} />}
-            onClick={() => navigate('/workspace/notes')} sx={{ fontSize: '0.75rem' }}>
-            View All
-          </Button>
-        </Box>
-        {recentNotes.length === 0 ? (
-          <Typography fontSize="0.84rem" color="text.secondary">No notes yet.</Typography>
-        ) : (
-          recentNotes.map(n => (
-            <Box key={n.id} sx={{ mb: 1.25, pb: 1.25, borderBottom: '1px solid', borderColor: 'divider', '&:last-child': { mb: 0, pb: 0, border: 'none' } }}>
-              <Box sx={{ display: 'flex', gap: 0.5, mb: 0.4, flexWrap: 'wrap' }}>
-                {(n.tags || []).map(t => (
-                  <Chip key={t} label={t} size="small" color={TAG_COLORS[t] || 'default'} sx={{ height: 16, fontSize: '0.65rem' }} />
-                ))}
-              </Box>
-              <Typography fontSize="0.83rem" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                {n.content}
-              </Typography>
-              <Typography fontSize="0.72rem" color="text.disabled">{relTime(n.created_at)}</Typography>
-            </Box>
-          ))
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function DigestCard({ digestStatus }) {
-  const navigate = useNavigate();
-  const statusIcon = { sent: '✓', pending: '⏳', disabled: '—' };
-  const statusColor = { sent: 'success.main', pending: 'warning.main', disabled: 'text.disabled' };
-  return (
-    <Card variant="outlined" sx={{ height: '100%' }}>
-      <CardContent>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Summarize fontSize="small" color="primary" />
-            <Typography fontWeight={600} fontSize="0.95rem">Digest Status</Typography>
-          </Box>
-          <Button size="small" endIcon={<ArrowForward sx={{ fontSize: 13 }} />}
-            onClick={() => navigate('/workspace/digests')} sx={{ fontSize: '0.75rem' }}>
-            Configure
-          </Button>
-        </Box>
-        {digestStatus.length === 0 ? (
-          <Typography fontSize="0.84rem" color="text.secondary">No groups connected yet.</Typography>
-        ) : (
-          digestStatus.map(d => (
-            <Box key={d.group_id} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.75 }}>
-              <Typography fontSize="0.83rem" noWrap sx={{ flex: 1, mr: 1 }}>{d.group_title}</Typography>
-              <Typography fontSize="0.78rem" color={statusColor[d.status]} fontWeight={600}>
-                {statusIcon[d.status]} {d.last_sent ? relTime(d.last_sent) : d.status}
-              </Typography>
-            </Box>
-          ))
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function ActivityCard({ activity }) {
-  const navigate = useNavigate();
-  return (
-    <Card variant="outlined" sx={{ height: '100%' }}>
-      <CardContent>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <AutoMode fontSize="small" color="primary" />
-            <Typography fontWeight={600} fontSize="0.95rem">Automation Today</Typography>
-          </Box>
-          <Button size="small" endIcon={<ArrowForward sx={{ fontSize: 13 }} />}
-            onClick={() => navigate('/workspace/automations')} sx={{ fontSize: '0.75rem' }}>
-            Workflows
-          </Button>
-        </Box>
-        <Box sx={{ display: 'flex', gap: 3 }}>
-          <Box>
-            <Typography fontSize="1.6rem" fontWeight={700} lineHeight={1}>{activity.auto_replies_today}</Typography>
-            <Typography fontSize="0.75rem" color="text.secondary">Auto-replies</Typography>
-          </Box>
-          <Box>
-            <Typography fontSize="1.6rem" fontWeight={700} lineHeight={1}>{activity.workflows_today}</Typography>
-            <Typography fontSize="0.75rem" color="text.secondary">Workflows fired</Typography>
-          </Box>
-        </Box>
-      </CardContent>
-    </Card>
-  );
-}
-
-// ── Ask Your Community (cross-group intelligence) ─────────────────────────────
-
-function AskCard({ hasGroups }) {
-  const [open, setOpen] = useState(false);
-  const [question, setQuestion] = useState('');
-  const [answer, setAnswer] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const ask = async () => {
-    if (!question.trim()) return;
-    setLoading(true); setError(''); setAnswer(null);
-    try {
-      const { data } = await assistant.ask(question.trim());
-      setAnswer(data);
-    } catch (e) {
-      setError(e.response?.data?.error || 'AI request failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <Card variant="outlined" sx={{ mt: 2 }}>
-      <CardContent sx={{ pb: open ? 1 : undefined }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
-          onClick={() => setOpen(v => !v)}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <QuestionAnswer fontSize="small" color="primary" />
-            <Typography fontWeight={600} fontSize="0.95rem">Ask Your Community</Typography>
-            {!hasGroups && <Chip label="Connect groups first" size="small" color="warning" sx={{ fontSize: '0.65rem', height: 18 }} />}
-          </Box>
-          {open ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
-        </Box>
-        <Collapse in={open}>
-          <Typography fontSize="0.82rem" color="text.secondary" mt={1.5} mb={1.5}>
-            Ask a question — AI searches the last 72h of messages across all your groups and answers.
-          </Typography>
-          {!hasGroups ? (
-            <Typography fontSize="0.84rem" color="text.secondary">Connect at least one group to use this feature.</Typography>
-          ) : (
-            <>
-              <Box sx={{ display: 'flex', gap: 1, mb: 1.5 }}>
-                <TextField
-                  size="small" fullWidth
-                  placeholder="What was decided about the product launch?"
-                  value={question}
-                  onChange={e => setQuestion(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), ask())}
-                  disabled={loading}
-                />
-                <Button variant="contained" size="small" onClick={ask} disabled={loading || !question.trim()} sx={{ minWidth: 72 }}>
-                  {loading ? <CircularProgress size={18} /> : 'Ask'}
-                </Button>
-              </Box>
-              {error && <Alert severity="error" sx={{ mb: 1 }}>{error}</Alert>}
-              {answer && (
-                <Paper variant="outlined" sx={{ p: 1.5, bgcolor: 'action.hover' }}>
-                  <Typography fontSize="0.85rem" sx={{ whiteSpace: 'pre-wrap' }}>{answer.answer}</Typography>
-                  <Typography fontSize="0.7rem" color="text.disabled" mt={0.75}>
-                    Searched {answer.groups_searched} group{answer.groups_searched !== 1 ? 's' : ''} · {answer.messages_scanned} messages
-                  </Typography>
-                </Paper>
-              )}
-            </>
-          )}
-        </Collapse>
-      </CardContent>
-    </Card>
-  );
-}
-
-// ── Personal Assistant Chat ───────────────────────────────────────────────────
-
-const QUICK_SUGGESTIONS = [
-  "Book a meeting",
-  "What's on my schedule?",
-  "Remind me about something",
-  "Any issues in my groups?",
-];
-
-function PersonalAssistantChat({ onMeetingCreated, botConnected }) {
-  const navigate = useNavigate();
-  const [open, setOpen] = useState(true);
-  const [messages, setMessages] = useState([
-    { id: 'welcome', direction: 'out', content: "Hi! I'm your personal assistant. I can schedule meetings, set reminders, show upcoming events, and summarise group issues. What can I help you with?", created_at: new Date().toISOString() },
-  ]);
-  const [draft, setDraft] = useState('');
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState('');
-  const endRef = useRef(null);
-
-  useEffect(() => {
-    if (open) endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, open]);
-
-  const send = useCallback(async (text) => {
-    const msg = (text || draft).trim();
-    if (!msg) return;
-    const userMsg = { id: Date.now(), direction: 'in', content: msg, created_at: new Date().toISOString() };
-    setMessages(prev => [...prev, userMsg]);
-    setDraft('');
-    setSending(true);
-    setError('');
-    try {
-      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      const { data } = await assistant.chat(msg, tz);
-      const botMsg = { id: data.message_id || Date.now() + 1, direction: 'out', content: data.reply, created_at: new Date().toISOString(), intent: data.intent, suggestions: data.suggestions || [] };
-      setMessages(prev => [...prev, botMsg]);
-      if (data.intent === 'schedule_meeting' && data.data && data.data.id && onMeetingCreated) {
-        onMeetingCreated(data.data);
-      }
-    } catch (e) {
-      setError(e.response?.data?.error || 'Failed to get a response. Please try again.');
-    } finally {
-      setSending(false);
-    }
-  }, [draft, onMeetingCreated]);
-
-  const handleKey = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
-
-  return (
-    <Card variant="outlined" sx={{ mt: 3 }}>
-      <CardContent sx={{ pb: open ? 1 : undefined }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', mb: open ? 1.5 : 0 }}
-          onClick={() => setOpen(v => !v)}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Chat fontSize="small" color="primary" />
-            <Typography fontWeight={600} fontSize="0.95rem">Live Chat with Bot</Typography>
-            <Chip label="AI" size="small" color="primary" sx={{ height: 17, fontSize: '0.62rem' }} />
-          </Box>
-          {open ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
-        </Box>
-
-        <Collapse in={open}>
-          {/* Quick suggestion chips */}
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mb: 1.5 }}>
-            {QUICK_SUGGESTIONS.map(s => (
-              <Chip
-                key={s}
-                label={s}
-                size="small"
-                variant="outlined"
-                onClick={() => !sending && send(s)}
-                sx={{ fontSize: '0.72rem', cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
-              />
-            ))}
-          </Box>
-
-          {/* Chat window */}
-          <Paper variant="outlined" sx={{ height: { xs: 260, sm: 320 }, overflowY: 'auto', p: 1.5, bgcolor: 'background.default' }}>
-            {messages.map((m, idx) => (
-              <Box key={m.id}>
-                <Box sx={{ display: 'flex', justifyContent: m.direction === 'out' ? 'flex-start' : 'flex-end', mb: m.suggestions?.length ? 0.5 : 1 }}>
-                  <Box sx={{
-                    maxWidth: '82%',
-                    bgcolor: m.direction === 'in' ? 'primary.main' : 'action.selected',
-                    color: m.direction === 'in' ? 'primary.contrastText' : 'text.primary',
-                    borderRadius: m.direction === 'in' ? '12px 12px 4px 12px' : '12px 12px 12px 4px',
-                    px: 1.5, py: 1,
-                  }}>
-                    <Typography fontSize="0.83rem" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                      {m.content}
-                    </Typography>
-                    <Typography fontSize="0.62rem" sx={{ opacity: 0.6, mt: 0.25 }}>
-                      {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </Typography>
-                  </Box>
-                </Box>
-                {/* Inline suggestion buttons for bot messages */}
-                {m.direction === 'out' && m.suggestions?.length > 0 && idx === messages.length - 1 && (
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 1, pl: 0.5 }}>
-                    {m.suggestions.map((s, si) => (
-                      <Chip
-                        key={si}
-                        label={s.label}
-                        size="small"
-                        color="primary"
-                        variant="outlined"
-                        onClick={() => {
-                          if (!sending) {
-                            if (s.value === null) {
-                              // Focus input for custom entry
-                              document.querySelector('[placeholder*="Schedule"]')?.focus();
-                            } else {
-                              send(s.value);
-                            }
-                          }
-                        }}
-                        sx={{ fontSize: '0.72rem', cursor: 'pointer' }}
-                      />
-                    ))}
-                  </Box>
-                )}
-              </Box>
-            ))}
-            {sending && (
-              <Box sx={{ display: 'flex', justifyContent: 'flex-start', mb: 1 }}>
-                <Box sx={{ bgcolor: 'action.selected', borderRadius: '12px 12px 12px 4px', px: 1.5, py: 1 }}>
-                  <Typography fontSize="0.83rem" color="text.secondary">Thinking…</Typography>
-                </Box>
-              </Box>
-            )}
-            <div ref={endRef} />
-          </Paper>
-
-          {error && <Alert severity="error" sx={{ mt: 0.75, py: 0, fontSize: '0.8rem' }}>{error}</Alert>}
-
-          {!botConnected && (
-            <Alert
-              severity="info"
-              sx={{ mt: 1, py: 0.5, fontSize: '0.8rem' }}
-              action={
-                <Button size="small" onClick={() => navigate('/workspace/ai-settings')}>Connect</Button>
-              }
-            >
-              Connect your Telegram account to receive reminders and DMs from the bot.
-            </Alert>
-          )}
-
-          <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
-            <TextField
-              size="small" fullWidth multiline maxRows={3}
-              placeholder="Schedule meeting, show reminders, group issues…"
-              value={draft}
-              onChange={e => setDraft(e.target.value)}
-              onKeyDown={handleKey}
-              disabled={sending}
-            />
-            <IconButton color="primary" onClick={() => send()} disabled={sending || !draft.trim()}>
-              {sending ? <CircularProgress size={18} /> : <Send fontSize="small" />}
-            </IconButton>
-          </Box>
-        </Collapse>
-      </CardContent>
-    </Card>
-  );
-}
 
 // ── Meetings Panel ────────────────────────────────────────────────────────────
 
 const PRIORITY_COLOR = { low: 'success', medium: 'warning', high: 'error' };
 
-function MeetingsCard({ newMeeting }) {
+function MeetingsCard() {
   const [meetings, setMeetings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(true);
@@ -638,16 +255,6 @@ function MeetingsCard({ newMeeting }) {
   }, []);
 
   useEffect(() => { load(); }, [load]);
-
-  // When assistant creates a new meeting, prepend it without re-fetching
-  useEffect(() => {
-    if (!newMeeting) return;
-    setMeetings(prev => {
-      if (prev.find(m => m.id === newMeeting.id)) return prev;
-      return [newMeeting, ...prev];
-    });
-    setOpen(true);
-  }, [newMeeting]);
 
   const markComplete = async (id) => {
     try {
@@ -869,7 +476,6 @@ export default function AssistantHub() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [newMeeting, setNewMeeting] = useState(null);
   const [hubTab, setHubTab] = useState(0);
   const [bannerDismissed, setBannerDismissed] = useState(
     () => localStorage.getItem(DISMISS_KEY) === '1'
@@ -953,34 +559,8 @@ export default function AssistantHub() {
           {/* Onboarding checklist */}
           {data?.onboarding && <OnboardingCard onboarding={data.onboarding} />}
 
-          {/* Row 1 — Reminders + Notes */}
-          <Grid container spacing={2} sx={{ mb: 2 }}>
-            <Grid item xs={12} sm={6}>
-              <RemindersCard reminders={data?.reminders_today || []} />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <NotesCard recentNotes={data?.recent_notes || []} />
-            </Grid>
-          </Grid>
-
-          {/* Row 2 — Digest + Automation */}
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={6}>
-              <DigestCard digestStatus={data?.digest_status || []} />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <ActivityCard activity={data?.automation_activity || { auto_replies_today: 0, workflows_today: 0 }} />
-            </Grid>
-          </Grid>
-
-          {/* Ask Your Community */}
-          <AskCard hasGroups={(data?.active_groups || 0) > 0} />
-
-          {/* Personal Assistant Chat */}
-          <PersonalAssistantChat onMeetingCreated={setNewMeeting} botConnected={data?.bot_connected} />
-
           {/* Upcoming Meetings */}
-          <MeetingsCard newMeeting={newMeeting} />
+          <MeetingsCard />
 
           {/* Active Spaces — assistant bot chats */}
           <ActiveSpacesCard plan={plan} />
