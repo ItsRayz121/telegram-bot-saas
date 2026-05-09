@@ -27,7 +27,8 @@ from ..assistant.hub_models import (
     AssistantHubGlobal, HubBotIdentity, HubBotSettings,
     HubConnectedGroup, HubTask, HubReminder, HubDecision,
     HubMeeting, HubNote, HubSystemAutomation, HubBotAutomationSetting,
-    HubInboxItem,
+    HubInboxItem, HubMemoryPerson, HubMemoryProject, HubMemoryGroupContext,
+    HubKnowledgeCard,
 )
 from ..assistant.hub_settings_resolver import get_effective_settings
 from ..assistant.hub_plan_limits import get_limits_for_plan, PlanLimitError
@@ -380,6 +381,285 @@ def plan_limits():
     usage["memory_projects"] = HubMemoryProject.query.filter_by(user_id=user.id).count()
 
     return jsonify({"plan": plan, "limits": limits, "usage": usage})
+
+
+@hub_bp.route("/bots/official/groups/<group_id>/pause", methods=["POST"])
+@jwt_required()
+def pause_group(group_id):
+    """Pause observation for a connected group."""
+    user = _current_user()
+    group = HubConnectedGroup.query.filter_by(id=group_id, user_id=user.id).first_or_404()
+    group.is_active = False
+    group.pause_reason = "user_paused"
+    db.session.commit()
+    return jsonify({"ok": True, "group": _group_dict(group)})
+
+
+@hub_bp.route("/bots/official/groups/<group_id>/resume", methods=["POST"])
+@jwt_required()
+def resume_group(group_id):
+    """Resume observation for a paused group (respects plan limits)."""
+    user = _current_user()
+    group = HubConnectedGroup.query.filter_by(id=group_id, user_id=user.id).first_or_404()
+
+    # Plan limit check before resuming
+    from ..assistant.hub_plan_limits import check_connected_groups, PlanLimitError
+    try:
+        check_connected_groups(
+            user_id=user.id,
+            bot_id=group.bot_id,
+            bot_type="official",
+            plan=user.subscription_tier or "free",
+        )
+    except PlanLimitError as e:
+        return jsonify({"error": "plan_limit", **e.to_dict()}), 402
+
+    group.is_active = True
+    group.pause_reason = None
+    db.session.commit()
+    return jsonify({"ok": True, "group": _group_dict(group)})
+
+
+@hub_bp.route("/bots/official/groups/<group_id>/disconnect", methods=["DELETE"])
+@jwt_required()
+def disconnect_group(group_id):
+    """
+    Disconnect a group. Optionally delete all extracted data.
+    Query param: delete_data=true
+    Bot must leave the group (done via Telegram API if bot instance available).
+    """
+    user = _current_user()
+    group = HubConnectedGroup.query.filter_by(id=group_id, user_id=user.id).first_or_404()
+    delete_data = request.args.get("delete_data", "false").lower() == "true"
+
+    if delete_data:
+        HubTask.query.filter_by(source_group_id=group.id, user_id=user.id).delete()
+        HubReminder.query.filter_by(source_group_id=group.id, user_id=user.id).delete()
+        HubDecision.query.filter_by(source_group_id=group.id, user_id=user.id).delete()
+        HubMeeting.query.filter_by(source_group_id=group.id, user_id=user.id).delete()
+        HubNote.query.filter_by(source_group_id=group.id, user_id=user.id).delete()
+
+    telegram_group_id = group.telegram_group_id
+    db.session.delete(group)
+    db.session.commit()
+
+    # Best-effort: leave Telegram group
+    _try_leave_group(telegram_group_id)
+
+    return jsonify({"ok": True, "deleted_data": delete_data})
+
+
+@hub_bp.route("/export", methods=["GET"])
+@jwt_required()
+def export_data():
+    """
+    Export all Assistant Hub data for the user as JSON.
+    Includes tasks, reminders, decisions, meetings, notes, templates,
+    memory entries, connected group metadata, digests.
+    Raw message content is never included (not stored permanently).
+    """
+    user = _current_user()
+
+    from ..assistant.hub_models import (
+        HubTemplate, HubDigest, HubMemoryGlobal, HubMemoryPerson,
+        HubMemoryProject, HubMemoryGroupContext,
+    )
+
+    bots = HubBotIdentity.query.filter_by(user_id=user.id).all()
+
+    export = {
+        "exported_at": datetime.utcnow().isoformat() + "Z",
+        "user_id": user.id,
+        "bots": [],
+        "memory": {
+            "global": None,
+            "people": [],
+            "projects": [],
+            "group_contexts": [],
+        },
+    }
+
+    for bot in bots:
+        groups = HubConnectedGroup.query.filter_by(bot_id=bot.id, user_id=user.id).all()
+        bot_export = {
+            "bot_id": bot.id,
+            "bot_type": bot.bot_type,
+            "display_name": bot.display_name,
+            "templates": [
+                {"name": t.name, "content": t.content, "use_count": t.use_count}
+                for t in HubTemplate.query.filter_by(bot_id=bot.id).all()
+            ],
+            "connected_groups": [],
+        }
+        for g in groups:
+            group_export = {
+                "group_id": g.id,
+                "group_name": g.group_name,
+                "category": g.category,
+                "tasks": [_task_dict(t) for t in HubTask.query.filter_by(source_group_id=g.id).all()],
+                "reminders": [_reminder_dict(r) for r in HubReminder.query.filter_by(source_group_id=g.id).all()],
+                "decisions": [_decision_dict(d) for d in HubDecision.query.filter_by(source_group_id=g.id).all()],
+                "meetings": [_meeting_dict(m) for m in HubMeeting.query.filter_by(source_group_id=g.id).all()],
+                "notes": [_note_dict(n) for n in HubNote.query.filter_by(source_group_id=g.id).all()],
+            }
+            bot_export["connected_groups"].append(group_export)
+        export["bots"].append(bot_export)
+
+    # Memory
+    mem_global = HubMemoryGlobal.query.filter_by(user_id=user.id).first()
+    if mem_global:
+        export["memory"]["global"] = {
+            "preferred_name": mem_global.preferred_name,
+            "company_name": mem_global.company_name,
+            "role": mem_global.role,
+            "timezone": mem_global.timezone,
+            "current_priorities": mem_global.current_priorities,
+            "free_notes": mem_global.free_notes,
+        }
+    export["memory"]["people"] = [
+        {"name": p.name, "role": p.role, "notes": p.notes}
+        for p in HubMemoryPerson.query.filter_by(user_id=user.id).all()
+    ]
+    export["memory"]["projects"] = [
+        {"name": p.name, "status": p.status, "context_notes": p.context_notes, "deadline": p.deadline.isoformat() if p.deadline else None}
+        for p in HubMemoryProject.query.filter_by(user_id=user.id).all()
+    ]
+    export["memory"]["group_contexts"] = [
+        {"group_id": gc.group_id, "context_notes": gc.context_notes, "key_members": gc.key_members, "active_projects": gc.active_projects}
+        for gc in HubMemoryGroupContext.query.filter_by(user_id=user.id).all()
+    ]
+
+    return jsonify(export)
+
+
+@hub_bp.route("/delete-all", methods=["DELETE"])
+@jwt_required()
+def delete_all_data():
+    """
+    Delete ALL Assistant Hub data for the user.
+    Requires confirmation header: X-Hub-Confirm: DELETE
+    Does NOT delete the main Telegizer account.
+    """
+    confirm = request.headers.get("X-Hub-Confirm", "")
+    if confirm != "DELETE":
+        return jsonify({"error": "Confirmation required. Send header X-Hub-Confirm: DELETE"}), 400
+
+    user = _current_user()
+
+    from ..assistant.hub_models import (
+        AssistantHubGlobal, HubTemplate, HubDigest,
+        HubMemoryGlobal, HubMemoryPerson, HubMemoryProject,
+        HubMemoryGroupContext, HubMemorySuggestion, HubKnowledgeCard,
+        HubExtractionBatch, HubInboxItem, HubBotAutomationSetting,
+    )
+
+    # Get all bots before deletion
+    bots = HubBotIdentity.query.filter_by(user_id=user.id).all()
+    telegram_group_ids = []
+
+    for bot in bots:
+        groups = HubConnectedGroup.query.filter_by(bot_id=bot.id, user_id=user.id).all()
+        for g in groups:
+            telegram_group_ids.append(g.telegram_group_id)
+            # Delete extracted data
+            HubTask.query.filter_by(source_group_id=g.id).delete()
+            HubReminder.query.filter_by(source_group_id=g.id).delete()
+            HubDecision.query.filter_by(source_group_id=g.id).delete()
+            HubMeeting.query.filter_by(source_group_id=g.id).delete()
+            HubNote.query.filter_by(source_group_id=g.id).delete()
+            HubMemoryGroupContext.query.filter_by(group_id=g.id).delete()
+
+        # Delete bot-scoped data
+        HubConnectedGroup.query.filter_by(bot_id=bot.id).delete()
+        HubTemplate.query.filter_by(bot_id=bot.id).delete()
+        HubKnowledgeCard.query.filter_by(bot_id=bot.id).delete()
+        HubBotAutomationSetting.query.filter_by(bot_id=bot.id).delete()
+        HubBotSettings.query.filter_by(bot_id=bot.id).delete()
+        HubDigest.query.filter_by(bot_id=bot.id).delete()
+        HubInboxItem.query.filter_by(bot_id=bot.id).delete()
+        HubExtractionBatch.query.filter_by(bot_id=bot.id).delete()
+
+    # Delete user-scoped data
+    HubMemoryGlobal.query.filter_by(user_id=user.id).delete()
+    HubMemoryPerson.query.filter_by(user_id=user.id).delete()
+    HubMemoryProject.query.filter_by(user_id=user.id).delete()
+    HubMemorySuggestion.query.filter_by(user_id=user.id).delete()
+    HubBotIdentity.query.filter_by(user_id=user.id).delete()
+    AssistantHubGlobal.query.filter_by(user_id=user.id).delete()
+
+    db.session.commit()
+
+    # Best-effort: leave all Telegram groups
+    for tg_id in telegram_group_ids:
+        _try_leave_group(tg_id)
+
+    return jsonify({"ok": True, "message": "All Assistant Hub data deleted."})
+
+
+@hub_bp.route("/bots/official/settings/retention", methods=["PATCH"])
+@jwt_required()
+def update_retention():
+    """Update raw buffer retention window (24 / 48 / 72 hours)."""
+    user = _current_user()
+    data = request.get_json(silent=True) or {}
+    hours = int(data.get("hours", 72))
+    if hours not in (24, 48, 72):
+        return jsonify({"error": "hours must be 24, 48, or 72"}), 400
+
+    # Store in global settings (we reuse notification_prefs JSON for now as a simple store)
+    bot = HubBotIdentity.query.filter_by(user_id=user.id, bot_type="official").first()
+    if bot:
+        settings = HubBotSettings.query.filter_by(bot_id=bot.id).first()
+        if settings:
+            prefs = settings.notification_prefs or {}
+            prefs["buffer_retention_hours"] = hours
+            settings.notification_prefs = prefs
+            db.session.commit()
+
+    return jsonify({"ok": True, "hours": hours})
+
+
+def _try_leave_group(telegram_group_id: int):
+    """Best-effort: instruct the official bot to leave a Telegram group."""
+    try:
+        from flask import current_app
+        bot_instance = getattr(current_app, "official_bot_instance", None)
+        if bot_instance and bot_instance._loop and bot_instance._loop.is_running():
+            import asyncio
+            future = asyncio.run_coroutine_threadsafe(
+                bot_instance.application.bot.leave_chat(telegram_group_id),
+                bot_instance._loop,
+            )
+            future.result(timeout=5)
+    except Exception as e:
+        _log.debug("leave_chat failed for %s: %s", telegram_group_id, e)
+
+
+# ── Export helpers ─────────────────────────────────────────────────────────────
+
+def _task_dict(t):
+    return {"id": t.id, "title": t.title, "assignee_name": t.assignee_name,
+            "due_date": t.due_date.isoformat() if t.due_date else None,
+            "priority": t.priority, "status": t.status, "source": t.source,
+            "created_at": t.created_at.isoformat()}
+
+def _reminder_dict(r):
+    return {"id": r.id, "content": r.content,
+            "remind_at": r.remind_at.isoformat() if r.remind_at else None,
+            "source": r.source, "created_at": r.created_at.isoformat()}
+
+def _decision_dict(d):
+    return {"id": d.id, "content": d.content, "made_by": d.made_by,
+            "created_at": d.created_at.isoformat()}
+
+def _meeting_dict(m):
+    return {"id": m.id, "title": m.title,
+            "scheduled_at": m.scheduled_at.isoformat() if m.scheduled_at else None,
+            "participants": m.participants, "created_at": m.created_at.isoformat()}
+
+def _note_dict(n):
+    return {"id": n.id, "content": n.content, "tags": n.tags,
+            "source": n.source, "created_at": n.created_at.isoformat()}
 
 
 @hub_bp.route("/webhook", methods=["POST"])

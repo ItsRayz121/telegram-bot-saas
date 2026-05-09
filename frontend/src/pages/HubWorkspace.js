@@ -11,11 +11,13 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   Box, Tabs, Tab, Typography, Chip, Button, CircularProgress,
   Card, CardContent, Switch, FormControlLabel, Divider, Select, MenuItem,
-  FormControl, InputLabel, FormHelperText, TextField,
-  CircularProgress as CProgress,
+  FormControl, InputLabel, FormHelperText, TextField, Alert, Dialog,
+  DialogTitle, DialogContent, DialogActions,
 } from '@mui/material';
 import { ArrowBack, SmartToy } from '@mui/icons-material';
 import hub from '../services/hubApi';
+import AddToGroupFlow from '../components/hub/AddToGroupFlow';
+import GroupSettingsOverlay from '../components/hub/GroupSettingsOverlay';
 
 // ── Tab definitions (Knowledge hidden in V1) ──────────────────────────────────
 const TABS = [
@@ -329,10 +331,34 @@ function AutomationToggle({ checked, onChange, label, description }) {
 // ── Settings ──────────────────────────────────────────────────────────────────
 
 function HubSettings({ botData }) {
-  const navigate = useNavigate();
   const [groups, setGroups] = useState([]);
   const [groupsLoading, setGroupsLoading] = useState(true);
   const [settings, setSettings] = useState(null);
+  const [personality, setPersonality] = useState('');
+  const [language, setLanguage] = useState('en');
+  const [sensitivity, setSensitivity] = useState('standard');
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsError, setSettingsError] = useState(null);
+  const [settingsSaved, setSettingsSaved] = useState(false);
+
+  // Group settings overlay
+  const [overlayGroup, setOverlayGroup] = useState(null);
+
+  // Add-to-group flow
+  const [addFlowOpen, setAddFlowOpen] = useState(false);
+
+  // Privacy
+  const [retention, setRetention] = useState('72');
+  const [retentionSaving, setRetentionSaving] = useState(false);
+
+  // Delete-all dialog
+  const [deleteAllOpen, setDeleteAllOpen] = useState(false);
+  const [deleteAllConfirm, setDeleteAllConfirm] = useState('');
+  const [deleteAllLoading, setDeleteAllLoading] = useState(false);
+  const [deleteAllError, setDeleteAllError] = useState(null);
+
+  // Export
+  const [exportLoading, setExportLoading] = useState(false);
 
   useEffect(() => {
     hub.listOfficialGroups()
@@ -341,9 +367,86 @@ function HubSettings({ botData }) {
       .finally(() => setGroupsLoading(false));
 
     hub.getOfficialSettings()
-      .then(r => setSettings(r.data.settings))
+      .then(r => {
+        const s = r.data.settings || {};
+        setSettings(s);
+        setPersonality(s.ai_personality_note || '');
+        setLanguage(s.response_language || 'en');
+        setSensitivity(s.extraction_sensitivity || 'standard');
+        setRetention(String(s.buffer_ttl_hours || 72));
+      })
       .catch(() => {});
   }, []);
+
+  const handleSaveAI = async () => {
+    setSettingsSaving(true);
+    setSettingsError(null);
+    setSettingsSaved(false);
+    try {
+      await hub.updateOfficialSettings({
+        ai_personality_note: personality || null,
+        response_language: language,
+        extraction_sensitivity: sensitivity,
+      });
+      setSettingsSaved(true);
+      setTimeout(() => setSettingsSaved(false), 2500);
+    } catch (e) {
+      setSettingsError(e?.response?.data?.error || 'Failed to save.');
+    } finally {
+      setSettingsSaving(false);
+    }
+  };
+
+  const handleRetentionChange = async (val) => {
+    setRetention(val);
+    setRetentionSaving(true);
+    try {
+      await hub.updateRetention(Number(val));
+    } catch (_) {}
+    setRetentionSaving(false);
+  };
+
+  const handleExport = async () => {
+    setExportLoading(true);
+    try {
+      const r = await hub.exportData();
+      const blob = new Blob([JSON.stringify(r.data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'hub-export.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (_) {}
+    setExportLoading(false);
+  };
+
+  const handleDeleteAll = async () => {
+    if (deleteAllConfirm !== 'DELETE') return;
+    setDeleteAllLoading(true);
+    setDeleteAllError(null);
+    try {
+      await hub.deleteAll();
+      setDeleteAllOpen(false);
+      setGroups([]);
+    } catch (e) {
+      setDeleteAllError(e?.response?.data?.error || 'Failed to delete.');
+    } finally {
+      setDeleteAllLoading(false);
+    }
+  };
+
+  const handleGroupUpdated = (updated) => {
+    setGroups(prev => prev.map(g => g.id === updated.id ? { ...g, ...updated } : g));
+  };
+
+  const handleGroupDisconnected = (groupId) => {
+    setGroups(prev => prev.filter(g => g.id !== groupId));
+  };
+
+  const handleGroupConnected = (newGroup) => {
+    setGroups(prev => [...prev, newGroup]);
+  };
 
   return (
     <Box sx={{ maxWidth: 640 }}>
@@ -351,6 +454,8 @@ function HubSettings({ botData }) {
       <SectionHeader label="AI Assistant" />
       <Card variant="outlined" sx={{ mb: 3 }}>
         <CardContent>
+          {settingsError && <Alert severity="error" sx={{ mb: 2 }}>{settingsError}</Alert>}
+          {settingsSaved && <Alert severity="success" sx={{ mb: 2 }}>Settings saved.</Alert>}
           <TextField
             label="Personality Note"
             multiline
@@ -358,16 +463,16 @@ function HubSettings({ botData }) {
             fullWidth
             size="small"
             placeholder="e.g. I'm a founder focused on growth. Keep extractions focused on action items and decisions."
-            value={settings?.ai_personality_note || ''}
+            value={personality}
             inputProps={{ maxLength: 200 }}
             helperText="Max 200 chars · Applied to all extractions for this bot"
             sx={{ mb: 2 }}
-            onChange={() => {}}
+            onChange={e => setPersonality(e.target.value)}
           />
 
           <FormControl size="small" fullWidth sx={{ mb: 2 }}>
             <InputLabel>Response Language</InputLabel>
-            <Select value={settings?.response_language || 'en'} label="Response Language" onChange={() => {}}>
+            <Select value={language} label="Response Language" onChange={e => setLanguage(e.target.value)}>
               <MenuItem value="en">English</MenuItem>
               <MenuItem value="ar">Arabic</MenuItem>
               <MenuItem value="es">Spanish</MenuItem>
@@ -376,18 +481,29 @@ function HubSettings({ botData }) {
           </FormControl>
 
           <Typography variant="body2" fontWeight={500} gutterBottom>Extraction Sensitivity</Typography>
-          <Box sx={{ display: 'flex', gap: 1 }}>
+          <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
             {['minimal', 'standard', 'aggressive'].map(v => (
               <Button
                 key={v}
                 size="small"
-                variant={settings?.extraction_sensitivity === v ? 'contained' : 'outlined'}
+                variant={sensitivity === v ? 'contained' : 'outlined'}
                 sx={{ textTransform: 'capitalize' }}
+                onClick={() => setSensitivity(v)}
               >
                 {v}
               </Button>
             ))}
           </Box>
+
+          <Button
+            variant="contained"
+            size="small"
+            onClick={handleSaveAI}
+            disabled={settingsSaving}
+          >
+            {settingsSaving ? <CircularProgress size={14} sx={{ mr: 0.5 }} /> : null}
+            Save AI Settings
+          </Button>
         </CardContent>
       </Card>
 
@@ -396,41 +512,46 @@ function HubSettings({ botData }) {
       <Card variant="outlined" sx={{ mb: 3 }}>
         <CardContent>
           {groupsLoading ? (
-            <CProgress size={20} />
+            <CircularProgress size={20} />
           ) : groups.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" color="text.secondary" mb={1.5}>
               No groups connected yet.
             </Typography>
           ) : (
-            groups.map(g => (
-              <Box
-                key={g.id}
-                sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 0.75 }}
-              >
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Box
-                    sx={{
-                      width: 8, height: 8, borderRadius: '50%',
-                      bgcolor: g.is_active ? 'success.main' : 'text.disabled',
-                    }}
-                  />
-                  <Typography variant="body2">{g.group_name || `Group ${g.telegram_group_id}`}</Typography>
-                  {g.pause_reason === 'plan_limit' && (
-                    <Chip label="Plan limit" size="small" sx={{ height: 16, fontSize: '0.6rem', bgcolor: 'warning.main', color: '#fff' }} />
-                  )}
+            groups.map((g, i) => (
+              <Box key={g.id}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 0.75 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                    <Box sx={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, bgcolor: g.is_active ? 'success.main' : 'text.disabled' }} />
+                    <Typography variant="body2" noWrap>
+                      {g.display_name || g.group_name || `Group ${g.telegram_group_id}`}
+                    </Typography>
+                    {g.pause_reason === 'plan_limit' && (
+                      <Chip label="Plan limit" size="small" sx={{ height: 16, fontSize: '0.6rem', bgcolor: 'warning.main', color: '#fff', flexShrink: 0 }} />
+                    )}
+                    {!g.is_active && g.pause_reason !== 'plan_limit' && (
+                      <Chip label="Paused" size="small" sx={{ height: 16, fontSize: '0.6rem', flexShrink: 0 }} />
+                    )}
+                  </Box>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    sx={{ fontSize: '0.72rem', flexShrink: 0, ml: 1 }}
+                    onClick={() => setOverlayGroup(g)}
+                  >
+                    Settings
+                  </Button>
                 </Box>
-                <Button size="small" variant="outlined" sx={{ fontSize: '0.72rem' }}>
-                  Group Settings
-                </Button>
+                {i < groups.length - 1 && <Divider />}
               </Box>
             ))
           )}
           <Button
             variant="outlined"
             size="small"
-            startIcon={<span>+</span>}
-            sx={{ mt: 1.5 }}
-            onClick={() => navigate('/hub/official/settings')}
+            startIcon={<span style={{ fontSize: '1rem', lineHeight: 1 }}>+</span>}
+            sx={{ mt: groups.length > 0 ? 1.5 : 0 }}
+            onClick={() => setAddFlowOpen(true)}
           >
             Add to Group
           </Button>
@@ -465,19 +586,78 @@ function HubSettings({ botData }) {
         <CardContent>
           <FormControl size="small" sx={{ mb: 2, minWidth: 180 }}>
             <InputLabel>Message retention</InputLabel>
-            <Select defaultValue="72" label="Message retention">
+            <Select
+              value={retention}
+              label="Message retention"
+              disabled={retentionSaving}
+              onChange={e => handleRetentionChange(e.target.value)}
+            >
               <MenuItem value="24">24 hours</MenuItem>
               <MenuItem value="48">48 hours</MenuItem>
               <MenuItem value="72">72 hours</MenuItem>
             </Select>
-            <FormHelperText>Raw message buffer TTL</FormHelperText>
+            <FormHelperText>Raw message buffer TTL{retentionSaving ? ' — saving…' : ''}</FormHelperText>
           </FormControl>
           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-            <Button variant="outlined" size="small">Export data from this bot</Button>
-            <Button variant="outlined" size="small" color="error">Delete data from this bot</Button>
+            <Button variant="outlined" size="small" onClick={handleExport} disabled={exportLoading}>
+              {exportLoading ? <CircularProgress size={14} sx={{ mr: 0.5 }} /> : null}
+              Export data
+            </Button>
+            <Button variant="outlined" size="small" color="error" onClick={() => setDeleteAllOpen(true)}>
+              Delete all data
+            </Button>
           </Box>
         </CardContent>
       </Card>
+
+      {/* Modals */}
+      <AddToGroupFlow
+        open={addFlowOpen}
+        onClose={() => setAddFlowOpen(false)}
+        onGroupConnected={handleGroupConnected}
+      />
+
+      <GroupSettingsOverlay
+        open={Boolean(overlayGroup)}
+        group={overlayGroup}
+        onClose={() => setOverlayGroup(null)}
+        onUpdated={handleGroupUpdated}
+        onDisconnected={handleGroupDisconnected}
+      />
+
+      {/* Delete-all confirmation dialog */}
+      <Dialog open={deleteAllOpen} onClose={() => setDeleteAllOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Delete all Hub data?</DialogTitle>
+        <DialogContent>
+          {deleteAllError && <Alert severity="error" sx={{ mb: 2 }}>{deleteAllError}</Alert>}
+          <Typography variant="body2" color="text.secondary" mb={2}>
+            This permanently deletes all digests, tasks, reminders, notes, decisions, meetings, and memory records.
+            Connected groups will remain but all extracted data will be erased.
+          </Typography>
+          <TextField
+            label='Type "DELETE" to confirm'
+            size="small"
+            fullWidth
+            value={deleteAllConfirm}
+            onChange={e => setDeleteAllConfirm(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => { setDeleteAllOpen(false); setDeleteAllConfirm(''); }} size="small" color="inherit">
+            Cancel
+          </Button>
+          <Button
+            onClick={handleDeleteAll}
+            variant="contained"
+            color="error"
+            size="small"
+            disabled={deleteAllConfirm !== 'DELETE' || deleteAllLoading}
+          >
+            {deleteAllLoading ? <CircularProgress size={14} sx={{ mr: 0.5 }} /> : null}
+            Delete all
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

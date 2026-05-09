@@ -52,6 +52,21 @@ export const hub = {
 
   /** Plan limits and current usage. */
   getLimits: () => api.get('/api/hub/limits'),
+
+  /** Disconnect a group (bot leaves and record is removed). */
+  disconnectGroup: (groupId) =>
+    api.delete(`/api/hub/bots/official/groups/${groupId}/disconnect`),
+
+  /** Export all Hub data as JSON. */
+  exportData: () => api.get('/api/hub/export'),
+
+  /** Delete all Hub data (requires X-Hub-Confirm header). */
+  deleteAll: () =>
+    api.delete('/api/hub/delete-all', { headers: { 'X-Hub-Confirm': 'DELETE' } }),
+
+  /** Update retention window setting. */
+  updateRetention: (bufferTtlHours) =>
+    api.patch('/api/hub/bots/official/settings/retention', { buffer_ttl_hours: bufferTtlHours }),
 };
 
 export default hub;

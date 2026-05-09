@@ -105,6 +105,11 @@ def make_celery(app=None):
                 "task": "backend.scheduler.send_lifecycle_emails",
                 "schedule": crontab(hour=10, minute=0),  # daily at 10:00 UTC
             },
+            # ── Assistant Hub retention enforcement ───────────────────────────
+            "hub-enforce-retention": {
+                "task": "backend.scheduler.hub_enforce_retention",
+                "schedule": crontab(hour=3, minute=15),  # daily at 03:15 UTC
+            },
         },
     )
 
@@ -1175,6 +1180,15 @@ def send_lifecycle_emails():
         logger.info("[lifecycle_emails] day1=%d day3=%d day14=%d", len(day1), len(day3), len(day14))
     except Exception as exc:
         logger.error("send_lifecycle_emails error: %s", exc)
+
+
+def hub_enforce_retention():
+    """Assistant Hub: daily data retention enforcement at 03:15 UTC."""
+    try:
+        from .assistant.hub_retention import enforce_retention
+        enforce_retention()
+    except Exception as exc:
+        logger.error("hub_enforce_retention error: %s", exc)
 
 
 def _get_bot_token_for_chat(chat_id, app):
