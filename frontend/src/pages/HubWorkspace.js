@@ -1,88 +1,92 @@
 /**
  * /hub/official/:tab — Official bot workspace.
- *
- * Tab bar: Overview | Notes | Reminders | Tasks | Templates | Automation | Settings
- * Knowledge tab is hidden in V1.
- *
- * Mirrors the Group Management tab pattern exactly.
+ * Sprint 4: Overview, Tasks, Reminders, Notes tabs are fully live.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Box, Tabs, Tab, Typography, Chip, Button, CircularProgress,
   Card, CardContent, Switch, FormControlLabel, Divider, Select, MenuItem,
   FormControl, InputLabel, FormHelperText, TextField, Alert, Dialog,
-  DialogTitle, DialogContent, DialogActions,
+  DialogTitle, DialogContent, DialogActions, IconButton,
 } from '@mui/material';
-import { ArrowBack, SmartToy } from '@mui/icons-material';
+import {
+  ArrowBack, SmartToy, Add, Delete, Edit, CheckCircleOutline,
+  AccessTime, CalendarToday,
+} from '@mui/icons-material';
 import hub from '../services/hubApi';
 import AddToGroupFlow from '../components/hub/AddToGroupFlow';
 import GroupSettingsOverlay from '../components/hub/GroupSettingsOverlay';
 
-// ── Tab definitions (Knowledge hidden in V1) ──────────────────────────────────
+// ── Tab definitions ────────────────────────────────────────────────────────────
 const TABS = [
-  { label: 'Overview',    value: 'overview' },
-  { label: 'Notes',       value: 'notes' },
-  { label: 'Reminders',   value: 'reminders' },
-  { label: 'Tasks',       value: 'tasks' },
-  { label: 'Templates',   value: 'templates' },
-  { label: 'Automation',  value: 'automation' },
-  { label: 'Settings',    value: 'settings' },
+  { label: 'Overview',   value: 'overview' },
+  { label: 'Notes',      value: 'notes' },
+  { label: 'Reminders',  value: 'reminders' },
+  { label: 'Tasks',      value: 'tasks' },
+  { label: 'Templates',  value: 'templates' },
+  { label: 'Automation', value: 'automation' },
+  { label: 'Settings',   value: 'settings' },
 ];
+
+// ── Shared date formatter ─────────────────────────────────────────────────────
+function fmtDate(iso) {
+  if (!iso) return null;
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  } catch { return iso; }
+}
+
+function fmtDateTime(iso) {
+  if (!iso) return null;
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  } catch { return iso; }
+}
+
+function isOverdue(isoDate) {
+  if (!isoDate) return false;
+  return new Date(isoDate) < new Date();
+}
+
+// ── Root component ─────────────────────────────────────────────────────────────
 
 export default function HubWorkspace() {
   const navigate = useNavigate();
   const { tab = 'overview' } = useParams();
-
   const [botData, setBotData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [groups, setGroups] = useState([]);
 
   useEffect(() => {
     hub.getOfficialBot()
       .then(r => setBotData(r.data))
       .catch(() => {})
       .finally(() => setLoading(false));
+    hub.listOfficialGroups()
+      .then(r => setGroups(r.data.groups || []))
+      .catch(() => {});
   }, []);
 
-  const handleTabChange = (_, newTab) => {
-    navigate(`/hub/official/${newTab}`);
-  };
+  const handleTabChange = (_, newTab) => navigate(`/hub/official/${newTab}`);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* ── Header ── */}
-      <Box
-        sx={{
-          px: { xs: 2, sm: 3 }, pt: 2, pb: 0,
-          borderBottom: '1px solid', borderColor: 'divider',
-          bgcolor: 'background.paper',
-        }}
-      >
-        {/* Back link + bot identity row */}
+      {/* Header */}
+      <Box sx={{ px: { xs: 2, sm: 3 }, pt: 2, pb: 0, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
-          <Button
-            size="small"
-            startIcon={<ArrowBack sx={{ fontSize: 15 }} />}
-            onClick={() => navigate('/hub')}
-            sx={{ minWidth: 0, color: 'text.secondary', fontWeight: 400, px: 0.5 }}
-          >
-            Hub
-          </Button>
-
+          <Button size="small" startIcon={<ArrowBack sx={{ fontSize: 15 }} />} onClick={() => navigate('/hub')}
+            sx={{ minWidth: 0, color: 'text.secondary', fontWeight: 400, px: 0.5 }}>Hub</Button>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, minWidth: 0 }}>
             <SmartToy sx={{ fontSize: 20, color: 'primary.main', flexShrink: 0 }} />
-            {loading ? (
-              <CircularProgress size={16} />
-            ) : (
+            {loading ? <CircularProgress size={16} /> : (
               <>
                 <Typography variant="subtitle1" fontWeight={700} noWrap>
                   {botData?.display_name || 'Official Telegizer Assistant'}
                 </Typography>
-                <Chip
-                  label="Active"
-                  size="small"
-                  sx={{ bgcolor: 'success.main', color: '#fff', height: 18, fontSize: '0.65rem', flexShrink: 0 }}
-                />
+                <Chip label="Active" size="small" sx={{ bgcolor: 'success.main', color: '#fff', height: 18, fontSize: '0.65rem', flexShrink: 0 }} />
                 <Typography variant="caption" color="text.secondary" noWrap sx={{ flexShrink: 0 }}>
                   @{botData?.telegram_bot_username || 'telegizer_bot'} · {botData?.group_count ?? 0} groups
                 </Typography>
@@ -90,166 +94,561 @@ export default function HubWorkspace() {
             )}
           </Box>
         </Box>
-
-        {/* Tab bar */}
-        <Tabs
-          value={TABS.find(t => t.value === tab) ? tab : 'overview'}
-          onChange={handleTabChange}
-          variant="scrollable"
-          scrollButtons="auto"
-          sx={{
-            minHeight: 38,
-            '& .MuiTab-root': { minHeight: 38, fontSize: '0.8rem', py: 0, px: 1.5, textTransform: 'none' },
-          }}
-        >
-          {TABS.map(t => (
-            <Tab key={t.value} label={t.label} value={t.value} />
-          ))}
+        <Tabs value={TABS.find(t => t.value === tab) ? tab : 'overview'} onChange={handleTabChange}
+          variant="scrollable" scrollButtons="auto"
+          sx={{ minHeight: 38, '& .MuiTab-root': { minHeight: 38, fontSize: '0.8rem', py: 0, px: 1.5, textTransform: 'none' } }}>
+          {TABS.map(t => <Tab key={t.value} label={t.label} value={t.value} />)}
         </Tabs>
       </Box>
 
-      {/* ── Tab content ── */}
+      {/* Tab content */}
       <Box sx={{ flex: 1, overflow: 'auto', p: { xs: 2, sm: 3 } }}>
-        <TabContent tab={tab} botData={botData} />
+        <TabContent tab={tab} botData={botData} groups={groups} setGroups={setGroups} />
       </Box>
     </Box>
   );
 }
 
-
-// ── Tab content dispatcher ────────────────────────────────────────────────────
-
-function TabContent({ tab, botData }) {
+// ── Tab dispatcher ─────────────────────────────────────────────────────────────
+function TabContent({ tab, botData, groups, setGroups }) {
   switch (tab) {
-    case 'overview':   return <HubOverview botData={botData} />;
-    case 'notes':      return <HubNotes />;
-    case 'reminders':  return <HubReminders />;
-    case 'tasks':      return <HubTasks />;
+    case 'overview':   return <HubOverview botData={botData} groups={groups} />;
+    case 'notes':      return <HubNotes groups={groups} />;
+    case 'reminders':  return <HubReminders groups={groups} />;
+    case 'tasks':      return <HubTasks groups={groups} />;
     case 'templates':  return <HubTemplates />;
     case 'automation': return <HubAutomation />;
-    case 'settings':   return <HubSettings botData={botData} />;
-    default:           return <HubOverview botData={botData} />;
+    case 'settings':   return <HubSettings botData={botData} groups={groups} setGroups={setGroups} />;
+    default:           return <HubOverview botData={botData} groups={groups} />;
   }
 }
 
-
-// ── Overview ──────────────────────────────────────────────────────────────────
-
-function HubOverview({ botData }) {
+// ── Overview ───────────────────────────────────────────────────────────────────
+function HubOverview({ botData, groups }) {
   const navigate = useNavigate();
-  const groupCount = botData?.group_count ?? 0;
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [groupFilter, setGroupFilter] = useState('');
 
-  if (groupCount === 0) {
+  const load = useCallback(() => {
+    setLoading(true);
+    hub.getOverview(groupFilter || null)
+      .then(r => setData(r.data))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [groupFilter]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const groupCount = data?.group_count ?? botData?.group_count ?? 0;
+
+  if (!loading && groupCount === 0) {
     return (
-      <EmptyState
-        icon="🤖"
-        title="Add the Telegizer bot to your private groups to get started."
+      <EmptyState icon="🤖" title="Add the Telegizer bot to your private groups to get started."
         body="The assistant will silently observe and surface tasks, decisions, and meetings here."
-        action={
-          <Button variant="contained" size="small" onClick={() => navigate('/hub/official/settings')}>
-            + Add to Group
-          </Button>
-        }
+        action={<Button variant="contained" size="small" onClick={() => navigate('/hub/official/settings')}>+ Add to Group</Button>}
       />
     );
   }
 
   return (
-    <EmptyState
-      icon="👁"
-      title={`Watching ${groupCount} group${groupCount !== 1 ? 's' : ''}.`}
-      body="Activity will appear here once there are group discussions to process."
-    />
+    <Box sx={{ maxWidth: 700 }}>
+      {/* Group filter */}
+      {groups.length > 1 && (
+        <FormControl size="small" sx={{ mb: 2, minWidth: 180 }}>
+          <InputLabel>Filter by group</InputLabel>
+          <Select value={groupFilter} label="Filter by group" onChange={e => setGroupFilter(e.target.value)}>
+            <MenuItem value="">All groups</MenuItem>
+            {groups.map(g => <MenuItem key={g.id} value={g.id}>{g.group_name || g.id}</MenuItem>)}
+          </Select>
+        </FormControl>
+      )}
+
+      {loading ? (
+        <Box sx={{ textAlign: 'center', py: 6 }}><CircularProgress /></Box>
+      ) : (
+        <>
+          {data?.new_inbox_items > 0 && (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              {data.new_inbox_items} new item{data.new_inbox_items !== 1 ? 's' : ''} extracted from your groups.
+            </Alert>
+          )}
+
+          {/* Tasks */}
+          <OverviewSection title="Tasks" count={data?.tasks?.length} emptyText="No pending tasks.">
+            {data?.tasks?.map(t => (
+              <ItemRow key={t.id}
+                label={t.title}
+                meta={[t.assignee_name, t.due_date && <span style={{ color: isOverdue(t.due_date) ? '#f44336' : undefined }}>{fmtDate(t.due_date)}</span>]}
+                badge={t.priority !== 'normal' ? t.priority : null}
+                badgeColor={t.priority === 'high' ? 'error' : 'default'}
+                onConfirm={() => hub.updateTask(t.id, { status: 'confirmed' }).then(() => load())}
+              />
+            ))}
+          </OverviewSection>
+
+          {/* Meetings */}
+          <OverviewSection title="Upcoming Meetings" count={data?.meetings?.length} emptyText="No upcoming meetings.">
+            {data?.meetings?.map(m => (
+              <ItemRow key={m.id}
+                label={m.title || 'Meeting'}
+                meta={[fmtDateTime(m.scheduled_at), m.participants?.length ? `${m.participants.join(', ')}` : null]}
+                onDismiss={() => hub.dismissMeeting(m.id).then(() => load())}
+              />
+            ))}
+          </OverviewSection>
+
+          {/* Decisions */}
+          <OverviewSection title="Recent Decisions" count={data?.decisions?.length} emptyText="No decisions captured yet.">
+            {data?.decisions?.map(d => (
+              <ItemRow key={d.id}
+                label={d.content}
+                meta={[d.made_by, fmtDate(d.created_at)]}
+                onDismiss={() => hub.dismissDecision(d.id).then(() => load())}
+              />
+            ))}
+          </OverviewSection>
+
+          {/* Reminders */}
+          <OverviewSection title="Upcoming Reminders" count={data?.reminders?.length} emptyText="No reminders scheduled.">
+            {data?.reminders?.map(r => (
+              <ItemRow key={r.id}
+                label={r.content}
+                meta={[fmtDateTime(r.remind_at)]}
+              />
+            ))}
+          </OverviewSection>
+        </>
+      )}
+    </Box>
   );
 }
 
-
-// ── Notes ─────────────────────────────────────────────────────────────────────
-
-function HubNotes() {
+function OverviewSection({ title, count, emptyText, children }) {
   return (
-    <EmptyState
-      icon="📝"
-      title="No notes yet."
-      body="I'll extract them from group discussions. You can also add notes manually."
-      action={<Button variant="outlined" size="small">+ New Note</Button>}
-    />
+    <Box sx={{ mb: 3 }}>
+      <SectionHeader label={title} />
+      <Card variant="outlined">
+        <CardContent sx={{ p: '12px !important' }}>
+          {count === 0 ? (
+            <Typography variant="body2" color="text.secondary">{emptyText}</Typography>
+          ) : children}
+        </CardContent>
+      </Card>
+    </Box>
   );
 }
 
-
-// ── Reminders ─────────────────────────────────────────────────────────────────
-
-function HubReminders() {
+function ItemRow({ label, meta = [], badge, badgeColor, onConfirm, onDismiss }) {
   return (
-    <EmptyState
-      icon="🔔"
-      title="No reminders scheduled."
-      body="Reminders extracted from group discussions will appear here."
-      action={<Button variant="outlined" size="small">+ New Reminder</Button>}
-    />
+    <Box sx={{ display: 'flex', alignItems: 'flex-start', py: 0.75, gap: 1, '&:not(:last-child)': { borderBottom: '1px solid', borderColor: 'divider' } }}>
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Typography variant="body2" fontWeight={500} noWrap>{label}</Typography>
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 0.25 }}>
+          {meta.filter(Boolean).map((m, i) => (
+            <Typography key={i} variant="caption" color="text.secondary">{m}</Typography>
+          ))}
+          {badge && <Chip label={badge} size="small" color={badgeColor} sx={{ height: 16, fontSize: '0.6rem' }} />}
+        </Box>
+      </Box>
+      <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
+        {onConfirm && (
+          <IconButton size="small" onClick={onConfirm} title="Confirm">
+            <CheckCircleOutline sx={{ fontSize: 16, color: 'success.main' }} />
+          </IconButton>
+        )}
+        {onDismiss && (
+          <IconButton size="small" onClick={onDismiss} title="Dismiss">
+            <Delete sx={{ fontSize: 16, color: 'text.disabled' }} />
+          </IconButton>
+        )}
+      </Box>
+    </Box>
   );
 }
 
+// ── Tasks tab ──────────────────────────────────────────────────────────────────
+function HubTasks({ groups }) {
+  const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState('pending');
+  const [groupFilter, setGroupFilter] = useState('');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editTask, setEditTask] = useState(null);
 
-// ── Tasks ─────────────────────────────────────────────────────────────────────
+  const load = useCallback(() => {
+    setLoading(true);
+    hub.listTasks({ status: statusFilter || undefined, group_id: groupFilter || undefined })
+      .then(r => setTasks(r.data.tasks || []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [statusFilter, groupFilter]);
 
-function HubTasks() {
+  useEffect(() => { load(); }, [load]);
+
+  const handleDelete = async (id) => {
+    await hub.deleteTask(id);
+    load();
+  };
+
+  const handleStatusChange = async (task, newStatus) => {
+    await hub.updateTask(task.id, { status: newStatus });
+    load();
+  };
+
   return (
-    <EmptyState
-      icon="✅"
-      title="No tasks yet."
-      body="I'll surface tasks and action items from group discussions."
-      action={<Button variant="outlined" size="small">+ New Task</Button>}
-    />
+    <Box sx={{ maxWidth: 700 }}>
+      {/* Filters + add button */}
+      <Box sx={{ display: 'flex', gap: 1.5, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+        <FormControl size="small" sx={{ minWidth: 120 }}>
+          <InputLabel>Status</InputLabel>
+          <Select value={statusFilter} label="Status" onChange={e => setStatusFilter(e.target.value)}>
+            <MenuItem value="">All</MenuItem>
+            <MenuItem value="pending">Pending</MenuItem>
+            <MenuItem value="confirmed">Confirmed</MenuItem>
+            <MenuItem value="done">Done</MenuItem>
+            <MenuItem value="dismissed">Dismissed</MenuItem>
+          </Select>
+        </FormControl>
+        {groups.length > 1 && (
+          <FormControl size="small" sx={{ minWidth: 140 }}>
+            <InputLabel>Group</InputLabel>
+            <Select value={groupFilter} label="Group" onChange={e => setGroupFilter(e.target.value)}>
+              <MenuItem value="">All groups</MenuItem>
+              {groups.map(g => <MenuItem key={g.id} value={g.id}>{g.group_name || g.id}</MenuItem>)}
+            </Select>
+          </FormControl>
+        )}
+        <Box sx={{ flex: 1 }} />
+        <Button variant="contained" size="small" startIcon={<Add />} onClick={() => setCreateOpen(true)}>
+          New Task
+        </Button>
+      </Box>
+
+      {/* Task list */}
+      {loading ? (
+        <Box sx={{ textAlign: 'center', py: 6 }}><CircularProgress /></Box>
+      ) : tasks.length === 0 ? (
+        <EmptyState icon="✅" title="No tasks yet."
+          body="Tasks will appear here once extracted from group messages, or create one manually."
+          action={<Button variant="outlined" size="small" onClick={() => setCreateOpen(true)}>+ New Task</Button>}
+        />
+      ) : (
+        <Card variant="outlined">
+          {tasks.map((t, i) => (
+            <Box key={t.id}>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', px: 2, py: 1.25, gap: 1 }}>
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+                    <Typography variant="body2" fontWeight={500}>{t.title}</Typography>
+                    <TaskStatusChip status={t.status} />
+                    {t.priority === 'high' && <Chip label="high" size="small" color="error" sx={{ height: 16, fontSize: '0.6rem' }} />}
+                    {t.source === 'extracted' && <Chip label="AI" size="small" sx={{ height: 16, fontSize: '0.6rem', bgcolor: 'primary.main', color: '#fff' }} />}
+                  </Box>
+                  <Box sx={{ display: 'flex', gap: 1.5, mt: 0.25, flexWrap: 'wrap' }}>
+                    {t.assignee_name && <Typography variant="caption" color="text.secondary">{t.assignee_name}</Typography>}
+                    {t.due_date && (
+                      <Typography variant="caption" sx={{ color: isOverdue(t.due_date) ? 'error.main' : 'text.secondary' }}>
+                        <CalendarToday sx={{ fontSize: 10, mr: 0.25 }} />{fmtDate(t.due_date)}
+                      </Typography>
+                    )}
+                  </Box>
+                </Box>
+                <Box sx={{ display: 'flex', gap: 0.25, flexShrink: 0 }}>
+                  {t.status === 'pending' && (
+                    <IconButton size="small" title="Mark confirmed" onClick={() => handleStatusChange(t, 'confirmed')}>
+                      <CheckCircleOutline sx={{ fontSize: 16, color: 'success.main' }} />
+                    </IconButton>
+                  )}
+                  {t.status !== 'done' && (
+                    <IconButton size="small" title="Mark done" onClick={() => handleStatusChange(t, 'done')}>
+                      <CheckCircleOutline sx={{ fontSize: 16, color: 'text.disabled' }} />
+                    </IconButton>
+                  )}
+                  <IconButton size="small" title="Edit" onClick={() => setEditTask(t)}>
+                    <Edit sx={{ fontSize: 15 }} />
+                  </IconButton>
+                  <IconButton size="small" title="Delete" onClick={() => handleDelete(t.id)}>
+                    <Delete sx={{ fontSize: 15 }} />
+                  </IconButton>
+                </Box>
+              </Box>
+              {i < tasks.length - 1 && <Divider />}
+            </Box>
+          ))}
+        </Card>
+      )}
+
+      <TaskModal open={createOpen || Boolean(editTask)} task={editTask}
+        onClose={() => { setCreateOpen(false); setEditTask(null); }}
+        onSaved={() => { setCreateOpen(false); setEditTask(null); load(); }}
+        groups={groups}
+      />
+    </Box>
   );
 }
 
+function TaskStatusChip({ status }) {
+  const map = { pending: ['Pending', 'default'], confirmed: ['Confirmed', 'info'], done: ['Done', 'success'], dismissed: ['Dismissed', 'default'] };
+  const [label, color] = map[status] || ['Unknown', 'default'];
+  return <Chip label={label} size="small" color={color} sx={{ height: 16, fontSize: '0.6rem' }} />;
+}
 
-// ── Templates ─────────────────────────────────────────────────────────────────
+// ── Reminders tab ──────────────────────────────────────────────────────────────
+function HubReminders({ groups }) {
+  const [reminders, setReminders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('upcoming');
+  const [groupFilter, setGroupFilter] = useState('');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editReminder, setEditReminder] = useState(null);
 
+  const load = useCallback(() => {
+    setLoading(true);
+    hub.listReminders({ filter: filter || undefined, group_id: groupFilter || undefined })
+      .then(r => setReminders(r.data.reminders || []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [filter, groupFilter]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleDelete = async (id) => {
+    await hub.deleteReminder(id);
+    load();
+  };
+
+  return (
+    <Box sx={{ maxWidth: 700 }}>
+      <Box sx={{ display: 'flex', gap: 1.5, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+        <FormControl size="small" sx={{ minWidth: 120 }}>
+          <InputLabel>Filter</InputLabel>
+          <Select value={filter} label="Filter" onChange={e => setFilter(e.target.value)}>
+            <MenuItem value="upcoming">Upcoming</MenuItem>
+            <MenuItem value="overdue">Overdue</MenuItem>
+            <MenuItem value="">All</MenuItem>
+          </Select>
+        </FormControl>
+        {groups.length > 1 && (
+          <FormControl size="small" sx={{ minWidth: 140 }}>
+            <InputLabel>Group</InputLabel>
+            <Select value={groupFilter} label="Group" onChange={e => setGroupFilter(e.target.value)}>
+              <MenuItem value="">All groups</MenuItem>
+              {groups.map(g => <MenuItem key={g.id} value={g.id}>{g.group_name || g.id}</MenuItem>)}
+            </Select>
+          </FormControl>
+        )}
+        <Box sx={{ flex: 1 }} />
+        <Button variant="contained" size="small" startIcon={<Add />} onClick={() => setCreateOpen(true)}>
+          New Reminder
+        </Button>
+      </Box>
+
+      {loading ? (
+        <Box sx={{ textAlign: 'center', py: 6 }}><CircularProgress /></Box>
+      ) : reminders.length === 0 ? (
+        <EmptyState icon="🔔" title="No reminders scheduled."
+          body="Reminders extracted from group discussions will appear here."
+          action={<Button variant="outlined" size="small" onClick={() => setCreateOpen(true)}>+ New Reminder</Button>}
+        />
+      ) : (
+        <Card variant="outlined">
+          {reminders.map((r, i) => (
+            <Box key={r.id}>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', px: 2, py: 1.25, gap: 1 }}>
+                <AccessTime sx={{ fontSize: 16, color: isOverdue(r.remind_at) ? 'error.main' : 'text.secondary', mt: 0.25, flexShrink: 0 }} />
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography variant="body2" fontWeight={500}>{r.content}</Typography>
+                  <Typography variant="caption" sx={{ color: isOverdue(r.remind_at) ? 'error.main' : 'text.secondary' }}>
+                    {fmtDateTime(r.remind_at)}{isOverdue(r.remind_at) ? ' · overdue' : ''}
+                  </Typography>
+                  {r.source === 'extracted' && (
+                    <Chip label="AI" size="small" sx={{ ml: 1, height: 14, fontSize: '0.58rem', bgcolor: 'primary.main', color: '#fff' }} />
+                  )}
+                </Box>
+                <Box sx={{ display: 'flex', gap: 0.25, flexShrink: 0 }}>
+                  <IconButton size="small" onClick={() => setEditReminder(r)}><Edit sx={{ fontSize: 15 }} /></IconButton>
+                  <IconButton size="small" onClick={() => handleDelete(r.id)}><Delete sx={{ fontSize: 15 }} /></IconButton>
+                </Box>
+              </Box>
+              {i < reminders.length - 1 && <Divider />}
+            </Box>
+          ))}
+        </Card>
+      )}
+
+      <ReminderModal open={createOpen || Boolean(editReminder)} reminder={editReminder}
+        onClose={() => { setCreateOpen(false); setEditReminder(null); }}
+        onSaved={() => { setCreateOpen(false); setEditReminder(null); load(); }}
+        groups={groups}
+      />
+    </Box>
+  );
+}
+
+// ── Notes tab ──────────────────────────────────────────────────────────────────
+function HubNotes({ groups }) {
+  const [notes, setNotes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [sourceFilter, setSourceFilter] = useState('');
+  const [groupFilter, setGroupFilter] = useState('');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editNote, setEditNote] = useState(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    hub.listNotes({ source: sourceFilter || undefined, group_id: groupFilter || undefined })
+      .then(r => setNotes(r.data.notes || []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [sourceFilter, groupFilter]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleDelete = async (id) => {
+    await hub.deleteNote(id);
+    load();
+  };
+
+  return (
+    <Box sx={{ maxWidth: 700 }}>
+      <Box sx={{ display: 'flex', gap: 1.5, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+        <FormControl size="small" sx={{ minWidth: 120 }}>
+          <InputLabel>Source</InputLabel>
+          <Select value={sourceFilter} label="Source" onChange={e => setSourceFilter(e.target.value)}>
+            <MenuItem value="">All</MenuItem>
+            <MenuItem value="manual">Manual</MenuItem>
+            <MenuItem value="extracted">AI Extracted</MenuItem>
+          </Select>
+        </FormControl>
+        {groups.length > 1 && (
+          <FormControl size="small" sx={{ minWidth: 140 }}>
+            <InputLabel>Group</InputLabel>
+            <Select value={groupFilter} label="Group" onChange={e => setGroupFilter(e.target.value)}>
+              <MenuItem value="">All groups</MenuItem>
+              {groups.map(g => <MenuItem key={g.id} value={g.id}>{g.group_name || g.id}</MenuItem>)}
+            </Select>
+          </FormControl>
+        )}
+        <Box sx={{ flex: 1 }} />
+        <Button variant="contained" size="small" startIcon={<Add />} onClick={() => setCreateOpen(true)}>
+          New Note
+        </Button>
+      </Box>
+
+      {loading ? (
+        <Box sx={{ textAlign: 'center', py: 6 }}><CircularProgress /></Box>
+      ) : notes.length === 0 ? (
+        <EmptyState icon="📝" title="No notes yet."
+          body='I\'ll extract them from group discussions. You can also add notes manually.'
+          action={<Button variant="outlined" size="small" onClick={() => setCreateOpen(true)}>+ New Note</Button>}
+        />
+      ) : (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          {notes.map(n => (
+            <Card key={n.id} variant="outlined">
+              <CardContent sx={{ p: '12px !important' }}>
+                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{n.content}</Typography>
+                    <Box sx={{ display: 'flex', gap: 0.75, mt: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+                      <Chip
+                        label={n.source === 'extracted' ? 'AI' : 'Manual'}
+                        size="small"
+                        sx={{ height: 16, fontSize: '0.6rem', bgcolor: n.source === 'extracted' ? 'primary.main' : 'action.selected', color: n.source === 'extracted' ? '#fff' : 'text.primary' }}
+                      />
+                      {(n.tags || []).map(tag => (
+                        <Chip key={tag} label={tag} size="small" variant="outlined" sx={{ height: 16, fontSize: '0.6rem' }} />
+                      ))}
+                      <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>{fmtDate(n.created_at)}</Typography>
+                    </Box>
+                  </Box>
+                  <Box sx={{ display: 'flex', gap: 0.25, flexShrink: 0 }}>
+                    <IconButton size="small" onClick={() => setEditNote(n)}><Edit sx={{ fontSize: 15 }} /></IconButton>
+                    <IconButton size="small" onClick={() => handleDelete(n.id)}><Delete sx={{ fontSize: 15 }} /></IconButton>
+                  </Box>
+                </Box>
+              </CardContent>
+            </Card>
+          ))}
+        </Box>
+      )}
+
+      <NoteModal open={createOpen || Boolean(editNote)} note={editNote}
+        onClose={() => { setCreateOpen(false); setEditNote(null); }}
+        onSaved={() => { setCreateOpen(false); setEditNote(null); load(); }}
+        groups={groups}
+      />
+    </Box>
+  );
+}
+
+// ── Templates tab ──────────────────────────────────────────────────────────────
 function HubTemplates() {
   return (
-    <EmptyState
-      icon="📋"
-      title="No templates yet."
+    <EmptyState icon="📋" title="No templates yet."
       body="Create reusable content blocks and dispatch them into groups with /assist [name]."
       action={<Button variant="outlined" size="small">+ New Template</Button>}
     />
   );
 }
 
-
-// ── Automation ────────────────────────────────────────────────────────────────
-
+// ── Automation tab ─────────────────────────────────────────────────────────────
 function HubAutomation() {
-  const [digestEnabled, setDigestEnabled] = useState(false);
-  const [digestTime, setDigestTime] = useState('21:00');
-  const [digestFormat, setDigestFormat] = useState('compact');
-  const [meetingReminder, setMeetingReminder] = useState(true);
-  const [deadlineAlert, setDeadlineAlert] = useState(true);
-  const [followUpReminder, setFollowUpReminder] = useState(false);
+  const [automations, setAutomations] = useState([]);
+  const [digest, setDigest] = useState({ enabled: false, time: '21:00', format: 'compact' });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    hub.getAutomations()
+      .then(r => {
+        setAutomations(r.data.automations || []);
+        setDigest(r.data.digest || { enabled: false, time: '21:00', format: 'compact' });
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleToggle = async (code, value) => {
+    setAutomations(prev => prev.map(a => a.code === code ? { ...a, is_enabled: value } : a));
+    try {
+      await hub.updateAutomations({ automations: { [code]: value } });
+    } catch (_) {}
+  };
+
+  const handleSaveDigest = async () => {
+    setSaving(true);
+    try {
+      await hub.updateAutomations({ digest });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (_) {}
+    setSaving(false);
+  };
+
+  if (loading) return <Box sx={{ py: 4, textAlign: 'center' }}><CircularProgress /></Box>;
 
   return (
     <Box sx={{ maxWidth: 640 }}>
       {/* Daily Digest */}
-      <Typography variant="subtitle2" fontWeight={700} color="text.secondary" sx={{ mb: 1.5, textTransform: 'uppercase', fontSize: '0.7rem', letterSpacing: '0.08em' }}>
-        Daily Digest
-      </Typography>
+      <SectionHeader label="Daily Digest" />
       <Card variant="outlined" sx={{ mb: 3 }}>
         <CardContent>
           <Typography variant="body2" color="text.secondary" mb={2}>
             Send a daily summary to your Telegram DM
           </Typography>
           <FormControlLabel
-            control={<Switch checked={digestEnabled} onChange={e => setDigestEnabled(e.target.checked)} size="small" />}
-            label={<Typography variant="body2">{digestEnabled ? 'Enabled' : 'Disabled'}</Typography>}
+            control={<Switch checked={digest.enabled} size="small"
+              onChange={e => setDigest(d => ({ ...d, enabled: e.target.checked }))} />}
+            label={<Typography variant="body2">{digest.enabled ? 'Enabled' : 'Disabled'}</Typography>}
           />
-          {digestEnabled && (
+          {digest.enabled && (
             <Box sx={{ mt: 2, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
               <FormControl size="small" sx={{ minWidth: 120 }}>
                 <InputLabel>Time</InputLabel>
-                <Select value={digestTime} label="Time" onChange={e => setDigestTime(e.target.value)}>
+                <Select value={digest.time} label="Time" onChange={e => setDigest(d => ({ ...d, time: e.target.value }))}>
                   {['07:00','08:00','09:00','12:00','18:00','20:00','21:00','22:00'].map(t => (
                     <MenuItem key={t} value={t}>{t}</MenuItem>
                   ))}
@@ -257,53 +656,46 @@ function HubAutomation() {
               </FormControl>
               <FormControl size="small" sx={{ minWidth: 120 }}>
                 <InputLabel>Format</InputLabel>
-                <Select value={digestFormat} label="Format" onChange={e => setDigestFormat(e.target.value)}>
+                <Select value={digest.format} label="Format" onChange={e => setDigest(d => ({ ...d, format: e.target.value }))}>
                   <MenuItem value="compact">Compact</MenuItem>
                   <MenuItem value="detailed">Detailed</MenuItem>
                 </Select>
               </FormControl>
             </Box>
           )}
+          <Box sx={{ mt: 2 }}>
+            <Button variant="outlined" size="small" onClick={handleSaveDigest} disabled={saving}>
+              {saved ? '✓ Saved' : saving ? <CircularProgress size={14} /> : 'Save'}
+            </Button>
+          </Box>
         </CardContent>
       </Card>
 
       {/* Smart Triggers */}
-      <Typography variant="subtitle2" fontWeight={700} color="text.secondary" sx={{ mb: 1.5, textTransform: 'uppercase', fontSize: '0.7rem', letterSpacing: '0.08em' }}>
-        Smart Triggers
-      </Typography>
+      <SectionHeader label="Smart Triggers" />
       <Card variant="outlined" sx={{ mb: 3 }}>
         <CardContent sx={{ pb: '12px !important' }}>
           <Typography variant="body2" color="text.secondary" mb={2}>
             Automated behaviors when specific events are detected
           </Typography>
-
-          <AutomationToggle
-            checked={meetingReminder}
-            onChange={setMeetingReminder}
-            label="Meeting Reminder"
-            description="Remind me 1 hour before any extracted meeting"
-          />
-          <Divider sx={{ my: 1.5 }} />
-          <AutomationToggle
-            checked={deadlineAlert}
-            onChange={setDeadlineAlert}
-            label="Deadline Alert"
-            description="Send me a DM immediately when a task with a deadline is extracted"
-          />
-          <Divider sx={{ my: 1.5 }} />
-          <AutomationToggle
-            checked={followUpReminder}
-            onChange={setFollowUpReminder}
-            label="Follow-up Reminder"
-            description="Remind me 2 days after a follow-up is detected"
-          />
+          {automations.map((a, i) => (
+            <Box key={a.code}>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
+                <Box>
+                  <Typography variant="body2" fontWeight={500}>{a.name}</Typography>
+                  <Typography variant="caption" color="text.secondary">{a.description}</Typography>
+                </Box>
+                <Switch checked={a.is_enabled} size="small" sx={{ flexShrink: 0 }}
+                  onChange={e => handleToggle(a.code, e.target.checked)} />
+              </Box>
+              {i < automations.length - 1 && <Divider sx={{ my: 1.5 }} />}
+            </Box>
+          ))}
         </CardContent>
       </Card>
 
       {/* Forwarding — Coming V1.5 */}
-      <Typography variant="subtitle2" fontWeight={700} color="text.secondary" sx={{ mb: 1.5, textTransform: 'uppercase', fontSize: '0.7rem', letterSpacing: '0.08em' }}>
-        Forwarding
-      </Typography>
+      <SectionHeader label="Forwarding" />
       <Card variant="outlined" sx={{ borderStyle: 'dashed', borderColor: 'divider', bgcolor: 'transparent' }}>
         <CardContent>
           <Typography variant="body2" color="text.secondary">
@@ -315,24 +707,8 @@ function HubAutomation() {
   );
 }
 
-function AutomationToggle({ checked, onChange, label, description }) {
-  return (
-    <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
-      <Box>
-        <Typography variant="body2" fontWeight={500}>{label}</Typography>
-        <Typography variant="caption" color="text.secondary">{description}</Typography>
-      </Box>
-      <Switch checked={checked} onChange={e => onChange(e.target.checked)} size="small" sx={{ flexShrink: 0 }} />
-    </Box>
-  );
-}
-
-
-// ── Settings ──────────────────────────────────────────────────────────────────
-
-function HubSettings({ botData }) {
-  const [groups, setGroups] = useState([]);
-  const [groupsLoading, setGroupsLoading] = useState(true);
+// ── Settings tab ───────────────────────────────────────────────────────────────
+function HubSettings({ botData, groups, setGroups }) {
   const [settings, setSettings] = useState(null);
   const [personality, setPersonality] = useState('');
   const [language, setLanguage] = useState('en');
@@ -340,32 +716,17 @@ function HubSettings({ botData }) {
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsError, setSettingsError] = useState(null);
   const [settingsSaved, setSettingsSaved] = useState(false);
-
-  // Group settings overlay
   const [overlayGroup, setOverlayGroup] = useState(null);
-
-  // Add-to-group flow
   const [addFlowOpen, setAddFlowOpen] = useState(false);
-
-  // Privacy
   const [retention, setRetention] = useState('72');
   const [retentionSaving, setRetentionSaving] = useState(false);
-
-  // Delete-all dialog
   const [deleteAllOpen, setDeleteAllOpen] = useState(false);
   const [deleteAllConfirm, setDeleteAllConfirm] = useState('');
   const [deleteAllLoading, setDeleteAllLoading] = useState(false);
   const [deleteAllError, setDeleteAllError] = useState(null);
-
-  // Export
   const [exportLoading, setExportLoading] = useState(false);
 
   useEffect(() => {
-    hub.listOfficialGroups()
-      .then(r => setGroups(r.data.groups || []))
-      .catch(() => {})
-      .finally(() => setGroupsLoading(false));
-
     hub.getOfficialSettings()
       .then(r => {
         const s = r.data.settings || {};
@@ -373,36 +734,24 @@ function HubSettings({ botData }) {
         setPersonality(s.ai_personality_note || '');
         setLanguage(s.response_language || 'en');
         setSensitivity(s.extraction_sensitivity || 'standard');
-        setRetention(String(s.buffer_ttl_hours || 72));
+        setRetention(String(s.buffer_retention_hours || s.buffer_ttl_hours || 72));
       })
       .catch(() => {});
   }, []);
 
   const handleSaveAI = async () => {
-    setSettingsSaving(true);
-    setSettingsError(null);
-    setSettingsSaved(false);
+    setSettingsSaving(true); setSettingsError(null); setSettingsSaved(false);
     try {
-      await hub.updateOfficialSettings({
-        ai_personality_note: personality || null,
-        response_language: language,
-        extraction_sensitivity: sensitivity,
-      });
+      await hub.updateOfficialSettings({ ai_personality_note: personality || null, response_language: language, extraction_sensitivity: sensitivity });
       setSettingsSaved(true);
       setTimeout(() => setSettingsSaved(false), 2500);
-    } catch (e) {
-      setSettingsError(e?.response?.data?.error || 'Failed to save.');
-    } finally {
-      setSettingsSaving(false);
-    }
+    } catch (e) { setSettingsError(e?.response?.data?.error || 'Failed to save.'); }
+    setSettingsSaving(false);
   };
 
   const handleRetentionChange = async (val) => {
-    setRetention(val);
-    setRetentionSaving(true);
-    try {
-      await hub.updateRetention(Number(val));
-    } catch (_) {}
+    setRetention(val); setRetentionSaving(true);
+    try { await hub.updateRetention(Number(val)); } catch (_) {}
     setRetentionSaving(false);
   };
 
@@ -412,10 +761,7 @@ function HubSettings({ botData }) {
       const r = await hub.exportData();
       const blob = new Blob([JSON.stringify(r.data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'hub-export.json';
-      a.click();
+      const a = document.createElement('a'); a.href = url; a.download = 'hub-export.json'; a.click();
       URL.revokeObjectURL(url);
     } catch (_) {}
     setExportLoading(false);
@@ -423,53 +769,28 @@ function HubSettings({ botData }) {
 
   const handleDeleteAll = async () => {
     if (deleteAllConfirm !== 'DELETE') return;
-    setDeleteAllLoading(true);
-    setDeleteAllError(null);
-    try {
-      await hub.deleteAll();
-      setDeleteAllOpen(false);
-      setGroups([]);
-    } catch (e) {
-      setDeleteAllError(e?.response?.data?.error || 'Failed to delete.');
-    } finally {
-      setDeleteAllLoading(false);
-    }
+    setDeleteAllLoading(true); setDeleteAllError(null);
+    try { await hub.deleteAll(); setDeleteAllOpen(false); setGroups([]); }
+    catch (e) { setDeleteAllError(e?.response?.data?.error || 'Failed to delete.'); }
+    setDeleteAllLoading(false);
   };
 
-  const handleGroupUpdated = (updated) => {
-    setGroups(prev => prev.map(g => g.id === updated.id ? { ...g, ...updated } : g));
-  };
-
-  const handleGroupDisconnected = (groupId) => {
-    setGroups(prev => prev.filter(g => g.id !== groupId));
-  };
-
-  const handleGroupConnected = (newGroup) => {
-    setGroups(prev => [...prev, newGroup]);
-  };
+  const handleGroupUpdated = (updated) => setGroups(prev => prev.map(g => g.id === updated.id ? { ...g, ...updated } : g));
+  const handleGroupDisconnected = (groupId) => setGroups(prev => prev.filter(g => g.id !== groupId));
+  const handleGroupConnected = (newGroup) => setGroups(prev => [...prev, newGroup]);
 
   return (
     <Box sx={{ maxWidth: 640 }}>
-      {/* AI Assistant */}
       <SectionHeader label="AI Assistant" />
       <Card variant="outlined" sx={{ mb: 3 }}>
         <CardContent>
           {settingsError && <Alert severity="error" sx={{ mb: 2 }}>{settingsError}</Alert>}
           {settingsSaved && <Alert severity="success" sx={{ mb: 2 }}>Settings saved.</Alert>}
-          <TextField
-            label="Personality Note"
-            multiline
-            rows={3}
-            fullWidth
-            size="small"
+          <TextField label="Personality Note" multiline rows={3} fullWidth size="small"
             placeholder="e.g. I'm a founder focused on growth. Keep extractions focused on action items and decisions."
-            value={personality}
-            inputProps={{ maxLength: 200 }}
+            value={personality} inputProps={{ maxLength: 200 }}
             helperText="Max 200 chars · Applied to all extractions for this bot"
-            sx={{ mb: 2 }}
-            onChange={e => setPersonality(e.target.value)}
-          />
-
+            sx={{ mb: 2 }} onChange={e => setPersonality(e.target.value)} />
           <FormControl size="small" fullWidth sx={{ mb: 2 }}>
             <InputLabel>Response Language</InputLabel>
             <Select value={language} label="Response Language" onChange={e => setLanguage(e.target.value)}>
@@ -479,66 +800,35 @@ function HubSettings({ botData }) {
               <MenuItem value="fr">French</MenuItem>
             </Select>
           </FormControl>
-
           <Typography variant="body2" fontWeight={500} gutterBottom>Extraction Sensitivity</Typography>
           <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
             {['minimal', 'standard', 'aggressive'].map(v => (
-              <Button
-                key={v}
-                size="small"
-                variant={sensitivity === v ? 'contained' : 'outlined'}
-                sx={{ textTransform: 'capitalize' }}
-                onClick={() => setSensitivity(v)}
-              >
-                {v}
-              </Button>
+              <Button key={v} size="small" variant={sensitivity === v ? 'contained' : 'outlined'}
+                sx={{ textTransform: 'capitalize' }} onClick={() => setSensitivity(v)}>{v}</Button>
             ))}
           </Box>
-
-          <Button
-            variant="contained"
-            size="small"
-            onClick={handleSaveAI}
-            disabled={settingsSaving}
-          >
-            {settingsSaving ? <CircularProgress size={14} sx={{ mr: 0.5 }} /> : null}
-            Save AI Settings
+          <Button variant="contained" size="small" onClick={handleSaveAI} disabled={settingsSaving}>
+            {settingsSaving ? <CircularProgress size={14} sx={{ mr: 0.5 }} /> : null}Save AI Settings
           </Button>
         </CardContent>
       </Card>
 
-      {/* Connected Groups */}
       <SectionHeader label="Connected Groups" />
       <Card variant="outlined" sx={{ mb: 3 }}>
         <CardContent>
-          {groupsLoading ? (
-            <CircularProgress size={20} />
-          ) : groups.length === 0 ? (
-            <Typography variant="body2" color="text.secondary" mb={1.5}>
-              No groups connected yet.
-            </Typography>
+          {groups.length === 0 ? (
+            <Typography variant="body2" color="text.secondary" mb={1.5}>No groups connected yet.</Typography>
           ) : (
             groups.map((g, i) => (
               <Box key={g.id}>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 0.75 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
                     <Box sx={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, bgcolor: g.is_active ? 'success.main' : 'text.disabled' }} />
-                    <Typography variant="body2" noWrap>
-                      {g.display_name || g.group_name || `Group ${g.telegram_group_id}`}
-                    </Typography>
-                    {g.pause_reason === 'plan_limit' && (
-                      <Chip label="Plan limit" size="small" sx={{ height: 16, fontSize: '0.6rem', bgcolor: 'warning.main', color: '#fff', flexShrink: 0 }} />
-                    )}
-                    {!g.is_active && g.pause_reason !== 'plan_limit' && (
-                      <Chip label="Paused" size="small" sx={{ height: 16, fontSize: '0.6rem', flexShrink: 0 }} />
-                    )}
+                    <Typography variant="body2" noWrap>{g.display_name || g.group_name || `Group ${g.telegram_group_id}`}</Typography>
+                    {g.pause_reason === 'plan_limit' && <Chip label="Plan limit" size="small" sx={{ height: 16, fontSize: '0.6rem', bgcolor: 'warning.main', color: '#fff', flexShrink: 0 }} />}
+                    {!g.is_active && g.pause_reason !== 'plan_limit' && <Chip label="Paused" size="small" sx={{ height: 16, fontSize: '0.6rem', flexShrink: 0 }} />}
                   </Box>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    sx={{ fontSize: '0.72rem', flexShrink: 0, ml: 1 }}
-                    onClick={() => setOverlayGroup(g)}
-                  >
+                  <Button size="small" variant="outlined" sx={{ fontSize: '0.72rem', flexShrink: 0, ml: 1 }} onClick={() => setOverlayGroup(g)}>
                     Settings
                   </Button>
                 </Box>
@@ -546,52 +836,36 @@ function HubSettings({ botData }) {
               </Box>
             ))
           )}
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={<span style={{ fontSize: '1rem', lineHeight: 1 }}>+</span>}
-            sx={{ mt: groups.length > 0 ? 1.5 : 0 }}
-            onClick={() => setAddFlowOpen(true)}
-          >
+          <Button variant="outlined" size="small" startIcon={<span style={{ fontSize: '1rem', lineHeight: 1 }}>+</span>}
+            sx={{ mt: groups.length > 0 ? 1.5 : 0 }} onClick={() => setAddFlowOpen(true)}>
             Add to Group
           </Button>
         </CardContent>
       </Card>
 
-      {/* Memory */}
       <SectionHeader label="Memory" />
       <Card variant="outlined" sx={{ mb: 3 }}>
         <CardContent>
-          <Typography variant="body2" color="text.secondary" mb={1.5}>
-            Global memory is shared across all your bots.
-          </Typography>
+          <Typography variant="body2" color="text.secondary" mb={1.5}>Global memory is shared across all your bots.</Typography>
           <Button variant="outlined" size="small">Edit Memory →</Button>
         </CardContent>
       </Card>
 
-      {/* Notifications */}
       <SectionHeader label="Notifications" />
       <Card variant="outlined" sx={{ mb: 3 }}>
         <CardContent>
-          <FormControlLabel
-            control={<Switch defaultChecked size="small" />}
-            label={<Typography variant="body2">Telegram DM alerts</Typography>}
-          />
+          <FormControlLabel control={<Switch defaultChecked size="small" />}
+            label={<Typography variant="body2">Telegram DM alerts</Typography>} />
         </CardContent>
       </Card>
 
-      {/* Privacy & Data */}
       <SectionHeader label="Privacy & Data" />
       <Card variant="outlined">
         <CardContent>
           <FormControl size="small" sx={{ mb: 2, minWidth: 180 }}>
             <InputLabel>Message retention</InputLabel>
-            <Select
-              value={retention}
-              label="Message retention"
-              disabled={retentionSaving}
-              onChange={e => handleRetentionChange(e.target.value)}
-            >
+            <Select value={retention} label="Message retention" disabled={retentionSaving}
+              onChange={e => handleRetentionChange(e.target.value)}>
               <MenuItem value="24">24 hours</MenuItem>
               <MenuItem value="48">48 hours</MenuItem>
               <MenuItem value="72">72 hours</MenuItem>
@@ -600,61 +874,32 @@ function HubSettings({ botData }) {
           </FormControl>
           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
             <Button variant="outlined" size="small" onClick={handleExport} disabled={exportLoading}>
-              {exportLoading ? <CircularProgress size={14} sx={{ mr: 0.5 }} /> : null}
-              Export data
+              {exportLoading ? <CircularProgress size={14} sx={{ mr: 0.5 }} /> : null}Export data
             </Button>
-            <Button variant="outlined" size="small" color="error" onClick={() => setDeleteAllOpen(true)}>
-              Delete all data
-            </Button>
+            <Button variant="outlined" size="small" color="error" onClick={() => setDeleteAllOpen(true)}>Delete all data</Button>
           </Box>
         </CardContent>
       </Card>
 
-      {/* Modals */}
-      <AddToGroupFlow
-        open={addFlowOpen}
-        onClose={() => setAddFlowOpen(false)}
-        onGroupConnected={handleGroupConnected}
-      />
+      <AddToGroupFlow open={addFlowOpen} onClose={() => setAddFlowOpen(false)} onGroupConnected={handleGroupConnected} />
+      <GroupSettingsOverlay open={Boolean(overlayGroup)} group={overlayGroup} onClose={() => setOverlayGroup(null)}
+        onUpdated={handleGroupUpdated} onDisconnected={handleGroupDisconnected} />
 
-      <GroupSettingsOverlay
-        open={Boolean(overlayGroup)}
-        group={overlayGroup}
-        onClose={() => setOverlayGroup(null)}
-        onUpdated={handleGroupUpdated}
-        onDisconnected={handleGroupDisconnected}
-      />
-
-      {/* Delete-all confirmation dialog */}
       <Dialog open={deleteAllOpen} onClose={() => setDeleteAllOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle>Delete all Hub data?</DialogTitle>
         <DialogContent>
           {deleteAllError && <Alert severity="error" sx={{ mb: 2 }}>{deleteAllError}</Alert>}
           <Typography variant="body2" color="text.secondary" mb={2}>
             This permanently deletes all digests, tasks, reminders, notes, decisions, meetings, and memory records.
-            Connected groups will remain but all extracted data will be erased.
           </Typography>
-          <TextField
-            label='Type "DELETE" to confirm'
-            size="small"
-            fullWidth
-            value={deleteAllConfirm}
-            onChange={e => setDeleteAllConfirm(e.target.value)}
-          />
+          <TextField label='Type "DELETE" to confirm' size="small" fullWidth
+            value={deleteAllConfirm} onChange={e => setDeleteAllConfirm(e.target.value)} />
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => { setDeleteAllOpen(false); setDeleteAllConfirm(''); }} size="small" color="inherit">
-            Cancel
-          </Button>
-          <Button
-            onClick={handleDeleteAll}
-            variant="contained"
-            color="error"
-            size="small"
-            disabled={deleteAllConfirm !== 'DELETE' || deleteAllLoading}
-          >
-            {deleteAllLoading ? <CircularProgress size={14} sx={{ mr: 0.5 }} /> : null}
-            Delete all
+          <Button onClick={() => { setDeleteAllOpen(false); setDeleteAllConfirm(''); }} size="small" color="inherit">Cancel</Button>
+          <Button onClick={handleDeleteAll} variant="contained" color="error" size="small"
+            disabled={deleteAllConfirm !== 'DELETE' || deleteAllLoading}>
+            {deleteAllLoading ? <CircularProgress size={14} sx={{ mr: 0.5 }} /> : null}Delete all
           </Button>
         </DialogActions>
       </Dialog>
@@ -662,21 +907,212 @@ function HubSettings({ botData }) {
   );
 }
 
+// ── Create/Edit Modals ─────────────────────────────────────────────────────────
+
+function TaskModal({ open, task, onClose, onSaved, groups }) {
+  const [title, setTitle] = useState('');
+  const [assignee, setAssignee] = useState('');
+  const [dueDate, setDueDate] = useState('');
+  const [priority, setPriority] = useState('normal');
+  const [groupId, setGroupId] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (task) {
+      setTitle(task.title || '');
+      setAssignee(task.assignee_name || '');
+      setDueDate(task.due_date || '');
+      setPriority(task.priority || 'normal');
+      setGroupId(task.source_group_id || '');
+    } else {
+      setTitle(''); setAssignee(''); setDueDate(''); setPriority('normal'); setGroupId('');
+    }
+    setError(null);
+  }, [task, open]);
+
+  const handleSave = async () => {
+    if (!title.trim()) { setError('Title is required'); return; }
+    setSaving(true); setError(null);
+    try {
+      const data = { title: title.trim(), assignee_name: assignee || null, due_date: dueDate || null, priority, source_group_id: groupId || null };
+      if (task) { await hub.updateTask(task.id, data); }
+      else { await hub.createTask(data); }
+      onSaved();
+    } catch (e) { setError(e?.response?.data?.error || 'Failed to save.'); }
+    setSaving(false);
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+      <DialogTitle sx={{ pr: 6 }}>{task ? 'Edit Task' : 'New Task'}
+        <IconButton onClick={onClose} size="small" sx={{ position: 'absolute', right: 8, top: 8 }}>✕</IconButton>
+      </DialogTitle>
+      <DialogContent dividers>
+        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+        <TextField label="Title" size="small" fullWidth sx={{ mb: 1.5 }} value={title} onChange={e => setTitle(e.target.value)} inputProps={{ maxLength: 500 }} />
+        <TextField label="Assignee" size="small" fullWidth sx={{ mb: 1.5 }} value={assignee} onChange={e => setAssignee(e.target.value)} />
+        <TextField label="Due date" type="date" size="small" fullWidth sx={{ mb: 1.5 }} value={dueDate} onChange={e => setDueDate(e.target.value)} InputLabelProps={{ shrink: true }} />
+        <FormControl size="small" fullWidth sx={{ mb: 1.5 }}>
+          <InputLabel>Priority</InputLabel>
+          <Select value={priority} label="Priority" onChange={e => setPriority(e.target.value)}>
+            <MenuItem value="low">Low</MenuItem>
+            <MenuItem value="normal">Normal</MenuItem>
+            <MenuItem value="high">High</MenuItem>
+          </Select>
+        </FormControl>
+        {groups.length > 0 && (
+          <FormControl size="small" fullWidth>
+            <InputLabel>Group (optional)</InputLabel>
+            <Select value={groupId} label="Group (optional)" onChange={e => setGroupId(e.target.value)}>
+              <MenuItem value="">None</MenuItem>
+              {groups.map(g => <MenuItem key={g.id} value={g.id}>{g.group_name || g.id}</MenuItem>)}
+            </Select>
+          </FormControl>
+        )}
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} size="small" color="inherit">Cancel</Button>
+        <Button onClick={handleSave} variant="contained" size="small" disabled={saving}>
+          {saving ? <CircularProgress size={14} sx={{ mr: 0.5 }} /> : null}Save
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+function ReminderModal({ open, reminder, onClose, onSaved, groups }) {
+  const [content, setContent] = useState('');
+  const [remindAt, setRemindAt] = useState('');
+  const [groupId, setGroupId] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (reminder) {
+      setContent(reminder.content || '');
+      setRemindAt(reminder.remind_at ? reminder.remind_at.slice(0, 16) : '');
+      setGroupId(reminder.source_group_id || '');
+    } else {
+      setContent(''); setRemindAt(''); setGroupId('');
+    }
+    setError(null);
+  }, [reminder, open]);
+
+  const handleSave = async () => {
+    if (!content.trim() || !remindAt) { setError('Content and remind time are required'); return; }
+    setSaving(true); setError(null);
+    try {
+      const data = { content: content.trim(), remind_at: new Date(remindAt).toISOString(), source_group_id: groupId || null };
+      if (reminder) { await hub.updateReminder(reminder.id, data); }
+      else { await hub.createReminder(data); }
+      onSaved();
+    } catch (e) { setError(e?.response?.data?.error || 'Failed to save.'); }
+    setSaving(false);
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+      <DialogTitle sx={{ pr: 6 }}>{reminder ? 'Edit Reminder' : 'New Reminder'}
+        <IconButton onClick={onClose} size="small" sx={{ position: 'absolute', right: 8, top: 8 }}>✕</IconButton>
+      </DialogTitle>
+      <DialogContent dividers>
+        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+        <TextField label="What to remind?" size="small" fullWidth sx={{ mb: 1.5 }} multiline rows={2}
+          value={content} onChange={e => setContent(e.target.value)} inputProps={{ maxLength: 500 }} />
+        <TextField label="Remind at" type="datetime-local" size="small" fullWidth sx={{ mb: 1.5 }}
+          value={remindAt} onChange={e => setRemindAt(e.target.value)} InputLabelProps={{ shrink: true }} />
+        {groups.length > 0 && (
+          <FormControl size="small" fullWidth>
+            <InputLabel>Group (optional)</InputLabel>
+            <Select value={groupId} label="Group (optional)" onChange={e => setGroupId(e.target.value)}>
+              <MenuItem value="">None</MenuItem>
+              {groups.map(g => <MenuItem key={g.id} value={g.id}>{g.group_name || g.id}</MenuItem>)}
+            </Select>
+          </FormControl>
+        )}
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} size="small" color="inherit">Cancel</Button>
+        <Button onClick={handleSave} variant="contained" size="small" disabled={saving}>
+          {saving ? <CircularProgress size={14} sx={{ mr: 0.5 }} /> : null}Save
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+function NoteModal({ open, note, onClose, onSaved, groups }) {
+  const [content, setContent] = useState('');
+  const [tags, setTags] = useState('');
+  const [groupId, setGroupId] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (note) {
+      setContent(note.content || '');
+      setTags((note.tags || []).join(', '));
+      setGroupId(note.source_group_id || '');
+    } else {
+      setContent(''); setTags(''); setGroupId('');
+    }
+    setError(null);
+  }, [note, open]);
+
+  const handleSave = async () => {
+    if (!content.trim()) { setError('Content is required'); return; }
+    setSaving(true); setError(null);
+    try {
+      const parsedTags = tags.split(',').map(t => t.trim()).filter(Boolean);
+      const data = { content: content.trim(), tags: parsedTags, source_group_id: groupId || null };
+      if (note) { await hub.updateNote(note.id, data); }
+      else { await hub.createNote(data); }
+      onSaved();
+    } catch (e) { setError(e?.response?.data?.error || 'Failed to save.'); }
+    setSaving(false);
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+      <DialogTitle sx={{ pr: 6 }}>{note ? 'Edit Note' : 'New Note'}
+        <IconButton onClick={onClose} size="small" sx={{ position: 'absolute', right: 8, top: 8 }}>✕</IconButton>
+      </DialogTitle>
+      <DialogContent dividers>
+        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+        <TextField label="Note" size="small" fullWidth multiline rows={4} sx={{ mb: 1.5 }}
+          value={content} onChange={e => setContent(e.target.value)} inputProps={{ maxLength: 2000 }} />
+        <TextField label="Tags (comma separated)" size="small" fullWidth sx={{ mb: 1.5 }}
+          value={tags} onChange={e => setTags(e.target.value)} placeholder="decision, action, link" />
+        {groups.length > 0 && (
+          <FormControl size="small" fullWidth>
+            <InputLabel>Group (optional)</InputLabel>
+            <Select value={groupId} label="Group (optional)" onChange={e => setGroupId(e.target.value)}>
+              <MenuItem value="">None</MenuItem>
+              {groups.map(g => <MenuItem key={g.id} value={g.id}>{g.group_name || g.id}</MenuItem>)}
+            </Select>
+          </FormControl>
+        )}
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} size="small" color="inherit">Cancel</Button>
+        <Button onClick={handleSave} variant="contained" size="small" disabled={saving}>
+          {saving ? <CircularProgress size={14} sx={{ mr: 0.5 }} /> : null}Save
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+// ── Shared helpers ─────────────────────────────────────────────────────────────
 function SectionHeader({ label }) {
   return (
-    <Typography
-      variant="caption"
-      fontWeight={700}
-      color="text.disabled"
-      sx={{ display: 'block', mb: 1, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.68rem' }}
-    >
+    <Typography variant="caption" fontWeight={700} color="text.disabled"
+      sx={{ display: 'block', mb: 1, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.68rem' }}>
       {label}
     </Typography>
   );
 }
-
-
-// ── Shared empty state ────────────────────────────────────────────────────────
 
 function EmptyState({ icon, title, body, action }) {
   return (

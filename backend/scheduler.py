@@ -119,6 +119,15 @@ def make_celery(app=None):
                 "task": "backend.scheduler.hub_run_priority_extraction",
                 "schedule": 120.0,    # every 2 minutes
             },
+            # ── Assistant Hub notification delivery ───────────────────────────
+            "hub-deliver-reminders": {
+                "task": "backend.scheduler.hub_deliver_due_reminders",
+                "schedule": 300.0,    # every 5 minutes
+            },
+            "hub-send-daily-digests": {
+                "task": "backend.scheduler.hub_send_daily_digests",
+                "schedule": 600.0,    # every 10 minutes (checks if digest time reached per user)
+            },
         },
     )
 
@@ -1237,6 +1246,34 @@ def hub_run_priority_extraction():
         logger.info("hub_run_priority_extraction: processed %d priority groups", len(pairs))
     except Exception as exc:
         logger.error("hub_run_priority_extraction error: %s", exc)
+
+
+@celery.task(name="backend.scheduler.hub_deliver_due_reminders")
+def hub_deliver_due_reminders():
+    """Assistant Hub: deliver reminders due within next 5 minutes (every 5 min)."""
+    try:
+        from .assistant.hub_digest import deliver_due_reminders
+        from .app import create_app
+        flask_app = create_app()
+        sent = deliver_due_reminders(flask_app)
+        if sent:
+            logger.info("hub_deliver_due_reminders: sent=%d", sent)
+    except Exception as exc:
+        logger.error("hub_deliver_due_reminders error: %s", exc)
+
+
+@celery.task(name="backend.scheduler.hub_send_daily_digests")
+def hub_send_daily_digests():
+    """Assistant Hub: send daily digests to users whose configured time has passed (every 10 min)."""
+    try:
+        from .assistant.hub_digest import deliver_all_due_digests
+        from .app import create_app
+        flask_app = create_app()
+        sent = deliver_all_due_digests(flask_app)
+        if sent:
+            logger.info("hub_send_daily_digests: sent=%d digests", sent)
+    except Exception as exc:
+        logger.error("hub_send_daily_digests error: %s", exc)
 
 
 def _get_bot_token_for_chat(chat_id, app):

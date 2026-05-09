@@ -1,23 +1,11 @@
 """
-Assistant Hub API — Sprint 1 routes.
+Assistant Hub API — Sprint 1–4 routes.
 
 All routes use /api/hub prefix.
-
-Endpoints:
-  GET  /api/hub/status               — lazy-create global record, return hub state
-  GET  /api/hub/bots                 — list bot identities for user
-  POST /api/hub/bots/official/init   — create official bot identity (first Hub enable)
-  GET  /api/hub/bots/official        — official bot card data
-  GET  /api/hub/bots/official/settings — effective settings (via resolver)
-  PATCH /api/hub/bots/official/settings — save settings
-  GET  /api/hub/bots/official/groups — connected groups list
-  GET  /api/hub/bots/official/stats  — card stats (task count, last summary)
-  GET  /api/hub/limits               — plan limits for current user
-  POST /api/hub/webhook              — Telegram webhook receiver (official bot, Hub context)
 """
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
@@ -293,6 +281,10 @@ def update_group_settings(group_id):
     group = HubConnectedGroup.query.filter_by(id=group_id, user_id=user.id).first_or_404()
     data = request.get_json(silent=True) or {}
 
+    # display_name is the frontend alias for group_name (override label)
+    if "display_name" in data:
+        group.group_name = data["display_name"] or group.group_name
+
     allowed = [
         "group_name", "category", "is_active", "active_mode_enabled",
         "extract_tasks", "extract_reminders", "extract_decisions", "extract_meetings",
@@ -305,6 +297,10 @@ def update_group_settings(group_id):
         group.silence_start = _parse_time(data["silence_start"])
     if "silence_end" in data:
         group.silence_end = _parse_time(data["silence_end"])
+    if "silence_window_start" in data:
+        group.silence_start = _parse_time(data["silence_window_start"])
+    if "silence_window_end" in data:
+        group.silence_end = _parse_time(data["silence_window_end"])
 
     if "is_active" in data and not data["is_active"]:
         group.pause_reason = "user_paused"
@@ -662,6 +658,517 @@ def _note_dict(n):
             "source": n.source, "created_at": n.created_at.isoformat()}
 
 
+# ── Sprint 4: Overview aggregation ───────────────────────────────────────────
+
+@hub_bp.route("/overview", methods=["GET"])
+@jwt_required()
+def hub_overview():
+    """
+    Aggregated data for the Overview tab.
+    Returns: tasks (pending, sorted by due_date), upcoming meetings,
+    recent decisions, upcoming reminders, new inbox count.
+    """
+    user = _current_user()
+    bot = _get_or_create_official_bot(user.id)
+    group_id = request.args.get("group_id")
+
+    now = datetime.utcnow()
+    today = now.date()
+
+    def _gfilter(q, model):
+        if group_id:
+            return q.filter(model.source_group_id == group_id)
+        return q
+
+    # Tasks — pending, sort overdue first then by due_date
+    tasks_q = HubTask.query.filter_by(
+        user_id=user.id, bot_id=bot.id, status="pending"
+    ).filter(HubTask.dismissed_at.is_(None) if hasattr(HubTask, "dismissed_at") else db.true())
+    tasks_q = _gfilter(tasks_q, HubTask)
+    tasks = tasks_q.order_by(
+        db.case((HubTask.due_date.isnot(None), HubTask.due_date), else_=db.literal(None)).asc().nullslast()
+    ).limit(20).all()
+
+    # Meetings — upcoming (not dismissed)
+    meetings_q = HubMeeting.query.filter(
+        HubMeeting.user_id == user.id,
+        HubMeeting.bot_id == bot.id,
+        HubMeeting.dismissed_at.is_(None),
+        HubMeeting.scheduled_at >= now - timedelta(hours=1),
+    )
+    meetings_q = _gfilter(meetings_q, HubMeeting)
+    meetings = meetings_q.order_by(HubMeeting.scheduled_at.asc().nullslast()).limit(10).all()
+
+    # Decisions — last 7 days
+    decisions_q = HubDecision.query.filter(
+        HubDecision.user_id == user.id,
+        HubDecision.bot_id == bot.id,
+        HubDecision.dismissed_at.is_(None),
+        HubDecision.created_at >= now - timedelta(days=7),
+    )
+    decisions_q = _gfilter(decisions_q, HubDecision)
+    decisions = decisions_q.order_by(HubDecision.created_at.desc()).limit(10).all()
+
+    # Reminders — upcoming (not delivered, not dismissed)
+    reminders_q = HubReminder.query.filter(
+        HubReminder.user_id == user.id,
+        HubReminder.bot_id == bot.id,
+        HubReminder.delivered_at.is_(None),
+        HubReminder.dismissed_at.is_(None),
+        HubReminder.remind_at >= now - timedelta(minutes=5),
+    )
+    reminders_q = _gfilter(reminders_q, HubReminder)
+    reminders = reminders_q.order_by(HubReminder.remind_at.asc()).limit(10).all()
+
+    new_inbox = HubInboxItem.query.filter_by(
+        user_id=user.id, bot_id=bot.id, is_new=True
+    ).filter(HubInboxItem.dismissed_at.is_(None)).count()
+
+    group_count = HubConnectedGroup.query.filter_by(
+        bot_id=bot.id, user_id=user.id, is_active=True
+    ).count()
+
+    return jsonify({
+        "group_count": group_count,
+        "new_inbox_items": new_inbox,
+        "tasks": [_task_dict(t) for t in tasks],
+        "meetings": [_meeting_dict(m) for m in meetings],
+        "decisions": [_decision_dict(d) for d in decisions],
+        "reminders": [_reminder_dict(r) for r in reminders],
+    })
+
+
+# ── Sprint 4: Inbox ───────────────────────────────────────────────────────────
+
+@hub_bp.route("/inbox", methods=["GET"])
+@jwt_required()
+def list_inbox():
+    user = _current_user()
+    bot = _get_or_create_official_bot(user.id)
+    item_type = request.args.get("type")
+    show_dismissed = request.args.get("dismissed", "false").lower() == "true"
+
+    q = HubInboxItem.query.filter_by(user_id=user.id, bot_id=bot.id)
+    if item_type:
+        q = q.filter_by(item_type=item_type)
+    if not show_dismissed:
+        q = q.filter(HubInboxItem.dismissed_at.is_(None))
+    items = q.order_by(HubInboxItem.created_at.desc()).limit(50).all()
+
+    return jsonify({"items": [_inbox_dict(i) for i in items]})
+
+
+@hub_bp.route("/inbox/<item_id>/confirm", methods=["PATCH"])
+@jwt_required()
+def confirm_inbox_item(item_id):
+    user = _current_user()
+    item = HubInboxItem.query.filter_by(id=item_id, user_id=user.id).first_or_404()
+    item.is_new = False
+    item.confirmed_at = datetime.utcnow()
+    # Also update source item status to 'confirmed'
+    if item.item_type == "task":
+        t = HubTask.query.filter_by(id=item.item_id, user_id=user.id).first()
+        if t:
+            t.status = "confirmed"
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@hub_bp.route("/inbox/<item_id>/dismiss", methods=["PATCH"])
+@jwt_required()
+def dismiss_inbox_item(item_id):
+    user = _current_user()
+    item = HubInboxItem.query.filter_by(id=item_id, user_id=user.id).first_or_404()
+    item.is_new = False
+    item.dismissed_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+# ── Sprint 4: Tasks CRUD ──────────────────────────────────────────────────────
+
+@hub_bp.route("/tasks", methods=["GET"])
+@jwt_required()
+def list_tasks():
+    user = _current_user()
+    bot = _get_or_create_official_bot(user.id)
+    status = request.args.get("status")
+    group_id = request.args.get("group_id")
+
+    q = HubTask.query.filter_by(user_id=user.id, bot_id=bot.id)
+    if status:
+        q = q.filter_by(status=status)
+    if group_id:
+        q = q.filter_by(source_group_id=group_id)
+
+    tasks = q.order_by(
+        db.case((HubTask.due_date.isnot(None), HubTask.due_date), else_=db.literal(None)).asc().nullslast(),
+        HubTask.created_at.desc(),
+    ).all()
+
+    return jsonify({"tasks": [_task_dict(t) for t in tasks]})
+
+
+@hub_bp.route("/tasks", methods=["POST"])
+@jwt_required()
+def create_task():
+    user = _current_user()
+    bot = _get_or_create_official_bot(user.id)
+    data = request.get_json(silent=True) or {}
+
+    title = (data.get("title") or "").strip()
+    if not title:
+        return jsonify({"error": "title required"}), 400
+
+    task = HubTask(
+        user_id=user.id,
+        bot_id=bot.id,
+        source_group_id=data.get("source_group_id"),
+        title=title[:500],
+        description=data.get("description"),
+        assignee_name=data.get("assignee_name"),
+        due_date=_parse_date_str(data.get("due_date")),
+        priority=data.get("priority", "normal"),
+        status="pending",
+        source="manual",
+    )
+    db.session.add(task)
+    db.session.flush()
+
+    # Add to inbox
+    inbox = HubInboxItem(
+        user_id=user.id, bot_id=bot.id,
+        item_type="task", item_id=task.id, is_new=True,
+    )
+    db.session.add(inbox)
+    db.session.commit()
+    return jsonify({"task": _task_dict(task)}), 201
+
+
+@hub_bp.route("/tasks/<task_id>", methods=["PATCH"])
+@jwt_required()
+def update_task(task_id):
+    user = _current_user()
+    task = HubTask.query.filter_by(id=task_id, user_id=user.id).first_or_404()
+    data = request.get_json(silent=True) or {}
+
+    for field in ("title", "description", "assignee_name", "priority", "status"):
+        if field in data:
+            setattr(task, field, data[field])
+    if "due_date" in data:
+        task.due_date = _parse_date_str(data["due_date"])
+    task.updated_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"task": _task_dict(task)})
+
+
+@hub_bp.route("/tasks/<task_id>", methods=["DELETE"])
+@jwt_required()
+def delete_task(task_id):
+    user = _current_user()
+    task = HubTask.query.filter_by(id=task_id, user_id=user.id).first_or_404()
+    HubInboxItem.query.filter_by(item_type="task", item_id=task_id, user_id=user.id).delete()
+    db.session.delete(task)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+# ── Sprint 4: Reminders CRUD ──────────────────────────────────────────────────
+
+@hub_bp.route("/reminders", methods=["GET"])
+@jwt_required()
+def list_reminders():
+    user = _current_user()
+    bot = _get_or_create_official_bot(user.id)
+    group_id = request.args.get("group_id")
+    filter_by = request.args.get("filter")  # upcoming | overdue | all
+
+    now = datetime.utcnow()
+    q = HubReminder.query.filter_by(user_id=user.id, bot_id=bot.id).filter(
+        HubReminder.dismissed_at.is_(None)
+    )
+    if group_id:
+        q = q.filter_by(source_group_id=group_id)
+    if filter_by == "upcoming":
+        q = q.filter(HubReminder.remind_at >= now)
+    elif filter_by == "overdue":
+        q = q.filter(HubReminder.remind_at < now, HubReminder.delivered_at.is_(None))
+
+    reminders = q.order_by(HubReminder.remind_at.asc()).all()
+    return jsonify({"reminders": [_reminder_dict(r) for r in reminders]})
+
+
+@hub_bp.route("/reminders", methods=["POST"])
+@jwt_required()
+def create_reminder():
+    user = _current_user()
+    bot = _get_or_create_official_bot(user.id)
+    data = request.get_json(silent=True) or {}
+
+    content = (data.get("content") or "").strip()
+    remind_at_raw = data.get("remind_at")
+    if not content or not remind_at_raw:
+        return jsonify({"error": "content and remind_at required"}), 400
+
+    remind_at = _parse_datetime_str(remind_at_raw)
+    if not remind_at:
+        return jsonify({"error": "invalid remind_at datetime"}), 400
+
+    reminder = HubReminder(
+        user_id=user.id, bot_id=bot.id,
+        source_group_id=data.get("source_group_id"),
+        content=content[:500],
+        remind_at=remind_at,
+        recurrence=data.get("recurrence"),
+        source="manual",
+    )
+    db.session.add(reminder)
+    db.session.flush()
+
+    inbox = HubInboxItem(
+        user_id=user.id, bot_id=bot.id,
+        item_type="reminder", item_id=reminder.id, is_new=True,
+    )
+    db.session.add(inbox)
+    db.session.commit()
+    return jsonify({"reminder": _reminder_dict(reminder)}), 201
+
+
+@hub_bp.route("/reminders/<reminder_id>", methods=["PATCH"])
+@jwt_required()
+def update_reminder(reminder_id):
+    user = _current_user()
+    reminder = HubReminder.query.filter_by(id=reminder_id, user_id=user.id).first_or_404()
+    data = request.get_json(silent=True) or {}
+
+    if "content" in data:
+        reminder.content = data["content"][:500]
+    if "remind_at" in data:
+        reminder.remind_at = _parse_datetime_str(data["remind_at"]) or reminder.remind_at
+    if "recurrence" in data:
+        reminder.recurrence = data["recurrence"]
+    db.session.commit()
+    return jsonify({"reminder": _reminder_dict(reminder)})
+
+
+@hub_bp.route("/reminders/<reminder_id>", methods=["DELETE"])
+@jwt_required()
+def delete_reminder(reminder_id):
+    user = _current_user()
+    reminder = HubReminder.query.filter_by(id=reminder_id, user_id=user.id).first_or_404()
+    HubInboxItem.query.filter_by(item_type="reminder", item_id=reminder_id, user_id=user.id).delete()
+    db.session.delete(reminder)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+# ── Sprint 4: Notes CRUD ──────────────────────────────────────────────────────
+
+@hub_bp.route("/notes", methods=["GET"])
+@jwt_required()
+def list_notes():
+    user = _current_user()
+    bot = _get_or_create_official_bot(user.id)
+    group_id = request.args.get("group_id")
+    source = request.args.get("source")
+
+    q = HubNote.query.filter_by(user_id=user.id, bot_id=bot.id)
+    if group_id:
+        q = q.filter_by(source_group_id=group_id)
+    if source:
+        q = q.filter_by(source=source)
+
+    notes = q.order_by(HubNote.created_at.desc()).all()
+    return jsonify({"notes": [_note_dict(n) for n in notes]})
+
+
+@hub_bp.route("/notes", methods=["POST"])
+@jwt_required()
+def create_note():
+    user = _current_user()
+    bot = _get_or_create_official_bot(user.id)
+    data = request.get_json(silent=True) or {}
+
+    content = (data.get("content") or "").strip()
+    if not content:
+        return jsonify({"error": "content required"}), 400
+
+    note = HubNote(
+        user_id=user.id, bot_id=bot.id,
+        source_group_id=data.get("source_group_id"),
+        content=content[:2000],
+        tags=data.get("tags", []),
+        source="manual",
+    )
+    db.session.add(note)
+    db.session.commit()
+    return jsonify({"note": _note_dict(note)}), 201
+
+
+@hub_bp.route("/notes/<note_id>", methods=["PATCH"])
+@jwt_required()
+def update_note(note_id):
+    user = _current_user()
+    note = HubNote.query.filter_by(id=note_id, user_id=user.id).first_or_404()
+    data = request.get_json(silent=True) or {}
+
+    if "content" in data:
+        note.content = data["content"][:2000]
+    if "tags" in data and isinstance(data["tags"], list):
+        note.tags = data["tags"]
+    note.updated_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"note": _note_dict(note)})
+
+
+@hub_bp.route("/notes/<note_id>", methods=["DELETE"])
+@jwt_required()
+def delete_note(note_id):
+    user = _current_user()
+    note = HubNote.query.filter_by(id=note_id, user_id=user.id).first_or_404()
+    db.session.delete(note)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+# ── Sprint 4: Decisions & Meetings (read + dismiss) ──────────────────────────
+
+@hub_bp.route("/decisions", methods=["GET"])
+@jwt_required()
+def list_decisions():
+    user = _current_user()
+    bot = _get_or_create_official_bot(user.id)
+    group_id = request.args.get("group_id")
+
+    q = HubDecision.query.filter(
+        HubDecision.user_id == user.id,
+        HubDecision.bot_id == bot.id,
+        HubDecision.dismissed_at.is_(None),
+    )
+    if group_id:
+        q = q.filter_by(source_group_id=group_id)
+    decisions = q.order_by(HubDecision.created_at.desc()).limit(50).all()
+    return jsonify({"decisions": [_decision_dict(d) for d in decisions]})
+
+
+@hub_bp.route("/decisions/<decision_id>/dismiss", methods=["PATCH"])
+@jwt_required()
+def dismiss_decision(decision_id):
+    user = _current_user()
+    d = HubDecision.query.filter_by(id=decision_id, user_id=user.id).first_or_404()
+    d.dismissed_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@hub_bp.route("/meetings", methods=["GET"])
+@jwt_required()
+def list_meetings():
+    user = _current_user()
+    bot = _get_or_create_official_bot(user.id)
+    group_id = request.args.get("group_id")
+
+    q = HubMeeting.query.filter(
+        HubMeeting.user_id == user.id,
+        HubMeeting.bot_id == bot.id,
+        HubMeeting.dismissed_at.is_(None),
+    )
+    if group_id:
+        q = q.filter_by(source_group_id=group_id)
+    meetings = q.order_by(HubMeeting.scheduled_at.asc().nullslast()).all()
+    return jsonify({"meetings": [_meeting_dict(m) for m in meetings]})
+
+
+@hub_bp.route("/meetings/<meeting_id>/dismiss", methods=["PATCH"])
+@jwt_required()
+def dismiss_meeting(meeting_id):
+    user = _current_user()
+    m = HubMeeting.query.filter_by(id=meeting_id, user_id=user.id).first_or_404()
+    m.dismissed_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+# ── Sprint 4: Automation settings ────────────────────────────────────────────
+
+@hub_bp.route("/bots/official/automations", methods=["GET"])
+@jwt_required()
+def get_automations():
+    """Return automation toggle states for the official bot."""
+    user = _current_user()
+    bot = _get_or_create_official_bot(user.id)
+    _ensure_seed_automations()
+
+    automations = HubSystemAutomation.query.filter_by(is_active=True).all()
+    result = []
+    for auto in automations:
+        setting = HubBotAutomationSetting.query.filter_by(
+            bot_id=bot.id, automation_id=auto.id
+        ).first()
+        is_enabled = setting.is_enabled if (setting and setting.is_enabled is not None) else True
+        result.append({
+            "code": auto.code,
+            "name": auto.name,
+            "description": auto.description,
+            "is_enabled": is_enabled,
+            "custom_params": setting.custom_params if setting else None,
+        })
+
+    # Also return digest settings from bot_settings
+    settings = HubBotSettings.query.filter_by(bot_id=bot.id).first()
+    digest = {
+        "enabled": bool(settings.digest_enabled) if settings else False,
+        "time": settings.digest_time.strftime("%H:%M") if (settings and settings.digest_time) else "21:00",
+        "format": settings.digest_format or "compact",
+    }
+
+    return jsonify({"automations": result, "digest": digest})
+
+
+@hub_bp.route("/bots/official/automations", methods=["PATCH"])
+@jwt_required()
+def update_automations():
+    """Save automation toggle states."""
+    user = _current_user()
+    bot = _get_or_create_official_bot(user.id)
+    _ensure_seed_automations()
+    data = request.get_json(silent=True) or {}
+
+    # Update individual automation toggles
+    toggles = data.get("automations", {})  # {"meeting_reminder": true, "deadline_alert": false}
+    for code, enabled in toggles.items():
+        auto = HubSystemAutomation.query.filter_by(code=code).first()
+        if not auto:
+            continue
+        setting = HubBotAutomationSetting.query.filter_by(
+            bot_id=bot.id, automation_id=auto.id
+        ).first()
+        if not setting:
+            setting = HubBotAutomationSetting(
+                id=str(uuid.uuid4()), bot_id=bot.id, automation_id=auto.id
+            )
+            db.session.add(setting)
+        setting.is_enabled = bool(enabled)
+
+    # Update digest settings
+    if "digest" in data:
+        digest_data = data["digest"]
+        settings = HubBotSettings.query.filter_by(bot_id=bot.id).first()
+        if settings:
+            if "enabled" in digest_data:
+                settings.digest_enabled = bool(digest_data["enabled"])
+            if "time" in digest_data and isinstance(digest_data["time"], str):
+                parts = digest_data["time"].split(":")
+                from datetime import time as dtime
+                settings.digest_time = dtime(int(parts[0]), int(parts[1]))
+            if "format" in digest_data:
+                settings.digest_format = digest_data["format"]
+            settings.updated_at = datetime.utcnow()
+
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
 @hub_bp.route("/webhook", methods=["POST"])
 def hub_webhook():
     """
@@ -741,6 +1248,7 @@ def _group_dict(group: HubConnectedGroup) -> dict:
         "bot_id": group.bot_id,
         "telegram_group_id": group.telegram_group_id,
         "group_name": group.group_name,
+        "display_name": group.group_name,  # frontend alias
         "category": group.category,
         "is_active": group.is_active,
         "pause_reason": group.pause_reason,
@@ -749,6 +1257,8 @@ def _group_dict(group: HubConnectedGroup) -> dict:
         "is_public_group": group.is_public_group,
         "silence_start": group.silence_start.strftime("%H:%M") if group.silence_start else None,
         "silence_end": group.silence_end.strftime("%H:%M") if group.silence_end else None,
+        "silence_window_start": group.silence_start.strftime("%H:%M") if group.silence_start else None,
+        "silence_window_end": group.silence_end.strftime("%H:%M") if group.silence_end else None,
         "extract_tasks": group.extract_tasks,
         "extract_reminders": group.extract_reminders,
         "extract_decisions": group.extract_decisions,
@@ -772,3 +1282,36 @@ def _parse_time(raw):
 def _safe_compare(a: str, b: str) -> bool:
     import hmac
     return hmac.compare_digest(a.encode(), b.encode())
+
+
+def _inbox_dict(item: HubInboxItem) -> dict:
+    return {
+        "id": item.id,
+        "item_type": item.item_type,
+        "item_id": item.item_id,
+        "is_new": item.is_new,
+        "dismissed_at": item.dismissed_at.isoformat() if item.dismissed_at else None,
+        "confirmed_at": item.confirmed_at.isoformat() if item.confirmed_at else None,
+        "created_at": item.created_at.isoformat(),
+    }
+
+
+def _parse_date_str(value):
+    if not value:
+        return None
+    try:
+        from datetime import date
+        return date.fromisoformat(str(value)[:10])
+    except (ValueError, TypeError):
+        return None
+
+
+def _parse_datetime_str(value):
+    if not value:
+        return None
+    try:
+        s = str(value).replace("Z", "+00:00")
+        dt = datetime.fromisoformat(s)
+        return dt.replace(tzinfo=None)
+    except (ValueError, TypeError):
+        return None

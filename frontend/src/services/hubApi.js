@@ -67,6 +67,43 @@ export const hub = {
   /** Update retention window setting. */
   updateRetention: (bufferTtlHours) =>
     api.patch('/api/hub/bots/official/settings/retention', { buffer_ttl_hours: bufferTtlHours }),
+
+  /** Overview tab aggregation. */
+  getOverview: (groupId) =>
+    api.get('/api/hub/overview', { params: groupId ? { group_id: groupId } : {} }),
+
+  // ── Inbox ──────────────────────────────────────────────────────────────────
+  listInbox: (params) => api.get('/api/hub/inbox', { params }),
+  confirmInboxItem: (id) => api.patch(`/api/hub/inbox/${id}/confirm`),
+  dismissInboxItem: (id) => api.patch(`/api/hub/inbox/${id}/dismiss`),
+
+  // ── Tasks ──────────────────────────────────────────────────────────────────
+  listTasks: (params) => api.get('/api/hub/tasks', { params }),
+  createTask: (data) => api.post('/api/hub/tasks', data),
+  updateTask: (id, data) => api.patch(`/api/hub/tasks/${id}`, data),
+  deleteTask: (id) => api.delete(`/api/hub/tasks/${id}`),
+
+  // ── Reminders ─────────────────────────────────────────────────────────────
+  listReminders: (params) => api.get('/api/hub/reminders', { params }),
+  createReminder: (data) => api.post('/api/hub/reminders', data),
+  updateReminder: (id, data) => api.patch(`/api/hub/reminders/${id}`, data),
+  deleteReminder: (id) => api.delete(`/api/hub/reminders/${id}`),
+
+  // ── Notes ─────────────────────────────────────────────────────────────────
+  listNotes: (params) => api.get('/api/hub/notes', { params }),
+  createNote: (data) => api.post('/api/hub/notes', data),
+  updateNote: (id, data) => api.patch(`/api/hub/notes/${id}`, data),
+  deleteNote: (id) => api.delete(`/api/hub/notes/${id}`),
+
+  // ── Decisions & Meetings ──────────────────────────────────────────────────
+  listDecisions: (params) => api.get('/api/hub/decisions', { params }),
+  dismissDecision: (id) => api.patch(`/api/hub/decisions/${id}/dismiss`),
+  listMeetings: (params) => api.get('/api/hub/meetings', { params }),
+  dismissMeeting: (id) => api.patch(`/api/hub/meetings/${id}/dismiss`),
+
+  // ── Automations ───────────────────────────────────────────────────────────
+  getAutomations: () => api.get('/api/hub/bots/official/automations'),
+  updateAutomations: (data) => api.patch('/api/hub/bots/official/automations', data),
 };
 
 export default hub;
