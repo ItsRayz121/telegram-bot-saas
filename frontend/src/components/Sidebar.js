@@ -221,15 +221,6 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
   const [channelsOpen, setChannelsOpen] = useState(channelActive);
 
   const assistantActive = isActive('/hub') || isActive('/workspace');
-  const [assistantOpen, setAssistantOpen] = useState(() => {
-    const stored = localStorage.getItem('sidebar_assistant_open');
-    return stored === null ? true : stored === '1';
-  });
-
-  const toggleAssistant = () => setAssistantOpen(o => {
-    localStorage.setItem('sidebar_assistant_open', !o ? '1' : '0');
-    return !o;
-  });
 
   const automationActive = isActive('/workspace/forwarding') || isActive('/workspace/automations') || isActive('/workflow-builder');
   const [automationOpen, setAutomationOpen] = useState(() => {
@@ -545,24 +536,7 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
 
         {/* ── ASSISTANT HUB ── */}
         <SectionLabel label="Assistant Hub" />
-        <ExpandableHeader
-          label="Hub"
-          icon={Psychology}
-          path="/hub"
-          active={assistantActive}
-          open={assistantOpen}
-          onToggle={toggleAssistant}
-          onNavigate={() => nav('/hub')}
-        />
-        <Collapse in={assistantOpen} timeout={160} unmountOnExit>
-          <NavItem label="Overview"    path="/hub/official/overview"    icon={Home}        active={isActive('/hub/official/overview')}    onClick={() => nav('/hub/official/overview')} indent />
-          <NavItem label="Tasks"       path="/hub/official/tasks"       icon={CheckBox}    active={isActive('/hub/official/tasks')}       onClick={() => nav('/hub/official/tasks')} indent />
-          <NavItem label="Reminders"   path="/hub/official/reminders"   icon={AccessTime}  active={isActive('/hub/official/reminders')}   onClick={() => nav('/hub/official/reminders')} indent />
-          <NavItem label="Notes"       path="/hub/official/notes"       icon={EditNote}    active={isActive('/hub/official/notes')}       onClick={() => nav('/hub/official/notes')} indent />
-          <NavItem label="Templates"   path="/hub/official/templates"   icon={LibraryBooks} active={isActive('/hub/official/templates')} onClick={() => nav('/hub/official/templates')} indent />
-          <NavItem label="Automation"  path="/hub/official/automation"  icon={AutoMode}    active={isActive('/hub/official/automation')}  onClick={() => nav('/hub/official/automation')} indent />
-          <NavItem label="Settings"    path="/hub/official/settings"    icon={Tune}        active={isActive('/hub/official/settings')}    onClick={() => nav('/hub/official/settings')} indent />
-        </Collapse>
+        <NavItem label="Hub" icon={Psychology} path="/hub" active={assistantActive} onClick={() => nav('/hub')} />
 
         {/* ── AUTOMATION ── */}
         <SectionLabel label="Automation" />
