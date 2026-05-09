@@ -23,7 +23,9 @@ auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 # ── 1-D-01: Cookie auth helpers ────────────────────────────────────────────────
 
 def _is_secure() -> bool:
-    return current_app.config.get("JWT_COOKIE_SECURE", False)
+    # Default True in production (PostgreSQL) so auth cookies always have Secure flag.
+    is_prod = "postgres" in (current_app.config.get("SQLALCHEMY_DATABASE_URI") or "")
+    return current_app.config.get("JWT_COOKIE_SECURE", is_prod)
 
 
 def _set_auth_cookies(response, access_token: str, refresh_token: str = None):

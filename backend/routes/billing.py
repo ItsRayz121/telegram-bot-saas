@@ -18,7 +18,7 @@ billing_bp = Blueprint("billing", __name__, url_prefix="/api/billing")
 
 _TIER_DURATION_MONTHLY = 30
 _TIER_DURATION_ANNUAL = 365
-_TIER_PRICES_USD = {"pro": {"monthly": 9, "annual": 90}, "enterprise": {"monthly": 49, "annual": 470}}
+_TIER_PRICES_USD = {"pro": {"monthly": 19, "annual": 152}, "enterprise": {"monthly": 49, "annual": 392}}
 
 
 def _get_current_user():
@@ -245,7 +245,7 @@ def crypto_checkout():
                 "price_currency": "usd",
                 "order_description": f"Telegizer {tier.capitalize()} Plan - {period_label}",
                 "success_url": f"{Config.FRONTEND_URL}/payment/success",
-                "cancel_url": f"{Config.FRONTEND_URL}/payment/success?status=failed",
+                "cancel_url": f"{Config.FRONTEND_URL}/pricing",
                 "ipn_callback_url": f"{Config.BACKEND_URL}/api/billing/crypto/webhook",
                 "is_fixed_rate": True,
                 "is_fee_paid_by_user": False,
@@ -595,6 +595,16 @@ def ls_webhook():
             amount_usd = int(cents) / 100
     except Exception:
         pass
+
+    # Server-side amount validation — prevent paying $1 to activate a $49 plan.
+    expected_usd = _TIER_PRICES_USD.get(tier, {}).get(interval)
+    if expected_usd and amount_usd is not None:
+        if amount_usd < expected_usd * 0.99:
+            logger.error(
+                "[LS] Price mismatch for order %s: paid $%.2f, expected $%.2f for %s/%s — rejecting",
+                order_id, amount_usd, expected_usd, tier, interval,
+            )
+            return jsonify({"error": "Payment amount does not match plan price"}), 400
 
     _activate_subscription(
         user, tier,

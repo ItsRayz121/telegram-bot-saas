@@ -7,6 +7,7 @@ import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import ErrorBoundary from './components/ErrorBoundary';
 import PWAInstallBanner from './components/PWAInstallBanner';
+import CookieConsent from './components/CookieConsent';
 import DebugPanel from './components/DebugPanel';
 import AppLayout from './layouts/AppLayout';
 import { API_CONFIG_ERROR } from './services/api';
@@ -333,6 +334,7 @@ export default function App() {
           style={{ zIndex: 9999 }}
         />
         <PWAInstallBanner />
+        <CookieConsent />
         <DebugPanel />
       </ErrorBoundary>
     </ThemeProvider>

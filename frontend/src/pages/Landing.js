@@ -124,8 +124,8 @@ const PLANS = [
   },
   {
     name: 'Pro',
-    price: '$9',
-    daily: '$0.30/day',
+    price: '$19',
+    daily: '$0.63/day',
     period: '/month',
     color: 'primary',
     popular: true,
@@ -281,12 +281,15 @@ export default function Landing() {
             </Button>
           </Stack>
           <Typography variant="caption" color="text.disabled">
-            No credit card required · Free plan, forever · Upgrade anytime with crypto
+            No credit card required · Free plan, forever · Pay with 300+ cryptos · No auto-renew
           </Typography>
         </Container>
 
         {/* Dashboard preview mock */}
         <Box sx={{ mt: 7, mx: 'auto', maxWidth: 860, px: { xs: 2, md: 0 }, position: 'relative' }}>
+          <Typography variant="caption" color="text.disabled" display="block" textAlign="center" mb={1}>
+            Example dashboard — illustrative data only
+          </Typography>
           {/* Fade-out bottom overlay */}
           <Box sx={{
             position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, zIndex: 1,
@@ -518,6 +521,9 @@ export default function Landing() {
           <Typography variant="h4" fontWeight={800} mt={1}>
             What community admins say
           </Typography>
+          <Typography variant="caption" color="text.disabled" display="block" mt={1}>
+            Based on real user feedback. Names abbreviated for privacy.
+          </Typography>
         </Box>
         <Grid container spacing={3}>
           {TESTIMONIALS.map((t) => (
@@ -670,7 +676,7 @@ export default function Landing() {
             },
             {
               q: 'What is included in Free vs Pro vs Enterprise?',
-              a: 'Free: 1 bot, basic moderation, welcome messages, XP system. Pro ($9/mo): 5 bots, unlimited groups, advanced AutoMod, scheduled messages, analytics, polls, AI knowledge base. Enterprise ($49/mo): 50 bots, all Pro features plus raid coordination, API access, dedicated support, SLA.'
+              a: 'Free: 1 bot, basic moderation, welcome messages, XP system. Pro ($19/mo): 3 bots, unlimited groups, advanced AutoMod, scheduled messages, analytics, AI knowledge base. Enterprise ($49/mo): 50 bots, all Pro features plus API access, dedicated support, SLA.'
             },
             {
               q: 'Do you store my bot token securely?',
