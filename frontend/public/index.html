@@ -97,8 +97,19 @@
 
     <!-- Privacy-first analytics (no cookies, GDPR compliant) -->
     <script defer data-domain="telegizer.com" src="https://plausible.io/js/script.js"></script>
-    <!-- Telegram Mini App SDK (no-op on non-Telegram browsers) -->
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <!-- Telegram Mini App SDK — loaded async, no-op on non-Telegram browsers.
+         Must not block page render on auth pages (forgot-password, login, etc.) -->
+    <script>
+      // Only load the Telegram SDK when running inside a Telegram WebView.
+      // window.Telegram is undefined in normal browsers, so this is a no-op for
+      // regular users and avoids a connection-timeout warning on auth pages.
+      if (navigator.userAgent && /Telegram/i.test(navigator.userAgent)) {
+        var _tgScript = document.createElement('script');
+        _tgScript.src = 'https://telegram.org/js/telegram-web-app.js';
+        _tgScript.async = true;
+        document.head.appendChild(_tgScript);
+      }
+    </script>
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

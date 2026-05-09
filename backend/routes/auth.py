@@ -848,12 +848,18 @@ def forgot_password():
     user = User.query.filter_by(email=email).first()
     # Always return 200 to avoid leaking which emails exist
     if user and not user.is_banned:
-        PasswordResetToken.query.filter_by(user_id=user.id, used=False).update({"used": True})
-        db.session.flush()
+        try:
+            PasswordResetToken.query.filter_by(user_id=user.id, used=False).update({"used": True})
+            db.session.flush()
 
-        raw_token, reset_token = PasswordResetToken.create_for_user(user.id)
-        db.session.add(reset_token)
-        db.session.commit()
+            raw_token, reset_token = PasswordResetToken.create_for_user(user.id)
+            db.session.add(reset_token)
+            db.session.commit()
+        except Exception as db_exc:
+            db.session.rollback()
+            logger.error("Failed to create password reset token for user %s: %s", user.id, db_exc)
+            # Return generic 200 — never reveal internal errors to the client
+            return jsonify({"message": "If that email exists, a reset link has been sent."}), 200
 
         try:
             from flask import current_app
