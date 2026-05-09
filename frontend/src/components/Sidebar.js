@@ -220,7 +220,7 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
   const [groupsOpen, setGroupsOpen] = useState(groupActive);
   const [channelsOpen, setChannelsOpen] = useState(channelActive);
 
-  const assistantActive = isActive('/workspace');
+  const assistantActive = isActive('/hub') || isActive('/workspace');
   const [assistantOpen, setAssistantOpen] = useState(() => {
     const stored = localStorage.getItem('sidebar_assistant_open');
     return stored === null ? true : stored === '1';
@@ -318,7 +318,7 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
       { label: 'Dashboard', icon: Home, path: '/dashboard', exact: true },
       { label: 'Groups',    icon: Groups, path: '/groups' },
       { label: 'Channels',  icon: Campaign, path: '/channels' },
-      { label: 'Hub',       icon: Psychology, path: '/workspace' },
+      { label: 'Hub',       icon: Psychology, path: '/hub' },
       { label: 'Automation',icon: AutoMode, path: '/workspace/automations' },
       { label: 'Billing',   icon: CreditCard, path: '/billing' },
       { label: 'Settings',  icon: Settings, path: '/settings' },
@@ -548,25 +548,20 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
         <ExpandableHeader
           label="Hub"
           icon={Psychology}
-          path="/workspace"
+          path="/hub"
           active={assistantActive}
           open={assistantOpen}
           onToggle={toggleAssistant}
-          onNavigate={() => nav('/workspace')}
+          onNavigate={() => nav('/hub')}
         />
-        {/* "Powered by" subtitle — always visible, outside the Collapse */}
-        <Typography variant="caption" sx={{ px: 2, pb: 0.5, display: 'block', fontSize: '0.62rem', color: 'text.disabled', lineHeight: 1.3 }}>
-          Powered by Telegizer Assistant
-        </Typography>
         <Collapse in={assistantOpen} timeout={160} unmountOnExit>
-          <NavItem label="Assistant Bot" path="/workspace/assistant-bot"  icon={SmartToy}    active={isActive('/workspace/assistant-bot')} onClick={() => nav('/workspace/assistant-bot')} indent badge={plan === 'free' ? 'Pro' : null} />
-          <NavItem label="Auto-Replies"  path="/workspace/smart-links"    icon={Reply}       active={isActive('/workspace/smart-links')}    onClick={() => nav('/workspace/smart-links')} indent />
-          <NavItem label="Reminders"     path="/workspace/reminders"      icon={AccessTime}  active={isActive('/workspace/reminders')}      onClick={() => nav('/workspace/reminders')} indent />
-          <NavItem label="Tasks"         path="/workspace/tasks"          icon={CheckBox}    active={isActive('/workspace/tasks')}          onClick={() => nav('/workspace/tasks')} indent />
-          <NavItem label="Notes"         path="/workspace/notes"          icon={EditNote}    active={isActive('/workspace/notes')}          onClick={() => nav('/workspace/notes')} indent />
-          <NavItem label="Digests"       path="/workspace/digests"        icon={Summarize}   active={isActive('/workspace/digests')}       onClick={() => nav('/workspace/digests')} indent />
-          <NavItem label="Knowledge"     path="/workspace/knowledge"      icon={LibraryBooks} active={isActive('/workspace/knowledge')}    onClick={() => nav('/workspace/knowledge')} indent />
-          <NavItem label="AI Settings"   path="/workspace/ai-settings"    icon={Tune}        active={isActive('/workspace/ai-settings')}   onClick={() => nav('/workspace/ai-settings')} indent />
+          <NavItem label="Overview"    path="/hub/official/overview"    icon={Home}        active={isActive('/hub/official/overview')}    onClick={() => nav('/hub/official/overview')} indent />
+          <NavItem label="Tasks"       path="/hub/official/tasks"       icon={CheckBox}    active={isActive('/hub/official/tasks')}       onClick={() => nav('/hub/official/tasks')} indent />
+          <NavItem label="Reminders"   path="/hub/official/reminders"   icon={AccessTime}  active={isActive('/hub/official/reminders')}   onClick={() => nav('/hub/official/reminders')} indent />
+          <NavItem label="Notes"       path="/hub/official/notes"       icon={EditNote}    active={isActive('/hub/official/notes')}       onClick={() => nav('/hub/official/notes')} indent />
+          <NavItem label="Templates"   path="/hub/official/templates"   icon={LibraryBooks} active={isActive('/hub/official/templates')} onClick={() => nav('/hub/official/templates')} indent />
+          <NavItem label="Automation"  path="/hub/official/automation"  icon={AutoMode}    active={isActive('/hub/official/automation')}  onClick={() => nav('/hub/official/automation')} indent />
+          <NavItem label="Settings"    path="/hub/official/settings"    icon={Tune}        active={isActive('/hub/official/settings')}    onClick={() => nav('/hub/official/settings')} indent />
         </Collapse>
 
         {/* ── AUTOMATION ── */}

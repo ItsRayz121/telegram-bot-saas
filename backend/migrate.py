@@ -382,5 +382,55 @@ def _backfill_telegram_accounts(app):
             print("  – UserTelegramAccount backfill: all rows already present")
 
 
+def init_hub_db():
+    """Apply Sprint 1 Assistant Hub schema — idempotent, safe to re-run."""
+    app = create_app()
+    with app.app_context():
+        # Import hub models so SQLAlchemy knows about them before create_all
+        from .assistant import hub_models  # noqa: F401
+
+        db.create_all()
+        print("Assistant Hub tables created (new tables only).")
+
+        # Indexes — created via CREATE INDEX IF NOT EXISTS
+        hub_indexes = [
+            ("CREATE INDEX IF NOT EXISTS idx_hub_bot_identities_user ON hub_bot_identities(user_id, is_active)",
+             "idx_hub_bot_identities_user"),
+            ("CREATE INDEX IF NOT EXISTS idx_hub_connected_groups_bot ON hub_connected_groups(bot_id, is_active)",
+             "idx_hub_connected_groups_bot"),
+            ("CREATE INDEX IF NOT EXISTS idx_hub_connected_groups_user ON hub_connected_groups(user_id)",
+             "idx_hub_connected_groups_user"),
+            ("CREATE INDEX IF NOT EXISTS idx_hub_tasks_user_bot_status ON hub_tasks(user_id, bot_id, status)",
+             "idx_hub_tasks_user_bot_status"),
+            ("CREATE INDEX IF NOT EXISTS idx_hub_tasks_user_group ON hub_tasks(user_id, source_group_id)",
+             "idx_hub_tasks_user_group"),
+            ("CREATE INDEX IF NOT EXISTS idx_hub_reminders_bot_remind_at ON hub_reminders(bot_id, remind_at) WHERE delivered_at IS NULL",
+             "idx_hub_reminders_bot_remind_at"),
+            ("CREATE INDEX IF NOT EXISTS idx_hub_decisions_user_bot ON hub_decisions(user_id, bot_id)",
+             "idx_hub_decisions_user_bot"),
+            ("CREATE INDEX IF NOT EXISTS idx_hub_meetings_bot_scheduled ON hub_meetings(bot_id, scheduled_at)",
+             "idx_hub_meetings_bot_scheduled"),
+            ("CREATE INDEX IF NOT EXISTS idx_hub_inbox_user_bot_new ON hub_inbox_items(user_id, bot_id, is_new) WHERE dismissed_at IS NULL",
+             "idx_hub_inbox_user_bot_new"),
+            ("CREATE INDEX IF NOT EXISTS idx_hub_templates_bot ON hub_templates(bot_id)",
+             "idx_hub_templates_bot"),
+            ("CREATE INDEX IF NOT EXISTS idx_hub_knowledge_cards_bot ON hub_knowledge_cards(bot_id)",
+             "idx_hub_knowledge_cards_bot"),
+            ("CREATE INDEX IF NOT EXISTS idx_hub_extraction_batches_bot_group ON hub_extraction_batches(bot_id, group_id, started_at DESC)",
+             "idx_hub_extraction_batches_bot_group"),
+            ("CREATE INDEX IF NOT EXISTS idx_hub_memory_people_user ON hub_memory_people(user_id)",
+             "idx_hub_memory_people_user"),
+            ("CREATE INDEX IF NOT EXISTS idx_hub_memory_suggestions_pending ON hub_memory_suggestions(user_id, status) WHERE status = 'pending'",
+             "idx_hub_memory_suggestions_pending"),
+        ]
+
+        print("Applying Assistant Hub indexes…")
+        for sql, desc in hub_indexes:
+            _run_alter(db.engine, sql, desc)
+
+        print("Assistant Hub migration complete.")
+
+
 if __name__ == "__main__":
     init_db()
+    init_hub_db()

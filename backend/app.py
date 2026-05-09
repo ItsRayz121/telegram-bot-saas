@@ -70,6 +70,8 @@ from .routes.assistant_bots import assistant_bots_bp
 from .routes.telegram_updates import telegram_updates_bp
 from .routes.meetings import meetings_bp
 from .routes.integration_webhooks import integration_webhooks_bp
+from .routes.hub import hub_bp
+from .assistant import hub_models as _hub_models_import  # noqa: F401 — ensures models registered with db.create_all()
 from .bot_manager import BotManager
 from .official_bot import start_official_bot
 
@@ -233,6 +235,7 @@ def create_app():
     app.register_blueprint(telegram_updates_bp)
     app.register_blueprint(meetings_bp)
     app.register_blueprint(integration_webhooks_bp)
+    app.register_blueprint(hub_bp)
 
     app.bot_manager = bot_manager
 

@@ -61,6 +61,10 @@ import MarketplaceDeal from './pages/MarketplaceDeal';
 import JoinReferral from './pages/JoinReferral';
 import Referrals from './pages/Referrals';
 
+// Assistant Hub (Sprint 1)
+import HubLanding from './pages/HubLanding';
+import HubWorkspace from './pages/HubWorkspace';
+
 // Pages — lazy loaded
 const AssistantNotes = React.lazy(() => import('./pages/AssistantNotes'));
 const AssistantBotSettings = React.lazy(() => import('./pages/AssistantBotSettings'));
@@ -269,6 +273,11 @@ export default function App() {
             {/* ── Channels ──────────────────────────────────────────────────── */}
             <Route path="/channels"         element={<AppRoute><Channels /></AppRoute>} />
             <Route path="/channels/:cid"    element={<AppRoute><ChannelDetail /></AppRoute>} />
+
+            {/* ── Assistant Hub (/hub prefix) ───────────────────────────────── */}
+            <Route path="/hub"               element={<AppRoute><HubLanding /></AppRoute>} />
+            <Route path="/hub/official"      element={<Navigate to="/hub/official/overview" replace />} />
+            <Route path="/hub/official/:tab" element={<AppRoute><HubWorkspace /></AppRoute>} />
 
             {/* ── Workspace ─────────────────────────────────────────────────── */}
             <Route path="/workspace"               element={<AppRoute><Workspace /></AppRoute>} />
