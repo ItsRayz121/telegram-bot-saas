@@ -422,6 +422,8 @@ def init_hub_db():
              "idx_hub_memory_people_user"),
             ("CREATE INDEX IF NOT EXISTS idx_hub_memory_suggestions_pending ON hub_memory_suggestions(user_id, status) WHERE status = 'pending'",
              "idx_hub_memory_suggestions_pending"),
+            ("CREATE INDEX IF NOT EXISTS idx_hub_followups_user_bot_status ON hub_follow_ups(user_id, bot_id, status)",
+             "idx_hub_followups_user_bot_status"),
         ]
 
         print("Applying Assistant Hub indexes…")

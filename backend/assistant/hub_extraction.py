@@ -24,7 +24,7 @@ _log = logging.getLogger(__name__)
 _DAILY_LIMITS = {"free": 50, "pro": 500, "enterprise": 999_999}
 
 # ── Output schema validation ───────────────────────────────────────────────────
-_ARRAY_FIELDS = ("tasks", "reminders", "decisions", "meetings", "important_notes")
+_ARRAY_FIELDS = ("tasks", "reminders", "decisions", "meetings", "important_notes", "follow_ups")
 
 
 def run_extraction(bot_id: str, group_id: str, flask_app) -> dict:
@@ -200,7 +200,11 @@ def _call_openai(user, group, messages: list, bot_id: str, r) -> tuple:
         "- reminders: array of {content, remind_at (ISO 8601 datetime or null)}\n"
         "- decisions: array of {content, made_by (name or null)}\n"
         "- meetings: array of {title, scheduled_at (ISO 8601 datetime or null), participants (name array)}\n"
-        "- important_notes: array of {content}\n\n"
+        "- important_notes: array of {content}\n"
+        "- follow_ups: array of {commitment, committed_by (name or null), due_hint (e.g. 'by Friday', 'tomorrow', null)}\n"
+        "  A follow_up is a commitment or promise made by someone that has NOT been confirmed as done in this conversation.\n"
+        "  Examples: 'I'll send the report tomorrow', 'John will follow up on the client', 'We need to review this before Thursday'.\n"
+        "  Do NOT include items that were already confirmed or completed in the same conversation.\n\n"
         "Rules:\n"
         "- Only extract items clearly present in the conversation\n"
         "- Do not infer or assume details not explicitly stated\n"
@@ -317,10 +321,10 @@ def _validate_output(raw_json: str) -> dict:
 
 def _write_items(validated: dict, group, bot_id: str, batch_id: str, db) -> dict:
     from ..assistant.hub_models import (
-        HubTask, HubReminder, HubDecision, HubMeeting, HubNote, HubInboxItem,
+        HubTask, HubReminder, HubDecision, HubMeeting, HubNote, HubInboxItem, HubFollowUp,
     )
 
-    counts = {"tasks": 0, "reminders": 0, "decisions": 0, "meetings": 0, "notes": 0}
+    counts = {"tasks": 0, "reminders": 0, "decisions": 0, "meetings": 0, "notes": 0, "follow_ups": 0}
     user_id = group.user_id
 
     def _add_inbox(item_type: str, item_id: str):
@@ -447,6 +451,25 @@ def _write_items(validated: dict, group, bot_id: str, batch_id: str, db) -> dict
         _add_inbox("note", note.id)
         counts["notes"] += 1
 
+    # Follow-ups (unresolved commitments)
+    for fu in validated.get("follow_ups", []):
+        if not isinstance(fu, dict) or not fu.get("commitment"):
+            continue
+        followup = HubFollowUp(
+            user_id=user_id,
+            bot_id=bot_id,
+            source_group_id=group.id,
+            source_batch_id=batch_id,
+            commitment=_enc(str(fu["commitment"])[:500]),
+            committed_by=str(fu.get("committed_by", "") or "")[:100] or None,
+            due_hint=str(fu.get("due_hint", "") or "")[:100] or None,
+            status="open",
+        )
+        db.session.add(followup)
+        db.session.flush()
+        _add_inbox("follow_up", followup.id)
+        counts["follow_ups"] += 1
+
     return counts
 
 
@@ -469,8 +492,8 @@ def _run_automation_triggers(validated: dict, group, bot_id: str, batch_id: str,
             ).first()
             if setting and setting.is_enabled is not None:
                 return setting.is_enabled
-            # Default: meeting_reminder and deadline_alert are ON by default
-            return code in ("meeting_reminder", "deadline_alert")
+            # Fall back to seed default_enabled flag stored in default_params
+            return bool((auto.default_params or {}).get("default_enabled", True))
 
         # Meeting reminders: create reminder 60 min before each meeting
         if _is_enabled("meeting_reminder"):
@@ -495,7 +518,6 @@ def _run_automation_triggers(validated: dict, group, bot_id: str, batch_id: str,
 
         # Deadline alerts: DM immediately for tasks with due_date
         if _is_enabled("deadline_alert"):
-            from ..assistant.hub_models import HubTask
             urgent_tasks = [
                 t for t in validated.get("tasks", [])
                 if isinstance(t, dict) and t.get("due_date") and t.get("title")
@@ -503,14 +525,70 @@ def _run_automation_triggers(validated: dict, group, bot_id: str, batch_id: str,
             if urgent_tasks:
                 _send_deadline_alert_dm(user_id, urgent_tasks)
 
+        # High-priority task alert: DM for high-priority tasks
+        if _is_enabled("high_priority_alert"):
+            hp_tasks = [
+                t for t in validated.get("tasks", [])
+                if isinstance(t, dict) and t.get("priority") == "high" and t.get("title")
+            ]
+            if hp_tasks:
+                _send_deadline_alert_dm(user_id, hp_tasks, subject="🔴 High-priority tasks extracted:")
+
+        # Follow-up reminder: create a reminder 2 days from now for each open follow-up
+        if _is_enabled("follow_up_reminder"):
+            auto = HubSystemAutomation.query.filter_by(code="follow_up_reminder").first()
+            offset_days = 2
+            if auto and auto.default_params:
+                offset_days = int(auto.default_params.get("offset_days", 2))
+            for fu in validated.get("follow_ups", []):
+                if not isinstance(fu, dict) or not fu.get("commitment"):
+                    continue
+                remind_at = datetime.utcnow() + timedelta(days=offset_days)
+                commitment_text = str(fu["commitment"])[:300]
+                by = fu.get("committed_by")
+                label = f"Follow-up: {commitment_text}"
+                if by:
+                    label = f"Follow-up ({by}): {commitment_text}"
+                reminder = HubReminder(
+                    user_id=user_id,
+                    bot_id=bot_id,
+                    source_group_id=group.id,
+                    content=label[:500],
+                    remind_at=remind_at,
+                    source="extracted",
+                    source_batch_id=batch_id,
+                )
+                db.session.add(reminder)
+
+        # Decision log: save each decision as a Note
+        if _is_enabled("decision_digest"):
+            from ..assistant.hub_models import HubNote
+            for dec in validated.get("decisions", []):
+                if not isinstance(dec, dict) or not dec.get("content"):
+                    continue
+                content = str(dec["content"])[:2000]
+                by = dec.get("made_by")
+                note_text = f"Decision: {content}"
+                if by:
+                    note_text = f"Decision by {by}: {content}"
+                note = HubNote(
+                    user_id=user_id,
+                    bot_id=bot_id,
+                    source_group_id=group.id,
+                    content=note_text,
+                    source="extracted",
+                    source_batch_id=batch_id,
+                )
+                db.session.add(note)
+
         db.session.commit()
 
     except Exception as exc:
         _log.debug("hub_extraction: automation trigger error: %s", exc)
 
 
-def _send_deadline_alert_dm(user_id: int, tasks: list) -> None:
-    """Send an immediate Telegram DM for tasks with deadlines."""
+def _send_deadline_alert_dm(user_id: int, tasks: list, subject: str = "⚠️ *New tasks with deadlines extracted:*\n") -> None:
+    """Send an immediate Telegram DM for tasks with deadlines or high-priority tasks."""
     try:
         from ..models import User, UserTelegramAccount
         from ..config import Config
@@ -530,7 +608,7 @@ def _send_deadline_alert_dm(user_id: int, tasks: list) -> None:
         if not bot_token:
             return
 
-        lines = ["⚠️ *New tasks with deadlines extracted:*\n"]
+        lines = [subject]
         for t in tasks[:5]:
             lines.append(f"• {t['title']} — due {t['due_date']}")
         text = "\n".join(lines)

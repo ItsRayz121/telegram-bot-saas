@@ -564,6 +564,17 @@ export const assistant = {
   search: (q, types = 'meetings,reminders,notes,tasks,groups') => api.get('/api/assistant/search', { params: { q, types } }),
   // Learned user preferences
   getProfile: () => api.get('/api/assistant/profile'),
+  // Cross-group AI executive summary
+  crossGroupSummary: (range, startDate, endDate) =>
+    api.post('/api/hub/cross-group-summary', { range, start_date: startDate, end_date: endDate }),
+  // Follow-ups
+  listFollowUps: (status = 'open', groupId = null) =>
+    api.get('/api/hub/follow-ups', { params: { status, group_id: groupId } }),
+  resolveFollowUp: (id) => api.patch(`/api/hub/follow-ups/${id}/resolve`),
+  dismissFollowUp: (id) => api.patch(`/api/hub/follow-ups/${id}/dismiss`),
+  // Pre-built automations
+  getAutomations: () => api.get('/api/hub/bots/official/automations'),
+  updateAutomations: (automations) => api.patch('/api/hub/bots/official/automations', { automations }),
 };
 
 export const meetings = {

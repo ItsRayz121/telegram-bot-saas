@@ -425,3 +425,29 @@ class HubInboxItem(db.Model):
         db.UniqueConstraint("user_id", "item_type", "item_id", name="uq_hub_inbox_user_type_item"),
         db.Index("idx_hub_inbox_user_bot_new", "user_id", "bot_id", "is_new"),
     )
+
+
+class HubFollowUp(db.Model):
+    """
+    Unresolved commitment extracted from group conversations.
+    E.g. "John said he'd send the report by Friday" — no confirmation seen.
+    """
+    __tablename__ = "hub_follow_ups"
+
+    id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    bot_id = db.Column(db.String(36), db.ForeignKey("hub_bot_identities.id", ondelete="CASCADE"), nullable=False)
+    source_group_id = db.Column(db.String(36), db.ForeignKey("hub_connected_groups.id", ondelete="CASCADE"))
+    source_batch_id = db.Column(db.String(36))
+
+    commitment = db.Column(db.Text, nullable=False)      # encrypted: what was promised
+    committed_by = db.Column(db.String(100))             # person who made the commitment
+    due_hint = db.Column(db.String(100))                 # "by Friday", "tomorrow", "next week" — raw hint from AI
+    status = db.Column(db.String(20), default="open")   # open | resolved | dismissed
+    resolved_at = db.Column(db.DateTime(timezone=True))
+    dismissed_at = db.Column(db.DateTime(timezone=True))
+    created_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        db.Index("idx_hub_followups_user_bot_status", "user_id", "bot_id", "status"),
+    )

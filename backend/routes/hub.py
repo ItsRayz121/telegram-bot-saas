@@ -16,7 +16,7 @@ from ..assistant.hub_models import (
     HubConnectedGroup, HubTask, HubReminder, HubDecision,
     HubMeeting, HubNote, HubSystemAutomation, HubBotAutomationSetting,
     HubInboxItem, HubMemoryPerson, HubMemoryProject, HubMemoryGroupContext,
-    HubMemoryGlobal, HubKnowledgeCard,
+    HubMemoryGlobal, HubKnowledgeCard, HubFollowUp,
 )
 from ..assistant.hub_settings_resolver import get_effective_settings
 from ..assistant.hub_plan_limits import get_limits_for_plan, PlanLimitError
@@ -26,31 +26,67 @@ _log = logging.getLogger(__name__)
 
 hub_bp = Blueprint("hub", __name__, url_prefix="/api/hub")
 
-# Pre-built automation seed codes (Sprint 1 scaffold)
+# Pre-built automation seed codes
 _SEED_AUTOMATIONS = [
     {
         "code": "meeting_reminder",
         "name": "Meeting Reminder",
-        "description": "Remind me 1 hour before any extracted meeting",
+        "description": "Remind me 1 hour before any meeting extracted from a group",
         "trigger_event": "meeting_extracted",
         "action": "create_reminder",
         "default_params": {"offset_minutes": 60},
+        "default_enabled": True,
+        "icon": "CalendarMonth",
     },
     {
         "code": "deadline_alert",
         "name": "Deadline Alert",
-        "description": "Send me a DM immediately when a task with a deadline is extracted",
+        "description": "Send a Telegram DM immediately when a task with a deadline is extracted",
         "trigger_event": "task_with_deadline_extracted",
         "action": "send_immediate_dm",
         "default_params": {},
+        "default_enabled": True,
+        "icon": "Warning",
     },
     {
         "code": "follow_up_reminder",
-        "name": "Follow-up Reminder",
-        "description": "Remind me 2 days after a follow-up is detected",
+        "name": "Follow-up Nudge",
+        "description": "Remind me 2 days after an unresolved commitment is detected in a group",
         "trigger_event": "follow_up_detected",
         "action": "create_reminder",
         "default_params": {"offset_days": 2},
+        "default_enabled": True,
+        "icon": "TrackChanges",
+    },
+    {
+        "code": "decision_digest",
+        "name": "Decision Log",
+        "description": "Save every extracted decision to your Notes automatically",
+        "trigger_event": "decision_extracted",
+        "action": "save_note",
+        "default_params": {},
+        "default_enabled": False,
+        "icon": "Gavel",
+    },
+    {
+        "code": "high_priority_alert",
+        "name": "High-Priority Task Alert",
+        "description": "Send a Telegram DM immediately when a high-priority task is extracted",
+        "trigger_event": "high_priority_task_extracted",
+        "action": "send_immediate_dm",
+        "default_params": {},
+        "default_enabled": True,
+        "icon": "PriorityHigh",
+    },
+    {
+        "code": "daily_followup_summary",
+        "name": "Daily Follow-up Summary",
+        "description": "Send a morning DM listing all open follow-ups across your groups",
+        "trigger_event": "daily_schedule",
+        "action": "send_followup_summary_dm",
+        "default_params": {"hour": 9},
+        "default_enabled": False,
+        "icon": "Summarize",
     },
 ]
 
@@ -60,9 +96,25 @@ def _current_user() -> User:
 
 
 def _ensure_seed_automations():
-    """Idempotently seed system_automations if empty."""
-    if HubSystemAutomation.query.count() == 0:
-        for a in _SEED_AUTOMATIONS:
+    """Upsert seed automations — adds new ones, updates descriptions. Safe to call repeatedly."""
+    existing = {a.code: a for a in HubSystemAutomation.query.all()}
+    changed = False
+    for a in _SEED_AUTOMATIONS:
+        if a["code"] in existing:
+            rec = existing[a["code"]]
+            # Update name/description/icon if changed
+            if rec.description != a["description"]:
+                rec.description = a["description"]
+                changed = True
+            if rec.name != a["name"]:
+                rec.name = a["name"]
+                changed = True
+            # Persist icon in default_params if not there
+            if rec.default_params.get("icon") != a.get("icon"):
+                rec.default_params = {**rec.default_params, "icon": a.get("icon", ""), "default_enabled": a.get("default_enabled", False)}
+                changed = True
+        else:
+            params = {**a.get("default_params", {}), "icon": a.get("icon", ""), "default_enabled": a.get("default_enabled", False)}
             db.session.add(HubSystemAutomation(
                 id=str(uuid.uuid4()),
                 code=a["code"],
@@ -70,9 +122,11 @@ def _ensure_seed_automations():
                 description=a["description"],
                 trigger_event=a["trigger_event"],
                 action=a["action"],
-                default_params=a["default_params"],
+                default_params=params,
                 is_active=True,
             ))
+            changed = True
+    if changed:
         db.session.commit()
 
 
@@ -1226,12 +1280,15 @@ def get_automations():
         setting = HubBotAutomationSetting.query.filter_by(
             bot_id=bot.id, automation_id=auto.id
         ).first()
-        is_enabled = setting.is_enabled if (setting and setting.is_enabled is not None) else True
+        default_on = bool(auto.default_params.get("default_enabled", True)) if auto.default_params else True
+        is_enabled = setting.is_enabled if (setting and setting.is_enabled is not None) else default_on
         result.append({
             "code": auto.code,
             "name": auto.name,
             "description": auto.description,
+            "icon": auto.default_params.get("icon", "") if auto.default_params else "",
             "is_enabled": is_enabled,
+            "default_enabled": default_on,
             "custom_params": setting.custom_params if setting else None,
         })
 
@@ -1947,3 +2004,306 @@ def custom_bot_webhook(bot_id):
         _log.warning("custom_bot_webhook: dispatch error bot=%s: %s", bot_id, exc)
 
     return jsonify({"ok": True}), 200
+
+
+# ── Follow-ups ───────────────────────────────────────────────────────────────
+
+def _followup_dict(f):
+    from ..assistant.hub_crypto import _dec
+    from ..assistant.hub_models import HubConnectedGroup
+    group = HubConnectedGroup.query.get(f.source_group_id) if f.source_group_id else None
+    return {
+        "id": f.id,
+        "commitment": _dec(f.commitment),
+        "committed_by": f.committed_by,
+        "due_hint": f.due_hint,
+        "status": f.status,
+        "group_id": f.source_group_id,
+        "group_name": group.group_name if group else None,
+        "created_at": f.created_at.isoformat() if f.created_at else None,
+        "resolved_at": f.resolved_at.isoformat() if f.resolved_at else None,
+    }
+
+
+@hub_bp.route("/follow-ups", methods=["GET"])
+@jwt_required()
+def list_follow_ups():
+    user = _current_user()
+    bot = _get_or_create_official_bot(user.id)
+    status_filter = request.args.get("status", "open")   # open | resolved | dismissed | all
+    group_id = request.args.get("group_id")
+
+    q = HubFollowUp.query.filter_by(user_id=user.id, bot_id=bot.id)
+    if status_filter != "all":
+        q = q.filter_by(status=status_filter)
+    if group_id:
+        q = q.filter_by(source_group_id=group_id)
+    items = q.order_by(HubFollowUp.created_at.desc()).limit(50).all()
+    return jsonify({"follow_ups": [_followup_dict(f) for f in items]})
+
+
+@hub_bp.route("/follow-ups/<followup_id>/resolve", methods=["PATCH"])
+@jwt_required()
+def resolve_follow_up(followup_id):
+    user = _current_user()
+    fu = HubFollowUp.query.filter_by(id=followup_id, user_id=user.id).first_or_404()
+    fu.status = "resolved"
+    fu.resolved_at = datetime.utcnow()
+    HubInboxItem.query.filter_by(item_type="follow_up", item_id=followup_id, user_id=user.id).delete()
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@hub_bp.route("/follow-ups/<followup_id>/dismiss", methods=["PATCH"])
+@jwt_required()
+def dismiss_follow_up(followup_id):
+    user = _current_user()
+    fu = HubFollowUp.query.filter_by(id=followup_id, user_id=user.id).first_or_404()
+    fu.status = "dismissed"
+    fu.dismissed_at = datetime.utcnow()
+    HubInboxItem.query.filter_by(item_type="follow_up", item_id=followup_id, user_id=user.id).delete()
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+# ── Cross-Group AI Summary ────────────────────────────────────────────────────
+
+@hub_bp.route("/cross-group-summary", methods=["POST"])
+@jwt_required()
+def cross_group_summary():
+    """
+    Generate an executive AI narrative across all connected groups for a time range.
+    Caches result in Redis for 30 minutes per user+range combination.
+    """
+    user = _current_user()
+    bot = _get_or_create_official_bot(user.id)
+
+    body = request.get_json(silent=True) or {}
+    range_key = body.get("range", "this_week")
+    start_date_str = body.get("start_date")
+    end_date_str = body.get("end_date")
+
+    now = datetime.utcnow()
+
+    # Resolve date window
+    if range_key == "today":
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        end = now
+    elif range_key == "yesterday":
+        yesterday = now - timedelta(days=1)
+        start = yesterday.replace(hour=0, minute=0, second=0, microsecond=0)
+        end = yesterday.replace(hour=23, minute=59, second=59, microsecond=0)
+    elif range_key == "this_week":
+        start = now - timedelta(days=now.weekday())
+        start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+        end = now
+    elif range_key == "last_7_days":
+        start = now - timedelta(days=7)
+        end = now
+    elif range_key == "last_30_days":
+        start = now - timedelta(days=30)
+        end = now
+    elif range_key == "custom" and start_date_str and end_date_str:
+        try:
+            start = datetime.strptime(start_date_str, "%Y-%m-%d")
+            end = datetime.strptime(end_date_str, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+        except ValueError:
+            return jsonify({"error": "Invalid date format. Use YYYY-MM-DD."}), 400
+    else:
+        start = now - timedelta(days=7)
+        end = now
+
+    # Redis cache check
+    cache_key = f"cross_summary:{user.id}:{range_key}:{start.date()}:{end.date()}"
+    try:
+        import redis as redis_lib
+        r = redis_lib.from_url(Config.REDIS_URL, decode_responses=True)
+        cached = r.get(cache_key)
+        if cached:
+            import json as _json
+            return jsonify({**_json.loads(cached), "cached": True})
+    except Exception:
+        r = None
+
+    # Gather extracted items across all connected groups
+    connected_groups = HubConnectedGroup.query.filter_by(
+        bot_id=bot.id, user_id=user.id, is_active=True
+    ).all()
+
+    if not connected_groups:
+        return jsonify({"error": "No connected groups. Add the bot to a group first."}), 400
+
+    group_ids = [g.id for g in connected_groups]
+    group_name_map = {g.id: (g.group_name or f"Group {g.telegram_group_id}") for g in connected_groups}
+
+    tasks = HubTask.query.filter(
+        HubTask.user_id == user.id,
+        HubTask.bot_id == bot.id,
+        HubTask.source_group_id.in_(group_ids),
+        HubTask.created_at.between(start, end),
+    ).all()
+
+    decisions = HubDecision.query.filter(
+        HubDecision.user_id == user.id,
+        HubDecision.bot_id == bot.id,
+        HubDecision.source_group_id.in_(group_ids),
+        HubDecision.created_at.between(start, end),
+    ).all()
+
+    meetings = HubMeeting.query.filter(
+        HubMeeting.user_id == user.id,
+        HubMeeting.bot_id == bot.id,
+        HubMeeting.source_group_id.in_(group_ids),
+        HubMeeting.created_at.between(start, end),
+    ).all()
+
+    reminders = HubReminder.query.filter(
+        HubReminder.user_id == user.id,
+        HubReminder.bot_id == bot.id,
+        HubReminder.source_group_id.in_(group_ids),
+        HubReminder.created_at.between(start, end),
+    ).all()
+
+    total_items = len(tasks) + len(decisions) + len(meetings) + len(reminders)
+    if total_items == 0:
+        return jsonify({
+            "summary": "No activity was captured across your groups in this time range. Make sure the bot is active and observing your groups.",
+            "groups": [{"id": g.id, "name": group_name_map[g.id]} for g in connected_groups],
+            "counts": {"tasks": 0, "decisions": 0, "meetings": 0, "reminders": 0},
+            "generated_at": now.isoformat(),
+            "cached": False,
+        })
+
+    # Build structured context for GPT
+    def _group_label(gid):
+        return group_name_map.get(gid, "Unknown Group")
+
+    context_lines = []
+    if tasks:
+        context_lines.append("TASKS:")
+        for t in tasks[:30]:
+            line = f"  - [{_group_label(t.source_group_id)}] {t.title}"
+            if t.assignee:
+                line += f" (assigned to {t.assignee})"
+            if t.due_date:
+                line += f" — due {t.due_date.strftime('%b %d')}"
+            if t.priority and t.priority != "normal":
+                line += f" [{t.priority} priority]"
+            context_lines.append(line)
+
+    if decisions:
+        context_lines.append("DECISIONS:")
+        for d in decisions[:20]:
+            line = f"  - [{_group_label(d.source_group_id)}] {d.content}"
+            if d.made_by:
+                line += f" (by {d.made_by})"
+            context_lines.append(line)
+
+    if meetings:
+        context_lines.append("MEETINGS:")
+        for m in meetings[:15]:
+            line = f"  - [{_group_label(m.source_group_id)}] {m.title}"
+            if m.scheduled_at:
+                line += f" — {m.scheduled_at.strftime('%b %d %H:%M UTC')}"
+            context_lines.append(line)
+
+    if reminders:
+        context_lines.append("REMINDERS:")
+        for rem in reminders[:15]:
+            line = f"  - [{_group_label(rem.source_group_id)}] {rem.content}"
+            if rem.remind_at:
+                line += f" — {rem.remind_at.strftime('%b %d %H:%M UTC')}"
+            context_lines.append(line)
+
+    context_text = "\n".join(context_lines)
+    range_label = {
+        "today": "today",
+        "yesterday": "yesterday",
+        "this_week": "this week",
+        "last_7_days": "the last 7 days",
+        "last_30_days": "the last 30 days",
+        "custom": f"{start.strftime('%b %d')} – {end.strftime('%b %d')}",
+    }.get(range_key, "the selected period")
+
+    group_names_list = ", ".join(group_name_map.values())
+
+    system_prompt = (
+        "You are an executive AI assistant. Your job is to write a concise, insightful narrative "
+        "summary of what happened across a user's Telegram groups. "
+        "Write in second person ('Your teams...', 'Across your groups...'). "
+        "Be direct and specific — mention group names, key assignees, and important deadlines. "
+        "Highlight patterns, risks, and what needs attention. "
+        "Format as 2–4 short paragraphs. No bullet points. No headers. No markdown. "
+        "Sound like a smart chief of staff briefing an executive."
+    )
+
+    user_prompt = (
+        f"Here is what was captured across {len(connected_groups)} groups ({group_names_list}) "
+        f"during {range_label}:\n\n{context_text}\n\n"
+        f"Write an executive narrative summary."
+    )
+
+    try:
+        from openai import OpenAI
+        api_key = Config.OPENAI_API_KEY if hasattr(Config, "OPENAI_API_KEY") else ""
+        if not api_key:
+            import os
+            api_key = os.environ.get("OPENAI_API_KEY", "")
+        if not api_key:
+            return jsonify({"error": "AI service not configured."}), 503
+
+        client = OpenAI(api_key=api_key)
+        resp = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.4,
+            max_tokens=600,
+        )
+        summary_text = resp.choices[0].message.content.strip()
+    except Exception as exc:
+        _log.warning("cross_group_summary: OpenAI call failed: %s", exc)
+        return jsonify({"error": "AI generation failed. Please try again."}), 503
+
+    # Build groups metadata
+    groups_meta = []
+    group_item_counts = {}
+    for item_list, label in [(tasks, "tasks"), (decisions, "decisions"), (meetings, "meetings"), (reminders, "reminders")]:
+        for item in item_list:
+            gid = item.source_group_id
+            if gid not in group_item_counts:
+                group_item_counts[gid] = 0
+            group_item_counts[gid] += 1
+
+    for g in connected_groups:
+        groups_meta.append({
+            "id": g.id,
+            "name": group_name_map[g.id],
+            "item_count": group_item_counts.get(g.id, 0),
+        })
+
+    result = {
+        "summary": summary_text,
+        "groups": groups_meta,
+        "counts": {
+            "tasks": len(tasks),
+            "decisions": len(decisions),
+            "meetings": len(meetings),
+            "reminders": len(reminders),
+        },
+        "range": range_key,
+        "generated_at": now.isoformat(),
+        "cached": False,
+    }
+
+    # Cache for 30 minutes
+    try:
+        if r:
+            import json as _json
+            r.setex(cache_key, 1800, _json.dumps(result))
+    except Exception:
+        pass
+
+    return jsonify(result)

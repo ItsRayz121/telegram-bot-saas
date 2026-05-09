@@ -3,13 +3,16 @@ import {
   Box, Typography, Card, CardContent, Button, Chip, CircularProgress,
   Alert, LinearProgress,
   IconButton, Tooltip, Collapse, Tabs, Tab,
+  Select, MenuItem, FormControl, TextField, Divider,
 } from '@mui/material';
 import {
   Psychology, OpenInNew, ContentCopy, CheckCircle, RadioButtonUnchecked, Close,
   ArrowForward, ExpandMore, ExpandLess,
   CalendarMonth, SmartToy, Lock, Groups, Person, TrendingUp,
   EditNote, NotificationsActive, Summarize, Reply, MenuBook, AutoMode, BarChart,
+  AutoAwesome, Refresh, Bolt,
 } from '@mui/icons-material';
+import Switch from '@mui/material/Switch';
 import GroupTrendsDashboard from '../components/GroupTrendsDashboard';
 import { useMediaQuery, useTheme } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
@@ -471,6 +474,368 @@ function ActiveSpacesCard({ plan }) {
   );
 }
 
+// ── Follow-ups Card ───────────────────────────────────────────────────────────
+
+function FollowUpsCard() {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(true);
+  const [actioning, setActioning] = useState({});
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await assistant.listFollowUps('open');
+      setItems(data.follow_ups || []);
+    } catch {
+      // silent — not critical
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const act = async (id, action) => {
+    setActioning(a => ({ ...a, [id]: true }));
+    try {
+      if (action === 'resolve') await assistant.resolveFollowUp(id);
+      else await assistant.dismissFollowUp(id);
+      setItems(prev => prev.filter(f => f.id !== id));
+    } catch {
+      // silent
+    } finally {
+      setActioning(a => ({ ...a, [id]: false }));
+    }
+  };
+
+  if (!loading && items.length === 0) return null;
+
+  return (
+    <Card variant="outlined" sx={{ mt: 2 }}>
+      <CardContent sx={{ pb: open ? 1 : undefined }}>
+        <Box
+          sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
+          onClick={() => setOpen(v => !v)}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <NotificationsActive fontSize="small" sx={{ color: 'warning.main' }} />
+            <Typography fontWeight={600} fontSize="0.95rem">Unresolved Follow-ups</Typography>
+            {!loading && (
+              <Chip
+                label={items.length}
+                size="small"
+                color="warning"
+                sx={{ height: 17, fontSize: '0.65rem' }}
+              />
+            )}
+          </Box>
+          {open ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
+        </Box>
+
+        <Collapse in={open}>
+          {loading ? (
+            <Box sx={{ pt: 1.5 }}><CircularProgress size={18} /></Box>
+          ) : (
+            <>
+              <Typography fontSize="0.78rem" color="text.secondary" mt={1} mb={1.5}>
+                Commitments extracted from your groups that haven't been confirmed yet.
+              </Typography>
+              {items.map(fu => (
+                <Box
+                  key={fu.id}
+                  sx={{
+                    display: 'flex', alignItems: 'flex-start', gap: 1,
+                    mb: 1.25, p: 1, borderRadius: 1.5,
+                    bgcolor: 'action.hover',
+                  }}
+                >
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography fontSize="0.84rem" fontWeight={500} noWrap={false}>
+                      {fu.commitment}
+                    </Typography>
+                    <Box sx={{ display: 'flex', gap: 0.75, mt: 0.5, flexWrap: 'wrap' }}>
+                      {fu.committed_by && (
+                        <Chip label={fu.committed_by} size="small" variant="outlined" sx={{ height: 18, fontSize: '0.67rem' }} />
+                      )}
+                      {fu.due_hint && (
+                        <Chip label={fu.due_hint} size="small" color="warning" variant="outlined" sx={{ height: 18, fontSize: '0.67rem' }} />
+                      )}
+                      {fu.group_name && (
+                        <Chip label={fu.group_name} size="small" sx={{ height: 18, fontSize: '0.67rem', opacity: 0.7 }} />
+                      )}
+                    </Box>
+                  </Box>
+                  <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
+                    <Tooltip title="Mark resolved">
+                      <IconButton
+                        size="small"
+                        onClick={() => act(fu.id, 'resolve')}
+                        disabled={actioning[fu.id]}
+                        sx={{ color: 'success.main' }}
+                      >
+                        <CheckCircle fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Dismiss">
+                      <IconButton
+                        size="small"
+                        onClick={() => act(fu.id, 'dismiss')}
+                        disabled={actioning[fu.id]}
+                        sx={{ color: 'text.disabled' }}
+                      >
+                        <Close fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+                </Box>
+              ))}
+            </>
+          )}
+        </Collapse>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Hub Automations Card ──────────────────────────────────────────────────────
+
+function HubAutomationsCard() {
+  const [automations, setAutomations] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState({});
+
+  useEffect(() => {
+    assistant.getAutomations()
+      .then(r => setAutomations(r.data.automations || []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const toggle = async (code, current) => {
+    setSaving(s => ({ ...s, [code]: true }));
+    const next = !current;
+    setAutomations(prev => prev.map(a => a.code === code ? { ...a, is_enabled: next } : a));
+    try {
+      await assistant.updateAutomations({ [code]: next });
+    } catch {
+      // revert on failure
+      setAutomations(prev => prev.map(a => a.code === code ? { ...a, is_enabled: current } : a));
+    } finally {
+      setSaving(s => ({ ...s, [code]: false }));
+    }
+  };
+
+  const enabledCount = automations.filter(a => a.is_enabled).length;
+
+  return (
+    <Card variant="outlined" sx={{ mt: 2 }}>
+      <CardContent sx={{ pb: open ? 1 : undefined }}>
+        <Box
+          sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
+          onClick={() => setOpen(v => !v)}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Bolt fontSize="small" sx={{ color: 'primary.main' }} />
+            <Typography fontWeight={600} fontSize="0.95rem">Smart Automations</Typography>
+            {!loading && (
+              <Chip
+                label={`${enabledCount} active`}
+                size="small"
+                color={enabledCount > 0 ? 'primary' : 'default'}
+                sx={{ height: 17, fontSize: '0.65rem' }}
+              />
+            )}
+          </Box>
+          {open ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
+        </Box>
+
+        <Collapse in={open}>
+          {loading ? (
+            <Box sx={{ pt: 1.5 }}><CircularProgress size={18} /></Box>
+          ) : (
+            <>
+              <Typography fontSize="0.78rem" color="text.secondary" mt={1} mb={1.5}>
+                These run automatically after every extraction. Toggle to customize what fires for you.
+              </Typography>
+              {automations.map(a => (
+                <Box
+                  key={a.code}
+                  sx={{
+                    display: 'flex', alignItems: 'center', gap: 1.5,
+                    py: 1, borderBottom: '1px solid', borderColor: 'divider',
+                    '&:last-child': { borderBottom: 'none' },
+                  }}
+                >
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography fontSize="0.84rem" fontWeight={500}>{a.name}</Typography>
+                    <Typography fontSize="0.75rem" color="text.secondary" noWrap={false}>
+                      {a.description}
+                    </Typography>
+                  </Box>
+                  <Switch
+                    size="small"
+                    checked={a.is_enabled}
+                    disabled={!!saving[a.code]}
+                    onChange={() => toggle(a.code, a.is_enabled)}
+                    onClick={e => e.stopPropagation()}
+                  />
+                </Box>
+              ))}
+            </>
+          )}
+        </Collapse>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Cross-Group AI Summary ────────────────────────────────────────────────────
+
+const RANGE_OPTIONS = [
+  { value: 'today',       label: 'Today' },
+  { value: 'yesterday',   label: 'Yesterday' },
+  { value: 'this_week',   label: 'This Week' },
+  { value: 'last_7_days', label: 'Last 7 Days' },
+  { value: 'last_30_days',label: 'Last 30 Days' },
+  { value: 'custom',      label: 'Custom Range' },
+];
+
+function CrossGroupSummary() {
+  const [range, setRange] = useState('this_week');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState('');
+
+  const generate = async () => {
+    setLoading(true);
+    setError('');
+    setResult(null);
+    try {
+      const { data } = await assistant.crossGroupSummary(
+        range,
+        range === 'custom' ? startDate : undefined,
+        range === 'custom' ? endDate : undefined,
+      );
+      setResult(data);
+    } catch (e) {
+      setError(e?.response?.data?.error || 'Failed to generate summary. Try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const countLabel = result
+    ? [
+        result.counts.tasks && `${result.counts.tasks} task${result.counts.tasks !== 1 ? 's' : ''}`,
+        result.counts.decisions && `${result.counts.decisions} decision${result.counts.decisions !== 1 ? 's' : ''}`,
+        result.counts.meetings && `${result.counts.meetings} meeting${result.counts.meetings !== 1 ? 's' : ''}`,
+        result.counts.reminders && `${result.counts.reminders} reminder${result.counts.reminders !== 1 ? 's' : ''}`,
+      ].filter(Boolean).join(' · ')
+    : '';
+
+  return (
+    <Card variant="outlined" sx={{ mt: 2, mb: 1 }}>
+      <CardContent>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+          <AutoAwesome fontSize="small" sx={{ color: 'primary.main' }} />
+          <Typography fontWeight={700} fontSize="0.95rem">Cross-Group AI Summary</Typography>
+        </Box>
+        <Typography fontSize="0.8rem" color="text.secondary" mb={2}>
+          Generate an executive narrative of everything captured across your connected groups.
+        </Typography>
+
+        {/* Controls */}
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center', mb: range === 'custom' ? 1.5 : 0 }}>
+          <FormControl size="small" sx={{ minWidth: 160 }}>
+            <Select value={range} onChange={e => setRange(e.target.value)}>
+              {RANGE_OPTIONS.map(o => (
+                <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <Button
+            variant="contained"
+            size="small"
+            startIcon={loading ? <CircularProgress size={13} color="inherit" /> : result ? <Refresh /> : <AutoAwesome />}
+            onClick={generate}
+            disabled={loading || (range === 'custom' && (!startDate || !endDate))}
+          >
+            {loading ? 'Generating…' : result ? 'Regenerate' : 'Generate Summary'}
+          </Button>
+        </Box>
+
+        {range === 'custom' && (
+          <Box sx={{ display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap' }}>
+            <TextField
+              label="Start date" type="date" size="small"
+              value={startDate} onChange={e => setStartDate(e.target.value)}
+              InputLabelProps={{ shrink: true }} sx={{ width: 160 }}
+            />
+            <TextField
+              label="End date" type="date" size="small"
+              value={endDate} onChange={e => setEndDate(e.target.value)}
+              InputLabelProps={{ shrink: true }} sx={{ width: 160 }}
+            />
+          </Box>
+        )}
+
+        {error && (
+          <Alert severity="error" sx={{ mt: 1.5, fontSize: '0.82rem' }} onClose={() => setError('')}>
+            {error}
+          </Alert>
+        )}
+
+        {result && (
+          <Box sx={{ mt: 2 }}>
+            <Divider sx={{ mb: 1.5 }} />
+
+            {/* Meta row */}
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 1.5, alignItems: 'center' }}>
+              {result.groups.map(g => (
+                <Chip
+                  key={g.id}
+                  label={`${g.name}${g.item_count ? ` · ${g.item_count}` : ''}`}
+                  size="small"
+                  variant="outlined"
+                  sx={{ fontSize: '0.7rem', height: 22 }}
+                />
+              ))}
+              {result.cached && (
+                <Chip label="cached" size="small" sx={{ fontSize: '0.68rem', height: 20, opacity: 0.6 }} />
+              )}
+            </Box>
+
+            {/* Count summary */}
+            {countLabel && (
+              <Typography fontSize="0.78rem" color="text.secondary" mb={1.5} fontWeight={500}>
+                {countLabel}
+              </Typography>
+            )}
+
+            {/* AI narrative */}
+            <Typography
+              fontSize="0.88rem"
+              lineHeight={1.7}
+              color="text.primary"
+              sx={{ whiteSpace: 'pre-wrap' }}
+            >
+              {result.summary}
+            </Typography>
+
+            <Typography fontSize="0.7rem" color="text.disabled" mt={1.5}>
+              Generated {new Date(result.generated_at).toLocaleString()}
+            </Typography>
+          </Box>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Main Hub ──────────────────────────────────────────────────────────────────
 
 export default function AssistantHub() {
@@ -562,6 +927,15 @@ export default function AssistantHub() {
 
           {/* Upcoming Meetings */}
           <MeetingsCard />
+
+          {/* Pre-built automations */}
+          <HubAutomationsCard />
+
+          {/* Unresolved follow-ups */}
+          <FollowUpsCard />
+
+          {/* Cross-Group AI Summary */}
+          <CrossGroupSummary />
 
           {/* Active Spaces — assistant bot chats */}
           <ActiveSpacesCard plan={plan} />
