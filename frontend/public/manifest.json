@@ -1,7 +1,7 @@
 {
   "short_name": "Telegizer",
-  "name": "Telegizer — Telegram Group Automation",
-  "description": "Automate your Telegram groups with AutoMod, scheduling, analytics, and AI.",
+  "name": "Telegizer — Telegram Community Management",
+  "description": "Manage your Telegram groups with AutoMod, scheduling, analytics, and AI auto-reply.",
   "start_url": "/dashboard",
   "scope": "/",
   "display": "standalone",

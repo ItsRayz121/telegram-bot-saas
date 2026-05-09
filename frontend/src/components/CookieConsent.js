@@ -1,7 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Button, Typography, Stack, Link } from '@mui/material';
+import { initPostHog } from '../index';
 
 const STORAGE_KEY = 'telegizer_cookie_consent';
+
+// Called once at startup — if the user already accepted in a previous session,
+// boot PostHog immediately (before the banner renders) so no session is lost.
+function bootIfPreviouslyAccepted() {
+  if (localStorage.getItem(STORAGE_KEY) === 'accepted') {
+    initPostHog();
+  }
+}
+bootIfPreviouslyAccepted();
 
 export default function CookieConsent() {
   const [visible, setVisible] = useState(false);
@@ -15,13 +25,17 @@ export default function CookieConsent() {
   const accept = () => {
     localStorage.setItem(STORAGE_KEY, 'accepted');
     setVisible(false);
+    initPostHog();
   };
 
   const decline = () => {
     localStorage.setItem(STORAGE_KEY, 'declined');
     setVisible(false);
-    // Reload to ensure PostHog (if loaded) respects opt-out
-    // PostHog's opt-out is handled server-side via do-not-track or by not loading it.
+    // PostHog was never initialized so there is nothing to opt out of.
+    // If it was somehow already running, opt it out explicitly.
+    if (window.__posthog_initialized && window.posthog) {
+      window.posthog.opt_out_capturing();
+    }
   };
 
   if (!visible) return null;
@@ -47,11 +61,11 @@ export default function CookieConsent() {
       }}
     >
       <Typography variant="body2" fontWeight={600} mb={0.75}>
-        We use analytics cookies
+        Analytics cookies
       </Typography>
       <Typography variant="caption" color="text.secondary" display="block" mb={2} lineHeight={1.6}>
-        We use Plausible (cookieless, privacy-first) and PostHog (anonymised usage data) to improve
-        the product. No personal data is sold.{' '}
+        We use Plausible (cookieless, no personal data) and PostHog (anonymised usage) to improve
+        the product. No data is sold or shared with advertisers.{' '}
         <Link href="/privacy" color="primary.light" underline="hover">
           Privacy Policy
         </Link>

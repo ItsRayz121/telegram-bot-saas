@@ -223,7 +223,7 @@ export default function Pricing() {
             Annual
           </Typography>
           <Chip
-            label="Save ~17%"
+            label="Save ~33%"
             size="small"
             color="success"
             icon={<LocalOffer fontSize="small" />}
@@ -438,7 +438,7 @@ export default function Pricing() {
               <>
                 <strong>{selectedTier.charAt(0).toUpperCase() + selectedTier.slice(1)}</strong> Plan
                 {' — '}<strong>{annual ? 'Annual' : 'Monthly'}</strong>
-                {annual && <> · <span style={{ color: '#66bb6a' }}>~2 months free</span></>}
+                {annual && <> · <span style={{ color: '#66bb6a' }}>~4 months free</span></>}
               </>
             )}
           </Typography>

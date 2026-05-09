@@ -1,0 +1,4 @@
+Contact: mailto:fazalelahi5577@gmail.com
+Expires: 2027-01-01T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://telegizer.com/.well-known/security.txt

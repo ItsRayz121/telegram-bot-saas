@@ -37,11 +37,18 @@
       ]
     },
     {
+      "source": "/.well-known/security.txt",
+      "headers": [
+        { "key": "Content-Type",  "value": "text/plain; charset=utf-8" },
+        { "key": "Cache-Control", "value": "public, max-age=86400" }
+      ]
+    },
+    {
       "source": "/(.*)",
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://telegram.org https://cdn.jsdelivr.net https://plausible.io; connect-src 'self' https://*.railway.app https://api.telegizer.com https://api.telegizer.xyz https://*.posthog.com https://us-assets.i.posthog.com https://*.sentry.io https://o4511280517480449.ingest.us.sentry.io https://plausible.io https://fonts.googleapis.com https://fonts.gstatic.com; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; frame-src https://telegram.org; worker-src 'self';"
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://telegram.org https://cdn.jsdelivr.net https://plausible.io https://us-assets.i.posthog.com; connect-src 'self' https://api.telegizer.com https://*.posthog.com https://us-assets.i.posthog.com https://*.sentry.io https://o4511280517480449.ingest.us.sentry.io https://plausible.io https://fonts.googleapis.com https://fonts.gstatic.com; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; frame-src https://telegram.org; worker-src 'self';"
         },
         { "key": "X-Content-Type-Options",        "value": "nosniff" },
         { "key": "X-Frame-Options",                "value": "DENY" },
@@ -52,6 +59,9 @@
     }
   ],
   "rewrites": [
-    { "source": "/((?!api|static|sw\\.js|manifest\\.json|offline\\.html|favicon\\.ico|sitemap\\.xml|robots\\.txt).*)", "destination": "/index.html" }
+    {
+      "source": "/((?!api|static|sw\\.js|manifest\\.json|offline\\.html|favicon\\.ico|sitemap\\.xml|robots\\.txt|\\.well-known).*)",
+      "destination": "/index.html"
+    }
   ]
 }

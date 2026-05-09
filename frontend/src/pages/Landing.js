@@ -94,8 +94,8 @@ const FEATURES = [
   },
   {
     icon: <Lock fontSize="large" />,
-    title: 'Raid Coordinator',
-    desc: 'Launch coordinated community raids on Twitter/X. Members earn XP for participating — gamified growth.',
+    title: 'Coordinated Campaigns',
+    desc: 'Organise community participation events — like/repost campaigns, AMAs, and engagement drives. Members earn XP for taking part.',
     badge: 'Pro',
     badgeColor: 'primary',
     plan: 'Pro',
@@ -226,7 +226,7 @@ export default function Landing() {
         }} />
         <Container maxWidth="md" sx={{ position: 'relative' }}>
           <Chip
-            label="âœ¦  Built for Telegram communities"
+            label="Built for Telegram community managers"
             size="small"
             sx={{ mb: 3, bgcolor: 'rgba(33,150,243,0.12)', color: 'primary.light', fontWeight: 600, border: '1px solid rgba(33,150,243,0.3)' }}
           />
@@ -236,9 +236,9 @@ export default function Landing() {
             mb={2.5}
             sx={{ fontSize: { xs: '2.2rem', sm: '3rem', md: '3.75rem' }, lineHeight: 1.1, letterSpacing: '-0.02em' }}
           >
-            Turn Your Telegram Group{' '}
+            Manage Your Telegram Group{' '}
             <Box component="span" sx={{ color: 'primary.main' }}>
-              Into a Growth Machine
+              Without the Manual Work
             </Box>
           </Typography>
           <Typography
@@ -247,7 +247,7 @@ export default function Landing() {
             mb={1.5}
             sx={{ fontWeight: 400, fontSize: { xs: '1.1rem', md: '1.3rem' } }}
           >
-            No spam. No manual work. Just growth.
+            Moderation, scheduling, and analytics — handled automatically.
           </Typography>
           <Typography
             variant="body1"
@@ -255,8 +255,8 @@ export default function Landing() {
             mb={5}
             sx={{ maxWidth: 520, mx: 'auto', lineHeight: 1.7 }}
           >
-            Telegizer automates moderation, scheduling, member management, and analytics
-            for every Telegram group you run — from one dashboard.
+            Telegizer connects to your Telegram bot and automates moderation, scheduled posts,
+            member management, and analytics — from a single dashboard.
           </Typography>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="center" mb={3}>
             <Button
@@ -419,14 +419,15 @@ export default function Landing() {
       <Box sx={{ bgcolor: 'background.paper', borderTop: '1px solid', borderBottom: '1px solid', borderColor: 'divider', py: { xs: 6, md: 8 }, textAlign: 'center', px: 2 }}>
         <Container maxWidth="sm">
           <Typography variant="overline" color="success.main" fontWeight={700} letterSpacing={2}>
-            The Solution
+            How It Helps
           </Typography>
           <Typography variant="h4" fontWeight={800} mt={1} mb={2}>
-            Telegizer handles everything you're doing manually — automatically
+            Replace repetitive tasks with reliable automation
           </Typography>
           <Typography variant="body1" color="text.secondary" lineHeight={1.8}>
-            More automation → more consistent engagement → more trust → more members who stay.
-            That's the growth loop Telegizer puts in motion the moment you connect your first bot.
+            Connect your Telegram bot and configure what you want automated — spam removal,
+            scheduled posts, welcome messages, analytics. Telegizer runs it in the background
+            so you can focus on your community, not the admin work.
           </Typography>
         </Container>
       </Box>
@@ -660,7 +661,7 @@ export default function Landing() {
             },
             {
               q: 'What coins and payment methods are supported?',
-              a: 'Crypto payments accept USDT, BTC, ETH, BNB, TRX, SOL, and 300+ other coins via NOWPayments. Card / bank transfer via Lemon Squeezy is coming soon.'
+              a: 'Payments are processed via NOWPayments and support USDT, BTC, ETH, BNB, TRX, SOL, and 300+ other coins. Card payments are not available at this time.'
             },
             {
               q: 'How long do crypto payment confirmations take?',
@@ -704,8 +705,8 @@ export default function Landing() {
             Discover Telegram Communities
           </Typography>
           <Typography variant="body1" color="text.secondary" mb={3} lineHeight={1.7}>
-            Browse thousands of verified Telegram groups and channels — filtered by category, country, and size.
-            List your community for free and reach new members organically.
+            Explore Telegram groups and channels — filtered by category, country, and size.
+            List your community for free to help people find it.
           </Typography>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="center">
             <Button variant="contained" size="large" onClick={() => navigate('/directory')} endIcon={<ArrowForward />} sx={{ py: 1.5, px: 3 }}>
@@ -729,7 +730,7 @@ export default function Landing() {
       >
         <Container maxWidth="sm">
           <Typography variant="h4" fontWeight={800} color="white" mb={2}>
-            Your community deserves better than manual work
+            Stop managing your community by hand
           </Typography>
           <Typography variant="body1" sx={{ color: 'rgba(255,255,255,0.85)', mb: 4, lineHeight: 1.7 }}>
             Stop managing your community by hand.
