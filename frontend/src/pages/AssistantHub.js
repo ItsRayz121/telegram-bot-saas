@@ -8,6 +8,7 @@ import {
   Psychology, OpenInNew, ContentCopy, CheckCircle, RadioButtonUnchecked, Close,
   ArrowForward, ExpandMore, ExpandLess,
   CalendarMonth, SmartToy, Lock, Groups, Person, TrendingUp,
+  EditNote, NotificationsActive, Summarize, Reply, MenuBook, AutoMode, BarChart,
 } from '@mui/icons-material';
 import GroupTrendsDashboard from '../components/GroupTrendsDashboard';
 import { useMediaQuery, useTheme } from '@mui/material';
