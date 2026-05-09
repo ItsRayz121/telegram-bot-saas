@@ -634,28 +634,40 @@ def _try_leave_group(telegram_group_id: int):
 # ── Export helpers ─────────────────────────────────────────────────────────────
 
 def _task_dict(t):
-    return {"id": t.id, "title": t.title, "assignee_name": t.assignee_name,
+    from ..assistant.hub_crypto import _dec
+    return {"id": t.id, "title": _dec(t.title), "assignee_name": t.assignee_name,
             "due_date": t.due_date.isoformat() if t.due_date else None,
             "priority": t.priority, "status": t.status, "source": t.source,
+            "source_group_id": t.source_group_id,
             "created_at": t.created_at.isoformat()}
 
 def _reminder_dict(r):
-    return {"id": r.id, "content": r.content,
+    from ..assistant.hub_crypto import _dec
+    return {"id": r.id, "content": _dec(r.content),
             "remind_at": r.remind_at.isoformat() if r.remind_at else None,
-            "source": r.source, "created_at": r.created_at.isoformat()}
+            "delivered_at": r.delivered_at.isoformat() if r.delivered_at else None,
+            "dismissed_at": r.dismissed_at.isoformat() if r.dismissed_at else None,
+            "source": r.source, "source_group_id": r.source_group_id,
+            "created_at": r.created_at.isoformat()}
 
 def _decision_dict(d):
-    return {"id": d.id, "content": d.content, "made_by": d.made_by,
+    from ..assistant.hub_crypto import _dec
+    return {"id": d.id, "content": _dec(d.content), "made_by": d.made_by,
+            "source_group_id": d.source_group_id,
             "created_at": d.created_at.isoformat()}
 
 def _meeting_dict(m):
-    return {"id": m.id, "title": m.title,
+    from ..assistant.hub_crypto import _dec
+    return {"id": m.id, "title": _dec(m.title),
             "scheduled_at": m.scheduled_at.isoformat() if m.scheduled_at else None,
-            "participants": m.participants, "created_at": m.created_at.isoformat()}
+            "participants": m.participants, "source_group_id": m.source_group_id,
+            "created_at": m.created_at.isoformat()}
 
 def _note_dict(n):
-    return {"id": n.id, "content": n.content, "tags": n.tags,
-            "source": n.source, "created_at": n.created_at.isoformat()}
+    from ..assistant.hub_crypto import _dec
+    return {"id": n.id, "content": _dec(n.content), "tags": n.tags,
+            "source": n.source, "source_group_id": n.source_group_id,
+            "created_at": n.created_at.isoformat()}
 
 
 # ── Sprint 5: Templates CRUD ──────────────────────────────────────────────────
@@ -920,11 +932,12 @@ def create_task():
     if not title:
         return jsonify({"error": "title required"}), 400
 
+    from ..assistant.hub_crypto import _enc
     task = HubTask(
         user_id=user.id,
         bot_id=bot.id,
         source_group_id=data.get("source_group_id"),
-        title=title[:500],
+        title=_enc(title[:500]),
         description=data.get("description"),
         assignee_name=data.get("assignee_name"),
         due_date=_parse_date_str(data.get("due_date")),
@@ -952,9 +965,13 @@ def update_task(task_id):
     task = HubTask.query.filter_by(id=task_id, user_id=user.id).first_or_404()
     data = request.get_json(silent=True) or {}
 
-    for field in ("title", "description", "assignee_name", "priority", "status"):
+    from ..assistant.hub_crypto import _enc
+    for field in ("assignee_name", "priority", "status"):
         if field in data:
             setattr(task, field, data[field])
+    for field in ("title", "description"):
+        if field in data:
+            setattr(task, field, _enc(data[field]) if data[field] else None)
     if "due_date" in data:
         task.due_date = _parse_date_str(data["due_date"])
     task.updated_at = datetime.utcnow()
@@ -1014,10 +1031,11 @@ def create_reminder():
     if not remind_at:
         return jsonify({"error": "invalid remind_at datetime"}), 400
 
+    from ..assistant.hub_crypto import _enc
     reminder = HubReminder(
         user_id=user.id, bot_id=bot.id,
         source_group_id=data.get("source_group_id"),
-        content=content[:500],
+        content=_enc(content[:500]),
         remind_at=remind_at,
         recurrence=data.get("recurrence"),
         source="manual",
@@ -1042,7 +1060,8 @@ def update_reminder(reminder_id):
     data = request.get_json(silent=True) or {}
 
     if "content" in data:
-        reminder.content = data["content"][:500]
+        from ..assistant.hub_crypto import _enc
+        reminder.content = _enc(data["content"][:500])
     if "remind_at" in data:
         reminder.remind_at = _parse_datetime_str(data["remind_at"]) or reminder.remind_at
     if "recurrence" in data:
@@ -1093,10 +1112,11 @@ def create_note():
     if not content:
         return jsonify({"error": "content required"}), 400
 
+    from ..assistant.hub_crypto import _enc
     note = HubNote(
         user_id=user.id, bot_id=bot.id,
         source_group_id=data.get("source_group_id"),
-        content=content[:2000],
+        content=_enc(content[:2000]),
         tags=data.get("tags", []),
         source="manual",
     )
@@ -1113,7 +1133,8 @@ def update_note(note_id):
     data = request.get_json(silent=True) or {}
 
     if "content" in data:
-        note.content = data["content"][:2000]
+        from ..assistant.hub_crypto import _enc
+        note.content = _enc(data["content"][:2000])
     if "tags" in data and isinstance(data["tags"], list):
         note.tags = data["tags"]
     note.updated_at = datetime.utcnow()
@@ -1422,6 +1443,7 @@ def _parse_datetime_str(value):
 @hub_bp.route("/memory/global", methods=["GET"])
 @jwt_required()
 def get_memory_global():
+    from ..assistant.hub_crypto import _dec
     user = _current_user()
     mg = HubMemoryGlobal.query.filter_by(user_id=user.id).first()
     if not mg:
@@ -1432,7 +1454,7 @@ def get_memory_global():
         "role": mg.role,
         "timezone": mg.timezone,
         "current_priorities": mg.current_priorities or [],
-        "free_notes": mg.free_notes,
+        "free_notes": _dec(mg.free_notes),
         "updated_at": mg.updated_at.isoformat() if mg.updated_at else None,
     }})
 
@@ -1446,10 +1468,15 @@ def update_memory_global():
     if not mg:
         mg = HubMemoryGlobal(id=str(uuid.uuid4()), user_id=user.id)
         db.session.add(mg)
-    allowed = ["preferred_name", "company_name", "role", "timezone", "current_priorities", "free_notes"]
-    for k in allowed:
+    from ..assistant.hub_crypto import _enc
+    plain_fields = ["preferred_name", "company_name", "role", "timezone", "current_priorities"]
+    encrypted_fields = ["free_notes"]
+    for k in plain_fields:
         if k in data:
             setattr(mg, k, data[k])
+    for k in encrypted_fields:
+        if k in data:
+            setattr(mg, k, _enc(data[k]) if data[k] else None)
     mg.updated_at = datetime.utcnow()
     db.session.commit()
     return jsonify({"ok": True})
@@ -1476,12 +1503,13 @@ def create_memory_person():
     name = (data.get("name") or "").strip()
     if not name:
         return jsonify({"error": "name is required"}), 400
+    from ..assistant.hub_crypto import _enc
     p = HubMemoryPerson(
         id=str(uuid.uuid4()),
         user_id=user.id,
         name=name,
         role=data.get("role") or None,
-        notes=data.get("notes") or None,
+        notes=_enc(data.get("notes")) if data.get("notes") else None,
         group_associations=data.get("group_associations") or [],
         source="manual",
     )
@@ -1496,9 +1524,12 @@ def update_memory_person(person_id):
     user = _current_user()
     p = HubMemoryPerson.query.filter_by(id=person_id, user_id=user.id).first_or_404()
     data = request.get_json(silent=True) or {}
-    for k in ["name", "role", "notes", "group_associations"]:
+    from ..assistant.hub_crypto import _enc
+    for k in ["name", "role", "group_associations"]:
         if k in data:
             setattr(p, k, data[k] if data[k] != "" else None)
+    if "notes" in data:
+        p.notes = _enc(data["notes"]) if data["notes"] else None
     p.updated_at = datetime.utcnow()
     db.session.commit()
     return jsonify({"person": _person_dict(p)})
@@ -1535,12 +1566,13 @@ def create_memory_project():
     name = (data.get("name") or "").strip()
     if not name:
         return jsonify({"error": "name is required"}), 400
+    from ..assistant.hub_crypto import _enc
     pj = HubMemoryProject(
         id=str(uuid.uuid4()),
         user_id=user.id,
         name=name,
         status=data.get("status") or None,
-        context_notes=data.get("context_notes") or None,
+        context_notes=_enc(data.get("context_notes")) if data.get("context_notes") else None,
         group_associations=data.get("group_associations") or [],
         deadline=_parse_date_str(data.get("deadline")),
         source="manual",
@@ -1556,9 +1588,12 @@ def update_memory_project(project_id):
     user = _current_user()
     pj = HubMemoryProject.query.filter_by(id=project_id, user_id=user.id).first_or_404()
     data = request.get_json(silent=True) or {}
-    for k in ["name", "status", "context_notes", "group_associations"]:
+    from ..assistant.hub_crypto import _enc
+    for k in ["name", "status", "group_associations"]:
         if k in data:
             setattr(pj, k, data[k] if data[k] != "" else None)
+    if "context_notes" in data:
+        pj.context_notes = _enc(data["context_notes"]) if data["context_notes"] else None
     if "deadline" in data:
         pj.deadline = _parse_date_str(data["deadline"])
     pj.updated_at = datetime.utcnow()
@@ -1577,11 +1612,12 @@ def delete_memory_project(project_id):
 
 
 def _person_dict(p) -> dict:
+    from ..assistant.hub_crypto import _dec
     return {
         "id": p.id,
         "name": p.name,
         "role": p.role,
-        "notes": p.notes,
+        "notes": _dec(p.notes),
         "group_associations": p.group_associations or [],
         "source": p.source,
         "created_at": p.created_at.isoformat() if p.created_at else None,
@@ -1590,11 +1626,12 @@ def _person_dict(p) -> dict:
 
 
 def _project_dict(pj) -> dict:
+    from ..assistant.hub_crypto import _dec
     return {
         "id": pj.id,
         "name": pj.name,
         "status": pj.status,
-        "context_notes": pj.context_notes,
+        "context_notes": _dec(pj.context_notes),
         "group_associations": pj.group_associations or [],
         "deadline": pj.deadline.isoformat() if pj.deadline else None,
         "source": pj.source,

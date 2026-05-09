@@ -185,13 +185,14 @@ def _format_digest(tasks, reminders, decisions, meetings, fmt: str) -> str:
     today_str = now.strftime("%B %d")
     lines = [f"*📋 Daily Digest — {today_str}*\n"]
 
+    from .hub_crypto import _dec
     if fmt == "compact":
         if tasks:
             lines.append(f"*Tasks ({len(tasks)})*")
             for t in tasks[:5]:
                 due = f" · due {t.due_date}" if t.due_date else ""
                 assignee = f" ({t.assignee_name})" if t.assignee_name else ""
-                lines.append(f"• {t.title}{assignee}{due}")
+                lines.append(f"• {_dec(t.title)}{assignee}{due}")
             if len(tasks) > 5:
                 lines.append(f"  _+{len(tasks)-5} more_")
             lines.append("")
@@ -200,21 +201,21 @@ def _format_digest(tasks, reminders, decisions, meetings, fmt: str) -> str:
             lines.append(f"*Meetings ({len(meetings)})*")
             for m in meetings[:5]:
                 when = m.scheduled_at.strftime("%b %d %H:%M") if m.scheduled_at else "TBD"
-                lines.append(f"• {m.title or 'Meeting'} · {when}")
+                lines.append(f"• {_dec(m.title) or 'Meeting'} · {when}")
             lines.append("")
 
         if decisions:
             lines.append(f"*Decisions ({len(decisions)})*")
             for d in decisions[:5]:
                 made = f" — {d.made_by}" if d.made_by else ""
-                lines.append(f"• {d.content[:100]}{made}")
+                lines.append(f"• {_dec(d.content)[:100]}{made}")
             lines.append("")
 
         if reminders:
             lines.append(f"*Upcoming Reminders ({len(reminders)})*")
             for r in reminders[:5]:
                 when = r.remind_at.strftime("%b %d %H:%M") if r.remind_at else ""
-                lines.append(f"• {r.content[:80]} · {when}")
+                lines.append(f"• {_dec(r.content)[:80]} · {when}")
     else:
         # detailed
         if tasks:
@@ -223,7 +224,7 @@ def _format_digest(tasks, reminders, decisions, meetings, fmt: str) -> str:
                 priority_emoji = {"high": "🔴", "normal": "🟡", "low": "🟢"}.get(t.priority, "·")
                 due = f"\n  Due: {t.due_date}" if t.due_date else ""
                 assignee = f"\n  Assignee: {t.assignee_name}" if t.assignee_name else ""
-                lines.append(f"{priority_emoji} {t.title}{assignee}{due}")
+                lines.append(f"{priority_emoji} {_dec(t.title)}{assignee}{due}")
             lines.append("")
 
         if meetings:
@@ -231,21 +232,21 @@ def _format_digest(tasks, reminders, decisions, meetings, fmt: str) -> str:
             for m in meetings:
                 when = m.scheduled_at.strftime("%A %b %d at %H:%M") if m.scheduled_at else "TBD"
                 participants = f"\n  With: {', '.join(m.participants[:5])}" if m.participants else ""
-                lines.append(f"• *{m.title or 'Meeting'}* — {when}{participants}")
+                lines.append(f"• *{_dec(m.title) or 'Meeting'}* — {when}{participants}")
             lines.append("")
 
         if decisions:
             lines.append(f"*✅ Decisions — {len(decisions)}*")
             for d in decisions:
                 made = f"\n  By: {d.made_by}" if d.made_by else ""
-                lines.append(f"• {d.content}{made}")
+                lines.append(f"• {_dec(d.content)}{made}")
             lines.append("")
 
         if reminders:
             lines.append(f"*🔔 Upcoming Reminders — {len(reminders)}*")
             for r in reminders:
                 when = r.remind_at.strftime("%A %b %d at %H:%M") if r.remind_at else ""
-                lines.append(f"• {r.content}\n  _{when}_")
+                lines.append(f"• {_dec(r.content)}\n  _{when}_")
 
     return "\n".join(lines).strip()
 
@@ -294,7 +295,8 @@ def _deliver_due_reminders() -> int:
             if not tg_id or not bot_token:
                 continue
 
-            text = f"🔔 *Reminder*\n{reminder.content}"
+            from .hub_crypto import _dec
+            text = f"🔔 *Reminder*\n{_dec(reminder.content)}"
             requests.post(
                 f"https://api.telegram.org/bot{bot_token}/sendMessage",
                 json={"chat_id": tg_id, "text": text, "parse_mode": "Markdown"},

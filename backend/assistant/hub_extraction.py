@@ -86,7 +86,7 @@ def _do_extract(bot_id: str, group_id: str, r) -> dict:
         return {"status": "skip", "reason": "user not found"}
 
     # ── Daily limit check ─────────────────────────────────────────────────────
-    plan = getattr(user, "plan", "free") or "free"
+    plan = getattr(user, "subscription_tier", "free") or "free"
     today_str = date.today().isoformat()
     count_key = f"assistant:extract:count:{group.user_id}:{today_str}"
     daily_count = int(r.get(count_key) or 0)
@@ -346,11 +346,12 @@ def _write_items(validated: dict, group, bot_id: str, batch_id: str, db) -> dict
         priority = t.get("priority", "normal")
         if priority not in ("low", "normal", "high"):
             priority = "normal"
+        from ..assistant.hub_crypto import _enc
         task = HubTask(
             user_id=user_id,
             bot_id=bot_id,
             source_group_id=group.id,
-            title=str(t["title"])[:500],
+            title=_enc(str(t["title"])[:500]),
             assignee_name=str(t.get("assignee", "") or "")[:100] or None,
             due_date=due,
             priority=priority,
@@ -374,7 +375,7 @@ def _write_items(validated: dict, group, bot_id: str, batch_id: str, db) -> dict
             user_id=user_id,
             bot_id=bot_id,
             source_group_id=group.id,
-            content=str(rem["content"])[:500],
+            content=_enc(str(rem["content"])[:500]),
             remind_at=remind_at,
             source="extracted",
             source_batch_id=batch_id,
@@ -394,7 +395,7 @@ def _write_items(validated: dict, group, bot_id: str, batch_id: str, db) -> dict
             user_id=user_id,
             bot_id=bot_id,
             source_group_id=group.id,
-            content=str(dec["content"])[:1000],
+            content=_enc(str(dec["content"])[:1000]),
             made_by=str(dec.get("made_by", "") or "")[:100] or None,
             source_batch_id=batch_id,
         )
@@ -419,7 +420,7 @@ def _write_items(validated: dict, group, bot_id: str, batch_id: str, db) -> dict
             user_id=user_id,
             bot_id=bot_id,
             source_group_id=group.id,
-            title=title,
+            title=_enc(title),
             scheduled_at=scheduled_at,
             participants=participants,
             source_batch_id=batch_id,
@@ -437,7 +438,7 @@ def _write_items(validated: dict, group, bot_id: str, batch_id: str, db) -> dict
             user_id=user_id,
             bot_id=bot_id,
             source_group_id=group.id,
-            content=str(note_item["content"])[:2000],
+            content=_enc(str(note_item["content"])[:2000]),
             source="extracted",
             source_batch_id=batch_id,
         )

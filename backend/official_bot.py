@@ -5162,6 +5162,21 @@ class OfficialBotRunner:
             )
         )
 
+        # Rate-limit / flood error handler — respects Telegram RetryAfter
+        async def _error_handler(update, context):
+            import asyncio
+            from telegram.error import RetryAfter, TimedOut, NetworkError
+            exc = context.error
+            if isinstance(exc, RetryAfter):
+                _log.warning("[OfficialBot] Flood control: retry after %ss", exc.retry_after)
+                await asyncio.sleep(exc.retry_after)
+            elif isinstance(exc, (TimedOut, NetworkError)):
+                _log.warning("[OfficialBot] Network error (transient): %s", exc)
+            else:
+                _log.error("[OfficialBot] Unhandled update error: %s", exc, exc_info=exc)
+
+        a.add_error_handler(_error_handler)
+
         _log.info("[OfficialBot] Initializing application...")
         await a.initialize()
         await a.start()
