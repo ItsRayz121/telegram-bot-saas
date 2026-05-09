@@ -6,6 +6,8 @@ Disallow: /billing
 Disallow: /my-groups
 Disallow: /my-bots
 Disallow: /admin
+Disallow: /login
+Disallow: /register
 Disallow: /api/
 
 Sitemap: https://telegizer.com/sitemap.xml
