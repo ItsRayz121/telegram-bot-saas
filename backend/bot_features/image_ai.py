@@ -248,12 +248,24 @@ async def maybe_handle_image(
 
     caption = (message.caption or message.text or "").strip()
 
-    # Gate 2 — caption keyword classifier
     cost_mode = image_settings.get("cost_mode", "balanced")
     mention_only = image_settings.get("mention_only", True)
-    bot_username = (await bot.get_me()).username if mention_only else None
 
+    # Gate 2a — require caption (free check before any API call)
+    require_caption = image_settings.get("require_caption", True)
+    if require_caption and not caption:
+        return False
+
+    # Gate 2b — caption signal keywords (free, before any API call)
+    if cost_mode in ("balanced", "aggressive_savings"):
+        if not _caption_has_signal(caption):
+            logger.debug("image_ai: caption has no signal keywords, skipping")
+            return False
+
+    # Gate 2c — mention check (one bot.get_me() call, only if needed)
     if mention_only:
+        bot_me = await bot.get_me()
+        bot_username = bot_me.username
         mentioned = bot_username and f"@{bot_username}".lower() in caption.lower()
         replied_to_bot = (
             message.reply_to_message and
@@ -261,15 +273,6 @@ async def maybe_handle_image(
             message.reply_to_message.from_user.username == bot_username
         )
         if not mentioned and not replied_to_bot:
-            return False
-
-    require_caption = image_settings.get("require_caption", True)
-    if require_caption and not caption:
-        return False
-
-    if cost_mode in ("balanced", "aggressive_savings"):
-        if not _caption_has_signal(caption):
-            logger.debug("image_ai: caption has no signal keywords, skipping")
             return False
 
     # Gate 3 — file size

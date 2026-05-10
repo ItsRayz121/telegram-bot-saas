@@ -2070,7 +2070,7 @@ class BotInstance:
                 _base_url = _key_cfg.get("base_url") if _key_cfg else None
                 _group_name = getattr(group, "group_name", None) or "this community"
                 _kb_settings = group.settings.get("knowledge_base", {})
-                await maybe_handle_image(
+                _img_handled = await maybe_handle_image(
                     bot=context.bot,
                     message=update.message,
                     group_id=group.id,
@@ -2082,6 +2082,8 @@ class BotInstance:
                     api_key=_api_key,
                     base_url=_base_url,
                 )
+                if _img_handled:
+                    return  # image was answered/escalated — skip remaining handlers
             except Exception as _img_exc:
                 logger.error(f"image_ai handler error: {_img_exc}")
 

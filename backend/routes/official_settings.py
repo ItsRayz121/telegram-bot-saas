@@ -104,6 +104,8 @@ def update_official_settings(group_id):
             "verification", "welcome", "levels", "automod", "moderation",
             "auto_clean", "reports", "knowledge_base", "auto_responses",
             "digest", "xp", "timezone",
+            # features added post-launch
+            "social_replies", "image_ai", "raids", "admin_alerts",
         }
         unknown = set(data.keys()) - _ALLOWED_SETTING_KEYS
         if unknown:
