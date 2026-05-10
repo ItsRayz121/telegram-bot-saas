@@ -1981,12 +1981,13 @@ def use_knowledge_card(card_id):
 def custom_bot_webhook(bot_id):
     """
     Receive Telegram updates for a custom bot via webhook.
-    Dispatches @mention messages to hub_reply.handle_mention.
+    Handles:
+      - my_chat_member: auto-connect group to Hub (user set up this bot intentionally)
+      - message/@mention: dispatch to hub_reply
     No JWT — Telegram calls this directly.
     """
     from ..assistant.hub_crypto import _dec
     from ..assistant.hub_reply import handle_mention
-    from ..app import create_app as _create_app
 
     # Verify the bot exists and is active
     bot = HubBotIdentity.query.filter_by(id=bot_id, bot_type="custom", is_active=True).first()
@@ -1994,6 +1995,79 @@ def custom_bot_webhook(bot_id):
         return jsonify({"ok": False}), 404
 
     payload = request.get_json(force=True, silent=True) or {}
+
+    # ── Handle bot added-to / removed-from group ───────────────────────────────
+    my_chat_member = payload.get("my_chat_member")
+    if my_chat_member:
+        chat = my_chat_member.get("chat", {})
+        chat_type = chat.get("type", "")
+        new_status = (my_chat_member.get("new_chat_member") or {}).get("status", "")
+        telegram_group_id = chat.get("id")
+        group_name = chat.get("title") or f"Group {telegram_group_id}"
+
+        if chat_type in ("group", "supergroup") and telegram_group_id:
+            if new_status in ("member", "administrator"):
+                # Auto-connect: user deliberately added their custom Hub bot to this group.
+                # No consent DM needed — bot registration itself is the consent signal.
+                try:
+                    existing = HubConnectedGroup.query.filter_by(
+                        bot_id=bot.id,
+                        telegram_group_id=telegram_group_id,
+                    ).first()
+                    if existing:
+                        # Re-added: reactivate if paused
+                        existing.is_active = True
+                        existing.pause_reason = None
+                        existing.group_name = group_name
+                    else:
+                        from ..assistant.hub_plan_limits import check_connected_groups, PlanLimitError
+                        user = User.query.get(bot.user_id)
+                        plan = user.subscription_tier if user else "free"
+                        try:
+                            check_connected_groups(
+                                user_id=bot.user_id,
+                                bot_id=bot.id,
+                                bot_type="custom",
+                                plan=plan,
+                            )
+                        except PlanLimitError:
+                            _log.info("custom_bot_webhook: plan limit reached, skipping connect bot=%s group=%s", bot_id, telegram_group_id)
+                            return jsonify({"ok": True}), 200
+
+                        import uuid as _uuid_mod
+                        new_group = HubConnectedGroup(
+                            id=str(_uuid_mod.uuid4()),
+                            bot_id=bot.id,
+                            user_id=bot.user_id,
+                            telegram_group_id=telegram_group_id,
+                            group_name=group_name,
+                            is_active=True,
+                            consent_confirmed_at=datetime.utcnow(),
+                            is_public_group=bool(chat.get("username")),
+                        )
+                        db.session.add(new_group)
+                    db.session.commit()
+                    _log.info("custom_bot_webhook: group %s connected to bot %s", telegram_group_id, bot_id)
+                except Exception as exc:
+                    _log.warning("custom_bot_webhook: group connect failed bot=%s group=%s: %s", bot_id, telegram_group_id, exc)
+
+            elif new_status in ("left", "kicked"):
+                # Bot removed: deactivate the connected group record
+                try:
+                    existing = HubConnectedGroup.query.filter_by(
+                        bot_id=bot.id,
+                        telegram_group_id=telegram_group_id,
+                    ).first()
+                    if existing:
+                        existing.is_active = False
+                        existing.pause_reason = "error"
+                        db.session.commit()
+                except Exception as exc:
+                    _log.warning("custom_bot_webhook: group deactivate failed bot=%s group=%s: %s", bot_id, telegram_group_id, exc)
+
+        return jsonify({"ok": True}), 200
+
+    # ── Handle messages ────────────────────────────────────────────────────────
     message = payload.get("message") or payload.get("edited_message")
     if not message:
         return jsonify({"ok": True}), 200
@@ -2017,7 +2091,6 @@ def custom_bot_webhook(bot_id):
         return jsonify({"ok": True}), 200
 
     try:
-        flask_app = _create_app()
         handle_mention(
             bot_token=token,
             bot_username=bot_username,
@@ -2026,7 +2099,7 @@ def custom_bot_webhook(bot_id):
             message_id=message_id,
             bot_id=bot_id,
             user_id=bot.user_id,
-            flask_app=flask_app,
+            flask_app=None,
         )
     except Exception as exc:
         _log.warning("custom_bot_webhook: dispatch error bot=%s: %s", bot_id, exc)

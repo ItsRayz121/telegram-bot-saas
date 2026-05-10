@@ -153,6 +153,32 @@ def link_group():
     if tg.owner_user_id and tg.owner_user_id != user.id:
         return jsonify({"error": "This group is already linked to another account"}), 409
 
+    # ── Pillar separation guard ────────────────────────────────────────────────
+    # Block linking a group that is already connected to this user's Assistant Hub.
+    # Hub groups live in hub_connected_groups (separate table). Silently merging
+    # them into Group Management would expose moderation features (XP, welcome
+    # messages, analytics, warnings) on what was intended as a private assistant
+    # group. The user must explicitly disconnect from Hub first.
+    from ..assistant.hub_models import HubConnectedGroup, HubBotIdentity
+    hub_bot_ids = [
+        b.id for b in HubBotIdentity.query.filter_by(user_id=user.id).all()
+    ]
+    if hub_bot_ids:
+        hub_clash = HubConnectedGroup.query.filter(
+            HubConnectedGroup.bot_id.in_(hub_bot_ids),
+            HubConnectedGroup.telegram_group_id == int(tg.telegram_group_id),
+        ).first()
+        if hub_clash:
+            return jsonify({
+                "error": (
+                    "This group is already connected to Assistant Hub. "
+                    "Assistant Hub groups are separate from Group Management groups. "
+                    "To use it for Group Management, disconnect it from Assistant Hub first."
+                ),
+                "code": "HUB_GROUP_CONFLICT",
+                "hint": "Go to Assistant Hub → Groups → Disconnect, then try linking again.",
+            }), 409
+
     # Enforce per-tier official group limit
     max_groups = Config.MAX_OFFICIAL_GROUPS.get(user.subscription_tier, 3)
     if max_groups != -1:
