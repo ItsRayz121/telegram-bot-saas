@@ -302,6 +302,9 @@ def _do_send_report(group: Group, bot: Bot, period_label: str, since: datetime) 
         return {"sent": sent, "skipped": skipped, "failed": failed, "group_error": None}
 
     instance = _bm.active_bots.get(bot.id)
+    # Decrypt the bot token once — bot.bot_token is Fernet ciphertext;
+    # bot.get_token() returns the plain-text Telegram token.
+    plain_token = bot.get_token()
 
     def _run(coro):
         if instance and instance.loop and instance.loop.is_running():
@@ -322,7 +325,7 @@ def _do_send_report(group: Group, bot: Bot, period_label: str, since: datetime) 
     # ── Pre-flight: verify bot can still access the group ─────────────────────
     if send_to_group:
         try:
-            preflight = _run_preflight_sync(bot.bot_token, tg_chat_id, instance)
+            preflight = _run_preflight_sync(plain_token, tg_chat_id, instance)
         except Exception as exc:
             logger.warning(f"[DIGEST] preflight check error group={group.id} tg_chat={_mask_chat_id(tg_chat_id)}: {exc}")
             preflight = {"ok": True}  # attempt send anyway; errors caught below
@@ -356,7 +359,7 @@ def _do_send_report(group: Group, bot: Bot, period_label: str, since: datetime) 
     if send_to_group:
         import telegram.error as tg_error
         try:
-            _run(_send_telegram_message(bot.bot_token, tg_chat_id, text, topic_id))
+            _run(_send_telegram_message(plain_token, tg_chat_id, text, topic_id))
             sent.append({"target": "group", "description": f"tg_chat={_mask_chat_id(tg_chat_id)}"})
             logger.info(
                 f"[DIGEST] group send OK group={group.id} "
@@ -365,7 +368,7 @@ def _do_send_report(group: Group, bot: Bot, period_label: str, since: datetime) 
         except tg_error.ChatMigrated as exc:
             _update_telegram_group_id(group, exc.new_chat_id)
             try:
-                _run(_send_telegram_message(bot.bot_token, str(exc.new_chat_id), text, topic_id))
+                _run(_send_telegram_message(plain_token, str(exc.new_chat_id), text, topic_id))
                 sent.append({"target": "group", "description": f"tg_chat={_mask_chat_id(exc.new_chat_id)} (migrated)"})
             except Exception as retry_exc:
                 logger.error(
@@ -414,18 +417,25 @@ def _do_send_report(group: Group, bot: Bot, period_label: str, since: datetime) 
     # ── DM account owner ───────────────────────────────────────────────────────
     if owner_dm:
         try:
-            from ..models import User as _User, TelegramBotStarted
+            from ..models import User as _User
             bot_obj = Bot.query.get(bot.id)
             owner = _User.query.get(bot_obj.user_id) if bot_obj else None
             if owner and owner.telegram_user_id:
-                if TelegramBotStarted.has_started(owner.telegram_user_id):
-                    _run(_send_telegram_message(bot.bot_token, owner.telegram_user_id, text))
+                # For custom bots, TelegramBotStarted only tracks the official bot.
+                # Attempt the DM directly; Telegram returns Forbidden if the user
+                # hasn't started this custom bot — caught below and reported clearly.
+                try:
+                    _run(_send_telegram_message(plain_token, owner.telegram_user_id, text))
                     sent.append({"target": "owner_dm", "description": f"user_id={owner.id}"})
-                else:
-                    skipped.append({"target": "owner_dm", "reason": "owner has not started bot"})
-                    logger.info(f"[DIGEST] owner {owner.id} has not started bot — skipping DM")
+                except Exception as dm_exc:
+                    dm_err = str(dm_exc).lower()
+                    if "forbidden" in dm_err or "bot was blocked" in dm_err or "user is deactivated" in dm_err:
+                        skipped.append({"target": "owner_dm", "reason": f"owner has not started @{bot_username}"})
+                        logger.info(f"[DIGEST] owner DM blocked by Telegram — user hasn't started @{bot_username}")
+                    else:
+                        raise
             else:
-                skipped.append({"target": "owner_dm", "reason": "owner has no Telegram linked"})
+                skipped.append({"target": "owner_dm", "reason": "owner has no Telegram account linked"})
                 logger.info(f"[DIGEST] owner has no telegram linked — skipping DM")
         except Exception as exc:
             logger.error(f"[DIGEST] owner DM failed group={group.id} bot={bot_username}: {exc}")
@@ -435,13 +445,19 @@ def _do_send_report(group: Group, bot: Bot, period_label: str, since: datetime) 
     for admin_id in admin_ids:
         target = f"admin:{admin_id}"
         try:
-            from ..models import TelegramBotStarted
-            if TelegramBotStarted.has_started(str(admin_id)):
-                _run(_send_telegram_message(bot.bot_token, str(admin_id), text))
+            # Attempt DM directly; Telegram returns Forbidden if the admin
+            # hasn't started this custom bot — no TelegramBotStarted table check
+            # since that table only records official @telegizer_bot interactions.
+            try:
+                _run(_send_telegram_message(plain_token, str(admin_id), text))
                 sent.append({"target": target})
-            else:
-                skipped.append({"target": target, "reason": "admin has not started bot"})
-                logger.info(f"[DIGEST] admin {admin_id} has not started bot — skipping DM")
+            except Exception as dm_exc:
+                dm_err = str(dm_exc).lower()
+                if "forbidden" in dm_err or "bot was blocked" in dm_err or "user is deactivated" in dm_err:
+                    skipped.append({"target": target, "reason": f"admin has not started @{bot_username}"})
+                    logger.info(f"[DIGEST] admin {admin_id} DM blocked — hasn't started @{bot_username}")
+                else:
+                    raise
         except Exception as exc:
             logger.error(f"[DIGEST] admin DM {admin_id} failed group={group.id} bot={bot_username}: {exc}")
             failed.append({"target": target, "error": str(exc)})
@@ -559,10 +575,19 @@ def send_now(bot_id, group_id):
         except Exception:
             db.session.rollback()
 
-        error_msg = (
-            group_error
-            or "Failed to send report — check that bot is active in the group and recipients have started @telegizer_bot"
-        )
+        bot_handle = f"@{bot.bot_username}" if bot.bot_username else "the bot"
+        if skipped and not failed and not group_error:
+            # All recipients were skipped — no one has started the custom bot
+            error_msg = (
+                f"No recipients received the report. "
+                f"Ensure at least one recipient has started {bot_handle} in Telegram, "
+                f"or enable 'Send to group' in digest settings."
+            )
+        else:
+            error_msg = (
+                group_error
+                or f"Failed to send report — ensure {bot_handle} is active and an admin in the group."
+            )
         return jsonify({
             "error": error_msg,
             "sent": sent,
