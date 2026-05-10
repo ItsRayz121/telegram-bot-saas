@@ -42,13 +42,13 @@ function NotLinkedScreen() {
   );
 }
 
-function ErrorScreen() {
+function ErrorScreen({ message }) {
   return (
     <Box sx={{ p: { xs: 2, md: 3 }, textAlign: 'center' }}>
       <ErrorOutline sx={{ fontSize: 56, color: 'error.main', mb: 2 }} />
       <Typography variant="h6" fontWeight={700} gutterBottom>Something went wrong</Typography>
       <Typography variant="body2" color="text.secondary" mb={2}>
-        Could not authenticate with Telegizer. Please close and reopen the app.
+        {message || 'Could not authenticate with Telegizer. Please close and reopen the app.'}
       </Typography>
     </Box>
   );
@@ -236,13 +236,13 @@ function HomeTab() {
 // ── Main (tab shell) ──────────────────────────────────────────────────────────
 
 export default function MiniApp() {
-  const { status, haptic } = useTelegram();
+  const { status, authError, haptic } = useTelegram();
   const [tab, setTab] = useState(0);
 
   if (status === 'loading') return <LoadingScreen />;
   if (status === 'not_linked') return <NotLinkedScreen />;
   if (status === 'no_webapp' || status === 'no_init_data') return <NoWebAppScreen />;
-  if (status === 'error') return <ErrorScreen />;
+  if (status === 'error') return <ErrorScreen message={authError} />;
 
   const tabs = [
     { label: 'Home', icon: <Groups /> },

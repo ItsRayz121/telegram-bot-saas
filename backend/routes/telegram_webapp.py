@@ -89,7 +89,7 @@ def miniapp_auth():
     if not init_data:
         return jsonify({"error": "init_data is required"}), 400
 
-    bot_token = Config.TELEGRAM_BOT_TOKEN
+    bot_token = (Config.TELEGRAM_BOT_TOKEN or "").strip()
     if not bot_token:
         return jsonify({"error": "Bot not configured"}), 503
 

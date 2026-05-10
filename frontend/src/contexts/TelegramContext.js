@@ -42,6 +42,7 @@ export function TelegramProvider({ children }) {
   const [groups, setGroups] = useState([]);
   const [tgTheme, setTgTheme] = useState(null);
   const [status, setStatus] = useState('loading'); // loading | ok | not_linked | error | no_webapp | no_init_data
+  const [authError, setAuthError] = useState(null);
 
   useEffect(() => {
     const webapp = window?.Telegram?.WebApp;
@@ -79,7 +80,13 @@ export function TelegramProvider({ children }) {
       })
       .catch(err => {
         const code = err.response?.data?.code;
-        setStatus(code === 'NOT_LINKED' ? 'not_linked' : 'error');
+        const msg  = err.response?.data?.error || null;
+        if (code === 'NOT_LINKED') {
+          setStatus('not_linked');
+        } else {
+          setAuthError(msg);
+          setStatus('error');
+        }
       });
   }, []);
 
@@ -106,7 +113,7 @@ export function TelegramProvider({ children }) {
   }), [tg]);
 
   return (
-    <TelegramContext.Provider value={{ tg, tgUser, appUser, groups, tgTheme, status, refetchGroups, haptic }}>
+    <TelegramContext.Provider value={{ tg, tgUser, appUser, groups, tgTheme, status, authError, refetchGroups, haptic }}>
       {children}
     </TelegramContext.Provider>
   );
