@@ -185,7 +185,8 @@ class KnowledgeBaseSystem:
             db.session.commit()
             return doc.to_dict(), None
 
-    async def answer_question(self, question, group_id, telegram_group_id=None):
+    async def answer_question(self, question, group_id, telegram_group_id=None,
+                              group_name="this community", kb_settings=None):
         """Returns (answer: str|None, confidence: float)."""
         try:
             key_config = self._load_group_api_key(group_id, telegram_group_id)
@@ -243,22 +244,33 @@ class KnowledgeBaseSystem:
 
             context = "\n\n---\n\n".join(c["text"] for c in scored[:3])
 
-            answer = await self._generate_answer(question, context, key_config)
+            answer = await self._generate_answer(
+                question, context, key_config,
+                group_name=group_name,
+                kb_settings=kb_settings,
+            )
             return answer, top_score
 
         except Exception as e:
             logger.error(f"KB Q&A error: {e}")
             return None, 0.0
 
-    async def _generate_answer(self, question, context, key_config):
+    async def _generate_answer(self, question, context, key_config,
+                               group_name="this community", kb_settings=None):
         """Generate an answer from context using the appropriate provider."""
+        from .ai_personality import build_system_prompt
         provider = key_config["provider"] if key_config else "openai"
+        kb = kb_settings or {}
 
-        system_prompt = (
-            "You are a helpful assistant. Answer naturally and concisely based only on the provided context. "
-            "If the answer is not in the context, say you don't have that information."
+        system_prompt = build_system_prompt(
+            personality_id=kb.get("personality", "professional_support"),
+            group_name=group_name,
+            custom_instructions=kb.get("custom_instructions", ""),
+            reply_length=kb.get("reply_length", "balanced"),
+            emoji_level=kb.get("emoji_level", "minimal"),
+            formality_level=kb.get("formality_level", "neutral"),
         )
-        user_prompt = f"Context:\n{context}\n\nQuestion: {question}"
+        user_prompt = f"Knowledge base context:\n{context}\n\nQuestion: {question}"
 
         if provider == "anthropic" and key_config:
             return await self._generate_anthropic(key_config, system_prompt, user_prompt)

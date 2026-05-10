@@ -265,6 +265,12 @@ _DEFAULTS: dict = {
         "confidence_threshold": 0.65,     # raised from 0.35 — only reply when confident
         "fallback_enabled": False,
         "min_message_words": 5,
+        # AI personality & reply behavior (new — all have safe defaults)
+        "personality": "professional_support",
+        "custom_instructions": "",
+        "reply_length": "balanced",       # concise | balanced | detailed
+        "emoji_level": "minimal",         # none | minimal | moderate
+        "formality_level": "neutral",     # casual | neutral | formal
     },
 
     # ── Auto-responses ────────────────────────────────────────────────────────

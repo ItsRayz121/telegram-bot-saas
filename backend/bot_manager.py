@@ -2122,7 +2122,11 @@ class BotInstance:
         threshold = float(kb_settings.get("confidence_threshold", 0.35))
 
         logger.debug(f"KB auto-reply: querying KB for group {group.id}, question: {text[:80]!r}")
-        answer, confidence = await self.knowledge_base.answer_question(text, group.id)
+        answer, confidence = await self.knowledge_base.answer_question(
+            text, group.id,
+            group_name=getattr(group, "group_name", None) or "this community",
+            kb_settings=kb_settings,
+        )
 
         logger.debug(f"KB auto-reply: confidence={confidence:.3f}, threshold={threshold:.3f}")
 

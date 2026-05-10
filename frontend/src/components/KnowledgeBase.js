@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Box, Card, CardContent, Typography, Button, TextField, Grid,
   Switch, FormControlLabel, IconButton, Chip, Alert, LinearProgress,
@@ -6,9 +6,10 @@ import {
   MenuItem, Select, FormControl, InputLabel, Slider, CircularProgress,
   Collapse,
 } from '@mui/material';
-import { Upload, Delete, Description, Psychology, Key, ExpandMore, ExpandLess, CheckCircle } from '@mui/icons-material';
+import { Upload, Delete, Description, Psychology, Key, ExpandMore, ExpandLess, CheckCircle, SmartToy, Tune } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { knowledge, apiKeys } from '../services/api';
+import { AI_PERSONALITIES, REPLY_LENGTHS, EMOJI_LEVELS, FORMALITY_LEVELS } from '../config/aiPersonalities';
 
 const PROVIDERS = [
   { value: 'openai', label: 'OpenAI' },
@@ -52,14 +53,14 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
   const [savingKey, setSavingKey] = useState(false);
   const [testingKey, setTestingKey] = useState(false);
 
-  const loadDocs = async () => {
+  const loadDocs = useCallback(async () => {
     try {
       const res = await knowledge.list(botId, groupId);
       setDocs(res.data.documents || []);
     } catch { toast.error('Failed to load knowledge base documents'); }
-  };
+  }, [botId, groupId]);
 
-  const loadApiKey = async () => {
+  const loadApiKey = useCallback(async () => {
     try {
       const res = await apiKeys.get(botId, groupId);
       const record = res.data.api_key;
@@ -74,12 +75,12 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
         }));
       }
     } catch { }
-  };
+  }, [botId, groupId]);
 
   useEffect(() => {
     loadDocs();
     loadApiKey();
-  }, [botId, groupId]);
+  }, [loadDocs, loadApiKey]);
 
   const handleUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -421,6 +422,146 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
               </>
             )}
           </Grid>
+        </CardContent>
+      </Card>
+
+      {/* AI Personality & Reply Behavior */}
+      <Card sx={{ mb: 2 }}>
+        <CardContent>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+            <SmartToy color="primary" fontSize="small" />
+            <Typography variant="subtitle1" fontWeight={600}>AI Reply Personality</Typography>
+          </Box>
+          <Typography variant="body2" color="text.secondary" mb={2}>
+            Choose how the AI communicates with your community. Each personality uses professionally
+            engineered prompts designed to feel natural and human — not robotic.
+          </Typography>
+
+          <Grid container spacing={1.5} mb={2}>
+            {AI_PERSONALITIES.map((p) => {
+              const selected = (kb.personality || 'professional_support') === p.id;
+              return (
+                <Grid item xs={12} sm={6} key={p.id}>
+                  <Box
+                    onClick={() => updateSetting('knowledge_base.personality', p.id)}
+                    sx={{
+                      p: 1.5,
+                      border: '1px solid',
+                      borderRadius: 1.5,
+                      borderColor: selected ? 'primary.main' : 'divider',
+                      bgcolor: selected ? 'rgba(33,150,243,0.06)' : 'transparent',
+                      cursor: 'pointer',
+                      transition: 'border-color 0.15s, background-color 0.15s',
+                      '&:hover': { borderColor: 'primary.light' },
+                    }}
+                  >
+                    <Typography variant="body2" fontWeight={600}>
+                      {p.emoji} {p.label}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" display="block" mt={0.25}>
+                      {p.description}
+                    </Typography>
+                  </Box>
+                </Grid>
+              );
+            })}
+          </Grid>
+
+          <Divider sx={{ my: 2 }} />
+
+          {/* Custom Instructions */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+            <Tune fontSize="small" color="action" />
+            <Typography variant="subtitle2" fontWeight={600}>Custom Instructions</Typography>
+          </Box>
+          <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+            Add specific rules for your community. Examples: "Always reply in Urdu and English", "Never mention competitor products", "Summarize answers in bullet points", "Always link to our docs site".
+          </Typography>
+          <TextField
+            fullWidth
+            multiline
+            minRows={3}
+            maxRows={7}
+            size="small"
+            placeholder={'Examples:\n• Reply in both English and Spanish\n• Always end with "Check our docs at docs.example.com"\n• Never use emojis\n• Keep answers under 3 sentences'}
+            value={kb.custom_instructions || ''}
+            onChange={(e) => updateSetting('knowledge_base.custom_instructions', e.target.value)}
+            inputProps={{ maxLength: 1200 }}
+            helperText={`${(kb.custom_instructions || '').length}/1200 characters`}
+          />
+
+          <Divider sx={{ my: 2 }} />
+
+          {/* Format Controls */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+            <Tune fontSize="small" color="action" />
+            <Typography variant="subtitle2" fontWeight={600}>Reply Format</Typography>
+          </Box>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={4}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Reply Length</InputLabel>
+                <Select
+                  label="Reply Length"
+                  value={kb.reply_length || 'balanced'}
+                  onChange={(e) => updateSetting('knowledge_base.reply_length', e.target.value)}
+                >
+                  {REPLY_LENGTHS.map((opt) => (
+                    <MenuItem key={opt.value} value={opt.value}>
+                      <Box>
+                        <Typography variant="body2">{opt.label}</Typography>
+                        <Typography variant="caption" color="text.secondary">{opt.description}</Typography>
+                      </Box>
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Emoji Usage</InputLabel>
+                <Select
+                  label="Emoji Usage"
+                  value={kb.emoji_level || 'minimal'}
+                  onChange={(e) => updateSetting('knowledge_base.emoji_level', e.target.value)}
+                >
+                  {EMOJI_LEVELS.map((opt) => (
+                    <MenuItem key={opt.value} value={opt.value}>
+                      <Box>
+                        <Typography variant="body2">{opt.label}</Typography>
+                        <Typography variant="caption" color="text.secondary">{opt.description}</Typography>
+                      </Box>
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Formality Level</InputLabel>
+                <Select
+                  label="Formality Level"
+                  value={kb.formality_level || 'neutral'}
+                  onChange={(e) => updateSetting('knowledge_base.formality_level', e.target.value)}
+                >
+                  {FORMALITY_LEVELS.map((opt) => (
+                    <MenuItem key={opt.value} value={opt.value}>
+                      <Box>
+                        <Typography variant="body2">{opt.label}</Typography>
+                        <Typography variant="caption" color="text.secondary">{opt.description}</Typography>
+                      </Box>
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+          </Grid>
+
+          <Alert severity="info" sx={{ mt: 2, fontSize: '0.8rem' }} icon={false}>
+            <strong>How it works:</strong> Telegizer builds a layered system prompt: knowledge-base
+            context → personality rules → anti-robotic guidelines → your custom instructions.
+            Replies adapt to your community's tone automatically without any AI jailbreak risk.
+          </Alert>
         </CardContent>
       </Card>
 
