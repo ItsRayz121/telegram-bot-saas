@@ -271,6 +271,7 @@ _DEFAULTS: dict = {
         "reply_length": "balanced",       # concise | balanced | detailed
         "emoji_level": "minimal",         # none | minimal | moderate
         "formality_level": "neutral",     # casual | neutral | formal
+        "use_auto_replies_as_knowledge": False,
     },
 
     # ── Auto-responses ────────────────────────────────────────────────────────

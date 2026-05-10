@@ -186,11 +186,27 @@ class KnowledgeBaseSystem:
             return doc.to_dict(), None
 
     async def answer_question(self, question, group_id, telegram_group_id=None,
-                              group_name="this community", kb_settings=None):
-        """Returns (answer: str|None, confidence: float)."""
+                              group_name="this community", kb_settings=None,
+                              auto_reply_triggers=None):
+        """Returns (answer: str|None, confidence: float).
+
+        auto_reply_triggers: optional list of {"trigger": str, "response": str} dicts
+        injected as extra knowledge context when the admin has enabled that setting.
+        """
         try:
             key_config = self._load_group_api_key(group_id, telegram_group_id)
             provider = key_config["provider"] if key_config else "openai"
+
+            # Build trigger context block (safe, admin-authored content only)
+            trigger_context = ""
+            if auto_reply_triggers:
+                snippets = [
+                    f"Q: {t['trigger']}\nA: {t['response']}"
+                    for t in auto_reply_triggers
+                    if t.get("trigger") and t.get("response")
+                ]
+                if snippets:
+                    trigger_context = "Known community Q&A:\n" + "\n\n".join(snippets)
 
             with self.app.app_context():
                 from ..models import KnowledgeDocument
@@ -206,9 +222,25 @@ class KnowledgeBaseSystem:
                         if ch.get("embedding"):
                             all_chunks.append(ch)
 
-            if not all_chunks:
+            # If no KB chunks but triggers exist, answer from triggers alone
+            if not all_chunks and not trigger_context:
                 logger.debug(f"KB: No chunks found for group {group_id or telegram_group_id}")
                 return None, 0.0
+
+            if not all_chunks and trigger_context:
+                logger.debug(f"KB: No document chunks, using trigger context only for group {group_id or telegram_group_id}")
+                key_config = self._load_group_api_key(group_id, telegram_group_id)
+                if not key_config:
+                    from .. import config as _cfg
+                    fallback_key = _cfg.Config.OPENAI_API_KEY
+                    if not fallback_key:
+                        return None, 0.0
+                answer = await self._generate_answer(
+                    question, trigger_context, key_config,
+                    group_name=group_name,
+                    kb_settings=kb_settings,
+                )
+                return answer, 0.75  # fixed confidence: admin-curated content
 
             # Embed question — OpenRouter cannot handle embeddings, use OpenAI key
             from .. import config as _cfg
@@ -243,6 +275,8 @@ class KnowledgeBaseSystem:
             logger.debug(f"KB: Top confidence score for group {group_id}: {top_score:.3f}")
 
             context = "\n\n---\n\n".join(c["text"] for c in scored[:3])
+            if trigger_context:
+                context = context + "\n\n---\n\n" + trigger_context
 
             answer = await self._generate_answer(
                 question, context, key_config,

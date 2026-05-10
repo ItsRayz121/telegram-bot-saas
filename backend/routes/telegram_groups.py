@@ -950,6 +950,8 @@ def update_auto_response(group_id, ar_id):
         ar.is_case_sensitive = bool(data["is_case_sensitive"])
     if "is_enabled" in data:
         ar.is_enabled = bool(data["is_enabled"])
+    if "use_as_ai_knowledge" in data:
+        ar.use_as_ai_knowledge = bool(data["use_as_ai_knowledge"])
 
     db.session.commit()
     return jsonify({"auto_response": ar.to_dict()}), 200

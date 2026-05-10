@@ -298,6 +298,13 @@ def init_db():
             "users.ai_cost_reset_at",
         )
 
+        # ── auto_replies as AI knowledge ──────────────────────────────────────────
+        _run_alter(
+            db.engine,
+            "ALTER TABLE auto_responses ADD COLUMN IF NOT EXISTS use_as_ai_knowledge BOOLEAN NOT NULL DEFAULT FALSE",
+            "auto_responses.use_as_ai_knowledge",
+        )
+
         # ── Backfill: create UserTelegramAccount rows for legacy User.telegram_user_id ──
         # Any user with telegram_user_id but no junction row gets a primary record created.
         _backfill_telegram_accounts(app)

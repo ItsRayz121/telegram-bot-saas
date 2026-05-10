@@ -609,6 +609,8 @@ def update_auto_response(bot_id, group_id, ar_id):
             ar.is_case_sensitive = data["is_case_sensitive"]
         if "is_enabled" in data:
             ar.is_enabled = data["is_enabled"]
+        if "use_as_ai_knowledge" in data:
+            ar.use_as_ai_knowledge = bool(data["use_as_ai_knowledge"])
         db.session.commit()
         return jsonify({"auto_response": ar.to_dict(), "message": "Updated"})
     except Exception as e:

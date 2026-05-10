@@ -2121,11 +2121,32 @@ class BotInstance:
 
         threshold = float(kb_settings.get("confidence_threshold", 0.35))
 
+        # Collect auto-reply triggers as optional AI knowledge
+        auto_reply_triggers = []
+        if kb_settings.get("use_auto_replies_as_knowledge", False):
+            try:
+                with self.app.app_context():
+                    from .models import AutoResponse
+                    triggers = AutoResponse.query.filter_by(
+                        group_id=group.id,
+                        is_enabled=True,
+                        use_as_ai_knowledge=True,
+                        response_type="auto_response",
+                    ).all()
+                    auto_reply_triggers = [
+                        {"trigger": t.trigger_text, "response": t.response_text}
+                        for t in triggers
+                    ]
+                    logger.debug(f"KB auto-reply: loaded {len(auto_reply_triggers)} AI-knowledge triggers")
+            except Exception as exc:
+                logger.warning(f"KB auto-reply: failed to load triggers: {exc}")
+
         logger.debug(f"KB auto-reply: querying KB for group {group.id}, question: {text[:80]!r}")
         answer, confidence = await self.knowledge_base.answer_question(
             text, group.id,
             group_name=getattr(group, "group_name", None) or "this community",
             kb_settings=kb_settings,
+            auto_reply_triggers=auto_reply_triggers or None,
         )
 
         logger.debug(f"KB auto-reply: confidence={confidence:.3f}, threshold={threshold:.3f}")

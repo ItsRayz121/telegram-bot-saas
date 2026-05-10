@@ -565,6 +565,35 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
         </CardContent>
       </Card>
 
+      {/* Auto Replies as AI Knowledge */}
+      <Card sx={{ mb: 2 }}>
+        <CardContent>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+            <SmartToy color="primary" fontSize="small" />
+            <Typography variant="subtitle1" fontWeight={600}>Auto Replies as AI Knowledge</Typography>
+          </Box>
+          <Typography variant="body2" color="text.secondary" mb={1.5}>
+            When enabled, the AI can use your saved auto-reply triggers as extra knowledge for smarter,
+            context-aware answers — even when users phrase questions differently than the trigger keyword.
+          </Typography>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={!!kb.use_auto_replies_as_knowledge}
+                onChange={e => updateSetting('knowledge_base.use_auto_replies_as_knowledge', e.target.checked)}
+              />
+            }
+            label="Use Auto Replies as AI Knowledge"
+          />
+          {!!kb.use_auto_replies_as_knowledge && (
+            <Alert severity="info" sx={{ mt: 1.5, fontSize: '0.8rem' }} icon={false}>
+              Go to <strong>Automation → Auto Reply</strong> and enable the <strong>"AI Knowledge"</strong> toggle
+              on each trigger you want the AI to learn from. Only enabled triggers marked for AI use are included.
+            </Alert>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Upload */}
       <Card sx={{ mb: 2 }}>
         <CardContent>

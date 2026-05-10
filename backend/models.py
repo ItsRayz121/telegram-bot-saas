@@ -514,6 +514,7 @@ class AutoResponse(db.Model):
     is_case_sensitive = db.Column(db.Boolean, default=False)
     is_enabled = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    use_as_ai_knowledge = db.Column(db.Boolean, default=False, nullable=False, server_default="false")
 
     # Smart Links extension (Workspace feature)
     # response_type: 'auto_response' (default) | 'smart_link'
@@ -540,6 +541,7 @@ class AutoResponse(db.Model):
             "link_url": self.link_url,
             "owner_user_id": self.owner_user_id,
             "scope": self.scope,
+            "use_as_ai_knowledge": self.use_as_ai_knowledge,
         }
 
 

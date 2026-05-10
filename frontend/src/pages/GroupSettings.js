@@ -10,7 +10,7 @@ import {
 } from '@mui/material';
 import {
   ArrowBack, Save, Add, ExpandMore, Delete, CheckCircle, Schedule,
-  Send, Assessment, People,
+  Send, Assessment, People, SmartToy,
   Warning as WarningIcon, EmojiEvents,
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -679,6 +679,15 @@ export default function GroupSettings() {
   const handleToggleAutoResponse = async (ar) => {
     try {
       await settings.updateAutoResponse(botId, groupId, ar.id, { is_enabled: !ar.is_enabled });
+      fetchAutoResponses();
+    } catch {
+      toast.error('Failed to update');
+    }
+  };
+
+  const handleToggleAiKnowledge = async (ar) => {
+    try {
+      await settings.updateAutoResponse(botId, groupId, ar.id, { use_as_ai_knowledge: !ar.use_as_ai_knowledge });
       fetchAutoResponses();
     } catch {
       toast.error('Failed to update');
@@ -1724,6 +1733,14 @@ export default function GroupSettings() {
                         <TableCell>Response</TableCell>
                         <TableCell>Match</TableCell>
                         <TableCell>Enabled</TableCell>
+                        <TableCell>
+                          <Tooltip title="Use this trigger as AI knowledge so the AI can answer related questions semantically">
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                              <SmartToy fontSize="small" color="primary" />
+                              <span>AI</span>
+                            </Box>
+                          </Tooltip>
+                        </TableCell>
                         <TableCell>Actions</TableCell>
                       </TableRow>
                     </TableHead>
@@ -1738,6 +1755,16 @@ export default function GroupSettings() {
                           <TableCell>
                             <Switch size="small" checked={ar.is_enabled}
                               onChange={() => handleToggleAutoResponse(ar)} />
+                          </TableCell>
+                          <TableCell>
+                            <Tooltip title={ar.use_as_ai_knowledge ? 'AI uses this as knowledge — click to disable' : 'Enable to let AI use this as knowledge'}>
+                              <Switch
+                                size="small"
+                                checked={!!ar.use_as_ai_knowledge}
+                                onChange={() => handleToggleAiKnowledge(ar)}
+                                color="secondary"
+                              />
+                            </Tooltip>
                           </TableCell>
                           <TableCell>
                             <IconButton size="small" color="error"
