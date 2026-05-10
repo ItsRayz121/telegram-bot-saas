@@ -178,12 +178,22 @@ def _do_extract(bot_id: str, group_id: str, r) -> dict:
 def _call_openai(user, group, messages: list, bot_id: str, r) -> tuple:
     """Returns (validated_dict, tokens_used, model_used)."""
     from openai import OpenAI
+    from .ai_key_resolver import resolve_ai_provider_for_group, QuotaExceededError, record_token_usage
 
-    api_key = os.environ.get("OPENAI_API_KEY", "")
-    if not api_key:
-        raise RuntimeError("OPENAI_API_KEY not configured")
+    try:
+        key_config = resolve_ai_provider_for_group(user.id, group_id=group.id)
+    except QuotaExceededError:
+        raise RuntimeError("Daily AI quota exceeded")
 
-    client = OpenAI(api_key=api_key)
+    if not key_config.get("api_key"):
+        raise RuntimeError("No AI API key configured")
+
+    client_kwargs = {"api_key": key_config["api_key"]}
+    if key_config.get("base_url"):
+        client_kwargs["base_url"] = key_config["base_url"]
+    client = OpenAI(**client_kwargs)
+    model = key_config.get("model") or "gpt-4o-mini"
+    _key_source = key_config.get("source", "unknown")
 
     memory_context = _build_memory_context(user.id, group.id)
     formatted = _format_messages(messages)
@@ -215,7 +225,7 @@ def _call_openai(user, group, messages: list, bot_id: str, r) -> tuple:
     user_prompt = f"Conversation from {group_name} on {today}:\n\n{formatted}"
 
     resp = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=model,
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
@@ -226,7 +236,9 @@ def _call_openai(user, group, messages: list, bot_id: str, r) -> tuple:
     )
 
     tokens_used = resp.usage.total_tokens if resp.usage else 0
-    model_used = resp.model or "gpt-4o-mini"
+    model_used = resp.model or model
+    if _key_source == "platform":
+        record_token_usage(user, tokens_used)
     raw_json = resp.choices[0].message.content or "{}"
 
     validated = _validate_output(raw_json)

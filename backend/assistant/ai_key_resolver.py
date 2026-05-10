@@ -1,10 +1,68 @@
 """
-Resolves which AI key + provider to use for workspace-level assistant features
-(Notes, Digests, Hub). Priority: user workspace key → OpenRouter platform key.
+Resolves which AI key + provider to use for any AI feature.
+
+Single source of truth — all paths:
+  resolve_ai_provider_for_group(user_id, group_id, telegram_group_id)
+      → group key → workspace key → platform key
+  get_workspace_ai_key(user)
+      → workspace key → platform key
 """
 
 from datetime import datetime, timedelta
 from .. import config as _cfg
+
+
+def resolve_ai_provider_for_group(user_id: int, group_id=None, telegram_group_id=None) -> dict:
+    """Single resolver for ALL group-scoped AI calls (KB, embeddings, hub reply, extraction).
+
+    Priority:
+      1. Group-specific UserApiKey
+      2. User's workspace UserApiKey
+      3. Platform OpenRouter key (quota enforced by tier)
+
+    Returns { provider, api_key, model, base_url, source }
+    Raises QuotaExceededError if on platform key and quota exhausted.
+    Returns { api_key: "" } if nothing is configured.
+    """
+    from ..models import UserApiKey, User
+    from ..utils.encryption import decrypt_value, DecryptionError
+    import logging
+    _log = logging.getLogger(__name__)
+
+    # 1. Group-specific key
+    try:
+        q = UserApiKey.query.filter_by(is_active=True)
+        if telegram_group_id:
+            q = q.filter_by(telegram_group_id=str(telegram_group_id))
+        elif group_id:
+            q = q.filter_by(group_id=group_id)
+        else:
+            q = None
+
+        if q is not None:
+            record = q.order_by(UserApiKey.created_at.desc()).first()
+            if record:
+                try:
+                    api_key = decrypt_value(record.api_key_encrypted)
+                    if api_key:
+                        return {
+                            "provider": record.provider,
+                            "api_key": api_key,
+                            "model": record.model_name or _default_model(record.provider),
+                            "base_url": record.base_url or _default_base_url(record.provider),
+                            "source": "group",
+                        }
+                except DecryptionError:
+                    _log.error("resolve_ai_provider_for_group: group key decryption failed group=%s", group_id or telegram_group_id)
+    except Exception as exc:
+        _log.warning("resolve_ai_provider_for_group: group key lookup failed: %s", exc)
+
+    # 2+3. Workspace key → platform key via existing resolver
+    user = User.query.get(user_id)
+    if not user:
+        return {"api_key": "", "provider": "openai", "model": "gpt-4o-mini", "source": "none"}
+
+    return get_workspace_ai_key(user)
 
 
 class QuotaExceededError(Exception):
@@ -106,5 +164,15 @@ def _default_model(provider: str) -> str:
         "openai": "gpt-4o-mini",
         "anthropic": "claude-haiku-4-5-20251001",
         "openrouter": "openai/gpt-4o-mini",
+        "custom": "gpt-4o-mini",
+    }
+    return defaults.get(provider, "")
+
+
+def _default_base_url(provider: str) -> str:
+    defaults = {
+        "openrouter": "https://openrouter.ai/api/v1",
+        "anthropic": "https://api.anthropic.com",
+        "gemini": "https://generativelanguage.googleapis.com/v1beta",
     }
     return defaults.get(provider, "")

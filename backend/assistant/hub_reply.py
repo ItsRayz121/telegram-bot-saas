@@ -164,16 +164,30 @@ def _handle(bot_token, bot_username, message_text, chat_id, message_id, bot_id, 
 def _gpt_answer(query: str, bot_id: str, user_id: int) -> str | None:
     """Enterprise plan: answer via GPT-4o-mini with memory context."""
     try:
-        import openai
-        from ..config import Config
+        from openai import OpenAI
         from ..assistant.hub_models import (
             HubBotSettings, HubMemoryGlobal, HubMemoryPerson, HubMemoryProject,
         )
         from ..assistant.hub_crypto import _dec
+        from .ai_key_resolver import get_workspace_ai_key, QuotaExceededError, record_token_usage
+        from ..models import User
 
-        openai.api_key = os.environ.get("OPENAI_API_KEY", "")
-        if not openai.api_key:
+        user = User.query.get(user_id)
+        if not user:
             return None
+        try:
+            key_config = get_workspace_ai_key(user)
+        except QuotaExceededError:
+            return None
+        if not key_config.get("api_key"):
+            return None
+
+        client_kwargs = {"api_key": key_config["api_key"]}
+        if key_config.get("base_url"):
+            client_kwargs["base_url"] = key_config["base_url"]
+        _openai_client = OpenAI(**client_kwargs)
+        _model = key_config.get("model") or "gpt-4o-mini"
+        _key_source = key_config.get("source", "unknown")
 
         # Build system prompt from bot personality + memory
         settings = HubBotSettings.query.filter_by(bot_id=bot_id).first()
@@ -205,8 +219,8 @@ def _gpt_answer(query: str, bot_id: str, user_id: int) -> str | None:
         if context_lines:
             system += "\n\nContext about the workspace:\n" + "\n".join(context_lines)
 
-        resp = openai.chat.completions.create(
-            model="gpt-4o-mini",
+        resp = _openai_client.chat.completions.create(
+            model=_model,
             messages=[
                 {"role": "system", "content": system},
                 {"role": "user", "content": query},
@@ -214,6 +228,9 @@ def _gpt_answer(query: str, bot_id: str, user_id: int) -> str | None:
             max_tokens=400,
             temperature=0.4,
         )
+        if _key_source == "platform":
+            tokens_used = resp.usage.total_tokens if resp.usage else 0
+            record_token_usage(user, tokens_used)
         return resp.choices[0].message.content.strip()[:4000]
     except Exception as exc:
         _log.warning("hub_reply: GPT fallback failed: %s", exc)

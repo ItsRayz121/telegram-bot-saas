@@ -61,70 +61,40 @@ class KnowledgeBaseSystem:
         self.app = app
 
     def _load_group_api_key(self, group_id, telegram_group_id=None):
-        """Resolve AI key for a custom-bot group.
-
-        Priority:
-          1. Group-scoped UserApiKey tied to this group
-          2. Owner's workspace-scoped UserApiKey
-          3. Platform OpenRouter key (Pro/Enterprise only)
-        """
+        """Resolve AI key using the central resolver. Returns dict or None."""
         try:
             with self.app.app_context():
-                from ..models import UserApiKey, Group, TelegramGroup, User
-                from ..utils.encryption import decrypt_value, DecryptionError
-                from ..assistant.ai_key_resolver import get_workspace_ai_key, QuotaExceededError
+                from ..assistant.ai_key_resolver import resolve_ai_provider_for_group, QuotaExceededError
+                from ..models import Group, TelegramGroup
 
-                # 1. Group-specific key
-                if telegram_group_id:
-                    record = UserApiKey.query.filter_by(
-                        telegram_group_id=str(telegram_group_id), is_active=True
-                    ).order_by(UserApiKey.created_at.desc()).first()
-                else:
-                    record = UserApiKey.query.filter_by(
-                        group_id=group_id, is_active=True
-                    ).order_by(UserApiKey.created_at.desc()).first()
-
-                if record:
-                    try:
-                        api_key = decrypt_value(record.api_key_encrypted)
-                        return {
-                            "provider": record.provider,
-                            "api_key": api_key,
-                            "base_url": record.base_url,
-                            "model_name": record.model_name,
-                        }
-                    except DecryptionError:
-                        logger.error("knowledge_base: group key decryption failed for group %s", group_id)
-
-                # 2+3. Workspace key → platform key fallback via ai_key_resolver
-                owner = None
+                # Resolve user_id from group
+                user_id = None
                 if telegram_group_id:
                     tg = TelegramGroup.query.filter_by(telegram_group_id=str(telegram_group_id)).first()
                     if tg:
-                        owner = User.query.get(tg.owner_user_id)
+                        user_id = tg.owner_user_id
                 elif group_id:
                     grp = Group.query.get(group_id)
                     if grp:
-                        owner = User.query.get(grp.user_id)
+                        user_id = grp.user_id
 
-                if not owner:
+                if not user_id:
                     return None
 
                 try:
-                    ws = get_workspace_ai_key(owner)
+                    result = resolve_ai_provider_for_group(user_id, group_id, telegram_group_id)
                 except QuotaExceededError:
                     return None
 
-                if not ws.get("api_key"):
+                if not result.get("api_key"):
                     return None
 
                 return {
-                    "provider": ws["provider"],
-                    "api_key": ws["api_key"],
-                    "base_url": ws.get("base_url"),
-                    "model_name": ws.get("model"),
+                    "provider": result["provider"],
+                    "api_key": result["api_key"],
+                    "base_url": result.get("base_url"),
+                    "model_name": result.get("model"),
                 }
-
         except Exception as e:
             logger.error(f"Failed to load group API key: {e}")
             return None
@@ -132,8 +102,7 @@ class KnowledgeBaseSystem:
     def _get_openai_client(self, api_key=None, base_url=None):
         """Return an OpenAI-compatible client."""
         from openai import OpenAI
-        from ..config import Config
-        key = api_key or Config.OPENAI_API_KEY
+        key = api_key
         if not key:
             return None
         kwargs = {"api_key": key}

@@ -2245,16 +2245,20 @@ def cross_group_summary():
 
     try:
         from openai import OpenAI
-        api_key = Config.OPENAI_API_KEY if hasattr(Config, "OPENAI_API_KEY") else ""
-        if not api_key:
-            import os
-            api_key = os.environ.get("OPENAI_API_KEY", "")
-        if not api_key:
+        from ..assistant.ai_key_resolver import get_workspace_ai_key, QuotaExceededError, record_token_usage
+        try:
+            key_config = get_workspace_ai_key(user)
+        except QuotaExceededError:
+            return jsonify({"error": "Daily AI quota exceeded. Add your own API key in AI Settings."}), 429
+        if not key_config.get("api_key"):
             return jsonify({"error": "AI service not configured."}), 503
 
-        client = OpenAI(api_key=api_key)
+        client_kwargs = {"api_key": key_config["api_key"]}
+        if key_config.get("base_url"):
+            client_kwargs["base_url"] = key_config["base_url"]
+        client = OpenAI(**client_kwargs)
         resp = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=key_config.get("model") or "gpt-4o-mini",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
@@ -2263,6 +2267,8 @@ def cross_group_summary():
             max_tokens=600,
         )
         summary_text = resp.choices[0].message.content.strip()
+        if key_config.get("source") == "platform":
+            record_token_usage(user, resp.usage.total_tokens if resp.usage else 0)
     except Exception as exc:
         _log.warning("cross_group_summary: OpenAI call failed: %s", exc)
         return jsonify({"error": "AI generation failed. Please try again."}), 503
