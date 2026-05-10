@@ -141,22 +141,22 @@ export default function HubWorkspace() {
 }
 
 // ── Tab dispatcher ─────────────────────────────────────────────────────────────
-function TabContent({ tab, botData, groups, setGroups }) {
+export function TabContent({ tab, botData, groups, setGroups, botId }) {
   switch (tab) {
-    case 'overview':   return <HubOverview botData={botData} groups={groups} />;
-    case 'notes':      return <HubNotes groups={groups} />;
-    case 'reminders':  return <HubReminders groups={groups} />;
-    case 'tasks':      return <HubTasks groups={groups} />;
-    case 'templates':  return <HubTemplates />;
-    case 'knowledge':  return <HubKnowledge />;
+    case 'overview':   return <HubOverview botData={botData} groups={groups} botId={botId} />;
+    case 'notes':      return <HubNotes groups={groups} botId={botId} />;
+    case 'reminders':  return <HubReminders groups={groups} botId={botId} />;
+    case 'tasks':      return <HubTasks groups={groups} botId={botId} />;
+    case 'templates':  return <HubTemplates botId={botId} />;
+    case 'knowledge':  return <HubKnowledge botId={botId} />;
     case 'automation': return <HubAutomation />;
     case 'settings':   return <HubSettings botData={botData} groups={groups} setGroups={setGroups} />;
-    default:           return <HubOverview botData={botData} groups={groups} />;
+    default:           return <HubOverview botData={botData} groups={groups} botId={botId} />;
   }
 }
 
 // ── Overview ───────────────────────────────────────────────────────────────────
-function HubOverview({ botData, groups }) {
+function HubOverview({ botData, groups, botId }) {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -164,7 +164,7 @@ function HubOverview({ botData, groups }) {
 
   const load = useCallback(() => {
     setLoading(true);
-    hub.getOverview(groupFilter || null)
+    hub.getOverview(groupFilter || null, botId || null)
       .then(r => setData(r.data))
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -300,7 +300,7 @@ function ItemRow({ label, meta = [], badge, badgeColor, onConfirm, onDismiss }) 
 }
 
 // ── Tasks tab ──────────────────────────────────────────────────────────────────
-function HubTasks({ groups }) {
+function HubTasks({ groups, botId }) {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('pending');
@@ -312,7 +312,7 @@ function HubTasks({ groups }) {
 
   const load = useCallback(() => {
     setLoading(true);
-    hub.listTasks({ status: statusFilter || undefined, group_id: groupFilter || undefined })
+    hub.listTasks({ status: statusFilter || undefined, group_id: groupFilter || undefined, ...(botId ? { bot_id: botId } : {}) })
       .then(r => setTasks(r.data.tasks || []))
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -420,7 +420,7 @@ function HubTasks({ groups }) {
       <TaskModal open={createOpen || Boolean(editTask)} task={editTask}
         onClose={() => { setCreateOpen(false); setEditTask(null); }}
         onSaved={() => { setCreateOpen(false); setEditTask(null); load(); }}
-        groups={groups}
+        groups={groups} botId={botId}
       />
 
       <Dialog open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)} maxWidth="xs" fullWidth>
@@ -446,7 +446,7 @@ function TaskStatusChip({ status }) {
 }
 
 // ── Reminders tab ──────────────────────────────────────────────────────────────
-function HubReminders({ groups }) {
+function HubReminders({ groups, botId }) {
   const [reminders, setReminders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('upcoming');
@@ -458,7 +458,7 @@ function HubReminders({ groups }) {
 
   const load = useCallback(() => {
     setLoading(true);
-    hub.listReminders({ filter: filter || undefined, group_id: groupFilter || undefined })
+    hub.listReminders({ filter: filter || undefined, group_id: groupFilter || undefined, ...(botId ? { bot_id: botId } : {}) })
       .then(r => setReminders(r.data.reminders || []))
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -537,7 +537,7 @@ function HubReminders({ groups }) {
       <ReminderModal open={createOpen || Boolean(editReminder)} reminder={editReminder}
         onClose={() => { setCreateOpen(false); setEditReminder(null); }}
         onSaved={() => { setCreateOpen(false); setEditReminder(null); load(); }}
-        groups={groups}
+        groups={groups} botId={botId}
       />
 
       <Dialog open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)} maxWidth="xs" fullWidth>
@@ -557,7 +557,7 @@ function HubReminders({ groups }) {
 }
 
 // ── Notes tab ──────────────────────────────────────────────────────────────────
-function HubNotes({ groups }) {
+function HubNotes({ groups, botId }) {
   const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sourceFilter, setSourceFilter] = useState('');
@@ -569,7 +569,7 @@ function HubNotes({ groups }) {
 
   const load = useCallback(() => {
     setLoading(true);
-    hub.listNotes({ source: sourceFilter || undefined, group_id: groupFilter || undefined })
+    hub.listNotes({ source: sourceFilter || undefined, group_id: groupFilter || undefined, ...(botId ? { bot_id: botId } : {}) })
       .then(r => setNotes(r.data.notes || []))
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -653,7 +653,7 @@ function HubNotes({ groups }) {
       <NoteModal open={createOpen || Boolean(editNote)} note={editNote}
         onClose={() => { setCreateOpen(false); setEditNote(null); }}
         onSaved={() => { setCreateOpen(false); setEditNote(null); load(); }}
-        groups={groups}
+        groups={groups} botId={botId}
       />
 
       <Dialog open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)} maxWidth="xs" fullWidth>
@@ -673,7 +673,7 @@ function HubNotes({ groups }) {
 }
 
 // ── Templates tab ──────────────────────────────────────────────────────────────
-function HubTemplates() {
+function HubTemplates({ botId }) {
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
@@ -685,7 +685,7 @@ function HubTemplates() {
 
   const load = useCallback(() => {
     setLoading(true);
-    Promise.all([hub.listTemplates(), hub.getLimits()])
+    Promise.all([hub.listTemplates(botId || null), hub.getLimits()])
       .then(([tRes, lRes]) => {
         setTemplates(tRes.data.templates || []);
         setLimits(lRes.data);
@@ -789,6 +789,7 @@ function HubTemplates() {
         template={editTemplate}
         onClose={() => { setCreateOpen(false); setEditTemplate(null); }}
         onSaved={() => { setCreateOpen(false); setEditTemplate(null); load(); }}
+        botId={botId}
       />
 
       {/* Delete confirmation */}
@@ -811,7 +812,7 @@ function HubTemplates() {
 }
 
 // ── TemplateModal ──────────────────────────────────────────────────────────────
-function TemplateModal({ open, template, onClose, onSaved }) {
+function TemplateModal({ open, template, onClose, onSaved, botId }) {
   const [name, setName] = useState('');
   const [content, setContent] = useState('');
   const [saving, setSaving] = useState(false);
@@ -834,7 +835,7 @@ function TemplateModal({ open, template, onClose, onSaved }) {
       if (template) {
         await hub.updateTemplate(template.id, { name: name.trim(), content: content.trim() });
       } else {
-        await hub.createTemplate({ name: name.trim(), content: content.trim() });
+        await hub.createTemplate({ name: name.trim(), content: content.trim(), ...(botId ? { bot_id: botId } : {}) });
       }
       onSaved();
     } catch (e) {
@@ -881,7 +882,7 @@ function TemplateModal({ open, template, onClose, onSaved }) {
 }
 
 // ── Knowledge Cards tab ────────────────────────────────────────────────────────
-function HubKnowledge() {
+function HubKnowledge({ botId }) {
   const [cards, setCards] = useState([]);
   const [loading, setLoading] = useState(true);
   const [limits, setLimits] = useState(null);
@@ -893,7 +894,7 @@ function HubKnowledge() {
 
   const load = useCallback(() => {
     setLoading(true);
-    Promise.all([hub.listKnowledge(), hub.getLimits()])
+    Promise.all([hub.listKnowledge(botId || null), hub.getLimits()])
       .then(([cRes, lRes]) => {
         setCards(cRes.data.cards || []);
         setLimits(lRes.data);
@@ -993,6 +994,7 @@ function HubKnowledge() {
       <KnowledgeCardModal
         open={modalOpen}
         card={editCard}
+        botId={botId}
         onClose={() => { setModalOpen(false); setEditCard(null); }}
         onSaved={(saved) => {
           if (editCard) {
@@ -1022,7 +1024,7 @@ function HubKnowledge() {
   );
 }
 
-function KnowledgeCardModal({ open, card, onClose, onSaved }) {
+function KnowledgeCardModal({ open, card, onClose, onSaved, botId }) {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [tagsInput, setTagsInput] = useState('');
@@ -1050,7 +1052,7 @@ function KnowledgeCardModal({ open, card, onClose, onSaved }) {
         res = await hub.updateKnowledge(card.id, { title, content, tags });
         onSaved(res.data.card);
       } else {
-        res = await hub.createKnowledge({ title, content, tags });
+        res = await hub.createKnowledge({ title, content, tags, ...(botId ? { bot_id: botId } : {}) });
         onSaved(res.data.card);
       }
     } catch (e) {
@@ -1583,7 +1585,7 @@ function HubSettings({ botData, groups, setGroups }) {
 
 // ── Create/Edit Modals ─────────────────────────────────────────────────────────
 
-function TaskModal({ open, task, onClose, onSaved, groups }) {
+function TaskModal({ open, task, onClose, onSaved, groups, botId }) {
   const [title, setTitle] = useState('');
   const [assignee, setAssignee] = useState('');
   const [dueDate, setDueDate] = useState('');
@@ -1609,7 +1611,7 @@ function TaskModal({ open, task, onClose, onSaved, groups }) {
     if (!title.trim()) { setError('Title is required'); return; }
     setSaving(true); setError(null);
     try {
-      const data = { title: title.trim(), assignee_name: assignee || null, due_date: dueDate || null, priority, source_group_id: groupId || null };
+      const data = { title: title.trim(), assignee_name: assignee || null, due_date: dueDate || null, priority, source_group_id: groupId || null, ...(botId ? { bot_id: botId } : {}) };
       if (task) { await hub.updateTask(task.id, data); }
       else { await hub.createTask(data); }
       onSaved();
@@ -1655,7 +1657,7 @@ function TaskModal({ open, task, onClose, onSaved, groups }) {
   );
 }
 
-function ReminderModal({ open, reminder, onClose, onSaved, groups }) {
+function ReminderModal({ open, reminder, onClose, onSaved, groups, botId }) {
   const [content, setContent] = useState('');
   const [remindAt, setRemindAt] = useState('');
   const [groupId, setGroupId] = useState('');
@@ -1677,7 +1679,7 @@ function ReminderModal({ open, reminder, onClose, onSaved, groups }) {
     if (!content.trim() || !remindAt) { setError('Content and remind time are required'); return; }
     setSaving(true); setError(null);
     try {
-      const data = { content: content.trim(), remind_at: new Date(remindAt).toISOString(), source_group_id: groupId || null };
+      const data = { content: content.trim(), remind_at: new Date(remindAt).toISOString(), source_group_id: groupId || null, ...(botId ? { bot_id: botId } : {}) };
       if (reminder) { await hub.updateReminder(reminder.id, data); }
       else { await hub.createReminder(data); }
       onSaved();
@@ -1716,7 +1718,7 @@ function ReminderModal({ open, reminder, onClose, onSaved, groups }) {
   );
 }
 
-function NoteModal({ open, note, onClose, onSaved, groups }) {
+function NoteModal({ open, note, onClose, onSaved, groups, botId }) {
   const [content, setContent] = useState('');
   const [tags, setTags] = useState('');
   const [groupId, setGroupId] = useState('');
@@ -1739,7 +1741,7 @@ function NoteModal({ open, note, onClose, onSaved, groups }) {
     setSaving(true); setError(null);
     try {
       const parsedTags = tags.split(',').map(t => t.trim()).filter(Boolean);
-      const data = { content: content.trim(), tags: parsedTags, source_group_id: groupId || null };
+      const data = { content: content.trim(), tags: parsedTags, source_group_id: groupId || null, ...(botId ? { bot_id: botId } : {}) };
       if (note) { await hub.updateNote(note.id, data); }
       else { await hub.createNote(data); }
       onSaved();

@@ -1,6 +1,8 @@
 /**
  * /hub/bots/:botId/:tab — Custom bot workspace.
- * Separate from HubWorkspace (/hub/official/*) which is the shared Telegizer bot.
+ * Uses the same 8 tabs as the official bot workspace, with all data scoped
+ * to this bot's ID. The Settings tab shows bot-specific danger zone instead
+ * of the global official-bot settings.
  */
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -12,10 +14,17 @@ import {
 import { ArrowBack, SmartToy, Groups, Delete } from '@mui/icons-material';
 import { hub } from '../services/api';
 import { PALETTE } from '../theme';
+import { TabContent } from './HubWorkspace';
 
 const TABS = [
-  { label: 'Overview', value: 'overview' },
-  { label: 'Settings', value: 'settings' },
+  { label: 'Overview',   value: 'overview' },
+  { label: 'Notes',      value: 'notes' },
+  { label: 'Reminders',  value: 'reminders' },
+  { label: 'Tasks',      value: 'tasks' },
+  { label: 'Templates',  value: 'templates' },
+  { label: 'Knowledge',  value: 'knowledge' },
+  { label: 'Automation', value: 'automation' },
+  { label: 'Settings',   value: 'settings' },
 ];
 
 export default function HubCustomBotWorkspace() {
@@ -62,6 +71,8 @@ export default function HubCustomBotWorkspace() {
     );
   }
 
+  const activeTab = TABS.find(t => t.value === tab) ? tab : 'overview';
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Header */}
@@ -85,7 +96,7 @@ export default function HubCustomBotWorkspace() {
             )}
           </Box>
         </Box>
-        <Tabs value={TABS.find(t => t.value === tab) ? tab : 'overview'} onChange={handleTabChange}
+        <Tabs value={activeTab} onChange={handleTabChange}
           variant="scrollable" scrollButtons="auto"
           sx={{ minHeight: 38, '& .MuiTab-root': { minHeight: 38, fontSize: '0.8rem', py: 0, px: 1.5, textTransform: 'none' } }}>
           {TABS.map(t => <Tab key={t.value} label={t.label} value={t.value} />)}
@@ -94,66 +105,11 @@ export default function HubCustomBotWorkspace() {
 
       {/* Tab content */}
       <Box sx={{ flex: 1, overflow: 'auto', p: { xs: 2, sm: 3 } }}>
-        {tab === 'overview'
-          ? <CustomBotOverview bot={bot} />
-          : <CustomBotSettings bot={bot} onDeleted={handleDeleted} />
+        {activeTab === 'settings'
+          ? <CustomBotSettings bot={bot} onDeleted={handleDeleted} />
+          : <TabContent tab={activeTab} botData={bot} groups={[]} setGroups={() => {}} botId={botId} />
         }
       </Box>
-    </Box>
-  );
-}
-
-
-function CustomBotOverview({ bot }) {
-  return (
-    <Box sx={{ maxWidth: 600 }}>
-      <Typography variant="body2" color="text.secondary" gutterBottom>
-        Custom bot workspace — manage settings and data for this bot.
-      </Typography>
-
-      <Card variant="outlined" sx={{ mb: 2 }}>
-        <CardContent>
-          <Typography variant="subtitle2" gutterBottom fontWeight={600}>Bot Info</Typography>
-          <Box sx={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-            <Box>
-              <Typography variant="caption" color="text.secondary">Display Name</Typography>
-              <Typography variant="body2" fontWeight={500}>{bot.display_name || '—'}</Typography>
-            </Box>
-            <Box>
-              <Typography variant="caption" color="text.secondary">Username</Typography>
-              <Typography variant="body2" fontWeight={500}>@{bot.telegram_bot_username || '—'}</Typography>
-            </Box>
-            <Box>
-              <Typography variant="caption" color="text.secondary">Groups</Typography>
-              <Typography variant="body2" fontWeight={500}>{bot.group_count ?? 0}</Typography>
-            </Box>
-            <Box>
-              <Typography variant="caption" color="text.secondary">Pending Tasks</Typography>
-              <Typography variant="body2" fontWeight={500}>{bot.pending_tasks ?? 0}</Typography>
-            </Box>
-          </Box>
-        </CardContent>
-      </Card>
-
-      <Card variant="outlined">
-        <CardContent>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-            <Groups sx={{ fontSize: 18, color: 'text.secondary' }} />
-            <Typography variant="subtitle2" fontWeight={600}>Connected Groups</Typography>
-          </Box>
-          {(bot.group_count ?? 0) === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              No groups connected to this bot yet.
-              Add this bot to a Telegram group to get started.
-            </Typography>
-          ) : (
-            <Typography variant="body2" color="text.secondary">
-              {bot.group_count} group{bot.group_count !== 1 ? 's' : ''} connected.
-              Go to <strong>Groups</strong> in the sidebar to manage group-level settings.
-            </Typography>
-          )}
-        </CardContent>
-      </Card>
     </Box>
   );
 }
@@ -194,6 +150,15 @@ function CustomBotSettings({ bot, onDeleted }) {
           </Typography>
         </CardContent>
       </Card>
+
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+          <Groups sx={{ fontSize: 18, mt: 0.25 }} />
+          <span>
+            This bot can be added to Telegram groups. Go to <strong>Groups</strong> in the sidebar to manage group-level settings and analytics.
+          </span>
+        </Box>
+      </Typography>
 
       <Divider sx={{ my: 3 }} />
 

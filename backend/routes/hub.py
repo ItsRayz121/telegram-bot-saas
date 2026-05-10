@@ -180,6 +180,17 @@ def _get_or_create_official_bot(user_id: int) -> HubBotIdentity:
     return bot
 
 
+def _resolve_bot(user: User, bot_id_param: str | None = None) -> HubBotIdentity:
+    """Return the requested bot (verified owner) or fall back to the official bot."""
+    if bot_id_param:
+        bot = HubBotIdentity.query.filter_by(id=bot_id_param, user_id=user.id).first()
+        if bot is None:
+            from flask import abort
+            abort(404)
+        return bot
+    return _get_or_create_official_bot(user.id)
+
+
 def _bot_card_data(bot: HubBotIdentity, user_id: int) -> dict:
     """Assemble JSON for a bot card."""
     group_count = HubConnectedGroup.query.filter_by(
@@ -730,7 +741,7 @@ def _note_dict(n):
 @jwt_required()
 def list_templates():
     user = _current_user()
-    bot = _get_or_create_official_bot(user.id)
+    bot = _resolve_bot(user, request.args.get("bot_id"))
     from ..assistant.hub_models import HubTemplate
     templates = HubTemplate.query.filter_by(
         bot_id=bot.id, user_id=user.id
@@ -742,7 +753,8 @@ def list_templates():
 @jwt_required()
 def create_template():
     user = _current_user()
-    bot = _get_or_create_official_bot(user.id)
+    data = request.get_json(silent=True) or {}
+    bot = _resolve_bot(user, data.get("bot_id"))
     from ..assistant.hub_models import HubTemplate
     from ..assistant.hub_plan_limits import check_templates, PlanLimitError
 
@@ -751,7 +763,6 @@ def create_template():
     except PlanLimitError as e:
         return jsonify({"error": "plan_limit", **e.to_dict()}), 402
 
-    data = request.get_json(silent=True) or {}
     name = (data.get("name") or "").strip()
     content = (data.get("content") or "").strip()
     if not name or not content:
@@ -835,7 +846,7 @@ def hub_overview():
     recent decisions, upcoming reminders, new inbox count.
     """
     user = _current_user()
-    bot = _get_or_create_official_bot(user.id)
+    bot = _resolve_bot(user, request.args.get("bot_id"))
     group_id = request.args.get("group_id")
 
     now = datetime.utcnow()
@@ -957,7 +968,7 @@ def dismiss_inbox_item(item_id):
 @jwt_required()
 def list_tasks():
     user = _current_user()
-    bot = _get_or_create_official_bot(user.id)
+    bot = _resolve_bot(user, request.args.get("bot_id"))
     status = request.args.get("status")
     group_id = request.args.get("group_id")
 
@@ -979,8 +990,8 @@ def list_tasks():
 @jwt_required()
 def create_task():
     user = _current_user()
-    bot = _get_or_create_official_bot(user.id)
     data = request.get_json(silent=True) or {}
+    bot = _resolve_bot(user, data.get("bot_id"))
 
     title = (data.get("title") or "").strip()
     if not title:
@@ -1050,7 +1061,7 @@ def delete_task(task_id):
 @jwt_required()
 def list_reminders():
     user = _current_user()
-    bot = _get_or_create_official_bot(user.id)
+    bot = _resolve_bot(user, request.args.get("bot_id"))
     group_id = request.args.get("group_id")
     filter_by = request.args.get("filter")  # upcoming | overdue | all
 
@@ -1073,8 +1084,8 @@ def list_reminders():
 @jwt_required()
 def create_reminder():
     user = _current_user()
-    bot = _get_or_create_official_bot(user.id)
     data = request.get_json(silent=True) or {}
+    bot = _resolve_bot(user, data.get("bot_id"))
 
     content = (data.get("content") or "").strip()
     remind_at_raw = data.get("remind_at")
@@ -1141,7 +1152,7 @@ def delete_reminder(reminder_id):
 @jwt_required()
 def list_notes():
     user = _current_user()
-    bot = _get_or_create_official_bot(user.id)
+    bot = _resolve_bot(user, request.args.get("bot_id"))
     group_id = request.args.get("group_id")
     source = request.args.get("source")
 
@@ -1159,8 +1170,8 @@ def list_notes():
 @jwt_required()
 def create_note():
     user = _current_user()
-    bot = _get_or_create_official_bot(user.id)
     data = request.get_json(silent=True) or {}
+    bot = _resolve_bot(user, data.get("bot_id"))
 
     content = (data.get("content") or "").strip()
     if not content:
