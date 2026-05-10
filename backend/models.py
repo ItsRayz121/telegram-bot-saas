@@ -1021,6 +1021,10 @@ class TelegramGroup(db.Model):
     # Cached counts — kept up to date by the bot on member join/leave events
     member_count = db.Column(db.Integer, default=0, nullable=False)
     description = db.Column(db.Text, nullable=True)
+    # 'group_management' = My Groups / moderation pillar
+    # 'assistant_hub'    = Assistant Hub / AI extraction pillar
+    group_context = db.Column(db.String(20), default="group_management", nullable=False,
+                              server_default="group_management")
 
     link_codes = db.relationship("TelegramGroupLinkCode", backref="telegram_group", lazy=True, cascade="all, delete-orphan")
     custom_commands = db.relationship("CustomCommand", backref="telegram_group", lazy=True, cascade="all, delete-orphan")
@@ -1047,6 +1051,7 @@ class TelegramGroup(db.Model):
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "member_count": self.member_count,
             "description": self.description,
+            "group_context": self.group_context or "group_management",
         }
 
 

@@ -452,6 +452,7 @@ async def _handle_account_connect(update, context, user, flask_app, frontend, bo
                                 tg.bot_status = "active"
                                 tg.linked_at = datetime.utcnow()
                                 tg.linked_via_bot_type = "official"
+                                tg.group_context = "group_management"
                                 pc.used_at = datetime.utcnow()
                                 auto_linked_groups.append(tg.title)
 

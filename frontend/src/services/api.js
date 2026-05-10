@@ -736,6 +736,7 @@ export const hub = {
   getOfficialSettings:  ()           => api.get('/api/hub/bots/official/settings'),
   updateOfficialSettings: (data)     => api.patch('/api/hub/bots/official/settings', data),
   listOfficialGroups:   ()           => api.get('/api/hub/bots/official/groups'),
+  listBotGroups:        (botId)      => api.get(`/api/hub/bots/${botId}/groups`),
   updateGroupSettings:  (id, data)   => api.patch(`/api/hub/bots/official/groups/${id}`, data),
   deleteGroupData:      (id)         => api.delete(`/api/hub/bots/official/groups/${id}/data`),
   getOfficialStats:     ()           => api.get('/api/hub/bots/official/stats'),

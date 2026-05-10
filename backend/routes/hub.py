@@ -1842,6 +1842,23 @@ def delete_custom_bot(bot_id):
     return jsonify({"ok": True})
 
 
+@hub_bp.route("/bots/<bot_id>/groups", methods=["GET"])
+@jwt_required()
+def list_custom_bot_hub_groups(bot_id):
+    """Return Assistant Hub connected groups for a specific custom bot (assistant_hub context only)."""
+    user = _current_user()
+    bot = HubBotIdentity.query.filter_by(
+        id=bot_id, user_id=user.id, bot_type="custom"
+    ).first_or_404()
+    groups = HubConnectedGroup.query.filter_by(
+        bot_id=bot.id, user_id=user.id
+    ).order_by(HubConnectedGroup.joined_at.desc()).all()
+    return jsonify({
+        "groups": [_group_dict(g) for g in groups],
+        "total": len(groups),
+    })
+
+
 # ── Sprint 7: Knowledge Cards ─────────────────────────────────────────────────
 
 def _card_dict(c) -> dict:

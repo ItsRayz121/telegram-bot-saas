@@ -440,6 +440,7 @@ class BotInstance:
                     tg.linked_at = _dt.utcnow()
                     tg.linked_via_bot_type = "custom"
                     tg.linked_bot_id = None
+                    tg.group_context = "group_management"
                     TelegramGroupLinkCode.query.filter_by(
                         telegram_group_id=group_id,
                         created_by_telegram_user_id=str(user.id),

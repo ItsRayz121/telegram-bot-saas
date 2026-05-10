@@ -53,9 +53,13 @@ def list_groups():
     if not user:
         return jsonify({"error": "User not found"}), 404
 
-    groups = TelegramGroup.query.filter_by(
-        owner_user_id=user.id,
-        is_disabled=False,
+    groups = TelegramGroup.query.filter(
+        TelegramGroup.owner_user_id == user.id,
+        TelegramGroup.is_disabled == False,
+        db.or_(
+            TelegramGroup.group_context == "group_management",
+            TelegramGroup.group_context == None,  # noqa: E711 — SQL IS NULL
+        ),
     ).order_by(TelegramGroup.linked_at.desc()).all()
 
     groups_data = [g.to_dict() for g in groups]
@@ -171,6 +175,7 @@ def link_group():
     tg.bot_status = "active"
     tg.linked_at = datetime.utcnow()
     tg.linked_via_bot_type = "official"
+    tg.group_context = "group_management"
     # Fill in any default sections the group may be missing (handles both
     # brand-new groups and those created before a feature was added).
     fill_missing_defaults(tg)

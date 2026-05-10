@@ -26,6 +26,7 @@ export default function HubCustomBotWorkspace() {
   const [bot, setBot] = useState(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [groups, setGroups] = useState([]);
 
   const loadBot = useCallback(() => {
     setLoading(true);
@@ -39,7 +40,14 @@ export default function HubCustomBotWorkspace() {
       .finally(() => setLoading(false));
   }, [botId]);
 
+  const loadGroups = useCallback(() => {
+    hub.listBotGroups(botId)
+      .then(r => setGroups(r.data?.groups || []))
+      .catch(() => {});
+  }, [botId]);
+
   useEffect(() => { loadBot(); }, [loadBot]);
+  useEffect(() => { loadGroups(); }, [loadGroups]);
 
   const handleTabChange = (_, newTab) => navigate(`/hub/bots/${botId}/${newTab}`);
   const handleDeleted = () => navigate('/hub');
@@ -100,7 +108,7 @@ export default function HubCustomBotWorkspace() {
       <Box sx={{ flex: 1, overflow: 'auto', p: { xs: 2, sm: 3 } }}>
         {activeTab === 'settings'
           ? <CustomBotSettings bot={bot} onDeleted={handleDeleted} />
-          : <TabContent tab={activeTab} botData={bot} groups={[]} setGroups={() => {}} botId={botId} />
+          : <TabContent tab={activeTab} botData={bot} groups={groups} setGroups={setGroups} botId={botId} />
         }
       </Box>
     </Box>

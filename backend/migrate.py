@@ -309,6 +309,22 @@ def init_db():
         # Any user with telegram_user_id but no junction row gets a primary record created.
         _backfill_telegram_accounts(app)
 
+        # ── Context separation: group_context column on telegram_groups ──────────
+        # All existing rows (Group Management groups) default to 'group_management'.
+        # Assistant Hub groups are stored in hub_connected_groups (separate table).
+        _run_alter(
+            db.engine,
+            "ALTER TABLE telegram_groups ADD COLUMN IF NOT EXISTS group_context VARCHAR(20) NOT NULL DEFAULT 'group_management'",
+            "telegram_groups.group_context (pillar separation — default group_management)",
+        )
+        # Ensure any rows with NULL context are backfilled (shouldn't happen given
+        # server_default, but safe to run idempotently).
+        _run_alter(
+            db.engine,
+            "UPDATE telegram_groups SET group_context = 'group_management' WHERE group_context IS NULL",
+            "telegram_groups.group_context backfill NULL rows",
+        )
+
         print("Migration complete.")
 
     # One-shot Telegram account backfill (also runs inline above via _backfill_telegram_accounts).
