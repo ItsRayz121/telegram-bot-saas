@@ -104,7 +104,7 @@ const FAQ = [
   },
   {
     q: 'How do I request a refund?',
-    a: `Email ${SUPPORT_EMAIL} within 14 days of your first purchase with your account email and payment reference. We process refunds within 3 business days.',
+    a: `Email ${SUPPORT_EMAIL} within 14 days of your first purchase with your account email and payment reference. We process refunds within 3 business days.`,
   },
   {
     q: 'Do you support the Telegram Mini App?',
