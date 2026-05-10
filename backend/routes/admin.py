@@ -3,9 +3,12 @@ from functools import wraps
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 import json
+import logging
 from ..models import db, User, Bot, Group, Member, SuspiciousActivity, Referral, TelegramGroup, CustomBot, BotEvent, AdminAuditLog, DirectoryListing
 from ..config import Config
 from ..middleware.rate_limit import rate_limit
+
+_log = logging.getLogger("admin")
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/api/admin")
 
@@ -21,15 +24,33 @@ def admin_required(f):
     def decorated(*args, **kwargs):
         user = _get_current_user()
         if not user:
+            _log.warning("admin_required: JWT resolved but user not found — route=%s", request.path)
             return jsonify({"error": "User not found"}), 404
-        if user.email not in Config.ADMIN_EMAILS:
-            return jsonify({"error": "Admin access required"}), 403
-        if not user.totp_enabled:
-            return jsonify({"error": "Admin accounts must have 2FA enabled"}), 403
-        # Log every admin action for audit trail
+
+        # Email check is case-insensitive; ADMIN_EMAILS is already lowercased at config parse time.
+        if user.email.lower() not in Config.ADMIN_EMAILS:
+            _log.warning(
+                "admin_required: access denied — email=%s route=%s reason=not_in_allowlist",
+                user.email, request.path,
+            )
+            return jsonify({"error": "Admin access required", "reason": "not_in_allowlist"}), 403
+
+        # 2FA enforcement is opt-in via ENFORCE_ADMIN_2FA=true env var.
+        if Config.ENFORCE_ADMIN_2FA and not user.totp_enabled:
+            _log.warning(
+                "admin_required: access denied — email=%s route=%s reason=2fa_required",
+                user.email, request.path,
+            )
+            return jsonify({
+                "error": "Admin accounts must have 2FA enabled",
+                "reason": "2fa_required",
+            }), 403
+
+        _log.info("admin_required: access granted — email=%s route=%s method=%s", user.email, request.path, request.method)
+
+        # Audit log every admin action
         try:
             body = request.get_json(silent=True) or {}
-            # Strip any sensitive fields from the log
             sanitised = {k: v for k, v in body.items() if k not in {"password", "token", "api_key"}}
             log = AdminAuditLog(
                 admin_id=user.id,

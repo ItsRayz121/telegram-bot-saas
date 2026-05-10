@@ -473,7 +473,7 @@ def login():
             return jsonify({"error": "Invalid 2FA code"}), 401
 
     # Admin auto-promotion
-    if user.email in Config.ADMIN_EMAILS and user.subscription_tier != "enterprise":
+    if user.email.lower() in Config.ADMIN_EMAILS and user.subscription_tier != "enterprise":
         user.subscription_tier = "enterprise"
         user.subscription_expires = None
         try:
@@ -484,7 +484,7 @@ def login():
     token = create_access_token(identity=str(user.id))
     refresh_token = create_refresh_token(identity=str(user.id))
     user_data = user.to_dict()
-    user_data["is_admin"] = user.email in Config.ADMIN_EMAILS
+    user_data["is_admin"] = user.email.lower() in Config.ADMIN_EMAILS
     resp = jsonify({"token": token, "user": user_data})  # token also in body for TMA
     _set_auth_cookies(resp, token, refresh_token)
     return resp, 200
@@ -531,7 +531,7 @@ def verify_totp_login():
         return jsonify({"error": "Invalid 2FA code"}), 401
 
     # Admin auto-promotion
-    if user.email in Config.ADMIN_EMAILS and user.subscription_tier != "enterprise":
+    if user.email.lower() in Config.ADMIN_EMAILS and user.subscription_tier != "enterprise":
         user.subscription_tier = "enterprise"
         user.subscription_expires = None
         db.session.commit()
@@ -539,7 +539,7 @@ def verify_totp_login():
     token = create_access_token(identity=str(user.id))
     refresh_token = create_refresh_token(identity=str(user.id))
     user_data = user.to_dict()
-    user_data["is_admin"] = user.email in Config.ADMIN_EMAILS
+    user_data["is_admin"] = user.email.lower() in Config.ADMIN_EMAILS
     resp = jsonify({"token": token, "user": user_data})
     _set_auth_cookies(resp, token, refresh_token)
     return resp, 200
@@ -795,7 +795,7 @@ def get_me():
     if not user:
         return jsonify({"error": "User not found"}), 404
     user_data = user.to_dict()
-    user_data["is_admin"] = user.email in Config.ADMIN_EMAILS
+    user_data["is_admin"] = user.email.lower() in Config.ADMIN_EMAILS
     return jsonify({"user": user_data}), 200
 
 
@@ -833,7 +833,7 @@ def update_me():
         return jsonify({"error": "Failed to save profile"}), 500
 
     user_data = user.to_dict()
-    user_data["is_admin"] = user.email in Config.ADMIN_EMAILS
+    user_data["is_admin"] = user.email.lower() in Config.ADMIN_EMAILS
     return jsonify({"user": user_data}), 200
 
 
@@ -970,7 +970,7 @@ def delete_account():
     if not bcrypt.checkpw(password.encode("utf-8"), user.password_hash.encode("utf-8")):
         return jsonify({"error": "Incorrect password"}), 401
 
-    if user.email in Config.ADMIN_EMAILS:
+    if user.email.lower() in Config.ADMIN_EMAILS:
         return jsonify({"error": "Admin accounts cannot be deleted via API"}), 403
 
     try:

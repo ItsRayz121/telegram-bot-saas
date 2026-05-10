@@ -116,7 +116,11 @@ class Config:
     TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
     TELEGRAM_BOT_USERNAME = os.environ.get("TELEGRAM_BOT_USERNAME", "telegizer_bot")
     _admin_env = os.environ.get("ADMIN_EMAILS", "")
-    ADMIN_EMAILS = [e.strip() for e in _admin_env.split(",") if e.strip()]
+    ADMIN_EMAILS = [e.strip().lower() for e in _admin_env.split(",") if e.strip()]
+
+    # Set to "true" to require admin accounts to have TOTP/2FA before accessing /api/admin/*.
+    # Defaults to False so sole-admin setups are not locked out.
+    ENFORCE_ADMIN_2FA = os.environ.get("ENFORCE_ADMIN_2FA", "false").lower() == "true"
     if not ADMIN_EMAILS:
         if _is_prod:
             raise RuntimeError(

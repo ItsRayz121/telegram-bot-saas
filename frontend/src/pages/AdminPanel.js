@@ -1,15 +1,25 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box, AppBar, Toolbar, Typography, IconButton, Card, CardContent,
   Grid, CircularProgress, TextField, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Paper, Chip, Button, Dialog,
   DialogTitle, DialogContent, DialogActions, MenuItem, Select,
   FormControl, InputLabel, Pagination, InputAdornment, Tabs, Tab, Divider,
+  Alert,
 } from '@mui/material';
-import { ArrowBack, Search, Block, CheckCircle, Delete, Groups, SmartToy, LinkOff } from '@mui/icons-material';
+import { ArrowBack, Search, Block, CheckCircle, Delete, Groups, SmartToy, LinkOff, Lock } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { admin } from '../services/api';
+
+/** Extract the most useful error message from an API error.
+ *  Returns { message, is403 } so callers can gate on permission errors. */
+function parseApiError(err) {
+  const status = err?.response?.status;
+  const data = err?.response?.data;
+  const message = data?.error || data?.message || err?.message || 'Unknown error';
+  return { message, is403: status === 403 };
+}
 
 function StatCard({ label, value, color = '#2196f3' }) {
   return (
@@ -54,12 +64,27 @@ export default function AdminPanel() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [subTier, setSubTier] = useState('');
   const [actionLoading, setActionLoading] = useState('');
+  const [accessError, setAccessError] = useState(null); // non-null = admin access blocked
   // Bot ecosystem state
   const [tgGroups, setTgGroups] = useState([]);
   const [tgGroupsTotal, setTgGroupsTotal] = useState(0);
   const [tgGroupsPage, setTgGroupsPage] = useState(1);
   const [tgGroupsLoading, setTgGroupsLoading] = useState(false);
   const [tgSearch, setTgSearch] = useState('');
+  // Prevent repeated 403 toasts across concurrent fetches
+  const accessErrorShown = useRef(false);
+
+  const handleAdminError = useCallback((err, fallbackMsg) => {
+    const { message, is403 } = parseApiError(err);
+    if (is403) {
+      if (!accessErrorShown.current) {
+        accessErrorShown.current = true;
+        setAccessError(message);
+      }
+    } else {
+      toast.error(fallbackMsg || message);
+    }
+  }, []);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -69,10 +94,10 @@ export default function AdminPanel() {
       ]);
       setStats(statsRes.data.stats);
       setBotStats(botStatsRes.data.stats);
-    } catch {
-      toast.error('Failed to load stats');
+    } catch (err) {
+      handleAdminError(err, 'Failed to load stats');
     }
-  }, []);
+  }, [handleAdminError]);
 
   const fetchTgGroups = useCallback(async (p = 1, s = '') => {
     setTgGroupsLoading(true);
@@ -80,12 +105,12 @@ export default function AdminPanel() {
       const res = await admin.getTelegramGroups({ page: p, per_page: 20, search: s });
       setTgGroups(res.data.groups || []);
       setTgGroupsTotal(res.data.total || 0);
-    } catch {
-      toast.error('Failed to load groups');
+    } catch (err) {
+      handleAdminError(err, 'Failed to load groups');
     } finally {
       setTgGroupsLoading(false);
     }
-  }, []);
+  }, [handleAdminError]);
 
   const handleDisableGroup = async (groupId, title) => {
     if (!window.confirm(`Disable group "${title}"?`)) return;
@@ -115,12 +140,12 @@ export default function AdminPanel() {
       setUsers(res.data.users);
       setUsersTotal(res.data.total);
       setUsersPages(res.data.pages);
-    } catch {
-      toast.error('Failed to load users');
+    } catch (err) {
+      handleAdminError(err, 'Failed to load users');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [handleAdminError]);
 
   useEffect(() => {
     fetchStats();
@@ -223,6 +248,23 @@ export default function AdminPanel() {
       </AppBar>
 
       <Box sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 2, md: 3 } }}>
+
+        {/* Access error — shown once instead of spamming toasts */}
+        {accessError && (
+          <Alert
+            severity="error"
+            icon={<Lock />}
+            sx={{ mb: 3, borderRadius: 2 }}
+            action={
+              <Button color="inherit" size="small" onClick={() => { accessErrorShown.current = false; setAccessError(null); fetchStats(); fetchUsers(1, search); }}>
+                Retry
+              </Button>
+            }
+          >
+            <Typography variant="body2" fontWeight={700}>Admin Access Denied</Typography>
+            <Typography variant="caption">{accessError}</Typography>
+          </Alert>
+        )}
 
         {/* Platform stats */}
         {stats && (
