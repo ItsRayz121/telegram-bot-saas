@@ -72,7 +72,7 @@ def _user_groups(user: User):
         {
             "id": g.id,
             "telegram_group_id": g.telegram_group_id,
-            "name": g.title or g.display_name or f"Group {g.telegram_group_id}",
+            "name": g.title or f"Group {g.telegram_group_id}",
             "bot_status": g.bot_status,
             "member_count": g.member_count,
         }
