@@ -10,7 +10,7 @@ import {
 } from '@mui/material';
 import {
   ArrowBack, Save, Add, ExpandMore, Delete, CheckCircle, Schedule,
-  Send, Assessment, Shield, Group, AutoAwesome, BarChart, People, Bolt,
+  Send, Assessment, People,
   Warning as WarningIcon, EmojiEvents,
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -23,37 +23,12 @@ import PollCreator from '../components/PollCreator';
 import WebhookManager from '../components/WebhookManager';
 import InviteLinks from '../components/InviteLinks';
 import TimezoneSelect from '../components/TimezoneSelect';
-
-// Built at render time so official-group extras can be injected
-// Top-level settings keys that require Pro to enable.
-// Mirrors backend routes/settings.py _GATED_SECTIONS.
-const PRO_GATED_SECTIONS = new Set([
-  'verification', 'levels', 'raids', 'knowledge_base',
-  'webhooks', 'scheduled_messages', 'assistant',
-]);
-const PRO_GATED_LABELS = {
-  verification: 'Member Verification',
-  levels: 'XP & Levels System',
-  raids: 'Raid Coordinator',
-  knowledge_base: 'AI Knowledge Base',
-  webhooks: 'Webhook Integrations',
-  scheduled_messages: 'Scheduled Messages',
-  assistant: 'AI Assistant',
-};
-
-const buildCategories = (isOfficial) => [
-  { id: 'members',    label: 'Members',    icon: Group,  subTabs: ['Verification', 'Welcome', 'XP & Roles', 'Command Routing'] },
-  { id: 'moderation', label: 'Moderation', icon: Shield, subTabs: ['AutoMod', 'Behavior', 'Reports'] },
-  { id: 'community',  label: 'Engagement', icon: People, subTabs: ['Raids', 'Invite Links'] },
-  { id: 'ai',         label: 'AI & Integrations', icon: AutoAwesome, subTabs: ['Knowledge Base', 'Webhooks'] },
-  { id: 'automation', label: 'Automation', icon: Bolt,   subTabs: ['Scheduler', 'Auto Reply', 'Polls'] },
-  {
-    id: 'analytics', label: 'Analytics', icon: BarChart,
-    subTabs: isOfficial
-      ? ['Members', 'Leaderboard', 'Audit Log', 'Warnings', 'Digest']
-      : ['Members', 'Audit Log', 'Digest'],
-  },
-];
+import {
+  buildCategories,
+  getSubTabIndex,
+  PRO_GATED_SECTIONS,
+  PRO_GATED_LABELS,
+} from '../config/featureRegistry';
 
 function ProBadge() {
   return <Chip label="Pro" color="primary" size="small" sx={{ ml: 1, height: 18, fontSize: '0.65rem', fontWeight: 700 }} />;
@@ -600,12 +575,13 @@ export default function GroupSettings() {
     }
   };
 
-  // official: ['Members', 'Leaderboard', 'Audit Log', 'Warnings', 'Digest']
-  // custom:   ['Members', 'Audit Log', 'Digest']
-  const leaderboardSubTabIdx = isOfficial ? 1 : -1;
-  const auditLogSubTabIdx    = isOfficial ? 2 : 1;
-  const warningsSubTabIdx    = isOfficial ? 3 : -1;
-  const digestSubTabIdx      = isOfficial ? 4 : 2;
+  // SubTab indices are derived from the feature registry — no hardcoding needed.
+  // getSubTabIndex returns -1 for officialOnly subtabs in custom-bot context,
+  // which safely disables the associated useEffect guards.
+  const leaderboardSubTabIdx = getSubTabIndex(CATEGORIES, 'analytics', 'Leaderboard');
+  const auditLogSubTabIdx    = getSubTabIndex(CATEGORIES, 'analytics', 'Audit Log');
+  const warningsSubTabIdx    = getSubTabIndex(CATEGORIES, 'analytics', 'Warnings');
+  const digestSubTabIdx      = getSubTabIndex(CATEGORIES, 'analytics', 'Digest');
 
   useEffect(() => { fetchSettings(); }, [fetchSettings]);
   useEffect(() => { if (cat === 'analytics' && subTab === 0) fetchMembers(membersPage); }, [cat, subTab, membersPage, fetchMembers]);
