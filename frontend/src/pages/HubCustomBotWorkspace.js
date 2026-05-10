@@ -15,17 +15,10 @@ import { ArrowBack, SmartToy, Groups, Delete } from '@mui/icons-material';
 import { hub } from '../services/api';
 import { PALETTE } from '../theme';
 import { TabContent } from './HubWorkspace';
+import { getTabsForBot } from '../config/assistantHubRegistry';
 
-const TABS = [
-  { label: 'Overview',   value: 'overview' },
-  { label: 'Notes',      value: 'notes' },
-  { label: 'Reminders',  value: 'reminders' },
-  { label: 'Tasks',      value: 'tasks' },
-  { label: 'Templates',  value: 'templates' },
-  { label: 'Knowledge',  value: 'knowledge' },
-  { label: 'Automation', value: 'automation' },
-  { label: 'Settings',   value: 'settings' },
-];
+// Custom bots show all non-officialOnly tabs — derived from the shared registry.
+const TABS = getTabsForBot(false).map(t => ({ label: t.label, value: t.key }));
 
 export default function HubCustomBotWorkspace() {
   const navigate = useNavigate();

@@ -17,18 +17,10 @@ import {
 import { hub } from '../services/api';
 import AddToGroupFlow from '../components/hub/AddToGroupFlow';
 import GroupSettingsOverlay from '../components/hub/GroupSettingsOverlay';
+import { getTabsForBot } from '../config/assistantHubRegistry';
 
-// ── Tab definitions ────────────────────────────────────────────────────────────
-const TABS = [
-  { label: 'Overview',   value: 'overview' },
-  { label: 'Notes',      value: 'notes' },
-  { label: 'Reminders',  value: 'reminders' },
-  { label: 'Tasks',      value: 'tasks' },
-  { label: 'Templates',  value: 'templates' },
-  { label: 'Knowledge',  value: 'knowledge' },
-  { label: 'Automation', value: 'automation' },
-  { label: 'Settings',   value: 'settings' },
-];
+// Official bot always shows all non-customOnly tabs.
+const TABS = getTabsForBot(true).map(t => ({ label: t.label, value: t.key }));
 
 // ── Shared date formatter ─────────────────────────────────────────────────────
 function fmtDate(iso) {
@@ -151,8 +143,19 @@ export function TabContent({ tab, botData, groups, setGroups, botId }) {
     case 'knowledge':  return <HubKnowledge botId={botId} />;
     case 'automation': return <HubAutomation />;
     case 'settings':   return <HubSettings botData={botData} groups={groups} setGroups={setGroups} />;
-    default:           return <HubOverview botData={botData} groups={groups} botId={botId} />;
+    default:           return <TabComingSoon tab={tab} />;
   }
+}
+
+function TabComingSoon({ tab }) {
+  return (
+    <Box sx={{ maxWidth: 480, pt: 4, textAlign: 'center' }}>
+      <Typography variant="h6" gutterBottom sx={{ textTransform: 'capitalize' }}>{tab}</Typography>
+      <Typography variant="body2" color="text.secondary">
+        This tab is registered but not yet implemented. Add a <code>case '{tab}'</code> in <code>TabContent</code> to activate it.
+      </Typography>
+    </Box>
+  );
 }
 
 // ── Overview ───────────────────────────────────────────────────────────────────
