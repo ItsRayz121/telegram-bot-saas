@@ -76,7 +76,10 @@ class KnowledgeBaseSystem:
                 elif group_id:
                     grp = Group.query.get(group_id)
                     if grp:
-                        user_id = grp.user_id
+                        from ..models import Bot
+                        bot = Bot.query.get(grp.bot_id)
+                        if bot:
+                            user_id = bot.user_id
 
                 if not user_id:
                     return None
