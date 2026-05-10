@@ -388,9 +388,9 @@ function InviteCard({ userId }) {
         <Box sx={{
           display: 'flex', alignItems: 'center', gap: 1,
           p: 1.5, bgcolor: 'background.default', borderRadius: 2,
-          border: '1px solid', borderColor: 'divider', overflowX: 'auto',
+          border: '1px solid', borderColor: 'divider',
         }}>
-          <Typography variant="caption" color="text.secondary" sx={{ flexGrow: 1, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
+          <Typography variant="caption" color="text.secondary" sx={{ flexGrow: 1, fontFamily: 'monospace', wordBreak: 'break-all' }}>
             {inviteLink}
           </Typography>
           <IconButton size="small" onClick={handleCopy} color={copied ? 'success' : 'default'}>
@@ -775,7 +775,7 @@ export default function Dashboard() {
     <Box sx={{ minHeight: '100vh' }}>
       {/* ── AppBar ── */}
       <AppBar position="sticky" elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
-        <Toolbar sx={{ gap: 0.5, minHeight: { xs: 52, sm: 64 }, flexWrap: 'nowrap' }}>
+        <Toolbar sx={{ gap: 0.5, minHeight: { xs: 52, sm: 64 }, flexWrap: { xs: 'wrap', sm: 'nowrap' } }}>
           <Box
             onClick={() => navigate('/dashboard')}
             sx={{ display: 'flex', alignItems: 'center', gap: 0.75, cursor: 'pointer', mr: { xs: 0.5, md: 2 }, userSelect: 'none', flexShrink: 0 }}

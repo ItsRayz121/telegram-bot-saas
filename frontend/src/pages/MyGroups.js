@@ -363,7 +363,7 @@ export default function MyGroups() {
                       <Divider sx={{ my: 1.5 }} />
 
                       {/* Bot type + permissions row */}
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', mb: 1.5 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', mb: 1.5, flexWrap: 'wrap', gap: 1 }}>
                         <Box>
                           <Typography variant="caption" color="text.secondary">Bot Type</Typography>
                           <Typography variant="body2" fontWeight={500}>
@@ -426,7 +426,7 @@ export default function MyGroups() {
                       )}
 
                       {/* Actions */}
-                      <Box sx={{ display: 'flex', gap: 1 }}>
+                      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                         <Button
                           size="small"
                           variant="contained"
