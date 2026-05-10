@@ -9,7 +9,7 @@ import {
 } from '@mui/material';
 import {
   ArrowBack, Upgrade, CheckCircle,
-  CurrencyBitcoin, Refresh, ReceiptLong, Cancel, CreditCard,
+  CurrencyBitcoin, Refresh, ReceiptLong, Cancel, CreditCard, OpenInNew,
 } from '@mui/icons-material';
 import Skeleton from '@mui/material/Skeleton';
 import { useNavigate } from 'react-router-dom';
@@ -28,6 +28,28 @@ const TIER_PRICES = { free: '$0', pro: '$19/mo', enterprise: '$49/mo' };
 const PROVIDER_LABELS = { nowpayments: 'Crypto (NOWPayments)' };
 const STATUS_COLORS = { confirmed: 'success', pending: 'warning', failed: 'error' };
 
+// Centralized payment provider config — flip `enabled` / `comingSoon` here only.
+const PAYMENT_PROVIDERS = [
+  {
+    id: 'crypto',
+    label: 'Pay with Crypto',
+    sub: 'USDT, BTC, ETH, BNB and 300+ coins via NOWPayments',
+    badge: 'Recommended',
+    badgeColor: 'success',
+    enabled: true,
+    comingSoon: false,
+  },
+  {
+    id: 'card',
+    label: 'Pay with Card',
+    sub: 'Visa, Mastercard, Apple Pay and more',
+    badge: 'Coming Soon',
+    badgeColor: 'default',
+    enabled: false,
+    comingSoon: true,
+  },
+];
+
 export default function Billing() {
   const navigate = useNavigate();
   const [subscription, setSubscription] = useState(null);
@@ -41,6 +63,7 @@ export default function Billing() {
   const [cancelling, setCancelling] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [cardLoading, setCardLoading] = useState(false);
+  const [cryptoLoading, setCryptoLoading] = useState(false);
 
   const fetchSub = useCallback(async () => {
     try {
@@ -121,6 +144,21 @@ export default function Billing() {
       const msg = err?.response?.data?.error || 'Failed to start checkout';
       toast.error(msg);
       setCardLoading(false);
+    }
+  }, []);
+
+  const handleCryptoCheckout = useCallback(async (targetTier, interval = 'monthly') => {
+    setCryptoLoading(true);
+    try {
+      const res = await billing.cryptoCheckout({ tier: targetTier, interval });
+      if (res.data.checkout_url || res.data.invoice_url) {
+        window.open(res.data.checkout_url || res.data.invoice_url, '_blank', 'noopener,noreferrer');
+      }
+    } catch (err) {
+      const msg = err?.response?.data?.error || 'Failed to start crypto checkout';
+      toast.error(msg);
+    } finally {
+      setCryptoLoading(false);
     }
   }, []);
 
@@ -309,40 +347,77 @@ export default function Billing() {
                   Payment Methods
                 </Typography>
                 <Stack spacing={2}>
-                  {/* Card payments — primary */}
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, p: 2, border: '2px solid', borderColor: 'primary.main', borderRadius: 2 }}>
-                    <CreditCard color="primary" />
-                    <Box sx={{ flexGrow: 1 }}>
-                      <Typography variant="body2" fontWeight={600}>Pay with Card</Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        Visa, Mastercard, Apple Pay and more via Lemon Squeezy
-                      </Typography>
-                    </Box>
-                    <Button
-                      variant="contained"
-                      size="small"
-                      onClick={() => handleCardCheckout(tier === 'free' ? 'pro' : tier)}
-                      disabled={cardLoading}
-                      startIcon={cardLoading ? <CircularProgress size={14} /> : null}
-                    >
-                      {cardLoading ? 'Loading…' : 'Upgrade'}
-                    </Button>
-                  </Box>
-                  {/* Crypto — secondary */}
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
-                    <CurrencyBitcoin color="warning" />
-                    <Box sx={{ flexGrow: 1 }}>
-                      <Typography variant="body2" fontWeight={600}>Pay with Crypto</Typography>
+                  {/* Crypto — PRIMARY CTA */}
+                  <Box
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => !cryptoLoading && handleCryptoCheckout(tier === 'free' ? 'pro' : tier)}
+                    onKeyDown={e => e.key === 'Enter' && !cryptoLoading && handleCryptoCheckout(tier === 'free' ? 'pro' : tier)}
+                    sx={{
+                      display: 'flex', alignItems: 'center', gap: 2,
+                      p: { xs: 1.75, md: 2.25 },
+                      border: '2px solid', borderColor: 'success.main',
+                      borderRadius: 2, cursor: cryptoLoading ? 'wait' : 'pointer',
+                      transition: 'box-shadow 0.18s, border-color 0.18s, background 0.18s',
+                      '&:hover': {
+                        boxShadow: '0 0 0 3px rgba(34,197,94,0.18)',
+                        bgcolor: 'rgba(34,197,94,0.04)',
+                      },
+                      '&:focus-visible': {
+                        outline: '2px solid',
+                        outlineColor: 'success.main',
+                        outlineOffset: 2,
+                      },
+                    }}
+                  >
+                    <CurrencyBitcoin sx={{ color: 'warning.main', fontSize: 28, flexShrink: 0 }} />
+                    <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                        <Typography variant="body2" fontWeight={700}>Pay with Crypto</Typography>
+                        <Chip label="Recommended" color="success" size="small" sx={{ height: 18, fontSize: '0.65rem' }} />
+                      </Box>
                       <Typography variant="caption" color="text.secondary">
                         USDT, BTC, ETH, BNB and 300+ coins via NOWPayments
                       </Typography>
                     </Box>
-                    <Chip label="Available" color="success" size="small" />
+                    <Button
+                      variant="contained"
+                      color="success"
+                      size="small"
+                      disabled={cryptoLoading}
+                      tabIndex={-1}
+                      startIcon={cryptoLoading ? <CircularProgress size={13} color="inherit" /> : <OpenInNew fontSize="small" />}
+                      sx={{ flexShrink: 0, pointerEvents: 'none' }}
+                    >
+                      {cryptoLoading ? 'Opening…' : 'Upgrade'}
+                    </Button>
                   </Box>
+
+                  {/* Card payments — Coming Soon */}
+                  <Box
+                    sx={{
+                      display: 'flex', alignItems: 'center', gap: 2,
+                      p: { xs: 1.75, md: 2.25 },
+                      border: '1px solid', borderColor: 'divider',
+                      borderRadius: 2, opacity: 0.55, cursor: 'not-allowed',
+                    }}
+                  >
+                    <CreditCard sx={{ color: 'text.disabled', fontSize: 28, flexShrink: 0 }} />
+                    <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                        <Typography variant="body2" fontWeight={600} color="text.secondary">Pay with Card</Typography>
+                        <Chip label="Coming Soon" size="small" sx={{ height: 18, fontSize: '0.65rem' }} />
+                      </Box>
+                      <Typography variant="caption" color="text.disabled">
+                        Visa, Mastercard, Apple Pay and more
+                      </Typography>
+                    </Box>
+                  </Box>
+
                   {/* Verify pending crypto payment */}
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, p: 2, bgcolor: 'action.hover', borderRadius: 2 }}>
-                    <Refresh color="action" />
-                    <Box sx={{ flexGrow: 1 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, p: { xs: 1.5, md: 2 }, bgcolor: 'action.hover', borderRadius: 2 }}>
+                    <Refresh color="action" sx={{ flexShrink: 0 }} />
+                    <Box sx={{ flexGrow: 1, minWidth: 0 }}>
                       <Typography variant="body2" fontWeight={600}>Already paid with crypto?</Typography>
                       <Typography variant="caption" color="text.secondary">
                         If your plan hasn't activated yet, click to manually verify your payment.
@@ -353,7 +428,8 @@ export default function Billing() {
                       size="small"
                       onClick={handleVerifyPayment}
                       disabled={verifying}
-                      startIcon={verifying ? <CircularProgress size={14} /> : <Refresh fontSize="small" />}
+                      sx={{ flexShrink: 0 }}
+                      startIcon={verifying ? <CircularProgress size={13} /> : <Refresh fontSize="small" />}
                     >
                       {verifying ? 'Checking…' : 'Verify'}
                     </Button>
