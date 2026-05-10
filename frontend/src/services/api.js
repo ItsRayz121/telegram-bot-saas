@@ -265,6 +265,55 @@ export const knowledge = {
       : api.post(`/api/bots/${botId}/groups/${groupId}/knowledge`, formData, {
           headers: { 'Content-Type': undefined },
         }),
+  /**
+   * Upload with real progress events.
+   * onProgress(pct: number, stage: string) called as upload proceeds.
+   * Returns a Promise resolving to the parsed JSON response.
+   */
+  uploadWithProgress: (botId, groupId, formData, onProgress) => {
+    const url = botId === 'official'
+      ? `${BASE_URL}/api/telegram-groups/${groupId}/knowledge`
+      : `${BASE_URL}/api/bots/${botId}/groups/${groupId}/knowledge`;
+
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', url, true);
+      xhr.withCredentials = true;
+
+      const csrfToken = document.cookie.match(/csrf_token=([^;]+)/)?.[1];
+      if (csrfToken) xhr.setRequestHeader('X-CSRF-Token', csrfToken);
+
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          // Map upload bytes to 0–90% of the bar; 90–100% is server-side processing
+          const pct = Math.round((e.loaded / e.total) * 90);
+          onProgress?.(pct, pct < 90 ? 'Uploading…' : 'Processing…');
+        }
+      };
+
+      xhr.onload = () => {
+        let json;
+        try { json = JSON.parse(xhr.responseText); } catch { json = {}; }
+        if (xhr.status >= 200 && xhr.status < 300) {
+          onProgress?.(100, 'Indexed ✓');
+          resolve({ data: json, status: xhr.status });
+        } else {
+          const err = new Error(json.error || `Upload failed (${xhr.status})`);
+          err.response = { data: json, status: xhr.status };
+          reject(err);
+        }
+      };
+
+      xhr.onerror = () => {
+        const err = new Error('Network error — check your connection and try again');
+        reject(err);
+      };
+      xhr.ontimeout = () => reject(new Error('Upload timed out — try a smaller file'));
+      xhr.timeout = 120000; // 2 min for large files + server processing
+
+      xhr.send(formData);
+    });
+  },
   delete: (botId, groupId, docId) =>
     botId === 'official'
       ? api.delete(`/api/telegram-groups/${groupId}/knowledge/${docId}`)

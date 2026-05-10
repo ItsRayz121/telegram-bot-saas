@@ -28,16 +28,16 @@ _log = logging.getLogger(__name__)
 _MAX_AGE_SECONDS = 3600  # reject initData older than 1 hour
 
 
-def _verify_init_data(init_data: str, bot_token: str) -> dict | None:
+def _verify_init_data(init_data: str, bot_token: str) -> tuple[dict | None, str | None]:
     """
     Validate Telegram WebApp initData HMAC.
-    Returns the parsed data dict on success, None on failure.
+    Returns (parsed_dict, None) on success or (None, reason_string) on failure.
     """
     try:
         params = dict(urllib.parse.parse_qsl(init_data, keep_blank_values=True))
         received_hash = params.pop("hash", None)
         if not received_hash:
-            return None
+            return None, "missing_hash"
 
         # Build data-check string: sorted key=value pairs joined by \n
         data_check = "\n".join(f"{k}={v}" for k, v in sorted(params.items()))
@@ -47,20 +47,21 @@ def _verify_init_data(init_data: str, bot_token: str) -> dict | None:
         expected = hmac.new(secret, data_check.encode(), hashlib.sha256).hexdigest()
 
         if not hmac.compare_digest(expected, received_hash):
-            return None
+            return None, "hmac_mismatch"
 
         # Age check
         auth_date = int(params.get("auth_date", 0))
-        if time.time() - auth_date > _MAX_AGE_SECONDS:
-            return None
+        age = time.time() - auth_date
+        if age > _MAX_AGE_SECONDS:
+            return None, f"expired_{int(age)}s"
 
         result = dict(params)
         if "user" in result:
             result["user"] = json.loads(result["user"])
-        return result
+        return result, None
     except Exception as exc:
-        _log.debug("initData verification failed: %s", exc)
-        return None
+        _log.warning("initData verification exception: %s", exc)
+        return None, f"exception:{exc}"
 
 
 def _user_groups(user: User):
@@ -71,7 +72,7 @@ def _user_groups(user: User):
         {
             "id": g.id,
             "telegram_group_id": g.telegram_group_id,
-            "name": g.name,
+            "name": g.title or g.display_name or f"Group {g.telegram_group_id}",
             "bot_status": g.bot_status,
             "member_count": g.member_count,
         }
@@ -93,8 +94,14 @@ def miniapp_auth():
     if not bot_token:
         return jsonify({"error": "Bot not configured"}), 503
 
-    parsed = _verify_init_data(init_data, bot_token)
+    parsed, fail_reason = _verify_init_data(init_data, bot_token)
     if not parsed:
+        _log.warning("miniapp_auth: initData verification failed reason=%s ip=%s",
+                     fail_reason, request.remote_addr)
+        if fail_reason and "expired" in fail_reason:
+            return jsonify({"error": "Session expired — please reopen the app"}), 401
+        if fail_reason == "hmac_mismatch":
+            return jsonify({"error": "Invalid authentication — are you using the correct bot?"}), 401
         return jsonify({"error": "Invalid or expired initData"}), 401
 
     tg_user = parsed.get("user", {})
@@ -114,6 +121,7 @@ def miniapp_auth():
     if user.is_banned:
         return jsonify({"error": "Account suspended"}), 403
 
+    _log.info("miniapp_auth: ok user_id=%s tg_id=%s", user.id, tg_id)
     token = create_access_token(identity=str(user.id))
     return jsonify({
         "token": token,

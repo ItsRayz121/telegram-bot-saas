@@ -30,6 +30,8 @@ const DEFAULT_MODELS = {
 export default function KnowledgeBase({ botId, groupId, settings, updateSetting }) {
   const [docs, setDocs] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStage, setUploadStage] = useState('');
   const fileRef = useRef();
   const kb = settings?.knowledge_base || {};
 
@@ -89,20 +91,29 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
     const ext = file.name.split('.').pop().toLowerCase();
     if (!allowed.includes(ext)) {
       toast.error(`Unsupported file type. Use: ${allowed.join(', ')}`);
+      if (fileRef.current) fileRef.current.value = '';
       return;
     }
     setUploading(true);
+    setUploadProgress(0);
+    setUploadStage('Uploading…');
     try {
       const fd = new FormData();
       fd.append('file', file);
-      await knowledge.upload(botId, groupId, fd);
+      await knowledge.uploadWithProgress(botId, groupId, fd, (pct, stage) => {
+        setUploadProgress(pct);
+        setUploadStage(stage);
+      });
       toast.success(`"${file.name}" uploaded and indexed`);
       loadDocs();
-    } catch (e) {
-      toast.error(e.response?.data?.error || 'Upload failed');
+    } catch (err) {
+      const reason = err.response?.data?.error || err.message || 'Upload failed';
+      toast.error(reason);
     } finally {
       setUploading(false);
-      fileRef.current.value = '';
+      setUploadProgress(0);
+      setUploadStage('');
+      if (fileRef.current) fileRef.current.value = '';
     }
   };
 
@@ -861,10 +872,18 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
               ? ` Using ${savedApiKey.provider?.toUpperCase()} for embeddings.`
               : ' Requires OPENAI_API_KEY in server environment or a custom key above.'}
           </Alert>
-          {uploading && <LinearProgress sx={{ mb: 2 }} />}
+          {uploading && (
+            <Box sx={{ mb: 2 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                <Typography variant="caption" color="text.secondary">{uploadStage}</Typography>
+                <Typography variant="caption" color="text.secondary">{uploadProgress}%</Typography>
+              </Box>
+              <LinearProgress variant="determinate" value={uploadProgress} sx={{ borderRadius: 1 }} />
+            </Box>
+          )}
           <input type="file" ref={fileRef} style={{ display: 'none' }} accept=".pdf,.txt,.md,.docx" onChange={handleUpload} />
           <Button variant="outlined" startIcon={<Upload />} onClick={() => fileRef.current.click()} disabled={uploading}>
-            {uploading ? 'Processing...' : 'Upload Document'}
+            {uploading ? uploadStage || 'Processing…' : 'Upload Document'}
           </Button>
         </CardContent>
       </Card>

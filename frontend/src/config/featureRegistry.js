@@ -74,9 +74,9 @@ export const FEATURE_TABS = [
     icon: BarChart,
     subTabs: [
       { label: 'Members',    officialOnly: false },
-      { label: 'Leaderboard', officialOnly: true  },
+      { label: 'Leaderboard', officialOnly: false },
       { label: 'Audit Log',  officialOnly: false },
-      { label: 'Warnings',   officialOnly: true  },
+      { label: 'Warnings',   officialOnly: false },
       { label: 'Digest',     officialOnly: false },
     ],
   },

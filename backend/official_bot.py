@@ -72,6 +72,20 @@ def _user_by_tg_id(tg_id: str):
 # Phase 3 item 15: move to Redis/DB for persistence across restarts.
 _pending_verifications: dict = {}
 
+# ─── DM mode state ────────────────────────────────────────────────────────────
+# Tracks whether each user is in "assistant" mode or "menu" mode in private chat.
+# Resets to "menu" on bot restart (intentional — safe default).
+# Key: telegram user_id (int) → "menu" | "assistant"
+_dm_modes: dict[int, str] = {}
+
+
+def _get_dm_mode(user_id: int) -> str:
+    return _dm_modes.get(user_id, "menu")
+
+
+def _set_dm_mode(user_id: int, mode: str) -> None:
+    _dm_modes[user_id] = mode
+
 
 def _save_pending_verification(flask_app, chat_id: int, user_id: int, pending: dict):
     """Write-through: persist a pending verification to the DB."""
@@ -1079,7 +1093,21 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             _log.warning("Reminder intent failed: %s", _exc)
         return
 
-    # ── AI assistant routing — all unmatched DMs go through process_message ──
+    # ── Mode gate: only route to AI if user has activated assistant mode ─────
+    # Users in "menu" mode get a nudge to open the menu instead of spamming AI.
+    if _get_dm_mode(user.id) != "assistant":
+        await message.reply_text(
+            "Use the menu to navigate, or tap *AI Assistant* to chat with AI.",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🧠 AI Assistant", callback_data="menu:ai_assistant")],
+                [InlineKeyboardButton("📋 My Groups", callback_data="menu:my_groups"),
+                 InlineKeyboardButton("⚙️ Settings", callback_data="qs:groups")],
+            ]),
+        )
+        return
+
+    # ── AI assistant routing — only reached when mode == "assistant" ──────────
     if flask_app and _raw:
         _BOT_TOKEN_RE = re.compile(r'\d{9,10}:[A-Za-z0-9_-]{35,}')
         _safe_raw = _BOT_TOKEN_RE.sub("[REDACTED_BOT_TOKEN]", _raw)
@@ -1873,9 +1901,10 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     elif data == "menu:ai_assistant":
+        _set_dm_mode(query.from_user.id, "assistant")
         await query.edit_message_text(
-            "🧠 *Telegizer AI Assistant*\n\n"
-            "I'm your AI co-pilot — just type anything naturally right here in this chat.\n\n"
+            "🧠 *AI Assistant — Active*\n\n"
+            "I'm your AI co-pilot. Just type anything naturally right here.\n\n"
             "*Productivity:*\n"
             "• \"Schedule a meeting with Ahmed Friday 3pm\"\n"
             "• \"Remind me to send the proposal tomorrow morning\"\n"
@@ -1884,11 +1913,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "• \"What's happening in my groups?\"\n"
             "• \"Analyze my day\"\n"
             "• \"Any issues I should fix?\"\n\n"
-            "*General AI:*\n"
-            "• \"Write a welcome message for my community\"\n"
-            "• \"Give me Telegram growth strategies\"\n"
-            "• \"What do you think about this partnership idea?\"\n\n"
-            "Just send your message — no commands needed. 👇",
+            "Type freely — I'll reply below. Tap *Back to Menu* when done.",
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=InlineKeyboardMarkup([
                 [
@@ -1899,7 +1924,30 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     InlineKeyboardButton("👥 Group Health", callback_data="ai:group_health"),
                     InlineKeyboardButton("⏰ Set Reminder", callback_data="ai:remind"),
                 ],
-                [InlineKeyboardButton("« Back", callback_data="menu:main")],
+                [InlineKeyboardButton("« Back to Menu", callback_data="menu:exit_assistant")],
+            ]),
+        )
+
+    elif data == "menu:exit_assistant":
+        _set_dm_mode(query.from_user.id, "menu")
+        _frontend_url = _frontend()
+        await query.edit_message_text(
+            "👋 *Telegizer Main Menu*\n\n"
+            "AI assistant mode is off. Choose an option or use /start anytime.",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("➕ Add Group", callback_data="menu:add_group"),
+                    InlineKeyboardButton("📋 My Groups", callback_data="menu:my_groups"),
+                ],
+                [
+                    InlineKeyboardButton("🧠 AI Assistant", callback_data="menu:ai_assistant"),
+                    InlineKeyboardButton("⚡ Automations", url=f"{_frontend_url}/workspace/automations"),
+                ],
+                [
+                    InlineKeyboardButton("💬 Support", callback_data="menu:support"),
+                    InlineKeyboardButton("⚙️ Quick Settings", callback_data="qs:groups"),
+                ],
             ]),
         )
 

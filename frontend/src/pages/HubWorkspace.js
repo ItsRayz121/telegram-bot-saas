@@ -1275,6 +1275,12 @@ function HubSettings({ botData, groups, setGroups }) {
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [memoryCounts, setMemoryCounts] = useState({ people: 0, projects: 0 });
   const [limits, setLimits] = useState(null);
+  // Custom bots management
+  const [customBots, setCustomBots] = useState([]);
+  const [botToDelete, setBotToDelete] = useState(null);
+  const [deleteBotConfirm, setDeleteBotConfirm] = useState('');
+  const [deleteBotLoading, setDeleteBotLoading] = useState(false);
+  const [deleteBotError, setDeleteBotError] = useState(null);
 
   useEffect(() => {
     hub.getOfficialSettings()
@@ -1296,6 +1302,10 @@ function HubSettings({ botData, groups, setGroups }) {
           projects: (projectsRes.data.projects || []).length,
         });
       })
+      .catch(() => {});
+    // Load custom bots registered in hub
+    hub.listBots()
+      .then(r => setCustomBots((r.data.bots || []).filter(b => b.bot_type === 'custom')))
       .catch(() => {});
   }, []);
 
@@ -1338,6 +1348,19 @@ function HubSettings({ botData, groups, setGroups }) {
   const handleGroupUpdated = (updated) => setGroups(prev => prev.map(g => g.id === updated.id ? { ...g, ...updated } : g));
   const handleGroupDisconnected = (groupId) => setGroups(prev => prev.filter(g => g.id !== groupId));
   const handleGroupConnected = (newGroup) => setGroups(prev => [...prev, newGroup]);
+
+  const handleDeleteBot = async () => {
+    if (!botToDelete || deleteBotConfirm !== botToDelete.display_name) return;
+    setDeleteBotLoading(true); setDeleteBotError(null);
+    try {
+      await hub.deleteBot(botToDelete.id);
+      setCustomBots(prev => prev.filter(b => b.id !== botToDelete.id));
+      setBotToDelete(null); setDeleteBotConfirm('');
+    } catch (e) {
+      setDeleteBotError(e?.response?.data?.error || 'Failed to delete bot.');
+    }
+    setDeleteBotLoading(false);
+  };
 
   return (
     <Box sx={{ maxWidth: 640 }}>
@@ -1437,6 +1460,34 @@ function HubSettings({ botData, groups, setGroups }) {
         </CardContent>
       </Card>
 
+      {customBots.length > 0 && (
+        <>
+          <SectionHeader label="Custom Bots" />
+          <Card variant="outlined" sx={{ mb: 3 }}>
+            <CardContent>
+              <Typography variant="body2" color="text.secondary" mb={1.5}>
+                Custom bots registered in your hub. Deleting removes the integration and stops the bot.
+              </Typography>
+              {customBots.map((bot, i) => (
+                <Box key={bot.id}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 0.75 }}>
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography variant="body2" noWrap fontWeight={500}>{bot.display_name || `Bot ${bot.id}`}</Typography>
+                      <Typography variant="caption" color="text.secondary">@{bot.telegram_bot_username || '—'}</Typography>
+                    </Box>
+                    <Button size="small" color="error" variant="outlined" sx={{ fontSize: '0.72rem', flexShrink: 0, ml: 1 }}
+                      onClick={() => { setBotToDelete(bot); setDeleteBotConfirm(''); setDeleteBotError(null); }}>
+                      Delete
+                    </Button>
+                  </Box>
+                  {i < customBots.length - 1 && <Divider />}
+                </Box>
+              ))}
+            </CardContent>
+          </Card>
+        </>
+      )}
+
       <SectionHeader label="Notifications" />
       <Card variant="outlined" sx={{ mb: 3 }}>
         <CardContent>
@@ -1499,6 +1550,30 @@ function HubSettings({ botData, groups, setGroups }) {
           <Button onClick={handleDeleteAll} variant="contained" color="error" size="small"
             disabled={deleteAllConfirm !== 'DELETE' || deleteAllLoading}>
             {deleteAllLoading ? <CircularProgress size={14} sx={{ mr: 0.5 }} /> : null}Delete all
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={Boolean(botToDelete)} onClose={() => setBotToDelete(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Delete {botToDelete?.display_name || 'this bot'}?</DialogTitle>
+        <DialogContent>
+          {deleteBotError && <Alert severity="error" sx={{ mb: 2 }}>{deleteBotError}</Alert>}
+          <Typography variant="body2" color="text.secondary" mb={2}>
+            This permanently removes the bot integration, stops the webhook, and cannot be undone.
+            The bot will stop responding in all linked groups.
+          </Typography>
+          <TextField
+            label={`Type "${botToDelete?.display_name || 'the bot name'}" to confirm`}
+            size="small" fullWidth
+            value={deleteBotConfirm}
+            onChange={e => setDeleteBotConfirm(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setBotToDelete(null)} size="small" color="inherit">Cancel</Button>
+          <Button onClick={handleDeleteBot} variant="contained" color="error" size="small"
+            disabled={deleteBotConfirm !== (botToDelete?.display_name || '') || deleteBotLoading}>
+            {deleteBotLoading ? <CircularProgress size={14} sx={{ mr: 0.5 }} /> : null}Delete Bot
           </Button>
         </DialogActions>
       </Dialog>
