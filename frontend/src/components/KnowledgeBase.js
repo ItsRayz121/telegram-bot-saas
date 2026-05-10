@@ -4,11 +4,11 @@ import {
   Switch, FormControlLabel, IconButton, Chip, Alert, LinearProgress,
   List, ListItem, ListItemText, ListItemSecondaryAction, Divider,
   MenuItem, Select, FormControl, InputLabel, Slider, CircularProgress,
-  Collapse,
+  Collapse, Paper, Stack, Tooltip, Checkbox, InputAdornment,
 } from '@mui/material';
-import { Upload, Delete, Description, Psychology, Key, ExpandMore, ExpandLess, CheckCircle, SmartToy, Tune, EmojiPeople, ImageSearch } from '@mui/icons-material';
+import { Upload, Delete, Description, Psychology, Key, ExpandMore, ExpandLess, CheckCircle, SmartToy, Tune, EmojiPeople, ImageSearch, Search, Person } from '@mui/icons-material';
 import { toast } from 'react-toastify';
-import { knowledge, apiKeys } from '../services/api';
+import { knowledge, apiKeys, settings as settingsApi } from '../services/api';
 import { AI_PERSONALITIES, REPLY_LENGTHS, EMOJI_LEVELS, FORMALITY_LEVELS } from '../config/aiPersonalities';
 
 const PROVIDERS = [
@@ -54,6 +54,41 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
   });
   const [savingKey, setSavingKey] = useState(false);
   const [testingKey, setTestingKey] = useState(false);
+
+  // Escalation admin dropdown state
+  const [escalationDropdownOpen, setEscalationDropdownOpen] = useState(false);
+  const [escalationAdmins, setEscalationAdmins] = useState([]);
+  const [escalationAdminsLoading, setEscalationAdminsLoading] = useState(false);
+  const [escalationAdminSearch, setEscalationAdminSearch] = useState('');
+  const escalationDropdownRef = useRef(null);
+
+  const loadEscalationAdmins = useCallback(async () => {
+    if (escalationAdmins.length > 0) return; // already loaded
+    setEscalationAdminsLoading(true);
+    try {
+      const res = await settingsApi.getGroupAdmins(botId, groupId);
+      setEscalationAdmins(res.data.admins || []);
+    } catch {
+      setEscalationAdmins([]);
+    } finally {
+      setEscalationAdminsLoading(false);
+    }
+  }, [botId, groupId, escalationAdmins.length]);
+
+  useEffect(() => {
+    if (!escalationDropdownOpen) return;
+    loadEscalationAdmins();
+  }, [escalationDropdownOpen, loadEscalationAdmins]);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (escalationDropdownRef.current && !escalationDropdownRef.current.contains(e.target)) {
+        setEscalationDropdownOpen(false);
+      }
+    };
+    if (escalationDropdownOpen) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [escalationDropdownOpen]);
 
   const loadDocs = useCallback(async () => {
     try {
@@ -836,17 +871,109 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
                     </Grid>
                     {img.escalation_enabled !== false && (
                       <Grid item xs={12}>
-                        <TextField
-                          fullWidth size="small"
-                          label="Escalation admin Telegram IDs"
-                          placeholder="123456789, 987654321"
-                          value={(img.escalation_admin_ids || []).join(', ')}
-                          onChange={e => {
-                            const ids = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
-                            updateSetting('image_ai.escalation_admin_ids', ids);
-                          }}
-                          helperText="Comma-separated Telegram user IDs. These admins receive DMs when AI confidence is low."
-                        />
+                        <Box ref={escalationDropdownRef} sx={{ position: 'relative' }}>
+                          <Box
+                            onClick={() => setEscalationDropdownOpen(o => !o)}
+                            sx={{
+                              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                              px: 1.5, py: 1, border: '1px solid', borderRadius: 1,
+                              borderColor: escalationDropdownOpen ? 'primary.main' : 'divider',
+                              cursor: 'pointer', bgcolor: 'background.paper',
+                              '&:hover': { borderColor: 'text.primary' },
+                            }}
+                          >
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Person sx={{ fontSize: 16, color: 'text.secondary' }} />
+                              <Typography variant="body2" color={(img.escalation_admin_ids || []).length ? 'text.primary' : 'text.secondary'}>
+                                {(img.escalation_admin_ids || []).length > 0
+                                  ? `${(img.escalation_admin_ids || []).length} admin${(img.escalation_admin_ids || []).length !== 1 ? 's' : ''} selected`
+                                  : 'Select escalation admins'}
+                              </Typography>
+                            </Box>
+                            {escalationDropdownOpen ? <ExpandLess sx={{ fontSize: 18, color: 'text.secondary' }} /> : <ExpandMore sx={{ fontSize: 18, color: 'text.secondary' }} />}
+                          </Box>
+
+                          {escalationDropdownOpen && (
+                            <Paper elevation={4} sx={{
+                              position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 1300,
+                              mt: 0.5, border: '1px solid', borderColor: 'divider',
+                              maxHeight: 260, display: 'flex', flexDirection: 'column',
+                            }}>
+                              <Box sx={{ p: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
+                                <TextField
+                                  size="small" fullWidth
+                                  placeholder="Search admins…"
+                                  value={escalationAdminSearch}
+                                  onChange={e => setEscalationAdminSearch(e.target.value)}
+                                  onClick={e => e.stopPropagation()}
+                                  InputProps={{
+                                    startAdornment: (
+                                      <InputAdornment position="start">
+                                        <Search sx={{ fontSize: 16 }} />
+                                      </InputAdornment>
+                                    ),
+                                  }}
+                                />
+                              </Box>
+                              <Box sx={{ overflowY: 'auto', flex: 1 }}>
+                                {escalationAdminsLoading ? (
+                                  <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+                                    <CircularProgress size={20} />
+                                  </Box>
+                                ) : escalationAdmins.length === 0 ? (
+                                  <Typography variant="caption" color="text.secondary" sx={{ p: 1.5, display: 'block' }}>
+                                    No admins found. Ensure the bot is an admin in this group.
+                                  </Typography>
+                                ) : (
+                                  escalationAdmins
+                                    .filter(a => {
+                                      const q = escalationAdminSearch.toLowerCase();
+                                      return !q ||
+                                        (a.first_name || '').toLowerCase().includes(q) ||
+                                        (a.username || '').toLowerCase().includes(q);
+                                    })
+                                    .map(admin => {
+                                      const selectedIds = img.escalation_admin_ids || [];
+                                      const isSelected = selectedIds.includes(String(admin.user_id));
+                                      return (
+                                        <Box
+                                          key={admin.user_id}
+                                          onClick={() => {
+                                            const cur = (img.escalation_admin_ids || []).map(String);
+                                            const uid = String(admin.user_id);
+                                            updateSetting('image_ai.escalation_admin_ids',
+                                              isSelected ? cur.filter(id => id !== uid) : [...cur, uid]);
+                                          }}
+                                          sx={{
+                                            display: 'flex', alignItems: 'center', gap: 1,
+                                            px: 1.5, py: 0.75, cursor: 'pointer',
+                                            '&:hover': { bgcolor: 'action.hover' },
+                                            borderBottom: '1px solid', borderColor: 'divider',
+                                          }}
+                                        >
+                                          <Checkbox size="small" checked={isSelected} disableRipple sx={{ p: 0 }} onChange={() => {}} />
+                                          <Box sx={{ flex: 1, minWidth: 0 }}>
+                                            <Typography variant="body2" noWrap>
+                                              {admin.first_name}{admin.username ? ` @${admin.username}` : ''}
+                                            </Typography>
+                                          </Box>
+                                          {admin.can_dm
+                                            ? <Chip label="✅ Can receive DM" color="success" size="small" sx={{ fontSize: '0.65rem', height: 20 }} />
+                                            : <Tooltip title="Ask this admin to start a DM with the bot first.">
+                                                <Chip label="⚠️ Must start bot" color="warning" size="small" sx={{ fontSize: '0.65rem', height: 20 }} />
+                                              </Tooltip>
+                                          }
+                                        </Box>
+                                      );
+                                    })
+                                )}
+                              </Box>
+                            </Paper>
+                          )}
+                        </Box>
+                        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                          Selected admins receive DMs when AI confidence is low.
+                        </Typography>
                       </Grid>
                     )}
                   </Grid>
