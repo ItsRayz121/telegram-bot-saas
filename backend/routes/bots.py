@@ -185,6 +185,36 @@ def get_bot_groups(bot_id):
     return jsonify({"groups": [g.to_dict() for g in groups]}), 200
 
 
+@bots_bp.route("/<int:bot_id>/groups/<int:group_id>", methods=["DELETE"])
+@jwt_required()
+def disconnect_bot_group(bot_id, group_id):
+    """
+    Disconnect a single group from a custom bot.
+
+    Ownership chain verified: user → Bot → Group.
+    Only deletes the Group record (bot-group link in the old system).
+    Does NOT touch TelegramGroup, official bot groups, or analytics records
+    stored by telegram_group_id.
+    """
+    user = _get_current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    bot = Bot.query.filter_by(id=bot_id, user_id=user.id).first()
+    if not bot:
+        return jsonify({"error": "Bot not found"}), 404
+
+    group = Group.query.filter_by(id=group_id, bot_id=bot.id).first()
+    if not group:
+        return jsonify({"error": "Group not found or does not belong to this bot"}), 404
+
+    group_name = group.group_name or str(group.telegram_group_id)
+    db.session.delete(group)
+    db.session.commit()
+
+    return jsonify({"message": f"Group '{group_name}' disconnected from bot"}), 200
+
+
 @bots_bp.route("/<int:bot_id>/toggle", methods=["POST"])
 @jwt_required()
 def toggle_bot(bot_id):

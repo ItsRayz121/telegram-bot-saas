@@ -2,8 +2,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box, AppBar, Toolbar, Typography, Button, Card, CardContent,
   CardActionArea, Grid, Chip, CircularProgress, IconButton,
+  Dialog, DialogTitle, DialogContent, DialogActions,
 } from '@mui/material';
-import { ArrowBack, BarChart, Group, Settings } from '@mui/icons-material';
+import { ArrowBack, BarChart, Group, Settings, LinkOff } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { bots } from '../services/api';
@@ -14,6 +15,10 @@ export default function BotSettings() {
   const [bot, setBot] = useState(null);
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Disconnect confirmation state
+  const [disconnectTarget, setDisconnectTarget] = useState(null); // group object | null
+  const [disconnecting, setDisconnecting] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -34,6 +39,21 @@ export default function BotSettings() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  const handleDisconnect = async () => {
+    if (!disconnectTarget) return;
+    setDisconnecting(true);
+    try {
+      await bots.disconnectGroup(id, disconnectTarget.id);
+      toast.success(`"${disconnectTarget.group_name || 'Group'}" disconnected from ${bot?.bot_name || 'bot'}`);
+      setDisconnectTarget(null);
+      setGroups(prev => prev.filter(g => g.id !== disconnectTarget.id));
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to disconnect group');
+    } finally {
+      setDisconnecting(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -102,7 +122,8 @@ export default function BotSettings() {
                           </Typography>
                         </Box>
                       </Box>
-                      <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+
+                      <Box sx={{ display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap' }}>
                         <Button
                           size="small"
                           startIcon={<Settings />}
@@ -128,6 +149,19 @@ export default function BotSettings() {
                         >
                           Analytics
                         </Button>
+                        <Button
+                          size="small"
+                          startIcon={<LinkOff />}
+                          variant="outlined"
+                          color="error"
+                          fullWidth
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDisconnectTarget(group);
+                          }}
+                        >
+                          Disconnect
+                        </Button>
                       </Box>
                     </CardContent>
                   </CardActionArea>
@@ -137,6 +171,40 @@ export default function BotSettings() {
           </Grid>
         )}
       </Box>
+
+      {/* Disconnect confirmation dialog */}
+      <Dialog
+        open={!!disconnectTarget}
+        onClose={() => !disconnecting && setDisconnectTarget(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Disconnect Group?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            Disconnect <strong>{disconnectTarget?.group_name || 'this group'}</strong> from{' '}
+            <strong>{bot?.bot_name || 'this bot'}</strong>?
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            The Telegram group will not be deleted. The bot will stop managing it from
+            Telegizer, but it remains in the group on Telegram until you manually remove it.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDisconnectTarget(null)} disabled={disconnecting}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={handleDisconnect}
+            disabled={disconnecting}
+            startIcon={disconnecting ? <CircularProgress size={14} /> : <LinkOff />}
+          >
+            {disconnecting ? 'Disconnecting…' : 'Disconnect'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

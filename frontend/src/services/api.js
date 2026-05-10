@@ -133,6 +133,7 @@ export const bots = {
   get: (id) => api.get(`/api/bots/${id}`),
   delete: (id) => api.delete(`/api/bots/${id}`),
   getGroups: (id) => api.get(`/api/bots/${id}/groups`),
+  disconnectGroup: (botId, groupId) => api.delete(`/api/bots/${botId}/groups/${groupId}`),
   toggle: (id) => api.post(`/api/bots/${id}/toggle`),
   getStatus: (id) => api.get(`/api/bots/${id}/status`),
 };
