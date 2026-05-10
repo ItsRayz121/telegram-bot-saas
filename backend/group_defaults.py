@@ -279,6 +279,19 @@ _DEFAULTS: dict = {
         "enabled": True,
     },
 
+    # ── Social / human-like community interaction ─────────────────────────────
+    # Detects appreciation messages ("thanks", "helpful", etc.) and responds
+    # naturally. No AI cost — static personality-aware response pools.
+    # cooldown_minutes: min gap between replies to the same user.
+    # mode: minimal | professional | friendly | community_manager
+    "social_replies": {
+        "enabled": False,                # opt-in: admins enable deliberately
+        "react_to_appreciation": True,
+        "reply_to_appreciation": True,
+        "cooldown_minutes": 5,
+        "mode": "friendly",
+    },
+
     # ── Raids (Twitter/X engagement campaigns) ────────────────────────────────
     "raids": {
         "enabled": True,

@@ -2374,6 +2374,28 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as exc:
             _log.debug("Auto-response check failed: %s", exc)
 
+    # Social / human-like appreciation replies
+    if text and not text.startswith("/") and flask_app and message.from_user and not message.from_user.is_bot:
+        try:
+            with flask_app.app_context():
+                from .models import TelegramGroup as _TGSocial
+                _tg_social = _TGSocial.query.filter_by(telegram_group_id=group_id).first()
+                if _tg_social:
+                    _social_cfg = (_tg_social.settings or {}).get("social_replies", {})
+                    _kb_cfg = (_tg_social.settings or {}).get("knowledge_base", {})
+                    if _social_cfg.get("enabled", False):
+                        from .bot_features.social_reply import maybe_handle_social_reply
+                        await maybe_handle_social_reply(
+                            bot=context.bot,
+                            message=message,
+                            group_id=group_id,
+                            user_id=str(message.from_user.id),
+                            social_settings=_social_cfg,
+                            kb_settings=_kb_cfg,
+                        )
+        except Exception as _se:
+            _log.debug("social_reply error: %s", _se)
+
     # Message buffering for AI Daily Digest (opt-in per group)
     if text and not text.startswith("/") and flask_app:
         try:

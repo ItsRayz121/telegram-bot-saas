@@ -6,7 +6,7 @@ import {
   MenuItem, Select, FormControl, InputLabel, Slider, CircularProgress,
   Collapse,
 } from '@mui/material';
-import { Upload, Delete, Description, Psychology, Key, ExpandMore, ExpandLess, CheckCircle, SmartToy, Tune } from '@mui/icons-material';
+import { Upload, Delete, Description, Psychology, Key, ExpandMore, ExpandLess, CheckCircle, SmartToy, Tune, EmojiPeople } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { knowledge, apiKeys } from '../services/api';
 import { AI_PERSONALITIES, REPLY_LENGTHS, EMOJI_LEVELS, FORMALITY_LEVELS } from '../config/aiPersonalities';
@@ -593,6 +593,115 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
           )}
         </CardContent>
       </Card>
+
+      {/* Human-Like Community Interaction */}
+      {(() => {
+        const sr = settings?.social_replies || {};
+        return (
+          <Card sx={{ mb: 2 }}>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                <EmojiPeople color="primary" fontSize="small" />
+                <Typography variant="subtitle1" fontWeight={600}>Human-Like Community Interaction</Typography>
+              </Box>
+              <Typography variant="body2" color="text.secondary" mb={1.5}>
+                Bot reacts and responds naturally to appreciation messages ("thanks", "helpful", "solved", etc.)
+                — no AI cost, personality-aware, with spam protection.
+              </Typography>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={!!sr.enabled}
+                    onChange={e => updateSetting('social_replies.enabled', e.target.checked)}
+                  />
+                }
+                label="Enable Human-Like Interaction"
+              />
+              {!!sr.enabled && (
+                <Box mt={2}>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} sm={6}>
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            size="small"
+                            checked={sr.react_to_appreciation !== false}
+                            onChange={e => updateSetting('social_replies.react_to_appreciation', e.target.checked)}
+                          />
+                        }
+                        label="React with emoji to appreciation"
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            size="small"
+                            checked={sr.reply_to_appreciation !== false}
+                            onChange={e => updateSetting('social_replies.reply_to_appreciation', e.target.checked)}
+                          />
+                        }
+                        label="Reply with text acknowledgment"
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <FormControl fullWidth size="small">
+                        <InputLabel>Interaction Style</InputLabel>
+                        <Select
+                          label="Interaction Style"
+                          value={sr.mode || 'friendly'}
+                          onChange={e => updateSetting('social_replies.mode', e.target.value)}
+                        >
+                          <MenuItem value="minimal">
+                            <Box>
+                              <Typography variant="body2">Minimal</Typography>
+                              <Typography variant="caption" color="text.secondary">Emoji reaction only, no text reply</Typography>
+                            </Box>
+                          </MenuItem>
+                          <MenuItem value="professional">
+                            <Box>
+                              <Typography variant="body2">Professional</Typography>
+                              <Typography variant="caption" color="text.secondary">Formal text reply, no decorative emojis</Typography>
+                            </Box>
+                          </MenuItem>
+                          <MenuItem value="friendly">
+                            <Box>
+                              <Typography variant="body2">Friendly</Typography>
+                              <Typography variant="caption" color="text.secondary">Warm reply with occasional emojis</Typography>
+                            </Box>
+                          </MenuItem>
+                          <MenuItem value="community_manager">
+                            <Box>
+                              <Typography variant="body2">Community Manager</Typography>
+                              <Typography variant="caption" color="text.secondary">Energetic, engaging, personality-matched</Typography>
+                            </Box>
+                          </MenuItem>
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        fullWidth size="small"
+                        type="number"
+                        label="Cooldown per user (minutes)"
+                        value={sr.cooldown_minutes ?? 5}
+                        inputProps={{ min: 1, max: 60 }}
+                        onChange={e => updateSetting('social_replies.cooldown_minutes', parseInt(e.target.value) || 5)}
+                        helperText="Min gap between replies to the same user"
+                      />
+                    </Grid>
+                  </Grid>
+                  <Alert severity="info" sx={{ mt: 2, fontSize: '0.8rem' }} icon={false}>
+                    <strong>Reply style is determined by your AI Personality setting above.</strong> The interaction
+                    style controls formality and emoji intensity. Cooldown prevents the bot from responding to the
+                    same user more than once per interval.
+                  </Alert>
+                </Box>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {/* Upload */}
       <Card sx={{ mb: 2 }}>

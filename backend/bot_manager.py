@@ -2058,6 +2058,22 @@ class BotInstance:
                                 logger.error(f"Auto-response error: {e}")
                             break
 
+        # Social / human-like appreciation replies
+        social_settings = group.settings.get("social_replies", {})
+        if social_settings.get("enabled", False):
+            from .bot_features.social_reply import maybe_handle_social_reply
+            kb_settings_for_social = group.settings.get("knowledge_base", {})
+            handled = await maybe_handle_social_reply(
+                bot=context.bot,
+                message=update.message,
+                group_id=group.id,
+                user_id=user.id,
+                social_settings=social_settings,
+                kb_settings=kb_settings_for_social,
+            )
+            if handled:
+                return  # appreciation handled — skip KB reply for this message
+
         # Automatic KB reply
         kb_settings = group.settings.get("knowledge_base", {})
         if kb_settings.get("enabled", True) and kb_settings.get("auto_reply_enabled", False):
