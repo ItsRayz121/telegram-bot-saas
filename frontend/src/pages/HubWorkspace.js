@@ -61,9 +61,11 @@ export default function HubWorkspace() {
   const [loading, setLoading] = useState(true);
   const [groups, setGroups] = useState([]);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
-  const [allBots, setAllBots] = useState([]);
-  const [plan, setPlan] = useState('free');
   const [botRegOpen, setBotRegOpen] = useState(false);
+  const [allBots, setAllBots] = useState([]);
+  const plan = (() => {
+    try { return JSON.parse(localStorage.getItem('user') || '{}').subscription_tier || 'free'; } catch { return 'free'; }
+  })();
 
   useEffect(() => {
     hub.getOfficialBot()
@@ -77,12 +79,6 @@ export default function HubWorkspace() {
         if (g.length === 0 && !localStorage.getItem('hub_onboarding_done')) {
           setOnboardingOpen(true);
         }
-      })
-      .catch(() => {});
-    hub.listBots()
-      .then(r => {
-        setAllBots(r.data.bots || []);
-        setPlan(r.data.plan || 'free');
       })
       .catch(() => {});
   }, []);
@@ -110,30 +106,6 @@ export default function HubWorkspace() {
               </>
             )}
           </Box>
-          {/* Context Switcher / Add Bot */}
-          {!loading && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
-              {allBots.filter(b => b.bot_type === 'custom').map(b => (
-                <Chip
-                  key={b.id}
-                  label={`@${b.telegram_bot_username || b.display_name}`}
-                  size="small"
-                  variant="outlined"
-                  icon={<SmartToy sx={{ fontSize: '14px !important' }} />}
-                  sx={{ height: 22, fontSize: '0.65rem', cursor: 'default' }}
-                />
-              ))}
-              <Button
-                size="small"
-                variant="outlined"
-                startIcon={<Add sx={{ fontSize: 14 }} />}
-                onClick={() => setBotRegOpen(true)}
-                sx={{ height: 26, fontSize: '0.7rem', px: 1, textTransform: 'none' }}
-              >
-                Add Bot
-              </Button>
-            </Box>
-          )}
         </Box>
         <Tabs value={TABS.find(t => t.value === tab) ? tab : 'overview'} onChange={handleTabChange}
           variant="scrollable" scrollButtons="auto"
