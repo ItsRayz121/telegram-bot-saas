@@ -29,6 +29,7 @@ import {
   PRO_GATED_SECTIONS,
   PRO_GATED_LABELS,
 } from '../config/featureRegistry';
+import StickyFooter from '../components/StickyFooter';
 
 function ProBadge() {
   return <Chip label="Pro" color="primary" size="small" sx={{ ml: 1, height: 18, fontSize: '0.65rem', fontWeight: 700 }} />;
@@ -2471,33 +2472,18 @@ export default function GroupSettings() {
 
       <RaidCreator open={raidOpen} onClose={() => setRaidOpen(false)} botId={botId} groupId={groupId} />
 
-      {/* Sticky mobile save button — only visible on xs/sm, analytics tab has no save */}
-      {cat !== 'analytics' && (
-        <Box
-          sx={{
-            display: { xs: 'block', md: 'none' },
-            position: 'fixed',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            zIndex: 1200,
-            p: 1.5,
-            bgcolor: 'background.paper',
-            borderTop: '1px solid',
-            borderColor: 'divider',
-          }}
+      {/* Mobile save footer — hidden on analytics tab which has no global save */}
+      <StickyFooter hidden={cat === 'analytics'}>
+        <Button
+          fullWidth
+          variant="contained"
+          startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <Save />}
+          onClick={handleSave}
+          disabled={saving}
         >
-          <Button
-            fullWidth
-            variant="contained"
-            startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <Save />}
-            onClick={handleSave}
-            disabled={saving}
-          >
-            Save Settings
-          </Button>
-        </Box>
-      )}
+          Save Settings
+        </Button>
+      </StickyFooter>
     </Box>
   );
 }
