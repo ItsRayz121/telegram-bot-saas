@@ -1,4 +1,5 @@
 ﻿import React, { useEffect, useState, useRef } from 'react';
+import { SUPPORT_LINKS as SUPPORT_HREFS } from '../config/support';
 import {
   Box, Card, CardContent, Typography, Button, CircularProgress,
   Chip, Stack, LinearProgress,
@@ -189,7 +190,7 @@ export default function PaymentSuccess() {
                 If you believe your payment was sent but your plan did not activate,{' '}
                 <Typography
                   component="a"
-                  href="mailto:fazalelahi5577@gmail.com?subject=Telegizer%20Payment%20Issue"
+                  href={SUPPORT_HREFS.email}
                   variant="body2"
                   color="primary.main"
                   sx={{ textDecoration: 'none' }}

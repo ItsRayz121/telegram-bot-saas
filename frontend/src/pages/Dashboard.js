@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { SUPPORT_LINKS as SUPPORT_HREFS } from '../config/support';
 import {
   Box, AppBar, Toolbar, Typography, Button, Card, CardContent,
   CardActions, Grid, Dialog, DialogTitle, DialogContent, DialogActions,
@@ -793,7 +794,7 @@ export default function Dashboard() {
                 </Typography>
               </Box>
               <Divider />
-              <MenuItem component="a" href="https://t.me/telegizer" target="_blank" rel="noopener noreferrer" onClick={() => setSupportAnchor(null)} dense>
+              <MenuItem component="a" href={SUPPORT_HREFS.channel} target="_blank" rel="noopener noreferrer" onClick={() => setSupportAnchor(null)} dense>
                 <ListItemIcon><Campaign fontSize="small" sx={{ color: 'text.secondary' }} /></ListItemIcon>
                 <Box>
                   <Typography variant="body2" fontWeight={600}>Official Channel</Typography>
@@ -801,7 +802,7 @@ export default function Dashboard() {
                 </Box>
                 <OpenInNew sx={{ fontSize: 12, ml: 'auto', color: 'text.disabled' }} />
               </MenuItem>
-              <MenuItem component="a" href="https://t.me/telegizer_community" target="_blank" rel="noopener noreferrer" onClick={() => setSupportAnchor(null)} dense>
+              <MenuItem component="a" href={SUPPORT_HREFS.community} target="_blank" rel="noopener noreferrer" onClick={() => setSupportAnchor(null)} dense>
                 <ListItemIcon><People fontSize="small" sx={{ color: 'text.secondary' }} /></ListItemIcon>
                 <Box>
                   <Typography variant="body2" fontWeight={600}>Community Group</Typography>
@@ -809,19 +810,13 @@ export default function Dashboard() {
                 </Box>
                 <OpenInNew sx={{ fontSize: 12, ml: 'auto', color: 'text.disabled' }} />
               </MenuItem>
-              <MenuItem
-                onClick={() => {
-                  setSupportAnchor(null);
-                  window.open('mailto:fazalelahi5577@gmail.com?subject=Telegizer%20Support%20Request&body=Hi%20Telegizer%20team%2C%0A%0AI%20need%20help%20with%3A%0A%0A%5Bdescribe%20your%20issue%5D%0A%0A---%0AAccount%20email%3A%20', '_blank', 'noopener,noreferrer');
-                }}
-                dense
-                sx={{ cursor: 'pointer' }}
-              >
+              <MenuItem component="a" href={SUPPORT_HREFS.email} target="_blank" rel="noopener noreferrer" onClick={() => setSupportAnchor(null)} dense>
                 <ListItemIcon><Email fontSize="small" sx={{ color: 'primary.main' }} /></ListItemIcon>
                 <Box>
                   <Typography variant="body2" fontWeight={600}>Email Support</Typography>
-                  <Typography variant="caption" color="primary.main">fazalelahi5577@gmail.com</Typography>
+                  <Typography variant="caption" color="text.secondary">Click to contact us</Typography>
                 </Box>
+                <OpenInNew sx={{ fontSize: 12, ml: 'auto', color: 'text.disabled' }} />
               </MenuItem>
             </Menu>
           </Box>

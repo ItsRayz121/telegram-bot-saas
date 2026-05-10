@@ -1,4 +1,5 @@
 ﻿import React, { useState, useEffect, useCallback } from 'react';
+import { SUPPORT_LINKS as SUPPORT_HREFS } from '../config/support';
 import {
   Box, AppBar, Toolbar, Typography, Button, Card, CardContent,
   Chip, Stack, Divider, Alert, IconButton,
@@ -488,7 +489,7 @@ export default function Billing() {
                   variant="caption"
                   color="primary.main"
                   sx={{ cursor: 'pointer' }}
-                  onClick={() => window.open('mailto:fazalelahi5577@gmail.com?subject=Telegizer%20Support%20Request', '_blank')}
+                  onClick={() => window.open(SUPPORT_HREFS.email, '_blank', 'noopener,noreferrer')}
                 >
                   Contact support
                 </Typography>

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { SUPPORT_EMAIL, SUPPORT_LINKS as SUPPORT_HREFS } from '../config/support';
 import {
   Box, AppBar, Toolbar, Typography, Button, Container, Divider,
   Card, CardContent, Grid, TextField, Alert, CircularProgress, Link, Chip,
@@ -31,8 +32,8 @@ const CONTACT_CHANNELS = [
     icon: <Email />,
     title: 'General Support',
     desc: 'Account issues, billing questions, feature help',
-    value: 'fazalelahi5577@gmail.com',
-    href: 'mailto:fazalelahi5577@gmail.com?subject=Telegizer%20Support%20Request',
+    value: SUPPORT_EMAIL,
+    href: SUPPORT_HREFS.email,
     color: '#2563EB',
     responseTime: '< 24 hours',
   },
@@ -103,7 +104,7 @@ const FAQ = [
   },
   {
     q: 'How do I request a refund?',
-    a: 'Email fazalelahi5577@gmail.com within 14 days of your first purchase with your account email and payment reference. We process refunds within 3 business days.',
+    a: `Email ${SUPPORT_EMAIL} within 14 days of your first purchase with your account email and payment reference. We process refunds within 3 business days.',
   },
   {
     q: 'Do you support the Telegram Mini App?',
@@ -122,7 +123,7 @@ function ContactForm() {
     setSending(true);
     // Opens mailto as a fallback — replace with a real form endpoint if needed
     const body = encodeURIComponent(`From: ${form.name} <${form.email}>\nSubject: ${form.subject}\n\n${form.message}`);
-    window.open(`mailto:fazalelahi5577@gmail.com?subject=${encodeURIComponent(form.subject || 'Contact from telegizer.com')}&body=${body}`, '_blank');
+    window.open(`${SUPPORT_HREFS.email.split('?')[0]}?subject=${encodeURIComponent(form.subject || 'Contact from telegizer.com')}&body=${body}`, '_blank');
     setTimeout(() => {
       setSending(false);
       setSent(true);
@@ -134,7 +135,7 @@ function ContactForm() {
     return (
       <Alert severity="success" sx={{ mt: 2 }}>
         Your email client should have opened with the message pre-filled. If it didn't,{' '}
-        copy and email us directly at <strong>support@telegizer.com</strong>.
+        copy and email us directly at <strong>{SUPPORT_EMAIL}</strong>.
       </Alert>
     );
   }
@@ -260,8 +261,8 @@ export default function Contact() {
             <Typography variant="body2" color="text.secondary" mb={2}>
               Fill in the form and we'll open your email client with everything pre-filled.
               You can also email us directly at{' '}
-              <Link href="mailto:fazalelahi5577@gmail.com?subject=Telegizer%20Support%20Request" color="primary.main" underline="hover">
-                fazalelahi5577@gmail.com
+              <Link href={SUPPORT_HREFS.email} color="primary.main" underline="hover">
+                {SUPPORT_EMAIL}
               </Link>.
             </Typography>
             <ContactForm />
