@@ -10,6 +10,7 @@ import {
   Delete,
 } from '@mui/icons-material';
 import { hub } from '../services/api';
+import BotTokenConnectModal from '../components/shared/BotTokenConnectModal';
 import { PALETTE } from '../theme';
 
 /** Centralized feature gate — mirrors backend MAX_CUSTOM_BOTS config. */
@@ -363,11 +364,12 @@ function CustomBotsSection({ plan }) {
         </Stack>
       )}
 
-      <BotRegistrationDialog
+      <BotTokenConnectModal
         open={botRegOpen}
+        mode="assistant_hub"
         plan={plan}
         onClose={() => setBotRegOpen(false)}
-        onRegistered={(bot) => {
+        onConnected={(bot) => {
           setBotList(prev => [...prev, bot]);
           setBotRegOpen(false);
         }}
@@ -400,61 +402,6 @@ function CustomBotsSection({ plan }) {
     </Box>
   );
 }
-
-function BotRegistrationDialog({ open, onClose, onRegistered, plan }) {
-  const [displayName, setDisplayName] = useState('');
-  const [token, setToken] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    if (open) { setDisplayName(''); setToken(''); setError(null); }
-  }, [open]);
-
-  const handleCreate = async () => {
-    if (!displayName.trim()) { setError('Display name is required'); return; }
-    if (!token.trim()) { setError('Bot token is required'); return; }
-    setSaving(true);
-    setError(null);
-    try {
-      const res = await hub.createBot({ display_name: displayName, telegram_bot_token: token });
-      onRegistered(res.data.bot);
-    } catch (e) {
-      const err = e.response?.data?.error;
-      if (err === 'plan_limit') setError('Custom bot limit reached. Upgrade your plan.');
-      else if (err === 'invalid_token') setError('Invalid bot token. Check it in @BotFather.');
-      else if (err === 'already_registered') setError('This bot is already registered.');
-      else setError('Registration failed. Please try again.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Connect Assistant Bot</DialogTitle>
-      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '12px !important' }}>
-        {plan === 'free' && (
-          <Alert severity="warning">Assistant bots require a Pro or Enterprise plan.</Alert>
-        )}
-        {error && <Alert severity="error">{error}</Alert>}
-        <TextField label="Display Name" value={displayName} onChange={e => setDisplayName(e.target.value)}
-          size="small" disabled={plan === 'free'} helperText="How it appears in your Hub" />
-        <TextField label="Bot Token" value={token} onChange={e => setToken(e.target.value)}
-          size="small" disabled={plan === 'free'}
-          helperText="Get this from @BotFather → /mybots → API Token"
-          type="password" />
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button onClick={handleCreate} variant="contained" disabled={saving || plan === 'free'}>
-          {saving ? <CircularProgress size={16} /> : 'Connect Bot'}
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
-}
-
 
 function StatItem({ label, value }) {
   return (

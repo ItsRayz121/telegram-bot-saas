@@ -1727,8 +1727,6 @@ def create_custom_bot():
     display_name = (data.get("display_name") or "").strip()
     token = (data.get("telegram_bot_token") or "").strip()
 
-    if not display_name:
-        return jsonify({"error": "display_name required"}), 400
     if not token:
         return jsonify({"error": "telegram_bot_token required"}), 400
 
@@ -1763,7 +1761,7 @@ def create_custom_bot():
         id=str(uuid.uuid4()),
         user_id=user.id,
         bot_type="custom",
-        display_name=display_name,
+        display_name=display_name or tg_data.get("first_name") or bot_username,
         telegram_bot_token=_enc(token),
         telegram_bot_username=bot_username,
         telegram_bot_id=bot_tg_id,
