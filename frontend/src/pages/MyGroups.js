@@ -93,6 +93,7 @@ export default function MyGroups() {
   const [linkCode, setLinkCode] = useState('');
   const [linking, setLinking] = useState(false);
   const [unlinkTarget, setUnlinkTarget] = useState(null);
+  const [hubConflictOpen, setHubConflictOpen] = useState(false);
 
   // Per-card live permission state: { [groupId]: { loading, data } }
   const [permsState, setPermsState] = useState({});
@@ -154,7 +155,12 @@ export default function MyGroups() {
       setLinkCode('');
       load({ silent: true });
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to link group');
+      if (err.response?.data?.code === 'HUB_GROUP_CONFLICT') {
+        setLinkOpen(false);
+        setHubConflictOpen(true);
+      } else {
+        toast.error(err.response?.data?.error || 'Failed to link group');
+      }
     } finally {
       setLinking(false);
     }
@@ -617,6 +623,33 @@ export default function MyGroups() {
         <DialogActions>
           <Button onClick={() => setUnlinkTarget(null)}>Cancel</Button>
           <Button variant="contained" color="error" onClick={handleUnlink}>Unlink</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Hub conflict dialog */}
+      <Dialog open={hubConflictOpen} onClose={() => setHubConflictOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Group Already in Assistant Hub</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 1 }}>
+            This group is already connected to <strong>Assistant Hub</strong>.
+          </Typography>
+          <Typography variant="body2" sx={{ mb: 1 }}>
+            Assistant Hub groups and Group Management groups are separate. Mixing them
+            would apply moderation features (XP, welcome messages, analytics, warnings)
+            to a private assistant group.
+          </Typography>
+          <Typography variant="body2">
+            To use this group for Group Management, first disconnect it from Assistant Hub.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHubConflictOpen(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={() => { setHubConflictOpen(false); navigate('/hub'); }}
+          >
+            Open Assistant Hub
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>
