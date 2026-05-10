@@ -26,24 +26,41 @@ import { bots, auth, billing, referrals as referralsApi, notifications as notifi
 const MAX_BOTS = { free: 1, pro: 3, enterprise: 50 };
 
 const HEALTH_COLORS = {
-  active:     'success',
-  warning:    'warning',
-  error:      'error',
+  active:      'success',
+  idle:        'default',
+  offline:     'default',
+  unreachable: 'error',
+  // legacy values — map gracefully so old API responses never break UI
   stopped:    'default',
   unknown:    'default',
-  recovering: 'warning',
-  starting:   'info',
+  recovering: 'success',
+  starting:   'success',
+  warning:    'success',
+  error:      'error',
 };
 
 const HEALTH_LABELS = {
-  active:     'Active',
-  warning:    'Stale',
-  error:      'Error',
-  stopped:    'Stopped',
-  unknown:    'Unknown',
-  recovering: 'Restarting',
-  starting:   'Starting',
+  active:      'Active',
+  idle:        'Idle',
+  offline:     'Offline',
+  unreachable: 'Unreachable',
+  // legacy
+  stopped:    'Offline',
+  unknown:    'Active',
+  recovering: 'Active',
+  starting:   'Active',
+  warning:    'Active',
+  error:      'Unreachable',
 };
+
+function _relativeTime(iso) {
+  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
 
 function safeParseUser() {
   try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; }
@@ -1138,7 +1155,7 @@ export default function Dashboard() {
                       </Box>
                       <Typography variant="caption" color="text.disabled">
                         {bot.group_count ?? 0} group{bot.group_count !== 1 ? 's' : ''}
-                        {bot.last_active && <> · last active {new Date(bot.last_active).toLocaleDateString()}</>}
+                        {bot.last_active && <> · last active {_relativeTime(bot.last_active)}</>}
                       </Typography>
                     </CardContent>
                     <CardActions sx={{ px: 1.5, pb: 1.5, pt: 0, gap: 0.5, flexWrap: 'wrap' }}>

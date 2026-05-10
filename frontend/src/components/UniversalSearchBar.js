@@ -130,7 +130,12 @@ export default function UniversalSearchBar({ placeholder = 'Search everything…
                           </Typography>
                         )}
                         {r.health_status && (
-                          <Typography variant="caption" color="text.disabled">{r.health_status}</Typography>
+                          <Typography variant="caption" color="text.disabled">
+                            {r.health_status === 'active' || r.health_status === 'recovering' || r.health_status === 'starting' || r.health_status === 'warning' || r.health_status === 'unknown' ? 'Active' :
+                             r.health_status === 'idle' ? 'Idle' :
+                             r.health_status === 'offline' || r.health_status === 'stopped' ? 'Offline' :
+                             r.health_status === 'unreachable' || r.health_status === 'error' ? 'Unreachable' : 'Active'}
+                          </Typography>
                         )}
                       </Box>
                     }

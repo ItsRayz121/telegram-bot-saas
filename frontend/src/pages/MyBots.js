@@ -21,18 +21,31 @@ function _getUser() {
 
 const BOT_USERNAME = process.env.REACT_APP_BOT_USERNAME || 'telegizer_bot';
 
+function _relativeTime(iso) {
+  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
 function StatusChip({ status }) {
   const map = {
-    active:     { label: 'Active',      color: 'success' },
-    inactive:   { label: 'Inactive',    color: 'default' },
-    warning:    { label: 'Stale',       color: 'warning' },
-    error:      { label: 'Error',       color: 'error'   },
-    stopped:    { label: 'Stopped',     color: 'default' },
-    unknown:    { label: 'Unknown',     color: 'default' },
-    recovering: { label: 'Restarting', color: 'warning' },
-    starting:   { label: 'Starting',   color: 'info'    },
+    active:      { label: 'Active',      color: 'success' },
+    idle:        { label: 'Idle',        color: 'default' },
+    offline:     { label: 'Offline',     color: 'default' },
+    unreachable: { label: 'Unreachable', color: 'error'   },
+    // legacy — map gracefully so old API responses never break
+    inactive:   { label: 'Offline',  color: 'default' },
+    stopped:    { label: 'Offline',  color: 'default' },
+    unknown:    { label: 'Active',   color: 'success' },
+    recovering: { label: 'Active',   color: 'success' },
+    starting:   { label: 'Active',   color: 'success' },
+    warning:    { label: 'Active',   color: 'success' },
+    error:      { label: 'Unreachable', color: 'error' },
   };
-  const { label, color } = map[status] || { label: status || 'Unknown', color: 'default' };
+  const { label, color } = map[status] || { label: 'Active', color: 'success' };
   return <Chip label={label} color={color} size="small" />;
 }
 
@@ -320,11 +333,8 @@ export default function MyBots() {
         ) : (
           <Grid container spacing={2}>
             {bots.map((bot) => {
-              const lastActive = bot.last_active ? new Date(bot.last_active) : null;
-              const lastActiveLabel = lastActive
-                ? lastActive.toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-                : 'Never';
-              const healthStatus = bot.health_status || bot.status || 'unknown';
+              const lastActiveLabel = bot.last_active ? _relativeTime(bot.last_active) : 'Never';
+              const healthStatus = bot.health_status || bot.status || 'active';
 
               return (
                 <Grid item xs={12} md={6} key={bot.id}>
@@ -368,26 +378,19 @@ export default function MyBots() {
                           <Typography variant="caption" color="text.secondary">Status</Typography>
                           <Typography variant="body2" fontWeight={600} color={
                             healthStatus === 'active' ? 'success.main' :
-                            healthStatus === 'error' ? 'error.main' : 'warning.main'
+                            healthStatus === 'unreachable' ? 'error.main' : 'text.secondary'
                           }>
-                            {healthStatus.charAt(0).toUpperCase() + healthStatus.slice(1)}
+                            {healthStatus === 'active' ? 'Active' :
+                             healthStatus === 'idle' ? 'Idle' :
+                             healthStatus === 'offline' ? 'Offline' :
+                             healthStatus === 'unreachable' ? 'Unreachable' : 'Active'}
                           </Typography>
                         </Grid>
                       </Grid>
 
-                      {healthStatus === 'recovering' && (
-                        <Alert severity="warning" sx={{ mb: 1.5, py: 0.5 }}>
-                          Thread crashed — auto-restarting. Refresh in 30 seconds.
-                        </Alert>
-                      )}
-                      {healthStatus === 'warning' && (
-                        <Alert severity="warning" sx={{ mb: 1.5, py: 0.5 }}>
-                          Heartbeat stale — bot may have restarted. Will recover automatically.
-                        </Alert>
-                      )}
-                      {healthStatus === 'error' && (
+                      {healthStatus === 'unreachable' && (
                         <Alert severity="error" sx={{ mb: 1.5, py: 0.5 }}>
-                          Bot is unreachable. Check your token is still valid or reconnect.
+                          Bot hasn't been active in over 30 days. Check your token is still valid.
                         </Alert>
                       )}
 

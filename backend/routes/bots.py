@@ -14,30 +14,38 @@ def _get_current_user():
 
 
 def _enrich_bot(bot) -> dict:
-    """Add thread_alive and recompute health_status using live BotManager state."""
+    """Add internal runtime fields and compute public health_status.
+
+    Public health is derived solely from user intent (is_active) and
+    last-seen activity. Infrastructure states (thread alive, watchdog
+    recovery, Railway rolling deploy) are kept internal and never
+    surface as a user-facing badge.
+    """
     from ..bot_manager import bot_manager
     from datetime import datetime, timedelta
 
     d = bot.to_dict()
-    thread_alive = bot_manager.is_running(bot.id)
-    d["thread_alive"] = thread_alive
 
-    # Compute richer status so frontend doesn't show generic "Idle"
+    # thread_alive is an internal diagnostic field — kept in payload for
+    # admin tooling and the /status endpoint but NOT used for health_status.
+    d["thread_alive"] = bot_manager.is_running(bot.id)
+
+    # ── Public health_status ───────────────────────────────────────────
+    # Layer 1 (infrastructure) is invisible to users.
+    # Layer 2 (public health) is driven only by is_active + last_active.
     if not bot.is_active:
-        d["health_status"] = "stopped"
-    elif not thread_alive:
-        # Thread is dead but DB says active — recovering/restarting
-        d["health_status"] = "recovering"
+        d["health_status"] = "offline"
     elif bot.last_active is None:
-        d["health_status"] = "starting"
+        # Freshly added bot — thread is starting up. Show Active, not a warning.
+        d["health_status"] = "active"
     else:
         age = datetime.utcnow() - bot.last_active
-        if age < timedelta(minutes=10):
+        if age <= timedelta(days=7):
             d["health_status"] = "active"
-        elif age < timedelta(hours=24):
-            d["health_status"] = "warning"
+        elif age <= timedelta(days=30):
+            d["health_status"] = "idle"
         else:
-            d["health_status"] = "error"
+            d["health_status"] = "unreachable"
 
     return d
 

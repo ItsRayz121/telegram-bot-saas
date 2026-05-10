@@ -92,8 +92,8 @@ const FAQ = [
     a: 'Add @telegizer_bot as an admin in your group, run /linkgroup, then paste the code in your dashboard under Groups → Link Group.',
   },
   {
-    q: 'My bot shows "Restarting" — what do I do?',
-    a: 'Toggle the bot off and back on in your dashboard. If it persists, revoke and re-enter your bot token from @BotFather. This is usually caused by a Telegram conflict from another running instance.',
+    q: 'My bot shows "Unreachable" — what do I do?',
+    a: 'Your bot has not been active in over 30 days. Toggle it off and back on in your dashboard. If the issue persists, revoke and re-enter your bot token from @BotFather.',
   },
   {
     q: 'Can I use my own API key for AI features?',

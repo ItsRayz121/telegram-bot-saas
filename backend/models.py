@@ -284,17 +284,23 @@ class Bot(db.Model):
         self.bot_token_hash = hash_token(plain_token)
 
     def get_health_status(self):
-        """Derive health from is_active + last_active age. No extra DB column needed."""
+        """Derive public health from is_active + last_active age.
+
+        Infrastructure states (thread alive, watchdog recovery, deploy
+        events) are intentionally excluded — they are internal only.
+        Thresholds are wide enough to survive Railway rolling deploys
+        and heartbeat gaps without showing false negatives.
+        """
         if not self.is_active:
-            return "stopped"
+            return "offline"
         if self.last_active is None:
-            return "unknown"
+            return "active"  # freshly added bot; thread starting up
         age = datetime.utcnow() - self.last_active
-        if age < timedelta(hours=1):
+        if age <= timedelta(days=7):
             return "active"
-        if age < timedelta(hours=24):
-            return "warning"
-        return "error"
+        if age <= timedelta(days=30):
+            return "idle"
+        return "unreachable"
 
     def to_dict(self, include_token=False):
         data = {
