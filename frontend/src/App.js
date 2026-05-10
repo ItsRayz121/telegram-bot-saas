@@ -66,6 +66,7 @@ import Referrals from './pages/Referrals';
 // Assistant Hub (Sprint 1)
 import HubLanding from './pages/HubLanding';
 import HubWorkspace from './pages/HubWorkspace';
+import HubCustomBotWorkspace from './pages/HubCustomBotWorkspace';
 
 // Pages — lazy loaded
 const AssistantNotes = React.lazy(() => import('./pages/AssistantNotes'));
@@ -203,9 +204,11 @@ export default function App() {
             <Route path="/channels/:cid"    element={<AppRoute><ChannelDetail /></AppRoute>} />
 
             {/* ── Assistant Hub (/hub prefix) ───────────────────────────────── */}
-            <Route path="/hub"               element={<AppRoute><HubLanding /></AppRoute>} />
-            <Route path="/hub/official"      element={<Navigate to="/hub/official/overview" replace />} />
-            <Route path="/hub/official/:tab" element={<AppRoute><HubWorkspace /></AppRoute>} />
+            <Route path="/hub"                         element={<AppRoute><HubLanding /></AppRoute>} />
+            <Route path="/hub/official"                element={<Navigate to="/hub/official/overview" replace />} />
+            <Route path="/hub/official/:tab"           element={<AppRoute><HubWorkspace /></AppRoute>} />
+            <Route path="/hub/bots/:botId"             element={<Navigate to="overview" replace />} />
+            <Route path="/hub/bots/:botId/:tab"        element={<AppRoute><HubCustomBotWorkspace /></AppRoute>} />
 
             {/* ── Workspace ─────────────────────────────────────────────────── */}
             <Route path="/workspace"               element={<AppRoute><Workspace /></AppRoute>} />

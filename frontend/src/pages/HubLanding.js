@@ -6,8 +6,8 @@ import {
   DialogActions, TextField, CircularProgress,
 } from '@mui/material';
 import {
-  SmartToy, Add, Settings, GroupAdd, AutoMode, Lock, Psychology,
-  ArrowForward, OpenInNew,
+  SmartToy, Add, Settings, GroupAdd, Lock, Psychology,
+  Delete,
 } from '@mui/icons-material';
 import { hub } from '../services/api';
 import { PALETTE } from '../theme';
@@ -213,6 +213,10 @@ function CustomBotsSection({ plan }) {
   const [botList, setBotList] = useState([]);
   const [botsLoading, setBotsLoading] = useState(false);
   const [botRegOpen, setBotRegOpen] = useState(false);
+  const [botToDelete, setBotToDelete] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState('');
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
 
   const loadBots = () => {
     if (!hasAccess) return;
@@ -227,6 +231,19 @@ function CustomBotsSection({ plan }) {
   };
 
   useEffect(() => { loadBots(); }, [hasAccess]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleDelete = async () => {
+    if (!botToDelete || deleteConfirm !== botToDelete.display_name) return;
+    setDeleteLoading(true); setDeleteError(null);
+    try {
+      await hub.deleteBot(botToDelete.id);
+      setBotList(prev => prev.filter(b => b.id !== botToDelete.id));
+      setBotToDelete(null); setDeleteConfirm('');
+    } catch (e) {
+      setDeleteError(e?.response?.data?.error || 'Failed to delete bot.');
+    }
+    setDeleteLoading(false);
+  };
 
   const remaining = limit - botList.length;
   const slotsLabel = plan === 'enterprise' ? 'Unlimited' : `${remaining} slot${remaining !== 1 ? 's' : ''} free`;
@@ -245,14 +262,9 @@ function CustomBotsSection({ plan }) {
 
       {!hasAccess ? (
         /* ── Free users: upsell ── */
-        <Card
-          sx={{
-            borderStyle: 'dashed', borderColor: PALETTE.border2,
-            background: 'transparent',
-            transition: 'border-color 0.2s, box-shadow 0.2s',
-            '&:hover': { borderColor: `${PALETTE.purple}66`, boxShadow: `0 0 20px rgba(157,108,247,0.1)` },
-          }}
-        >
+        <Card sx={{ borderStyle: 'dashed', borderColor: PALETTE.border2, background: 'transparent',
+          transition: 'border-color 0.2s, box-shadow 0.2s',
+          '&:hover': { borderColor: `${PALETTE.purple}66`, boxShadow: `0 0 20px rgba(157,108,247,0.1)` } }}>
           <CardContent sx={{ textAlign: 'center', py: 5 }}>
             <Box sx={{ width: 52, height: 52, borderRadius: 2, mx: 'auto', mb: 1.5, background: 'rgba(157,108,247,0.08)', border: `1px solid rgba(157,108,247,0.2)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Lock sx={{ fontSize: 22, color: PALETTE.purple + '99' }} />
@@ -264,13 +276,10 @@ function CustomBotsSection({ plan }) {
               Connect your own @bot to observe specific groups with a custom identity.
               Available on Pro and Enterprise plans.
             </Typography>
-            <Button variant="contained" size="small" color="secondary" href="/billing">
-              Upgrade to Pro
-            </Button>
+            <Button variant="contained" size="small" color="secondary" href="/billing">Upgrade to Pro</Button>
           </CardContent>
         </Card>
       ) : botsLoading ? (
-        /* ── Loading skeleton ── */
         <Card sx={{ borderStyle: 'dashed', borderColor: PALETTE.border2, background: 'transparent' }}>
           <CardContent sx={{ py: 3 }}>
             <Skeleton width="40%" height={20} sx={{ mb: 1, bgcolor: 'rgba(255,255,255,0.06)' }} />
@@ -278,69 +287,77 @@ function CustomBotsSection({ plan }) {
           </CardContent>
         </Card>
       ) : botList.length === 0 ? (
-        /* ── Pro/Enterprise, no bots yet ── */
-        <Card
-          sx={{
-            borderStyle: 'dashed', borderColor: PALETTE.border2,
-            background: 'transparent',
-            transition: 'border-color 0.2s, box-shadow 0.2s',
-            '&:hover': { borderColor: `${PALETTE.blue}55`, boxShadow: `0 0 16px rgba(61,142,248,0.08)` },
-          }}
-        >
+        <Card sx={{ borderStyle: 'dashed', borderColor: PALETTE.border2, background: 'transparent',
+          transition: 'border-color 0.2s, box-shadow 0.2s',
+          '&:hover': { borderColor: `${PALETTE.blue}55`, boxShadow: `0 0 16px rgba(61,142,248,0.08)` } }}>
           <CardContent sx={{ textAlign: 'center', py: 5 }}>
             <Box sx={{ width: 52, height: 52, borderRadius: 2, mx: 'auto', mb: 1.5, background: 'rgba(61,142,248,0.08)', border: `1px solid rgba(61,142,248,0.2)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <SmartToy sx={{ fontSize: 22, color: `${PALETTE.blue}99` }} />
             </Box>
-            <Typography variant="body2" fontWeight={700} gutterBottom letterSpacing="-0.01em">
-              No assistant bots yet
-            </Typography>
+            <Typography variant="body2" fontWeight={700} gutterBottom letterSpacing="-0.01em">No assistant bots yet</Typography>
             <Typography variant="caption" color="text.secondary" display="block" mb={2.5}>
               Connect a custom bot token to use it as an AI assistant in your groups.
             </Typography>
-            <Button
-              variant="contained"
-              size="small"
-              startIcon={<Add />}
-              onClick={() => setBotRegOpen(true)}
-            >
-              Add Bot
-            </Button>
+            <Button variant="contained" size="small" startIcon={<Add />} onClick={() => setBotRegOpen(true)}>Add Bot</Button>
           </CardContent>
         </Card>
       ) : (
-        /* ── Pro/Enterprise, bots exist ── */
+        /* ── Pro/Enterprise, bots exist — each card navigates to its own workspace ── */
         <Stack spacing={1.5}>
           {botList.map(bot => (
             <Card
               key={bot.id}
               sx={{
-                cursor: 'pointer',
-                transition: 'box-shadow 0.18s, border-color 0.18s',
                 border: `1px solid ${PALETTE.border1}`,
+                transition: 'box-shadow 0.18s, border-color 0.18s',
                 '&:hover': { boxShadow: `0 0 16px rgba(61,142,248,0.12)`, borderColor: `${PALETTE.blue}55` },
               }}
-              onClick={() => navigate('/hub/official/overview')}
             >
               <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, py: '12px !important' }}>
                 <Avatar sx={{ width: 36, height: 36, bgcolor: PALETTE.blue + '22', color: PALETTE.blue, flexShrink: 0 }}>
                   <SmartToy sx={{ fontSize: 18 }} />
                 </Avatar>
                 <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                  <Typography variant="body2" fontWeight={600} noWrap>{bot.display_name || bot.telegram_bot_username || `Bot #${bot.id}`}</Typography>
-                  {bot.telegram_bot_username && <Typography variant="caption" color="text.secondary">@{bot.telegram_bot_username}</Typography>}
+                  <Typography variant="body2" fontWeight={600} noWrap>
+                    {bot.display_name || bot.telegram_bot_username || `Bot #${bot.id}`}
+                  </Typography>
+                  {bot.telegram_bot_username && (
+                    <Typography variant="caption" color="text.secondary">
+                      @{bot.telegram_bot_username} · {bot.group_count ?? 0} groups
+                    </Typography>
+                  )}
                 </Box>
-                <Chip label="Active" color="success" size="small" />
-                <ArrowForward sx={{ fontSize: 16, color: 'text.disabled' }} />
+                <Chip label="Active" color="success" size="small"
+                  sx={{ height: 20, fontSize: '0.68rem', fontWeight: 600 }} />
+                {/* Actions — Manage navigates to the bot's own workspace; Delete is inline */}
+                <Button
+                  size="small"
+                  variant="contained"
+                  sx={{ fontSize: '0.72rem', flexShrink: 0, ml: 0.5 }}
+                  onClick={() => navigate(`/hub/bots/${bot.id}/overview`)}
+                >
+                  Manage
+                </Button>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="error"
+                  sx={{ fontSize: '0.72rem', flexShrink: 0, minWidth: 0, px: 1 }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setBotToDelete(bot);
+                    setDeleteConfirm('');
+                    setDeleteError(null);
+                  }}
+                  title="Delete bot"
+                >
+                  <Delete sx={{ fontSize: 15 }} />
+                </Button>
               </CardContent>
             </Card>
           ))}
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={<Add />}
-            onClick={() => setBotRegOpen(true)}
-            sx={{ alignSelf: 'flex-start' }}
-          >
+          <Button variant="outlined" size="small" startIcon={<Add />}
+            onClick={() => setBotRegOpen(true)} sx={{ alignSelf: 'flex-start' }}>
             Add Another Bot
           </Button>
         </Stack>
@@ -355,6 +372,31 @@ function CustomBotsSection({ plan }) {
           setBotRegOpen(false);
         }}
       />
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={Boolean(botToDelete)} onClose={() => setBotToDelete(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Delete {botToDelete?.display_name || 'this bot'}?</DialogTitle>
+        <DialogContent>
+          {deleteError && <Alert severity="error" sx={{ mb: 2 }}>{deleteError}</Alert>}
+          <Typography variant="body2" color="text.secondary" mb={2}>
+            This permanently removes the bot integration, stops the webhook, and disconnects all groups.
+            This cannot be undone.
+          </Typography>
+          <TextField
+            label={`Type "${botToDelete?.display_name || 'bot name'}" to confirm`}
+            size="small" fullWidth
+            value={deleteConfirm}
+            onChange={e => setDeleteConfirm(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setBotToDelete(null)} size="small" color="inherit">Cancel</Button>
+          <Button onClick={handleDelete} variant="contained" color="error" size="small"
+            disabled={deleteConfirm !== (botToDelete?.display_name || '') || deleteLoading}>
+            {deleteLoading ? <CircularProgress size={14} sx={{ mr: 0.5 }} /> : null}Delete Bot
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
