@@ -251,7 +251,7 @@ export default function MiniApp() {
   ];
 
   return (
-    <Box sx={{ maxWidth: 480, mx: 'auto', px: 2, pt: 1 }}>
+    <Box sx={{ maxWidth: 480, mx: 'auto', px: 2, pt: 1, pb: 'calc(64px + env(safe-area-inset-bottom, 0px))' }}>
       {tab === 0 && <HomeTab />}
       {tab === 1 && <MiniAppReferrals />}
       {tab === 2 && <MiniAppSetup />}
