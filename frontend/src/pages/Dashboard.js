@@ -1023,7 +1023,7 @@ export default function Dashboard() {
             <SmartToy sx={{ fontSize: 18 }} />
           </Avatar>
           <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-            <Typography variant="subtitle1" fontWeight={700} lineHeight={1.2} letterSpacing="-0.01em">Custom Bots</Typography>
+            <Typography variant="subtitle1" fontWeight={700} lineHeight={1.2} letterSpacing="-0.01em">Community Bots</Typography>
             <Typography variant="caption" color="text.secondary">
               {botCount} / {maxBots} used · {tier} plan
             </Typography>

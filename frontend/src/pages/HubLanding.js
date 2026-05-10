@@ -2,13 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box, Typography, Button, Card, CardContent, Chip, Skeleton,
-  Divider, Alert, Avatar, Stack,
+  Divider, Alert, Avatar, Stack, Dialog, DialogTitle, DialogContent,
+  DialogActions, TextField, CircularProgress,
 } from '@mui/material';
 import {
   SmartToy, Add, Settings, GroupAdd, AutoMode, Lock, Psychology,
   ArrowForward, OpenInNew,
 } from '@mui/icons-material';
-import { hub, bots as botsApi } from '../services/api';
+import { hub } from '../services/api';
 import { PALETTE } from '../theme';
 
 /** Centralized feature gate — mirrors backend MAX_CUSTOM_BOTS config. */
@@ -211,15 +212,21 @@ function CustomBotsSection({ plan }) {
   const limit = customBotLimit(plan);
   const [botList, setBotList] = useState([]);
   const [botsLoading, setBotsLoading] = useState(false);
+  const [botRegOpen, setBotRegOpen] = useState(false);
 
-  useEffect(() => {
+  const loadBots = () => {
     if (!hasAccess) return;
     setBotsLoading(true);
-    botsApi.getAll()
-      .then(r => setBotList(Array.isArray(r.data) ? r.data : (r.data?.bots || [])))
+    hub.listBots()
+      .then(r => {
+        const all = r.data?.bots || [];
+        setBotList(all.filter(b => b.bot_type === 'custom'));
+      })
       .catch(() => {})
       .finally(() => setBotsLoading(false));
-  }, [hasAccess]);
+  };
+
+  useEffect(() => { loadBots(); }, [hasAccess]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const remaining = limit - botList.length;
   const slotsLabel = plan === 'enterprise' ? 'Unlimited' : `${remaining} slot${remaining !== 1 ? 's' : ''} free`;
@@ -228,7 +235,7 @@ function CustomBotsSection({ plan }) {
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Typography variant="subtitle1" fontWeight={700} letterSpacing="-0.01em">Custom Bots</Typography>
+          <Typography variant="subtitle1" fontWeight={700} letterSpacing="-0.01em">Assistant Bots</Typography>
           <Box className="ai-pulse-dot" sx={{ width: 5, height: 5 }} />
         </Box>
         {hasAccess && (
@@ -251,7 +258,7 @@ function CustomBotsSection({ plan }) {
               <Lock sx={{ fontSize: 22, color: PALETTE.purple + '99' }} />
             </Box>
             <Typography variant="body2" fontWeight={700} gutterBottom letterSpacing="-0.01em">
-              Custom Bots — Pro &amp; Enterprise
+              Assistant Bots — Pro &amp; Enterprise
             </Typography>
             <Typography variant="caption" color="text.secondary" display="block" mb={2.5} sx={{ maxWidth: 360, mx: 'auto' }}>
               Connect your own @bot to observe specific groups with a custom identity.
@@ -285,16 +292,16 @@ function CustomBotsSection({ plan }) {
               <SmartToy sx={{ fontSize: 22, color: `${PALETTE.blue}99` }} />
             </Box>
             <Typography variant="body2" fontWeight={700} gutterBottom letterSpacing="-0.01em">
-              No custom bots yet
+              No assistant bots yet
             </Typography>
             <Typography variant="caption" color="text.secondary" display="block" mb={2.5}>
-              Add a custom bot from your Dashboard to connect it here.
+              Connect a custom bot token to use it as an AI assistant in your groups.
             </Typography>
             <Button
               variant="contained"
               size="small"
               startIcon={<Add />}
-              onClick={() => navigate('/dashboard')}
+              onClick={() => setBotRegOpen(true)}
             >
               Add Bot
             </Button>
@@ -312,17 +319,17 @@ function CustomBotsSection({ plan }) {
                 border: `1px solid ${PALETTE.border1}`,
                 '&:hover': { boxShadow: `0 0 16px rgba(61,142,248,0.12)`, borderColor: `${PALETTE.blue}55` },
               }}
-              onClick={() => navigate(`/hub/bot/${bot.id}`)}
+              onClick={() => navigate('/hub/official/overview')}
             >
               <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, py: '12px !important' }}>
                 <Avatar sx={{ width: 36, height: 36, bgcolor: PALETTE.blue + '22', color: PALETTE.blue, flexShrink: 0 }}>
                   <SmartToy sx={{ fontSize: 18 }} />
                 </Avatar>
                 <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                  <Typography variant="body2" fontWeight={600} noWrap>{bot.bot_name || bot.bot_username || `Bot #${bot.id}`}</Typography>
-                  {bot.bot_username && <Typography variant="caption" color="text.secondary">@{bot.bot_username}</Typography>}
+                  <Typography variant="body2" fontWeight={600} noWrap>{bot.display_name || bot.telegram_bot_username || `Bot #${bot.id}`}</Typography>
+                  {bot.telegram_bot_username && <Typography variant="caption" color="text.secondary">@{bot.telegram_bot_username}</Typography>}
                 </Box>
-                <Chip label={bot.is_active ? 'Active' : 'Inactive'} color={bot.is_active ? 'success' : 'default'} size="small" />
+                <Chip label="Active" color="success" size="small" />
                 <ArrowForward sx={{ fontSize: 16, color: 'text.disabled' }} />
               </CardContent>
             </Card>
@@ -331,14 +338,78 @@ function CustomBotsSection({ plan }) {
             variant="outlined"
             size="small"
             startIcon={<Add />}
-            onClick={() => navigate('/dashboard')}
+            onClick={() => setBotRegOpen(true)}
             sx={{ alignSelf: 'flex-start' }}
           >
             Add Another Bot
           </Button>
         </Stack>
       )}
+
+      <BotRegistrationDialog
+        open={botRegOpen}
+        plan={plan}
+        onClose={() => setBotRegOpen(false)}
+        onRegistered={(bot) => {
+          setBotList(prev => [...prev, bot]);
+          setBotRegOpen(false);
+        }}
+      />
     </Box>
+  );
+}
+
+function BotRegistrationDialog({ open, onClose, onRegistered, plan }) {
+  const [displayName, setDisplayName] = useState('');
+  const [token, setToken] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (open) { setDisplayName(''); setToken(''); setError(null); }
+  }, [open]);
+
+  const handleCreate = async () => {
+    if (!displayName.trim()) { setError('Display name is required'); return; }
+    if (!token.trim()) { setError('Bot token is required'); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await hub.createBot({ display_name: displayName, telegram_bot_token: token });
+      onRegistered(res.data.bot);
+    } catch (e) {
+      const err = e.response?.data?.error;
+      if (err === 'plan_limit') setError('Custom bot limit reached. Upgrade your plan.');
+      else if (err === 'invalid_token') setError('Invalid bot token. Check it in @BotFather.');
+      else if (err === 'already_registered') setError('This bot is already registered.');
+      else setError('Registration failed. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Connect Assistant Bot</DialogTitle>
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '12px !important' }}>
+        {plan === 'free' && (
+          <Alert severity="warning">Assistant bots require a Pro or Enterprise plan.</Alert>
+        )}
+        {error && <Alert severity="error">{error}</Alert>}
+        <TextField label="Display Name" value={displayName} onChange={e => setDisplayName(e.target.value)}
+          size="small" disabled={plan === 'free'} helperText="How it appears in your Hub" />
+        <TextField label="Bot Token" value={token} onChange={e => setToken(e.target.value)}
+          size="small" disabled={plan === 'free'}
+          helperText="Get this from @BotFather → /mybots → API Token"
+          type="password" />
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button onClick={handleCreate} variant="contained" disabled={saving || plan === 'free'}>
+          {saving ? <CircularProgress size={16} /> : 'Connect Bot'}
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }
 
