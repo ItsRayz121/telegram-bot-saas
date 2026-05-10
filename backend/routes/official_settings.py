@@ -321,11 +321,12 @@ def update_official_digest(group_id):
             digest["recipients"] = existing_rec
 
         current["digest"] = digest
-        # Sync assistant.ai_digest_enabled so message buffering + AI summary activate correctly
-        assistant = dict(current.get("assistant", {}))
-        digest_enabled = bool(digest.get("daily") or digest.get("weekly") or digest.get("monthly"))
-        assistant["ai_digest_enabled"] = digest_enabled
-        current["assistant"] = assistant
+        # Only sync ai_digest_enabled when frequency keys are explicitly sent in the request
+        if any(k in data for k in ("daily", "weekly", "monthly")):
+            assistant = dict(current.get("assistant", {}))
+            digest_enabled = bool(digest.get("daily") or digest.get("weekly") or digest.get("monthly"))
+            assistant["ai_digest_enabled"] = digest_enabled
+            current["assistant"] = assistant
         tg.settings = current
         flag_modified(tg, "settings")
         db.session.commit()

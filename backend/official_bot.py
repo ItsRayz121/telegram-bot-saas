@@ -5285,15 +5285,12 @@ class OfficialBotRunner:
 
 
 async def _send_official_digest(bot, tg, days: int = 7):
-    """Send a stats digest to the group chat. Must be called with an active app context."""
+    """Send a stats digest respecting recipient settings. Must be called with an active app context."""
     group_id = tg.telegram_group_id
-    chat_id = int(group_id)
     since = datetime.utcnow() - timedelta(days=days)
 
     try:
-        from .models import BotEvent, OfficialWarning, OfficialMember
-
-        from .models import OfficialScheduledMessage, OfficialPoll
+        from .models import BotEvent, OfficialWarning, OfficialMember, OfficialScheduledMessage, OfficialPoll, User, TelegramBotStarted
 
         joins = BotEvent.query.filter(
             BotEvent.telegram_group_id == group_id,
@@ -5374,15 +5371,48 @@ async def _send_official_digest(bot, tg, days: int = 7):
         except Exception as ai_exc:
             _log.debug("AI digest summary failed for group %s: %s", group_id, ai_exc)
 
-        send_kw: dict = {
-            "chat_id": chat_id,
-            "text": "\n".join(lines),
-            "parse_mode": ParseMode.MARKDOWN,
-        }
-        if tg.is_forum:
-            topic_id = (tg.settings or {}).get("default_topic_id") or 1
-            send_kw["message_thread_id"] = int(topic_id)
-        await bot.send_message(**send_kw)
+        text = "\n".join(lines)
+
+        # Read recipients config — fall back to group delivery if not configured
+        recipients = (tg.settings or {}).get("digest", {}).get("recipients", {})
+        send_to_group = recipients.get("send_to_group", True)
+        topic_id = recipients.get("group_topic_id")
+        owner_dm = recipients.get("owner_dm", False)
+        admin_ids = recipients.get("selected_admin_ids") or []
+
+        async def _send_msg(chat_id, thread_id=None):
+            kwargs: dict = {"chat_id": chat_id, "text": text, "parse_mode": ParseMode.MARKDOWN}
+            if thread_id:
+                kwargs["message_thread_id"] = int(thread_id)
+            await bot.send_message(**kwargs)
+
+        if send_to_group:
+            try:
+                is_forum = getattr(tg, "is_forum", False)
+                resolved_topic = topic_id or ((tg.settings or {}).get("default_topic_id") or 1 if is_forum else None)
+                await _send_msg(int(group_id), resolved_topic)
+            except Exception as exc:
+                _log.error("[OfficialBot] Digest group send failed for group %s: %s", group_id, exc)
+
+        if owner_dm and tg.owner_user_id:
+            owner = User.query.get(tg.owner_user_id)
+            if owner and owner.telegram_user_id and TelegramBotStarted.has_started(str(owner.telegram_user_id)):
+                try:
+                    await _send_msg(int(owner.telegram_user_id))
+                except Exception as exc:
+                    _log.error("[OfficialBot] Digest owner DM failed for group %s: %s", group_id, exc)
+            else:
+                _log.info("[OfficialBot] Owner has not started bot or no telegram_user_id — skipping DM for group %s", group_id)
+
+        for admin_id in admin_ids:
+            if TelegramBotStarted.has_started(str(admin_id)):
+                try:
+                    await _send_msg(int(admin_id))
+                except Exception as exc:
+                    _log.error("[OfficialBot] Digest admin DM failed admin=%s group=%s: %s", admin_id, group_id, exc)
+            else:
+                _log.info("[OfficialBot] Admin %s has not started bot — skipping DM for group %s", admin_id, group_id)
+
     except Exception as exc:
         _log.error("[OfficialBot] Digest send failed for group %s: %s", group_id, exc)
         raise

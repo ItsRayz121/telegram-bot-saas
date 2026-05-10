@@ -508,12 +508,25 @@ export default function GroupSettings() {
   const handleSaveDigest = async () => {
     setDigestSaving(true);
     try {
-      await digestApi.update(botId, groupId, {
+      const res = await digestApi.update(botId, groupId, {
         daily: digestConfig.daily,
         weekly: digestConfig.weekly,
         monthly: digestConfig.monthly,
         recipients: digestConfig.recipients,
       });
+      if (res.data?.digest) {
+        setDigestConfig(prev => ({
+          ...prev,
+          ...res.data.digest,
+          recipients: {
+            owner_dm: false,
+            selected_admin_ids: [],
+            send_to_group: true,
+            group_topic_id: null,
+            ...(res.data.digest?.recipients || {}),
+          },
+        }));
+      }
       toast.success('Digest settings saved!');
     } catch {
       toast.error('Failed to save digest settings');
@@ -526,7 +539,7 @@ export default function GroupSettings() {
     setDigestSending(period);
     try {
       await digestApi.sendNow(botId, groupId, { period });
-      toast.success(`${period.charAt(0).toUpperCase() + period.slice(1)} report sent to the group!`);
+      toast.success(`${period.charAt(0).toUpperCase() + period.slice(1)} report sent to configured recipients!`);
       fetchDigest();
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to send report');
@@ -2347,6 +2360,18 @@ export default function GroupSettings() {
                         })}
                       </Stack>
                     )}
+
+                    <Box sx={{ mt: 2 }}>
+                      <Button
+                        variant="contained"
+                        size="small"
+                        startIcon={digestSaving ? <CircularProgress size={14} color="inherit" /> : <Save />}
+                        onClick={handleSaveDigest}
+                        disabled={digestSaving}
+                      >
+                        Save Recipient Settings
+                      </Button>
+                    </Box>
                   </CardContent>
                 </Card>
 
