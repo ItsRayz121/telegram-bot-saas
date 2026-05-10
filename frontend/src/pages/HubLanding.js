@@ -2,13 +2,29 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box, Typography, Button, Card, CardContent, Chip, Skeleton,
-  Divider, Alert, Avatar,
+  Divider, Alert, Avatar, Stack,
 } from '@mui/material';
 import {
   SmartToy, Add, Settings, GroupAdd, AutoMode, Lock, Psychology,
+  ArrowForward, OpenInNew,
 } from '@mui/icons-material';
-import { hub } from '../services/api';
+import { hub, bots as botsApi } from '../services/api';
 import { PALETTE } from '../theme';
+
+/** Centralized feature gate — mirrors backend MAX_CUSTOM_BOTS config. */
+export function canUseCustomBots(plan) {
+  return plan === 'pro' || plan === 'enterprise';
+}
+export function customBotLimit(plan) {
+  if (plan === 'enterprise') return 50;
+  if (plan === 'pro') return 3;
+  return 0;
+}
+export function customBotLimitLabel(plan) {
+  if (plan === 'enterprise') return 'Unlimited';
+  if (plan === 'pro') return '3 slots';
+  return '0';
+}
 
 export default function HubLanding() {
   const navigate = useNavigate();
@@ -190,7 +206,23 @@ function OfficialBotCard({ bot, onManage }) {
 
 
 function CustomBotsSection({ plan }) {
-  const isFree = plan === 'free';
+  const navigate = useNavigate();
+  const hasAccess = canUseCustomBots(plan);
+  const limit = customBotLimit(plan);
+  const [botList, setBotList] = useState([]);
+  const [botsLoading, setBotsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!hasAccess) return;
+    setBotsLoading(true);
+    botsApi.getAll()
+      .then(r => setBotList(Array.isArray(r.data) ? r.data : (r.data?.bots || [])))
+      .catch(() => {})
+      .finally(() => setBotsLoading(false));
+  }, [hasAccess]);
+
+  const remaining = limit - botList.length;
+  const slotsLabel = plan === 'enterprise' ? 'Unlimited' : `${remaining} slot${remaining !== 1 ? 's' : ''} free`;
 
   return (
     <Box>
@@ -199,14 +231,13 @@ function CustomBotsSection({ plan }) {
           <Typography variant="subtitle1" fontWeight={700} letterSpacing="-0.01em">Custom Bots</Typography>
           <Box className="ai-pulse-dot" sx={{ width: 5, height: 5 }} />
         </Box>
-        {!isFree && (
-          <Typography variant="caption" color="text.secondary">
-            {plan === 'pro' ? '2 slots' : 'Unlimited'}
-          </Typography>
+        {hasAccess && (
+          <Typography variant="caption" color="text.secondary">{slotsLabel}</Typography>
         )}
       </Box>
 
-      {isFree ? (
+      {!hasAccess ? (
+        /* ── Free users: upsell ── */
         <Card
           sx={{
             borderStyle: 'dashed', borderColor: PALETTE.border2,
@@ -216,14 +247,7 @@ function CustomBotsSection({ plan }) {
           }}
         >
           <CardContent sx={{ textAlign: 'center', py: 5 }}>
-            <Box
-              sx={{
-                width: 52, height: 52, borderRadius: 2, mx: 'auto', mb: 1.5,
-                background: 'rgba(157,108,247,0.08)',
-                border: `1px solid rgba(157,108,247,0.2)`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}
-            >
+            <Box sx={{ width: 52, height: 52, borderRadius: 2, mx: 'auto', mb: 1.5, background: 'rgba(157,108,247,0.08)', border: `1px solid rgba(157,108,247,0.2)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Lock sx={{ fontSize: 22, color: PALETTE.purple + '99' }} />
             </Box>
             <Typography variant="body2" fontWeight={700} gutterBottom letterSpacing="-0.01em">
@@ -238,35 +262,81 @@ function CustomBotsSection({ plan }) {
             </Button>
           </CardContent>
         </Card>
-      ) : (
+      ) : botsLoading ? (
+        /* ── Loading skeleton ── */
+        <Card sx={{ borderStyle: 'dashed', borderColor: PALETTE.border2, background: 'transparent' }}>
+          <CardContent sx={{ py: 3 }}>
+            <Skeleton width="40%" height={20} sx={{ mb: 1, bgcolor: 'rgba(255,255,255,0.06)' }} />
+            <Skeleton width="60%" height={16} sx={{ bgcolor: 'rgba(255,255,255,0.04)' }} />
+          </CardContent>
+        </Card>
+      ) : botList.length === 0 ? (
+        /* ── Pro/Enterprise, no bots yet ── */
         <Card
           sx={{
             borderStyle: 'dashed', borderColor: PALETTE.border2,
             background: 'transparent',
+            transition: 'border-color 0.2s, box-shadow 0.2s',
+            '&:hover': { borderColor: `${PALETTE.blue}55`, boxShadow: `0 0 16px rgba(61,142,248,0.08)` },
           }}
         >
           <CardContent sx={{ textAlign: 'center', py: 5 }}>
-            <Box
-              sx={{
-                width: 52, height: 52, borderRadius: 2, mx: 'auto', mb: 1.5,
-                background: 'rgba(61,142,248,0.08)',
-                border: `1px solid rgba(61,142,248,0.2)`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}
-            >
-              <AutoMode sx={{ fontSize: 22, color: `${PALETTE.blue}99` }} />
+            <Box sx={{ width: 52, height: 52, borderRadius: 2, mx: 'auto', mb: 1.5, background: 'rgba(61,142,248,0.08)', border: `1px solid rgba(61,142,248,0.2)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <SmartToy sx={{ fontSize: 22, color: `${PALETTE.blue}99` }} />
             </Box>
             <Typography variant="body2" fontWeight={700} gutterBottom letterSpacing="-0.01em">
-              Custom Bots — Coming Soon
+              No custom bots yet
             </Typography>
             <Typography variant="caption" color="text.secondary" display="block" mb={2.5}>
-              Connect your own bots from the Custom Bots section to Assistant Hub.
+              Add a custom bot from your Dashboard to connect it here.
             </Typography>
-            <Button variant="outlined" size="small" disabled startIcon={<Add />}>
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={<Add />}
+              onClick={() => navigate('/dashboard')}
+            >
               Add Bot
             </Button>
           </CardContent>
         </Card>
+      ) : (
+        /* ── Pro/Enterprise, bots exist ── */
+        <Stack spacing={1.5}>
+          {botList.map(bot => (
+            <Card
+              key={bot.id}
+              sx={{
+                cursor: 'pointer',
+                transition: 'box-shadow 0.18s, border-color 0.18s',
+                border: `1px solid ${PALETTE.border1}`,
+                '&:hover': { boxShadow: `0 0 16px rgba(61,142,248,0.12)`, borderColor: `${PALETTE.blue}55` },
+              }}
+              onClick={() => navigate(`/hub/bot/${bot.id}`)}
+            >
+              <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, py: '12px !important' }}>
+                <Avatar sx={{ width: 36, height: 36, bgcolor: PALETTE.blue + '22', color: PALETTE.blue, flexShrink: 0 }}>
+                  <SmartToy sx={{ fontSize: 18 }} />
+                </Avatar>
+                <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                  <Typography variant="body2" fontWeight={600} noWrap>{bot.bot_name || bot.bot_username || `Bot #${bot.id}`}</Typography>
+                  {bot.bot_username && <Typography variant="caption" color="text.secondary">@{bot.bot_username}</Typography>}
+                </Box>
+                <Chip label={bot.is_active ? 'Active' : 'Inactive'} color={bot.is_active ? 'success' : 'default'} size="small" />
+                <ArrowForward sx={{ fontSize: 16, color: 'text.disabled' }} />
+              </CardContent>
+            </Card>
+          ))}
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<Add />}
+            onClick={() => navigate('/dashboard')}
+            sx={{ alignSelf: 'flex-start' }}
+          >
+            Add Another Bot
+          </Button>
+        </Stack>
       )}
     </Box>
   );
