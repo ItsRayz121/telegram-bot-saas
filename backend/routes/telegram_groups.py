@@ -81,7 +81,8 @@ def list_groups():
                 continue  # already present in TelegramGroup
             linked_bot_id = custom_bot_id_by_username.get(old_bot.bot_username)
             groups_data.append({
-                "id": None,
+                # grp.id is the Group table PK — required for /bot/:bot_id/group/:group_id routing
+                "id": grp.id,
                 "telegram_group_id": grp.telegram_group_id,
                 "title": grp.group_name or "Unknown Group",
                 "username": None,
@@ -91,6 +92,8 @@ def list_groups():
                 "linked_bot_id": linked_bot_id,
                 "linked_bot_name": custom_bot_name_by_id.get(linked_bot_id) if linked_bot_id else None,
                 "linked_bot_username": custom_bot_username_by_id.get(linked_bot_id) if linked_bot_id else None,
+                # old_bot.id is the Bot table PK — needed for /api/bots/<bot_id>/... endpoints
+                "legacy_bot_id": old_bot.id,
                 "bot_status": "active" if old_bot.is_active else "inactive",
                 "bot_permissions": None,
                 "linked_at": None,

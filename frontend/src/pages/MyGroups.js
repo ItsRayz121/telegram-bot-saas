@@ -319,6 +319,16 @@ export default function MyGroups() {
               const liveLoading = ps?.loading;
               const isCustomBot = !!(g.linked_bot_id || g.linked_via_bot_type === 'custom');
 
+              // Legacy custom bot groups must route to /bot/:botId/group/:groupId so
+              // GroupSettings receives the correct bot context and calls the right API.
+              // Official groups use /groups/:telegramGroupId (no botId needed).
+              const manageRoute = (g.source === 'legacy' && g.legacy_bot_id && g.id)
+                ? `/bot/${g.legacy_bot_id}/group/${g.id}`
+                : `/groups/${gid}`;
+              const analyticsRoute = (g.source === 'legacy' && g.legacy_bot_id && g.id)
+                ? `/bot/${g.legacy_bot_id}/group/${g.id}/analytics`
+                : `/groups/${gid}/analytics`;
+
               return (
                 <Grid item xs={12} sm={6} lg={groups.length > 2 ? 4 : 6} key={gid}>
                   <Card
@@ -415,7 +425,7 @@ export default function MyGroups() {
                           size="small"
                           variant="contained"
                           startIcon={<Settings />}
-                          onClick={() => navigate(`/my-groups/${gid}`)}
+                          onClick={() => navigate(manageRoute)}
                           sx={{ flex: 1 }}
                         >
                           Manage
@@ -423,7 +433,7 @@ export default function MyGroups() {
                         <Tooltip title="View analytics">
                           <IconButton
                             size="small"
-                            onClick={() => navigate(`/my-groups/${gid}/analytics`)}
+                            onClick={() => navigate(analyticsRoute)}
                           >
                             <BarChart fontSize="small" />
                           </IconButton>
