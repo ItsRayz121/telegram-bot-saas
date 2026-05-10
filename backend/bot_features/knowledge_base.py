@@ -114,16 +114,26 @@ class KnowledgeBaseSystem:
         return OpenAI(**kwargs)
 
     def _embed(self, texts, group_id=None, telegram_group_id=None):
-        """Embed texts using group's custom key if available, else env key."""
+        """Embed texts using group's custom key if available, else env key.
+
+        OpenRouter does not support the embeddings API, so when the resolved
+        key is an OpenRouter platform key we fall back to OPENAI_API_KEY.
+        Users with an openai or custom key are used directly.
+        """
+        from .. import config as _cfg
         key_config = self._load_group_api_key(group_id, telegram_group_id) if (group_id or telegram_group_id) else None
 
-        if key_config and key_config["provider"] in ("openai", "openrouter", "custom"):
+        client = None
+        if key_config and key_config["provider"] == "openai":
+            client = self._get_openai_client(api_key=key_config["api_key"])
+        elif key_config and key_config["provider"] == "custom":
             client = self._get_openai_client(
                 api_key=key_config["api_key"],
-                base_url=key_config.get("base_url") or PROVIDER_DEFAULT_BASE_URLS.get(key_config["provider"]),
+                base_url=key_config.get("base_url"),
             )
-        else:
-            client = self._get_openai_client()
+        # OpenRouter cannot handle embeddings — fall through to env key
+        if not client:
+            client = self._get_openai_client(api_key=_cfg.Config.OPENAI_API_KEY or None)
 
         if not client:
             return [None] * len(texts)
@@ -199,14 +209,18 @@ class KnowledgeBaseSystem:
                 logger.debug(f"KB: No chunks found for group {group_id or telegram_group_id}")
                 return None, 0.0
 
-            # Embed question with appropriate client
-            if key_config and provider in ("openai", "openrouter", "custom"):
+            # Embed question — OpenRouter cannot handle embeddings, use OpenAI key
+            from .. import config as _cfg
+            embed_client = None
+            if key_config and provider == "openai":
+                embed_client = self._get_openai_client(api_key=key_config["api_key"])
+            elif key_config and provider == "custom":
                 embed_client = self._get_openai_client(
                     api_key=key_config["api_key"],
-                    base_url=key_config.get("base_url") or PROVIDER_DEFAULT_BASE_URLS.get(provider),
+                    base_url=key_config.get("base_url"),
                 )
-            else:
-                embed_client = self._get_openai_client()
+            if not embed_client:
+                embed_client = self._get_openai_client(api_key=_cfg.Config.OPENAI_API_KEY or None)
 
             if not embed_client:
                 logger.warning(
