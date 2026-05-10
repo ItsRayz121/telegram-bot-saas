@@ -1,5 +1,5 @@
 import React from 'react';
-import { SUPPORT_LINKS as SUPPORT_HREFS } from '../config/support';
+import { openSupportEmail } from '../config/support';
 import {
   Box, AppBar, Toolbar, Typography, Button, Container, Divider,
   Card, CardContent, Grid, Chip, Avatar,
@@ -269,7 +269,7 @@ export default function About() {
                   size="small"
                   variant="outlined"
                   startIcon={<Email fontSize="small" />}
-                  href={SUPPORT_HREFS.email}
+                  onClick={(e) => { e.preventDefault(); openSupportEmail(); }}
                   sx={{ fontSize: '0.75rem' }}
                 >
                   Email Me

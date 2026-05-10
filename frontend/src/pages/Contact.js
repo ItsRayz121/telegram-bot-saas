@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { SUPPORT_EMAIL, SUPPORT_LINKS as SUPPORT_HREFS } from '../config/support';
+import { SUPPORT_EMAIL, openSupportEmail } from '../config/support';
 import {
   Box, AppBar, Toolbar, Typography, Button, Container, Divider,
   Card, CardContent, Grid, TextField, Alert, CircularProgress, Link, Chip,
@@ -33,7 +33,8 @@ const CONTACT_CHANNELS = [
     title: 'General Support',
     desc: 'Account issues, billing questions, feature help',
     value: SUPPORT_EMAIL,
-    href: SUPPORT_HREFS.email,
+    href: '#',
+    onClick: (e) => { e.preventDefault(); openSupportEmail(); },
     color: '#2563EB',
     responseTime: '< 24 hours',
   },
@@ -123,7 +124,7 @@ function ContactForm() {
     setSending(true);
     // Opens mailto as a fallback — replace with a real form endpoint if needed
     const body = encodeURIComponent(`From: ${form.name} <${form.email}>\nSubject: ${form.subject}\n\n${form.message}`);
-    window.open(`${SUPPORT_HREFS.email.split('?')[0]}?subject=${encodeURIComponent(form.subject || 'Contact from telegizer.com')}&body=${body}`, '_blank');
+    openSupportEmail();
     setTimeout(() => {
       setSending(false);
       setSent(true);
@@ -261,7 +262,12 @@ export default function Contact() {
             <Typography variant="body2" color="text.secondary" mb={2}>
               Fill in the form and we'll open your email client with everything pre-filled.
               You can also email us directly at{' '}
-              <Link href={SUPPORT_HREFS.email} color="primary.main" underline="hover">
+              <Link
+                href="#"
+                color="primary.main"
+                underline="hover"
+                onClick={(e) => { e.preventDefault(); openSupportEmail(); }}
+              >
                 {SUPPORT_EMAIL}
               </Link>.
             </Typography>

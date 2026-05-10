@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect, useCallback } from 'react';
-import { SUPPORT_LINKS as SUPPORT_HREFS } from '../config/support';
+import { openSupportEmail } from '../config/support';
 import {
   Box, AppBar, Toolbar, Typography, Button, Card, CardContent,
   Chip, Stack, Divider, Alert, IconButton,
@@ -565,7 +565,7 @@ export default function Billing() {
                   variant="caption"
                   color="primary.main"
                   sx={{ cursor: 'pointer' }}
-                  onClick={() => window.open(SUPPORT_HREFS.email, '_blank', 'noopener,noreferrer')}
+                  onClick={openSupportEmail}
                 >
                   Contact support
                 </Typography>

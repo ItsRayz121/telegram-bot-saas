@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { SUPPORT_LINKS as SUPPORT_HREFS } from '../config/support';
+import { SUPPORT_LINKS as SUPPORT_HREFS, openSupportEmail } from '../config/support';
 import {
   Box, AppBar, Toolbar, Typography, Button, Card, CardContent,
   CardActions, Grid, Dialog, DialogTitle, DialogContent, DialogActions,
@@ -810,7 +810,11 @@ export default function Dashboard() {
                 </Box>
                 <OpenInNew sx={{ fontSize: 12, ml: 'auto', color: 'text.disabled' }} />
               </MenuItem>
-              <MenuItem component="a" href={SUPPORT_HREFS.email} target="_blank" rel="noopener noreferrer" onClick={() => setSupportAnchor(null)} dense>
+              <MenuItem
+                onClick={() => { setSupportAnchor(null); openSupportEmail(); }}
+                dense
+                sx={{ cursor: 'pointer' }}
+              >
                 <ListItemIcon><Email fontSize="small" sx={{ color: 'primary.main' }} /></ListItemIcon>
                 <Box>
                   <Typography variant="body2" fontWeight={600}>Email Support</Typography>

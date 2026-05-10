@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useState, useRef } from 'react';
-import { SUPPORT_LINKS as SUPPORT_HREFS } from '../config/support';
+import { openSupportEmail } from '../config/support';
 import {
   Box, Card, CardContent, Typography, Button, CircularProgress,
   Chip, Stack, LinearProgress,
@@ -190,10 +190,11 @@ export default function PaymentSuccess() {
                 If you believe your payment was sent but your plan did not activate,{' '}
                 <Typography
                   component="a"
-                  href={SUPPORT_HREFS.email}
+                  href="#"
+                  onClick={(e) => { e.preventDefault(); openSupportEmail(); }}
                   variant="body2"
                   color="primary.main"
-                  sx={{ textDecoration: 'none' }}
+                  sx={{ textDecoration: 'none', cursor: 'pointer' }}
                 >
                   contact support
                 </Typography>

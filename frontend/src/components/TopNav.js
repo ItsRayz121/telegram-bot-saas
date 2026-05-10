@@ -11,12 +11,12 @@ import {
 import TelegizerLogo from './TelegizerLogo';
 import UniversalSearchBar from './UniversalSearchBar';
 import { PALETTE } from '../theme';
-import { SUPPORT_LINKS as SUPPORT_HREFS } from '../config/support';
+import { SUPPORT_LINKS as SUPPORT_HREFS, openSupportEmail } from '../config/support';
 
 const SUPPORT_LINKS = [
   { label: 'Official Channel', sub: 'Updates & announcements', href: SUPPORT_HREFS.channel,   icon: Campaign, isEmail: false },
   { label: 'Community Group',  sub: 'Help from other users',   href: SUPPORT_HREFS.community, icon: People,   isEmail: false },
-  { label: 'Email Support',    sub: 'Click to contact us',     href: SUPPORT_HREFS.email,     icon: Email,    isEmail: true  },
+  { label: 'Email Support',    sub: 'Click to contact us',     href: null,                    icon: Email,    isEmail: true  },
 ];
 
 function SupportPopover() {
@@ -66,11 +66,18 @@ function SupportPopover() {
           {SUPPORT_LINKS.map(({ label, sub, href, icon: Icon, isEmail }) => (
             <ListItemButton
               key={label}
-              component="a"
-              href={href}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={() => setAnchor(null)}
+              {...(isEmail
+                ? {
+                    onClick: (e) => { e.preventDefault(); setAnchor(null); openSupportEmail(); },
+                  }
+                : {
+                    component: 'a',
+                    href,
+                    target: '_blank',
+                    rel: 'noopener noreferrer',
+                    onClick: () => setAnchor(null),
+                  }
+              )}
               sx={{
                 px: 2, py: 1.1, mx: 0.75, my: 0.2, borderRadius: 1.5,
                 cursor: 'pointer',
@@ -82,12 +89,7 @@ function SupportPopover() {
               }}
             >
               <ListItemIcon sx={{ minWidth: 36 }}>
-                <Icon
-                  sx={{
-                    fontSize: 18,
-                    color: isEmail ? PALETTE.blue : 'text.secondary',
-                  }}
-                />
+                <Icon sx={{ fontSize: 18, color: isEmail ? PALETTE.blue : 'text.secondary' }} />
               </ListItemIcon>
               <ListItemText
                 primary={label}

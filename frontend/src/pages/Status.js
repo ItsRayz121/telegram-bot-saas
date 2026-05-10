@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { SUPPORT_EMAIL, SUPPORT_LINKS as SUPPORT_HREFS } from '../config/support';
+import { SUPPORT_EMAIL, openSupportEmail } from '../config/support';
 import {
   Box, Container, Typography, Card, CardContent, Chip,
   CircularProgress, Divider, Link,
@@ -137,7 +137,11 @@ export default function Status() {
                 follow the official channel
               </Link>
               {', or email '}
-              <Link href={SUPPORT_HREFS.email} color="primary.main">
+              <Link
+                href="#"
+                color="primary.main"
+                onClick={(e) => { e.preventDefault(); openSupportEmail(); }}
+              >
                 {SUPPORT_EMAIL}
               </Link>
             </Typography>
