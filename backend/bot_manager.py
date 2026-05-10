@@ -2058,6 +2058,33 @@ class BotInstance:
                                 logger.error(f"Auto-response error: {e}")
                             break
 
+        # Multimodal image AI
+        image_settings = group.settings.get("image_ai", {})
+        if image_settings.get("enabled", False) and (update.message.photo or update.message.document):
+            try:
+                from .bot_features.image_ai import maybe_handle_image
+                from .bot_features.knowledge_base import KnowledgeBaseSystem
+                _kb_sys = KnowledgeBaseSystem(self.app_context)
+                _key_cfg = _kb_sys._load_group_api_key(group.id)
+                _api_key = _key_cfg["api_key"] if _key_cfg else None
+                _base_url = _key_cfg.get("base_url") if _key_cfg else None
+                _group_name = getattr(group, "group_name", None) or "this community"
+                _kb_settings = group.settings.get("knowledge_base", {})
+                await maybe_handle_image(
+                    bot=context.bot,
+                    message=update.message,
+                    group_id=group.id,
+                    telegram_group_id=None,
+                    image_settings=image_settings,
+                    kb_settings=_kb_settings,
+                    group_name=_group_name,
+                    app=self.app_context,
+                    api_key=_api_key,
+                    base_url=_base_url,
+                )
+            except Exception as _img_exc:
+                logger.error(f"image_ai handler error: {_img_exc}")
+
         # Social / human-like appreciation replies
         social_settings = group.settings.get("social_replies", {})
         if social_settings.get("enabled", False):

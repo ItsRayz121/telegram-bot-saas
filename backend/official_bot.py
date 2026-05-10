@@ -2374,6 +2374,38 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as exc:
             _log.debug("Auto-response check failed: %s", exc)
 
+    # Multimodal image AI
+    if flask_app and (message.photo or message.document) and message.from_user and not message.from_user.is_bot:
+        try:
+            with flask_app.app_context():
+                from .models import TelegramGroup as _TGImg
+                _tg_img = _TGImg.query.filter_by(telegram_group_id=group_id).first()
+                if _tg_img:
+                    _img_cfg = (_tg_img.settings or {}).get("image_ai", {})
+                    if _img_cfg.get("enabled", False):
+                        from .bot_features.image_ai import maybe_handle_image
+                        from .bot_features.knowledge_base import KnowledgeBaseSystem
+                        _kb_sys = KnowledgeBaseSystem(flask_app)
+                        _key_cfg = _kb_sys._load_group_api_key(None, group_id)
+                        _api_key = _key_cfg["api_key"] if _key_cfg else None
+                        _base_url = _key_cfg.get("base_url") if _key_cfg else None
+                        _grp_name = _tg_img.name or _tg_img.title or "this community"
+                        _kb_cfg = (_tg_img.settings or {}).get("knowledge_base", {})
+                        await maybe_handle_image(
+                            bot=context.bot,
+                            message=message,
+                            group_id=None,
+                            telegram_group_id=group_id,
+                            image_settings=_img_cfg,
+                            kb_settings=_kb_cfg,
+                            group_name=_grp_name,
+                            app=flask_app,
+                            api_key=_api_key,
+                            base_url=_base_url,
+                        )
+        except Exception as _img_exc:
+            _log.debug("image_ai error in on_message: %s", _img_exc)
+
     # Social / human-like appreciation replies
     if text and not text.startswith("/") and flask_app and message.from_user and not message.from_user.is_bot:
         try:

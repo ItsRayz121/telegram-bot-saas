@@ -279,6 +279,21 @@ _DEFAULTS: dict = {
         "enabled": True,
     },
 
+    # ── Multimodal image AI ───────────────────────────────────────────────────
+    # Uses GPT-4o mini vision by default (~$0.0003–0.0008/image).
+    # 5-gate smart routing: most images never reach the API.
+    # Disabled by default — admins opt in and supply their own AI key.
+    "image_ai": {
+        "enabled": False,
+        "confidence_threshold": 0.65,
+        "mention_only": True,         # only analyze if bot is @mentioned
+        "require_caption": True,      # skip images with no caption/question
+        "max_image_size_mb": 5,
+        "escalation_enabled": True,
+        "escalation_admin_ids": [],   # Telegram user IDs to DM on escalation
+        "cost_mode": "balanced",      # balanced | aggressive_savings | quality
+    },
+
     # ── Social / human-like community interaction ─────────────────────────────
     # Detects appreciation messages ("thanks", "helpful", etc.) and responds
     # naturally. No AI cost — static personality-aware response pools.

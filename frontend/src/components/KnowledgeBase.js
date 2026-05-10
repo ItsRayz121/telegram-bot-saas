@@ -6,7 +6,7 @@ import {
   MenuItem, Select, FormControl, InputLabel, Slider, CircularProgress,
   Collapse,
 } from '@mui/material';
-import { Upload, Delete, Description, Psychology, Key, ExpandMore, ExpandLess, CheckCircle, SmartToy, Tune, EmojiPeople } from '@mui/icons-material';
+import { Upload, Delete, Description, Psychology, Key, ExpandMore, ExpandLess, CheckCircle, SmartToy, Tune, EmojiPeople, ImageSearch } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { knowledge, apiKeys } from '../services/api';
 import { AI_PERSONALITIES, REPLY_LENGTHS, EMOJI_LEVELS, FORMALITY_LEVELS } from '../config/aiPersonalities';
@@ -695,6 +695,154 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
                     <strong>Reply style is determined by your AI Personality setting above.</strong> The interaction
                     style controls formality and emoji intensity. Cooldown prevents the bot from responding to the
                     same user more than once per interval.
+                  </Alert>
+                </Box>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })()}
+
+      {/* Image AI / Multimodal */}
+      {(() => {
+        const img = settings?.image_ai || {};
+        return (
+          <Card sx={{ mb: 2 }}>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                <ImageSearch color="primary" fontSize="small" />
+                <Typography variant="subtitle1" fontWeight={600}>Image Understanding (Multimodal AI)</Typography>
+              </Box>
+              <Typography variant="body2" color="text.secondary" mb={1.5}>
+                AI analyzes screenshots, error messages, and images sent with captions. Uses GPT-4o mini
+                (~$0.0003/image). Smart gating ensures most images are never sent to the API.
+              </Typography>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={!!img.enabled}
+                    onChange={e => updateSetting('image_ai.enabled', e.target.checked)}
+                  />
+                }
+                label="Enable Image Understanding"
+              />
+              {!!img.enabled && (
+                <Box mt={2}>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} sm={6}>
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            size="small"
+                            checked={img.mention_only !== false}
+                            onChange={e => updateSetting('image_ai.mention_only', e.target.checked)}
+                          />
+                        }
+                        label="Only when bot is @mentioned"
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            size="small"
+                            checked={img.require_caption !== false}
+                            onChange={e => updateSetting('image_ai.require_caption', e.target.checked)}
+                          />
+                        }
+                        label="Require caption/text with image"
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            size="small"
+                            checked={img.escalation_enabled !== false}
+                            onChange={e => updateSetting('image_ai.escalation_enabled', e.target.checked)}
+                          />
+                        }
+                        label="Escalate to admins when confidence low"
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <FormControl fullWidth size="small">
+                        <InputLabel>Cost Mode</InputLabel>
+                        <Select
+                          label="Cost Mode"
+                          value={img.cost_mode || 'balanced'}
+                          onChange={e => updateSetting('image_ai.cost_mode', e.target.value)}
+                        >
+                          <MenuItem value="aggressive_savings">
+                            <Box>
+                              <Typography variant="body2">Aggressive Savings</Typography>
+                              <Typography variant="caption" color="text.secondary">Only analyze if @mentioned + error keywords in caption</Typography>
+                            </Box>
+                          </MenuItem>
+                          <MenuItem value="balanced">
+                            <Box>
+                              <Typography variant="body2">Balanced (Recommended)</Typography>
+                              <Typography variant="caption" color="text.secondary">Analyze if caption has question/error keywords</Typography>
+                            </Box>
+                          </MenuItem>
+                          <MenuItem value="quality">
+                            <Box>
+                              <Typography variant="body2">Quality</Typography>
+                              <Typography variant="caption" color="text.secondary">Analyze any image when bot is @mentioned</Typography>
+                            </Box>
+                          </MenuItem>
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="body2" gutterBottom>
+                        Confidence threshold: <strong>{Math.round((img.confidence_threshold || 0.65) * 100)}%</strong>
+                      </Typography>
+                      <Slider
+                        value={Math.round((img.confidence_threshold || 0.65) * 100)}
+                        min={30}
+                        max={90}
+                        step={5}
+                        marks
+                        valueLabelDisplay="auto"
+                        valueLabelFormat={v => `${v}%`}
+                        onChange={(_, v) => updateSetting('image_ai.confidence_threshold', v / 100)}
+                        sx={{ maxWidth: 300 }}
+                      />
+                      <Typography variant="caption" color="text.secondary">
+                        Below this → escalate to admins
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        fullWidth size="small"
+                        type="number"
+                        label="Max image size (MB)"
+                        value={img.max_image_size_mb ?? 5}
+                        inputProps={{ min: 1, max: 10 }}
+                        onChange={e => updateSetting('image_ai.max_image_size_mb', parseInt(e.target.value) || 5)}
+                      />
+                    </Grid>
+                    {img.escalation_enabled !== false && (
+                      <Grid item xs={12}>
+                        <TextField
+                          fullWidth size="small"
+                          label="Escalation admin Telegram IDs"
+                          placeholder="123456789, 987654321"
+                          value={(img.escalation_admin_ids || []).join(', ')}
+                          onChange={e => {
+                            const ids = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
+                            updateSetting('image_ai.escalation_admin_ids', ids);
+                          }}
+                          helperText="Comma-separated Telegram user IDs. These admins receive DMs when AI confidence is low."
+                        />
+                      </Grid>
+                    )}
+                  </Grid>
+                  <Alert severity="info" sx={{ mt: 2, fontSize: '0.8rem' }} icon={false}>
+                    <strong>How it works:</strong> Smart gating checks caption keywords before calling the API —
+                    most images never cost anything. Requires an OpenAI-compatible API key configured above.
+                    For escalation to work, admins must have started a DM with the bot.
                   </Alert>
                 </Box>
               )}
