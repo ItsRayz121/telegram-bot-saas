@@ -32,13 +32,15 @@ _PUBLIC_GROUP_MEMBER_THRESHOLD = 500
 
 # ── Entry point: called when bot is added to any group ────────────────────────
 
-async def handle_bot_added_to_group(bot, flask_app, chat, added_by_tg_id: str):
+async def handle_bot_added_to_group(
+    bot, flask_app, chat, added_by_tg_id: str,
+    hub_bot_id: str | None = None,
+):
     """
-    Runs when @telegizer_bot is added to a group.
+    Runs when the official or a custom bot is added to a group.
 
-    Looks up the Telegizer account for the user who added the bot.
-    If found and that user has Hub enabled, sends the consent DM.
-    If the user has no Hub record yet, we still send — Hub is visible to all.
+    hub_bot_id: when set, the consent DM is issued for that specific custom
+    HubBotIdentity instead of the user's official bot.
     """
     if not added_by_tg_id:
         return
@@ -56,10 +58,16 @@ async def handle_bot_added_to_group(bot, flask_app, chat, added_by_tg_id: str):
         telegram_group_id = chat.id
         group_name = chat.title or f"Group {telegram_group_id}"
 
-        # Check if already connected (e.g. re-added)
-        bot_identity = HubBotIdentity.query.filter_by(
-            user_id=user.id, bot_type="official"
-        ).first()
+        # Resolve the bot identity to check for an existing consent record
+        if hub_bot_id:
+            bot_identity = HubBotIdentity.query.filter_by(
+                id=hub_bot_id, user_id=user.id, bot_type="custom"
+            ).first()
+        else:
+            bot_identity = HubBotIdentity.query.filter_by(
+                user_id=user.id, bot_type="official"
+            ).first()
+
         if bot_identity:
             existing = HubConnectedGroup.query.filter_by(
                 bot_id=bot_identity.id,
@@ -87,12 +95,15 @@ async def handle_bot_added_to_group(bot, flask_app, chat, added_by_tg_id: str):
             is_public=is_public,
             is_large=is_large,
             member_count=member_count,
+            hub_bot_id=hub_bot_id,
         )
 
 
-async def _send_consent_dm(bot, telegram_user_id: int, telegram_group_id: int,
-                            group_name: str, is_public: bool, is_large: bool,
-                            member_count: int):
+async def _send_consent_dm(
+    bot, telegram_user_id: int, telegram_group_id: int,
+    group_name: str, is_public: bool, is_large: bool,
+    member_count: int, hub_bot_id: str | None = None,
+):
     """Send the consent DM to the user who added the bot."""
 
     # If public or large: prepend warning
@@ -115,10 +126,14 @@ async def _send_consent_dm(bot, telegram_user_id: int, telegram_group_id: int,
         f"Do you want me to start observing this group?"
     )
 
+    # Embed hub_bot_id in callback_data so the confirm handler knows which bot.
+    # Format: hub_consent:<action>:<group_id>:<bot_tag>
+    # bot_tag is "official" for the official bot (backwards-compatible default).
+    bot_tag = hub_bot_id if hub_bot_id else "official"
     keyboard = InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("✓ Start Observing", callback_data=f"hub_consent:start:{telegram_group_id}"),
-            InlineKeyboardButton("✗ Cancel — Remove Me", callback_data=f"hub_consent:cancel:{telegram_group_id}"),
+            InlineKeyboardButton("✓ Start Observing", callback_data=f"hub_consent:start:{telegram_group_id}:{bot_tag}"),
+            InlineKeyboardButton("✗ Cancel — Remove Me", callback_data=f"hub_consent:cancel:{telegram_group_id}:{bot_tag}"),
         ]
     ])
 
@@ -150,16 +165,23 @@ async def handle_consent_callback(update, context, flask_app):
 
     await query.answer()
 
-    parts = data.split(":", 2)
+    # Supports both old 3-part format (hub_consent:start:<gid>) and new
+    # 4-part format (hub_consent:start:<gid>:<bot_tag>) for in-flight DMs.
+    parts = data.split(":")
     if len(parts) < 3:
         return True
 
-    prefix, action, group_id_str = parts[0] + ":" + parts[1], parts[1], parts[2]
-    telegram_group_id = int(group_id_str)
+    telegram_group_id = int(parts[2])
     telegram_user_id = query.from_user.id
+    bot_tag = parts[3] if len(parts) >= 4 else "official"
+    hub_bot_id = None if bot_tag == "official" else bot_tag
 
     if data.startswith("hub_consent:start:"):
-        await _confirm_consent(query, context.bot, flask_app, telegram_user_id, telegram_group_id)
+        await _confirm_consent(
+            query, context.bot, flask_app,
+            telegram_user_id, telegram_group_id,
+            hub_bot_id=hub_bot_id,
+        )
 
     elif data.startswith("hub_consent:cancel:"):
         await _cancel_consent(query, context.bot, flask_app, telegram_user_id, telegram_group_id)
@@ -173,7 +195,11 @@ async def handle_consent_callback(update, context, flask_app):
     return True
 
 
-async def _confirm_consent(query, bot, flask_app, telegram_user_id: int, telegram_group_id: int):
+async def _confirm_consent(
+    query, bot, flask_app,
+    telegram_user_id: int, telegram_group_id: int,
+    hub_bot_id: str | None = None,
+):
     """User confirmed consent. Create connected_groups record."""
     with flask_app.app_context():
         from ..models import db
@@ -187,44 +213,53 @@ async def _confirm_consent(query, bot, flask_app, telegram_user_id: int, telegra
             await query.edit_message_text("⚠️ Could not find your Telegizer account. Please connect your Telegram account at telegizer.com/settings.")
             return
 
-        # Lazy-create official bot identity if not exists
-        bot_identity = HubBotIdentity.query.filter_by(
-            user_id=user.id, bot_type="official"
-        ).first()
-        if not bot_identity:
-            from ..config import Config as _Config
-            bot_identity = HubBotIdentity(
-                id=str(uuid.uuid4()),
-                user_id=user.id,
-                bot_type="official",
-                display_name="Telegizer Official Assistant",
-                telegram_bot_username=_Config.TELEGRAM_BOT_USERNAME or "telegizer_bot",
-                is_active=True,
-            )
-            db.session.add(bot_identity)
-            db.session.flush()
-
-            settings_row = HubBotSettings(
-                id=str(uuid.uuid4()),
-                bot_id=bot_identity.id,
-                user_id=user.id,
-            )
-            db.session.add(settings_row)
-
-            # Lazy-create global record
-            global_rec = AssistantHubGlobal.query.filter_by(user_id=user.id).first()
-            if not global_rec:
-                global_rec = AssistantHubGlobal(
+        if hub_bot_id:
+            # Custom bot path — identity must already exist
+            bot_identity = HubBotIdentity.query.filter_by(
+                id=hub_bot_id, user_id=user.id, bot_type="custom"
+            ).first()
+            if not bot_identity:
+                await query.edit_message_text("⚠️ Custom bot not found. It may have been deleted.")
+                return
+        else:
+            # Official bot path — lazy-create if not exists
+            bot_identity = HubBotIdentity.query.filter_by(
+                user_id=user.id, bot_type="official"
+            ).first()
+            if not bot_identity:
+                from ..config import Config as _Config
+                bot_identity = HubBotIdentity(
                     id=str(uuid.uuid4()),
                     user_id=user.id,
-                    is_enabled=True,
-                    default_bot_id=bot_identity.id,
+                    bot_type="official",
+                    display_name="Telegizer Official Assistant",
+                    telegram_bot_username=_Config.TELEGRAM_BOT_USERNAME or "telegizer_bot",
+                    is_active=True,
                 )
-                db.session.add(global_rec)
-            else:
-                global_rec.is_enabled = True
-                global_rec.default_bot_id = global_rec.default_bot_id or bot_identity.id
-            db.session.flush()
+                db.session.add(bot_identity)
+                db.session.flush()
+
+                settings_row = HubBotSettings(
+                    id=str(uuid.uuid4()),
+                    bot_id=bot_identity.id,
+                    user_id=user.id,
+                )
+                db.session.add(settings_row)
+
+                # Lazy-create global record
+                global_rec = AssistantHubGlobal.query.filter_by(user_id=user.id).first()
+                if not global_rec:
+                    global_rec = AssistantHubGlobal(
+                        id=str(uuid.uuid4()),
+                        user_id=user.id,
+                        is_enabled=True,
+                        default_bot_id=bot_identity.id,
+                    )
+                    db.session.add(global_rec)
+                else:
+                    global_rec.is_enabled = True
+                    global_rec.default_bot_id = global_rec.default_bot_id or bot_identity.id
+                db.session.flush()
 
         # Get group metadata from Telegram
         group_name = f"Group {telegram_group_id}"
@@ -244,7 +279,7 @@ async def _confirm_consent(query, bot, flask_app, telegram_user_id: int, telegra
             check_connected_groups(
                 user_id=user.id,
                 bot_id=bot_identity.id,
-                bot_type="official",
+                bot_type=bot_identity.bot_type,
                 plan=user.subscription_tier or "free",
             )
         except PlanLimitError as e:
@@ -324,37 +359,41 @@ async def _cancel_consent(query, bot, flask_app, telegram_user_id: int, telegram
 
 
 async def _send_group_intro(query, bot, flask_app, telegram_user_id: int, telegram_group_id: int):
-    """Send an introduction message to the group."""
+    """Send an introduction message to the group (public groups only)."""
     with flask_app.app_context():
         from ..models import db
         from ..assistant.hub_models import HubConnectedGroup, HubBotIdentity
 
         user = _user_by_tg_id(str(telegram_user_id))
         if user:
-            bot_identity = HubBotIdentity.query.filter_by(
-                user_id=user.id, bot_type="official"
+            # Find the HubConnectedGroup for this group regardless of bot type
+            group = HubConnectedGroup.query.filter(
+                HubConnectedGroup.telegram_group_id == telegram_group_id,
+                HubConnectedGroup.user_id == user.id,
             ).first()
-            if bot_identity:
-                group = HubConnectedGroup.query.filter_by(
-                    bot_id=bot_identity.id,
-                    telegram_group_id=telegram_group_id,
-                ).first()
-                if group:
-                    group.intro_sent = True
-                    db.session.commit()
+            if group:
+                # Private groups: observe silently, never send intro messages
+                if not group.is_public_group:
+                    await query.edit_message_text(
+                        "✅ Group connected. I'll observe silently — no intro message sent to private groups."
+                    )
+                    return
 
-                    first_name = user.full_name.split()[0] if user.full_name else "the owner"
-                    try:
-                        await bot.send_message(
-                            chat_id=telegram_group_id,
-                            text=(
-                                f"👋 Hi, I'm Telegizer Assistant. I'll help {first_name} track "
-                                f"tasks and meetings from this group. I won't respond to messages "
-                                f"unless @mentioned."
-                            ),
-                        )
-                    except Exception as e:
-                        _log.warning("Hub intro send failed for group %s: %s", telegram_group_id, e)
+                group.intro_sent = True
+                db.session.commit()
+
+                first_name = user.full_name.split()[0] if user.full_name else "the owner"
+                try:
+                    await bot.send_message(
+                        chat_id=telegram_group_id,
+                        text=(
+                            f"👋 Hi, I'm Telegizer Assistant. I'll help {first_name} track "
+                            f"tasks and meetings from this group. I won't respond to messages "
+                            f"unless @mentioned."
+                        ),
+                    )
+                except Exception as e:
+                    _log.warning("Hub intro send failed for group %s: %s", telegram_group_id, e)
 
     await query.edit_message_text(
         "✅ Introduction sent to the group."

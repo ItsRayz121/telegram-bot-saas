@@ -92,7 +92,7 @@ export default function HubCustomBotWorkspace() {
             <Chip label="Custom Bot" size="small" variant="outlined" sx={{ height: 18, fontSize: '0.65rem', flexShrink: 0 }} />
             {bot.telegram_bot_username && (
               <Typography variant="caption" color="text.secondary" noWrap sx={{ flexShrink: 0 }}>
-                @{bot.telegram_bot_username} · {bot.group_count ?? 0} groups
+                @{bot.telegram_bot_username} · {groups.length} groups
               </Typography>
             )}
           </Box>

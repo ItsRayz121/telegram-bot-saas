@@ -2463,8 +2463,37 @@ class BotInstance:
         if chat.type not in ("group", "supergroup"):
             return
         new_status = result.new_chat_member.status
+        added_by = result.from_user
+
         if new_status in ("member", "administrator"):
+            # Group Management record
             await self._get_or_create_group(chat.id, chat.title, context.bot, chat_type=chat.type)
+
+            # Assistant Hub consent flow — find this custom bot's HubBotIdentity mirror
+            if added_by and self.app_context:
+                try:
+                    hub_bot_id = None
+                    with self.app_context.app_context():
+                        from .models import Bot, CustomBot
+                        bot_rec = Bot.query.get(self.bot_id)
+                        if bot_rec and bot_rec.custom_bot_id:
+                            cb = CustomBot.query.get(bot_rec.custom_bot_id)
+                            if cb and cb.hub_bot_id:
+                                hub_bot_id = cb.hub_bot_id
+
+                    if hub_bot_id:
+                        from .assistant.hub_consent import handle_bot_added_to_group
+                        await handle_bot_added_to_group(
+                            bot=context.bot,
+                            flask_app=self.app_context,
+                            chat=chat,
+                            added_by_tg_id=str(added_by.id),
+                            hub_bot_id=hub_bot_id,
+                        )
+                except Exception as _hub_e:
+                    logger.warning(
+                        "Custom bot Hub consent flow failed for chat %s: %s", chat.id, _hub_e
+                    )
 
     def _run_bot(self):
         import time
