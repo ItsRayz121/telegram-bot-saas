@@ -121,6 +121,12 @@ class Config:
     # Set to "true" to require admin accounts to have TOTP/2FA before accessing /api/admin/*.
     # Defaults to False so sole-admin setups are not locked out.
     ENFORCE_ADMIN_2FA = os.environ.get("ENFORCE_ADMIN_2FA", "false").lower() == "true"
+    if _is_prod and not ENFORCE_ADMIN_2FA:
+        _log.warning(
+            "ENFORCE_ADMIN_2FA is not enabled in production. "
+            "Admin accounts can be accessed without 2FA — set ENFORCE_ADMIN_2FA=true "
+            "in your Railway environment after ensuring all admin accounts have TOTP enabled."
+        )
     if not ADMIN_EMAILS:
         if _is_prod:
             raise RuntimeError(

@@ -488,16 +488,23 @@ export const digest = {
 };
 
 export const admin = {
+  // Users
   getUsers: (params) => api.get('/api/admin/users', { params }),
   getUser: (id) => api.get(`/api/admin/users/${id}`),
   updateSubscription: (id, data) => api.put(`/api/admin/users/${id}/subscription`, data),
   banUser: (id, data) => api.post(`/api/admin/users/${id}/ban`, data),
   unbanUser: (id) => api.post(`/api/admin/users/${id}/unban`),
   deleteUser: (id) => api.delete(`/api/admin/users/${id}`),
+  // Stats & Revenue
   getStats: () => api.get('/api/admin/stats'),
+  getRevenue: () => api.get('/api/admin/revenue'),
+  getHealth: () => api.get('/api/admin/health'),
+  // Bots
   getAllBots: (params) => api.get('/api/admin/bots', { params }),
+  // Suspicious Activity
   getSuspicious: (params) => api.get('/api/admin/suspicious', { params }),
   dismissSuspicious: (id) => api.post(`/api/admin/suspicious/${id}/dismiss`),
+  // Referrals
   getReferrals: (params) => api.get('/api/admin/referrals', { params }),
   updateReferralStatus: (id, data) => api.post(`/api/admin/referrals/${id}/status`, data),
   // Official bot ecosystem
@@ -506,8 +513,23 @@ export const admin = {
   disableTelegramGroup: (groupId) => api.post(`/api/admin/telegram-groups/${groupId}/disable`),
   unlinkTelegramGroup: (groupId) => api.post(`/api/admin/telegram-groups/${groupId}/unlink`),
   getGroupEvents: (groupId, params) => api.get(`/api/admin/telegram-groups/${groupId}/events`, { params }),
+  // Custom Bots
   getCustomBots: (params) => api.get('/api/admin/custom-bots', { params }),
   disableCustomBot: (id) => api.post(`/api/admin/custom-bots/${id}/disable`),
+  // Directory
+  getDirectory: (params) => api.get('/api/admin/directory', { params }),
+  moderateDirectory: (id, data) => api.post(`/api/admin/directory/${id}/moderate`, data),
+  // Announcements
+  getAnnouncements: (params) => api.get('/api/admin/announcements', { params }),
+  createAnnouncement: (data) => api.post('/api/admin/announcements', data),
+  deleteAnnouncement: (id) => api.delete(`/api/admin/announcements/${id}`),
+  // Audit Logs
+  getAuditLogs: (params) => api.get('/api/admin/audit-logs', { params }),
+  // Reported Messages
+  getReports: (params) => api.get('/api/admin/reports', { params }),
+  resolveReport: (source, id) => api.post(`/api/admin/reports/${source}/${id}/resolve`),
+  // Feature Adoption
+  getFeatureAdoption: () => api.get('/api/admin/feature-adoption'),
 };
 
 export const telegramGroups = {

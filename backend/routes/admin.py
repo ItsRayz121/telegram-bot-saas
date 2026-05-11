@@ -1,10 +1,16 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import wraps
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 import json
 import logging
-from ..models import db, User, Bot, Group, Member, SuspiciousActivity, Referral, TelegramGroup, CustomBot, BotEvent, AdminAuditLog, DirectoryListing
+from ..models import (
+    db, User, Bot, Group, Member, SuspiciousActivity, Referral,
+    TelegramGroup, CustomBot, BotEvent, AdminAuditLog, DirectoryListing,
+    PaymentHistory, SubscriptionRenewal, UserNotification, AdminAnnouncement,
+    ReportedMessage, OfficialReportedMessage,
+    AutomationWorkflow, WorkspaceReminder, Note, Channel, KnowledgeDocument,
+)
 from ..config import Config
 from ..middleware.rate_limit import rate_limit
 
@@ -27,7 +33,6 @@ def admin_required(f):
             _log.warning("admin_required: JWT resolved but user not found — route=%s", request.path)
             return jsonify({"error": "User not found"}), 404
 
-        # Email check is case-insensitive; ADMIN_EMAILS is already lowercased at config parse time.
         if user.email.lower() not in Config.ADMIN_EMAILS:
             _log.warning(
                 "admin_required: access denied — email=%s route=%s reason=not_in_allowlist",
@@ -35,7 +40,6 @@ def admin_required(f):
             )
             return jsonify({"error": "Admin access required", "reason": "not_in_allowlist"}), 403
 
-        # 2FA enforcement is opt-in via ENFORCE_ADMIN_2FA=true env var.
         if Config.ENFORCE_ADMIN_2FA and not user.totp_enabled:
             _log.warning(
                 "admin_required: access denied — email=%s route=%s reason=2fa_required",
@@ -48,7 +52,6 @@ def admin_required(f):
 
         _log.info("admin_required: access granted — email=%s route=%s method=%s", user.email, request.path, request.method)
 
-        # Audit log every admin action
         try:
             body = request.get_json(silent=True) or {}
             sanitised = {k: v for k, v in body.items() if k not in {"password", "token", "api_key"}}
@@ -68,6 +71,8 @@ def admin_required(f):
     return decorated
 
 
+# ── User Management ────────────────────────────────────────────────────────────
+
 @admin_bp.route("/users", methods=["GET"])
 @admin_required
 @rate_limit(requests_per_minute=60)
@@ -75,12 +80,24 @@ def list_users():
     page = request.args.get("page", 1, type=int)
     per_page = min(request.args.get("per_page", 50, type=int), 100)
     search = request.args.get("search", "")
+    tier = request.args.get("tier", "")
+    status = request.args.get("status", "")
+
     query = User.query
     if search:
         query = query.filter(
             (User.email.ilike(f"%{search}%")) |
             (User.full_name.ilike(f"%{search}%"))
         )
+    if tier in ("free", "pro", "enterprise"):
+        query = query.filter(User.subscription_tier == tier)
+    if status == "banned":
+        query = query.filter(User.is_banned == True)
+    elif status == "active":
+        query = query.filter(User.is_banned == False)
+    elif status == "suspicious":
+        query = query.filter(User.is_suspicious == True)
+
     query = query.order_by(User.created_at.desc())
     paginated = query.paginate(page=page, per_page=per_page, error_out=False)
     return jsonify({
@@ -101,6 +118,14 @@ def get_user(user_id):
         return jsonify({"error": "User not found"}), 404
     user_data = user.to_dict()
     user_data["bots"] = [b.to_dict() for b in user.bots]
+    # Recent payment history
+    payments = PaymentHistory.query.filter_by(user_id=user_id)\
+        .order_by(PaymentHistory.created_at.desc()).limit(10).all()
+    user_data["recent_payments"] = [p.to_dict() for p in payments]
+    # Recent suspicious activity
+    suspicious = SuspiciousActivity.query.filter_by(user_id=user_id)\
+        .order_by(SuspiciousActivity.created_at.desc()).limit(5).all()
+    user_data["suspicious_events"] = [s.to_dict() for s in suspicious]
     return jsonify({"user": user_data})
 
 
@@ -172,6 +197,8 @@ def delete_user(user_id):
     return jsonify({"message": "User deleted"})
 
 
+# ── Platform Stats ─────────────────────────────────────────────────────────────
+
 @admin_bp.route("/stats", methods=["GET"])
 @admin_required
 @rate_limit(requests_per_minute=30)
@@ -185,6 +212,13 @@ def get_stats():
     pro_users = User.query.filter_by(subscription_tier="pro").count()
     enterprise_users = User.query.filter_by(subscription_tier="enterprise").count()
     banned_users = User.query.filter_by(is_banned=True).count()
+    verified_users = User.query.filter_by(email_verified=True).count()
+
+    # New signups in last 7 and 30 days
+    now = datetime.utcnow()
+    new_7d = User.query.filter(User.created_at >= now - timedelta(days=7)).count()
+    new_30d = User.query.filter(User.created_at >= now - timedelta(days=30)).count()
+
     return jsonify({
         "stats": {
             "total_users": total_users,
@@ -192,6 +226,9 @@ def get_stats():
             "pro_users": pro_users,
             "enterprise_users": enterprise_users,
             "banned_users": banned_users,
+            "verified_users": verified_users,
+            "new_users_7d": new_7d,
+            "new_users_30d": new_30d,
             "total_bots": total_bots,
             "active_bots": active_bots,
             "total_groups": total_groups,
@@ -200,11 +237,142 @@ def get_stats():
     })
 
 
+@admin_bp.route("/revenue", methods=["GET"])
+@admin_required
+@rate_limit(requests_per_minute=30)
+def get_revenue():
+    """MRR, ARR, new revenue this month, and all-time totals from PaymentHistory."""
+    now = datetime.utcnow()
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    # All-time confirmed revenue (amount_usd is in cents)
+    all_payments = PaymentHistory.query.filter_by(status="confirmed").all()
+    total_revenue_cents = sum(p.amount_usd or 0 for p in all_payments)
+
+    # Revenue this month
+    month_payments = PaymentHistory.query.filter(
+        PaymentHistory.status == "confirmed",
+        PaymentHistory.created_at >= month_start,
+    ).all()
+    month_revenue_cents = sum(p.amount_usd or 0 for p in month_payments)
+
+    # Revenue last month
+    last_month_start = (month_start - timedelta(days=1)).replace(day=1)
+    last_month_payments = PaymentHistory.query.filter(
+        PaymentHistory.status == "confirmed",
+        PaymentHistory.created_at >= last_month_start,
+        PaymentHistory.created_at < month_start,
+    ).all()
+    last_month_revenue_cents = sum(p.amount_usd or 0 for p in last_month_payments)
+
+    # MRR estimate: active subscribers × monthly price
+    pro_monthly_price = 1900   # cents ($19)
+    enterprise_monthly_price = 4900  # cents ($49)
+    pro_count = User.query.filter_by(subscription_tier="pro").count()
+    enterprise_count = User.query.filter_by(subscription_tier="enterprise").count()
+    mrr_cents = (pro_count * pro_monthly_price) + (enterprise_count * enterprise_monthly_price)
+    arr_cents = mrr_cents * 12
+
+    # Payment method breakdown
+    nowpayments_count = PaymentHistory.query.filter_by(provider="nowpayments", status="confirmed").count()
+    lemonsqueezy_count = PaymentHistory.query.filter_by(provider="lemonsqueezy", status="confirmed").count()
+
+    # Monthly revenue trend (last 6 months)
+    trend = []
+    for i in range(5, -1, -1):
+        m_start = (now.replace(day=1) - timedelta(days=i * 30)).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        m_end_raw = m_start.replace(month=m_start.month % 12 + 1) if m_start.month < 12 else m_start.replace(year=m_start.year + 1, month=1)
+        m_rev = db.session.query(db.func.sum(PaymentHistory.amount_usd)).filter(
+            PaymentHistory.status == "confirmed",
+            PaymentHistory.created_at >= m_start,
+            PaymentHistory.created_at < m_end_raw,
+        ).scalar() or 0
+        trend.append({
+            "month": m_start.strftime("%b %Y"),
+            "revenue": round(m_rev / 100, 2),
+        })
+
+    return jsonify({
+        "revenue": {
+            "mrr": round(mrr_cents / 100, 2),
+            "arr": round(arr_cents / 100, 2),
+            "total_all_time": round(total_revenue_cents / 100, 2),
+            "this_month": round(month_revenue_cents / 100, 2),
+            "last_month": round(last_month_revenue_cents / 100, 2),
+            "pro_subscribers": pro_count,
+            "enterprise_subscribers": enterprise_count,
+            "nowpayments_count": nowpayments_count,
+            "lemonsqueezy_count": lemonsqueezy_count,
+            "monthly_trend": trend,
+        }
+    })
+
+
+@admin_bp.route("/health", methods=["GET"])
+@admin_required
+@rate_limit(requests_per_minute=30)
+def platform_health():
+    """Check DB, Redis, and Celery health for the admin dashboard."""
+    checks = {}
+
+    # Database
+    try:
+        db.session.execute(db.text("SELECT 1"))
+        checks["database"] = "ok"
+    except Exception as e:
+        checks["database"] = f"error: {str(e)[:80]}"
+
+    # Redis
+    try:
+        from flask import current_app
+        redis_client = getattr(current_app, "_redis_client", None)
+        if redis_client is None:
+            try:
+                import redis as _redis
+                r = _redis.from_url(Config.REDIS_URL or "redis://localhost:6379/0", socket_timeout=2)
+                r.ping()
+                checks["redis"] = "ok"
+            except Exception as re:
+                checks["redis"] = f"error: {str(re)[:80]}"
+        else:
+            redis_client.ping()
+            checks["redis"] = "ok"
+    except Exception as e:
+        checks["redis"] = f"error: {str(e)[:80]}"
+
+    # Celery — check for a recent heartbeat key in Redis
+    try:
+        import redis as _redis
+        r = _redis.from_url(Config.REDIS_URL or "redis://localhost:6379/0", socket_timeout=2)
+        # Celery workers write a heartbeat key; fall back to "unknown" gracefully
+        heartbeat = r.get("celery:heartbeat")
+        checks["celery"] = "ok" if heartbeat else "unknown"
+    except Exception:
+        checks["celery"] = "unknown"
+
+    overall = "ok" if all(v == "ok" or v == "unknown" for v in checks.values()) else "degraded"
+
+    # Recent error count from DB (last hour)
+    try:
+        one_hour_ago = datetime.utcnow() - timedelta(hours=1)
+        recent_admin_actions = AdminAuditLog.query.filter(
+            AdminAuditLog.created_at >= one_hour_ago
+        ).count()
+        checks["admin_actions_last_hour"] = recent_admin_actions
+    except Exception:
+        checks["admin_actions_last_hour"] = 0
+
+    return jsonify({
+        "status": overall,
+        "checks": checks,
+        "timestamp": datetime.utcnow().isoformat(),
+    })
+
+
 @admin_bp.route("/my-plan", methods=["PUT"])
 @admin_required
 @rate_limit(requests_per_minute=30)
 def set_own_plan():
-    """Allow admin/developer to freely switch their own subscription plan."""
     user = _get_current_user()
     data = request.get_json()
     tier = data.get("tier")
@@ -216,11 +384,12 @@ def set_own_plan():
     return jsonify({"user": user.to_dict(), "message": f"Plan switched to {tier}"}), 200
 
 
+# ── Suspicious Activity ────────────────────────────────────────────────────────
+
 @admin_bp.route("/suspicious", methods=["GET"])
 @admin_required
 @rate_limit(requests_per_minute=30)
 def list_suspicious():
-    """Return paginated suspicious activity events for admin review."""
     page = request.args.get("page", 1, type=int)
     per_page = min(request.args.get("per_page", 50, type=int), 100)
     event_type = request.args.get("event_type", "")
@@ -258,7 +427,6 @@ def list_suspicious():
 @admin_required
 @rate_limit(requests_per_minute=30)
 def dismiss_suspicious(event_id):
-    """Mark a suspicious activity event as reviewed/dismissed."""
     event = SuspiciousActivity.query.get(event_id)
     if not event:
         return jsonify({"error": "Event not found"}), 404
@@ -267,14 +435,15 @@ def dismiss_suspicious(event_id):
     return jsonify({"message": "Event dismissed", "event": event.to_dict()})
 
 
+# ── Referrals ──────────────────────────────────────────────────────────────────
+
 @admin_bp.route("/referrals", methods=["GET"])
 @admin_required
 @rate_limit(requests_per_minute=30)
 def list_referrals():
-    """Return paginated referral records with status filter for abuse review."""
     page = request.args.get("page", 1, type=int)
     per_page = min(request.args.get("per_page", 50, type=int), 100)
-    status = request.args.get("status", "")  # pending|approved|suspicious|rejected
+    status = request.args.get("status", "")
 
     query = Referral.query.order_by(Referral.created_at.desc())
     if status:
@@ -304,7 +473,6 @@ def list_referrals():
 @admin_required
 @rate_limit(requests_per_minute=30)
 def update_referral_status(referral_id):
-    """Manually approve or reject a referral."""
     referral = Referral.query.get(referral_id)
     if not referral:
         return jsonify({"error": "Referral not found"}), 404
@@ -318,7 +486,6 @@ def update_referral_status(referral_id):
     referral.status = new_status
     db.session.commit()
 
-    # If approving a previously non-approved referral, trigger reward check
     if new_status == "approved" and old_status != "approved":
         try:
             from flask import current_app
@@ -344,6 +511,8 @@ def update_referral_status(referral_id):
     return jsonify({"message": f"Referral status updated to {new_status}", "referral": referral.to_dict()})
 
 
+# ── Bots ───────────────────────────────────────────────────────────────────────
+
 @admin_bp.route("/bots", methods=["GET"])
 @admin_required
 @rate_limit(requests_per_minute=30)
@@ -366,13 +535,12 @@ def list_all_bots():
     })
 
 
-# ── Official bot ecosystem admin endpoints ─────────────────────────────────────
+# ── Official Bot Ecosystem ─────────────────────────────────────────────────────
 
 @admin_bp.route("/telegram-groups", methods=["GET"])
 @admin_required
 @rate_limit(requests_per_minute=30)
 def admin_list_telegram_groups():
-    """All linked Telegram groups across all users."""
     page = request.args.get("page", 1, type=int)
     per_page = min(request.args.get("per_page", 50, type=int), 200)
     search = request.args.get("search", "")
@@ -389,7 +557,6 @@ def admin_list_telegram_groups():
     query = query.order_by(TelegramGroup.created_at.desc())
     paginated = query.paginate(page=page, per_page=per_page, error_out=False)
 
-    # Batch-load all owner users in one query to avoid N+1
     owner_ids = {tg.owner_user_id for tg in paginated.items if tg.owner_user_id}
     owners_by_id = {}
     if owner_ids:
@@ -497,6 +664,8 @@ def admin_group_events(group_id):
     })
 
 
+# ── Custom Bots ────────────────────────────────────────────────────────────────
+
 @admin_bp.route("/custom-bots", methods=["GET"])
 @admin_required
 @rate_limit(requests_per_minute=30)
@@ -511,6 +680,7 @@ def admin_list_custom_bots():
         d = bot.to_dict()
         owner = User.query.get(bot.owner_user_id)
         d["owner_email"] = owner.email if owner else None
+        d["owner_tier"] = owner.subscription_tier if owner else None
         result.append(d)
     return jsonify({
         "bots": result,
@@ -532,22 +702,42 @@ def admin_disable_custom_bot(bot_id):
     return jsonify({"message": "Custom bot disabled", "bot": bot.to_dict()})
 
 
+# ── Directory Moderation ───────────────────────────────────────────────────────
+
 @admin_bp.route("/directory/pending", methods=["GET"])
 @admin_required
 @rate_limit(requests_per_minute=60)
 def list_pending_directory():
-    """List directory listings awaiting moderation approval."""
     pending = DirectoryListing.query.filter_by(moderation_status="pending").order_by(
         DirectoryListing.created_at.asc()
     ).all()
     return jsonify({"listings": [l.to_dict(include_contact=True) for l in pending], "total": len(pending)})
 
 
+@admin_bp.route("/directory", methods=["GET"])
+@admin_required
+@rate_limit(requests_per_minute=60)
+def list_all_directory():
+    page = request.args.get("page", 1, type=int)
+    per_page = min(request.args.get("per_page", 20, type=int), 100)
+    status_filter = request.args.get("status", "")
+    query = DirectoryListing.query
+    if status_filter:
+        query = query.filter(DirectoryListing.moderation_status == status_filter)
+    query = query.order_by(DirectoryListing.created_at.desc())
+    paginated = query.paginate(page=page, per_page=per_page, error_out=False)
+    return jsonify({
+        "listings": [l.to_dict(include_contact=True) for l in paginated.items],
+        "total": paginated.total,
+        "pages": paginated.pages,
+        "page": page,
+    })
+
+
 @admin_bp.route("/directory/<int:lid>/moderate", methods=["POST"])
 @admin_required
 @rate_limit(requests_per_minute=30)
 def moderate_directory_listing(lid):
-    """Approve or reject a directory listing."""
     listing = DirectoryListing.query.get(lid)
     if not listing:
         return jsonify({"error": "Listing not found"}), 404
@@ -558,3 +748,279 @@ def moderate_directory_listing(lid):
     listing.moderation_status = "approved" if action == "approve" else "rejected"
     db.session.commit()
     return jsonify({"listing": listing.to_dict(include_contact=True)})
+
+
+# ── Announcements ──────────────────────────────────────────────────────────────
+
+@admin_bp.route("/announcements", methods=["GET"])
+@admin_required
+@rate_limit(requests_per_minute=30)
+def list_announcements():
+    page = request.args.get("page", 1, type=int)
+    per_page = min(request.args.get("per_page", 20, type=int), 100)
+    paginated = AdminAnnouncement.query.order_by(
+        AdminAnnouncement.created_at.desc()
+    ).paginate(page=page, per_page=per_page, error_out=False)
+    return jsonify({
+        "announcements": [a.to_dict() for a in paginated.items],
+        "total": paginated.total,
+        "pages": paginated.pages,
+        "page": page,
+    })
+
+
+@admin_bp.route("/announcements", methods=["POST"])
+@admin_required
+@rate_limit(requests_per_minute=10)
+def create_announcement():
+    admin_user = _get_current_user()
+    data = request.get_json() or {}
+
+    title = (data.get("title") or "").strip()
+    body = (data.get("body") or "").strip()
+    if not title or not body:
+        return jsonify({"error": "title and body are required"}), 400
+    if len(title) > 200:
+        return jsonify({"error": "title must be under 200 characters"}), 400
+
+    audience = data.get("audience", "all")
+    if audience not in ("all", "free", "pro", "enterprise", "with_bots"):
+        return jsonify({"error": "Invalid audience"}), 400
+
+    channel = data.get("channel", "inapp")
+    if channel not in ("inapp", "email", "both"):
+        return jsonify({"error": "Invalid channel"}), 400
+
+    announcement_type = data.get("announcement_type", "info")
+    if announcement_type not in ("info", "warning", "critical"):
+        return jsonify({"error": "Invalid announcement_type"}), 400
+
+    announcement = AdminAnnouncement(
+        admin_id=admin_user.id,
+        title=title,
+        body=body,
+        audience=audience,
+        channel=channel,
+        announcement_type=announcement_type,
+    )
+    db.session.add(announcement)
+    db.session.flush()  # get the ID before sending
+
+    # Build recipient query
+    recipient_query = User.query.filter_by(is_banned=False)
+    if audience == "free":
+        recipient_query = recipient_query.filter_by(subscription_tier="free")
+    elif audience == "pro":
+        recipient_query = recipient_query.filter_by(subscription_tier="pro")
+    elif audience == "enterprise":
+        recipient_query = recipient_query.filter_by(subscription_tier="enterprise")
+    elif audience == "with_bots":
+        from ..models import Bot as BotModel
+        bot_user_ids = db.session.query(BotModel.owner_id).distinct()
+        recipient_query = recipient_query.filter(User.id.in_(bot_user_ids))
+
+    recipients = recipient_query.all()
+    delivered = 0
+
+    # Deliver in-app notifications
+    if channel in ("inapp", "both"):
+        for user in recipients:
+            notif = UserNotification(
+                user_id=user.id,
+                type=f"announcement_{announcement_type}",
+                title=title,
+                message=body,
+            )
+            db.session.add(notif)
+            delivered += 1
+
+    announcement.sent = True
+    announcement.sent_at = datetime.utcnow()
+    announcement.delivered_count = delivered
+    db.session.commit()
+
+    # Email delivery via Celery (fire and forget)
+    if channel in ("email", "both"):
+        try:
+            from ..tasks import send_announcement_emails
+            send_announcement_emails.delay(announcement.id, [u.id for u in recipients])
+        except Exception:
+            pass  # Email task is best-effort; in-app delivery already done
+
+    return jsonify({
+        "announcement": announcement.to_dict(),
+        "delivered_count": delivered,
+        "message": f"Announcement sent to {delivered} users",
+    }), 201
+
+
+@admin_bp.route("/announcements/<int:ann_id>", methods=["DELETE"])
+@admin_required
+@rate_limit(requests_per_minute=10)
+def delete_announcement(ann_id):
+    ann = AdminAnnouncement.query.get(ann_id)
+    if not ann:
+        return jsonify({"error": "Announcement not found"}), 404
+    db.session.delete(ann)
+    db.session.commit()
+    return jsonify({"message": "Announcement deleted"})
+
+
+# ── Audit Logs ─────────────────────────────────────────────────────────────────
+
+@admin_bp.route("/audit-logs", methods=["GET"])
+@admin_required
+@rate_limit(requests_per_minute=30)
+def list_audit_logs():
+    page = request.args.get("page", 1, type=int)
+    per_page = min(request.args.get("per_page", 50, type=int), 100)
+    admin_id_filter = request.args.get("admin_id", type=int)
+    method_filter = request.args.get("method", "")
+
+    query = AdminAuditLog.query.order_by(AdminAuditLog.created_at.desc())
+    if admin_id_filter:
+        query = query.filter(AdminAuditLog.admin_id == admin_id_filter)
+    if method_filter:
+        query = query.filter(AdminAuditLog.method == method_filter.upper())
+
+    paginated = query.paginate(page=page, per_page=per_page, error_out=False)
+
+    # Enrich with admin email (batch load)
+    admin_ids = {log.admin_id for log in paginated.items}
+    admins = {u.id: u.email for u in User.query.filter(User.id.in_(admin_ids)).all()} if admin_ids else {}
+
+    items = []
+    for log in paginated.items:
+        d = log.to_dict()
+        d["admin_email"] = admins.get(log.admin_id, "unknown")
+        items.append(d)
+
+    return jsonify({
+        "logs": items,
+        "total": paginated.total,
+        "pages": paginated.pages,
+        "page": page,
+    })
+
+
+# ── Reported Messages ──────────────────────────────────────────────────────────
+
+@admin_bp.route("/reports", methods=["GET"])
+@admin_required
+@rate_limit(requests_per_minute=30)
+def list_reports():
+    page = request.args.get("page", 1, type=int)
+    per_page = min(request.args.get("per_page", 50, type=int), 100)
+    status_filter = request.args.get("status", "")  # open | resolved | ""
+    source_filter = request.args.get("source", "")  # custom | official | ""
+
+    custom_reports = []
+    official_reports = []
+
+    if source_filter in ("", "custom"):
+        q = ReportedMessage.query.order_by(ReportedMessage.created_at.desc())
+        if status_filter:
+            q = q.filter(ReportedMessage.status == status_filter)
+        custom_reports = q.all()
+
+    if source_filter in ("", "official"):
+        q = OfficialReportedMessage.query.order_by(OfficialReportedMessage.created_at.desc())
+        if status_filter:
+            q = q.filter(OfficialReportedMessage.status == status_filter)
+        official_reports = q.all()
+
+    combined = []
+    for r in custom_reports:
+        combined.append({
+            "id": r.id,
+            "source": "custom",
+            "group_id": r.group_id,
+            "group_name": r.group.name if hasattr(r, "group") and r.group else None,
+            "reporter_user_id": str(r.reporter_user_id),
+            "reported_user_id": str(r.reported_user_id),
+            "reason": r.reason,
+            "status": r.status,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        })
+    for r in official_reports:
+        combined.append({
+            "id": r.id,
+            "source": "official",
+            "group_id": r.telegram_group_id,
+            "group_name": None,
+            "reporter_user_id": str(r.reporter_user_id),
+            "reported_user_id": str(r.reported_user_id),
+            "reason": r.reason,
+            "status": r.status,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        })
+
+    combined.sort(key=lambda x: x["created_at"] or "", reverse=True)
+
+    total = len(combined)
+    start = (page - 1) * per_page
+    page_items = combined[start: start + per_page]
+
+    return jsonify({
+        "reports": page_items,
+        "total": total,
+        "pages": max(1, (total + per_page - 1) // per_page),
+        "page": page,
+    })
+
+
+@admin_bp.route("/reports/<string:source>/<int:report_id>/resolve", methods=["POST"])
+@admin_required
+@rate_limit(requests_per_minute=30)
+def resolve_report(source, report_id):
+    if source == "custom":
+        report = ReportedMessage.query.get(report_id)
+    elif source == "official":
+        report = OfficialReportedMessage.query.get(report_id)
+    else:
+        return jsonify({"error": "source must be 'custom' or 'official'"}), 400
+
+    if not report:
+        return jsonify({"error": "Report not found"}), 404
+
+    report.status = "resolved"
+    db.session.commit()
+    return jsonify({"message": "Report resolved"})
+
+
+# ── Feature Adoption ───────────────────────────────────────────────────────────
+
+@admin_bp.route("/feature-adoption", methods=["GET"])
+@admin_required
+@rate_limit(requests_per_minute=30)
+def feature_adoption():
+    total_users = User.query.count() or 1
+
+    def _pct(n):
+        return round(n / total_users * 100, 1)
+
+    custom_bots = db.session.query(db.func.count(db.func.distinct(CustomBot.owner_user_id))).scalar() or 0
+    linked_groups = db.session.query(db.func.count(db.func.distinct(TelegramGroup.owner_user_id))).scalar() or 0
+    workflows = db.session.query(db.func.count(db.func.distinct(AutomationWorkflow.owner_user_id))).scalar() or 0
+    reminders = db.session.query(db.func.count(db.func.distinct(WorkspaceReminder.owner_user_id))).scalar() or 0
+    notes = db.session.query(db.func.count(db.func.distinct(Note.user_id))).scalar() or 0
+    channels = db.session.query(db.func.count(db.func.distinct(Channel.user_id))).scalar() or 0
+    # KnowledgeDocument links to groups (group_id), not users directly — count distinct groups with docs
+    knowledge_docs = db.session.query(db.func.count(db.func.distinct(KnowledgeDocument.group_id))).filter(KnowledgeDocument.group_id.isnot(None)).scalar() or 0
+    totp_enabled = User.query.filter(User.totp_enabled == True).count() or 0  # noqa: E712
+    telegram_linked = User.query.filter(User.telegram_user_id.isnot(None)).count() or 0
+
+    features = [
+        {"feature": "Custom Bots", "users": custom_bots, "pct": _pct(custom_bots)},
+        {"feature": "Linked Groups", "users": linked_groups, "pct": _pct(linked_groups)},
+        {"feature": "Automation Workflows", "users": workflows, "pct": _pct(workflows)},
+        {"feature": "Smart Reminders", "users": reminders, "pct": _pct(reminders)},
+        {"feature": "Notes", "users": notes, "pct": _pct(notes)},
+        {"feature": "Channels", "users": channels, "pct": _pct(channels)},
+        {"feature": "Knowledge Docs (groups)", "users": knowledge_docs, "pct": _pct(knowledge_docs)},
+        {"feature": "2FA Enabled", "users": totp_enabled, "pct": _pct(totp_enabled)},
+        {"feature": "Telegram Linked", "users": telegram_linked, "pct": _pct(telegram_linked)},
+    ]
+    features.sort(key=lambda x: x["users"], reverse=True)
+
+    return jsonify({"total_users": total_users, "features": features})

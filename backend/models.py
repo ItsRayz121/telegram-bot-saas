@@ -2391,6 +2391,43 @@ class AdminAuditLog(db.Model):
         }
 
 
+# ── AdminAnnouncement ─────────────────────────────────────────────────────────
+
+class AdminAnnouncement(db.Model):
+    """Platform-wide announcements broadcast by admins to user segments."""
+    __tablename__ = "admin_announcements"
+
+    id            = db.Column(db.Integer, primary_key=True)
+    admin_id      = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    title         = db.Column(db.String(200), nullable=False)
+    body          = db.Column(db.Text, nullable=False)
+    # Audience: all | free | pro | enterprise | with_bots
+    audience      = db.Column(db.String(50), nullable=False, default="all")
+    # Channel: inapp | email | both
+    channel       = db.Column(db.String(20), nullable=False, default="inapp")
+    # Type: info | warning | critical
+    announcement_type = db.Column(db.String(20), nullable=False, default="info")
+    sent          = db.Column(db.Boolean, default=False, nullable=False)
+    sent_at       = db.Column(db.DateTime, nullable=True)
+    delivered_count = db.Column(db.Integer, default=0, nullable=False)
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "admin_id": self.admin_id,
+            "title": self.title,
+            "body": self.body,
+            "audience": self.audience,
+            "channel": self.channel,
+            "announcement_type": self.announcement_type,
+            "sent": self.sent,
+            "sent_at": self.sent_at.isoformat() if self.sent_at else None,
+            "delivered_count": self.delivered_count,
+            "created_at": self.created_at.isoformat(),
+        }
+
+
 # ── AssistantBot ──────────────────────────────────────────────────────────────
 
 class AssistantBot(db.Model):
