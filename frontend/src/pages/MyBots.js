@@ -247,7 +247,7 @@ export default function MyBots() {
                     variant="contained"
                     size="small"
                     startIcon={<Groups />}
-                    onClick={() => navigate('/my-groups')}
+                    onClick={() => navigate('/my-groups?bot_type=official')}
                   >
                     Manage Groups
                   </Button>
