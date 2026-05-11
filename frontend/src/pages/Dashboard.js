@@ -5,7 +5,7 @@ import {
   CardActions, Grid, Dialog, DialogTitle, DialogContent, DialogActions,
   TextField, IconButton, Chip, CircularProgress, Tooltip, Menu, MenuItem,
   Avatar, LinearProgress, Alert, Stepper, Step, StepLabel, StepContent,
-  InputAdornment, Skeleton, Table, TableBody, TableCell, TableRow, Collapse,
+  InputAdornment, Skeleton, Table, TableBody, TableCell, TableContainer, TableRow, Collapse,
 } from '@mui/material';
 import {
   Add, Delete, Settings, BarChart, SmartToy, AccountCircle,
@@ -446,6 +446,7 @@ function LeaderboardCard() {
           </Box>
         ) : (
           <>
+            <TableContainer sx={{ overflowX: 'auto' }}>
             <Table size="small">
               <TableBody>
                 {data.leaderboard.map((entry) => (
@@ -468,6 +469,7 @@ function LeaderboardCard() {
                 ))}
               </TableBody>
             </Table>
+            </TableContainer>
 
             {data.current_user_rank === null && data.current_user_count > 0 && (
               <Box sx={{ mt: 1.5, pt: 1.5, borderTop: '1px dashed', borderColor: 'divider' }}>
@@ -1255,7 +1257,7 @@ export default function Dashboard() {
       </Dialog>
 
       {/* ── Delete Bot Dialog ── */}
-      <Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)}>
+      <Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)} fullWidth maxWidth="xs">
         <DialogTitle>Delete Bot</DialogTitle>
         <DialogContent>
           <Typography>

@@ -576,7 +576,7 @@ export default function Billing() {
         )}
 
         {/* Cancel confirmation dialog */}
-        <Dialog open={cancelDialogOpen} onClose={() => !cancelling && setCancelDialogOpen(false)}>
+        <Dialog open={cancelDialogOpen} onClose={() => !cancelling && setCancelDialogOpen(false)} fullWidth maxWidth="xs">
           <DialogTitle>Cancel your subscription?</DialogTitle>
           <DialogContent>
             <DialogContentText>

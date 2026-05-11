@@ -490,7 +490,7 @@ export function MobileAssistantFab() {
         onClick={() => setOpen(true)}
         sx={{
           position: 'fixed',
-          bottom: 72,   // above the bottom nav bar (56px) + 16px gap
+          bottom: 'calc(72px + env(safe-area-inset-bottom, 0px))',
           right: 16,
           zIndex: 1300,
           boxShadow: 4,

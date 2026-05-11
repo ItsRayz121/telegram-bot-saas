@@ -612,7 +612,7 @@ export default function MyGroups() {
       </Dialog>
 
       {/* Unlink confirm */}
-      <Dialog open={!!unlinkTarget} onClose={() => setUnlinkTarget(null)}>
+      <Dialog open={!!unlinkTarget} onClose={() => setUnlinkTarget(null)} fullWidth maxWidth="xs">
         <DialogTitle>Unlink Group?</DialogTitle>
         <DialogContent>
           <Typography>

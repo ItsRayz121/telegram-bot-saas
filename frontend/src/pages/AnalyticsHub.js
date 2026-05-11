@@ -136,7 +136,7 @@ function OverviewTab({ isPro }) {
                   {topGroups.length === 0 ? (
                     <Typography color="text.secondary" fontSize="0.84rem">No activity yet.</Typography>
                   ) : (
-                    <TableContainer>
+                    <TableContainer sx={{ overflowX: 'auto' }}>
                       <Table size="small">
                         <TableHead>
                           <TableRow>

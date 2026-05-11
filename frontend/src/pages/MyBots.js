@@ -511,7 +511,7 @@ export default function MyBots() {
       </Dialog>
 
       {/* Disconnect confirm */}
-      <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)}>
+      <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} fullWidth maxWidth="xs">
         <DialogTitle>Disconnect Bot?</DialogTitle>
         <DialogContent>
           <Typography>
