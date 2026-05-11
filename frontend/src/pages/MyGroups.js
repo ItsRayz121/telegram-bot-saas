@@ -10,7 +10,7 @@ import {
 import {
   Add, Groups, CheckCircle, LinkOff, Settings, Refresh,
   OpenInNew, Warning, Lock, Security, Cancel, BarChart,
-  HelpOutline, ExpandMore, ExpandLess,
+  HelpOutline, ExpandMore, ExpandLess, ArrowBack,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { telegramGroups, settings as settingsApi } from '../services/api';
@@ -221,35 +221,75 @@ export default function MyGroups() {
   return (
     <Box>
       <TopNav hasSidebar
-        breadcrumb={[
-          { label: 'Dashboard', path: '/dashboard' },
-          { label: 'My Groups' },
-        ]}
+        breadcrumb={
+          botTypeFilter === 'official'
+            ? [
+                { label: 'Dashboard', path: '/dashboard' },
+                { label: 'Official Telegizer Bot', path: '/dashboard' },
+                { label: 'Groups' },
+              ]
+            : [
+                { label: 'Dashboard', path: '/dashboard' },
+                { label: 'My Groups' },
+              ]
+        }
         actions={
           <Box sx={{ display: 'flex', gap: 1 }}>
-            <Button
-              variant="outlined"
-              size="small"
-              startIcon={<OpenInNew />}
-              href={addToGroupUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Add Bot
-            </Button>
-            <Button
-              variant="contained"
-              size="small"
-              startIcon={<Add />}
-              onClick={() => setLinkOpen(true)}
-            >
-              Link Group
-            </Button>
+            {botTypeFilter === 'official' ? (
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<ArrowBack />}
+                onClick={() => navigate('/dashboard')}
+              >
+                Back to Dashboard
+              </Button>
+            ) : (
+              <>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<OpenInNew />}
+                  href={addToGroupUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Add Bot
+                </Button>
+                <Button
+                  variant="contained"
+                  size="small"
+                  startIcon={<Add />}
+                  onClick={() => setLinkOpen(true)}
+                >
+                  Link Group
+                </Button>
+              </>
+            )}
           </Box>
         }
       />
 
       <Container maxWidth="xl" sx={{ py: 2.5 }}>
+        {/* Filter context banner — shown only when scoped to a bot */}
+        {botTypeFilter === 'official' && (
+          <Alert
+            severity="info"
+            icon={<Groups fontSize="small" />}
+            sx={{ mb: 2, borderRadius: 2, alignItems: 'center' }}
+            action={
+              <Button size="small" startIcon={<ArrowBack />} onClick={() => navigate('/dashboard')}>
+                Back
+              </Button>
+            }
+          >
+            Showing groups connected to <strong>Official Telegizer Bot (@{BOT_USERNAME})</strong> only.{' '}
+            <Button size="small" sx={{ p: 0, minWidth: 0, textTransform: 'none', fontWeight: 600 }} onClick={() => navigate('/my-groups')}>
+              View all groups
+            </Button>
+          </Alert>
+        )}
+
         {/* Compact toolbar row: refresh + collapsible guide */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
           <IconButton size="small" onClick={load} disabled={loading}>
