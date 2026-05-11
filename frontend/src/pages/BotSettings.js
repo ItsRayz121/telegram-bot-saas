@@ -123,41 +123,72 @@ export default function BotSettings() {
                         </Box>
                       </Box>
 
-                      <Box sx={{ display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap' }}>
+                      {/* Actions — three equal-width buttons in a single row */}
+                      <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
                         <Button
                           size="small"
-                          startIcon={<Settings />}
-                          variant="outlined"
-                          fullWidth
+                          variant="contained"
+                          startIcon={<Settings sx={{ fontSize: '0.95rem !important' }} />}
                           onClick={(e) => {
                             e.stopPropagation();
                             navigate(`/bot/${id}/group/${group.id}`);
                           }}
+                          sx={{
+                            flex: 1,
+                            fontSize: '0.72rem',
+                            fontWeight: 600,
+                            letterSpacing: 0.2,
+                            textTransform: 'none',
+                            py: 0.75,
+                            borderRadius: 1.5,
+                            boxShadow: 'none',
+                            '&:hover': { boxShadow: '0 2px 8px rgba(33,150,243,0.25)', transform: 'translateY(-1px)' },
+                            transition: 'transform 0.15s, box-shadow 0.15s',
+                          }}
                         >
-                          Manage Settings
+                          Settings
                         </Button>
                         <Button
                           size="small"
-                          startIcon={<BarChart />}
                           variant="outlined"
-                          color="secondary"
-                          fullWidth
+                          startIcon={<BarChart sx={{ fontSize: '0.95rem !important' }} />}
                           onClick={(e) => {
                             e.stopPropagation();
                             navigate(`/bot/${id}/group/${group.id}/analytics`);
+                          }}
+                          sx={{
+                            flex: 1,
+                            fontSize: '0.72rem',
+                            fontWeight: 600,
+                            letterSpacing: 0.2,
+                            textTransform: 'none',
+                            py: 0.75,
+                            borderRadius: 1.5,
+                            '&:hover': { bgcolor: 'primary.main', color: '#fff', borderColor: 'primary.main', transform: 'translateY(-1px)' },
+                            transition: 'transform 0.15s, background-color 0.15s, color 0.15s',
                           }}
                         >
                           Analytics
                         </Button>
                         <Button
                           size="small"
-                          startIcon={<LinkOff />}
                           variant="outlined"
                           color="error"
-                          fullWidth
+                          startIcon={<LinkOff sx={{ fontSize: '0.95rem !important' }} />}
                           onClick={(e) => {
                             e.stopPropagation();
                             setDisconnectTarget(group);
+                          }}
+                          sx={{
+                            flex: 1,
+                            fontSize: '0.72rem',
+                            fontWeight: 600,
+                            letterSpacing: 0.2,
+                            textTransform: 'none',
+                            py: 0.75,
+                            borderRadius: 1.5,
+                            '&:hover': { bgcolor: 'error.main', color: '#fff', borderColor: 'error.main', transform: 'translateY(-1px)' },
+                            transition: 'transform 0.15s, background-color 0.15s, color 0.15s',
                           }}
                         >
                           Disconnect
