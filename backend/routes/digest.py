@@ -628,9 +628,9 @@ def run_digest_scheduler(app):
             if not bot or not bot.is_active:
                 continue
 
-            _check_and_send(group, bot, now, "daily",   timedelta(days=1),  timedelta(hours=23))
-            _check_and_send(group, bot, now, "weekly",  timedelta(days=7),  timedelta(hours=23))
-            _check_and_send(group, bot, now, "monthly", timedelta(days=30), timedelta(hours=23))
+            _check_and_send(group, bot, now, "daily",   timedelta(days=1),  timedelta(hours=1))
+            _check_and_send(group, bot, now, "weekly",  timedelta(days=7),  timedelta(hours=1))
+            _check_and_send(group, bot, now, "monthly", timedelta(days=30), timedelta(hours=1))
 
             db.session.commit()
 
@@ -651,7 +651,6 @@ def _check_and_send(group, bot, now, key, period_delta, tolerance):
             pass
 
     # Timezone-aware hour gate: only send during the user's preferred digest hour (default 8am).
-    # Falls back gracefully if pytz is unavailable or timezone is invalid.
     digest_hour = int(digest.get("hour", 8))
     owner_tz_name = "UTC"
     try:
@@ -667,8 +666,14 @@ def _check_and_send(group, bot, now, key, period_delta, tolerance):
         local_now = datetime.utcnow().replace(tzinfo=pytz.utc).astimezone(tz)
         if local_now.hour != digest_hour:
             return
+    except ImportError:
+        # pytz not installed — fall back to UTC hour gate so we still block hourly resends
+        if datetime.utcnow().hour != digest_hour:
+            return
     except Exception:
-        pass  # pytz unavailable or bad timezone — fall through and send anyway
+        # Bad timezone string — use UTC
+        if datetime.utcnow().hour != digest_hour:
+            return
 
     label_map = {"daily": "Daily", "weekly": "Weekly", "monthly": "Monthly"}
     result = _do_send_report(group, bot, f"{label_map[key]} Report", now - period_delta)
