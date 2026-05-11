@@ -1380,6 +1380,9 @@ class CustomBot(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
+    # Link to the matching HubBotIdentity — set when the bot is auto-mirrored to Assistant Hub
+    hub_bot_id = db.Column(db.String(36), db.ForeignKey("hub_bot_identities.id", ondelete="SET NULL"), nullable=True, index=True)
+
     linked_groups = db.relationship("TelegramGroup", backref="custom_bot", lazy=True)
 
     def get_token(self) -> str:
@@ -1413,6 +1416,7 @@ class CustomBot(db.Model):
             "last_active": self.updated_at.isoformat() if self.updated_at else None,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "hub_bot_id": self.hub_bot_id,
         }
         if include_token:
             data["bot_token"] = self.get_token()

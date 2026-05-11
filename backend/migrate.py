@@ -325,6 +325,31 @@ def init_db():
             "telegram_groups.group_context backfill NULL rows",
         )
 
+        # ── Dual-side bot mirroring: cross-reference columns ─────────────────────
+        _run_alter(
+            db.engine,
+            "ALTER TABLE custom_bots ADD COLUMN IF NOT EXISTS hub_bot_id VARCHAR(36) REFERENCES hub_bot_identities(id) ON DELETE SET NULL",
+            "custom_bots.hub_bot_id (link to hub identity)",
+        )
+        _run_alter(
+            db.engine,
+            "CREATE INDEX IF NOT EXISTS ix_custom_bots_hub_bot_id ON custom_bots (hub_bot_id)",
+            "custom_bots.hub_bot_id index",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE hub_bot_identities ADD COLUMN IF NOT EXISTS custom_bot_id INTEGER",
+            "hub_bot_identities.custom_bot_id (link to group-management bot)",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE hub_bot_identities ADD CONSTRAINT IF NOT EXISTS fk_hub_bot_custom_bot "
+            "FOREIGN KEY (custom_bot_id) REFERENCES custom_bots(id) ON DELETE SET NULL",
+            "hub_bot_identities.custom_bot_id FK constraint",
+        )
+
+        _backfill_bot_mirror_links(app)
+
         print("Migration complete.")
 
     # One-shot Telegram account backfill (also runs inline above via _backfill_telegram_accounts).
@@ -403,6 +428,34 @@ def _backfill_telegram_accounts(app):
             print(f"  ✓ Backfilled {created} UserTelegramAccount rows from legacy telegram_user_id")
         else:
             print("  – UserTelegramAccount backfill: all rows already present")
+
+
+def _backfill_bot_mirror_links(app):
+    """Link existing CustomBot ↔ HubBotIdentity records that predate the dual-side feature.
+
+    Matches on (user_id, bot_username) — safe to run multiple times (skips already-linked rows).
+    """
+    from .models import db, CustomBot
+    from .assistant.hub_models import HubBotIdentity
+    with app.app_context():
+        unlinked = CustomBot.query.filter(CustomBot.hub_bot_id.is_(None)).all()
+        linked = 0
+        for cb in unlinked:
+            hub = HubBotIdentity.query.filter_by(
+                user_id=cb.owner_user_id,
+                telegram_bot_username=cb.bot_username,
+                bot_type="custom",
+                is_active=True,
+            ).first()
+            if hub:
+                cb.hub_bot_id = hub.id
+                hub.custom_bot_id = cb.id
+                linked += 1
+        if linked:
+            db.session.commit()
+            print(f"  ✓ Backfilled {linked} CustomBot ↔ HubBotIdentity links")
+        else:
+            print("  – Bot mirror backfill: no unlinked pairs found")
 
 
 def init_hub_db():

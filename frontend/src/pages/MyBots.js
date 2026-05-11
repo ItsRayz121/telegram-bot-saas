@@ -8,7 +8,7 @@ import {
 } from '@mui/material';
 import {
   Add, SmartToy, Delete, Refresh, OpenInNew, Groups,
-  Settings, CheckCircle, Warning, BarChart, Bolt,
+  Settings, CheckCircle, Warning, BarChart, Bolt, Psychology,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { customBots, telegramGroups as telegramGroupsApi } from '../services/api';
@@ -348,6 +348,16 @@ export default function MyBots() {
                           <Typography variant="body2" color="text.secondary">
                             @{bot.bot_username}
                           </Typography>
+                          {bot.hub_bot_id && (
+                            <Chip
+                              icon={<Psychology sx={{ fontSize: '13px !important' }} />}
+                              label="Also in Assistant Hub"
+                              size="small"
+                              color="secondary"
+                              variant="outlined"
+                              sx={{ mt: 0.5, fontSize: '0.7rem' }}
+                            />
+                          )}
                         </Box>
                         <StatusChip status={healthStatus} />
                       </Box>

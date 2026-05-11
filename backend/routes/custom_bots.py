@@ -168,6 +168,31 @@ def add_custom_bot():
 
     db.session.commit()
 
+    # Auto-mirror to Assistant Hub so the bot appears on both sides
+    try:
+        from ..assistant.hub_models import HubBotIdentity, HubBotSettings
+        from ..assistant.hub_crypto import _enc
+        import uuid as _uuid
+        hub_bot = HubBotIdentity(
+            id=str(_uuid.uuid4()),
+            user_id=user.id,
+            bot_type="custom",
+            display_name=bot_name or bot_username,
+            telegram_bot_token=_enc(bot_token),
+            telegram_bot_username=bot_username,
+            is_active=True,
+            custom_bot_id=custom_bot.id,
+        )
+        db.session.add(hub_bot)
+        db.session.flush()
+        db.session.add(HubBotSettings(id=str(_uuid.uuid4()), bot_id=hub_bot.id, user_id=user.id))
+        custom_bot.hub_bot_id = hub_bot.id
+        db.session.commit()
+    except Exception as _e:
+        import logging as _log
+        _log.getLogger(__name__).warning("add_custom_bot: hub mirror failed: %s", _e)
+        db.session.rollback()
+
     # Start the polling thread immediately so the bot responds in Telegram right away
     try:
         from ..bot_manager import bot_manager as _bm
@@ -231,6 +256,17 @@ def delete_custom_bot(bot_id):
         "linked_bot_id": None,
         "linked_via_bot_type": "official",
     })
+
+    # Deactivate the mirrored HubBotIdentity so it disappears from Assistant Hub
+    if bot.hub_bot_id:
+        try:
+            from ..assistant.hub_models import HubBotIdentity as _HBI
+            hub_bot = _HBI.query.filter_by(id=bot.hub_bot_id, user_id=user.id).first()
+            if hub_bot:
+                hub_bot.is_active = False
+        except Exception as _e:
+            import logging as _log
+            _log.getLogger(__name__).warning("delete_custom_bot: hub deactivation failed: %s", _e)
 
     db.session.delete(bot)
     db.session.commit()

@@ -1426,6 +1426,15 @@ function HubSettings({ botData, groups, setGroups }) {
                     <Box sx={{ minWidth: 0 }}>
                       <Typography variant="body2" noWrap fontWeight={500}>{bot.display_name || `Bot ${bot.id}`}</Typography>
                       <Typography variant="caption" color="text.secondary">@{bot.telegram_bot_username || '—'}</Typography>
+                      {bot.custom_bot_id && (
+                        <Chip
+                          label="Also in Group Management"
+                          size="small"
+                          color="primary"
+                          variant="outlined"
+                          sx={{ mt: 0.5, fontSize: '0.7rem', display: 'block', width: 'fit-content' }}
+                        />
+                      )}
                     </Box>
                     <Button size="small" color="error" variant="outlined" sx={{ fontSize: '0.72rem', flexShrink: 0, ml: 1 }}
                       onClick={() => { setBotToDelete(bot); setDeleteBotConfirm(''); setDeleteBotError(null); }}>

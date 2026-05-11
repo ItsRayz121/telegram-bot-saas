@@ -30,6 +30,8 @@ class HubBotIdentity(db.Model):
     telegram_bot_username = db.Column(db.String(100))                # NULL for official bot
     telegram_bot_id = db.Column(db.BigInteger)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
+    # Set when this hub identity was auto-mirrored from a Group Management CustomBot
+    custom_bot_id = db.Column(db.Integer, db.ForeignKey("custom_bots.id", ondelete="SET NULL"), nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
     __table_args__ = (

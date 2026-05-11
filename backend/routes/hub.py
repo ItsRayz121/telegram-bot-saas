@@ -228,6 +228,7 @@ def _bot_card_data(bot: HubBotIdentity, user_id: int) -> dict:
         "meetings_today": meetings_today,
         "last_summary": last_summary,
         "created_at": bot.created_at.isoformat() if bot.created_at else None,
+        "custom_bot_id": bot.custom_bot_id,
     }
 
 
@@ -1779,6 +1780,55 @@ def create_custom_bot():
     db.session.commit()
     _log.info("create_custom_bot: user=%s registered @%s", user.id, bot_username)
 
+    # Auto-mirror to Group Management so the bot appears on both sides
+    try:
+        from ..models import CustomBot, Bot
+        from ..utils.encryption import hash_token as _hash_token
+        # Guard: skip if a Bot polling record already exists for this token
+        # (prevents duplicate threads and unique-constraint failures)
+        existing_bot_rec = Bot.query.filter_by(bot_token_hash=_hash_token(token)).first()
+        existing_cb = CustomBot.query.filter_by(
+            owner_user_id=user.id, bot_username=bot_username
+        ).first()
+        if not existing_cb:
+            cb = CustomBot(
+                owner_user_id=user.id,
+                bot_name=tg_data.get("first_name") or bot_username,
+                bot_username=bot_username,
+                status="active",
+                hub_bot_id=bot.id,
+            )
+            cb.set_token(token)
+            db.session.add(cb)
+            db.session.flush()
+            bot.custom_bot_id = cb.id
+        else:
+            # Link existing record
+            existing_cb.hub_bot_id = bot.id
+            bot.custom_bot_id = existing_cb.id
+            cb = existing_cb
+
+        if not existing_bot_rec:
+            bot_record = Bot(user_id=user.id, bot_username=bot_username,
+                             bot_name=tg_data.get("first_name") or bot_username, is_active=True)
+            bot_record.set_token(token)
+            db.session.add(bot_record)
+            db.session.flush()
+        else:
+            bot_record = existing_bot_rec
+
+        db.session.commit()
+        if not existing_bot_rec:
+            try:
+                from ..bot_manager import bot_manager as _bm
+                from flask import current_app
+                _bm.start_bot(bot_record.id, token, current_app._get_current_object())
+            except Exception as _be:
+                _log.warning("create_custom_bot: polling thread start failed: %s", _be)
+    except Exception as _e:
+        _log.warning("create_custom_bot: group_management mirror failed: %s", _e)
+        db.session.rollback()
+
     # Register Telegram webhook (best-effort — don't fail if BASE_URL not set)
     base_url = Config.BACKEND_URL
     if base_url:
@@ -1836,6 +1886,27 @@ def delete_custom_bot(bot_id):
             _log.warning("delete_custom_bot: webhook removal failed bot=%s: %s", bot_id, exc)
 
     bot.is_active = False
+
+    # Stop and deactivate the mirrored CustomBot + polling thread
+    if bot.custom_bot_id:
+        try:
+            from ..models import CustomBot, Bot as BotModel
+            cb = CustomBot.query.filter_by(id=bot.custom_bot_id, owner_user_id=user.id).first()
+            if cb:
+                cb.status = "inactive"
+                bot_rec = BotModel.query.filter_by(
+                    user_id=user.id, bot_username=cb.bot_username
+                ).first()
+                if bot_rec:
+                    try:
+                        from ..bot_manager import bot_manager as _bm
+                        _bm.stop_bot(bot_rec.id)
+                        bot_rec.is_active = False
+                    except Exception as _be:
+                        _log.warning("delete_custom_bot hub: stop polling failed: %s", _be)
+        except Exception as _e:
+            _log.warning("delete_custom_bot hub: CustomBot deactivation failed: %s", _e)
+
     db.session.commit()
     return jsonify({"ok": True})
 

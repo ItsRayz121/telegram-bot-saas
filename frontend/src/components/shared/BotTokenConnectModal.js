@@ -64,6 +64,7 @@ export default function BotTokenConnectModal({ open, onClose, onConnected, mode 
         bot = preview;
       }
       onConnected(bot);
+      // Both sides are now wired — the backend auto-mirrors the bot to the other pillar
     } catch (e) {
       const code = e.response?.data?.error;
       if (code === 'plan_limit') setError('Bot limit reached. Upgrade your plan.');
@@ -107,6 +108,11 @@ export default function BotTokenConnectModal({ open, onClose, onConnected, mode 
               <SmartToy fontSize="small" color="primary" />
               <Typography variant="body2"><strong>{preview.bot_name}</strong></Typography>
               <Chip label={`@${preview.bot_username}`} size="small" variant="outlined" />
+            </Box>
+            <Box sx={{ mt: 1 }}>
+              <Typography variant="caption" color="text.secondary">
+                This bot will be available in both <strong>Assistant Hub</strong> (private groups) and <strong>Group Management</strong> (public communities).
+              </Typography>
             </Box>
             {!preview.can_join_groups && (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 1 }}>
