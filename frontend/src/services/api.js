@@ -185,6 +185,23 @@ export const settings = {
         }))
       : api.get(`/api/bots/${botId}/groups/${groupId}/audit-logs`, { params }),
 
+  // Leaderboard: official reads OfficialMember, custom reads Member table
+  getLeaderboard: (botId, groupId, params) =>
+    botId === 'official'
+      ? api.get(`/api/telegram-groups/${groupId}/leaderboard`, { params })
+      : api.get(`/api/bots/${botId}/groups/${groupId}/leaderboard`, { params }),
+
+  // Warnings: official reads OfficialWarning, custom reads AuditLog warn entries
+  listWarnings: (botId, groupId, params) =>
+    botId === 'official'
+      ? api.get(`/api/telegram-groups/${groupId}/warnings`, { params })
+      : api.get(`/api/bots/${botId}/groups/${groupId}/warnings`, { params }),
+
+  removeWarning: (botId, groupId, warningId) =>
+    botId === 'official'
+      ? api.delete(`/api/telegram-groups/${groupId}/warnings/${warningId}`)
+      : Promise.resolve({ data: { message: 'ok' } }), // custom bot warnings are AuditLog entries — no delete needed
+
   // Official groups: real scheduled-messages endpoints
   getScheduledMessages: (botId, groupId) =>
     botId === 'official'

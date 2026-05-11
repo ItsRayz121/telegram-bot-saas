@@ -334,6 +334,70 @@ def get_audit_logs(bot_id, group_id):
         return jsonify({"error": str(e)}), 500
 
 
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/leaderboard", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def get_custom_bot_leaderboard(bot_id, group_id):
+    """XP leaderboard for custom-bot groups (reads from Member table, not OfficialMember)."""
+    try:
+        user = _get_current_user()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        bot, group, err = _get_bot_and_group(user, bot_id, group_id)
+        if err:
+            return err
+        limit = min(request.args.get("limit", 20, type=int), 100)
+        members = (
+            Member.query.filter_by(group_id=group.id)
+            .order_by(Member.xp.desc())
+            .limit(limit)
+            .all()
+        )
+        return jsonify({"members": [m.to_dict() for m in members]})
+    except Exception as e:
+        logger.error(f"get_custom_bot_leaderboard error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/warnings", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def get_custom_bot_warnings(bot_id, group_id):
+    """Active warnings for custom-bot groups (reads warn entries from AuditLog)."""
+    try:
+        user = _get_current_user()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        bot, group, err = _get_bot_and_group(user, bot_id, group_id)
+        if err:
+            return err
+        target_user_id = request.args.get("user_id")
+        q = AuditLog.query.filter_by(group_id=group.id, action_type="warn")
+        if target_user_id:
+            q = q.filter_by(target_user_id=str(target_user_id))
+        logs = q.order_by(AuditLog.timestamp.desc()).limit(200).all()
+        # Shape into the same structure the frontend expects from OfficialWarning
+        warnings = [
+            {
+                "id": log.id,
+                "telegram_group_id": str(group.telegram_group_id),
+                "target_user_id": log.target_user_id,
+                "target_username": log.target_username,
+                "moderator_user_id": log.moderator_id,
+                "moderator_username": log.moderator_username,
+                "reason": log.reason,
+                "active": True,
+                "created_at": log.timestamp.isoformat(),
+                "total_warnings": (log.extra_data or {}).get("total_warnings"),
+            }
+            for log in logs
+        ]
+        return jsonify({"warnings": warnings})
+    except Exception as e:
+        logger.error(f"get_custom_bot_warnings error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
 @settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/scheduled-messages", methods=["GET"])
 @jwt_required()
 @rate_limit(requests_per_minute=60)

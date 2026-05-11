@@ -387,17 +387,16 @@ export default function GroupSettings() {
   }, [botId, groupId, isOfficial, membersSearch, membersRole, membersVerified, membersMuted, membersSort, membersSortDir]);
 
   const fetchLeaderboard = useCallback(async () => {
-    if (!isOfficial) return;
     setLeaderboardLoading(true);
     try {
-      const res = await tgGroupsApi.getLeaderboard(groupId, { limit: 50 });
+      const res = await settings.getLeaderboard(botId, groupId, { limit: 50 });
       setLeaderboard(res.data.members || []);
     } catch {
       toast.error('Failed to load leaderboard');
     } finally {
       setLeaderboardLoading(false);
     }
-  }, [isOfficial, groupId]);
+  }, [botId, groupId]);
 
   const fetchAuditLogs = useCallback(async (page = 1) => {
     try {
@@ -431,21 +430,20 @@ export default function GroupSettings() {
   }, [botId, groupId]);
 
   const fetchWarnings = useCallback(async () => {
-    if (!isOfficial) return;
     setWarningsLoading(true);
     try {
-      const res = await tgGroupsApi.listWarnings(groupId);
+      const res = await settings.listWarnings(botId, groupId);
       setWarnings(res.data.warnings || []);
     } catch {
       toast.error('Failed to load warnings');
     } finally {
       setWarningsLoading(false);
     }
-  }, [isOfficial, groupId]);
+  }, [botId, groupId]);
 
   const handleRemoveWarning = async (warningId) => {
     try {
-      await tgGroupsApi.removeWarning(groupId, warningId);
+      await settings.removeWarning(botId, groupId, warningId);
       toast.success('Warning removed');
       setWarnings(prev => prev.filter(w => w.id !== warningId));
     } catch {
@@ -2004,8 +2002,8 @@ export default function GroupSettings() {
           </>
         )}
 
-        {/* ANALYTICS › Leaderboard (official groups only) */}
-        {cat === 'analytics' && subTab === leaderboardSubTabIdx && isOfficial && (
+        {/* ANALYTICS › Leaderboard */}
+        {cat === 'analytics' && subTab === leaderboardSubTabIdx && (
           <>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
               <EmojiEvents color="primary" />
@@ -2129,8 +2127,8 @@ export default function GroupSettings() {
           </>
         )}
 
-        {/* ANALYTICS › Warnings (official groups only) */}
-        {cat === 'analytics' && subTab === warningsSubTabIdx && isOfficial && (
+        {/* ANALYTICS › Warnings */}
+        {cat === 'analytics' && subTab === warningsSubTabIdx && (
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
