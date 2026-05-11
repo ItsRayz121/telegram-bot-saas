@@ -215,7 +215,7 @@ class BotInstance:
                 return None
             return GroupContext.from_group(group)
 
-    async def _get_or_create_group(self, chat_id, chat_title=None, bot=None):
+    async def _get_or_create_group(self, chat_id, chat_title=None, bot=None, chat_type="group"):
         member_count = None
         if bot:
             try:
@@ -224,7 +224,9 @@ class BotInstance:
                 pass
         with self.app_context.app_context():
             from .database import DatabaseManager
-            group = DatabaseManager.get_or_create_group(self.bot_id, chat_id, chat_title, member_count)
+            group = DatabaseManager.get_or_create_group(
+                self.bot_id, chat_id, chat_title, member_count, chat_type=chat_type
+            )
             if not group:
                 return None
             return GroupContext.from_group(group)
@@ -1978,8 +1980,12 @@ class BotInstance:
         if not update.message.new_chat_members:
             return
 
-        chat_id = update.effective_chat.id
-        group = await self._get_or_create_group(chat_id, update.effective_chat.title, context.bot)
+        chat = update.effective_chat
+        if chat.type not in ("group", "supergroup"):
+            return  # never send welcome messages or create DB rows for private chats
+
+        chat_id = chat.id
+        group = await self._get_or_create_group(chat_id, chat.title, context.bot, chat_type=chat.type)
 
         for new_user in update.message.new_chat_members:
             if new_user.is_bot:
@@ -2036,8 +2042,11 @@ class BotInstance:
             return
 
         user = update.effective_user
-        chat_id = update.effective_chat.id
-        group = await self._get_or_create_group(chat_id, update.effective_chat.title, context.bot)
+        chat = update.effective_chat
+        chat_id = chat.id
+        group = await self._get_or_create_group(chat_id, chat.title, context.bot, chat_type=chat.type)
+        if not group:
+            return  # private chat or limit reached — skip all processing
 
         with self.app_context.app_context():
             from .database import DatabaseManager
@@ -2455,7 +2464,7 @@ class BotInstance:
             return
         new_status = result.new_chat_member.status
         if new_status in ("member", "administrator"):
-            await self._get_or_create_group(chat.id, chat.title, context.bot)
+            await self._get_or_create_group(chat.id, chat.title, context.bot, chat_type=chat.type)
 
     def _run_bot(self):
         import time
@@ -2549,19 +2558,23 @@ class BotInstance:
             app.add_handler(_MessageReactionHandler(self.handle_reaction))
         app.add_handler(ChatMemberHandler(self.handle_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))
         app.add_handler(ChatMemberHandler(self.handle_chat_member, ChatMemberHandler.CHAT_MEMBER))
+        # Restrict all group-level handlers to actual groups/supergroups only.
+        # Private chats are handled exclusively by handle_private_message.
+        _GROUP_TYPES = filters.ChatType.GROUP | filters.ChatType.SUPERGROUP
+
         # NEW_CHAT_MEMBERS must be in its own handler group so it runs even when
         # StatusUpdate.ALL (below, in group 1) also matches the same update.
         # python-telegram-bot runs ALL groups for each update; within a group only
         # the first matching handler runs.
         app.add_handler(
-            MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, self.handle_new_member),
+            MessageHandler(_GROUP_TYPES & filters.StatusUpdate.NEW_CHAT_MEMBERS, self.handle_new_member),
             group=0,
         )
         app.add_handler(
-            MessageHandler(filters.StatusUpdate.ALL, self.handle_service_message),
+            MessageHandler(_GROUP_TYPES & filters.StatusUpdate.ALL, self.handle_service_message),
             group=1,
         )
-        app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, self.handle_message))
+        app.add_handler(MessageHandler(_GROUP_TYPES & ~filters.COMMAND, self.handle_message))
         app.add_handler(MessageHandler(filters.ChatType.PRIVATE & ~filters.COMMAND, self.handle_private_message))
         app.add_handler(CallbackQueryHandler(self.handle_callback))
 

@@ -365,6 +365,16 @@ def init_db():
             "group_forum_topics.telegram_group_id index",
         )
 
+        # ── groups.chat_type column ───────────────────────────────────────────────
+        # Stores the Telegram chat type (group|supergroup|channel|private).
+        # Existing rows default to 'group' which is safe — they were all created
+        # from real group/supergroup events before this column existed.
+        _run_alter(
+            db.engine,
+            "ALTER TABLE groups ADD COLUMN IF NOT EXISTS chat_type VARCHAR(20) NOT NULL DEFAULT 'group'",
+            "groups.chat_type column",
+        )
+
         # ── Global escalation events table ────────────────────────────────────────
         # db.create_all() creates the table; add indexes idempotently.
         _run_alter(

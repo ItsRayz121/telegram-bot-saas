@@ -13,7 +13,12 @@ def get_default_settings():
 class DatabaseManager:
 
     @staticmethod
-    def get_or_create_group(bot_id, telegram_group_id, group_name=None, member_count=None):
+    def get_or_create_group(bot_id, telegram_group_id, group_name=None,
+                             member_count=None, chat_type="group"):
+        # Never create a Group record for private chats — custom bots observe only.
+        if chat_type == "private":
+            return None
+
         group = Group.query.filter_by(
             bot_id=bot_id,
             telegram_group_id=str(telegram_group_id),
@@ -27,7 +32,9 @@ class DatabaseManager:
                 tier = user.subscription_tier if user else "free"
                 max_groups = Config.MAX_GROUPS_PER_CUSTOM_BOT.get(tier, 3)
                 if max_groups != -1:
-                    current_count = Group.query.filter_by(bot_id=bot_id).count()
+                    current_count = Group.query.filter_by(
+                        bot_id=bot_id
+                    ).filter(Group.chat_type != "private").count()
                     if current_count >= max_groups:
                         raise PermissionError(
                             f"Group limit reached. Your {tier.capitalize()} plan allows "
@@ -41,6 +48,7 @@ class DatabaseManager:
                 group_name=group_name or str(telegram_group_id),
                 settings=get_default_settings(),
                 telegram_member_count=member_count or 0,
+                chat_type=chat_type,
             )
             db.session.add(group)
             db.session.commit()

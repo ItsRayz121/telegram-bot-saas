@@ -328,6 +328,9 @@ class Group(db.Model):
     group_name = db.Column(db.String(255), nullable=True)
     settings = db.Column(db.JSON, nullable=False, default=dict)
     telegram_member_count = db.Column(db.Integer, default=0)
+    # Telegram chat type: group | supergroup | channel | private
+    # Set at creation time; used to exclude private groups from listings.
+    chat_type = db.Column(db.String(20), default="group", nullable=False)
     # Dedicated column so timezone is queryable and not buried in the JSON blob.
     # Authoritative source; groups.settings["timezone"] is kept in sync.
     timezone = db.Column(db.String(50), default="UTC", nullable=True)
@@ -355,6 +358,8 @@ class Group(db.Model):
             "group_name": self.group_name,
             "settings": self.settings,
             "timezone": self.timezone or "UTC",
+            "chat_type": self.chat_type or "group",
+            "is_private": (self.chat_type or "group") == "private",
             "created_at": self.created_at.isoformat(),
             "member_count": self.telegram_member_count if self.telegram_member_count else len(self.members),
         }

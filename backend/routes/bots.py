@@ -189,7 +189,10 @@ def get_bot_groups(bot_id):
     if not bot:
         return jsonify({"error": "Bot not found"}), 404
 
-    groups = Group.query.filter_by(bot_id=bot_id).all()
+    groups = Group.query.filter(
+        Group.bot_id == bot_id,
+        Group.chat_type != "private",
+    ).all()
     return jsonify({"groups": [g.to_dict() for g in groups]}), 200
 
 
