@@ -425,35 +425,70 @@ export default function MyGroups() {
                         </Alert>
                       )}
 
-                      {/* Actions */}
-                      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                      {/* Actions — three equal-width buttons in a single row */}
+                      <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
                         <Button
                           size="small"
                           variant="contained"
-                          startIcon={<Settings />}
+                          startIcon={<Settings sx={{ fontSize: '0.95rem !important' }} />}
                           onClick={() => navigate(manageRoute)}
-                          sx={{ flex: 1 }}
+                          sx={{
+                            flex: 1,
+                            fontSize: '0.72rem',
+                            fontWeight: 600,
+                            letterSpacing: 0.2,
+                            textTransform: 'none',
+                            py: 0.75,
+                            borderRadius: 1.5,
+                            boxShadow: 'none',
+                            '&:hover': { boxShadow: '0 2px 8px rgba(33,150,243,0.25)', transform: 'translateY(-1px)' },
+                            transition: 'transform 0.15s, box-shadow 0.15s',
+                          }}
                         >
-                          Manage
+                          Settings
                         </Button>
-                        <Tooltip title="View analytics">
-                          <IconButton
-                            size="small"
-                            onClick={() => navigate(analyticsRoute)}
-                          >
-                            <BarChart fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          startIcon={<BarChart sx={{ fontSize: '0.95rem !important' }} />}
+                          onClick={() => navigate(analyticsRoute)}
+                          sx={{
+                            flex: 1,
+                            fontSize: '0.72rem',
+                            fontWeight: 600,
+                            letterSpacing: 0.2,
+                            textTransform: 'none',
+                            py: 0.75,
+                            borderRadius: 1.5,
+                            '&:hover': { bgcolor: 'primary.main', color: '#fff', borderColor: 'primary.main', transform: 'translateY(-1px)' },
+                            transition: 'transform 0.15s, background-color 0.15s, color 0.15s',
+                          }}
+                        >
+                          Analytics
+                        </Button>
                         <Tooltip title={g.source === 'legacy' ? 'Managed via custom bot runner' : 'Unlink group'}>
-                          <span>
-                            <IconButton
+                          <span style={{ flex: 1, display: 'flex' }}>
+                            <Button
                               size="small"
+                              variant="outlined"
                               color="error"
+                              startIcon={<LinkOff sx={{ fontSize: '0.95rem !important' }} />}
                               onClick={() => setUnlinkTarget(g)}
                               disabled={g.source === 'legacy'}
+                              sx={{
+                                flex: 1,
+                                fontSize: '0.72rem',
+                                fontWeight: 600,
+                                letterSpacing: 0.2,
+                                textTransform: 'none',
+                                py: 0.75,
+                                borderRadius: 1.5,
+                                '&:hover': { bgcolor: 'error.main', color: '#fff', borderColor: 'error.main', transform: 'translateY(-1px)' },
+                                transition: 'transform 0.15s, background-color 0.15s, color 0.15s',
+                              }}
                             >
-                              <LinkOff fontSize="small" />
-                            </IconButton>
+                              Unlink
+                            </Button>
                           </span>
                         </Tooltip>
                       </Box>
