@@ -308,13 +308,14 @@ def get_revenue():
     churn_30d_prev = churned_60d - churned_30d  # churned in 30-60d window
 
     # Cohort funnel: user counts by tier, grouped by registration month (last 6 months)
+    six_months_ago = now - timedelta(days=180)
     cohort_rows = db.session.execute(db.text(
         "SELECT DATE_TRUNC('month', created_at) AS month, subscription_tier, COUNT(*) AS cnt "
         "FROM users "
         "WHERE created_at >= :since "
         "GROUP BY 1, 2 "
         "ORDER BY 1"
-    ), {"since": six_months_ago := (now - timedelta(days=180))}).fetchall()
+    ), {"since": six_months_ago}).fetchall()
 
     cohort_map: dict = {}
     for row in cohort_rows:
@@ -1071,42 +1072,60 @@ def feature_adoption():
 @rate_limit(requests_per_minute=20)
 def fraud_clusters():
     """Multi-accounting detection: find ip_hash or device_hash shared by 2+ distinct users."""
-    # Cluster by ip_hash
-    ip_rows = db.session.execute(db.text(
-        "SELECT ip_hash, array_agg(DISTINCT user_id) AS user_ids, COUNT(DISTINCT user_id) AS cnt "
-        "FROM suspicious_activities "
-        "WHERE ip_hash IS NOT NULL AND user_id IS NOT NULL "
-        "GROUP BY ip_hash HAVING COUNT(DISTINCT user_id) >= 2 "
-        "ORDER BY cnt DESC LIMIT 50"
-    )).fetchall()
-
-    device_rows = db.session.execute(db.text(
-        "SELECT device_hash, array_agg(DISTINCT user_id) AS user_ids, COUNT(DISTINCT user_id) AS cnt "
-        "FROM suspicious_activities "
-        "WHERE device_hash IS NOT NULL AND user_id IS NOT NULL "
-        "GROUP BY device_hash HAVING COUNT(DISTINCT user_id) >= 2 "
-        "ORDER BY cnt DESC LIMIT 50"
-    )).fetchall()
 
     def _enrich_users(user_id_list):
+        if not user_id_list:
+            return []
         users = User.query.filter(User.id.in_(user_id_list)).all()
         return [{"id": u.id, "email": u.email, "tier": u.subscription_tier, "banned": u.is_banned} for u in users]
 
+    # Step 1: find hashes with 2+ distinct users (no array_agg — avoids pg array type issues)
+    ip_hash_rows = db.session.execute(db.text(
+        "SELECT ip_hash, COUNT(DISTINCT user_id) AS cnt "
+        "FROM suspicious_activities "
+        "WHERE ip_hash IS NOT NULL AND user_id IS NOT NULL "
+        "GROUP BY ip_hash HAVING COUNT(DISTINCT user_id) >= 2 "
+        "ORDER BY cnt DESC LIMIT 30"
+    )).fetchall()
+
+    device_hash_rows = db.session.execute(db.text(
+        "SELECT device_hash, COUNT(DISTINCT user_id) AS cnt "
+        "FROM suspicious_activities "
+        "WHERE device_hash IS NOT NULL AND user_id IS NOT NULL "
+        "GROUP BY device_hash HAVING COUNT(DISTINCT user_id) >= 2 "
+        "ORDER BY cnt DESC LIMIT 30"
+    )).fetchall()
+
     clusters = []
-    for row in ip_rows:
-        uid_list = list(row[1]) if row[1] else []
+
+    # Step 2: for each hash, fetch the distinct user_ids separately
+    for row in ip_hash_rows:
+        h = row[0]
+        cnt = int(row[1])
+        uid_rows = db.session.execute(db.text(
+            "SELECT DISTINCT user_id FROM suspicious_activities "
+            "WHERE ip_hash = :h AND user_id IS NOT NULL LIMIT 20"
+        ), {"h": h}).fetchall()
+        uid_list = [int(r[0]) for r in uid_rows]
         clusters.append({
             "type": "ip_hash",
-            "hash_prefix": str(row[0])[:12],
-            "user_count": int(row[2]),
+            "hash_prefix": str(h)[:12],
+            "user_count": cnt,
             "users": _enrich_users(uid_list),
         })
-    for row in device_rows:
-        uid_list = list(row[1]) if row[1] else []
+
+    for row in device_hash_rows:
+        h = row[0]
+        cnt = int(row[1])
+        uid_rows = db.session.execute(db.text(
+            "SELECT DISTINCT user_id FROM suspicious_activities "
+            "WHERE device_hash = :h AND user_id IS NOT NULL LIMIT 20"
+        ), {"h": h}).fetchall()
+        uid_list = [int(r[0]) for r in uid_rows]
         clusters.append({
             "type": "device_hash",
-            "hash_prefix": str(row[0])[:12],
-            "user_count": int(row[2]),
+            "hash_prefix": str(h)[:12],
+            "user_count": cnt,
             "users": _enrich_users(uid_list),
         })
 
@@ -1119,8 +1138,6 @@ def fraud_clusters():
 @rate_limit(requests_per_minute=20)
 def fraud_referral_farming():
     """Detect referral farming: referrers with many referrals where referred users share suspicious signals."""
-    from ..models import Referral
-
     # Find referrers with 3+ referrals
     farming_rows = db.session.execute(db.text(
         "SELECT referrer_user_id, COUNT(*) AS cnt, "
@@ -1132,20 +1149,21 @@ def fraud_referral_farming():
 
     suspects = []
     for row in farming_rows:
-        referrer = User.query.get(int(row[0]))
+        referrer = db.session.get(User, int(row[0]))
         if not referrer:
             continue
-        # Check if this referrer themselves have suspicious activity
+        total_refs = int(row[1])
+        suspicious_refs = int(row[2] or 0)
         sa_count = SuspiciousActivity.query.filter_by(user_id=referrer.id).count()
         suspects.append({
             "referrer_id": referrer.id,
             "referrer_email": referrer.email,
             "referrer_tier": referrer.subscription_tier,
             "referrer_banned": referrer.is_banned,
-            "total_referrals": int(row[1]),
-            "suspicious_referrals": int(row[2]),
+            "total_referrals": total_refs,
+            "suspicious_referrals": suspicious_refs,
             "referrer_suspicious_events": sa_count,
-            "risk_score": int(row[2]) * 3 + sa_count,
+            "risk_score": suspicious_refs * 3 + sa_count,
         })
 
     suspects.sort(key=lambda x: x["risk_score"], reverse=True)
@@ -1169,7 +1187,7 @@ def fraud_payment_anomalies():
     )).fetchall()
 
     for row in dupe_rows:
-        user = User.query.get(int(row[0]))
+        user = db.session.get(User, int(row[0]))
         if not user:
             continue
         anomalies.append({
@@ -1183,16 +1201,16 @@ def fraud_payment_anomalies():
         })
 
     # Payments outside normal price range (not $19 / $49 / $190 / $490)
-    valid_amounts = {1900, 4900, 19000, 49000}
+    valid_amounts = [1900, 4900, 19000, 49000]
     odd_payments = PaymentHistory.query.filter(
         PaymentHistory.status == "confirmed",
         PaymentHistory.amount_usd.isnot(None),
-        ~PaymentHistory.amount_usd.in_(valid_amounts),
+        PaymentHistory.amount_usd.notin_(valid_amounts),
         PaymentHistory.amount_usd > 0,
     ).order_by(PaymentHistory.created_at.desc()).limit(20).all()
 
     for p in odd_payments:
-        user = User.query.get(p.user_id)
+        user = db.session.get(User, p.user_id)
         anomalies.append({
             "type": "unusual_amount",
             "user_id": p.user_id,
