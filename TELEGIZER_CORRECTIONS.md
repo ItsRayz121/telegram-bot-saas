@@ -678,7 +678,7 @@
 
 ### 6.1 Responsive Design
 
-- [ ] **Audit all 60 pages at 375px (iPhone SE) and 360px (Android budget)**
+- [x] **Audit all 60 pages at 375px (iPhone SE) and 360px (Android budget)**
   - Severity: `HIGH`
   - Priority: `P0 — Must Fix Before Launch`
   - Phase: Phase 1
@@ -686,7 +686,7 @@
   - Fix: Use Chrome DevTools device emulation at 375×667 and 360×800 for every page. Fix: replace horizontal data tables with card stacks on mobile (<600px), make all CTAs full-width, ensure sidebar collapses to hamburger or bottom nav on mobile. Minimum bar: every page must be usable with one thumb.
   - Impact: `[FE]`
 
-- [ ] **Replace analytics tables with card views on mobile**
+- [x] **Replace analytics tables with card views on mobile**
   - Severity: `HIGH`
   - Priority: `P1 — Beta`
   - Phase: Phase 2
@@ -694,7 +694,7 @@
   - Fix: For screens <600px: show a "Summary Cards" view (top 3 metrics as large numbers), hide secondary chart axes, reduce recharts height to 180px. Full table/chart view on tablet+.
   - Impact: `[FE]`
 
-- [ ] **Ensure recharts ResponsiveContainer is applied to all charts**
+- [x] **Ensure recharts ResponsiveContainer is applied to all charts**
   - Severity: `MEDIUM`
   - Priority: `P1 — Beta`
   - Phase: Phase 2

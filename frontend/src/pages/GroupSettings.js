@@ -1292,8 +1292,8 @@ export default function GroupSettings() {
                   reports.length === 0 ? (
                     <Typography color="text.secondary">No reports yet.</Typography>
                   ) : (
-                    <TableContainer>
-                      <Table size="small">
+                    <TableContainer sx={{ overflowX: 'auto' }}>
+                      <Table size="small" sx={{ minWidth: 500 }}>
                         <TableHead>
                           <TableRow>
                             <TableCell>Reporter</TableCell>
@@ -1760,8 +1760,8 @@ export default function GroupSettings() {
               {autoResponses.length === 0 ? (
                 <Typography color="text.secondary">No triggers configured yet.</Typography>
               ) : (
-                <TableContainer>
-                  <Table size="small">
+                <TableContainer sx={{ overflowX: 'auto' }}>
+                  <Table size="small" sx={{ minWidth: 420 }}>
                     <TableHead>
                       <TableRow>
                         <TableCell>Trigger</TableCell>
@@ -2305,8 +2305,8 @@ export default function GroupSettings() {
               ) : warnings.length === 0 ? (
                 <Alert severity="success" icon={<CheckCircle />}>No active warnings in this group.</Alert>
               ) : (
-                <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider' }}>
-                  <Table size="small">
+                <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', overflowX: 'auto' }}>
+                  <Table size="small" sx={{ minWidth: 460 }}>
                     <TableHead>
                       <TableRow>
                         <TableCell>Warned Member</TableCell>

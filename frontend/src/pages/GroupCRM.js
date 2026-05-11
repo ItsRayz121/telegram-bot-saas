@@ -33,7 +33,7 @@ function ScoreBar({ score }) {
   if (score == null) return <Typography variant="caption" color="text.disabled">—</Typography>;
   const color = score >= 70 ? 'success' : score >= 40 ? 'warning' : 'error';
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 100 }}>
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: { xs: 70, sm: 100 } }}>
       <LinearProgress
         variant="determinate" value={score} color={color}
         sx={{ flex: 1, height: 6, borderRadius: 3 }}
@@ -422,8 +422,8 @@ export default function GroupCRM() {
               </Typography>
             </Box>
           ) : (
-            <TableContainer component={Paper} elevation={0} sx={{ bgcolor: 'transparent' }}>
-              <Table size="small">
+            <TableContainer component={Paper} elevation={0} sx={{ bgcolor: 'transparent', overflowX: 'auto' }}>
+              <Table size="small" sx={{ minWidth: 560 }}>
                 <TableHead>
                   <TableRow>
                     <TableCell sx={{ fontWeight: 600, fontSize: '0.72rem', color: 'text.secondary' }}>Member</TableCell>

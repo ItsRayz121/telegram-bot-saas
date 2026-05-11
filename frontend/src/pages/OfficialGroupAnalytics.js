@@ -378,8 +378,8 @@ export default function OfficialGroupAnalytics() {
               {visibleEvents.length === 0 ? (
                 <Alert severity="info">No events recorded in this period.</Alert>
               ) : (
-                <TableContainer component={Paper} variant="outlined">
-                  <Table size="small">
+                <TableContainer component={Paper} variant="outlined" sx={{ overflowX: 'auto' }}>
+                  <Table size="small" sx={{ minWidth: 360 }}>
                     <TableHead>
                       <TableRow>
                         <TableCell>Time</TableCell>

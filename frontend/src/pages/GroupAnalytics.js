@@ -3,7 +3,7 @@ import {
   Box, AppBar, Toolbar, Typography, IconButton, Card, CardContent,
   Grid, CircularProgress, Select, MenuItem, FormControl, InputLabel,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  Avatar,
+  Avatar, useMediaQuery, useTheme,
 } from '@mui/material';
 import { ArrowBack, Group, PersonAdd, Shield, TrendingUp } from '@mui/icons-material';
 import {
@@ -52,6 +52,10 @@ function EmptyChart({ height = 220, message = 'No data yet' }) {
 }
 
 export default function GroupAnalytics() {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const chartH = isMobile ? 170 : 260;
+  const chartHSm = isMobile ? 140 : 220;
   const navigate = useNavigate();
   const { id: botId, groupId } = useParams();
   const [data, setData] = useState(null);
@@ -155,7 +159,7 @@ export default function GroupAnalytics() {
                 <CardContent>
                   <Typography variant="h6" fontWeight={600} mb={2}>Member Growth</Typography>
                   {hasGrowth ? (
-                    <ResponsiveContainer width="100%" height={260}>
+                    <ResponsiveContainer width="100%" height={chartH}>
                       <LineChart data={data.member_growth}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#30363d" />
                         <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#8b949e' }} tickFormatter={(d) => d.slice(5)} />
@@ -165,7 +169,7 @@ export default function GroupAnalytics() {
                       </LineChart>
                     </ResponsiveContainer>
                   ) : (
-                    <EmptyChart height={260} message="No member activity tracked yet" />
+                    <EmptyChart height={chartH} message="No member activity tracked yet" />
                   )}
                 </CardContent>
               </Card>
@@ -175,7 +179,7 @@ export default function GroupAnalytics() {
                 <CardContent>
                   <Typography variant="h6" fontWeight={600} mb={2}>Level Distribution</Typography>
                   {hasLevels ? (
-                    <ResponsiveContainer width="100%" height={260}>
+                    <ResponsiveContainer width="100%" height={chartH}>
                       <PieChart>
                         <Pie
                           data={data.level_distribution}
@@ -195,7 +199,7 @@ export default function GroupAnalytics() {
                       </PieChart>
                     </ResponsiveContainer>
                   ) : (
-                    <EmptyChart height={260} message="No XP activity yet" />
+                    <EmptyChart height={chartH} message="No XP activity yet" />
                   )}
                 </CardContent>
               </Card>
@@ -209,7 +213,7 @@ export default function GroupAnalytics() {
                 <CardContent>
                   <Typography variant="h6" fontWeight={600} mb={2}>Moderation Actions</Typography>
                   {hasMod ? (
-                    <ResponsiveContainer width="100%" height={220}>
+                    <ResponsiveContainer width="100%" height={chartHSm}>
                       <BarChart data={data.mod_actions}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#30363d" />
                         <XAxis dataKey="action" tick={{ fontSize: 11, fill: '#8b949e' }} />
@@ -219,7 +223,7 @@ export default function GroupAnalytics() {
                       </BarChart>
                     </ResponsiveContainer>
                   ) : (
-                    <EmptyChart height={220} message="No moderation actions recorded" />
+                    <EmptyChart height={chartHSm} message="No moderation actions recorded" />
                   )}
                 </CardContent>
               </Card>

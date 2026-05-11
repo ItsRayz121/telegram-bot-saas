@@ -3,7 +3,7 @@ import {
   Box, AppBar, Toolbar, Typography, IconButton, Card, CardContent,
   Grid, CircularProgress, Select, MenuItem, FormControl, InputLabel,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
-  Avatar,
+  Avatar, useMediaQuery, useTheme,
 } from '@mui/material';
 import { ArrowBack, Group, PersonAdd, Shield, TrendingUp } from '@mui/icons-material';
 import {
@@ -33,6 +33,10 @@ function StatCard({ icon, label, value, color = 'primary.main' }) {
 }
 
 export default function Analytics() {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const chartH = isMobile ? 170 : 260;
+  const chartHSm = isMobile ? 140 : 220;
   const navigate = useNavigate();
   const { id: botId } = useParams();
   const [bot, setBot] = useState(null);
@@ -108,7 +112,7 @@ export default function Analytics() {
               <Card>
                 <CardContent>
                   <Typography variant="h6" fontWeight={600} mb={2}>Member Growth</Typography>
-                  <ResponsiveContainer width="100%" height={260}>
+                  <ResponsiveContainer width="100%" height={chartH}>
                     <LineChart data={data?.member_growth || []}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#30363d" />
                       <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#8b949e' }} tickFormatter={(d) => d.slice(5)} />
@@ -124,7 +128,7 @@ export default function Analytics() {
               <Card sx={{ height: '100%' }}>
                 <CardContent>
                   <Typography variant="h6" fontWeight={600} mb={2}>Level Distribution</Typography>
-                  <ResponsiveContainer width="100%" height={260}>
+                  <ResponsiveContainer width="100%" height={chartH}>
                     <PieChart>
                       <Pie
                         data={data?.level_distribution || []}
@@ -153,7 +157,7 @@ export default function Analytics() {
               <Card>
                 <CardContent>
                   <Typography variant="h6" fontWeight={600} mb={2}>Moderation Actions</Typography>
-                  <ResponsiveContainer width="100%" height={220}>
+                  <ResponsiveContainer width="100%" height={chartHSm}>
                     <BarChart data={data?.mod_actions || []}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#30363d" />
                       <XAxis dataKey="action" tick={{ fontSize: 11, fill: '#8b949e' }} />
