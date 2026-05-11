@@ -284,7 +284,7 @@ export default function MyGroups() {
             }
           >
             Showing groups connected to <strong>Official Telegizer Bot (@{BOT_USERNAME})</strong> only.{' '}
-            <Button size="small" sx={{ p: 0, minWidth: 0, textTransform: 'none', fontWeight: 600 }} onClick={() => navigate('/my-groups')}>
+            <Button size="small" sx={{ p: 0, minWidth: 0, textTransform: 'none', fontWeight: 600 }} onClick={() => navigate('/groups')}>
               View all groups
             </Button>
           </Alert>

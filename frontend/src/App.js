@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
 import { ThemeProvider } from '@mui/material/styles';
 import telegizer from './theme';
@@ -193,8 +193,8 @@ export default function App() {
             <Route path="/groups/:groupId/manage"           element={<AppRoute><GroupManagement /></AppRoute>} />
             <Route path="/groups/:groupId/crm"             element={<AppRoute><GroupCRM /></AppRoute>} />
 
-            {/* /my-groups/* → redirect to /groups/* (backward compat) */}
-            <Route path="/my-groups"                        element={<Navigate to="/groups" replace />} />
+            {/* /my-groups/* → redirect to /groups/* (backward compat, preserves query string) */}
+            <Route path="/my-groups"                        element={<RedirectMyGroups />} />
             <Route path="/my-groups/:groupId"               element={<RedirectGroupId prefix="/groups" />} />
             <Route path="/my-groups/:groupId/analytics"     element={<RedirectGroupId prefix="/groups" suffix="/analytics" />} />
             <Route path="/add-group"                        element={<Navigate to="/groups" replace />} />
@@ -280,6 +280,12 @@ export default function App() {
       </ErrorBoundary>
     </ThemeProvider>
   );
+}
+
+// Utility: redirect /my-groups → /groups, preserving query string (e.g. ?bot_type=official)
+function RedirectMyGroups() {
+  const { search } = useLocation();
+  return <Navigate to={`/groups${search}`} replace />;
 }
 
 // Utility: redirect /my-groups/:groupId → /groups/:groupId (with optional suffix)
