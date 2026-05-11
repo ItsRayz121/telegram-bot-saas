@@ -506,11 +506,11 @@ export default function MyGroups() {
                         >
                           Analytics
                         </Button>
-                        <Tooltip title={g.source === 'legacy' ? 'Managed via custom bot runner' : 'Unlink group'}>
+                        <Tooltip title={g.source === 'legacy' ? 'Use the bot page to manage legacy groups' : isCustomBot ? 'Unlink from custom bot' : 'Unlink group'}>
                           <span style={{ flex: 1, display: 'flex' }}>
                             <Button
                               size="small"
-                              variant="outlined"
+                              variant={g.source === 'legacy' ? 'outlined' : 'outlined'}
                               color="error"
                               startIcon={<LinkOff sx={{ fontSize: '0.95rem !important' }} />}
                               onClick={() => setUnlinkTarget(g)}
@@ -523,6 +523,10 @@ export default function MyGroups() {
                                 textTransform: 'none',
                                 py: 0.75,
                                 borderRadius: 1.5,
+                                ...(g.source !== 'legacy' && {
+                                  borderColor: 'error.main',
+                                  color: 'error.main',
+                                }),
                                 '&:hover': { bgcolor: 'error.main', color: '#fff', borderColor: 'error.main', transform: 'translateY(-1px)' },
                                 transition: 'transform 0.15s, background-color 0.15s, color 0.15s',
                               }}

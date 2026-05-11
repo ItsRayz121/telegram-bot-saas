@@ -79,6 +79,24 @@ def list_groups():
     }
     custom_bot_username_by_id = {cb.id: cb.bot_username for cb in custom_bots}
 
+    # Build reverse lookup: telegram_group_id → old Bot, for enriching TelegramGroup rows
+    # that have linked_via_bot_type='custom' but a NULL linked_bot_id.
+    tg_id_to_old_bot = {}
+    for old_bot in old_bots:
+        for grp in old_bot.groups:
+            tg_id_to_old_bot[grp.telegram_group_id] = old_bot
+
+    # Enrich TelegramGroup rows that are custom but missing linked_bot_id
+    for g in groups_data:
+        if g.get("linked_via_bot_type") == "custom" and not g.get("linked_bot_id"):
+            ob = tg_id_to_old_bot.get(g["telegram_group_id"])
+            if ob:
+                bid = custom_bot_id_by_username.get(ob.bot_username)
+                if bid:
+                    g["linked_bot_id"] = bid
+                    g["linked_bot_name"] = custom_bot_name_by_id.get(bid)
+                    g["linked_bot_username"] = custom_bot_username_by_id.get(bid)
+
     for old_bot in old_bots:
         for grp in old_bot.groups:
             if grp.telegram_group_id in new_system_tg_ids:
