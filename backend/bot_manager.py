@@ -124,9 +124,11 @@ async def _send_routing_rejection(update, settings: dict, command: str):
 
 
 def _capture_topic(group, thread_id, topic_name):
-    """Upsert a topic entry in group.settings['command_routing']['topics'].
+    """Upsert a topic entry in group.settings['command_routing']['topics'] and
+    in the group_forum_topics DB table.
 
     Returns True if the settings dict was mutated (caller must flag_modified / commit).
+    The DB upsert is best-effort and does not affect the return value.
     """
     if not group or thread_id is None:
         return False
@@ -137,14 +139,40 @@ def _capture_topic(group, thread_id, topic_name):
     })
     topics = routing.setdefault("topics", [])
     tid = str(thread_id)
+    name = topic_name or f"Topic {tid}"
+    settings_mutated = False
     for t in topics:
         if str(t.get("thread_id")) == tid:
             if topic_name and t.get("name") != topic_name:
                 t["name"] = topic_name
-                return True
-            return False
-    topics.append({"thread_id": tid, "name": topic_name or f"Topic {tid}"})
-    return True
+                settings_mutated = True
+            break
+    else:
+        topics.append({"thread_id": tid, "name": name})
+        settings_mutated = True
+
+    # Persist to group_forum_topics table (best-effort — uses group.telegram_group_id)
+    try:
+        from .models import db as _db, GroupForumTopic
+        from datetime import datetime as _dt
+        tg_id = str(group.telegram_group_id)
+        existing = GroupForumTopic.query.filter_by(
+            telegram_group_id=tg_id, thread_id=int(thread_id)
+        ).first()
+        if existing:
+            existing.last_seen_at = _dt.utcnow()
+            if topic_name and existing.name != topic_name:
+                existing.name = topic_name
+        else:
+            _db.session.add(GroupForumTopic(
+                telegram_group_id=tg_id,
+                thread_id=int(thread_id),
+                name=name,
+            ))
+    except Exception:
+        pass
+
+    return settings_mutated
 
 
 async def _auto_delete(bot, chat_id, message_id, delay):
@@ -1798,6 +1826,18 @@ class BotInstance:
             return
         chat = update.effective_chat
         user = update.effective_user
+
+        # Topic restriction: if admin configured an allowed topic, enforce it
+        thread_id = getattr(update.message, "message_thread_id", None)
+        group = self._get_group(chat.id)
+        if group:
+            allowed_topic = (group.settings or {}).get("invites", {}).get("allowed_topic_id")
+            if allowed_topic and str(thread_id) != str(allowed_topic):
+                routing = (group.settings or {}).get("command_routing", {})
+                if routing.get("restricted_reply", "silent") == "message":
+                    await update.message.reply_text("⚠️ Please use /invitelink in the designated topic.")
+                return
+
         try:
             member = await context.bot.get_chat_member(chat.id, user.id)
             if member.status not in ("administrator", "creator"):
@@ -1893,7 +1933,7 @@ class BotInstance:
         ):
             should_delete = True
 
-        # Capture new topics so the dashboard can show them for routing config.
+        # Capture/update topics so the dashboard topic selectors stay current.
         if message.forum_topic_created and message.message_thread_id:
             topic_name = getattr(message.forum_topic_created, "name", None)
             changed = _capture_topic(group, message.message_thread_id, topic_name)
@@ -1903,6 +1943,30 @@ class BotInstance:
                     from sqlalchemy.orm.attributes import flag_modified
                     flag_modified(group, "settings")
                     db.session.commit()
+        elif (message.forum_topic_closed or message.forum_topic_reopened) and message.message_thread_id:
+            is_closed = bool(message.forum_topic_closed)
+            try:
+                with self.app_context.app_context():
+                    from .models import db, GroupForumTopic
+                    row = GroupForumTopic.query.filter_by(
+                        telegram_group_id=str(group.telegram_group_id),
+                        thread_id=int(message.message_thread_id),
+                    ).first()
+                    if row and row.is_closed != is_closed:
+                        row.is_closed = is_closed
+                        db.session.commit()
+            except Exception:
+                pass
+        elif message.forum_topic_edited and message.message_thread_id:
+            new_name = getattr(message.forum_topic_edited, "name", None)
+            if new_name:
+                changed = _capture_topic(group, message.message_thread_id, new_name)
+                if changed:
+                    with self.app_context.app_context():
+                        from .models import db
+                        from sqlalchemy.orm.attributes import flag_modified
+                        flag_modified(group, "settings")
+                        db.session.commit()
 
         if should_delete:
             try:

@@ -22,6 +22,7 @@ import KnowledgeBase from '../components/KnowledgeBase';
 import PollCreator from '../components/PollCreator';
 import WebhookManager from '../components/WebhookManager';
 import InviteLinks from '../components/InviteLinks';
+import ForumTopicSelector from '../components/ForumTopicSelector';
 import TimezoneSelect from '../components/TimezoneSelect';
 import {
   buildCategories,
@@ -1414,10 +1415,16 @@ export default function GroupSettings() {
               </FormControl>
 
               {(v.destination === 'topic') && (
-                <TextField fullWidth label="Topic ID" sx={{ mb: 2 }}
-                  value={v.destination_topic_id || ''}
-                  onChange={(e) => updateSetting('verification.destination_topic_id', e.target.value ? parseInt(e.target.value) : null)}
-                  helperText="The forum thread / topic ID inside this group where the bot sends the verification prompt" />
+                <Box sx={{ mb: 2 }}>
+                  <ForumTopicSelector
+                    botId={botId}
+                    groupId={groupId}
+                    value={v.destination_topic_id || null}
+                    onChange={(id) => updateSetting('verification.destination_topic_id', id)}
+                    label="Verification Topic"
+                    helperText="Topic where the bot sends verification prompts."
+                  />
+                </Box>
               )}
 
               {(v.destination === 'dedicated_group' || v.destination === 'channel') && (
@@ -1478,10 +1485,14 @@ export default function GroupSettings() {
                       onChange={(e) => updateSetting('welcome.delete_after_seconds', parseInt(e.target.value))} />
                   </Grid>
                   <Grid item xs={12} sm={6}>
-                    <TextField fullWidth type="number" label="Forum Topic ID (leave blank for main chat)"
-                      value={w.topic_id || ''}
-                      onChange={(e) => updateSetting('welcome.topic_id', e.target.value ? parseInt(e.target.value) : null)}
-                      helperText="Send welcome to a specific forum topic thread" />
+                    <ForumTopicSelector
+                      botId={botId}
+                      groupId={groupId}
+                      value={w.topic_id || null}
+                      onChange={(id) => updateSetting('welcome.topic_id', id)}
+                      label="Welcome Topic"
+                      helperText="Topic where welcome messages are sent."
+                    />
                   </Grid>
                   <Grid item xs={12}>
                     <FormControlLabel
@@ -1544,9 +1555,13 @@ export default function GroupSettings() {
                       onChange={(e) => updateSetting('levels.xp_cooldown_seconds', parseInt(e.target.value))} />
                   </Grid>
                   <Grid item xs={12} sm={4}>
-                    <TextField fullWidth type="number" label="Level-up Topic ID (blank = main chat)"
-                      value={l.levelup_topic_id || ''}
-                      onChange={(e) => updateSetting('levels.levelup_topic_id', e.target.value ? parseInt(e.target.value) : null)} />
+                    <ForumTopicSelector
+                      botId={botId}
+                      groupId={groupId}
+                      value={l.levelup_topic_id || null}
+                      onChange={(id) => updateSetting('levels.levelup_topic_id', id)}
+                      label="Level-up Topic"
+                    />
                   </Grid>
                   <Grid item xs={12} sm={8}>
                     <TextField fullWidth label="Level-up Message"
@@ -1834,7 +1849,22 @@ export default function GroupSettings() {
 
         {/* COMMUNITY › Invite Links */}
         {cat === 'community' && subTab === 1 && (
-          <InviteLinks botId={botId} groupId={groupId} />
+          <>
+            <Card sx={{ mb: 2 }}>
+              <CardContent>
+                <Typography variant="subtitle2" fontWeight={600} mb={1}>Invite Command Topic</Typography>
+                <ForumTopicSelector
+                  botId={botId}
+                  groupId={groupId}
+                  value={settingsData?.invites?.allowed_topic_id || null}
+                  onChange={(id) => updateSetting('invites.allowed_topic_id', id)}
+                  label="Allowed Topic"
+                  helperText="If set, /invitelink only works in this topic. Other topics: silent ignore."
+                />
+              </CardContent>
+            </Card>
+            <InviteLinks botId={botId} groupId={groupId} />
+          </>
         )}
 
         {/* ══════════════════════════════════════════════════════════

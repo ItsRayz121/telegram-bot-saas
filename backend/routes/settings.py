@@ -334,6 +334,31 @@ def get_audit_logs(bot_id, group_id):
         return jsonify({"error": str(e)}), 500
 
 
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/forum-topics", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def get_custom_bot_forum_topics(bot_id, group_id):
+    """Return cached forum topics for a custom-bot group."""
+    try:
+        user = _get_current_user()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        bot, group, err = _get_bot_and_group(user, bot_id, group_id)
+        if err:
+            return err
+        from ..models import GroupForumTopic
+        topics = (
+            GroupForumTopic.query
+            .filter_by(telegram_group_id=str(group.telegram_group_id))
+            .order_by(GroupForumTopic.name)
+            .all()
+        )
+        return jsonify({"topics": [t.to_dict() for t in topics]})
+    except Exception as e:
+        logger.error(f"get_custom_bot_forum_topics error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
 @settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/leaderboard", methods=["GET"])
 @jwt_required()
 @rate_limit(requests_per_minute=60)

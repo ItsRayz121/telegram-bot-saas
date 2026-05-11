@@ -350,6 +350,21 @@ def init_db():
 
         _backfill_bot_mirror_links(app)
 
+        # ── Forum topic cache table ───────────────────────────────────────────────
+        # db.create_all() above handles the new table; add indexes idempotently.
+        _run_alter(
+            db.engine,
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_forum_topic_group_thread "
+            "ON group_forum_topics (telegram_group_id, thread_id)",
+            "group_forum_topics unique index",
+        )
+        _run_alter(
+            db.engine,
+            "CREATE INDEX IF NOT EXISTS ix_group_forum_topics_group "
+            "ON group_forum_topics (telegram_group_id)",
+            "group_forum_topics.telegram_group_id index",
+        )
+
         print("Migration complete.")
 
     # One-shot Telegram account backfill (also runs inline above via _backfill_telegram_accounts).

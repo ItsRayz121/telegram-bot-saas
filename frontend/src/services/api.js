@@ -185,6 +185,12 @@ export const settings = {
         }))
       : api.get(`/api/bots/${botId}/groups/${groupId}/audit-logs`, { params }),
 
+  // Forum topics: cached from bot activity, used to populate topic selectors
+  getForumTopics: (botId, groupId) =>
+    botId === 'official'
+      ? api.get(`/api/telegram-groups/${groupId}/forum-topics`)
+      : api.get(`/api/bots/${botId}/groups/${groupId}/forum-topics`),
+
   // Leaderboard: official reads OfficialMember, custom reads Member table
   getLeaderboard: (botId, groupId, params) =>
     botId === 'official'

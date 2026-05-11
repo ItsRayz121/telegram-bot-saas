@@ -455,6 +455,31 @@ def get_leaderboard(group_id):
     return jsonify({"members": [m.to_dict() for m in members]}), 200
 
 
+# ── Forum Topics ──────────────────────────────────────────────────────────────
+
+@tg_groups_bp.route("/<group_id>/forum-topics", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def get_forum_topics(group_id):
+    """Return cached forum topics discovered by the bot for this group."""
+    user = _current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    tg = _owns_group(user.id, group_id)
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+
+    from ..models import GroupForumTopic
+    topics = (
+        GroupForumTopic.query
+        .filter_by(telegram_group_id=group_id)
+        .order_by(GroupForumTopic.name)
+        .all()
+    )
+    return jsonify({"topics": [t.to_dict() for t in topics]}), 200
+
+
 # ── Official-group Digest ──────────────────────────────────────────────────────
 
 @tg_groups_bp.route("/<group_id>/digest", methods=["GET"])

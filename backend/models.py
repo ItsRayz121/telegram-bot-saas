@@ -1423,6 +1423,38 @@ class CustomBot(db.Model):
         return data
 
 
+class GroupForumTopic(db.Model):
+    """Forum topics passively discovered by the bot in a Telegram supergroup.
+
+    Telegram has no API to list all topics, so the bot caches them here as it
+    sees activity. The dashboard reads this table to populate topic selectors.
+    """
+    __tablename__ = "group_forum_topics"
+
+    id = db.Column(db.Integer, primary_key=True)
+    # The Telegram chat ID string (e.g. "-100123456789") — works for both
+    # TelegramGroup (official) and Group (custom bot) contexts.
+    telegram_group_id = db.Column(db.String(255), nullable=False, index=True)
+    thread_id = db.Column(db.BigInteger, nullable=False)
+    name = db.Column(db.String(255), nullable=False)
+    is_closed = db.Column(db.Boolean, default=False, nullable=False)
+    discovered_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    last_seen_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint("telegram_group_id", "thread_id", name="uq_forum_topic_group_thread"),
+    )
+
+    def to_dict(self):
+        return {
+            "thread_id": self.thread_id,
+            "name": self.name,
+            "is_closed": self.is_closed,
+            "discovered_at": self.discovered_at.isoformat(),
+            "last_seen_at": self.last_seen_at.isoformat(),
+        }
+
+
 class CustomCommand(db.Model):
     """Per-group slash commands managed via dashboard."""
     __tablename__ = "custom_commands"
