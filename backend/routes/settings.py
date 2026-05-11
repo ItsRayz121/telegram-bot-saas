@@ -3,7 +3,7 @@ from datetime import datetime
 import requests as _http
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from ..models import db, User, Bot, Group, Member, AuditLog, ScheduledMessage, Raid, AutoResponse, ReportedMessage, TelegramBotStarted, UserTelegramAccount
+from ..models import db, User, Bot, Group, Member, AuditLog, ScheduledMessage, Raid, AutoResponse, ReportedMessage, TelegramBotStarted, UserTelegramAccount, EscalationEvent
 from ..middleware.rate_limit import rate_limit
 
 _PAID_TIERS = {"pro", "enterprise"}
@@ -1032,3 +1032,75 @@ def update_custom_command_routing(bot_id, group_id):
         logger.error(f"update_custom_command_routing error: {e}", exc_info=True)
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
+# ── Escalation endpoints ──────────────────────────────────────────────────────
+
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/escalations", methods=["GET"])
+@jwt_required()
+def list_escalations(bot_id, group_id):
+    user_id = int(get_jwt_identity())
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "Not found"}), 404
+    bot = Bot.query.filter_by(id=bot_id, owner_user_id=user_id).first()
+    if not bot:
+        return jsonify({"error": "Not found"}), 404
+    group = Group.query.filter_by(id=group_id, bot_id=bot_id).first()
+    if not group:
+        return jsonify({"error": "Not found"}), 404
+    status = request.args.get("status")
+    q = EscalationEvent.query.filter_by(group_id=group_id)
+    if status:
+        q = q.filter_by(status=status)
+    events = q.order_by(EscalationEvent.created_at.desc()).limit(100).all()
+    return jsonify({"escalations": [e.to_dict() for e in events]})
+
+
+@settings_bp.route("/telegram-groups/<telegram_group_id>/escalations", methods=["GET"])
+@jwt_required()
+def list_official_escalations(telegram_group_id):
+    user_id = int(get_jwt_identity())
+    status = request.args.get("status")
+    q = EscalationEvent.query.filter_by(telegram_group_id=str(telegram_group_id), bot_id=None)
+    if status:
+        q = q.filter_by(status=status)
+    events = q.order_by(EscalationEvent.created_at.desc()).limit(100).all()
+    return jsonify({"escalations": [e.to_dict() for e in events]})
+
+
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/escalations/<int:event_id>", methods=["PATCH"])
+@jwt_required()
+def patch_escalation(bot_id, group_id, event_id):
+    user_id = int(get_jwt_identity())
+    bot = Bot.query.filter_by(id=bot_id, owner_user_id=user_id).first()
+    if not bot:
+        return jsonify({"error": "Not found"}), 404
+    ev = EscalationEvent.query.get(event_id)
+    if not ev or ev.group_id != group_id:
+        return jsonify({"error": "Not found"}), 404
+    data = request.get_json(silent=True) or {}
+    if "status" in data and data["status"] in ("pending", "resolved", "ignored"):
+        ev.status = data["status"]
+        if data["status"] == "resolved" and not ev.resolved_at:
+            ev.resolved_at = datetime.utcnow()
+    if "admin_answer" in data:
+        ev.admin_answer = str(data["admin_answer"])[:4000]
+    db.session.commit()
+    return jsonify(ev.to_dict())
+
+
+@settings_bp.route("/telegram-groups/<telegram_group_id>/escalations/<int:event_id>", methods=["PATCH"])
+@jwt_required()
+def patch_official_escalation(telegram_group_id, event_id):
+    ev = EscalationEvent.query.get(event_id)
+    if not ev or ev.telegram_group_id != str(telegram_group_id):
+        return jsonify({"error": "Not found"}), 404
+    data = request.get_json(silent=True) or {}
+    if "status" in data and data["status"] in ("pending", "resolved", "ignored"):
+        ev.status = data["status"]
+        if data["status"] == "resolved" and not ev.resolved_at:
+            ev.resolved_at = datetime.utcnow()
+    if "admin_answer" in data:
+        ev.admin_answer = str(data["admin_answer"])[:4000]
+    db.session.commit()
+    return jsonify(ev.to_dict())

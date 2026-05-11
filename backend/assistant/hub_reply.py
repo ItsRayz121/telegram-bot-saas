@@ -39,7 +39,8 @@ def handle_mention(
     """
     with flask_app.app_context():
         return _handle(bot_token, bot_username, message_text,
-                       chat_id, message_id, bot_id, user_id)
+                       chat_id, message_id, bot_id, user_id,
+                       flask_app=flask_app)
 
 
 async def handle_mention_async(
@@ -68,7 +69,8 @@ async def handle_mention_async(
 
 # ── Internal ───────────────────────────────────────────────────────────────────
 
-def _handle(bot_token, bot_username, message_text, chat_id, message_id, bot_id, user_id) -> bool:
+def _handle(bot_token, bot_username, message_text, chat_id, message_id, bot_id, user_id,
+            flask_app=None, sender_id=None, sender_username=None) -> bool:
     import redis as _redis
     import requests as _req
     from ..config import Config
@@ -133,6 +135,49 @@ def _handle(bot_token, bot_username, message_text, chat_id, message_id, bot_id, 
         if plan == "enterprise":
             reply_text = _gpt_answer(query, bot_id, user_id)
         else:
+            # Attempt global escalation before sending generic reply
+            if flask_app:
+                try:
+                    from ..models import Group
+                    from ..bot_features.escalation import trigger_escalation as _esc
+                    import asyncio, requests as _req
+
+                    grp = Group.query.filter_by(telegram_group_id=str(chat_id)).first()
+                    esc_settings = (grp.settings if grp else {}).get("escalation", {})
+                    if esc_settings.get("enabled") and "ai_kb" in esc_settings.get("types", []):
+                        ctx = {
+                            "group_name": getattr(grp, "group_name", str(chat_id)) if grp else str(chat_id),
+                            "user_id": sender_id,
+                            "username": sender_username or "",
+                        }
+                        loop = asyncio.new_event_loop()
+                        import telegram as _tg
+                        _bot_obj = _tg.Bot(token=bot_token)
+                        loop.run_until_complete(_esc(
+                            bot=_bot_obj,
+                            group_settings=grp.settings if grp else {},
+                            issue_type="ai_kb",
+                            original_content=query,
+                            context_data=ctx,
+                            app=flask_app,
+                            group_id=grp.id if grp else None,
+                            telegram_group_id=str(chat_id),
+                        ))
+                        loop.close()
+                        # Send ack instead of generic reply
+                        _req.post(
+                            f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                            json={
+                                "chat_id": chat_id,
+                                "text": "Your question has been forwarded to an admin. They'll respond shortly.",
+                                "reply_to_message_id": message_id,
+                            },
+                            timeout=8,
+                        )
+                        return True
+                except Exception:
+                    pass  # fall through to generic reply
+
             reply_text = (
                 "I don't have a knowledge card for that. "
                 "Ask the group admin to add one in Hub Settings → Knowledge."

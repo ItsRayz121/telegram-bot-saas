@@ -321,19 +321,63 @@ async def maybe_handle_image(
             logger.error(f"image_ai: reply failed: {exc}")
             return False
 
-    # Low confidence — escalate if enabled
-    if image_settings.get("escalation_enabled", True):
+    # Low confidence — prefer global escalation, fall back to legacy image_ai escalation
+    group_settings = {}
+    if app:
+        try:
+            with app.app_context():
+                from ..models import Group
+                grp = Group.query.get(group_id)
+                if grp:
+                    group_settings = grp.settings or {}
+        except Exception:
+            pass
+
+    global_esc = group_settings.get("escalation", {})
+    used_global = False
+
+    if global_esc.get("enabled") and "ai_image" in global_esc.get("types", []):
+        try:
+            from .escalation import trigger_escalation
+            sender = message.from_user
+            uname = getattr(sender, "username", None) or ""
+            uid   = getattr(sender, "id", None)
+            await trigger_escalation(
+                bot=bot,
+                group_settings=group_settings,
+                issue_type="ai_image",
+                original_content=caption or result.get("visible_text", "") or "(image)",
+                context_data={
+                    "confidence": confidence,
+                    "group_name": group_name,
+                    "user_id": uid,
+                    "username": uname,
+                    "issue_type": result.get("issue_type"),
+                    "summary": result.get("summary"),
+                },
+                app=app,
+                group_id=group_id,
+                telegram_group_id=str(telegram_group_id) if telegram_group_id else None,
+                original_message=message,
+            )
+            used_global = True
+        except Exception as exc:
+            logger.warning(f"image_ai: global escalation failed: {exc}")
+
+    if not used_global and image_settings.get("escalation_enabled", True):
         admin_ids = image_settings.get("escalation_admin_ids") or []
         if admin_ids:
             await _escalate_to_admins(bot, message, result, admin_ids, group_name, caption)
-            # Acknowledge to user so they're not left in silence
-            try:
-                await message.reply_text(
-                    "I've forwarded your message to the support team for a detailed response. "
-                    "They'll get back to you as soon as possible."
-                )
-            except Exception:
-                pass
-            return True
+            used_global = True
+
+    if used_global:
+        try:
+            await message.reply_text(
+                "I've forwarded your message to the support team for a detailed response. "
+                "They'll get back to you as soon as possible."
+            )
+        except Exception:
+            pass
+        return True
 
     return False

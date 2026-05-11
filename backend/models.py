@@ -2210,6 +2210,51 @@ class BotDMMessage(db.Model):
         }
 
 
+class EscalationEvent(db.Model):
+    """Global escalation event — any AI/Automation issue forwarded to admins for review."""
+    __tablename__ = "escalation_events"
+
+    id = db.Column(db.Integer, primary_key=True)
+    # Group context (nullable to support both official and custom bots)
+    group_id = db.Column(db.Integer, db.ForeignKey("groups.id", ondelete="SET NULL"), nullable=True, index=True)
+    telegram_group_id = db.Column(db.String(255), nullable=True, index=True)
+    bot_id = db.Column(db.Integer, nullable=True)  # custom bot int id, null = official
+    # Issue details
+    issue_type = db.Column(db.String(50), nullable=False)  # ai_kb | ai_image | automation | command | moderation
+    user_telegram_id = db.Column(db.String(100), nullable=True)
+    user_username = db.Column(db.String(255), nullable=True)
+    original_content = db.Column(db.Text, nullable=True)
+    context_data = db.Column(db.JSON, nullable=True)   # {confidence, group_name, thread_id, ...}
+    # Admin DM tracking: list of {admin_id, summary_msg_id} so replies can be linked
+    admin_dm_refs = db.Column(db.JSON, nullable=True)
+    # Resolution
+    status = db.Column(db.String(20), default="pending", nullable=False, index=True)  # pending | resolved | ignored
+    resolved_admin_telegram_id = db.Column(db.String(100), nullable=True)
+    admin_answer = db.Column(db.Text, nullable=True)
+    learned = db.Column(db.Boolean, default=False, nullable=False)  # stored in KB?
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    resolved_at = db.Column(db.DateTime, nullable=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "group_id": self.group_id,
+            "telegram_group_id": self.telegram_group_id,
+            "bot_id": self.bot_id,
+            "issue_type": self.issue_type,
+            "user_telegram_id": self.user_telegram_id,
+            "user_username": self.user_username,
+            "original_content": self.original_content,
+            "context_data": self.context_data,
+            "status": self.status,
+            "resolved_admin_telegram_id": self.resolved_admin_telegram_id,
+            "admin_answer": self.admin_answer,
+            "learned": self.learned,
+            "created_at": self.created_at.isoformat(),
+            "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None,
+        }
+
+
 class PendingReminderState(db.Model):
     """Transient state while bot collects reminder time/frequency from the user."""
     __tablename__ = "pending_reminder_states"

@@ -208,6 +208,17 @@ export const settings = {
       ? api.delete(`/api/telegram-groups/${groupId}/warnings/${warningId}`)
       : Promise.resolve({ data: { message: 'ok' } }), // custom bot warnings are AuditLog entries — no delete needed
 
+  // Escalation log: lists EscalationEvent records for this group
+  listEscalations: (botId, groupId, params) =>
+    botId === 'official'
+      ? api.get(`/api/telegram-groups/${groupId}/escalations`, { params })
+      : api.get(`/api/bots/${botId}/groups/${groupId}/escalations`, { params }),
+
+  patchEscalation: (botId, groupId, eventId, data) =>
+    botId === 'official'
+      ? api.patch(`/api/telegram-groups/${groupId}/escalations/${eventId}`, data)
+      : api.patch(`/api/bots/${botId}/groups/${groupId}/escalations/${eventId}`, data),
+
   // Official groups: real scheduled-messages endpoints
   getScheduledMessages: (botId, groupId) =>
     botId === 'official'

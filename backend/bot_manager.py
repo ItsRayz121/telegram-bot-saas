@@ -2000,6 +2000,35 @@ class BotInstance:
             else:
                 await self.welcome.send_welcome(context.bot, chat_id, new_user, group)
 
+    async def handle_private_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle DMs to the bot — primarily for admin escalation replies."""
+        if not update.message or not update.effective_user:
+            return
+        if update.effective_chat.type != "private":
+            return
+
+        # Check if this is a reply to an escalation header
+        replied_msg = update.message.reply_to_message
+        if replied_msg and update.message.text:
+            admin_id = str(update.effective_user.id)
+            replied_id = replied_msg.message_id
+            try:
+                from .bot_features.escalation import handle_admin_reply
+                matched = handle_admin_reply(
+                    reply_text=update.message.text,
+                    admin_telegram_id=admin_id,
+                    replied_to_message_id=replied_id,
+                    app=self.app_context,
+                )
+                if matched:
+                    await update.message.reply_text(
+                        "✅ Escalation resolved. The answer has been saved and will be used for future auto-replies.",
+                        parse_mode="Markdown",
+                    )
+                    return
+            except Exception as exc:
+                logger.warning(f"handle_private_message: escalation reply error: {exc}")
+
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not update.message or not update.effective_user:
             return
@@ -2270,16 +2299,46 @@ class BotInstance:
                     await update.message.reply_text(answer)
                 except Exception as e:
                     logger.error(f"KB auto-reply send error: {e}")
-        elif kb_settings.get("fallback_enabled", False) and answer:
-            # Fallback: reply with a softer phrasing when confidence is low
-            logger.debug(f"KB auto-reply: low confidence fallback (confidence={confidence:.3f})")
-            try:
-                fallback_text = f"I found some related information, but I'm not fully certain: {answer}"
-                await update.message.reply_text(fallback_text)
-            except Exception as e:
-                logger.error(f"KB fallback reply error: {e}")
         else:
-            logger.debug(f"KB auto-reply: no confident answer (confidence={confidence:.3f})")
+            # Low confidence or no answer — try global escalation before fallback
+            esc_settings = group.settings.get("escalation", {})
+            if esc_settings.get("enabled") and "ai_kb" in esc_settings.get("types", []):
+                try:
+                    from .bot_features.escalation import trigger_escalation
+                    sender = update.message.from_user
+                    uname = getattr(sender, "username", None) or ""
+                    uid   = getattr(sender, "id", None)
+                    await trigger_escalation(
+                        bot=context.bot,
+                        group_settings=group.settings,
+                        issue_type="ai_kb",
+                        original_content=text,
+                        context_data={
+                            "confidence": confidence,
+                            "group_name": getattr(group, "group_name", None) or "this community",
+                            "user_id": uid,
+                            "username": uname,
+                            "thread_id": getattr(update.message, "message_thread_id", None),
+                        },
+                        app=self.app,
+                        group_id=group.id,
+                        telegram_group_id=getattr(group, "telegram_group_id", None),
+                        original_message=update.message,
+                    )
+                    logger.debug(f"KB auto-reply: escalated (confidence={confidence:.3f})")
+                    return  # suppress public reply when escalating
+                except Exception as exc:
+                    logger.warning(f"KB auto-reply: escalation failed: {exc}")
+
+            if kb_settings.get("fallback_enabled", False) and answer:
+                logger.debug(f"KB auto-reply: low confidence fallback (confidence={confidence:.3f})")
+                try:
+                    fallback_text = f"I found some related information, but I'm not fully certain: {answer}"
+                    await update.message.reply_text(fallback_text)
+                except Exception as e:
+                    logger.error(f"KB fallback reply error: {e}")
+            else:
+                logger.debug(f"KB auto-reply: no confident answer (confidence={confidence:.3f})")
 
     async def handle_chat_member(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Track when users join via a tracked invite link."""
@@ -2503,6 +2562,7 @@ class BotInstance:
             group=1,
         )
         app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, self.handle_message))
+        app.add_handler(MessageHandler(filters.ChatType.PRIVATE & ~filters.COMMAND, self.handle_private_message))
         app.add_handler(CallbackQueryHandler(self.handle_callback))
 
         await app.initialize()

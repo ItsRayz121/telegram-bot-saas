@@ -56,6 +56,7 @@ export const FEATURE_TABS = [
     subTabs: [
       { label: 'Knowledge Base', officialOnly: false },
       { label: 'Webhooks',       officialOnly: false },
+      { label: 'Escalation',     officialOnly: false },
     ],
   },
   {
@@ -73,11 +74,12 @@ export const FEATURE_TABS = [
     label: 'Analytics',
     icon: BarChart,
     subTabs: [
-      { label: 'Members',    officialOnly: false },
+      { label: 'Members',     officialOnly: false },
       { label: 'Leaderboard', officialOnly: false },
-      { label: 'Audit Log',  officialOnly: false },
-      { label: 'Warnings',   officialOnly: false },
-      { label: 'Digest',     officialOnly: false },
+      { label: 'Audit Log',   officialOnly: false },
+      { label: 'Warnings',    officialOnly: false },
+      { label: 'Digest',      officialOnly: false },
+      { label: 'Escalations', officialOnly: false },
     ],
   },
 ];

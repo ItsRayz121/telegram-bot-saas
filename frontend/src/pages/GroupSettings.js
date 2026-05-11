@@ -308,6 +308,10 @@ export default function GroupSettings() {
   const [leaderboard, setLeaderboard] = useState([]);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
 
+  const [escalations, setEscalations] = useState([]);
+  const [escalationsLoading, setEscalationsLoading] = useState(false);
+  const [escalationFilter, setEscalationFilter] = useState('');  // '' | 'pending' | 'resolved'
+
   const [auditLogs, setAuditLogs] = useState([]);
   const [auditTotal, setAuditTotal] = useState(0);
   const [auditPage, setAuditPage] = useState(1);
@@ -439,6 +443,19 @@ export default function GroupSettings() {
       toast.error('Failed to load warnings');
     } finally {
       setWarningsLoading(false);
+    }
+  }, [botId, groupId]);
+
+  const fetchEscalations = useCallback(async (statusFilter) => {
+    setEscalationsLoading(true);
+    try {
+      const params = statusFilter ? { status: statusFilter } : {};
+      const res = await settings.listEscalations(botId, groupId, params);
+      setEscalations(res.data.escalations || []);
+    } catch {
+      toast.error('Failed to load escalations');
+    } finally {
+      setEscalationsLoading(false);
     }
   }, [botId, groupId]);
 
@@ -578,10 +595,11 @@ export default function GroupSettings() {
   // SubTab indices are derived from the feature registry — no hardcoding needed.
   // getSubTabIndex returns -1 for officialOnly subtabs in custom-bot context,
   // which safely disables the associated useEffect guards.
-  const leaderboardSubTabIdx = getSubTabIndex(CATEGORIES, 'analytics', 'Leaderboard');
-  const auditLogSubTabIdx    = getSubTabIndex(CATEGORIES, 'analytics', 'Audit Log');
-  const warningsSubTabIdx    = getSubTabIndex(CATEGORIES, 'analytics', 'Warnings');
-  const digestSubTabIdx      = getSubTabIndex(CATEGORIES, 'analytics', 'Digest');
+  const leaderboardSubTabIdx  = getSubTabIndex(CATEGORIES, 'analytics', 'Leaderboard');
+  const auditLogSubTabIdx     = getSubTabIndex(CATEGORIES, 'analytics', 'Audit Log');
+  const warningsSubTabIdx     = getSubTabIndex(CATEGORIES, 'analytics', 'Warnings');
+  const digestSubTabIdx       = getSubTabIndex(CATEGORIES, 'analytics', 'Digest');
+  const escalationsSubTabIdx  = getSubTabIndex(CATEGORIES, 'analytics', 'Escalations');
 
   useEffect(() => { fetchSettings(); }, [fetchSettings]);
   useEffect(() => { if (cat === 'analytics' && subTab === 0) fetchMembers(membersPage); }, [cat, subTab, membersPage, fetchMembers]);
@@ -591,6 +609,10 @@ export default function GroupSettings() {
   useEffect(() => { if (cat === 'moderation' && subTab === 2) fetchReports(); }, [cat, subTab, fetchReports]);
   useEffect(() => { if (cat === 'analytics' && subTab === warningsSubTabIdx) fetchWarnings(); }, [cat, subTab, warningsSubTabIdx, fetchWarnings]);
   useEffect(() => { if (cat === 'analytics' && subTab === digestSubTabIdx) fetchDigest(); }, [cat, subTab, digestSubTabIdx, fetchDigest]);
+  useEffect(() => {
+    if (cat === 'analytics' && subTab === escalationsSubTabIdx)
+      fetchEscalations(escalationFilter);
+  }, [cat, subTab, escalationsSubTabIdx, escalationFilter, fetchEscalations]); // eslint-disable-line
   useEffect(() => {
     if ((cat === 'moderation' && subTab === 2) || (cat === 'analytics' && subTab === digestSubTabIdx)) {
       fetchAdmins();
@@ -1887,6 +1909,112 @@ export default function GroupSettings() {
           </>
         )}
 
+        {/* AI › Escalation — global settings for all AI + Automation triggers */}
+        {cat === 'ai' && subTab === 2 && (() => {
+          const esc = settingsData?.escalation || {};
+          const adminIds = esc.admin_ids || [];
+          return (
+            <>
+              <Typography variant="h6" fontWeight={600} mb={2}>Global Escalation</Typography>
+              <Alert severity="info" sx={{ mb: 2 }} icon={false}>
+                When enabled, any AI or Automation issue (low-confidence KB reply, image AI, command failures)
+                is privately forwarded to your selected admins instead of a public reply.
+                Admins reply directly to the bot DM — the answer is auto-saved into the Knowledge Base.
+              </Alert>
+
+              <Card sx={{ mb: 2 }}>
+                <CardContent>
+                  <FormControlLabel
+                    control={<Switch checked={!!esc.enabled}
+                      onChange={(e) => updateSetting('escalation.enabled', e.target.checked)} />}
+                    label="Enable global escalation"
+                  />
+                  <Typography variant="caption" color="text.secondary" display="block" mb={2}>
+                    When on, the bot suppresses public replies for unsure situations and DMs admins instead.
+                  </Typography>
+
+                  <Typography variant="subtitle2" fontWeight={600} mb={1}>Escalation Admins</Typography>
+                  <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+                    Enter Telegram user IDs of admins who should receive escalation DMs.
+                    Each admin must have started a DM with the bot first.
+                  </Typography>
+                  <Stack spacing={1} mb={1}>
+                    {adminIds.map((aid, idx) => (
+                      <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <TextField
+                          size="small"
+                          label={`Admin ${idx + 1} Telegram ID`}
+                          value={aid}
+                          onChange={(e) => {
+                            const updated = [...adminIds];
+                            updated[idx] = e.target.value;
+                            updateSetting('escalation.admin_ids', updated);
+                          }}
+                          sx={{ flex: 1 }}
+                        />
+                        <IconButton size="small" onClick={() => {
+                          updateSetting('escalation.admin_ids', adminIds.filter((_, i) => i !== idx));
+                        }}>
+                          <Delete fontSize="small" />
+                        </IconButton>
+                      </Box>
+                    ))}
+                  </Stack>
+                  <Button size="small" startIcon={<Add />}
+                    onClick={() => updateSetting('escalation.admin_ids', [...adminIds, ''])}>
+                    Add Admin
+                  </Button>
+                  <Typography variant="caption" color="text.secondary" display="block" mt={1}>
+                    Selected admins receive DMs when any AI or Automation issue occurs.
+                  </Typography>
+                </CardContent>
+              </Card>
+
+              <Card sx={{ mb: 2 }}>
+                <CardContent>
+                  <Typography variant="subtitle2" fontWeight={600} mb={1}>Escalation Types</Typography>
+                  {[
+                    { key: 'ai_kb',      label: '🤖 AI Knowledge Base',  desc: 'Escalate when KB auto-reply confidence is low' },
+                    { key: 'ai_image',   label: '🖼️ AI Image Review',    desc: 'Escalate low-confidence image AI results' },
+                    { key: 'automation', label: '⚙️ Automation Errors',  desc: 'Escalate scheduled post / poll failures' },
+                    { key: 'command',    label: '📌 Unknown Commands',    desc: 'Escalate unrecognised bot commands' },
+                  ].map(({ key, label, desc }) => {
+                    const types = esc.types || [];
+                    return (
+                      <FormControlLabel key={key}
+                        sx={{ display: 'block', mb: 0.5 }}
+                        control={<Switch size="small" checked={types.includes(key)}
+                          onChange={(e) => {
+                            const updated = e.target.checked
+                              ? [...types, key]
+                              : types.filter(t => t !== key);
+                            updateSetting('escalation.types', updated);
+                          }} />}
+                        label={<Box><Typography variant="body2">{label}</Typography>
+                          <Typography variant="caption" color="text.secondary">{desc}</Typography></Box>}
+                      />
+                    );
+                  })}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent>
+                  <FormControlLabel
+                    control={<Switch checked={esc.auto_learn !== false}
+                      onChange={(e) => updateSetting('escalation.auto_learn', e.target.checked)} />}
+                    label="Auto-learn from admin replies"
+                  />
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    When an admin replies to an escalation DM, the Q&amp;A is automatically stored in the
+                    Knowledge Base for future auto-replies.
+                  </Typography>
+                </CardContent>
+              </Card>
+            </>
+          );
+        })()}
+
         {/* ══════════════════════════════════════════════════════════
             ANALYTICS
         ══════════════════════════════════════════════════════════ */}
@@ -2489,6 +2617,82 @@ export default function GroupSettings() {
               </Card>
             </>
           )
+        )}
+
+        {/* ANALYTICS › Escalations log */}
+        {cat === 'analytics' && subTab === escalationsSubTabIdx && (
+          <>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+              <Typography variant="h6" fontWeight={600}>Escalation Log</Typography>
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                {['', 'pending', 'resolved', 'ignored'].map(f => (
+                  <Button key={f} size="small"
+                    variant={escalationFilter === f ? 'contained' : 'outlined'}
+                    onClick={() => setEscalationFilter(f)}>
+                    {f === '' ? 'All' : f.charAt(0).toUpperCase() + f.slice(1)}
+                  </Button>
+                ))}
+                <Button size="small" onClick={() => fetchEscalations(escalationFilter)} disabled={escalationsLoading}>
+                  Refresh
+                </Button>
+              </Box>
+            </Box>
+            {escalationsLoading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
+            ) : escalations.length === 0 ? (
+              <Alert severity="info">No escalation events found. Enable Global Escalation in AI &amp; Integrations → Escalation.</Alert>
+            ) : (
+              <Stack spacing={1.5}>
+                {escalations.map(ev => (
+                  <Card key={ev.id} sx={{ borderLeft: `4px solid ${ev.status === 'resolved' ? '#4caf50' : ev.status === 'ignored' ? '#9e9e9e' : '#ff9800'}` }}>
+                    <CardContent sx={{ pb: '12px !important' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
+                        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                          <Chip size="small" label={ev.issue_type?.replace('_', ' ').toUpperCase()} sx={{ fontSize: '0.7rem' }} />
+                          <Chip size="small"
+                            label={ev.status}
+                            color={ev.status === 'resolved' ? 'success' : ev.status === 'ignored' ? 'default' : 'warning'}
+                          />
+                          {ev.learned && <Chip size="small" label="KB learned" color="info" />}
+                        </Box>
+                        <Typography variant="caption" color="text.secondary">
+                          {new Date(ev.created_at).toLocaleString()}
+                        </Typography>
+                      </Box>
+                      {ev.user_username && (
+                        <Typography variant="caption" color="text.secondary" display="block">
+                          User: @{ev.user_username}
+                        </Typography>
+                      )}
+                      <Typography variant="body2" sx={{ mt: 0.5, fontStyle: 'italic', color: 'text.secondary' }}>
+                        {(ev.original_content || '').slice(0, 200)}{(ev.original_content || '').length > 200 ? '…' : ''}
+                      </Typography>
+                      {ev.admin_answer && (
+                        <Box sx={{ mt: 1, p: 1, bgcolor: 'action.hover', borderRadius: 1 }}>
+                          <Typography variant="caption" fontWeight={600}>Admin answer:</Typography>
+                          <Typography variant="body2">{ev.admin_answer}</Typography>
+                        </Box>
+                      )}
+                      {ev.status === 'pending' && (
+                        <Box sx={{ mt: 1, display: 'flex', gap: 1 }}>
+                          <Button size="small" variant="outlined" color="success"
+                            onClick={() => settings.patchEscalation(botId, groupId, ev.id, { status: 'resolved' })
+                              .then(() => fetchEscalations(escalationFilter))}>
+                            Mark Resolved
+                          </Button>
+                          <Button size="small" variant="outlined" color="inherit"
+                            onClick={() => settings.patchEscalation(botId, groupId, ev.id, { status: 'ignored' })
+                              .then(() => fetchEscalations(escalationFilter))}>
+                            Ignore
+                          </Button>
+                        </Box>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </Stack>
+            )}
+          </>
         )}
 
       </Box>

@@ -365,6 +365,27 @@ def init_db():
             "group_forum_topics.telegram_group_id index",
         )
 
+        # ── Global escalation events table ────────────────────────────────────────
+        # db.create_all() creates the table; add indexes idempotently.
+        _run_alter(
+            db.engine,
+            "CREATE INDEX IF NOT EXISTS ix_escalation_events_group_id "
+            "ON escalation_events (group_id)",
+            "escalation_events.group_id index",
+        )
+        _run_alter(
+            db.engine,
+            "CREATE INDEX IF NOT EXISTS ix_escalation_events_telegram_group_id "
+            "ON escalation_events (telegram_group_id)",
+            "escalation_events.telegram_group_id index",
+        )
+        _run_alter(
+            db.engine,
+            "CREATE INDEX IF NOT EXISTS ix_escalation_events_status "
+            "ON escalation_events (status)",
+            "escalation_events.status index",
+        )
+
         print("Migration complete.")
 
     # One-shot Telegram account backfill (also runs inline above via _backfill_telegram_accounts).

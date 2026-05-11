@@ -279,6 +279,17 @@ _DEFAULTS: dict = {
         "enabled": True,
     },
 
+    # ── Global escalation ─────────────────────────────────────────────────────
+    # Applies to ALL AI & Automation issues: KB low-confidence, image AI,
+    # command failures, automation errors, and hub reply no-match.
+    "escalation": {
+        "enabled": False,
+        "admin_ids": [],              # Telegram user IDs to DM on any escalation
+        "types": ["ai_kb", "ai_image", "automation", "command"],
+        "auto_learn": True,           # auto-store admin replies back into KB
+        "notify_group_on_resolve": False,
+    },
+
     # ── Multimodal image AI ───────────────────────────────────────────────────
     # Uses GPT-4o mini vision by default (~$0.0003–0.0008/image).
     # 5-gate smart routing: most images never reach the API.
@@ -289,9 +300,10 @@ _DEFAULTS: dict = {
         "mention_only": True,         # only analyze if bot is @mentioned
         "require_caption": True,      # skip images with no caption/question
         "max_image_size_mb": 5,
-        "escalation_enabled": True,
-        "escalation_admin_ids": [],   # Telegram user IDs to DM on escalation
         "cost_mode": "balanced",      # balanced | aggressive_savings | quality
+        # Legacy per-feature escalation kept for backward compat; global wins if set
+        "escalation_enabled": True,
+        "escalation_admin_ids": [],
     },
 
     # ── Social / human-like community interaction ─────────────────────────────
