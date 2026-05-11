@@ -12,6 +12,7 @@ import {
   LinkOff, Lock, Warning, TrendingUp, People, AttachMoney, Notifications,
   History, Dns, FolderOpen, Campaign, VerifiedUser, Refresh,
   CheckCircleOutline, Cancel, MoreHoriz, Circle, Flag,
+  Security, AccountTree, TrendingDown, Payment,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -156,6 +157,27 @@ function DashboardTab({ stats, botStats, revenue, health, featureAdoption, loadi
             </Grid>
           </Grid>
 
+          {/* Churn stats */}
+          {(revenue.churned_30d !== undefined) && (
+            <Grid container spacing={2} mb={2}>
+              <Grid item xs={6} sm={3}>
+                <StatCard
+                  label="Churned (30d)"
+                  value={revenue.churned_30d}
+                  color="#ef4444"
+                  sub={revenue.churned_30d_prev != null ? `prev 30d: ${revenue.churned_30d_prev}` : undefined}
+                  icon={TrendingDown}
+                />
+              </Grid>
+              <Grid item xs={6} sm={3}>
+                <StatCard label="Active Pro" value={revenue.pro_subscribers} color="#7c4dff" />
+              </Grid>
+              <Grid item xs={6} sm={3}>
+                <StatCard label="Active Enterprise" value={revenue.enterprise_subscribers} color="#f59e0b" />
+              </Grid>
+            </Grid>
+          )}
+
           {/* Revenue trend chart */}
           {revenue.monthly_trend?.length > 0 && (
             <Card sx={{ mb: 3, p: 2 }}>
@@ -169,6 +191,49 @@ function DashboardTab({ stats, botStats, revenue, health, featureAdoption, loadi
                   <Line type="monotone" dataKey="revenue" stroke="#22c55e" strokeWidth={2} dot={{ r: 4 }} />
                 </LineChart>
               </ResponsiveContainer>
+            </Card>
+          )}
+
+          {/* Cohort conversion funnel */}
+          {revenue.cohort?.length > 0 && (
+            <Card sx={{ mb: 3 }}>
+              <CardContent sx={{ pb: '12px !important' }}>
+                <Typography variant="subtitle2" fontWeight={600} mb={2}>Cohort Conversion (Free → Pro → Enterprise)</Typography>
+                <TableContainer>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Cohort</TableCell>
+                        <TableCell align="right">Free</TableCell>
+                        <TableCell align="right">Pro</TableCell>
+                        <TableCell align="right">Enterprise</TableCell>
+                        <TableCell align="right">Conversion %</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {revenue.cohort.map(row => {
+                        const total = (row.free || 0) + (row.pro || 0) + (row.enterprise || 0);
+                        const paidPct = total ? (((row.pro || 0) + (row.enterprise || 0)) / total * 100).toFixed(1) : '0.0';
+                        return (
+                          <TableRow key={row.month}>
+                            <TableCell>{row.month}</TableCell>
+                            <TableCell align="right">{row.free || 0}</TableCell>
+                            <TableCell align="right" sx={{ color: '#7c4dff', fontWeight: 600 }}>{row.pro || 0}</TableCell>
+                            <TableCell align="right" sx={{ color: '#f59e0b', fontWeight: 600 }}>{row.enterprise || 0}</TableCell>
+                            <TableCell align="right">
+                              <Chip
+                                label={`${paidPct}%`}
+                                size="small"
+                                color={Number(paidPct) >= 20 ? 'success' : Number(paidPct) >= 10 ? 'warning' : 'default'}
+                              />
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </CardContent>
             </Card>
           )}
         </>
@@ -736,14 +801,14 @@ function CustomBotsTab({ onAdminError }) {
 // TAB 4 — SUSPICIOUS ACTIVITY
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function SuspiciousTab({ onAdminError }) {
+function SuspiciousEventsView({ onAdminError }) {
   const [events, setEvents] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [reviewed, setReviewed] = useState('false');
   const [loading, setLoading] = useState(false);
 
-  const fetch = useCallback(async (p = 1, r = 'false') => {
+  const fetchEvents = useCallback(async (p = 1, r = 'false') => {
     setLoading(true);
     try {
       const res = await admin.getSuspicious({ page: p, per_page: 20, reviewed: r });
@@ -753,10 +818,10 @@ function SuspiciousTab({ onAdminError }) {
     finally { setLoading(false); }
   }, [onAdminError]);
 
-  useEffect(() => { fetch(); }, [fetch]);
+  useEffect(() => { fetchEvents(); }, [fetchEvents]);
 
   const handleDismiss = async (id) => {
-    try { await admin.dismissSuspicious(id); toast.success('Event dismissed'); fetch(page, reviewed); }
+    try { await admin.dismissSuspicious(id); toast.success('Event dismissed'); fetchEvents(page, reviewed); }
     catch { toast.error('Failed to dismiss event'); }
   };
 
@@ -767,7 +832,7 @@ function SuspiciousTab({ onAdminError }) {
       <Stack direction="row" spacing={1.5} mb={2} alignItems="center">
         <FormControl size="small" sx={{ minWidth: 150 }}>
           <InputLabel>Review Status</InputLabel>
-          <Select value={reviewed} label="Review Status" onChange={(e) => { setReviewed(e.target.value); setPage(1); fetch(1, e.target.value); }}>
+          <Select value={reviewed} label="Review Status" onChange={(e) => { setReviewed(e.target.value); setPage(1); fetchEvents(1, e.target.value); }}>
             <MenuItem value="false">Unreviewed</MenuItem>
             <MenuItem value="true">Reviewed</MenuItem>
             <MenuItem value="">All</MenuItem>
@@ -775,19 +840,14 @@ function SuspiciousTab({ onAdminError }) {
         </FormControl>
         <Typography variant="body2" color="text.secondary">{total.toLocaleString()} events</Typography>
       </Stack>
-
       {loading ? <Box display="flex" justifyContent="center" mt={4}><CircularProgress /></Box> : (
         <>
           <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', mb: 2, overflowX: 'auto' }}>
             <Table size="small">
               <TableHead>
                 <TableRow>
-                  <TableCell>Type</TableCell>
-                  <TableCell>User</TableCell>
-                  <TableCell>IP Hash</TableCell>
-                  <TableCell>Device Hash</TableCell>
-                  <TableCell>Reason</TableCell>
-                  <TableCell>Time</TableCell>
+                  <TableCell>Type</TableCell><TableCell>User</TableCell><TableCell>IP Hash</TableCell>
+                  <TableCell>Device Hash</TableCell><TableCell>Reason</TableCell><TableCell>Time</TableCell>
                   <TableCell align="right">Actions</TableCell>
                 </TableRow>
               </TableHead>
@@ -812,9 +872,198 @@ function SuspiciousTab({ onAdminError }) {
               </TableBody>
             </Table>
           </TableContainer>
-          {pages > 1 && <Box display="flex" justifyContent="center"><Pagination count={pages} page={page} onChange={(_, p) => { setPage(p); fetch(p, reviewed); }} color="primary" /></Box>}
+          {pages > 1 && <Box display="flex" justifyContent="center"><Pagination count={pages} page={page} onChange={(_, p) => { setPage(p); fetchEvents(p, reviewed); }} color="primary" /></Box>}
         </>
       )}
+    </Box>
+  );
+}
+
+function FraudClustersView({ onAdminError }) {
+  const [clusters, setClusters] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    admin.getFraudClusters()
+      .then(r => setClusters(r.data.clusters || []))
+      .catch(err => onAdminError(err, 'Failed to load clusters'))
+      .finally(() => setLoading(false));
+  }, [onAdminError]);
+
+  if (loading) return <Box display="flex" justifyContent="center" mt={4}><CircularProgress /></Box>;
+
+  return (
+    <Box>
+      <Alert severity="warning" sx={{ mb: 2 }}>
+        These IP/device hashes are shared by 2+ different user accounts — possible multi-accounting.
+      </Alert>
+      {clusters.length === 0 ? (
+        <Alert severity="success">No multi-account clusters detected.</Alert>
+      ) : clusters.map((c, i) => (
+        <Card key={i} sx={{ mb: 1.5, borderLeft: '4px solid #f59e0b' }}>
+          <CardContent sx={{ pb: '12px !important' }}>
+            <Stack direction="row" spacing={1} alignItems="center" mb={1}>
+              <AccountTree sx={{ fontSize: 18, color: '#f59e0b' }} />
+              <Chip label={c.type === 'ip_hash' ? 'Shared IP' : 'Shared Device'} size="small" color="warning" />
+              <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>{c.hash_prefix}…</Typography>
+              <Chip label={`${c.user_count} accounts`} size="small" color="error" />
+            </Stack>
+            <Stack direction="row" flexWrap="wrap" gap={1}>
+              {(c.users || []).map(u => (
+                <Chip
+                  key={u.id}
+                  label={`${u.email} (${u.tier})`}
+                  size="small"
+                  color={u.banned ? 'error' : 'default'}
+                  variant="outlined"
+                />
+              ))}
+            </Stack>
+          </CardContent>
+        </Card>
+      ))}
+    </Box>
+  );
+}
+
+function ReferralFarmingView({ onAdminError }) {
+  const [suspects, setSuspects] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    admin.getFraudReferralFarming()
+      .then(r => setSuspects(r.data.suspects || []))
+      .catch(err => onAdminError(err, 'Failed to load referral farming data'))
+      .finally(() => setLoading(false));
+  }, [onAdminError]);
+
+  if (loading) return <Box display="flex" justifyContent="center" mt={4}><CircularProgress /></Box>;
+
+  return (
+    <Box>
+      <Alert severity="info" sx={{ mb: 2 }}>
+        Users with 3+ referrals — sorted by risk score (suspicious referrals × 3 + suspicious events).
+      </Alert>
+      {suspects.length === 0 ? (
+        <Alert severity="success">No referral farming suspects detected.</Alert>
+      ) : (
+        <TableContainer component={Paper}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Email</TableCell><TableCell>Tier</TableCell><TableCell>Total Referrals</TableCell>
+                <TableCell>Suspicious Referrals</TableCell><TableCell>Suspicious Events</TableCell>
+                <TableCell>Risk Score</TableCell><TableCell>Banned</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {suspects.map(s => (
+                <TableRow key={s.referrer_id} hover>
+                  <TableCell>{s.referrer_email}</TableCell>
+                  <TableCell><Chip label={s.referrer_tier} size="small" /></TableCell>
+                  <TableCell>{s.total_referrals}</TableCell>
+                  <TableCell><Typography color={s.suspicious_referrals > 0 ? 'error' : 'text.primary'}>{s.suspicious_referrals}</Typography></TableCell>
+                  <TableCell>{s.referrer_suspicious_events}</TableCell>
+                  <TableCell>
+                    <Chip
+                      label={s.risk_score}
+                      size="small"
+                      color={s.risk_score >= 10 ? 'error' : s.risk_score >= 5 ? 'warning' : 'default'}
+                    />
+                  </TableCell>
+                  <TableCell>{s.referrer_banned ? <Chip label="Banned" size="small" color="error" /> : '—'}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
+    </Box>
+  );
+}
+
+function PaymentAnomaliesView({ onAdminError }) {
+  const [anomalies, setAnomalies] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    admin.getFraudPaymentAnomalies()
+      .then(r => setAnomalies(r.data.anomalies || []))
+      .catch(err => onAdminError(err, 'Failed to load payment anomalies'))
+      .finally(() => setLoading(false));
+  }, [onAdminError]);
+
+  if (loading) return <Box display="flex" justifyContent="center" mt={4}><CircularProgress /></Box>;
+
+  return (
+    <Box>
+      {anomalies.length === 0 ? (
+        <Alert severity="success">No payment anomalies detected.</Alert>
+      ) : (
+        <TableContainer component={Paper}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Type</TableCell><TableCell>User</TableCell><TableCell>Tier</TableCell>
+                <TableCell>Detail</TableCell><TableCell>Risk</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {anomalies.map((a, i) => (
+                <TableRow key={i} hover>
+                  <TableCell><Chip label={a.type.replace(/_/g, ' ')} size="small" color="warning" variant="outlined" /></TableCell>
+                  <TableCell><Typography variant="caption">{a.user_email || `UID:${a.user_id}`}</Typography></TableCell>
+                  <TableCell><Chip label={a.user_tier || '?'} size="small" /></TableCell>
+                  <TableCell>
+                    <Typography variant="caption">
+                      {a.type === 'multiple_payments_same_day'
+                        ? `${a.payment_count} payments on ${a.date}`
+                        : `$${((a.amount_usd || 0) / 100).toFixed(2)} via ${a.provider} on ${fmtDate(a.date)}`}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Chip label={a.risk} size="small" color={a.risk === 'high' ? 'error' : 'warning'} />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
+    </Box>
+  );
+}
+
+const FRAUD_VIEWS = [
+  { key: 'events', label: 'Suspicious Events', icon: <Warning fontSize="small" /> },
+  { key: 'clusters', label: 'Multi-Account Clusters', icon: <AccountTree fontSize="small" /> },
+  { key: 'farming', label: 'Referral Farming', icon: <People fontSize="small" /> },
+  { key: 'payments', label: 'Payment Anomalies', icon: <Payment fontSize="small" /> },
+];
+
+function SuspiciousTab({ onAdminError }) {
+  const [subView, setSubView] = useState('events');
+
+  return (
+    <Box>
+      <Stack direction="row" spacing={1} mb={2} flexWrap="wrap">
+        {FRAUD_VIEWS.map(v => (
+          <Button
+            key={v.key}
+            size="small"
+            variant={subView === v.key ? 'contained' : 'outlined'}
+            startIcon={v.icon}
+            onClick={() => setSubView(v.key)}
+            sx={{ borderRadius: 2 }}
+          >
+            {v.label}
+          </Button>
+        ))}
+      </Stack>
+      {subView === 'events' && <SuspiciousEventsView onAdminError={onAdminError} />}
+      {subView === 'clusters' && <FraudClustersView onAdminError={onAdminError} />}
+      {subView === 'farming' && <ReferralFarmingView onAdminError={onAdminError} />}
+      {subView === 'payments' && <PaymentAnomaliesView onAdminError={onAdminError} />}
     </Box>
   );
 }
@@ -1064,7 +1313,7 @@ function AnnouncementsTab({ onAdminError }) {
 
   const pages = Math.ceil(total / 20);
 
-  const typeColor = { info: 'info', warning: 'warning', critical: 'error' };
+  const typeColor = { info: 'info', warning: 'warning', critical: 'error', security: 'error' };
 
   return (
     <Box>
@@ -1150,11 +1399,17 @@ function AnnouncementsTab({ onAdminError }) {
                   <MenuItem value="info">Info</MenuItem>
                   <MenuItem value="warning">Warning</MenuItem>
                   <MenuItem value="critical">Critical</MenuItem>
+                  <MenuItem value="security">🔒 Urgent Security Notice</MenuItem>
                 </Select>
               </FormControl>
             </Stack>
             {form.announcement_type === 'critical' && (
               <Alert severity="error">Critical announcements appear as a full-screen modal for all recipients on their next app load.</Alert>
+            )}
+            {form.announcement_type === 'security' && (
+              <Alert severity="error" icon={<Security />}>
+                Urgent Security Notices are delivered immediately to all users regardless of audience setting, with a red banner that persists until dismissed.
+              </Alert>
             )}
           </Stack>
         </DialogContent>
@@ -1435,6 +1690,18 @@ export default function AdminPanel() {
   }, [handleAdminError]);
 
   useEffect(() => { fetchDashboard(); }, [fetchDashboard]);
+
+  // Keyboard shortcuts: 1–9 to switch tabs, R to refresh dashboard
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      const num = parseInt(e.key, 10);
+      if (num >= 1 && num <= TABS.length) { setActiveTab(num - 1); return; }
+      if (e.key === 'r' || e.key === 'R') { fetchDashboard(); toast.info('Dashboard refreshed'); }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [fetchDashboard]);
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>

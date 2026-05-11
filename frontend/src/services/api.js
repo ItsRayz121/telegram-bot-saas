@@ -530,6 +530,10 @@ export const admin = {
   resolveReport: (source, id) => api.post(`/api/admin/reports/${source}/${id}/resolve`),
   // Feature Adoption
   getFeatureAdoption: () => api.get('/api/admin/feature-adoption'),
+  // Fraud Detection
+  getFraudClusters: () => api.get('/api/admin/fraud/clusters'),
+  getFraudReferralFarming: () => api.get('/api/admin/fraud/referral-farming'),
+  getFraudPaymentAnomalies: () => api.get('/api/admin/fraud/payment-anomalies'),
 };
 
 export const telegramGroups = {

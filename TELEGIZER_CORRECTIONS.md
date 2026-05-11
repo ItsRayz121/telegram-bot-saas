@@ -143,7 +143,7 @@
 
 #### Corrections
 
-- [ ] **Automated fraud alert emails to ADMIN_EMAILS**
+- [x] **Automated fraud alert emails to ADMIN_EMAILS**
   - Severity: `HIGH`
   - Priority: `P1 — Beta`
   - Phase: Phase 2
@@ -151,7 +151,7 @@
   - Fix: Add Celery Beat task running hourly. Checks: (a) >10 `SuspiciousActivity` records from same IP hash prefix in 1 hour → alert, (b) one referral code used >20 times in 24h → alert, (c) >5 payment failures from same user in 1 hour → alert, (d) >3 accounts upgraded without payment (admin grants) in 1 day → alert. Send email to all `ADMIN_EMAILS` with a summary.
   - Impact: `[BE]` `[OPS]`
 
-- [ ] **Referral farming detection**
+- [x] **Referral farming detection**
   - Severity: `HIGH`
   - Priority: `P0 — Must Fix Before Launch`
   - Phase: Phase 1
@@ -159,7 +159,7 @@
   - Fix: Rate-limit `POST /api/referrals/validate/:code` to 5 attempts per IP per hour. Require email verification before any referral credit is applied. Flag accounts where >3 referrals came from the same device fingerprint hash.
   - Impact: `[BE]` `[SEC]`
 
-- [ ] **Multi-accounting detection dashboard**
+- [x] **Multi-accounting detection dashboard**
   - Severity: `MEDIUM`
   - Priority: `P1 — Beta`
   - Phase: Phase 2
@@ -167,7 +167,7 @@
   - Fix: Add a "Suspected Multi-Accounts" view in the admin panel. Group `SuspiciousActivity` records by IP hash. Show all accounts linked to the same IP cluster. Allow admin to bulk-review and mark as "Legitimate" or "Fraudulent."
   - Impact: `[BE]` `[FE]`
 
-- [ ] **Payment anomaly detection**
+- [x] **Payment anomaly detection**
   - Severity: `HIGH`
   - Priority: `P1 — Beta`
   - Phase: Phase 2
@@ -192,7 +192,7 @@
   - Fix: Add "Announcements" section to admin panel. Fields: Title, Body (rich text), Audience (All / Free / Pro / Enterprise / Users with bots), Channel (In-app notification / Email / Telegram DM / All). Preview modal before send. Celery task handles bulk delivery. Store in `AdminAnnouncement` model with `sent_at`, `audience_filter`, `channel`, `delivered_count`.
   - Impact: `[BE]` `[FE]` `[DB]` `[BOT]`
 
-- [ ] **Add urgent security notice system**
+- [x] **Add urgent security notice system**
   - Severity: `CRITICAL`
   - Priority: `P1 — Beta`
   - Phase: Phase 2
@@ -218,7 +218,7 @@
   - Impact: `[BE]` `[FE]`
   - **DONE:** `/api/admin/revenue` endpoint + Dashboard tab revenue cards + 6-month trend chart.
 
-- [ ] **Add churn rate tracking**
+- [x] **Add churn rate tracking**
   - Severity: `HIGH`
   - Priority: `P1 — Beta`
   - Phase: Phase 2
@@ -226,7 +226,7 @@
   - Fix: Track `subscription_cancelled_at` on `User`. Monthly churn = users whose subscription expired this month / active subscribers last month × 100. Display as a time-series chart in admin dashboard.
   - Impact: `[BE]` `[FE]` `[DB]`
 
-- [ ] **Add cohort conversion funnel**
+- [x] **Add cohort conversion funnel**
   - Severity: `HIGH`
   - Priority: `P1 — Beta`
   - Phase: Phase 2
@@ -252,7 +252,7 @@
 
 #### Corrections
 
-- [ ] **Add reported content queue** *(ReportedMessage model exists — UI tab pending)*
+- [x] **Add reported content queue** *(ReportedMessage model exists — UI tab built)*
   - Severity: `HIGH`
   - Priority: `P1 — Beta`
   - Phase: Phase 2
@@ -274,7 +274,7 @@
 
 #### Corrections
 
-- [ ] **Collapse admin route into top-right dropdown, not sidebar**
+- [x] **Collapse admin route into top-right dropdown, not sidebar**
   - Severity: `MEDIUM`
   - Priority: `P1 — Beta`
   - Phase: Phase 2
@@ -282,7 +282,7 @@
   - Fix: Remove `/admin` from main sidebar. Add an "Admin" icon/dropdown to the top-right header bar, only visible when `user.is_admin=true`. Open in the same SPA or a separate layout context with a visually distinct theme (e.g., a subtle red/dark banner indicating admin mode).
   - Impact: `[FE]`
 
-- [ ] **Add keyboard shortcuts for admin actions**
+- [x] **Add keyboard shortcuts for admin actions**
   - Severity: `LOW`
   - Priority: `P3 — Future`
   - Phase: Phase 4

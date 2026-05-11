@@ -85,6 +85,11 @@ def make_celery(app=None):
                 "task": "backend.scheduler.send_renewal_reminders",
                 "schedule": crontab(hour=9, minute=0),  # daily at 09:00 UTC
             },
+            # ── Fraud alert digest ────────────────────────────────────────────
+            "scan-fraud-alerts": {
+                "task": "backend.scheduler.scan_fraud_alerts",
+                "schedule": crontab(hour=7, minute=0),  # daily at 07:00 UTC
+            },
             # ── Maintenance (Phase 6) ───────────────────────────────────────
             "cleanup-message-buffer": {
                 "task": "backend.scheduler.cleanup_message_buffer",
@@ -1292,3 +1297,53 @@ def _get_bot_token_for_chat(chat_id, app):
         if token:
             return token
     raise ValueError(f"No bot token found for chat_id={chat_id}")
+
+
+@celery.task(name="backend.scheduler.scan_fraud_alerts")
+def scan_fraud_alerts():
+    """Daily fraud digest: email ADMIN_EMAILS if unreviewed suspicious activity exceeds threshold."""
+    ALERT_THRESHOLD = 5  # fire if >= this many new events since yesterday
+
+    try:
+        from datetime import timedelta
+        from .app import create_app
+        flask_app = create_app()
+
+        with flask_app.app_context():
+            from .models import SuspiciousActivity
+            from .config import Config
+            from .notifications import send_email
+
+            since = datetime.utcnow() - timedelta(hours=24)
+            new_events = SuspiciousActivity.query.filter(
+                SuspiciousActivity.reviewed == False,  # noqa: E712
+                SuspiciousActivity.created_at >= since,
+            ).count()
+
+            if new_events < ALERT_THRESHOLD:
+                logger.info("scan_fraud_alerts: %d new events (below threshold %d)", new_events, ALERT_THRESHOLD)
+                return
+
+            admin_emails = Config.ADMIN_EMAILS or []
+            if not admin_emails:
+                logger.warning("scan_fraud_alerts: no ADMIN_EMAILS configured, skipping")
+                return
+
+            subject = f"[Telegizer] Fraud Alert: {new_events} unreviewed suspicious events in 24h"
+            html_body = f"""
+<h2 style="color:#ef4444">Fraud Alert</h2>
+<p>There are <strong>{new_events}</strong> new unreviewed suspicious activity events in the last 24 hours.</p>
+<p>This exceeds the alert threshold of {ALERT_THRESHOLD}. Please review them in the Admin Panel.</p>
+<p><a href="https://telegizer.com/admin-panel">Open Admin Panel → Suspicious Tab</a></p>
+<hr/>
+<p style="color:#888;font-size:12px">This is an automated security digest from your Telegizer platform.</p>
+"""
+            for email in admin_emails:
+                try:
+                    send_email(email, subject, html_body)
+                    logger.info("scan_fraud_alerts: alert sent to %s", email)
+                except Exception as e:
+                    logger.error("scan_fraud_alerts: failed to send to %s: %s", email, e)
+
+    except Exception as exc:
+        logger.error("scan_fraud_alerts error: %s", exc)

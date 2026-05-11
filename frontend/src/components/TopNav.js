@@ -7,6 +7,7 @@ import {
 import {
   Home, Dashboard, Groups, SmartToy, CreditCard, Settings,
   HelpOutline, Campaign, People, Email, OpenInNew, CardGiftcard,
+  AdminPanelSettings,
 } from '@mui/icons-material';
 import TelegizerLogo from './TelegizerLogo';
 import UniversalSearchBar from './UniversalSearchBar';
@@ -120,9 +121,14 @@ const NAV_ITEMS = [
   { label: 'Billing',   path: '/billing',   icon: CreditCard },
 ];
 
+function _isAdmin() {
+  try { return JSON.parse(localStorage.getItem('user') || '{}').is_admin === true; } catch { return false; }
+}
+
 export default function TopNav({ title, subtitle, actions, breadcrumb, hasSidebar = false }) {
   const navigate  = useNavigate();
   const { pathname } = useLocation();
+  const isAdmin = _isAdmin();
 
   const isActive = (path, exact) =>
     exact ? pathname === path : pathname === path || pathname.startsWith(path + '/');
@@ -202,6 +208,23 @@ export default function TopNav({ title, subtitle, actions, breadcrumb, hasSideba
         </Tooltip>
 
         <SupportPopover />
+
+        {/* Admin panel shortcut — only visible to admins */}
+        {isAdmin && (
+          <Tooltip title="Admin Panel" arrow>
+            <IconButton
+              size="small"
+              onClick={() => navigate('/admin-panel')}
+              sx={{
+                ml: 0.5, color: pathname === '/admin-panel' ? '#ef4444' : 'text.secondary',
+                transition: 'color 0.15s, background 0.15s',
+                '&:hover': { color: '#ef4444', bgcolor: 'rgba(239,68,68,0.1)' },
+              }}
+            >
+              <AdminPanelSettings fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
 
         {/* Settings shortcut */}
         <Tooltip title="Settings" arrow>
