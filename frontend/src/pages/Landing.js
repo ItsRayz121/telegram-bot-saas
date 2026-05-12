@@ -361,7 +361,6 @@ export default function Landing() {
             </Box>
           </Box>
         </Box>
-      </Box>
 
       {/* â"€â"€ Stats Strip â"€â"€ */}
       <Box ref={statsRef} sx={{ bgcolor: '#0b1626', borderTop: '1px solid', borderBottom: '1px solid', borderColor: 'divider', py: 3, ...reveal(statsVisible) }}>
