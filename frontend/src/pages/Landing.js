@@ -1,4 +1,5 @@
 ﻿import React, { useState } from 'react';
+import { useScrollReveal } from '../hooks/useScrollReveal';
 import {
   Box, AppBar, Toolbar, Typography, Button, Card, CardContent,
   Grid, Chip, Container, Stack, Divider, Avatar,
@@ -174,6 +175,22 @@ export default function Landing() {
   const navigate = useNavigate();
   const token = localStorage.getItem('token');
 
+  const [statsRef, statsVisible] = useScrollReveal(0.15);
+  const [painRef, painVisible] = useScrollReveal(0.08);
+  const [solutionRef, solutionVisible] = useScrollReveal(0.15);
+  const [featuresRef, featuresVisible] = useScrollReveal(0.05);
+  const [stepsRef, stepsVisible] = useScrollReveal(0.1);
+  const [testimonialsRef, testimonialsVisible] = useScrollReveal(0.1);
+  const [pricingRef, pricingVisible] = useScrollReveal(0.05);
+  const [faqRef, faqVisible] = useScrollReveal(0.1);
+  const [ctaRef, ctaVisible] = useScrollReveal(0.15);
+
+  const reveal = (visible, delay = 0) => ({
+    opacity: visible ? 1 : 0,
+    transform: visible ? 'none' : 'translateY(22px)',
+    transition: `opacity 0.55s ease ${delay}ms, transform 0.55s cubic-bezier(0.22,1,0.36,1) ${delay}ms`,
+  });
+
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
 
@@ -237,7 +254,7 @@ export default function Landing() {
             sx={{ fontSize: { xs: '2.2rem', sm: '3rem', md: '3.75rem' }, lineHeight: 1.1, letterSpacing: '-0.02em' }}
           >
             Manage Your Telegram Group{' '}
-            <Box component="span" sx={{ color: 'primary.main' }}>
+            <Box component="span" className="gradient-text">
               Without the Manual Work
             </Box>
           </Typography>
@@ -282,35 +299,18 @@ export default function Landing() {
           </Typography>
         </Container>
 
-        {/* Dashboard preview mock */}
+        {/* Dashboard preview — floating cards, no browser chrome */}
         <Box sx={{ mt: 7, mx: 'auto', maxWidth: 860, px: { xs: 2, md: 0 }, position: 'relative' }}>
-          <Typography variant="caption" color="text.disabled" display="block" textAlign="center" mb={1}>
+          <Typography variant="caption" color="text.disabled" display="block" textAlign="center" mb={2}>
             Example dashboard — illustrative data only
           </Typography>
           {/* Fade-out bottom overlay */}
           <Box sx={{
-            position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, zIndex: 1,
+            position: 'absolute', bottom: 0, left: 0, right: 0, height: 100, zIndex: 1,
             background: 'linear-gradient(transparent, #0d1117)',
             pointerEvents: 'none',
           }} />
-          <Box sx={{
-            border: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: 3,
-            overflow: 'hidden',
-            bgcolor: '#0f172a',
-            boxShadow: '0 0 60px rgba(37,99,235,0.15)',
-          }}>
-            {/* Window chrome */}
-            <Box sx={{ bgcolor: '#1e293b', px: 2, py: 1.25, display: 'flex', alignItems: 'center', gap: 1, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-              {['#ef4444','#f59e0b','#22c55e'].map(c => (
-                <Box key={c} sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: c }} />
-              ))}
-              <Box sx={{ flexGrow: 1, mx: 2, bgcolor: 'rgba(255,255,255,0.04)', borderRadius: 1, height: 22, display: 'flex', alignItems: 'center', px: 1.5 }}>
-                <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.65rem' }}>telegizer.com/dashboard</Typography>
-              </Box>
-            </Box>
-            {/* Dashboard body */}
-            <Box sx={{ p: 2.5 }}>
+          <Box sx={{ p: 2.5, bgcolor: 'rgba(15,30,53,0.6)', borderRadius: 3, border: '1px solid rgba(61,142,248,0.12)', boxShadow: '0 0 60px rgba(37,99,235,0.12), 0 24px 80px rgba(0,0,0,0.5)' }}>
               {/* Stat cards row */}
               <Grid container spacing={1.5} mb={2}>
                 {[
@@ -364,7 +364,7 @@ export default function Landing() {
       </Box>
 
       {/* â"€â"€ Stats Strip â"€â"€ */}
-      <Box sx={{ bgcolor: 'background.paper', borderTop: '1px solid', borderBottom: '1px solid', borderColor: 'divider', py: 3 }}>
+      <Box ref={statsRef} sx={{ bgcolor: '#0b1626', borderTop: '1px solid', borderBottom: '1px solid', borderColor: 'divider', py: 3, ...reveal(statsVisible) }}>
         <Container maxWidth="md">
           <Grid container justifyContent="center" spacing={0}>
             {[
@@ -388,41 +388,44 @@ export default function Landing() {
       </Box>
 
       {/* â"€â"€ Pain â"€â"€ */}
-      <Container maxWidth="lg" sx={{ py: { xs: 8, md: 12 } }}>
-        <Box sx={{ textAlign: 'center', mb: 6 }}>
-          <Typography variant="overline" color="error.main" fontWeight={700} letterSpacing={2}>
-            The Problem
-          </Typography>
-          <Typography variant="h4" fontWeight={800} mt={1} mb={1.5}>
-            Managing a Telegram group shouldn't feel like a full-time job
-          </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 560, mx: 'auto' }}>
-            If you're running a community without automation, here's what your day looks like:
-          </Typography>
-        </Box>
-        <Grid container spacing={3}>
-          {PAIN_POINTS.map((p) => (
-            <Grid item xs={12} sm={6} key={p.title}>
-              <Card sx={{ height: '100%', p: 1, borderColor: 'rgba(211,47,47,0.2)', bgcolor: 'rgba(211,47,47,0.03)' }}>
-                <CardContent>
-                  <Box sx={{ color: 'error.main', mb: 1.5 }}>{p.icon}</Box>
-                  <Typography variant="h6" fontWeight={700} mb={1}>{p.title}</Typography>
-                  <Typography variant="body2" color="text.secondary" lineHeight={1.7}>{p.desc}</Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
-      </Container>
+      <Box sx={{ bgcolor: '#07101f' }}>
+        <Container maxWidth="lg" sx={{ py: { xs: 8, md: 12 } }}>
+          <Box ref={painRef} sx={{ textAlign: 'center', mb: 6, ...reveal(painVisible) }}>
+            <Typography variant="overline" color="error.main" fontWeight={700} letterSpacing={2}>
+              The Problem
+            </Typography>
+            <Typography variant="h4" fontWeight={800} mt={1} mb={1.5}>
+              Managing a Telegram group shouldn't feel like a full-time job
+            </Typography>
+            <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 560, mx: 'auto' }}>
+              If you're running a community without automation, here's what your day looks like:
+            </Typography>
+          </Box>
+          <Grid container spacing={3}>
+            {PAIN_POINTS.map((p, i) => (
+              <Grid item xs={12} sm={6} key={p.title} sx={reveal(painVisible, i * 80)}>
+                <Card sx={{ height: '100%', p: 1, borderColor: 'rgba(211,47,47,0.2)', bgcolor: 'rgba(211,47,47,0.03)' }}>
+                  <CardContent>
+                    <Box sx={{ color: 'error.main', mb: 1.5 }}>{p.icon}</Box>
+                    <Typography variant="h6" fontWeight={700} mb={1}>{p.title}</Typography>
+                    <Typography variant="body2" color="text.secondary" lineHeight={1.7}>{p.desc}</Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+        </Container>
+      </Box>
 
       {/* â"€â"€ Solution bridge â"€â"€ */}
-      <Box sx={{ bgcolor: 'background.paper', borderTop: '1px solid', borderBottom: '1px solid', borderColor: 'divider', py: { xs: 6, md: 8 }, textAlign: 'center', px: 2 }}>
+      <Box ref={solutionRef} sx={{ bgcolor: '#0b1626', borderTop: '1px solid', borderBottom: '1px solid', borderColor: 'divider', py: { xs: 6, md: 8 }, textAlign: 'center', px: 2, ...reveal(solutionVisible) }}>
         <Container maxWidth="sm">
           <Typography variant="overline" color="success.main" fontWeight={700} letterSpacing={2}>
             How It Helps
           </Typography>
           <Typography variant="h4" fontWeight={800} mt={1} mb={2}>
-            Replace repetitive tasks with reliable automation
+            Replace repetitive tasks with{' '}
+            <Box component="span" className="gradient-text">reliable automation</Box>
           </Typography>
           <Typography variant="body1" color="text.secondary" lineHeight={1.8}>
             Connect your Telegram bot and configure what you want automated — spam removal,
@@ -433,46 +436,49 @@ export default function Landing() {
       </Box>
 
       {/* â"€â"€ Features â"€â"€ */}
-      <Container maxWidth="lg" sx={{ py: { xs: 8, md: 12 } }}>
-        <Box sx={{ textAlign: 'center', mb: 6 }}>
-          <Typography variant="overline" color="primary.main" fontWeight={700} letterSpacing={2}>
-            Features
-          </Typography>
-          <Typography variant="h4" fontWeight={800} mt={1} mb={1}>
-            One dashboard. Full control.
-          </Typography>
-          <Typography variant="body1" color="text.secondary">
-            Everything your community needs, built in — no plugins, no integrations required.
-          </Typography>
-        </Box>
-        <Grid container spacing={3}>
-          {FEATURES.map((f) => (
-            <Grid item xs={12} sm={6} md={4} key={f.title}>
-              <Card sx={{ height: '100%', p: 1, position: 'relative' }}>
-                {(f.badge || f.plan) && (
-                  <Box sx={{ position: 'absolute', top: 12, right: 12, display: 'flex', gap: 0.5 }}>
-                    {f.badge ? (
-                      <Chip label={f.badge} size="small" color={f.badgeColor || 'primary'} sx={{ fontSize: 10, height: 20 }} />
-                    ) : (
-                      <Chip label={f.plan} size="small" color={f.planColor || 'default'} variant="outlined" sx={{ fontSize: 10, height: 20 }} />
-                    )}
-                  </Box>
-                )}
-                <CardContent sx={{ pt: (f.badge || f.plan) ? 4.5 : 2 }}>
-                  <Box sx={{ color: 'primary.main', mb: 1.5 }}>{f.icon}</Box>
-                  <Typography variant="h6" fontWeight={700} mb={1}>{f.title}</Typography>
-                  <Typography variant="body2" color="text.secondary" lineHeight={1.7}>{f.desc}</Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
-      </Container>
+      <Box sx={{ bgcolor: '#07101f' }}>
+        <Container maxWidth="lg" sx={{ py: { xs: 8, md: 12 } }}>
+          <Box ref={featuresRef} sx={{ textAlign: 'center', mb: 6, ...reveal(featuresVisible) }}>
+            <Typography variant="overline" color="primary.main" fontWeight={700} letterSpacing={2}>
+              Features
+            </Typography>
+            <Typography variant="h4" fontWeight={800} mt={1} mb={1}>
+              One dashboard.{' '}
+              <Box component="span" className="gradient-text">Full control.</Box>
+            </Typography>
+            <Typography variant="body1" color="text.secondary">
+              Everything your community needs, built in — no plugins, no integrations required.
+            </Typography>
+          </Box>
+          <Grid container spacing={3}>
+            {FEATURES.map((f, i) => (
+              <Grid item xs={12} sm={6} md={4} key={f.title} sx={reveal(featuresVisible, (i % 3) * 70)}>
+                <Card sx={{ height: '100%', p: 1, position: 'relative' }}>
+                  {(f.badge || f.plan) && (
+                    <Box sx={{ position: 'absolute', top: 12, right: 12, display: 'flex', gap: 0.5 }}>
+                      {f.badge ? (
+                        <Chip label={f.badge} size="small" color={f.badgeColor || 'primary'} sx={{ fontSize: 10, height: 20 }} />
+                      ) : (
+                        <Chip label={f.plan} size="small" color={f.planColor || 'default'} variant="outlined" sx={{ fontSize: 10, height: 20 }} />
+                      )}
+                    </Box>
+                  )}
+                  <CardContent sx={{ pt: (f.badge || f.plan) ? 4.5 : 2 }}>
+                    <Box sx={{ color: 'primary.main', mb: 1.5 }}>{f.icon}</Box>
+                    <Typography variant="h6" fontWeight={700} mb={1}>{f.title}</Typography>
+                    <Typography variant="body2" color="text.secondary" lineHeight={1.7}>{f.desc}</Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+        </Container>
+      </Box>
 
       {/* â"€â"€ How It Works â"€â"€ */}
-      <Box sx={{ bgcolor: 'background.paper', borderTop: '1px solid', borderColor: 'divider', py: { xs: 8, md: 10 } }}>
+      <Box sx={{ bgcolor: '#0b1626', borderTop: '1px solid', borderColor: 'divider', py: { xs: 8, md: 10 } }}>
         <Container maxWidth="sm">
-          <Box sx={{ textAlign: 'center', mb: 6 }}>
+          <Box ref={stepsRef} sx={{ textAlign: 'center', mb: 6, ...reveal(stepsVisible) }}>
             <Typography variant="overline" color="primary.main" fontWeight={700} letterSpacing={2}>
               Setup
             </Typography>
@@ -484,8 +490,8 @@ export default function Landing() {
             </Typography>
           </Box>
           <Stack spacing={3}>
-            {STEPS.map((s) => (
-              <Box key={s.n} sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+            {STEPS.map((s, i) => (
+              <Box key={s.n} sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, ...reveal(stepsVisible, i * 60) }}>
                 <Avatar sx={{ bgcolor: 'primary.main', width: 36, height: 36, fontSize: '0.9rem', fontWeight: 800, flexShrink: 0 }}>
                   {s.n}
                 </Avatar>
@@ -496,7 +502,7 @@ export default function Landing() {
               </Box>
             ))}
           </Stack>
-          <Box sx={{ textAlign: 'center', mt: 5 }}>
+          <Box sx={{ textAlign: 'center', mt: 5, ...reveal(stepsVisible, STEPS.length * 60) }}>
             <Button
               variant="contained"
               size="large"
@@ -511,52 +517,55 @@ export default function Landing() {
       </Box>
 
       {/* â"€â"€ Social Proof â"€â"€ */}
-      <Container maxWidth="lg" sx={{ py: { xs: 8, md: 10 } }}>
-        <Box sx={{ textAlign: 'center', mb: 6 }}>
-          <Typography variant="overline" color="primary.main" fontWeight={700} letterSpacing={2}>
-            Early Feedback
-          </Typography>
-          <Typography variant="h4" fontWeight={800} mt={1}>
-            What community admins say
-          </Typography>
-          <Typography variant="caption" color="text.disabled" display="block" mt={1}>
-            Paraphrased from real user feedback. Names withheld for privacy.
-          </Typography>
-        </Box>
-        <Grid container spacing={3}>
-          {EARLY_FEEDBACK.map((t, i) => (
-            <Grid item xs={12} sm={6} md={4} key={i}>
-              <Card sx={{ height: '100%', p: 1 }}>
-                <CardContent>
-                  <Typography variant="body1" color="text.primary" lineHeight={1.7} mb={2} sx={{ fontStyle: 'italic' }}>
-                    "{t.text}"
-                  </Typography>
-                  <Divider sx={{ mb: 2 }} />
-                  <Typography variant="caption" color="text.secondary">{t.context}</Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
-      </Container>
+      <Box sx={{ bgcolor: '#07101f' }}>
+        <Container maxWidth="lg" sx={{ py: { xs: 8, md: 10 } }}>
+          <Box ref={testimonialsRef} sx={{ textAlign: 'center', mb: 6, ...reveal(testimonialsVisible) }}>
+            <Typography variant="overline" color="primary.main" fontWeight={700} letterSpacing={2}>
+              Early Feedback
+            </Typography>
+            <Typography variant="h4" fontWeight={800} mt={1}>
+              What community admins say
+            </Typography>
+            <Typography variant="caption" color="text.disabled" display="block" mt={1}>
+              Paraphrased from real user feedback. Names withheld for privacy.
+            </Typography>
+          </Box>
+          <Grid container spacing={3}>
+            {EARLY_FEEDBACK.map((t, i) => (
+              <Grid item xs={12} sm={6} md={4} key={i} sx={reveal(testimonialsVisible, i * 90)}>
+                <Card sx={{ height: '100%', p: 1 }}>
+                  <CardContent>
+                    <Typography variant="body1" color="text.primary" lineHeight={1.7} mb={2} sx={{ fontStyle: 'italic' }}>
+                      "{t.text}"
+                    </Typography>
+                    <Divider sx={{ mb: 2 }} />
+                    <Typography variant="caption" color="text.secondary">{t.context}</Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+        </Container>
+      </Box>
 
       {/* â"€â"€ Pricing â"€â"€ */}
-      <Box sx={{ bgcolor: 'background.paper', borderTop: '1px solid', borderColor: 'divider', py: { xs: 8, md: 12 } }}>
+      <Box sx={{ bgcolor: '#0b1626', borderTop: '1px solid', borderColor: 'divider', py: { xs: 8, md: 12 } }}>
         <Container maxWidth="lg">
-          <Box sx={{ textAlign: 'center', mb: 6 }}>
+          <Box ref={pricingRef} sx={{ textAlign: 'center', mb: 6, ...reveal(pricingVisible) }}>
             <Typography variant="overline" color="primary.main" fontWeight={700} letterSpacing={2}>
               Pricing
             </Typography>
             <Typography variant="h4" fontWeight={800} mt={1} mb={1}>
-              Simple, transparent pricing
+              Simple,{' '}
+              <Box component="span" className="gradient-text">transparent pricing</Box>
             </Typography>
             <Typography variant="body1" color="text.secondary">
               Start free. Upgrade when you need more. No surprises.
             </Typography>
           </Box>
           <Grid container spacing={3} justifyContent="center">
-            {PLANS.map((plan) => (
-              <Grid item xs={12} sm={6} md={4} key={plan.name}>
+            {PLANS.map((plan, i) => (
+              <Grid item xs={12} sm={6} md={4} key={plan.name} sx={reveal(pricingVisible, i * 90)}>
                 <Box sx={{ position: 'relative', pt: '14px', height: '100%' }}>
                   {plan.popular && (
                     <Chip
@@ -638,7 +647,7 @@ export default function Landing() {
       </Box>
 
       {/* â"€â"€ FAQ â"€â"€ */}
-      <Box sx={{ py: { xs: 8, md: 10 }, bgcolor: 'background.default' }}>
+      <Box ref={faqRef} sx={{ py: { xs: 8, md: 10 }, bgcolor: '#07101f', ...reveal(faqVisible) }}>
         <Container maxWidth="md">
           <Typography variant="overline" color="primary.main" fontWeight={700} display="block" textAlign="center">
             FAQ
@@ -698,7 +707,7 @@ export default function Landing() {
       </Box>
 
       {/* ── Community Directory callout ── */}
-      <Box sx={{ py: { xs: 6, md: 8 }, px: 2, textAlign: 'center', bgcolor: 'background.paper', borderTop: '1px solid', borderColor: 'divider' }}>
+      <Box sx={{ py: { xs: 6, md: 8 }, px: 2, textAlign: 'center', bgcolor: '#0b1626', borderTop: '1px solid', borderColor: 'divider' }}>
         <Container maxWidth="sm">
           <Chip label="Community Directory" size="small" sx={{ mb: 2, bgcolor: 'rgba(33,150,243,0.1)', color: 'primary.light', fontWeight: 600, border: '1px solid rgba(33,150,243,0.25)' }} />
           <Typography variant="h5" fontWeight={800} mb={1.5}>
@@ -721,19 +730,38 @@ export default function Landing() {
 
       {/* ── Final CTA ── */}
       <Box
+        ref={ctaRef}
         sx={{
-          background: 'linear-gradient(135deg, #1565c0 0%, #7c4dff 100%)',
+          background: 'linear-gradient(135deg, #0d2a5a 0%, #1a1a6e 40%, #2d1060 70%, #0a2040 100%)',
+          backgroundSize: '200% 200%',
+          animation: 'gradientShift 10s ease infinite',
           py: { xs: 8, md: 10 },
           textAlign: 'center',
           px: 2,
+          position: 'relative',
+          overflow: 'hidden',
+          ...reveal(ctaVisible),
         }}
       >
-        <Container maxWidth="sm">
+        {/* Ambient orb — top right */}
+        <Box sx={{
+          position: 'absolute', top: -60, right: -60, width: 340, height: 340,
+          borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(157,108,247,0.22) 0%, transparent 70%)',
+          pointerEvents: 'none',
+        }} />
+        {/* Ambient orb — bottom left */}
+        <Box sx={{
+          position: 'absolute', bottom: -80, left: -80, width: 400, height: 400,
+          borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(61,142,248,0.18) 0%, transparent 70%)',
+          pointerEvents: 'none',
+        }} />
+        <Container maxWidth="sm" sx={{ position: 'relative' }}>
           <Typography variant="h4" fontWeight={800} color="white" mb={2}>
             Stop managing your community by hand
           </Typography>
-          <Typography variant="body1" sx={{ color: 'rgba(255,255,255,0.85)', mb: 4, lineHeight: 1.7 }}>
-            Stop managing your community by hand.
+          <Typography variant="body1" sx={{ color: 'rgba(255,255,255,0.75)', mb: 4, lineHeight: 1.7 }}>
             Your first bot is free — no credit card, no setup complexity. Takes 60 seconds.
           </Typography>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="center">
@@ -742,7 +770,7 @@ export default function Landing() {
               size="large"
               onClick={() => navigate('/register')}
               endIcon={<ArrowForward />}
-              sx={{ bgcolor: 'white', color: 'primary.main', py: 1.75, px: 4, fontWeight: 700, '&:hover': { bgcolor: '#f0f0f0' } }}
+              sx={{ bgcolor: 'white', color: '#0d2a5a', py: 1.75, px: 4, fontWeight: 700, '&:hover': { bgcolor: '#e8f0ff', transform: 'translateY(-1px)' } }}
             >
               Create Free Account
             </Button>
@@ -750,7 +778,7 @@ export default function Landing() {
               variant="outlined"
               size="large"
               onClick={() => navigate('/pricing')}
-              sx={{ borderColor: 'rgba(255,255,255,0.5)', color: 'white', py: 1.75, px: 4, '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}
+              sx={{ borderColor: 'rgba(255,255,255,0.35)', color: 'white', py: 1.75, px: 4, '&:hover': { borderColor: 'rgba(255,255,255,0.7)', bgcolor: 'rgba(255,255,255,0.07)' } }}
             >
               See Pricing
             </Button>
@@ -759,7 +787,7 @@ export default function Landing() {
       </Box>
 
       {/* â"€â"€ Footer â"€â"€ */}
-      <Box sx={{ bgcolor: 'background.paper', borderTop: '1px solid', borderColor: 'divider', py: 4 }}>
+      <Box sx={{ bgcolor: '#07101f', borderTop: '1px solid', borderColor: 'divider', py: 4 }}>
         <Container maxWidth="lg">
           <Grid container alignItems="center" spacing={2}>
             <Grid item xs={12} sm="auto">

@@ -202,9 +202,11 @@ const telegizer = createTheme({
           background: PALETTE.bg2,
           backgroundImage: 'none',
           boxShadow: `0 2px 8px rgba(0,0,0,0.4)`,
-          transition: 'box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease',
+          transition: 'box-shadow 0.2s ease, transform 0.2s cubic-bezier(0.22,1,0.36,1), border-color 0.2s ease',
           '&:hover': {
-            boxShadow: `0 6px 24px rgba(0,0,0,0.5), 0 0 0 1px ${PALETTE.border2}`,
+            boxShadow: `0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px ${PALETTE.border2}, 0 0 20px -4px rgba(61,142,248,0.12)`,
+            transform: 'translateY(-2px)',
+            borderColor: 'rgba(61,142,248,0.25)',
           },
         },
       },
