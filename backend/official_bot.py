@@ -3007,7 +3007,6 @@ async def _start_verification(bot, chat, user, v_cfg, flask_app, group_id):
 async def _handle_verification_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle v: prefixed callback_data for official bot verification."""
     query = update.callback_query
-    await query.answer()
     data = query.data  # "v:{chat_id}:{user_id}:b" or "v:{chat_id}:{user_id}:m:{chosen}:{correct}"
     flask_app = context.bot_data.get("flask_app")
 
@@ -3017,6 +3016,7 @@ async def _handle_verification_callback(update: Update, context: ContextTypes.DE
         user_id_target = int(parts[2])
         vtype = parts[3]
     except (IndexError, ValueError):
+        await query.answer()
         return
 
     actual_user_id = update.effective_user.id
@@ -3032,7 +3032,7 @@ async def _handle_verification_callback(update: Update, context: ContextTypes.DE
         return
 
     if datetime.utcnow() > pending["expires_at"]:
-        await query.answer("Verification expired!")
+        await query.answer("Verification expired!", show_alert=True)
         await _fail_verification(context.bot, chat_id, user_id_target, pending, flask_app)
         return
 
@@ -5255,6 +5255,17 @@ class OfficialBotRunner:
     async def _poll(self, flask_app):
         _load_pending_verifications_from_db(flask_app)
         self.application = Application.builder().token(Config.TELEGRAM_BOT_TOKEN).build()
+        # Re-register timeout handlers for verifications restored from DB
+        loop = asyncio.get_event_loop()
+        for _vkey, _vpending in list(_pending_verifications.items()):
+            _vc, _vu = _vkey.split(":", 1)
+            _vremaining = max(1.0, (_vpending["expires_at"] - datetime.utcnow()).total_seconds())
+            loop.call_later(
+                _vremaining,
+                lambda _c=int(_vc), _u=int(_vu): asyncio.ensure_future(
+                    _verification_timeout(self.application.bot, _c, _u)
+                ),
+            )
         self.application.bot_data["flask_app"] = flask_app
         # Expose the PTB Application so the webhook route can forward updates
         self._app = self.application

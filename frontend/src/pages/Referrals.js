@@ -79,8 +79,9 @@ export default function Referrals() {
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
 
-  const userId = JSON.parse(localStorage.getItem('user') || '{}')?.id;
-  const inviteLink = userId ? `${window.location.origin}/register?ref=${userId}` : '';
+  const inviteLink = stats?.referral_code
+    ? `${window.location.origin}/register?ref=${stats.referral_code}`
+    : '';
 
   useEffect(() => {
     Promise.all([
