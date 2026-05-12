@@ -604,7 +604,10 @@ export default function Settings() {
   };
 
   const tier = subscription?.tier || user.subscription_tier || 'free';
-  const expires = subscription?.expires ? new Date(subscription.expires) : null;
+  const isTrial = !subscription?.expires && !!user.trial_ends_at;
+  const expires = subscription?.expires
+    ? new Date(subscription.expires)
+    : (user.trial_ends_at ? new Date(user.trial_ends_at) : null);
   const tierColor = tier === 'enterprise' ? 'secondary' : tier === 'pro' ? 'primary' : 'default';
 
   return (
@@ -665,7 +668,7 @@ export default function Settings() {
             <Chip label={tier.toUpperCase()} color={tierColor} size="medium" />
             {expires && (
               <Typography variant="body2" color="text.secondary">
-                Expires {expires.toLocaleDateString()}
+                {isTrial ? 'Trial ends' : 'Expires'} {expires.toLocaleDateString()}
               </Typography>
             )}
             {!expires && tier !== 'free' && (

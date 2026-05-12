@@ -1129,7 +1129,7 @@ def expire_trials():
             User.trial_ends_at != None,  # noqa: E711
             User.trial_ends_at < now,
             User.subscription_tier == "pro",
-            User.subscription_expires_at == None,  # noqa: E711 — not a paid subscriber
+            User.subscription_expires == None,  # noqa: E711 — not a paid subscriber
         ).all()
         for user in expired:
             user.subscription_tier = "free"
