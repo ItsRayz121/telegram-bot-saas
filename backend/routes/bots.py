@@ -2,7 +2,7 @@ import requests as http_requests
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
-from ..models import db, User, Bot, Group
+from ..models import db, User, Bot, Group, AdminAuditLog
 from ..middleware.rate_limit import rate_limit
 
 bots_bp = Blueprint("bots", __name__, url_prefix="/api/bots")
@@ -20,11 +20,19 @@ def _enrich_bot(bot) -> dict:
     last-seen activity. Infrastructure states (thread alive, watchdog
     recovery, Railway rolling deploy) are kept internal and never
     surface as a user-facing badge.
+
+    Token is never included in normal responses. Use POST /reveal-token
+    with password re-authentication to access the raw token.
     """
     from ..bot_manager import bot_manager
     from datetime import datetime, timedelta
 
     d = bot.to_dict()
+
+    # Show a masked token (last 4 chars only) so the UI can display a hint
+    # without exposing the full credential.
+    raw_token = bot.get_token() or ""
+    d["token_masked"] = ("•" * max(0, len(raw_token) - 4) + raw_token[-4:]) if raw_token else ""
 
     # thread_alive is an internal diagnostic field — kept in payload for
     # admin tooling and the /status endpoint but NOT used for health_status.
@@ -276,3 +284,52 @@ def bot_status(bot_id):
         "thread_alive": running,
         "auto_restarted": auto_restarted,
     }), 200
+
+
+@bots_bp.route("/<int:bot_id>/reveal-token", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=5)
+def reveal_token(bot_id):
+    """Step-up authentication: requires current account password.
+
+    Returns the raw decrypted bot token once per confirmed request.
+    Every successful reveal is recorded in AuditLog for security monitoring.
+    """
+    user = _get_current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    bot = Bot.query.filter_by(id=bot_id, user_id=user.id).first()
+    if not bot:
+        return jsonify({"error": "Bot not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    password = data.get("password", "")
+    if not password:
+        return jsonify({"error": "password is required"}), 400
+
+    if not user.check_password(password):
+        return jsonify({"error": "Invalid password"}), 403
+
+    token = bot.get_token()
+    if not token:
+        return jsonify({"error": "Token unavailable"}), 500
+
+    # Audit log — every token reveal is tracked for security review
+    import json
+    audit = AdminAuditLog(
+        admin_id=user.id,
+        action="bot_token_revealed",
+        method="POST",
+        path=f"/api/bots/{bot_id}/reveal-token",
+        payload_json=json.dumps({"bot_id": bot_id, "bot_username": bot.bot_username}),
+        ip_address=request.remote_addr,
+    )
+    db.session.add(audit)
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    masked = "•" * max(0, len(token) - 4) + token[-4:]
+    return jsonify({"token": token, "masked": masked}), 200

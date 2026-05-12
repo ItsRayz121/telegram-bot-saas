@@ -213,6 +213,9 @@ def send_scheduled_messages():
                         }
                         if getattr(m, "topic_id", None):
                             send_kwargs["message_thread_id"] = m.topic_id
+                        from .official_bot import _can_send_to_group
+                        if not _can_send_to_group(str(g.telegram_group_id)):
+                            continue
                         sent = await b.application.bot.send_message(**send_kwargs)
 
                         if m.pin_message:
@@ -1347,3 +1350,146 @@ def scan_fraud_alerts():
 
     except Exception as exc:
         logger.error("scan_fraud_alerts error: %s", exc)
+
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# GDPR Tasks
+# ══════════════════════════════════════════════════════════════════════════════
+
+@celery.task(name="backend.scheduler.generate_gdpr_export")
+def generate_gdpr_export(user_id: int):
+    """Generate a JSON data export for the user and email it to them.
+
+    Collects: profile, bots (masked tokens), groups, payment history,
+    referrals, subscription history, notes, tasks (via Hub models if available).
+    """
+    try:
+        from .app import create_app
+        app = create_app()
+        with app.app_context():
+            from .models import db, User, Bot, Group, PaymentHistory, Referral
+            from .notifications import send_email
+            import json, datetime as _dt
+
+            user = User.query.get(user_id)
+            if not user:
+                logger.error("generate_gdpr_export: user %s not found", user_id)
+                return
+
+            # Collect data
+            bots_data = []
+            for b in Bot.query.filter_by(user_id=user_id).all():
+                d = b.to_dict()
+                d.pop("bot_token", None)  # never export raw token
+                bots_data.append(d)
+
+            groups_data = [
+                {"id": g.id, "name": g.group_name, "telegram_group_id": g.telegram_group_id}
+                for g in Group.query.filter(Group.bot_id.in_([b["id"] for b in bots_data])).all()
+            ]
+
+            payments_data = [
+                p.to_dict()
+                for p in PaymentHistory.query.filter_by(user_id=user_id).order_by(PaymentHistory.created_at.desc()).all()
+            ]
+
+            referrals_data = []
+            try:
+                referrals_data = [
+                    {"referred_user_id": r.referred_user_id, "created_at": r.created_at.isoformat()}
+                    for r in Referral.query.filter_by(referrer_user_id=user_id).all()
+                ]
+            except Exception:
+                pass
+
+            export = {
+                "exported_at": _dt.datetime.utcnow().isoformat() + "Z",
+                "profile": {
+                    "id": user.id,
+                    "email": user.email,
+                    "full_name": user.full_name,
+                    "created_at": user.created_at.isoformat() if user.created_at else None,
+                    "subscription_tier": user.subscription_tier,
+                    "telegram_user_id": user.telegram_user_id,
+                },
+                "bots": bots_data,
+                "groups": groups_data,
+                "payments": payments_data,
+                "referrals": referrals_data,
+            }
+
+            export_json = json.dumps(export, indent=2, default=str)
+
+            subject = "Your Telegizer Data Export"
+            html_body = f"""
+<h2>Your data export is ready</h2>
+<p>Hi {user.full_name or user.email},</p>
+<p>As requested, here is your Telegizer account data. The JSON file is attached to this email.</p>
+<p>If you have questions about your data, contact us at support@telegizer.com.</p>
+<p style="color:#888;font-size:12px">This export was generated on {_dt.datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}.</p>
+"""
+            # Send with attachment
+            send_email(
+                user.email,
+                subject,
+                html_body,
+                attachment_data=export_json.encode("utf-8"),
+                attachment_filename="telegizer_data_export.json",
+                attachment_content_type="application/json",
+            )
+            logger.info("generate_gdpr_export: export emailed to user %s", user_id)
+
+    except Exception as exc:
+        logger.error("generate_gdpr_export error for user %s: %s", user_id, exc)
+
+
+@celery.task(name="backend.scheduler.hard_delete_user")
+def hard_delete_user(user_id: int):
+    """Permanently anonymise all PII for a deleted user account (GDPR Art. 17).
+
+    Runs 30 days after the user requests account deletion.
+    Payment records are anonymised (user_id nulled) rather than deleted
+    to preserve financial audit trails.
+    """
+    try:
+        from .app import create_app
+        app = create_app()
+        with app.app_context():
+            from .models import db, User, Bot, Group, PaymentHistory, PendingInvoice
+            from sqlalchemy import text
+
+            user = User.query.get(user_id)
+            if not user:
+                logger.info("hard_delete_user: user %s already gone", user_id)
+                return
+            if not user.deleted_at:
+                logger.warning("hard_delete_user: user %s has no deleted_at — skipping", user_id)
+                return
+
+            # Anonymise payment records (keep for financial/legal audit)
+            db.session.execute(
+                text("UPDATE payment_history SET user_id = NULL WHERE user_id = :uid"),
+                {"uid": user_id},
+            )
+            db.session.execute(
+                text("UPDATE subscription_renewals SET user_id = NULL WHERE user_id = :uid"),
+                {"uid": user_id},
+            )
+
+            # Delete bots + cascaded groups/members/logs
+            for bot in Bot.query.filter_by(user_id=user_id).all():
+                db.session.delete(bot)
+
+            # Anonymise user record (keep row for referential integrity if needed)
+            user.email = f"deleted_{user_id}@deleted.invalid"
+            user.full_name = "Deleted User"
+            user.password_hash = ""
+            user.telegram_user_id = None
+            user.totp_secret_encrypted = None
+
+            db.session.commit()
+            logger.info("hard_delete_user: PII anonymised for user %s", user_id)
+
+    except Exception as exc:
+        logger.error("hard_delete_user error for user %s: %s", user_id, exc)

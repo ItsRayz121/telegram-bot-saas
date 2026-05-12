@@ -8,9 +8,102 @@ Single source of truth — all paths:
       → workspace key → platform key
 """
 
-from datetime import datetime, timedelta
+import logging
+from datetime import datetime, date, timedelta
 from .. import config as _cfg
 
+_log = logging.getLogger(__name__)
+
+# ─── Custom exceptions ────────────────────────────────────────────────────────
+
+class QuotaExceededError(Exception):
+    """Raised when a user's daily platform AI token quota is exhausted."""
+
+
+class PlatformCostLimitError(Exception):
+    """Raised when the platform's daily AI spend budget is reached."""
+
+
+# ─── Redis helpers ────────────────────────────────────────────────────────────
+
+def _get_redis():
+    try:
+        import redis as _redis
+        from flask import current_app
+        r = _redis.from_url(
+            current_app.config.get("REDIS_URL", "redis://localhost:6379/0"),
+            socket_connect_timeout=1, socket_timeout=1,
+        )
+        r.ping()
+        return r
+    except Exception:
+        return None
+
+
+def _redis_check_and_increment(user_id: int, daily_limit: int):
+    """Atomically increment the user's daily AI token counter via Redis INCR.
+
+    Returns:
+        True  — under the limit (request allowed)
+        False — limit exceeded (request blocked)
+        None  — Redis unavailable (caller should fall back to DB check)
+    """
+    r = _get_redis()
+    if r is None:
+        return None  # signal fallback
+    try:
+        key = f"ai_tokens:{user_id}:{date.today().isoformat()}"
+        pipe = r.pipeline()
+        pipe.incr(key)
+        pipe.expire(key, 86400)
+        results = pipe.execute()
+        count = results[0]
+        return count <= daily_limit
+    except Exception as exc:
+        _log.warning("ai_key_resolver: Redis token check error: %s", exc)
+        return None
+
+
+def _check_platform_cost_circuit():
+    """Raise PlatformCostLimitError if the daily platform AI spend limit is hit."""
+    from flask import current_app
+    limit = float(current_app.config.get("MAX_DAILY_AI_SPEND_USD", 50))
+    r = _get_redis()
+    if r is None:
+        return  # Redis down — allow request
+    try:
+        key = f"platform_ai_spend:{date.today().isoformat()}"
+        current_spend = float(r.get(key) or 0)
+        if current_spend >= limit:
+            _log.warning("Platform AI cost circuit OPEN: $%.4f >= $%.2f today", current_spend, limit)
+            raise PlatformCostLimitError(
+                "Platform AI temporarily unavailable (daily budget reached). "
+                "Add your own API key in AI Settings to continue."
+            )
+    except PlatformCostLimitError:
+        raise
+    except Exception as exc:
+        _log.debug("_check_platform_cost_circuit: Redis error: %s", exc)
+
+
+def record_platform_cost(tokens_used: int) -> None:
+    """Add estimated USD cost for a platform-key call to the daily Redis counter."""
+    r = _get_redis()
+    if r is None:
+        return
+    try:
+        # gpt-4o-mini: ~$0.15 / 1M tokens (blended input+output estimate)
+        cost = tokens_used * 0.00000015
+        key = f"platform_ai_spend:{date.today().isoformat()}"
+        pipe = r.pipeline()
+        pipe.incrbyfloat(key, cost)
+        pipe.expire(key, 86400)
+        pipe.execute()
+    except Exception as exc:
+        _log.debug("record_platform_cost: Redis error: %s", exc)
+
+
+# ─── Main resolvers ───────────────────────────────────────────────────────────
 
 def resolve_ai_provider_for_group(user_id: int, group_id=None, telegram_group_id=None) -> dict:
     """Single resolver for ALL group-scoped AI calls (KB, embeddings, hub reply, extraction).
@@ -65,10 +158,6 @@ def resolve_ai_provider_for_group(user_id: int, group_id=None, telegram_group_id
     return get_workspace_ai_key(user)
 
 
-class QuotaExceededError(Exception):
-    """Raised when a user's daily platform AI token quota is exhausted."""
-
-
 def get_workspace_ai_key(user) -> dict:
     """Return { provider, api_key, model } for the given user's workspace.
 
@@ -105,15 +194,28 @@ def get_workspace_ai_key(user) -> dict:
                 "source": "user",
             }
 
-    # Platform key path — enforce daily quota
-    _check_and_reset_quota(user)
+    # Platform key path — enforce daily quota (Redis-atomic) + cost circuit breaker
     tier = user.subscription_tier
     daily_limit = 500000 if tier == "enterprise" else (200000 if tier == "pro" else 10000)
-    if user.workspace_ai_tokens_today >= daily_limit:
+
+    # 1. Platform cost circuit breaker — hard stop if daily budget exceeded
+    _check_platform_cost_circuit()
+
+    # 2. Per-user quota — atomic Redis INCR (race-condition safe)
+    redis_result = _redis_check_and_increment(user.id, daily_limit)
+    if redis_result is False:
         raise QuotaExceededError(
             f"Daily AI token limit ({daily_limit:,}) reached. "
             "Quota resets in 24 hours or add your own API key in AI Settings."
         )
+    if redis_result is None:
+        # Redis unavailable — fall back to DB check (existing behavior)
+        _check_and_reset_quota(user)
+        if user.workspace_ai_tokens_today >= daily_limit:
+            raise QuotaExceededError(
+                f"Daily AI token limit ({daily_limit:,}) reached. "
+                "Quota resets in 24 hours or add your own API key in AI Settings."
+            )
 
     if _cfg.Config.PLATFORM_OPENROUTER_API_KEY:
         return {
@@ -132,14 +234,18 @@ def record_token_usage(user, tokens_used: int):
     """Increment the user's daily platform token counter after a successful call.
 
     Call this only when source == "platform"; user-key usage is not tracked here.
+    Also increments the platform-wide cost estimate in Redis.
     """
     from ..models import db
+    # DB counter (kept for reporting/admin visibility)
     _check_and_reset_quota(user)
     user.workspace_ai_tokens_today = (user.workspace_ai_tokens_today or 0) + tokens_used
     try:
         db.session.commit()
     except Exception:
         db.session.rollback()
+    # Platform cost tracker in Redis
+    record_platform_cost(tokens_used)
 
 
 def _check_and_reset_quota(user):

@@ -6,6 +6,7 @@ import {
 import { CheckCircle, ErrorOutline, Email, MarkEmailRead, Logout } from '@mui/icons-material';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { auth } from '../services/api';
+import { track } from '../services/analytics';
 
 const SpamTip = () => (
   <Alert severity="info" sx={{ mt: 2, textAlign: 'left', fontSize: '0.8rem' }}>
@@ -73,6 +74,7 @@ export default function VerifyEmail() {
           u.email_verified = true;
           localStorage.setItem('user', JSON.stringify(u));
         } catch {}
+        track('email_verified');
         setStatus('success');
       })
       .catch((err) => {

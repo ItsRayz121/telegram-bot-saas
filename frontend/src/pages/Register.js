@@ -9,6 +9,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { auth } from '../services/api';
 import { generateFingerprint } from '../utils/fingerprint';
+import { track, identify } from '../services/analytics';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -16,6 +17,7 @@ export default function Register() {
   const refCode = searchParams.get('ref') || '';
   const [form, setForm] = useState({ email: '', password: '', full_name: '' });
   const [tosAccepted, setTosAccepted] = useState(false);
+  const [aupAccepted, setAupAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   // Device fingerprint — generated once on mount, sent with registration payload
@@ -38,16 +40,25 @@ export default function Register() {
       setError('You must accept the Terms of Service to continue.');
       return;
     }
+    if (!aupAccepted) {
+      setError('You must accept the Acceptable Use Policy to continue.');
+      return;
+    }
     setLoading(true);
     try {
       const res = await auth.register({
         ...form,
         ref: refCode,
         device_fingerprint: fingerprintRef.current,
-        tos_accepted: true,  // 1-D-05
+        tos_accepted: true,   // 1-D-05
+        aup_accepted: true,
       });
       // Cookies set by server; only persist non-sensitive user data
-      if (res.data.user) localStorage.setItem('user', JSON.stringify(res.data.user));
+      if (res.data.user) {
+        localStorage.setItem('user', JSON.stringify(res.data.user));
+        identify(res.data.user.id, { plan: res.data.user.subscription_tier });
+      }
+      track('signup_completed', { ref_code: refCode || null });
       toast.success('Account created! Please verify your email to continue.');
       navigate('/verify-email');
     } catch (err) {
@@ -161,12 +172,33 @@ export default function Register() {
                 </Typography>
               }
             />
+            <FormControlLabel
+              sx={{ mb: 2, alignItems: 'flex-start' }}
+              control={
+                <Checkbox
+                  checked={aupAccepted}
+                  onChange={(e) => setAupAccepted(e.target.checked)}
+                  size="small"
+                  sx={{ pt: 0.5 }}
+                  required
+                />
+              }
+              label={
+                <Typography variant="caption" color="text.secondary">
+                  I agree to the{' '}
+                  <Link component="button" type="button" onClick={() => navigate('/acceptable-use')} sx={{ color: 'primary.main', cursor: 'pointer', fontSize: 'inherit' }}>
+                    Acceptable Use Policy
+                  </Link>
+                  {' '}*
+                </Typography>
+              }
+            />
             <Button
               type="submit"
               fullWidth
               variant="contained"
               size="large"
-              disabled={loading || !tosAccepted}
+              disabled={loading || !tosAccepted || !aupAccepted}
               sx={{ mb: 2 }}
             >
               {loading ? <CircularProgress size={24} color="inherit" /> : 'Create Account'}

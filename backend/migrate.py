@@ -396,6 +396,33 @@ def init_db():
             "escalation_events.status index",
         )
 
+        # ── GDPR: account soft-delete and suspension columns ─────────────────────
+        _run_alter(
+            db.engine,
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP",
+            "users.deleted_at (soft-delete for GDPR)",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_suspended BOOLEAN NOT NULL DEFAULT FALSE",
+            "users.is_suspended",
+        )
+
+        # ── AUP: Acceptable Use Policy acceptance tracking ────────────────────────
+        _run_alter(
+            db.engine,
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS aup_accepted_at TIMESTAMP",
+            "users.aup_accepted_at",
+        )
+
+        # ── KB isolation: enforce NOT NULL on workspace_knowledge_documents.user_id ─
+        # Safe to run — all existing rows must have a user_id (FK required at insert).
+        _run_alter(
+            db.engine,
+            "ALTER TABLE workspace_knowledge_documents ALTER COLUMN user_id SET NOT NULL",
+            "workspace_knowledge_documents.user_id NOT NULL",
+        )
+
         print("Migration complete.")
 
     # One-shot Telegram account backfill (also runs inline above via _backfill_telegram_accounts).

@@ -8,6 +8,7 @@ import { CheckCircle, HourglassTop, ErrorOutline } from '@mui/icons-material';
 import TelegizerLogo from '../components/TelegizerLogo';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { billing, auth } from '../services/api';
+import { track } from '../services/analytics';
 
 const MAX_ATTEMPTS = 15;   // 15 × 4s = 60s total poll window
 const POLL_INTERVAL = 4000;
@@ -44,6 +45,11 @@ export default function PaymentSuccess() {
           } catch { /* ignore */ }
           setTier(sub.tier);
           setStatus('success');
+          track('first_pro_upgrade', { plan: sub.tier });
+          track('subscription_started', {
+            plan: sub.tier,
+            payment_method: 'crypto',
+          });
           return true;
         }
       } catch { /* ignore */ }

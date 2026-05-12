@@ -469,6 +469,7 @@ export const referrals = {
 
 export const userSettings = {
   deleteAccount: (data) => api.delete('/api/auth/account', { data }),
+  exportData:    ()     => api.post('/api/settings/export-data'),
 };
 
 // Digest: official groups use /api/official-groups/ (existing official_settings.py blueprint)

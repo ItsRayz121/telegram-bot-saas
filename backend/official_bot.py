@@ -53,6 +53,43 @@ from .bot_features.levels import level_from_xp as _level_from_xp, xp_for_level a
 
 _log = logging.getLogger(__name__)
 
+# ─── Telegram ToS outgoing rate limiter ──────────────────────────────────────
+# Telegram's Bot API allows at most 20 messages/second globally, but for a
+# single group the recommended limit is much lower. We enforce 20 msg/min
+# per group to stay well under ToS limits and avoid getting the shared bot
+# banned for flooding.
+
+_OUTGOING_RATE_LIMIT = 20   # messages per minute per group
+
+
+def _can_send_to_group(group_id: str, limit: int = _OUTGOING_RATE_LIMIT) -> bool:
+    """Return True if we are under the per-group outgoing rate limit.
+
+    Uses Redis INCR + EXPIRE for an atomic sliding-window check. Falls back
+    to True (allow) when Redis is unavailable so messages are never silently
+    dropped due to a Redis outage.
+    """
+    try:
+        import redis as _redis
+        r = _redis.from_url(
+            Config.REDIS_URL or "redis://localhost:6379/0",
+            socket_connect_timeout=1,
+            socket_timeout=1,
+        )
+        key = f"bot_send_rate:{group_id}"
+        count = r.incr(key)
+        if count == 1:
+            r.expire(key, 60)
+        if count > limit:
+            _log.warning(
+                "[OfficialBot] Per-group send rate limit hit for group=%s (count=%d > %d/min) — skipping",
+                group_id, count, limit,
+            )
+            return False
+        return True
+    except Exception:
+        return True  # Redis down — allow (degrade gracefully)
+
 
 def _user_by_tg_id(tg_id: str):
     """Two-step lookup: legacy User.telegram_user_id first, then UserTelegramAccount junction table.
@@ -2877,7 +2914,8 @@ async def on_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await _start_verification(context.bot, chat, user, v_cfg, flask_app, group_id)
     elif group_ctx.settings.get("welcome", {}).get("enabled", True):
         try:
-            await WelcomeSystem(flask_app).send_welcome(context.bot, chat.id, user, group_ctx)
+            if _can_send_to_group(str(chat.id)):
+                await WelcomeSystem(flask_app).send_welcome(context.bot, chat.id, user, group_ctx)
         except Exception as _we:
             _log.debug("[OfficialBot] Welcome on join failed: %s", _we)
 
@@ -3124,7 +3162,7 @@ async def _complete_verification(bot, query, chat_id, user_id, pending, flask_ap
                     ).first()
                     if _tg_w and (_tg_w.settings or {}).get("welcome", {}).get("enabled", True):
                         grp_ctx = GroupContext.from_telegram_group(_tg_w)
-                if grp_ctx:
+                if grp_ctx and _can_send_to_group(str(chat_id)):
                     await WelcomeSystem(flask_app).send_welcome(bot, chat_id, user, grp_ctx)
             except Exception as _we:
                 _log.debug("[OfficialBot] Post-verification welcome failed: %s", _we)

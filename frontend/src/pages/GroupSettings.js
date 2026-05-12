@@ -16,6 +16,7 @@ import {
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { settings, digest as digestApi, telegramGroups as tgGroupsApi } from '../services/api';
+import { track } from '../services/analytics';
 import RaidCreator from '../components/RaidCreator';
 import ScheduledMessages from '../components/ScheduledMessages';
 import KnowledgeBase from '../components/KnowledgeBase';
@@ -629,6 +630,7 @@ export default function GroupSettings() {
     try {
       await settings.updateGroupSettings(botId, groupId, settingsData);
       toast.success('Settings saved!');
+      track('first_moderation_rule_set', { bot_id: botId, group_id: groupId });
     } catch (err) {
       if (err.response?.status === 403 && err.response?.data?.code === 'FEATURE_REQUIRES_PRO') {
         setUpgradeFeature(err.response.data.feature || 'This feature');

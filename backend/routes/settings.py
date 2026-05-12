@@ -1104,3 +1104,121 @@ def patch_official_escalation(telegram_group_id, event_id):
         ev.admin_answer = str(data["admin_answer"])[:4000]
     db.session.commit()
     return jsonify(ev.to_dict())
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# GDPR: Data Export (Right to Portability — GDPR Art. 20)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@settings_bp.route("/settings/export-data", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=2)
+def export_data():
+    """Queue a GDPR data export. User receives an email with their data within 24 hours.
+    Rate-limited to 1 export per 24 hours per user via Redis.
+    """
+    user = User.query.get(int(get_jwt_identity()))
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    # 24-hour rate limit per user via Redis
+    try:
+        import redis as _redis
+        from flask import current_app
+        from datetime import date as _date
+        r = _redis.from_url(
+            current_app.config.get("REDIS_URL", "redis://localhost:6379/0"),
+            socket_connect_timeout=1, socket_timeout=1,
+        )
+        r_key = f"gdpr_export:{user.id}:{_date.today().isoformat()}"
+        if r.exists(r_key):
+            return jsonify({"error": "Export already requested today. Check your email."}), 429
+        r.setex(r_key, 86400, 1)
+    except Exception:
+        pass  # Redis down — allow through
+
+    try:
+        from ..scheduler import generate_gdpr_export
+        generate_gdpr_export.delay(user.id)
+    except Exception as exc:
+        logger.error("Failed to queue GDPR export for user %s: %s", user.id, exc)
+        return jsonify({"error": "Failed to queue export. Please try again."}), 500
+
+    return jsonify({"message": "Export requested. You will receive an email with your data within 24 hours."})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# GDPR: Account Deletion (Right to Erasure — GDPR Art. 17)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@settings_bp.route("/settings/delete-account", methods=["POST"])
+@jwt_required()
+def delete_account():
+    """Soft-delete the user's account. Hard deletion of PII is scheduled 30 days later.
+
+    Requires current password. If 2FA is enabled, also requires a TOTP code.
+    """
+    user = User.query.get(int(get_jwt_identity()))
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    password = data.get("password", "")
+    if not password or not user.check_password(password):
+        return jsonify({"error": "Invalid password"}), 403
+
+    # Require TOTP code if 2FA is enabled
+    if getattr(user, "totp_enabled", False):
+        totp_code = data.get("totp_code", "").strip()
+        if not totp_code:
+            return jsonify({"error": "TOTP code required", "requires_totp": True}), 403
+        try:
+            import pyotp
+            from ..utils.encryption import decrypt_value
+            secret = decrypt_value(user.totp_secret_encrypted) if user.totp_secret_encrypted else None
+            if not secret or not pyotp.TOTP(secret).verify(totp_code, valid_window=1):
+                return jsonify({"error": "Invalid TOTP code"}), 403
+        except Exception as exc:
+            logger.error("TOTP verification failed for account deletion user=%s: %s", user.id, exc)
+            return jsonify({"error": "TOTP verification failed"}), 500
+
+    # Soft-delete: mark account, suspend access immediately
+    user.deleted_at = datetime.utcnow()
+    user.is_suspended = True
+
+    # Stop all bots immediately
+    try:
+        from ..bot_manager import bot_manager
+        for bot in Bot.query.filter_by(user_id=user.id).all():
+            try:
+                bot_manager.stop_bot(bot.id)
+            except Exception:
+                pass
+    except Exception as exc:
+        logger.warning("Could not stop bots on account deletion user=%s: %s", user.id, exc)
+
+    db.session.commit()
+
+    # Schedule hard deletion in 30 days
+    try:
+        from ..scheduler import hard_delete_user
+        hard_delete_user.apply_async(args=[user.id], countdown=30 * 86400)
+    except Exception as exc:
+        logger.error("Failed to schedule hard deletion for user %s: %s", user.id, exc)
+
+    # Revoke the current JWT by adding it to the blacklist
+    try:
+        from flask_jwt_extended import get_jwt
+        from flask import current_app
+        import redis as _redis
+        jti = get_jwt().get("jti", "")
+        if jti:
+            r = _redis.from_url(
+                current_app.config.get("REDIS_URL", "redis://localhost:6379/0"),
+                socket_connect_timeout=1, socket_timeout=1,
+            )
+            r.setex(f"jwt_blocklist:{jti}", 86400 * 30, 1)
+    except Exception:
+        pass
+
+    return jsonify({"message": "Account deletion scheduled. Your data will be permanently removed within 30 days."})

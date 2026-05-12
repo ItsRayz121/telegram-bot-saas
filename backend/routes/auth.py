@@ -245,6 +245,10 @@ def register():
     if not data.get("tos_accepted"):
         return jsonify({"error": "You must accept the Terms of Service to register.", "code": "TOS_REQUIRED"}), 400
 
+    # AUP acceptance required
+    if not data.get("aup_accepted"):
+        return jsonify({"error": "You must accept the Acceptable Use Policy to register.", "code": "AUP_REQUIRED"}), 400
+
     # Input length limits
     if len(email) > 255:
         return jsonify({"error": "Email too long"}), 400
@@ -297,6 +301,7 @@ def register():
         device_fingerprint_hash=device_hash,
         tos_version_accepted="2.0",  # 1-D-05
         tos_accepted_at=datetime.utcnow(),
+        aup_accepted_at=datetime.utcnow(),
     )
     # Generate email verification token
     verification_token = user.generate_verification_token()

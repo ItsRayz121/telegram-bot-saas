@@ -14,6 +14,7 @@ import {
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { telegramGroups, settings as settingsApi } from '../services/api';
+import { track } from '../services/analytics';
 import TopNav from '../components/TopNav';
 
 const BOT_USERNAME = process.env.REACT_APP_BOT_USERNAME || 'telegizer_bot';
@@ -151,6 +152,7 @@ export default function MyGroups() {
     try {
       const res = await telegramGroups.link({ code: linkCode.trim().toUpperCase() });
       toast.success(`Group "${res.data.group.title}" linked successfully!`);
+      track('first_group_linked');
       setLinkOpen(false);
       setLinkCode('');
       load({ silent: true });

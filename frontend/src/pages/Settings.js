@@ -14,6 +14,7 @@ import { List, ListItem, ListItemText, ListItemSecondaryAction, Tooltip } from '
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { auth, totp as totpApi, billing, userSettings, telegramAccount } from '../services/api';
+import { track } from '../services/analytics';
 import TimezoneSelect from '../components/TimezoneSelect';
 
 function safeParseUser() {
@@ -268,6 +269,7 @@ function TelegramConnectSection({ user, onUserRefresh }) {
           setConnecting(false);
           stopPolling();
           toast.success('Telegram account connected!');
+          track('telegram_connected');
           await onUserRefresh();
         }
       } catch { /* ignore */ }
@@ -521,7 +523,10 @@ export default function Settings() {
 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletePw, setDeletePw] = useState('');
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deleting, setDeleting] = useState(false);
+
+  const [exportingData, setExportingData] = useState(false);
 
   const fetchUser = useCallback(async () => {
     try {
@@ -584,15 +589,31 @@ export default function Settings() {
     }
   };
 
+  const handleExportData = async () => {
+    setExportingData(true);
+    try {
+      await userSettings.exportData();
+      toast.success('Export requested — check your email within 24 hours.');
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to request export. Please try again later.');
+    } finally {
+      setExportingData(false);
+    }
+  };
+
   const handleDeleteAccount = async () => {
     if (!deletePw) {
       toast.error('Enter your password to confirm deletion');
       return;
     }
+    if (deleteConfirmText !== 'DELETE') {
+      toast.error('Type DELETE in the confirmation field to proceed');
+      return;
+    }
     setDeleting(true);
     try {
       await userSettings.deleteAccount({ password: deletePw });
-      toast.success('Account deleted');
+      toast.success('Account deletion scheduled. Your data will be removed within 30 days.');
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       navigate('/');
@@ -750,6 +771,25 @@ export default function Settings() {
           </Stack>
         </Section>
 
+        {/* Data Privacy */}
+        <Card sx={{ mb: 3 }}>
+          <CardContent>
+            <Typography variant="subtitle1" fontWeight={700} mb={1}>Data & Privacy</Typography>
+            <Typography variant="body2" color="text.secondary" mb={2}>
+              Download a copy of all your data stored on Telegizer (GDPR Art. 20).
+              You will receive an email with your data within 24 hours.
+            </Typography>
+            <Button
+              variant="outlined"
+              startIcon={exportingData ? <CircularProgress size={16} /> : null}
+              onClick={handleExportData}
+              disabled={exportingData}
+            >
+              {exportingData ? 'Requesting…' : 'Download My Data'}
+            </Button>
+          </CardContent>
+        </Card>
+
         {/* Danger Zone */}
         <Card sx={{ mb: 3, border: '1px solid', borderColor: 'error.dark' }}>
           <CardContent>
@@ -772,22 +812,29 @@ export default function Settings() {
 
       </Box>
 
-      <Dialog open={deleteOpen} onClose={() => { setDeleteOpen(false); setDeletePw(''); }} maxWidth="xs" fullWidth>
+      <Dialog open={deleteOpen} onClose={() => { setDeleteOpen(false); setDeletePw(''); setDeleteConfirmText(''); }} maxWidth="xs" fullWidth>
         <DialogTitle sx={{ color: 'error.main', fontWeight: 700 }}>Delete Account</DialogTitle>
         <DialogContent>
-          <Typography variant="body2" mb={2}>
-            This will permanently delete your account and all associated data. Enter your password to confirm.
-          </Typography>
+          <Alert severity="error" sx={{ mb: 2 }}>
+            This will permanently schedule deletion of your account and all data (bots, groups, settings).
+            You will have 30 days before the data is fully erased.
+          </Alert>
           <TextField
             fullWidth type="password" label="Your Password"
             value={deletePw} onChange={(e) => setDeletePw(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleDeleteAccount()}
+            sx={{ mb: 2 }}
             autoFocus
+          />
+          <TextField
+            fullWidth label='Type "DELETE" to confirm'
+            value={deleteConfirmText} onChange={(e) => setDeleteConfirmText(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleDeleteAccount()}
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => { setDeleteOpen(false); setDeletePw(''); }} disabled={deleting}>Cancel</Button>
-          <Button variant="contained" color="error" onClick={handleDeleteAccount} disabled={deleting || !deletePw}>
+          <Button onClick={() => { setDeleteOpen(false); setDeletePw(''); setDeleteConfirmText(''); }} disabled={deleting}>Cancel</Button>
+          <Button variant="contained" color="error" onClick={handleDeleteAccount}
+            disabled={deleting || !deletePw || deleteConfirmText !== 'DELETE'}>
             {deleting ? <CircularProgress size={20} color="inherit" /> : 'Delete Forever'}
           </Button>
         </DialogActions>

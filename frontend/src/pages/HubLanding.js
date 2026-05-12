@@ -98,9 +98,81 @@ export default function HubLanding() {
 
       <Divider sx={{ mb: 3, borderColor: PALETTE.border1 }} />
 
+      {/* ── First-visit decision guide ── */}
+      {!loading && !status?.official_bot && !(status?.custom_bots?.length) && (
+        <DecisionGuideCard plan={plan} />
+      )}
+
       {/* ── Custom Bots section ── */}
       <CustomBotsSection plan={plan} />
     </Box>
+  );
+}
+
+function DecisionGuideCard({ plan }) {
+  const navigate = useNavigate();
+  const isPro = plan === 'pro' || plan === 'enterprise';
+  return (
+    <Card sx={{ mb: 3, border: '1px solid', borderColor: 'divider' }}>
+      <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+        <Typography variant="subtitle1" fontWeight={700} mb={0.5}>Which bot type is right for you?</Typography>
+        <Typography variant="body2" color="text.secondary" mb={3}>
+          Get started in seconds with our shared bot, or bring your own for full branding control.
+        </Typography>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+          <Card variant="outlined" sx={{ flex: 1, p: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+              <SmartToy color="primary" />
+              <Typography variant="subtitle2" fontWeight={700}>Official Bot</Typography>
+              <Chip label="Free" size="small" color="success" />
+            </Box>
+            <Typography variant="body2" color="text.secondary" mb={2}>
+              Instant setup — no BotFather required. Shared infrastructure managed by Telegizer.
+            </Typography>
+            {[
+              '✅ Instant activation',
+              '✅ Free on all plans',
+              '✅ Managed & updated for you',
+              '❌ Shared bot username',
+            ].map(f => (
+              <Typography key={f} variant="caption" display="block" color="text.secondary">{f}</Typography>
+            ))}
+            <Button
+              variant="contained" size="small" fullWidth sx={{ mt: 2 }}
+              onClick={() => navigate('/hub/workspace')}
+            >
+              Use Official Bot
+            </Button>
+          </Card>
+
+          <Card variant="outlined" sx={{ flex: 1, p: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+              <Add color="secondary" />
+              <Typography variant="subtitle2" fontWeight={700}>Custom Bot</Typography>
+              <Chip label="Pro" size="small" color="primary" />
+            </Box>
+            <Typography variant="body2" color="text.secondary" mb={2}>
+              Your own bot token from BotFather. Full brand control with your custom username.
+            </Typography>
+            {[
+              '✅ Your own bot username',
+              '✅ Full branding control',
+              '✅ Multiple bots',
+              isPro ? '✅ Available on your plan' : '⚡ Requires Pro or Enterprise',
+            ].map(f => (
+              <Typography key={f} variant="caption" display="block" color="text.secondary">{f}</Typography>
+            ))}
+            <Button
+              variant={isPro ? 'contained' : 'outlined'}
+              color="secondary" size="small" fullWidth sx={{ mt: 2 }}
+              onClick={() => navigate(isPro ? '/hub/custom-bot/new' : '/pricing')}
+            >
+              {isPro ? 'Add Custom Bot' : 'Upgrade to Pro'}
+            </Button>
+          </Card>
+        </Stack>
+      </CardContent>
+    </Card>
   );
 }
 

@@ -102,6 +102,11 @@ class User(db.Model):
     # ToS acceptance tracking (1-D-05)
     tos_version_accepted = db.Column(db.String(20), nullable=True)  # e.g. "2.0"
     tos_accepted_at      = db.Column(db.DateTime, nullable=True)
+    # AUP acceptance tracking
+    aup_accepted_at      = db.Column(db.DateTime, nullable=True)
+    # GDPR soft-delete
+    deleted_at           = db.Column(db.DateTime, nullable=True)
+    is_suspended         = db.Column(db.Boolean, default=False, nullable=False)
     # AI cost tracking (1-G-04)
     ai_cost_usd_today    = db.Column(db.Numeric(10, 6), default=0)
     ai_cost_reset_at     = db.Column(db.DateTime, nullable=True)

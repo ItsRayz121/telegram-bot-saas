@@ -111,6 +111,10 @@ class Config:
     # OpenRouter — primary platform AI key.
     PLATFORM_OPENROUTER_API_KEY = os.environ.get("PLATFORM_OPENROUTER_API_KEY", "")
 
+    # Daily platform AI spend cap in USD. When exceeded, platform-key AI calls are
+    # blocked until midnight UTC. Users with their own API key are unaffected.
+    MAX_DAILY_AI_SPEND_USD = float(os.environ.get("MAX_DAILY_AI_SPEND_USD", "50"))
+
 
     # Official Telegizer shared bot (serves all users/groups)
     TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
