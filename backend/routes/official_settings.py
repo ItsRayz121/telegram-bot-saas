@@ -120,6 +120,12 @@ def update_official_settings(group_id):
         if "timezone" in data and isinstance(data.get("timezone"), str):
             tg.timezone = data["timezone"].strip() or "UTC"
         db.session.commit()
+        if "automod" in data and data["automod"]:
+            try:
+                from ..routes.auth import _mark_onboarding_step
+                _mark_onboarding_step(user, "automod_enabled")
+            except Exception:
+                pass
         return jsonify({"settings": tg.settings, "timezone": tg.timezone or "UTC", "message": "Settings updated"})
     except Exception as e:
         logger.error(f"update_official_settings error: {e}", exc_info=True)

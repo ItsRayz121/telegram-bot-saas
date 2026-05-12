@@ -787,6 +787,15 @@ def resend_verification():
 
 # ── Standard auth routes ───────────────────────────────────────────────────────
 
+def _mark_onboarding_step(user, step):
+    """Mark a single onboarding step complete for a user. Idempotent."""
+    steps = list(user.onboarding_completed_steps or [])
+    if step not in steps:
+        steps.append(step)
+        user.onboarding_completed_steps = steps
+        db.session.commit()
+
+
 @auth_bp.route("/me", methods=["GET"])
 @jwt_required()
 def get_me():
@@ -794,6 +803,31 @@ def get_me():
     user = User.query.get(int(user_id))
     if not user:
         return jsonify({"error": "User not found"}), 404
+
+    # Lazy backfill: auto-mark onboarding steps for users who already did the actions
+    try:
+        steps = list(user.onboarding_completed_steps or [])
+        changed = False
+        if "automod_enabled" not in steps:
+            from ..models import TelegramGroup
+            groups = TelegramGroup.query.filter_by(owner_user_id=user.id).all()
+            if any((g.settings or {}).get("automod") for g in groups):
+                steps.append("automod_enabled")
+                changed = True
+        if "schedule_created" not in steps:
+            from ..models import TelegramGroup as _TG, OfficialScheduledMessage as _OSM
+            has_sched = _OSM.query.join(
+                _TG, _OSM.telegram_group_id == _TG.telegram_group_id
+            ).filter(_TG.owner_user_id == user.id).first()
+            if has_sched:
+                steps.append("schedule_created")
+                changed = True
+        if changed:
+            user.onboarding_completed_steps = steps
+            db.session.commit()
+    except Exception:
+        pass
+
     user_data = user.to_dict()
     user_data["is_admin"] = user.email.lower() in Config.ADMIN_EMAILS
     return jsonify({"user": user_data}), 200
@@ -1013,7 +1047,7 @@ def update_onboarding():
         return jsonify({"error": "User not found"}), 404
     body = request.get_json(silent=True) or {}
     step = body.get("step")
-    valid_steps = {"email_verified", "bot_connected", "group_linked", "feature_configured", "ai_enabled"}
+    valid_steps = {"email_verified", "bot_connected", "group_linked", "feature_configured", "ai_enabled", "automod_enabled", "schedule_created"}
     if step and step in valid_steps:
         steps = list(user.onboarding_completed_steps or [])
         if step not in steps:

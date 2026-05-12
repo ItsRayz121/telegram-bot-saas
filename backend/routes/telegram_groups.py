@@ -676,6 +676,11 @@ def create_official_scheduled_message(group_id):
     )
     db.session.add(msg)
     db.session.commit()
+    try:
+        from ..routes.auth import _mark_onboarding_step
+        _mark_onboarding_step(user, "schedule_created")
+    except Exception:
+        pass
     return jsonify(msg.to_dict()), 201
 
 

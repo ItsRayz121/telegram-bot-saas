@@ -159,7 +159,7 @@ function OnboardingCard({ botList, onAddBot, navigate, user, officialGroupCount 
     },
     {
       label: 'Enable AutoMod to protect your group',
-      done: false,
+      done: !!(user?.onboarding_completed_steps?.includes('automod_enabled')),
       action: hasGroups ? (
         <Button size="small" variant="outlined" onClick={() => navigate('/my-groups')} sx={{ mt: 1 }}>
           Open Group Settings
@@ -169,7 +169,7 @@ function OnboardingCard({ botList, onAddBot, navigate, user, officialGroupCount 
     },
     {
       label: 'Schedule your first automated post',
-      done: false,
+      done: !!(user?.onboarding_completed_steps?.includes('schedule_created')),
       action: hasGroups ? (
         <Button size="small" variant="outlined" onClick={() => navigate('/my-groups')} sx={{ mt: 1 }}>
           Open Scheduler
