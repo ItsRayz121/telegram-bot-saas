@@ -423,6 +423,13 @@ def init_db():
             "workspace_knowledge_documents.user_id NOT NULL",
         )
 
+        # ── Payment abuse tracking ────────────────────────────────────────────────
+        _run_alter(
+            db.engine,
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS chargeback_count INTEGER NOT NULL DEFAULT 0",
+            "users.chargeback_count",
+        )
+
         print("Migration complete.")
 
     # One-shot Telegram account backfill (also runs inline above via _backfill_telegram_accounts).

@@ -1223,3 +1223,59 @@ def fraud_payment_anomalies():
         })
 
     return jsonify({"anomalies": anomalies, "total": len(anomalies)})
+
+
+# ── Chargeback Tracking ────────────────────────────────────────────────────────
+
+@admin_bp.route("/fraud/chargebacks", methods=["GET"])
+@admin_required
+@rate_limit(requests_per_minute=20)
+def fraud_chargebacks():
+    """List users with recorded chargebacks, ordered by count descending."""
+    users = (
+        User.query
+        .filter(User.chargeback_count > 0)
+        .order_by(User.chargeback_count.desc())
+        .limit(100)
+        .all()
+    )
+    return jsonify({
+        "chargebacks": [
+            {
+                "id": u.id,
+                "email": u.email,
+                "full_name": u.full_name,
+                "tier": u.subscription_tier,
+                "chargeback_count": u.chargeback_count,
+                "created_at": u.created_at.isoformat() if u.created_at else None,
+                "is_banned": u.is_banned,
+                "is_suspended": u.is_suspended,
+            }
+            for u in users
+        ],
+        "total": len(users),
+    })
+
+
+@admin_bp.route("/fraud/chargebacks/<int:user_id>/increment", methods=["POST"])
+@admin_required
+@rate_limit(requests_per_minute=20)
+def increment_chargeback(user_id):
+    """Manually record a chargeback against a user."""
+    admin_user = _get_current_user()
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    user.chargeback_count = (user.chargeback_count or 0) + 1
+    audit = AdminAuditLog(
+        admin_id=admin_user.id,
+        action="chargeback_recorded",
+        method="POST",
+        path=f"/api/admin/fraud/chargebacks/{user_id}/increment",
+        payload_json=json.dumps({"user_id": user_id, "new_count": user.chargeback_count}),
+        ip_address=request.remote_addr,
+    )
+    db.session.add(audit)
+    db.session.commit()
+    return jsonify({"user_id": user_id, "chargeback_count": user.chargeback_count})

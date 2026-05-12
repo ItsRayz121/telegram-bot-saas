@@ -62,6 +62,7 @@ import GroupCRM from './pages/GroupCRM';
 import Marketplace from './pages/Marketplace';
 import MarketplaceDeal from './pages/MarketplaceDeal';
 import JoinReferral from './pages/JoinReferral';
+import InviteLanding from './pages/InviteLanding';
 import Referrals from './pages/Referrals';
 
 // Assistant Hub (Sprint 1)
@@ -177,6 +178,7 @@ export default function App() {
             <Route path="/about" element={<About />} />
             <Route path="/status" element={<Status />} />
             <Route path="/join" element={<JoinReferral />} />
+            <Route path="/invite/:code" element={<InviteLanding />} />
 
             {/* ── Auth (no sidebar) ─────────────────────────────────────────── */}
             <Route path="/login"          element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />

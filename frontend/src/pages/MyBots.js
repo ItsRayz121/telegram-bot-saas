@@ -8,12 +8,14 @@ import {
 } from '@mui/material';
 import {
   Add, SmartToy, Delete, Refresh, OpenInNew, Groups,
-  Settings, CheckCircle, Warning, BarChart, Bolt, Psychology,
+  Settings, CheckCircle, Warning, BarChart, Bolt, Psychology, Lock,
 } from '@mui/icons-material';
+import { track } from '../services/analytics';
 import { toast } from 'react-toastify';
 import { customBots, telegramGroups as telegramGroupsApi } from '../services/api';
 import TopNav from '../components/TopNav';
 import PlanGate from '../components/PlanGate';
+import UpsellModal from '../components/UpsellModal';
 
 function _getUser() {
   try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; }
@@ -74,6 +76,8 @@ export default function MyBots() {
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [upsellOpen, setUpsellOpen] = useState(false);
+  const [upsellMessage, setUpsellMessage] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -117,13 +121,21 @@ export default function MyBots() {
     setAddError('');
     try {
       await customBots.add({ bot_token: form.bot_token, bot_username: preview.bot_username });
+      track('feature_used', { feature: 'custom_bot' });
       toast.success(`@${preview.bot_username} connected!`);
       setAddOpen(false);
       setForm({ bot_token: '' });
       setPreview(null);
       load();
     } catch (err) {
-      setAddError(err.response?.data?.error || 'Failed to connect bot');
+      const errMsg = err.response?.data?.error || 'Failed to connect bot';
+      if (errMsg.toLowerCase().includes('bot limit')) {
+        setUpsellMessage(errMsg);
+        setUpsellOpen(true);
+        setAddOpen(false);
+      } else {
+        setAddError(errMsg);
+      }
     } finally {
       setAdding(false);
     }
@@ -471,6 +483,15 @@ export default function MyBots() {
             disabled={validating || adding}
           />
 
+          {/* Security disclosure */}
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.75, mb: 2, p: 1.25, bgcolor: 'rgba(255,255,255,0.03)', borderRadius: 1.5, border: '1px solid', borderColor: 'divider' }}>
+            <Lock sx={{ fontSize: 13, color: 'text.disabled', mt: 0.1, flexShrink: 0 }} />
+            <Typography variant="caption" color="text.disabled" lineHeight={1.5}>
+              Your token is encrypted with AES-256 before storage. We never log or display it in plaintext.
+              Revoke access at any time by regenerating your token in @BotFather.
+            </Typography>
+          </Box>
+
           {/* Step 2 — preview after validation */}
           {preview && (
             <Alert severity="success" sx={{ mb: 2 }}>
@@ -524,6 +545,12 @@ export default function MyBots() {
           <Button variant="contained" color="error" onClick={handleDelete}>Disconnect</Button>
         </DialogActions>
       </Dialog>
+      <UpsellModal
+        open={upsellOpen}
+        onClose={() => setUpsellOpen(false)}
+        feature="custom_bot"
+        limitMessage={upsellMessage}
+      />
     </Box>
     </PlanGate>
   );

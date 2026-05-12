@@ -16,6 +16,7 @@ import { useNavigate } from 'react-router-dom';
 import TelegizerLogo from '../components/TelegizerLogo';
 import { toast } from 'react-toastify';
 import { billing } from '../services/api';
+import { track } from '../services/analytics';
 
 const TIER_FEATURES = {
   free: ['1 bot', '3 groups per bot', 'Basic moderation', 'Welcome messages', 'XP system'],
@@ -105,7 +106,12 @@ export default function Billing() {
   const handleCancelConfirm = useCallback(async () => {
     setCancelling(true);
     try {
-      await billing.cancelSubscription();
+      const resp = await billing.cancelSubscription();
+      track('subscription_cancelled', {
+        plan: resp.data.plan || 'pro',
+        tenure_days: resp.data.tenure_days,
+        reason: 'user_initiated',
+      });
       toast.success('Subscription cancelled. You are now on the Free plan.');
       setCancelDialogOpen(false);
       await fetchSub();

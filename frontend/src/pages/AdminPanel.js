@@ -1034,11 +1034,86 @@ function PaymentAnomaliesView({ onAdminError }) {
   );
 }
 
+function ChargebacksView({ onAdminError }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await admin.getFraudChargebacks();
+      setRows(res.data.chargebacks || []);
+    } catch (err) { onAdminError(err, 'Failed to load chargebacks'); }
+    finally { setLoading(false); }
+  }, [onAdminError]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleRecord = async (userId) => {
+    try {
+      await admin.recordChargeback(userId);
+      toast.success('Chargeback recorded');
+      load();
+    } catch { toast.error('Failed to record chargeback'); }
+  };
+
+  if (loading) return <Box display="flex" justifyContent="center" mt={3}><CircularProgress /></Box>;
+
+  return (
+    <Box>
+      <Typography variant="body2" color="text.secondary" mb={2}>
+        Users with recorded payment chargebacks. Use "Record" when you receive a chargeback notification from your payment processor.
+      </Typography>
+      <TableContainer component={Paper} variant="outlined">
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>User</TableCell>
+              <TableCell>Plan</TableCell>
+              <TableCell align="center">Chargebacks</TableCell>
+              <TableCell>Joined</TableCell>
+              <TableCell>Status</TableCell>
+              <TableCell>Actions</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {rows.length === 0 && <EmptyRow cols={6} message="No chargebacks recorded" />}
+            {rows.map(r => (
+              <TableRow key={r.id} hover>
+                <TableCell>
+                  <Typography variant="body2" fontWeight={600}>{r.full_name}</Typography>
+                  <Typography variant="caption" color="text.secondary">{r.email}</Typography>
+                </TableCell>
+                <TableCell><Chip label={r.tier} size="small" color={r.tier === 'pro' ? 'primary' : r.tier === 'enterprise' ? 'secondary' : 'default'} /></TableCell>
+                <TableCell align="center">
+                  <Chip label={r.chargeback_count} size="small" color={r.chargeback_count >= 3 ? 'error' : 'warning'} />
+                </TableCell>
+                <TableCell><Typography variant="caption">{fmtDate(r.created_at)}</Typography></TableCell>
+                <TableCell>
+                  {r.is_banned && <Chip label="Banned" size="small" color="error" sx={{ mr: 0.5 }} />}
+                  {r.is_suspended && <Chip label="Suspended" size="small" color="warning" />}
+                  {!r.is_banned && !r.is_suspended && <Chip label="Active" size="small" color="success" />}
+                </TableCell>
+                <TableCell>
+                  <Button size="small" variant="outlined" color="warning" onClick={() => handleRecord(r.id)}>
+                    +1 Chargeback
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Box>
+  );
+}
+
 const FRAUD_VIEWS = [
   { key: 'events', label: 'Suspicious Events', icon: <Warning fontSize="small" /> },
   { key: 'clusters', label: 'Multi-Account Clusters', icon: <AccountTree fontSize="small" /> },
   { key: 'farming', label: 'Referral Farming', icon: <People fontSize="small" /> },
   { key: 'payments', label: 'Payment Anomalies', icon: <Payment fontSize="small" /> },
+  { key: 'chargebacks', label: 'Chargebacks', icon: <TrendingDown fontSize="small" /> },
 ];
 
 function SuspiciousTab({ onAdminError }) {
@@ -1064,6 +1139,7 @@ function SuspiciousTab({ onAdminError }) {
       {subView === 'clusters' && <FraudClustersView onAdminError={onAdminError} />}
       {subView === 'farming' && <ReferralFarmingView onAdminError={onAdminError} />}
       {subView === 'payments' && <PaymentAnomaliesView onAdminError={onAdminError} />}
+      {subView === 'chargebacks' && <ChargebacksView onAdminError={onAdminError} />}
     </Box>
   );
 }

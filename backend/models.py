@@ -115,6 +115,8 @@ class User(db.Model):
     trial_used           = db.Column(db.Boolean, default=False)
     # Onboarding checklist (2-B-01)
     onboarding_completed_steps = db.Column(db.JSON, nullable=True)  # list of completed step keys
+    # Payment abuse tracking
+    chargeback_count = db.Column(db.Integer, default=0, nullable=False)
 
     bots = db.relationship("Bot", backref="owner", lazy=True, cascade="all, delete-orphan")
 

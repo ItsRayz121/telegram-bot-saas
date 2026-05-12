@@ -3,13 +3,14 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Box, List, ListItem, ListItemButton, ListItemIcon, ListItemText,
   Typography, Avatar, Chip, Divider, Skeleton, Tooltip,
-  Menu, MenuItem, IconButton, Collapse,
+  Menu, MenuItem, IconButton, Collapse, LinearProgress,
 } from '@mui/material';
 import {
   Home, Groups, Campaign, AutoMode, Explore, BarChart,
   CreditCard, Settings, Add, AccountCircle, Logout,
   AdminPanelSettings, ExpandMore, ExpandLess,
   Psychology, ChevronLeft, ChevronRight,
+  SmartToy, EmojiEvents, Store, CheckCircle, RadioButtonUnchecked,
 } from '@mui/icons-material';
 import TelegizerLogo from './TelegizerLogo';
 import { telegramGroups as tgApi, auth as authApi, channels as chApi } from '../services/api';
@@ -250,6 +251,81 @@ function HubSectionLabel() {
   );
 }
 
+// ── 5-step onboarding checklist ───────────────────────────────────────────────
+const ONBOARDING_STEPS = [
+  { key: 'telegram_connected',     label: 'Connect Telegram',       path: '/settings' },
+  { key: 'first_group_linked',     label: 'Link a Group',           path: '/groups' },
+  { key: 'welcome_message_set',    label: 'Enable Welcome Message', path: '/groups' },
+  { key: 'moderation_rule_set',    label: 'Set Moderation Rule',    path: '/groups' },
+  { key: 'referral_shared',        label: 'Invite a Friend',        path: '/referrals' },
+];
+
+function OnboardingChecklist({ user, nav }) {
+  const [open, setOpen] = useState(false);
+  const completed = user?.onboarding_completed_steps || [];
+  const doneCount = ONBOARDING_STEPS.filter(s => completed.includes(s.key)).length;
+
+  if (doneCount >= ONBOARDING_STEPS.length) return null;
+
+  return (
+    <Box sx={{ mx: 1, mb: 0.5 }}>
+      <Box
+        onClick={() => setOpen(o => !o)}
+        sx={{
+          display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer',
+          px: 1.5, py: 1, borderRadius: 1.5,
+          border: '1px solid rgba(61,142,248,0.2)',
+          background: 'rgba(61,142,248,0.06)',
+          '&:hover': { background: 'rgba(61,142,248,0.1)' },
+        }}
+      >
+        <Typography fontSize="0.72rem" fontWeight={600} sx={{ flex: 1, color: PALETTE.blueLt }}>
+          Getting Started {doneCount}/{ONBOARDING_STEPS.length}
+        </Typography>
+        <LinearProgress
+          variant="determinate"
+          value={(doneCount / ONBOARDING_STEPS.length) * 100}
+          sx={{
+            width: 48, height: 4, borderRadius: 2,
+            bgcolor: 'rgba(61,142,248,0.15)',
+            '& .MuiLinearProgress-bar': { bgcolor: PALETTE.blue },
+          }}
+        />
+        {open ? <ExpandLess sx={{ fontSize: 14, color: 'text.disabled' }} /> : <ExpandMore sx={{ fontSize: 14, color: 'text.disabled' }} />}
+      </Box>
+      <Collapse in={open} timeout={180} unmountOnExit>
+        <Box sx={{ pt: 0.5 }}>
+          {ONBOARDING_STEPS.map(step => {
+            const done = completed.includes(step.key);
+            return (
+              <Box
+                key={step.key}
+                onClick={() => nav(step.path)}
+                sx={{
+                  display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer',
+                  px: 1.5, py: 0.6, borderRadius: 1, mx: 0.25,
+                  '&:hover': { background: 'rgba(255,255,255,0.04)' },
+                }}
+              >
+                {done
+                  ? <CheckCircle sx={{ fontSize: 14, color: 'success.main', flexShrink: 0 }} />
+                  : <RadioButtonUnchecked sx={{ fontSize: 14, color: 'text.disabled', flexShrink: 0 }} />
+                }
+                <Typography
+                  fontSize="0.76rem"
+                  sx={{ color: done ? 'text.disabled' : 'text.secondary', textDecoration: done ? 'line-through' : 'none' }}
+                >
+                  {step.label}
+                </Typography>
+              </Box>
+            );
+          })}
+        </Box>
+      </Collapse>
+    </Box>
+  );
+}
+
 // ── Sidebar content ────────────────────────────────────────────────────────────
 export default function Sidebar({ onClose, collapsed, onToggle }) {
   const navigate = useNavigate();
@@ -328,13 +404,13 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
   // ── Collapsed view ────────────────────────────────────────────────────────
   if (collapsed) {
     const COLLAPSED_ITEMS = [
-      { label: 'Dashboard', icon: Home,       path: '/dashboard', exact: true },
-      { label: 'Groups',    icon: Groups,     path: '/groups' },
-      { label: 'Channels',  icon: Campaign,   path: '/channels' },
-      { label: 'Hub',       icon: Psychology, path: '/hub', ai: true },
-      { label: 'Automation',icon: AutoMode,   path: '/automation' },
-      { label: 'Billing',   icon: CreditCard, path: '/billing' },
-      { label: 'Settings',  icon: Settings,   path: '/settings' },
+      { label: 'Dashboard',   icon: Home,        path: '/dashboard', exact: true },
+      { label: 'Groups',      icon: Groups,      path: '/groups' },
+      { label: 'My Bots',     icon: SmartToy,    path: '/custom-bots' },
+      { label: 'Hub',         icon: Psychology,  path: '/hub', ai: true },
+      { label: 'Referrals',   icon: EmojiEvents, path: '/referrals' },
+      { label: 'Billing',     icon: CreditCard,  path: '/billing' },
+      { label: 'Settings',    icon: Settings,    path: '/settings' },
     ];
     return (
       <Box sx={{ ...shellSx, alignItems: 'center', pt: 1 }}>
@@ -470,8 +546,8 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
 
         <NavItem label="Dashboard" path="/dashboard" icon={Home} active={isActive('/dashboard', true)} onClick={() => nav('/dashboard')} />
 
-        {/* Communities */}
-        <SectionLabel label="Communities" />
+        {/* GROUPS */}
+        <SectionLabel label="Groups" />
         <NavItem label="Groups" path="/groups" icon={Groups} active={groupActive} onClick={() => nav('/groups')} />
 
         {hasChannels ? (
@@ -560,20 +636,31 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
           </ListItem>
         )}
 
-        {/* Assistant Hub */}
+        {/* BOTS */}
+        <SectionLabel label="Bots" />
+        <NavItem label="My Bots" icon={SmartToy} path="/custom-bots" active={isActive('/custom-bots')} onClick={() => nav('/custom-bots')} />
+
+        {/* WORKSPACE */}
         <HubSectionLabel />
         <NavItem label="Hub" icon={Psychology} path="/hub" active={assistantActive} aiAccent onClick={() => nav('/hub')} />
-
-        {/* Automation */}
         <SectionLabel label="Automation" />
         <NavItem label="Automation" icon={AutoMode} path="/automation" active={automationActive} onClick={() => nav('/automation')} />
 
-        {/* Account */}
+        {/* GROWTH */}
+        <SectionLabel label="Growth" />
+        <NavItem label="Referrals"   icon={EmojiEvents} path="/referrals"   active={isActive('/referrals')}   onClick={() => nav('/referrals')} />
+        <NavItem label="Marketplace" icon={Store}       path="/marketplace" active={isActive('/marketplace')} onClick={() => nav('/marketplace')} />
+        <NavItem label="Directory"   icon={Explore}     path="/directory"   active={isActive('/directory')}   onClick={() => nav('/directory')} />
+
+        {/* ACCOUNT */}
         <SectionLabel label="Account" />
         <NavItem label="Billing"  path="/billing"  icon={CreditCard} active={isActive('/billing')}  onClick={() => nav('/billing')} />
         <NavItem label="Settings" path="/settings" icon={Settings}   active={isActive('/settings')} onClick={() => nav('/settings')} />
 
       </List>
+
+      {/* ── 5-step onboarding checklist ── */}
+      <OnboardingChecklist user={user} nav={nav} />
 
       {/* ── Plan upgrade banner ── */}
       {plan === 'free' && (

@@ -6,9 +6,10 @@ import {
 } from '@mui/material';
 import {
   ContentCopy, CheckCircle, EmojiEvents, People, CardGiftcard,
-  HelpOutline, OpenInNew, Share,
+  HelpOutline, OpenInNew, Share, Telegram,
 } from '@mui/icons-material';
 import { referrals as referralsApi } from '../services/api';
+import { track } from '../services/analytics';
 
 const MILESTONES = [
   { count: 3,  reward: '7 days Pro',    icon: '🎁', color: '#2563eb' },
@@ -80,8 +81,14 @@ export default function Referrals() {
   const [copied, setCopied] = useState(false);
 
   const inviteLink = stats?.referral_code
-    ? `${window.location.origin}/register?ref=${stats.referral_code}`
+    ? `${window.location.origin}/invite/${stats.referral_code}`
     : '';
+
+  const handleTelegramShare = () => {
+    const url = `https://t.me/share/url?url=${encodeURIComponent(inviteLink)}&text=${encodeURIComponent('Join me on Telegizer — the easiest way to manage your Telegram community!')}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+    track('referral_shared', { method: 'telegram' });
+  };
 
   useEffect(() => {
     Promise.all([
@@ -163,6 +170,16 @@ export default function Referrals() {
               sx={{ borderRadius: 1.5 }}
             >
               Share
+            </Button>
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={<Telegram />}
+              onClick={handleTelegramShare}
+              disabled={!inviteLink}
+              sx={{ borderRadius: 1.5, bgcolor: '#0088cc', '&:hover': { bgcolor: '#007ab8' } }}
+            >
+              Share on Telegram
             </Button>
           </Box>
         </CardContent>

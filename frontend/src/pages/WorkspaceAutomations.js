@@ -14,6 +14,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { automations as autoApi, telegramGroups as tgApi } from '../services/api';
 import PlanGate from '../components/PlanGate';
+import { track } from '../services/analytics';
 import { WebhooksSection } from './Integrations';
 
 function _getUser() {
@@ -241,6 +242,7 @@ function CreateDialog({ open, onClose, onCreated, groups, templates }) {
     try {
       const res = await autoApi.createWorkflow(buildPayload());
       onCreated(res.data.workflow);
+      track('feature_used', { feature: 'automation' });
       setForm(EMPTY_FORM);
       onClose();
       toast.success('Workflow created');
@@ -443,6 +445,17 @@ export default function WorkspaceAutomations() {
 
       {loading ? (
         <Box sx={{ py: 6, textAlign: 'center' }}><CircularProgress /></Box>
+      ) : workflows.length === 0 ? (
+        <Box sx={{ textAlign: 'center', py: 8, color: 'text.secondary' }}>
+          <AutoMode sx={{ fontSize: 56, mb: 1.5, opacity: 0.4 }} />
+          <Typography variant="h6" fontWeight={600} gutterBottom>No automations yet</Typography>
+          <Typography variant="body2" mb={3}>
+            Create your first automation to auto-respond to triggers in your groups.
+          </Typography>
+          <Button variant="contained" startIcon={<Add />} onClick={() => setCreateOpen(true)}>
+            New Automation
+          </Button>
+        </Box>
       ) : (
         workflows.map(wf => (
           <WorkflowCard key={wf.id} wf={wf} groups={groups} onToggle={handleToggle} onDelete={handleDelete} />

@@ -193,8 +193,13 @@ def cancel_subscription():
         send_subscription_cancelled(user.email, user.full_name)
     except Exception:
         pass
+    tenure_days = (datetime.utcnow() - user.created_at).days
     logger.info("[BILLING] User %d cancelled %s subscription", user.id, prev_tier)
-    return jsonify({"message": "Subscription cancelled. You have been moved to the Free plan."})
+    return jsonify({
+        "message": "Subscription cancelled. You have been moved to the Free plan.",
+        "plan": prev_tier,
+        "tenure_days": tenure_days,
+    })
 
 
 # ─── NOWPayments (crypto) ─────────────────────────────────────────────────────

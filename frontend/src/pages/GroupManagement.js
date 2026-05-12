@@ -14,6 +14,7 @@ import {
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { telegramGroups } from '../services/api';
+import { track } from '../services/analytics';
 
 function TabPanel({ children, value, index }) {
   return value === index ? <Box sx={{ pt: 3 }}>{children}</Box> : null;
@@ -74,6 +75,13 @@ export default function GroupManagement() {
   useEffect(() => {
     if (tab === 1) loadEvents();
   }, [tab, loadEvents]);
+
+  useEffect(() => {
+    if (events.length > 0 && !localStorage.getItem('aha_moment_fired')) {
+      track('aha_moment_reached', { group_id: groupId });
+      localStorage.setItem('aha_moment_fired', '1');
+    }
+  }, [events, groupId]);
 
   const openNewCmd = () => {
     setEditCmd(null);

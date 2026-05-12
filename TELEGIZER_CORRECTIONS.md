@@ -584,7 +584,7 @@
 
 ### 5.1 Onboarding
 
-- [ ] **Build 5-step onboarding checklist**
+- [x] **Build 5-step onboarding checklist**
   - Severity: `CRITICAL`
   - Priority: `P0 — Must Fix Before Launch`
   - Phase: Phase 1
@@ -612,7 +612,7 @@
 
 ### 5.2 Empty States
 
-- [ ] **Add meaningful empty states with CTAs to all list pages**
+- [x] **Add meaningful empty states with CTAs to all list pages**
   - Severity: `CRITICAL`
   - Priority: `P0 — Must Fix Before Launch`
   - Phase: Phase 1
@@ -624,7 +624,7 @@
 
 ### 5.3 Navigation & Information Architecture
 
-- [ ] **Collapse sidebar to 5 primary sections**
+- [x] **Collapse sidebar to 5 primary sections**
   - Severity: `HIGH`
   - Priority: `P0 — Must Fix Before Launch`
   - Phase: Phase 1
@@ -632,7 +632,7 @@
   - Fix: Sidebar sections: (1) **Groups** — My Groups, Moderation, Members, Analytics; (2) **Bots** — My Bots, Commands, Analytics; (3) **Workspace** — Hub, Notes, Tasks, Automations, Reminders, Forwarding; (4) **Growth** — Referrals, Marketplace, Directory, Smart Links; (5) **Account** — Billing, Settings, Integrations. Admin in top-right dropdown.
   - Impact: `[FE]`
 
-- [ ] **Add confirmation dialogs for all destructive actions**
+- [x] **Add confirmation dialogs for all destructive actions**
   - Severity: `HIGH`
   - Priority: `P0 — Must Fix Before Launch`
   - Phase: Phase 1
@@ -652,7 +652,7 @@
 
 ### 5.4 Upsell & Upgrade Experience
 
-- [ ] **Add gate-triggered upsell overlays**
+- [x] **Add gate-triggered upsell overlays**
   - Severity: `HIGH`
   - Priority: `P0 — Must Fix Before Launch`
   - Phase: Phase 1
@@ -856,7 +856,7 @@
 
 ### 9.1 Error Handling
 
-- [ ] **Add global error boundary with meaningful fallback UI**
+- [x] **Add global error boundary with meaningful fallback UI**
   - Severity: `HIGH`
   - Priority: `P0 — Must Fix Before Launch`
   - Phase: Phase 1
@@ -1072,7 +1072,7 @@
   - Fix: Fire PostHog events at: (1) `signup_completed`, (2) `email_verified`, (3) `telegram_connected`, (4) `first_group_linked`, (5) `first_moderation_rule_set`, (6) `first_pro_upgrade`. Build funnel view in PostHog. Review weekly.
   - Impact: `[FE]` `[BE]`
 
-- [ ] **Add feature usage tracking events**
+- [x] **Add feature usage tracking events**
   - Severity: `HIGH`
   - Priority: `P1 — Beta`
   - Phase: Phase 2
@@ -1080,7 +1080,7 @@
   - Fix: Track: `feature_used {feature: 'moderation_rule', 'automation', 'knowledge_base', 'digest', 'welcome_message', ...}` on first use per user. Build feature adoption matrix: % of users who have used each feature at least once. Review monthly to guide roadmap prioritization.
   - Impact: `[FE]`
 
-- [ ] **Add revenue tracking events (PostHog + admin)**
+- [x] **Add revenue tracking events (PostHog + admin)**
   - Severity: `HIGH`
   - Priority: `P0 — Must Fix Before Launch`
   - Phase: Phase 1
@@ -1128,7 +1128,7 @@
 
 ---
 
-- [ ] **Build branded referral landing page**
+- [x] **Build branded referral landing page**
   - Severity: `HIGH`
   - Priority: `P1 — Beta`
   - Phase: Phase 2
@@ -1136,7 +1136,7 @@
   - Fix: `telegizer.com/invite/:code` → dedicated page with referrer's name (if they consent), social proof ("Join 5,000+ Telegram community managers"), and a signup CTA. Track referral landing page conversion separately.
   - Impact: `[FE]`
 
-- [ ] **Add one-tap Telegram share button for referrals**
+- [x] **Add one-tap Telegram share button for referrals**
   - Severity: `HIGH`
   - Priority: `P1 — Beta`
   - Phase: Phase 2
@@ -1168,7 +1168,7 @@
   - Fix: (1) Collect 10 beta user testimonials — name, Telegram community name, 2-sentence quote. (2) Display "X groups managed" live counter (even if starting from 1). (3) Add a security trust section: "Your bot token is encrypted with AES-256 and never shared." (4) Link to security documentation page.
   - Impact: `[FE]`
 
-- [ ] **Add explicit bot token security disclosure on bot creation page**
+- [x] **Add explicit bot token security disclosure on bot creation page**
   - Severity: `HIGH`
   - Priority: `P0 — Must Fix Before Launch`
   - Phase: Phase 1
@@ -1317,7 +1317,7 @@
   - See Bot Architecture Section 7.2 "Validate bot token on creation" for full detail.
   - Impact: `[BE]` `[BOT]`
 
-- [ ] **Add IP and device fingerprint clustering for multi-account detection**
+- [x] **Add IP and device fingerprint clustering for multi-account detection**
   - Severity: `HIGH`
   - Priority: `P1 — Beta`
   - Phase: Phase 2
@@ -1325,7 +1325,7 @@
   - Fix: Admin panel "Account Clusters" view: group `SuspiciousActivity` records by first 3 bytes of IP hash. Show all accounts in each cluster. Admin can mark entire cluster as fraudulent and bulk-suspend.
   - Impact: `[BE]` `[FE]`
 
-- [ ] **Add payment chargeback tracking**
+- [x] **Add payment chargeback tracking**
   - Severity: `HIGH`
   - Priority: `P1 — Beta`
   - Phase: Phase 2
@@ -1348,7 +1348,7 @@
   - Fix: Rewrite landing page around one primary persona: "Telegram community managers who want moderation + engagement tools without managing bot infrastructure." Hero headline and sub-headline must answer: What it is, Who it's for, What problem it solves. All other features appear as secondary benefits, not as co-equal headline features.
   - Impact: `[FE]`
 
-- [ ] **Define and instrument the Aha Moment**
+- [x] **Define and instrument the Aha Moment**
   - Severity: `HIGH`
   - Priority: `P1 — Beta`
   - Phase: Phase 2

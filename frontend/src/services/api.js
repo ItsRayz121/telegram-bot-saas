@@ -535,6 +535,8 @@ export const admin = {
   getFraudClusters: () => api.get('/api/admin/fraud/clusters'),
   getFraudReferralFarming: () => api.get('/api/admin/fraud/referral-farming'),
   getFraudPaymentAnomalies: () => api.get('/api/admin/fraud/payment-anomalies'),
+  getFraudChargebacks: () => api.get('/api/admin/fraud/chargebacks'),
+  recordChargeback: (userId) => api.post(`/api/admin/fraud/chargebacks/${userId}/increment`),
 };
 
 export const telegramGroups = {
