@@ -305,10 +305,6 @@ def init_db():
             "auto_responses.use_as_ai_knowledge",
         )
 
-        # ── Backfill: create UserTelegramAccount rows for legacy User.telegram_user_id ──
-        # Any user with telegram_user_id but no junction row gets a primary record created.
-        _backfill_telegram_accounts(app)
-
         # ── Context separation: group_context column on telegram_groups ──────────
         # All existing rows (Group Management groups) default to 'group_management'.
         # Assistant Hub groups are stored in hub_connected_groups (separate table).
@@ -430,9 +426,15 @@ def init_db():
             "users.chargeback_count",
         )
 
+        # ── Backfill: create UserTelegramAccount rows for legacy User.telegram_user_id ──
+        # Runs AFTER all users-table ALTER statements so the SQLAlchemy User model
+        # (which includes aup_accepted_at, deleted_at, is_suspended, chargeback_count)
+        # doesn't query a schema that is missing those columns.
+        _backfill_telegram_accounts(app)
+
         print("Migration complete.")
 
-    # One-shot Telegram account backfill (also runs inline above via _backfill_telegram_accounts).
+    # One-shot Telegram account backfill (moved above; comment kept for reference).
     # One-shot TOTP secret encryption migration.
     # Run with: MIGRATE_ENCRYPT_TOTP=1 python -m backend.migrate
     import os as _os
