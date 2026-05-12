@@ -184,6 +184,18 @@ function OnboardingCard({ botList, onAddBot, navigate, user, officialGroupCount 
   const allDone = completedCount === steps.length;
   const progressPct = (completedCount / steps.length) * 100;
 
+  const toggleExpand = () => {
+    const next = !expanded;
+    setExpanded(next);
+    localStorage.setItem('onboarding_expanded', next ? '1' : '0');
+  };
+
+  const handleDismiss = (e) => {
+    e.stopPropagation();
+    setDismissed(true);
+    localStorage.setItem('onboarding_dismissed', '1');
+  };
+
   if (dismissed) return null;
 
   // Success state — show celebration card instead of hiding silently
@@ -208,18 +220,6 @@ function OnboardingCard({ botList, onAddBot, navigate, user, officialGroupCount 
       </Card>
     );
   }
-
-  const toggleExpand = () => {
-    const next = !expanded;
-    setExpanded(next);
-    localStorage.setItem('onboarding_expanded', next ? '1' : '0');
-  };
-
-  const handleDismiss = (e) => {
-    e.stopPropagation();
-    setDismissed(true);
-    localStorage.setItem('onboarding_dismissed', '1');
-  };
 
   return (
     <Card
