@@ -1867,6 +1867,65 @@ def update_custom_bot(bot_id):
     return jsonify({"ok": True, "bot": _bot_card_data(bot, user.id)})
 
 
+def _custom_bot_settings_dict(settings):
+    if not settings:
+        return {
+            "ai_personality_note": "",
+            "response_language": "en",
+            "reply_sensitivity": "medium",
+            "escalation_contact": None,
+            "tone": "friendly",
+        }
+    return {
+        "ai_personality_note": settings.ai_personality_note or "",
+        "response_language": settings.response_language or "en",
+        "reply_sensitivity": settings.reply_sensitivity or "medium",
+        "escalation_contact": settings.escalation_contact,
+        "tone": settings.tone or "friendly",
+    }
+
+
+@hub_bp.route("/bots/<bot_id>/settings", methods=["GET"])
+@jwt_required()
+def get_custom_bot_settings(bot_id):
+    """Return community reply settings for a custom bot."""
+    user = _current_user()
+    bot = HubBotIdentity.query.filter_by(
+        id=bot_id, user_id=user.id, bot_type="custom"
+    ).first_or_404()
+    settings = HubBotSettings.query.filter_by(bot_id=bot.id).first()
+    return jsonify({"bot_id": bot.id, "settings": _custom_bot_settings_dict(settings)})
+
+
+@hub_bp.route("/bots/<bot_id>/settings", methods=["PATCH"])
+@jwt_required()
+def update_custom_bot_settings(bot_id):
+    """Update community reply settings for a custom bot."""
+    user = _current_user()
+    bot = HubBotIdentity.query.filter_by(
+        id=bot_id, user_id=user.id, bot_type="custom"
+    ).first_or_404()
+    settings = HubBotSettings.query.filter_by(bot_id=bot.id).first()
+    if settings is None:
+        settings = HubBotSettings(id=str(uuid.uuid4()), bot_id=bot.id, user_id=user.id)
+        db.session.add(settings)
+
+    data = request.get_json(silent=True) or {}
+    allowed = [
+        "ai_personality_note", "response_language",
+        "reply_sensitivity", "escalation_contact", "tone",
+    ]
+    for field in allowed:
+        if field in data:
+            val = data[field]
+            if field == "escalation_contact":
+                val = int(val) if val else None
+            setattr(settings, field, val)
+    settings.updated_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"ok": True, "settings": _custom_bot_settings_dict(settings)})
+
+
 @hub_bp.route("/bots/<bot_id>", methods=["DELETE"])
 @jwt_required()
 def delete_custom_bot(bot_id):

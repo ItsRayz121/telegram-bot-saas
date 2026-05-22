@@ -10,8 +10,9 @@ import {
   Box, Tabs, Tab, Typography, Chip, Button, CircularProgress,
   Card, CardContent, Alert, Divider, Dialog, DialogTitle,
   DialogContent, DialogActions, TextField, Avatar,
+  MenuItem, Select, FormControl, InputLabel, Snackbar,
 } from '@mui/material';
-import { ArrowBack, SmartToy, Groups, Delete } from '@mui/icons-material';
+import { ArrowBack, SmartToy, Groups, Delete, Save } from '@mui/icons-material';
 import { hub } from '../services/api';
 import { PALETTE } from '../theme';
 import { TabContent } from './HubWorkspace';
@@ -122,6 +123,49 @@ function CustomBotSettings({ bot, onDeleted }) {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
 
+  // Reply settings
+  const [settingsLoading, setSettingsLoading] = useState(true);
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [snack, setSnack] = useState(null);
+  const [form, setForm] = useState({
+    ai_personality_note: '',
+    response_language: 'en',
+    reply_sensitivity: 'medium',
+    escalation_contact: '',
+    tone: 'friendly',
+  });
+
+  useEffect(() => {
+    hub.getBotSettings(bot.id)
+      .then(r => {
+        const s = r.data?.settings || {};
+        setForm({
+          ai_personality_note: s.ai_personality_note || '',
+          response_language: s.response_language || 'en',
+          reply_sensitivity: s.reply_sensitivity || 'medium',
+          escalation_contact: s.escalation_contact ? String(s.escalation_contact) : '',
+          tone: s.tone || 'friendly',
+        });
+      })
+      .catch(() => {})
+      .finally(() => setSettingsLoading(false));
+  }, [bot.id]);
+
+  const handleSave = async () => {
+    setSaveLoading(true);
+    try {
+      const payload = {
+        ...form,
+        escalation_contact: form.escalation_contact ? Number(form.escalation_contact) : null,
+      };
+      await hub.updateBotSettings(bot.id, payload);
+      setSnack('Settings saved.');
+    } catch (e) {
+      setSnack(e?.response?.data?.error || 'Failed to save settings.');
+    }
+    setSaveLoading(false);
+  };
+
   const handleDelete = async () => {
     if (deleteConfirm !== bot.display_name) return;
     setDeleteLoading(true); setDeleteError(null);
@@ -152,14 +196,97 @@ function CustomBotSettings({ bot, onDeleted }) {
         </CardContent>
       </Card>
 
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
         <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
           <Groups sx={{ fontSize: 18, mt: 0.25 }} />
           <span>
-            This bot can be added to Telegram groups. Go to <strong>Groups</strong> in the sidebar to manage group-level settings and analytics.
+            This bot can be added to Telegram groups. Go to <strong>Groups</strong> tab to manage group-level settings and analytics.
           </span>
         </Box>
       </Typography>
+
+      <Divider sx={{ my: 2 }} />
+
+      {/* Community Reply Settings */}
+      <Typography variant="subtitle2" fontWeight={600} gutterBottom sx={{ mt: 2 }}>
+        Community Reply Settings
+      </Typography>
+      <Typography variant="caption" color="text.secondary" display="block" mb={2}>
+        Controls how this bot replies when @mentioned in groups.
+      </Typography>
+
+      {settingsLoading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+          <CircularProgress size={24} />
+        </Box>
+      ) : (
+        <Card variant="outlined" sx={{ mb: 3 }}>
+          <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <TextField
+              label="Personality note"
+              placeholder="e.g. Always be concise and reply in bullet points."
+              size="small"
+              fullWidth
+              multiline
+              rows={2}
+              inputProps={{ maxLength: 200 }}
+              value={form.ai_personality_note}
+              onChange={e => setForm(f => ({ ...f, ai_personality_note: e.target.value }))}
+              helperText={`${form.ai_personality_note.length}/200 — Appended to the AI system prompt.`}
+            />
+
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+              <FormControl size="small" sx={{ minWidth: 160 }}>
+                <InputLabel>Tone</InputLabel>
+                <Select
+                  label="Tone"
+                  value={form.tone}
+                  onChange={e => setForm(f => ({ ...f, tone: e.target.value }))}
+                >
+                  <MenuItem value="friendly">Friendly</MenuItem>
+                  <MenuItem value="professional">Professional</MenuItem>
+                  <MenuItem value="neutral">Neutral</MenuItem>
+                </Select>
+              </FormControl>
+
+              <FormControl size="small" sx={{ minWidth: 180 }}>
+                <InputLabel>Reply sensitivity</InputLabel>
+                <Select
+                  label="Reply sensitivity"
+                  value={form.reply_sensitivity}
+                  onChange={e => setForm(f => ({ ...f, reply_sensitivity: e.target.value }))}
+                >
+                  <MenuItem value="low">Low — reply to everything</MenuItem>
+                  <MenuItem value="medium">Medium — default</MenuItem>
+                  <MenuItem value="high">High — ask for detail often</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
+
+            <TextField
+              label="Escalation contact (Telegram user ID)"
+              placeholder="e.g. 123456789"
+              size="small"
+              sx={{ maxWidth: 280 }}
+              value={form.escalation_contact}
+              onChange={e => setForm(f => ({ ...f, escalation_contact: e.target.value.replace(/\D/g, '') }))}
+              helperText="When the bot can't answer, it DMs this admin."
+            />
+
+            <Box>
+              <Button
+                variant="contained"
+                size="small"
+                startIcon={saveLoading ? <CircularProgress size={13} /> : <Save />}
+                onClick={handleSave}
+                disabled={saveLoading}
+              >
+                Save settings
+              </Button>
+            </Box>
+          </CardContent>
+        </Card>
+      )}
 
       <Divider sx={{ my: 3 }} />
 
@@ -206,6 +333,14 @@ function CustomBotSettings({ bot, onDeleted }) {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Snackbar
+        open={!!snack}
+        autoHideDuration={3000}
+        onClose={() => setSnack(null)}
+        message={snack}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      />
     </Box>
   );
 }

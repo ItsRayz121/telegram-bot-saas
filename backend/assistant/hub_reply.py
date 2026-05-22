@@ -98,8 +98,15 @@ def _handle(bot_token, bot_username, message_text, chat_id, message_id, bot_id, 
     if not query:
         return False
 
+    # ── Load bot community reply settings ─────────────────────────────────────
+    from ..assistant.hub_models import HubBotSettings as _HubBotSettings
+    _bot_settings = _HubBotSettings.query.filter_by(bot_id=bot_id).first()
+    _reply_sensitivity = (_bot_settings.reply_sensitivity or "medium") if _bot_settings else "medium"
+    _tone = (_bot_settings.tone or "friendly") if _bot_settings else "friendly"
+    _escalation_contact = (_bot_settings.escalation_contact) if _bot_settings else None
+
     # ── Smart pre-filter: sentiment-aware short message handler ───────────────
-    pre_reply = _pre_filter(query, bot_token, chat_id, message_id)
+    pre_reply = _pre_filter(query, bot_token, chat_id, message_id, sensitivity=_reply_sensitivity)
     if pre_reply == "__SILENCE__":
         return False   # human-to-human chat — bot stays quiet
     if pre_reply:
@@ -141,7 +148,7 @@ def _handle(bot_token, bot_username, message_text, chat_id, message_id, bot_id, 
         plan = (user.subscription_tier or "free") if user else "free"
 
         if plan == "enterprise":
-            reply_text = _gpt_answer(query, bot_id, user_id)
+            reply_text = _gpt_answer(query, bot_id, user_id, tone=_tone)
         else:
             # Attempt global escalation before sending generic reply
             if flask_app:
@@ -186,6 +193,25 @@ def _handle(bot_token, bot_username, message_text, chat_id, message_id, bot_id, 
                 except Exception:
                     pass  # fall through to generic reply
 
+            # Notify escalation_contact admin via DM if configured
+            if _escalation_contact:
+                try:
+                    import requests as _req2
+                    _req2.post(
+                        f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                        json={
+                            "chat_id": _escalation_contact,
+                            "text": (
+                                f"❓ <b>Unanswered question in group {chat_id}</b>\n\n"
+                                f"{query}"
+                            ),
+                            "parse_mode": "HTML",
+                        },
+                        timeout=8,
+                    )
+                except Exception:
+                    pass
+
             reply_text = (
                 "I don't have a knowledge card for that. "
                 "Ask the group admin to add one in Hub Settings → Knowledge."
@@ -202,7 +228,7 @@ def _handle(bot_token, bot_username, message_text, chat_id, message_id, bot_id, 
     return sent
 
 
-def _gpt_answer(query: str, bot_id: str, user_id: int) -> str | None:
+def _gpt_answer(query: str, bot_id: str, user_id: int, tone: str = "friendly") -> str | None:
     """Enterprise plan: answer via GPT-4o-mini with memory context."""
     try:
         from openai import OpenAI
@@ -259,6 +285,13 @@ def _gpt_answer(query: str, bot_id: str, user_id: int) -> str | None:
         system = HUB_COMMUNITY_REPLY_SYSTEM.format(knowledge_context=knowledge_context)
         if personality:
             system += f"\n\nBot personality note from owner: {personality}"
+        _tone_map = {
+            "professional": "Maintain a formal, professional tone. Be precise and avoid casual language.",
+            "neutral": "Use a neutral, balanced tone — neither too casual nor too formal.",
+            "friendly": "Be warm, approachable, and conversational.",
+        }
+        tone_note = _tone_map.get(tone, _tone_map["friendly"])
+        system += f"\n\nTone instruction: {tone_note}"
 
         resp = _openai_client.chat.completions.create(
             model=_model,
@@ -348,30 +381,44 @@ _HUMAN_CHAT_EXACT = {
 }
 
 
-def _pre_filter(query: str, bot_token: str, chat_id: int, message_id: int):
+def _pre_filter(query: str, bot_token: str, chat_id: int, message_id: int,
+                sensitivity: str = "medium"):
     """
     Sentiment-aware pre-filter before the knowledge card / AI pipeline.
 
-    1. Greeting → engage warmly
-    2. Known human-chat phrase → stay silent
-    3. Single vague fragment keyword → ask for more detail
-    4. Otherwise → None (proceed to normal pipeline)
+    sensitivity:
+      "low"    → never silence; reply to everything
+      "medium" → default: silence human-chat, clarify vague fragments
+      "high"   → also clarify 1-3 word messages not in GREETINGS or HUMAN_CHAT_EXACT
+
+    1. Greeting → engage warmly (always)
+    2. Known human-chat phrase → stay silent (unless sensitivity=low)
+    3. Single vague fragment keyword → ask for more detail (medium+)
+    4. Short unknown message → ask for more detail (high only)
+    5. Otherwise → None (proceed to normal pipeline)
     """
     text = query.strip().lower()
     clean = _re.sub(r"[^\w\s]", "", text).strip()
 
-    # 1. Greeting
+    # 1. Greeting — always engage regardless of sensitivity
     if clean in _GREETINGS or any(clean.startswith(g) for g in _GREETINGS if len(g) > 2):
         return _random.choice(_GREETING_REPLIES)
 
-    # 2. Human-to-human short phrases — stay silent
+    # 2. Human-to-human short phrases
     if clean in _HUMAN_CHAT_EXACT:
+        if sensitivity == "low":
+            return None  # don't silence — pass to pipeline
         return "__SILENCE__"
 
-    # 3. Single vague fragment — ask for more detail
     words = clean.split()
-    if len(words) <= 2 and clean in _FRAGMENT_KEYWORDS:
+
+    # 3. Vague fragment — ask for detail (medium and high)
+    if sensitivity != "low" and len(words) <= 2 and clean in _FRAGMENT_KEYWORDS:
         return _random.choice(_CLARIFICATION_REPLIES)
 
-    # 4. Proceed normally
+    # 4. High sensitivity — ask for detail on any short unclear message
+    if sensitivity == "high" and len(words) <= 3 and clean not in _GREETINGS:
+        return _random.choice(_CLARIFICATION_REPLIES)
+
+    # 5. Proceed normally
     return None

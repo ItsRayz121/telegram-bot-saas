@@ -59,6 +59,11 @@ class HubBotSettings(db.Model):
     digest_format = db.Column(db.String(10))                         # compact | detailed
     notification_prefs = db.Column(db.JSON)
 
+    # Community reply settings (custom bots only — controls hub_reply behaviour)
+    reply_sensitivity = db.Column(db.String(10), default="medium")   # low | medium | high
+    escalation_contact = db.Column(db.BigInteger)                    # Telegram user_id to DM when bot can't answer
+    tone = db.Column(db.String(20), default="friendly")              # friendly | professional | neutral
+
     created_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 

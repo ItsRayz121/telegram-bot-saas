@@ -432,6 +432,23 @@ def init_db():
         # doesn't query a schema that is missing those columns.
         _backfill_telegram_accounts(app)
 
+        # ── Phase 3: Community reply settings on hub_bot_settings ────────────────
+        _run_alter(
+            db.engine,
+            "ALTER TABLE hub_bot_settings ADD COLUMN IF NOT EXISTS reply_sensitivity VARCHAR(10) DEFAULT 'medium'",
+            "hub_bot_settings.reply_sensitivity",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE hub_bot_settings ADD COLUMN IF NOT EXISTS escalation_contact BIGINT",
+            "hub_bot_settings.escalation_contact",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE hub_bot_settings ADD COLUMN IF NOT EXISTS tone VARCHAR(20) DEFAULT 'friendly'",
+            "hub_bot_settings.tone",
+        )
+
         print("Migration complete.")
 
     # One-shot Telegram account backfill (moved above; comment kept for reference).
