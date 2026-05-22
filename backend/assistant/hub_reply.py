@@ -98,6 +98,14 @@ def _handle(bot_token, bot_username, message_text, chat_id, message_id, bot_id, 
     if not query:
         return False
 
+    # ── Smart pre-filter: sentiment-aware short message handler ───────────────
+    pre_reply = _pre_filter(query, bot_token, chat_id, message_id)
+    if pre_reply == "__SILENCE__":
+        return False   # human-to-human chat — bot stays quiet
+    if pre_reply:
+        _send_reply(bot_token, chat_id, message_id, pre_reply, parse_mode="HTML")
+        return True
+
     # ── Knowledge card match ───────────────────────────────────────────────────
     cards = HubKnowledgeCard.query.filter_by(bot_id=bot_id, user_id=user_id).all()
     matched_card = None
@@ -187,23 +195,11 @@ def _handle(bot_token, bot_username, message_text, chat_id, message_id, bot_id, 
         return False
 
     # ── Send reply ─────────────────────────────────────────────────────────────
-    try:
-        _req.post(
-            f"https://api.telegram.org/bot{bot_token}/sendMessage",
-            json={
-                "chat_id": chat_id,
-                "text": reply_text,
-                "parse_mode": "Markdown",
-                "reply_to_message_id": message_id,
-            },
-            timeout=10,
-        )
+    sent = _send_reply(bot_token, chat_id, message_id, reply_text, parse_mode="HTML")
+    if sent:
         _log.info("hub_reply: replied bot=%s group=%s matched=%s",
                   bot_id, chat_id, bool(matched_card))
-        return True
-    except Exception as exc:
-        _log.warning("hub_reply: send failed bot=%s group=%s: %s", bot_id, chat_id, exc)
-        return False
+    return sent
 
 
 def _gpt_answer(query: str, bot_id: str, user_id: int) -> str | None:
@@ -258,11 +254,11 @@ def _gpt_answer(query: str, bot_id: str, user_id: int) -> str | None:
             proj_names = ", ".join(p.name for p in projects)
             context_lines.append(f"Active projects: {proj_names}")
 
-        system = "You are a helpful Telegram group assistant."
+        from .handlers._prompts import HUB_COMMUNITY_REPLY_SYSTEM
+        knowledge_context = "\n".join(context_lines) if context_lines else "No specific workspace context available."
+        system = HUB_COMMUNITY_REPLY_SYSTEM.format(knowledge_context=knowledge_context)
         if personality:
-            system += f" {personality}"
-        if context_lines:
-            system += "\n\nContext about the workspace:\n" + "\n".join(context_lines)
+            system += f"\n\nBot personality note from owner: {personality}"
 
         resp = _openai_client.chat.completions.create(
             model=_model,
@@ -270,8 +266,8 @@ def _gpt_answer(query: str, bot_id: str, user_id: int) -> str | None:
                 {"role": "system", "content": system},
                 {"role": "user", "content": query},
             ],
-            max_tokens=400,
-            temperature=0.4,
+            max_tokens=500,
+            temperature=0.6,
         )
         if _key_source == "platform":
             tokens_used = resp.usage.total_tokens if resp.usage else 0
@@ -280,3 +276,102 @@ def _gpt_answer(query: str, bot_id: str, user_id: int) -> str | None:
     except Exception as exc:
         _log.warning("hub_reply: GPT fallback failed: %s", exc)
         return None
+
+
+# ── Send helper ────────────────────────────────────────────────────────────────
+
+def _send_reply(bot_token: str, chat_id: int, message_id: int,
+                text: str, parse_mode: str = "HTML") -> bool:
+    import requests as _req
+    try:
+        _req.post(
+            f"https://api.telegram.org/bot{bot_token}/sendMessage",
+            json={
+                "chat_id": chat_id,
+                "text": text,
+                "parse_mode": parse_mode,
+                "reply_to_message_id": message_id,
+            },
+            timeout=10,
+        )
+        return True
+    except Exception as exc:
+        _log.warning("hub_reply: send failed: %s", exc)
+        return False
+
+
+# ── Smart pre-filter ───────────────────────────────────────────────────────────
+# Returns:
+#   "__SILENCE__"  → human-to-human chat, bot stays quiet
+#   str            → ready-to-send reply (greeting or clarification ask)
+#   None           → no match, proceed to normal pipeline
+
+import random as _random
+import re as _re
+
+_GREETINGS = {
+    "hi", "hey", "hello", "helo", "hy", "heya",
+    "gm", "good morning", "good afternoon", "good evening", "good night",
+    "morning", "evening", "afternoon", "yo", "sup", "howdy",
+    "salam", "assalam", "assalamu alaikum", "assalamualaikum",
+}
+
+_GREETING_REPLIES = [
+    "Hey! 👋 Happy to help — what's on your mind?",
+    "Hi there! 😊 What can I do for you today?",
+    "Hello! Feel free to ask anything — I'm here to help.",
+    "Good to see you! What would you like to know?",
+    "Hey! What can I help you with?",
+    "Hi! Ask away — I'll do my best to help. 🙌",
+]
+
+_CLARIFICATION_REPLIES = [
+    "Could you share a bit more detail? I want to make sure I give you the right answer.",
+    "Happy to help — could you tell me a little more about what you're looking for?",
+    "I think I need a bit more context to answer that properly. Could you explain further?",
+    "Sure, I can help with that! What specifically would you like to know?",
+    "Could you describe the issue in a little more detail? That way I can give you a proper answer.",
+]
+
+# Single-word fragments too vague to answer usefully
+_FRAGMENT_KEYWORDS = {
+    "wallet", "reward", "rewards", "airdrop", "help", "issue",
+    "problem", "support", "verify", "verification", "link", "links",
+    "join", "error", "bug", "not working", "broken", "stuck",
+}
+
+# Exact short phrases that are clearly human-to-human
+_HUMAN_CHAT_EXACT = {
+    "ok", "okay", "k", "lol", "haha", "hehe", "nice", "cool",
+    "thanks", "thank you", "ty", "thx", "np", "no problem",
+    "sure", "yeah", "yep", "nope", "nah", "gg", "wb",
+}
+
+
+def _pre_filter(query: str, bot_token: str, chat_id: int, message_id: int):
+    """
+    Sentiment-aware pre-filter before the knowledge card / AI pipeline.
+
+    1. Greeting → engage warmly
+    2. Known human-chat phrase → stay silent
+    3. Single vague fragment keyword → ask for more detail
+    4. Otherwise → None (proceed to normal pipeline)
+    """
+    text = query.strip().lower()
+    clean = _re.sub(r"[^\w\s]", "", text).strip()
+
+    # 1. Greeting
+    if clean in _GREETINGS or any(clean.startswith(g) for g in _GREETINGS if len(g) > 2):
+        return _random.choice(_GREETING_REPLIES)
+
+    # 2. Human-to-human short phrases — stay silent
+    if clean in _HUMAN_CHAT_EXACT:
+        return "__SILENCE__"
+
+    # 3. Single vague fragment — ask for more detail
+    words = clean.split()
+    if len(words) <= 2 and clean in _FRAGMENT_KEYWORDS:
+        return _random.choice(_CLARIFICATION_REPLIES)
+
+    # 4. Proceed normally
+    return None
