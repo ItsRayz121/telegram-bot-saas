@@ -97,10 +97,33 @@ def list_groups():
                     g["linked_bot_name"] = custom_bot_name_by_id.get(bid)
                     g["linked_bot_username"] = custom_bot_username_by_id.get(bid)
 
+    # Pre-fetch HubConnectedGroup records for all custom bots owned by this user,
+    # so we can skip private custom-bot groups that already live in Assistant Hub.
+    from ..assistant.hub_models import HubConnectedGroup, HubBotIdentity
+    hub_bot_ids = [
+        hb.id for hb in HubBotIdentity.query.filter_by(user_id=user.id, bot_type="custom").all()
+    ]
+    hub_private_tg_ids: set = set()
+    if hub_bot_ids:
+        hub_groups = HubConnectedGroup.query.filter(
+            HubConnectedGroup.bot_id.in_(hub_bot_ids),
+            HubConnectedGroup.is_active == True,  # noqa: E712
+        ).all()
+        hub_private_tg_ids = {
+            str(hg.telegram_group_id) for hg in hub_groups if not hg.is_public_group
+        }
+
     for old_bot in old_bots:
+        # A Bot record whose username matches a CustomBot is a custom-bot polling thread.
+        # Private groups for such bots are owned by Assistant Hub — don't show them here.
+        is_custom_bot_record = bool(custom_bot_id_by_username.get(old_bot.bot_username))
+
         for grp in old_bot.groups:
             if grp.telegram_group_id in new_system_tg_ids:
                 continue  # already present in TelegramGroup
+            # Private groups belonging to custom bots are owned by Assistant Hub — skip them.
+            if is_custom_bot_record and grp.telegram_group_id in hub_private_tg_ids:
+                continue
             linked_bot_id = custom_bot_id_by_username.get(old_bot.bot_username)
             groups_data.append({
                 # grp.id is the Group table PK — required for /bot/:bot_id/group/:group_id routing

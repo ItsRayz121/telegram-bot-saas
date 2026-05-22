@@ -433,73 +433,107 @@ class BotInstance:
         linked_user_id = None
         code = None
         limit_hit = None
+        redirect_to_hub = False
+
+        # Private groups (no public username) connected via a custom bot belong in
+        # Assistant Hub, not Group Management. Detect this before entering the DB block.
+        is_private_group = not chat.username
 
         with self.app_context.app_context():
-            from .models import db, Group, TelegramGroup, TelegramGroupLinkCode
+            from .models import db, Group, TelegramGroup, TelegramGroupLinkCode, Bot, CustomBot
             from datetime import datetime as _dt, timedelta as _td
 
             website_user = self._find_website_user(user.id)
 
-            # Get or create the TelegramGroup record
-            tg = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
-            if not tg:
-                tg = TelegramGroup(
-                    telegram_group_id=group_id,
-                    title=group_title,
-                    username=chat.username,
-                    bot_status="pending",
-                )
-                db.session.add(tg)
-                db.session.flush()
+            # Check if this polling instance belongs to a custom bot (match by username)
+            bot_rec = Bot.query.get(self.bot_id)
+            is_custom_bot = bool(
+                bot_rec and bot_rec.bot_username and
+                CustomBot.query.filter_by(
+                    bot_username=bot_rec.bot_username,
+                    owner_user_id=bot_rec.user_id,
+                ).first()
+            )
 
-            if tg.owner_user_id and tg.bot_status == "active":
-                already_linked = True
+            # Private group + custom bot → route to Assistant Hub only.
+            # The Hub consent DM was already sent when the bot was added; skip creating
+            # a Group Management record so the group doesn't appear in the wrong section.
+            if is_custom_bot and is_private_group and website_user:
+                redirect_to_hub = True
                 db.session.commit()
-            elif website_user:
-                from .config import Config
-                max_groups = Config.MAX_OFFICIAL_GROUPS.get(website_user.subscription_tier, 3)
-                current_count = TelegramGroup.query.filter_by(
-                    owner_user_id=website_user.id, is_disabled=False,
-                ).count()
-                if max_groups != -1 and current_count >= max_groups:
-                    limit_hit = (max_groups, website_user.subscription_tier)
+            else:
+                # Get or create the TelegramGroup record
+                tg = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
+                if not tg:
+                    tg = TelegramGroup(
+                        telegram_group_id=group_id,
+                        title=group_title,
+                        username=chat.username,
+                        bot_status="pending",
+                    )
+                    db.session.add(tg)
+                    db.session.flush()
+
+                if tg.owner_user_id and tg.bot_status == "active":
+                    already_linked = True
                     db.session.commit()
+                elif website_user:
+                    from .config import Config
+                    max_groups = Config.MAX_OFFICIAL_GROUPS.get(website_user.subscription_tier, 3)
+                    current_count = TelegramGroup.query.filter_by(
+                        owner_user_id=website_user.id, is_disabled=False,
+                    ).count()
+                    if max_groups != -1 and current_count >= max_groups:
+                        limit_hit = (max_groups, website_user.subscription_tier)
+                        db.session.commit()
+                    else:
+                        tg.owner_user_id = website_user.id
+                        tg.bot_status = "active"
+                        tg.linked_at = _dt.utcnow()
+                        tg.linked_via_bot_type = "custom"
+                        tg.linked_bot_id = None
+                        tg.group_context = "group_management"
+                        TelegramGroupLinkCode.query.filter_by(
+                            telegram_group_id=group_id,
+                            created_by_telegram_user_id=str(user.id),
+                            used_at=None,
+                        ).update({"expires_at": _dt.utcnow()})
+                        db.session.commit()
+                        linked_user_id = website_user.id
                 else:
-                    tg.owner_user_id = website_user.id
-                    tg.bot_status = "active"
-                    tg.linked_at = _dt.utcnow()
-                    tg.linked_via_bot_type = "custom"
-                    tg.linked_bot_id = None
-                    tg.group_context = "group_management"
+                    # Code flow — no website account linked yet
                     TelegramGroupLinkCode.query.filter_by(
                         telegram_group_id=group_id,
-                        created_by_telegram_user_id=str(user.id),
                         used_at=None,
+                    ).filter(
+                        TelegramGroupLinkCode.expires_at > _dt.utcnow()
                     ).update({"expires_at": _dt.utcnow()})
-                    db.session.commit()
-                    linked_user_id = website_user.id
-            else:
-                # Code flow — no website account linked yet
-                TelegramGroupLinkCode.query.filter_by(
-                    telegram_group_id=group_id,
-                    used_at=None,
-                ).filter(
-                    TelegramGroupLinkCode.expires_at > _dt.utcnow()
-                ).update({"expires_at": _dt.utcnow()})
 
-                code = TelegramGroupLinkCode.generate_code()
-                while TelegramGroupLinkCode.query.filter_by(code=code).first():
                     code = TelegramGroupLinkCode.generate_code()
+                    while TelegramGroupLinkCode.query.filter_by(code=code).first():
+                        code = TelegramGroupLinkCode.generate_code()
 
-                link_code = TelegramGroupLinkCode(
-                    code=code,
-                    telegram_group_id=group_id,
-                    telegram_group_title=group_title,
-                    created_by_telegram_user_id=str(user.id),
-                    expires_at=_dt.utcnow() + _td(minutes=15),
-                )
-                db.session.add(link_code)
-                db.session.commit()
+                    link_code = TelegramGroupLinkCode(
+                        code=code,
+                        telegram_group_id=group_id,
+                        telegram_group_title=group_title,
+                        created_by_telegram_user_id=str(user.id),
+                        expires_at=_dt.utcnow() + _td(minutes=15),
+                    )
+                    db.session.add(link_code)
+                    db.session.commit()
+
+        if redirect_to_hub:
+            await update.message.reply_text(
+                "🤖 <b>Private groups use Assistant Hub.</b>\n\n"
+                "Your bot is already active as an AI assistant for this group. "
+                "Open your dashboard to confirm the connection and configure it.",
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🤖 Assistant Hub", url=f"{frontend}/assistant-hub")],
+                ]),
+            )
+            return
 
         if limit_hit:
             max_n, tier = limit_hit
@@ -2503,8 +2537,11 @@ class BotInstance:
                     with self.app_context.app_context():
                         from .models import Bot, CustomBot
                         bot_rec = Bot.query.get(self.bot_id)
-                        if bot_rec and bot_rec.custom_bot_id:
-                            cb = CustomBot.query.get(bot_rec.custom_bot_id)
+                        if bot_rec and bot_rec.bot_username:
+                            cb = CustomBot.query.filter_by(
+                                bot_username=bot_rec.bot_username,
+                                owner_user_id=bot_rec.user_id,
+                            ).first()
                             if cb and cb.hub_bot_id:
                                 hub_bot_id = cb.hub_bot_id
 
