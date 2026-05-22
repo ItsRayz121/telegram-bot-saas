@@ -432,6 +432,23 @@ def init_db():
         # doesn't query a schema that is missing those columns.
         _backfill_telegram_accounts(app)
 
+        # ── Phase 4: Auto-knowledge capture columns ───────────────────────────────
+        _run_alter(
+            db.engine,
+            "ALTER TABLE hub_connected_groups ADD COLUMN IF NOT EXISTS is_knowledge_channel BOOLEAN NOT NULL DEFAULT FALSE",
+            "hub_connected_groups.is_knowledge_channel",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE hub_knowledge_cards ADD COLUMN IF NOT EXISTS embedding TEXT",
+            "hub_knowledge_cards.embedding",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE hub_knowledge_cards ADD COLUMN IF NOT EXISTS source VARCHAR(20) NOT NULL DEFAULT 'manual'",
+            "hub_knowledge_cards.source",
+        )
+
         # ── Phase 3: Community reply settings on hub_bot_settings ────────────────
         _run_alter(
             db.engine,

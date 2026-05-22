@@ -113,7 +113,7 @@ def _handle(bot_token, bot_username, message_text, chat_id, message_id, bot_id, 
         _send_reply(bot_token, chat_id, message_id, pre_reply, parse_mode="HTML")
         return True
 
-    # ── Knowledge card match ───────────────────────────────────────────────────
+    # ── Knowledge card match (keyword first, semantic fallback) ───────────────
     cards = HubKnowledgeCard.query.filter_by(bot_id=bot_id, user_id=user_id).all()
     matched_card = None
     query_lower = query.lower()
@@ -121,13 +121,30 @@ def _handle(bot_token, bot_username, message_text, chat_id, message_id, bot_id, 
     for card in cards:
         title = (_dec(card.title) or "").lower()
         tags = [t.lower() for t in (card.tags or [])]
-        # Exact title match, or title contains query, or any tag matches
         if (query_lower == title
                 or query_lower in title
                 or title in query_lower
                 or any(t in query_lower or query_lower in t for t in tags)):
             matched_card = card
             break
+
+    # Semantic fallback when keyword match fails
+    if not matched_card:
+        try:
+            from .hub_knowledge_capture import semantic_search_cards
+            from .ai_key_resolver import get_workspace_ai_key, QuotaExceededError
+            from ..models import User as _User
+            _u = _User.query.get(user_id)
+            if _u:
+                try:
+                    _kc = get_workspace_ai_key(_u)
+                    sem_results = semantic_search_cards(query, bot_id, user_id, _kc, limit=1)
+                    if sem_results:
+                        matched_card = sem_results[0]
+                except QuotaExceededError:
+                    pass
+        except Exception as _se:
+            _log.debug("hub_reply: semantic search error: %s", _se)
 
     reply_text = None
 

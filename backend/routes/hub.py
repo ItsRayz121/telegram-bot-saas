@@ -1445,6 +1445,7 @@ def _group_dict(group: HubConnectedGroup) -> dict:
         "consent_confirmed_at": group.consent_confirmed_at.isoformat() if group.consent_confirmed_at else None,
         "intro_sent": group.intro_sent,
         "is_public_group": group.is_public_group,
+        "is_knowledge_channel": bool(group.is_knowledge_channel),
         "silence_start": group.silence_start.strftime("%H:%M") if group.silence_start else None,
         "silence_end": group.silence_end.strftime("%H:%M") if group.silence_end else None,
         "silence_window_start": group.silence_start.strftime("%H:%M") if group.silence_start else None,
@@ -1987,6 +1988,22 @@ def list_custom_bot_hub_groups(bot_id):
     })
 
 
+@hub_bp.route("/bots/<bot_id>/groups/<group_id>", methods=["PATCH"])
+@jwt_required()
+def update_custom_bot_group(bot_id, group_id):
+    """Update per-group settings for a custom bot (e.g. is_knowledge_channel)."""
+    user = _current_user()
+    HubBotIdentity.query.filter_by(id=bot_id, user_id=user.id, bot_type="custom").first_or_404()
+    group = HubConnectedGroup.query.filter_by(id=group_id, bot_id=bot_id, user_id=user.id).first_or_404()
+    data = request.get_json(silent=True) or {}
+    allowed = ["is_knowledge_channel", "category", "active_mode_enabled"]
+    for field in allowed:
+        if field in data:
+            setattr(group, field, data[field])
+    db.session.commit()
+    return jsonify({"ok": True, "group": _group_dict(group)})
+
+
 # ── Sprint 7: Knowledge Cards ─────────────────────────────────────────────────
 
 def _card_dict(c) -> dict:
@@ -1998,6 +2015,8 @@ def _card_dict(c) -> dict:
         "content": _dec(c.content),
         "tags": c.tags or [],
         "use_count": c.use_count,
+        "source": getattr(c, "source", "manual") or "manual",
+        "has_embedding": bool(getattr(c, "embedding", None)),
         "last_used_at": c.last_used_at.isoformat() if c.last_used_at else None,
         "created_at": c.created_at.isoformat(),
         "updated_at": c.updated_at.isoformat() if c.updated_at else None,
@@ -2057,9 +2076,20 @@ def create_knowledge_card():
         title=_enc(title[:100]),
         content=_enc(content[:2000]),
         tags=data.get("tags") or [],
+        source="manual",
     )
     db.session.add(card)
     db.session.commit()
+
+    # Embed for semantic search (best-effort)
+    try:
+        from ..assistant.hub_knowledge_capture import embed_card
+        from ..assistant.ai_key_resolver import get_workspace_ai_key, QuotaExceededError
+        key_config = get_workspace_ai_key(user)
+        embed_card(card, key_config)
+    except Exception:
+        pass
+
     return jsonify({"card": _card_dict(card)}), 201
 
 
@@ -2216,6 +2246,24 @@ def custom_bot_webhook(bot_id):
     message_id = message.get("message_id")
     token = _dec(bot.telegram_bot_token) if bot.telegram_bot_token else None
     if not token:
+        return jsonify({"ok": True}), 200
+
+    # ── Auto-capture: if this group is designated as a knowledge channel ───────
+    if text:
+        try:
+            connected_group = HubConnectedGroup.query.filter_by(
+                bot_id=bot.id,
+                telegram_group_id=chat_id,
+                is_active=True,
+            ).first()
+            if connected_group and connected_group.is_knowledge_channel:
+                from ..assistant.hub_knowledge_capture import auto_capture_message
+                auto_capture_message(text, bot_id, bot.user_id)
+        except Exception as _ce:
+            _log.debug("custom_bot_webhook: knowledge capture error: %s", _ce)
+
+    # Only handle messages that @mention this bot
+    if f"@{bot_username}" not in text:
         return jsonify({"ok": True}), 200
 
     try:

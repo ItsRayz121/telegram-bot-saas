@@ -842,6 +842,7 @@ export const hub = {
   deleteBot:            (id)         => api.delete(`/api/hub/bots/${id}`),
   getBotSettings:       (botId)      => api.get(`/api/hub/bots/${botId}/settings`),
   updateBotSettings:    (botId, data) => api.patch(`/api/hub/bots/${botId}/settings`, data),
+  updateBotGroup:       (botId, groupId, data) => api.patch(`/api/hub/bots/${botId}/groups/${groupId}`, data),
   listKnowledge:        (botId)      => api.get('/api/hub/knowledge', { params: botId ? { bot_id: botId } : {} }),
   createKnowledge:      (data)       => api.post('/api/hub/knowledge', data),
   updateKnowledge:      (id, data)   => api.patch(`/api/hub/knowledge/${id}`, data),

@@ -11,8 +11,9 @@ import {
   Card, CardContent, Alert, Divider, Dialog, DialogTitle,
   DialogContent, DialogActions, TextField, Avatar,
   MenuItem, Select, FormControl, InputLabel, Snackbar,
+  Switch, FormControlLabel, List, ListItem, ListItemText, ListItemSecondaryAction,
 } from '@mui/material';
-import { ArrowBack, SmartToy, Groups, Delete, Save } from '@mui/icons-material';
+import { ArrowBack, SmartToy, Groups, Delete, Save, AutoAwesome } from '@mui/icons-material';
 import { hub } from '../services/api';
 import { PALETTE } from '../theme';
 import { TabContent } from './HubWorkspace';
@@ -135,6 +136,11 @@ function CustomBotSettings({ bot, onDeleted }) {
     tone: 'friendly',
   });
 
+  // Knowledge source groups
+  const [kcGroups, setKcGroups] = useState([]);
+  const [kcLoading, setKcLoading] = useState(true);
+  const [kcTogglingId, setKcTogglingId] = useState(null);
+
   useEffect(() => {
     hub.getBotSettings(bot.id)
       .then(r => {
@@ -150,6 +156,27 @@ function CustomBotSettings({ bot, onDeleted }) {
       .catch(() => {})
       .finally(() => setSettingsLoading(false));
   }, [bot.id]);
+
+  useEffect(() => {
+    hub.listBotGroups(bot.id)
+      .then(r => setKcGroups(r.data?.groups || []))
+      .catch(() => {})
+      .finally(() => setKcLoading(false));
+  }, [bot.id]);
+
+  const handleKcToggle = async (group) => {
+    setKcTogglingId(group.id);
+    try {
+      const r = await hub.updateBotGroup(bot.id, group.id, {
+        is_knowledge_channel: !group.is_knowledge_channel,
+      });
+      const updated = r.data?.group;
+      setKcGroups(prev => prev.map(g => g.id === group.id ? { ...g, ...(updated || { is_knowledge_channel: !group.is_knowledge_channel }) } : g));
+    } catch {
+      setSnack('Failed to update group setting.');
+    }
+    setKcTogglingId(null);
+  };
 
   const handleSave = async () => {
     setSaveLoading(true);
@@ -287,6 +314,62 @@ function CustomBotSettings({ bot, onDeleted }) {
           </CardContent>
         </Card>
       )}
+
+      <Divider sx={{ my: 2 }} />
+
+      {/* Knowledge Source */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2, mb: 0.5 }}>
+        <AutoAwesome sx={{ fontSize: 16, color: 'primary.main' }} />
+        <Typography variant="subtitle2" fontWeight={600}>Knowledge Source</Typography>
+      </Box>
+      <Typography variant="caption" color="text.secondary" display="block" mb={2}>
+        Mark a group as a knowledge channel. Every message posted there is automatically
+        parsed by AI and saved as a knowledge card — no manual entry needed.
+      </Typography>
+
+      <Card variant="outlined" sx={{ mb: 3 }}>
+        {kcLoading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+            <CircularProgress size={20} />
+          </Box>
+        ) : kcGroups.length === 0 ? (
+          <CardContent>
+            <Typography variant="body2" color="text.secondary">
+              No groups connected yet. Add this bot to a Telegram group first.
+            </Typography>
+          </CardContent>
+        ) : (
+          <List dense disablePadding>
+            {kcGroups.map((group, idx) => (
+              <ListItem
+                key={group.id}
+                divider={idx < kcGroups.length - 1}
+                sx={{ py: 1 }}
+              >
+                <ListItemText
+                  primary={group.group_name || `Group ${group.telegram_group_id}`}
+                  secondary={group.is_knowledge_channel ? 'Auto-capturing messages → knowledge cards' : 'Not capturing'}
+                  primaryTypographyProps={{ variant: 'body2', fontWeight: 500 }}
+                  secondaryTypographyProps={{ variant: 'caption' }}
+                />
+                <ListItemSecondaryAction>
+                  {kcTogglingId === group.id
+                    ? <CircularProgress size={18} />
+                    : (
+                      <Switch
+                        size="small"
+                        checked={!!group.is_knowledge_channel}
+                        onChange={() => handleKcToggle(group)}
+                        color="primary"
+                      />
+                    )
+                  }
+                </ListItemSecondaryAction>
+              </ListItem>
+            ))}
+          </List>
+        )}
+      </Card>
 
       <Divider sx={{ my: 3 }} />
 

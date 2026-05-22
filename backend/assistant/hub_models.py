@@ -106,6 +106,7 @@ class HubConnectedGroup(db.Model):
     extract_decisions = db.Column(db.Boolean, default=True, nullable=False)
     extract_meetings = db.Column(db.Boolean, default=True, nullable=False)
     last_batch_at = db.Column(db.DateTime(timezone=True))
+    is_knowledge_channel = db.Column(db.Boolean, default=False, nullable=False)  # auto-capture all msgs → knowledge cards
     joined_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
     __table_args__ = (
@@ -374,6 +375,8 @@ class HubKnowledgeCard(db.Model):
     tags = db.Column(db.JSON, default=list)
     use_count = db.Column(db.Integer, default=0, nullable=False)
     last_used_at = db.Column(db.DateTime(timezone=True))
+    embedding = db.Column(db.Text)                                    # JSON-encoded float list for semantic search
+    source = db.Column(db.String(20), default="manual", nullable=False)  # manual | auto_capture
     created_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
