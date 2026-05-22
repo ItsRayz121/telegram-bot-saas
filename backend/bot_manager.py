@@ -2137,6 +2137,22 @@ class BotInstance:
                 context.bot, chat_id, user.id, user.username, user.first_name, group
             )
 
+        # Resolve sender admin status once — all reply features skip admins entirely
+        sender_is_admin = False
+        try:
+            _cm = await context.bot.get_chat_member(chat_id, user.id)
+            sender_is_admin = _cm.status in ("creator", "administrator")
+        except Exception:
+            pass
+
+        if sender_is_admin:
+            # React 👍 to admin messages then stop — never process admins as reply targets
+            rxn_settings = group.settings.get("reactions", {})
+            if rxn_settings.get("enabled") and rxn_settings.get("admin_thumbs_up", True):
+                from .bot_features.reactions import send_reaction
+                await send_reaction(context.bot, chat_id, update.message.message_id, "👍")
+            return
+
         # Auto-response triggers
         if group.settings.get("auto_responses", {}).get("enabled", True):
             text = update.message.text or ""
@@ -2210,6 +2226,17 @@ class BotInstance:
         kb_settings = group.settings.get("knowledge_base", {})
         if kb_settings.get("enabled", True) and kb_settings.get("auto_reply_enabled", False):
             await self._handle_auto_kb_reply(update, context, group, kb_settings)
+
+        # Sentiment-based emoji reactions for member messages
+        rxn_settings = group.settings.get("reactions", {})
+        if rxn_settings.get("enabled") and rxn_settings.get("sentiment_reactions", True):
+            from .bot_features.reactions import detect_sentiment_reaction, should_react, mark_reacted, send_reaction
+            msg_text = update.message.text or update.message.caption or ""
+            reaction_emoji = detect_sentiment_reaction(msg_text)
+            if reaction_emoji and should_react(group.id, user.id):
+                sent = await send_reaction(context.bot, chat_id, update.message.message_id, reaction_emoji)
+                if sent:
+                    mark_reacted(group.id, user.id)
 
     def _is_kb_question(self, text: str, kb_settings: dict) -> bool:
         """Classify whether a message looks like a knowledge-base question worth answering."""

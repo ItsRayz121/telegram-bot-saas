@@ -20,6 +20,44 @@ EMOJI_PATTERN = re.compile(
 )
 EMAIL_PATTERN = re.compile(r"\b[\w.+-]+@[\w-]+\.\w{2,}\b")
 
+# Hidden URL obfuscation normalization rules (applied sequentially)
+HIDDEN_URL_RULES = [
+    (re.compile(r'hxxps?://', re.I),                   'https://'),
+    (re.compile(r'(\w)\(\.\)(\w)'),                    r'\1.\2'),       # t(.)me → t.me
+    (re.compile(r'\b(\w+)_me/', re.I),                 r'\1.me/'),      # t_me/ → t.me/
+    (re.compile(r'\bbit\s+ly\b', re.I),                'bit.ly'),
+    (re.compile(r'\b(\w+)\s+dot\s+(\w+)\b', re.I),    r'\1.\2'),       # site dot com
+    (re.compile(r'\b(\w+)_com\b', re.I),               r'\1.com'),      # example_com
+    (re.compile(r'\bwww\s+(\w+)\s+(\w+)\b', re.I),    r'www.\1.\2'),   # www example com
+    (re.compile(r'\b(\w+)\s+\.\s+(\w{2,6})\b'),       r'\1.\2'),       # example . com
+]
+
+# Promotional / ad / referral / fake-earnings patterns
+PROMO_PATTERNS = re.compile(
+    r'\bdm\s+me\b'
+    r'|\bprivate\s+message\s+me\b'
+    r'|\bchat\s+me\b'
+    r'|\bjoin\s+(my|our)\s+(channel|group|community)\b'
+    r'|\bsubscribe\s+to\b'
+    r'|\bcheck\s+out\s+my\b'
+    r'|\bfollow\s+me\b'
+    r'|\bref(erral)?\s+code\b'
+    r'|\buse\s+my\s+(code|link|referral)\b'
+    r'|\bsign\s+up\s+(using|with)\b'
+    r'|\binvite\s+code\b'
+    r'|\bearn\s+\$[\d,]+\s+(daily|per\s+day|a\s+day)\b'
+    r'|\b(guaranteed|100\s*%)\s+(profit|returns?|roi)\b'
+    r'|\bpassive\s+income\b'
+    r'|\bdouble\s+your\s+(money|investment)\b'
+    r'|\b(presale|pre[\s\-]sale)\b'
+    r'|\b\d{2,}x\s+(potential|gem|gains?)\b'
+    r'|\b(moonshot|100x|next\s+100x)\b'
+    r'|\binvest\s+(in|with|today|now)\b'
+    r'|\bget\s+paid\s+(daily|weekly)\b'
+    r'|\btrading\s+(signals?|tips?)\s+free\b',
+    re.IGNORECASE,
+)
+
 LANGUAGE_RANGES = {
     "cyrillic": re.compile(r"[Ѐ-ӿ]"),
     "chinese": re.compile(r"[一-鿿㐀-䶿]"),
@@ -34,11 +72,23 @@ def normalize_homoglyphs(text):
     return unicodedata.normalize("NFKD", text)
 
 
+def normalize_hidden_urls(text: str) -> str:
+    for pattern, replacement in HIDDEN_URL_RULES:
+        text = pattern.sub(replacement, text)
+    return text
+
+
+def format_violation_message(username: str, reason: str, group_topic: str = "") -> str:
+    topic_clause = f" Please keep discussion relevant to {group_topic}." if group_topic else ""
+    return f"@{username}, your message was removed — {reason}.{topic_clause}"
+
+
 class ModerationSystem:
 
     def __init__(self, app):
         self.app = app
         self._spam_tracker = {}
+        self._ai_cooldown: dict = {}  # (chat_id, user_id) → last AI call datetime
 
     async def warn_user(self, bot, chat_id, target_user_id, target_username,
                         moderator_id, moderator_username, reason, group):
@@ -215,8 +265,16 @@ class ModerationSystem:
             member = await bot.get_chat_member(chat_id, user_id)
             if member.status in ("creator", "administrator"):
                 return False
-        except Exception:
-            pass
+        except Exception as e:
+            # Can't verify admin status — fail open so we never accidentally
+            # block an admin's message due to a permission or network error.
+            logger.debug(f"Admin check failed for user {user_id} in {chat_id}: {e}")
+            return False
+
+        # Trusted user bypass (smart_mod whitelist)
+        smart_cfg = settings.get("smart_mod", {})
+        if user_id in smart_cfg.get("trusted_users", []):
+            return False
 
         # Normalize homoglyphs before text checks
         normalized_text = normalize_homoglyphs(text) if settings.get("homoglyphs", {}).get("enabled") else text
@@ -263,6 +321,21 @@ class ModerationSystem:
                     return True
             except Exception as e:
                 logger.error(f"Automod check {check.__name__} error: {e}")
+
+        # Layer 2: hidden URL normalization + promotional pattern detection
+        for check in [self.check_hidden_urls, self.check_promotional_content]:
+            try:
+                if await check(bot, message, normalized_text, group, settings):
+                    return True
+            except Exception as e:
+                logger.error(f"Smart mod check {check.__name__} error: {e}")
+
+        # Layer 3: AI relevance check (only when L1+L2 passed)
+        try:
+            if await self.check_ai_relevance(bot, message, normalized_text, group, settings):
+                return True
+        except Exception as e:
+            logger.error(f"AI relevance check error: {e}")
 
         return False
 
@@ -338,12 +411,28 @@ class ModerationSystem:
                 return True
         return False
 
+    def _is_platform_invite_link(self, group_id, text: str) -> bool:
+        """Return True if text contains a platform-generated invite link stored for this group."""
+        try:
+            with self.app.app_context():
+                from ..models import InviteLink
+                links = InviteLink.query.filter_by(group_id=group_id, is_active=True).all()
+                for link in links:
+                    if link.telegram_invite_link and link.telegram_invite_link in text:
+                        return True
+        except Exception as e:
+            logger.debug(f"Invite link lookup failed: {e}")
+        return False
+
     async def check_telegram_links(self, bot, message, text, group, settings):
         cfg = settings.get("telegram_links", {})
         if not cfg.get("enabled", False):
             return False
 
         if TELEGRAM_LINK_PATTERN.search(text):
+            # Never block platform-generated invite links for this group
+            if self._is_platform_invite_link(group.id, text):
+                return False
             await self.execute_automod_action(
                 bot, message, group, cfg.get("action", "delete"),
                 reason="Telegram link/invite",
@@ -695,3 +784,178 @@ class ModerationSystem:
                 moderator_username="AutoMod",
                 reason=reason,
             )
+
+    # ── Smart Moderation: Layer 2 ─────────────────────────────────────────────
+
+    async def check_hidden_urls(self, bot, message, text, group, settings):
+        cfg = settings.get("smart_mod", {})
+        if not cfg.get("enabled") or not cfg.get("hidden_url_detection", True):
+            return False
+
+        normalized = normalize_hidden_urls(text)
+        if normalized == text:
+            return False  # nothing was obfuscated
+
+        username = message.from_user.username or str(message.from_user.id) if message.from_user else "user"
+        topic = cfg.get("group_topic", "")
+
+        # Re-check external links on normalized text
+        ext_cfg = settings.get("external_links", {})
+        if ext_cfg.get("enabled") and URL_PATTERN.search(normalized):
+            whitelist = ext_cfg.get("whitelist", [])
+            for url in URL_PATTERN.findall(normalized):
+                if not any(w in url for w in whitelist):
+                    msg = format_violation_message(username, "hidden or obfuscated external links are not allowed", topic)
+                    await self.execute_automod_action(
+                        bot, message, group, cfg.get("action", "delete"),
+                        reason=msg, warn=cfg.get("warn_user", True),
+                    )
+                    return True
+
+        # Re-check Telegram links on normalized text
+        tg_cfg = settings.get("telegram_links", {})
+        if tg_cfg.get("enabled") and TELEGRAM_LINK_PATTERN.search(normalized):
+            # Never block platform-generated invite links for this group
+            if not self._is_platform_invite_link(group.id, normalized):
+                msg = format_violation_message(username, "hidden Telegram links or invites are not allowed", topic)
+                await self.execute_automod_action(
+                    bot, message, group, cfg.get("action", "delete"),
+                    reason=msg, warn=cfg.get("warn_user", True),
+                )
+                return True
+
+        return False
+
+    async def check_promotional_content(self, bot, message, text, group, settings):
+        cfg = settings.get("smart_mod", {})
+        if not cfg.get("enabled") or not cfg.get("promotional_detection", True):
+            return False
+
+        # Exempt referral codes if explicitly allowed
+        if cfg.get("allow_referral_codes") and re.search(
+            r'\bref(erral)?\s+code\b|\buse\s+my\s+code\b', text, re.I
+        ):
+            return False
+
+        if PROMO_PATTERNS.search(text):
+            username = message.from_user.username or str(message.from_user.id) if message.from_user else "user"
+            topic = cfg.get("group_topic", "")
+            msg = format_violation_message(
+                username,
+                "promotional content, advertisements, and referral solicitation are not allowed in this group",
+                topic,
+            )
+            await self.execute_automod_action(
+                bot, message, group, cfg.get("action", "delete"),
+                reason=msg, warn=cfg.get("warn_user", True),
+            )
+            return True
+        return False
+
+    # ── Smart Moderation: Layer 3 (AI) ────────────────────────────────────────
+
+    @staticmethod
+    def _call_ai_moderation(text, group_topic, group_name, key_info):
+        import requests as _r, json as _json
+        prompt = (
+            f"You are a content moderator for a Telegram group.\n"
+            f"Group name: {group_name}\n"
+            f"Group topic: {group_topic}\n\n"
+            f"Message: \"{text[:500]}\"\n\n"
+            "Classify this message. Reply with JSON only, no markdown:\n"
+            "{\"verdict\": \"ok\" or \"promotional\" or \"irrelevant\", "
+            "\"reason\": \"one professional sentence explaining the removal\"}"
+        )
+        provider = key_info.get("provider", "openrouter")
+        api_key = key_info.get("api_key", "")
+        model = key_info.get("model", "gpt-4o-mini")
+
+        try:
+            if provider == "gemini":
+                resp = _r.post(
+                    f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}",
+                    json={"contents": [{"parts": [{"text": prompt}]}]},
+                    timeout=8,
+                )
+                resp.raise_for_status()
+                raw = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+            elif provider == "anthropic":
+                resp = _r.post(
+                    "https://api.anthropic.com/v1/messages",
+                    headers={"x-api-key": api_key, "anthropic-version": "2023-06-01"},
+                    json={"model": model, "max_tokens": 80,
+                          "messages": [{"role": "user", "content": prompt}]},
+                    timeout=8,
+                )
+                resp.raise_for_status()
+                raw = resp.json()["content"][0]["text"].strip()
+            else:
+                base = key_info.get("base_url", "https://api.openai.com/v1")
+                resp = _r.post(
+                    f"{base.rstrip('/')}/chat/completions",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                    json={"model": model, "max_tokens": 80,
+                          "messages": [{"role": "user", "content": prompt}]},
+                    timeout=8,
+                )
+                resp.raise_for_status()
+                raw = resp.json()["choices"][0]["message"]["content"].strip()
+
+            # Strip markdown code fences if model wrapped the JSON
+            raw = raw.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
+            data = _json.loads(raw)
+            return data.get("verdict", "ok"), data.get("reason", "off-topic content")
+        except Exception as e:
+            logger.debug(f"AI moderation call failed: {e}")
+            return "ok", ""
+
+    async def check_ai_relevance(self, bot, message, text, group, settings):
+        cfg = settings.get("smart_mod", {})
+        if not cfg.get("enabled") or not cfg.get("ai_enabled"):
+            return False
+        group_topic = cfg.get("group_topic", "").strip()
+        if not group_topic or not text:
+            return False
+        if len(text.split()) < 10:
+            return False  # too short for AI to make a fair judgement
+
+        user_id = message.from_user.id if message.from_user else None
+        if not user_id:
+            return False
+        chat_id = message.chat.id
+        key = (chat_id, user_id)
+        rate_secs = cfg.get("ai_rate_limit_seconds", 30)
+        now = datetime.utcnow()
+        last = self._ai_cooldown.get(key)
+        if last and (now - last).total_seconds() < rate_secs:
+            return False
+        self._ai_cooldown[key] = now
+
+        with self.app.app_context():
+            from ..models import Bot, User
+            from ..assistant.ai_key_resolver import get_workspace_ai_key
+            bot_obj = Bot.query.get(group.bot_id)
+            owner = User.query.get(bot_obj.user_id) if bot_obj else None
+            if not owner:
+                return False
+            key_info = get_workspace_ai_key(owner)
+            if not key_info.get("api_key"):
+                return False
+
+        import asyncio as _asyncio
+        loop = _asyncio.get_running_loop()
+        verdict, reason = await loop.run_in_executor(
+            None, self._call_ai_moderation,
+            text, group_topic, message.chat.title or "", key_info,
+        )
+
+        if verdict in ("promotional", "irrelevant"):
+            username = message.from_user.username or str(user_id)
+            fallback = "off-topic content" if verdict == "irrelevant" else "promotional content"
+            msg = format_violation_message(username, reason or fallback, group_topic)
+            await self.execute_automod_action(
+                bot, message, group, cfg.get("action", "delete"),
+                reason=msg, warn=cfg.get("warn_user", True),
+            )
+            return True
+        return False

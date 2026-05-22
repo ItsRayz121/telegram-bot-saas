@@ -212,6 +212,20 @@ _DEFAULTS: dict = {
             "action": "delete",
             "warn_user": False,
         },
+
+        # ── Smart Moderation (3-layer: rules → hidden URL → AI) ──────────────
+        "smart_mod": {
+            "enabled": False,
+            "group_topic": "",           # e.g. "CreatorX — creator economy tools"
+            "promotional_detection": True,
+            "hidden_url_detection": True,
+            "allow_referral_codes": False,
+            "ai_enabled": False,         # Layer 3 — uses workspace AI key
+            "ai_rate_limit_seconds": 30, # min seconds between AI calls per user
+            "trusted_users": [],         # list of int telegram user IDs
+            "action": "delete",
+            "warn_user": True,
+        },
     },
 
     # ── Warning / moderation system ───────────────────────────────────────────
@@ -317,6 +331,16 @@ _DEFAULTS: dict = {
         "reply_to_appreciation": True,
         "cooldown_minutes": 5,
         "mode": "friendly",
+    },
+
+    # ── Emoji reactions ───────────────────────────────────────────────────────
+    # Sentiment-based reactions to member messages + 👍 on admin messages.
+    # admin_thumbs_up fires whenever an admin/creator sends any message.
+    # sentiment_reactions fires for members based on detected tone.
+    "reactions": {
+        "enabled": False,
+        "admin_thumbs_up": True,       # 👍 every admin message
+        "sentiment_reactions": True,   # ❤️ 🔥 😂 👍 🎉 🫂 based on tone
     },
 
     # ── Raids (Twitter/X engagement campaigns) ────────────────────────────────

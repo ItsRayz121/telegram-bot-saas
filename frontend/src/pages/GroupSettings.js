@@ -912,6 +912,114 @@ export default function GroupSettings() {
               </CardContent>
             </Card>
 
+            {/* Smart Moderation — 3-layer AI-powered system */}
+            <Card variant="outlined" sx={{ mt: 2 }}>
+              <CardContent>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                  <Typography variant="h6" fontWeight={600}>Smart Moderation</Typography>
+                  <Chip label="AI-Powered" size="small" color="primary" variant="outlined" />
+                </Box>
+                <Typography variant="body2" color="text.secondary" mb={2}>
+                  Three-layer system: fast rules → hidden URL detection → AI relevance check. AI is only called when the first two layers pass.
+                </Typography>
+                <FormControlLabel
+                  control={<Switch checked={!!(am.smart_mod || {}).enabled}
+                    onChange={(e) => updateSetting('automod.smart_mod.enabled', e.target.checked)} />}
+                  label="Enable Smart Moderation"
+                />
+
+                <TextField
+                  fullWidth
+                  label="Group Topic"
+                  placeholder="e.g. CreatorX — creator economy tools and discussion"
+                  value={(am.smart_mod || {}).group_topic || ''}
+                  onChange={(e) => updateSetting('automod.smart_mod.group_topic', e.target.value)}
+                  sx={{ mt: 2 }}
+                  helperText="Describe what this group is about. Used by Layer 3 AI to judge relevance."
+                />
+
+                <Divider sx={{ my: 2 }} />
+                <Typography variant="subtitle2" fontWeight={600} mb={1}>Layer 2 — Pattern Detection</Typography>
+                <Grid container spacing={1}>
+                  <Grid item xs={12} sm={6}>
+                    <FormControlLabel
+                      control={<Switch checked={!!(am.smart_mod || {}).promotional_detection}
+                        onChange={(e) => updateSetting('automod.smart_mod.promotional_detection', e.target.checked)} />}
+                      label="Detect promotional content"
+                    />
+                    <Typography variant="caption" color="text.secondary" display="block" ml={4}>
+                      Ads, DM spam, referral codes, fake earnings, crypto shilling
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <FormControlLabel
+                      control={<Switch checked={!!(am.smart_mod || {}).hidden_url_detection}
+                        onChange={(e) => updateSetting('automod.smart_mod.hidden_url_detection', e.target.checked)} />}
+                      label="Detect hidden/obfuscated URLs"
+                    />
+                    <Typography variant="caption" color="text.secondary" display="block" ml={4}>
+                      t_me/x, site dot com, hxxps://, example_com, etc.
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <FormControlLabel
+                      control={<Switch checked={!!(am.smart_mod || {}).allow_referral_codes}
+                        onChange={(e) => updateSetting('automod.smart_mod.allow_referral_codes', e.target.checked)} />}
+                      label="Allow referral codes"
+                    />
+                    <Typography variant="caption" color="text.secondary" display="block" ml={4}>
+                      Exempts referral codes from promotional detection
+                    </Typography>
+                  </Grid>
+                </Grid>
+
+                <Divider sx={{ my: 2 }} />
+                <Typography variant="subtitle2" fontWeight={600} mb={1}>Layer 3 — AI Relevance Check</Typography>
+                <FormControlLabel
+                  control={<Switch checked={!!(am.smart_mod || {}).ai_enabled}
+                    onChange={(e) => updateSetting('automod.smart_mod.ai_enabled', e.target.checked)} />}
+                  label="Enable AI check for off-topic and unclear messages"
+                />
+                <Typography variant="caption" color="text.secondary" display="block" ml={4} mb={1}>
+                  Uses your workspace AI key. Only runs when Layers 1 & 2 pass. Skips messages under 10 words.
+                </Typography>
+
+                <Divider sx={{ my: 2 }} />
+                <Typography variant="subtitle2" fontWeight={600} mb={1}>Action & Whitelist</Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                  <FormControl size="small" sx={{ minWidth: 140 }}>
+                    <InputLabel>Action</InputLabel>
+                    <Select
+                      value={(am.smart_mod || {}).action || 'delete'}
+                      label="Action"
+                      onChange={(e) => updateSetting('automod.smart_mod.action', e.target.value)}
+                    >
+                      <MenuItem value="delete">Delete</MenuItem>
+                      <MenuItem value="warn">Warn</MenuItem>
+                      <MenuItem value="mute">Mute</MenuItem>
+                    </Select>
+                  </FormControl>
+                  <FormControlLabel
+                    control={<Switch checked={!!(am.smart_mod || {}).warn_user}
+                      onChange={(e) => updateSetting('automod.smart_mod.warn_user', e.target.checked)} />}
+                    label="Warn user"
+                  />
+                </Box>
+                <TextField
+                  fullWidth
+                  label="Trusted User IDs (comma-separated)"
+                  placeholder="e.g. 123456789, 987654321"
+                  value={((am.smart_mod || {}).trusted_users || []).join(', ')}
+                  onChange={(e) => updateSetting(
+                    'automod.smart_mod.trusted_users',
+                    e.target.value.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n))
+                  )}
+                  sx={{ mt: 2 }}
+                  helperText="Messages from these Telegram user IDs will bypass all smart mod checks."
+                />
+              </CardContent>
+            </Card>
+
             <Accordion>
               <AccordionSummary expandIcon={<ExpandMore />}>
                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -1017,6 +1125,33 @@ export default function GroupSettings() {
                 </Grid>
               </AccordionDetails>
             </Accordion>
+
+            {/* Emoji Reactions */}
+            <Card variant="outlined" sx={{ mt: 2 }}>
+              <CardContent>
+                <Typography variant="h6" fontWeight={600} mb={1}>Emoji Reactions</Typography>
+                <Typography variant="body2" color="text.secondary" mb={2}>
+                  React to messages with emojis based on their sentiment. Admin messages always get 👍. Member messages get ❤️ 🔥 😂 👍 🎉 🫂 based on tone.
+                </Typography>
+                <FormControlLabel
+                  control={<Switch checked={!!(settingsData.reactions || {}).enabled}
+                    onChange={(e) => updateSetting('reactions.enabled', e.target.checked)} />}
+                  label="Enable emoji reactions"
+                />
+                <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                  <FormControlLabel
+                    control={<Switch checked={(settingsData.reactions || {}).admin_thumbs_up !== false}
+                      onChange={(e) => updateSetting('reactions.admin_thumbs_up', e.target.checked)} />}
+                    label="👍 Thumbs up on every admin message"
+                  />
+                  <FormControlLabel
+                    control={<Switch checked={(settingsData.reactions || {}).sentiment_reactions !== false}
+                      onChange={(e) => updateSetting('reactions.sentiment_reactions', e.target.checked)} />}
+                    label="React to member messages based on sentiment (❤️ 🔥 😂 👍 🎉 🫂)"
+                  />
+                </Box>
+              </CardContent>
+            </Card>
           </>
         )}
 
