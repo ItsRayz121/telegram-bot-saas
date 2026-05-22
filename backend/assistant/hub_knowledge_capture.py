@@ -55,9 +55,9 @@ def auto_capture_message(message_text: str, bot_id: str, user_id: int) -> bool:
         return False
 
     try:
-        from ..assistant.hub_models import HubKnowledgeCard
-        from ..assistant.hub_crypto import _enc, _dec
-        from ..assistant.ai_key_resolver import get_workspace_ai_key, QuotaExceededError
+        from .hub_models import HubKnowledgeCard
+        from .hub_crypto import _enc, _dec
+        from .ai_key_resolver import get_workspace_ai_key, QuotaExceededError
         from ..models import User, db
         from openai import OpenAI
 
@@ -135,8 +135,8 @@ def auto_capture_message(message_text: str, bot_id: str, user_id: int) -> bool:
 def embed_card(card, key_config: dict) -> None:
     """Compute and store a JSON-encoded embedding on a HubKnowledgeCard. Best-effort."""
     try:
-        from ..assistant.embeddings import embed_text
-        from ..assistant.hub_crypto import _dec
+        from .embeddings import embed_text
+        from .hub_crypto import _dec
         from ..models import db
 
         text = f"{_dec(card.title) or ''}\n{_dec(card.content) or ''}"[:4000]
@@ -154,18 +154,22 @@ def semantic_search_cards(
     user_id: int,
     key_info: dict,
     limit: int = 3,
+    preloaded_cards=None,
 ):
     """
     Return the most relevant HubKnowledgeCards for a query.
 
     1. Embed query → cosine similarity against stored card embeddings
     2. If embeddings missing or unavailable → ILIKE keyword fallback on title/content
-    """
-    from ..assistant.hub_models import HubKnowledgeCard
-    from ..assistant.hub_crypto import _dec
-    from ..assistant.embeddings import embed_text
 
-    all_cards = HubKnowledgeCard.query.filter_by(bot_id=bot_id, user_id=user_id).all()
+    Pass preloaded_cards to skip the DB query (avoids double-fetch in hub_reply).
+    """
+    from .hub_models import HubKnowledgeCard
+    from .hub_crypto import _dec
+    from .embeddings import embed_text
+
+    all_cards = preloaded_cards if preloaded_cards is not None else \
+        HubKnowledgeCard.query.filter_by(bot_id=bot_id, user_id=user_id).all()
     if not all_cards:
         return []
 

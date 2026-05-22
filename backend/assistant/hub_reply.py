@@ -31,16 +31,24 @@ def handle_mention(
     message_id: int,
     bot_id: str,
     user_id: int,
-    flask_app,
+    flask_app=None,
 ) -> bool:
     """
     Synchronous wrapper safe to call from Flask routes or Celery tasks.
     Returns True if a reply was sent.
+
+    flask_app is optional — omit (or pass None) when already inside an app
+    context (e.g. from a Flask route handler).  Pass the app object when
+    calling from a background thread or Celery task.
     """
-    with flask_app.app_context():
-        return _handle(bot_token, bot_username, message_text,
-                       chat_id, message_id, bot_id, user_id,
-                       flask_app=flask_app)
+    if flask_app is not None:
+        with flask_app.app_context():
+            return _handle(bot_token, bot_username, message_text,
+                           chat_id, message_id, bot_id, user_id,
+                           flask_app=flask_app)
+    return _handle(bot_token, bot_username, message_text,
+                   chat_id, message_id, bot_id, user_id,
+                   flask_app=None)
 
 
 async def handle_mention_async(
@@ -75,7 +83,7 @@ def _handle(bot_token, bot_username, message_text, chat_id, message_id, bot_id, 
     import requests as _req
     from ..config import Config
     from ..assistant.hub_models import HubKnowledgeCard
-    from ..assistant.hub_crypto import _dec, _enc
+    from ..assistant.hub_crypto import _dec
     from ..models import User
 
     redis_url = os.environ.get("REDIS_URL", Config.REDIS_URL)
@@ -128,8 +136,8 @@ def _handle(bot_token, bot_username, message_text, chat_id, message_id, bot_id, 
             matched_card = card
             break
 
-    # Semantic fallback when keyword match fails
-    if not matched_card:
+    # Semantic fallback when keyword match fails (reuses already-loaded cards list)
+    if not matched_card and cards:
         try:
             from .hub_knowledge_capture import semantic_search_cards
             from .ai_key_resolver import get_workspace_ai_key, QuotaExceededError
@@ -138,7 +146,9 @@ def _handle(bot_token, bot_username, message_text, chat_id, message_id, bot_id, 
             if _u:
                 try:
                     _kc = get_workspace_ai_key(_u)
-                    sem_results = semantic_search_cards(query, bot_id, user_id, _kc, limit=1)
+                    sem_results = semantic_search_cards(
+                        query, bot_id, user_id, _kc, limit=1, preloaded_cards=cards
+                    )
                     if sem_results:
                         matched_card = sem_results[0]
                 except QuotaExceededError:
@@ -172,7 +182,7 @@ def _handle(bot_token, bot_username, message_text, chat_id, message_id, bot_id, 
                 try:
                     from ..models import Group
                     from ..bot_features.escalation import trigger_escalation as _esc
-                    import asyncio, requests as _req
+                    import asyncio
 
                     grp = Group.query.filter_by(telegram_group_id=str(chat_id)).first()
                     esc_settings = (grp.settings if grp else {}).get("escalation", {})
