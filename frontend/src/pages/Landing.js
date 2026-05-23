@@ -176,6 +176,7 @@ export default function Landing() {
   const token = localStorage.getItem('token');
 
   const [statsRef, statsVisible] = useScrollReveal(0.15);
+  const [proofRef, proofVisible] = useScrollReveal(0.1);
   const [painRef, painVisible] = useScrollReveal(0.08);
   const [solutionRef, solutionVisible] = useScrollReveal(0.15);
   const [featuresRef, featuresVisible] = useScrollReveal(0.05);
@@ -386,7 +387,49 @@ export default function Landing() {
         </Container>
       </Box>
 
-      {/* â"€â"€ Pain â"€â"€ */}
+      {/* ── Live Proof Strip ── */}
+      <Box ref={proofRef} sx={{ bgcolor: '#060e1c', borderBottom: '1px solid', borderColor: 'divider', py: { xs: 5, md: 7 }, ...reveal(proofVisible) }}>
+        <Container maxWidth="md">
+          <Box sx={{ textAlign: 'center', mb: 4 }}>
+            <Chip
+              label="Live data · Verified from a real community on Telegizer"
+              size="small"
+              sx={{ bgcolor: 'rgba(33,150,243,0.1)', color: 'primary.light', fontWeight: 600, border: '1px solid rgba(33,150,243,0.25)', mb: 1.5 }}
+            />
+            <Typography variant="h5" fontWeight={800}>
+              Real numbers. Real groups.
+            </Typography>
+            <Typography variant="body2" color="text.secondary" mt={0.5}>
+              These figures come directly from a live Telegizer-powered community.
+            </Typography>
+          </Box>
+          <Grid container spacing={2} justifyContent="center">
+            {[
+              { value: '8,568', label: 'Members tracked', sub: 'in one group', color: 'primary.main' },
+              { value: '220', label: 'Mod actions', sub: 'last 30 days — automated', color: 'success.main' },
+              { value: '79', label: 'New members tracked', sub: 'growth data captured automatically', color: 'info.main' },
+              { value: '6+', label: 'Active groups', sub: 'managed from one dashboard', color: 'secondary.main' },
+            ].map((s, i) => (
+              <Grid item xs={6} sm={3} key={s.label} sx={reveal(proofVisible, i * 70)}>
+                <Box sx={{
+                  textAlign: 'center', p: { xs: 2, sm: 2.5 },
+                  bgcolor: 'rgba(15,30,53,0.7)',
+                  borderRadius: 2,
+                  border: '1px solid rgba(255,255,255,0.07)',
+                }}>
+                  <Typography variant="h4" fontWeight={900} color={s.color} sx={{ fontSize: { xs: '1.7rem', sm: '2.1rem' } }}>
+                    {s.value}
+                  </Typography>
+                  <Typography variant="body2" fontWeight={600} mt={0.25}>{s.label}</Typography>
+                  <Typography variant="caption" color="text.disabled" display="block" mt={0.25} lineHeight={1.4}>{s.sub}</Typography>
+                </Box>
+              </Grid>
+            ))}
+          </Grid>
+        </Container>
+      </Box>
+
+      {/* ── Pain ── */}
       <Box sx={{ bgcolor: '#07101f' }}>
         <Container maxWidth="lg" sx={{ py: { xs: 8, md: 12 } }}>
           <Box ref={painRef} sx={{ textAlign: 'center', mb: 6, ...reveal(painVisible) }}>
