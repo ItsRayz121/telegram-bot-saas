@@ -197,10 +197,33 @@ def get_bot_groups(bot_id):
     if not bot:
         return jsonify({"error": "Bot not found"}), 404
 
-    groups = Group.query.filter(
+    # Find Hub-connected private groups for this bot so we can exclude them.
+    # Private groups (is_public_group=False) belong in Assistant Hub only.
+    hub_private_tg_ids: set = set()
+    try:
+        from ..models import CustomBot
+        from ..assistant.hub_models import HubBotIdentity, HubConnectedGroup
+        cb = CustomBot.query.filter_by(
+            bot_username=bot.bot_username,
+            owner_user_id=bot.user_id,
+        ).first()
+        if cb and cb.hub_bot_id:
+            hub_private_tg_ids = {
+                str(hg.telegram_group_id)
+                for hg in HubConnectedGroup.query.filter_by(
+                    bot_id=cb.hub_bot_id, is_active=True
+                ).all()
+                if not hg.is_public_group
+            }
+    except Exception:
+        pass
+
+    all_groups = Group.query.filter(
         Group.bot_id == bot_id,
         Group.chat_type != "private",
     ).all()
+
+    groups = [g for g in all_groups if g.telegram_group_id not in hub_private_tg_ids]
     return jsonify({"groups": [g.to_dict() for g in groups]}), 200
 
 
