@@ -103,6 +103,26 @@ const LANGUAGE_OPTIONS = [
   { value: 'japanese', label: 'Japanese' },
 ];
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function parseTopicInput(val) {
+  if (!val || !val.trim()) return null;
+  const match = val.match(/\/(\d+)\/?$/);
+  if (match) return parseInt(match[1], 10);
+  const n = parseInt(val, 10);
+  return isNaN(n) ? null : n;
+}
+
+function classifyReason(reason) {
+  if (!reason) return null;
+  const r = reason.toLowerCase();
+  if (r.includes('telegizer') || r.includes('tracked link')) return { label: 'Telegizer link', color: 'info' };
+  if (r.includes('t.me/+') || r.includes('t.me/joinchat')) return { label: 'Telegram invite', color: 'warning' };
+  if (r.includes('t.me/') || r.includes('telegram.me/')) return { label: 'Telegram link', color: 'warning' };
+  if (r.includes('link') || r.includes('invite')) return { label: 'External link', color: 'default' };
+  return null;
+}
+
 // ── Command Routing Tab Component ─────────────────────────────────────────────
 
 const SCOPE_OPTIONS = [
@@ -213,9 +233,29 @@ function CommandRoutingTab({
               {rule.scope === 'specific_topics' && (
                 <Box sx={{ mt: 1, ml: 0.5 }}>
                   {topics.length === 0 ? (
-                    <Typography variant="caption" color="text.secondary">
-                      No topics discovered yet. Topics are detected automatically from incoming messages.
-                    </Typography>
+                    <TextField
+                      size="small"
+                      fullWidth
+                      label="Topic ID or link"
+                      placeholder="e.g. 12345 or https://t.me/c/123/456"
+                      value={rule.manual_topic_input || (rule.topic_ids?.[0] ? String(rule.topic_ids[0]) : '')}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        const parsed = parseTopicInput(raw);
+                        setCmdRouting((prev) => ({
+                          ...prev,
+                          commands: {
+                            ...prev.commands,
+                            [cmd]: {
+                              ...rule,
+                              manual_topic_input: raw,
+                              topic_ids: parsed ? [String(parsed)] : [],
+                            },
+                          },
+                        }));
+                      }}
+                      helperText="No forum topics detected yet. Paste a Telegram topic link or enter the topic ID directly."
+                    />
                   ) : (
                     <Stack direction="row" flexWrap="wrap" gap={1} mt={0.5}>
                       {topics.map((t) => {
@@ -316,6 +356,8 @@ export default function GroupSettings() {
   const [auditLogs, setAuditLogs] = useState([]);
   const [auditTotal, setAuditTotal] = useState(0);
   const [auditPage, setAuditPage] = useState(1);
+  const [expandedLogId, setExpandedLogId] = useState(null);
+  const [expandedWarnId, setExpandedWarnId] = useState(null);
 
   const [autoResponses, setAutoResponses] = useState([]);
   const [arDialogOpen, setArDialogOpen] = useState(false);
@@ -1007,7 +1049,7 @@ export default function GroupSettings() {
                 </Box>
                 <TextField
                   fullWidth
-                  label="Trusted User IDs (comma-separated)"
+                  label="Trusted Admins / Trusted Users"
                   placeholder="e.g. 123456789, 987654321"
                   value={((am.smart_mod || {}).trusted_users || []).join(', ')}
                   onChange={(e) => updateSetting(
@@ -1015,7 +1057,7 @@ export default function GroupSettings() {
                     e.target.value.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n))
                   )}
                   sx={{ mt: 2 }}
-                  helperText="Messages from these Telegram user IDs will bypass all smart mod checks."
+                  helperText="Enter Telegram user IDs (comma-separated). Messages from these users bypass all smart moderation checks. Group admins are not automatically trusted — add them here if needed."
                 />
               </CardContent>
             </Card>
@@ -1028,50 +1070,102 @@ export default function GroupSettings() {
                 </Box>
               </AccordionSummary>
               <AccordionDetails>
+                {/* Global defaults — apply once, inherited by all enabled rules */}
+                <Box sx={{ p: 2, mb: 2, bgcolor: 'rgba(255,255,255,0.03)', border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+                  <Typography variant="subtitle2" fontWeight={700} mb={1.5}>Default settings for all rules</Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                    <FormControl size="small" sx={{ minWidth: 130 }}>
+                      <InputLabel>Default action</InputLabel>
+                      <Select
+                        value={am.ext_default_action || 'delete'}
+                        label="Default action"
+                        onChange={(e) => updateSetting('automod.ext_default_action', e.target.value)}
+                      >
+                        <MenuItem value="delete">Delete</MenuItem>
+                        <MenuItem value="warn">Warn</MenuItem>
+                        <MenuItem value="mute">Mute</MenuItem>
+                        <MenuItem value="ban">Ban</MenuItem>
+                      </Select>
+                    </FormControl>
+                    <FormControlLabel
+                      control={<Switch
+                        checked={!!am.ext_default_warn_user}
+                        onChange={(e) => updateSetting('automod.ext_default_warn_user', e.target.checked)}
+                      />}
+                      label="Warn user"
+                    />
+                    {am.ext_default_warn_user && (
+                      <FormControl size="small" sx={{ minWidth: 170 }}>
+                        <InputLabel>Delete warning after</InputLabel>
+                        <Select
+                          value={am.ext_default_warn_delete_seconds ?? 0}
+                          label="Delete warning after"
+                          onChange={(e) => updateSetting('automod.ext_default_warn_delete_seconds', e.target.value)}
+                        >
+                          <MenuItem value={0}>Never</MenuItem>
+                          <MenuItem value={5}>5 seconds</MenuItem>
+                          <MenuItem value={10}>10 seconds</MenuItem>
+                          <MenuItem value={30}>30 seconds</MenuItem>
+                          <MenuItem value={60}>1 minute</MenuItem>
+                          <MenuItem value={300}>5 minutes</MenuItem>
+                        </Select>
+                      </FormControl>
+                    )}
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={() => {
+                        const defaultAction = am.ext_default_action || 'delete';
+                        const defaultWarn = !!am.ext_default_warn_user;
+                        const defaultExpiry = am.ext_default_warn_delete_seconds ?? 0;
+                        AUTOMOD_EXTENDED_RULES.forEach(({ key }) => {
+                          const rule = am[key] || {};
+                          if (rule.enabled) {
+                            updateSetting(`automod.${key}.action`, defaultAction);
+                            updateSetting(`automod.${key}.warn_user`, defaultWarn);
+                            updateSetting(`automod.${key}.warn_delete_seconds`, defaultExpiry);
+                          }
+                        });
+                      }}
+                    >
+                      Apply to all enabled rules
+                    </Button>
+                  </Box>
+                  <Typography variant="caption" color="text.secondary" display="block" mt={1}>
+                    Click "Apply" to push these defaults to every currently-enabled rule below. Individual rules can still be overridden.
+                  </Typography>
+                </Box>
+
                 <Grid container spacing={1}>
                   {AUTOMOD_EXTENDED_RULES.map(({ key, label }) => {
                     const rule = am[key] || {};
-                    const showWarnTimer = rule.warn_user || rule.action === 'warn';
                     return (
                       <Grid item xs={12} key={key}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', py: 0.5 }}>
                           <FormControlLabel
                             sx={{ minWidth: 280 }}
                             control={<Switch checked={!!rule.enabled}
                               onChange={(e) => updateSetting(`automod.${key}.enabled`, e.target.checked)} />}
                             label={label}
                           />
-                          <FormControl size="small" sx={{ minWidth: 120 }}>
-                            <InputLabel>Action</InputLabel>
-                            <Select value={rule.action || 'delete'} label="Action"
-                              onChange={(e) => updateSetting(`automod.${key}.action`, e.target.value)}>
-                              <MenuItem value="delete">Delete</MenuItem>
-                              <MenuItem value="warn">Warn</MenuItem>
-                              <MenuItem value="mute">Mute</MenuItem>
-                              <MenuItem value="ban">Ban</MenuItem>
-                            </Select>
-                          </FormControl>
-                          <FormControlLabel
-                            control={<Switch checked={!!rule.warn_user}
-                              onChange={(e) => updateSetting(`automod.${key}.warn_user`, e.target.checked)} />}
-                            label="Warn user"
-                          />
-                          {showWarnTimer && (
-                            <FormControl size="small" sx={{ minWidth: 160 }}>
-                              <InputLabel>Delete warning after</InputLabel>
-                              <Select
-                                value={rule.warn_delete_seconds ?? 0}
-                                label="Delete warning after"
-                                onChange={(e) => updateSetting(`automod.${key}.warn_delete_seconds`, e.target.value)}
-                              >
-                                <MenuItem value={0}>Never</MenuItem>
-                                <MenuItem value={5}>5 seconds</MenuItem>
-                                <MenuItem value={10}>10 seconds</MenuItem>
-                                <MenuItem value={30}>30 seconds</MenuItem>
-                                <MenuItem value={60}>1 minute</MenuItem>
-                                <MenuItem value={300}>5 minutes</MenuItem>
-                              </Select>
-                            </FormControl>
+                          {rule.enabled && (
+                            <>
+                              <FormControl size="small" sx={{ minWidth: 120 }}>
+                                <InputLabel>Action</InputLabel>
+                                <Select value={rule.action || 'delete'} label="Action"
+                                  onChange={(e) => updateSetting(`automod.${key}.action`, e.target.value)}>
+                                  <MenuItem value="delete">Delete</MenuItem>
+                                  <MenuItem value="warn">Warn</MenuItem>
+                                  <MenuItem value="mute">Mute</MenuItem>
+                                  <MenuItem value="ban">Ban</MenuItem>
+                                </Select>
+                              </FormControl>
+                              <FormControlLabel
+                                control={<Switch checked={!!rule.warn_user}
+                                  onChange={(e) => updateSetting(`automod.${key}.warn_user`, e.target.checked)} />}
+                                label="Warn user"
+                              />
+                            </>
                           )}
                         </Box>
                       </Grid>
@@ -1634,7 +1728,9 @@ export default function GroupSettings() {
                 )}
                 {w.ai_welcome_enabled && (
                   <Alert severity="info" sx={{ mt: 2, mb: 2 }}>
-                    AI will generate a unique welcome message for each new member. Set OPENAI_API_KEY in your Railway environment.
+                    {settingsData?.workspace_ai_key_set
+                      ? 'AI welcome messages are active using the Telegizer platform AI. You can add your own OpenAI key in AI & Integrations if preferred.'
+                      : 'AI welcome messages require an OpenAI API key. Add your key in AI & Integrations → Knowledge Base.'}
                   </Alert>
                 )}
                 <Grid container spacing={2}>
@@ -1670,24 +1766,29 @@ export default function GroupSettings() {
               </CardContent>
             </Card>
 
-            <Card sx={{ mt: 2 }}>
-              <CardContent>
-                <Typography variant="subtitle1" fontWeight={600} mb={1}>Private Welcome DM</Typography>
-                <Typography variant="body2" color="text.secondary" mb={2}>
-                  Send a private message to each new member in addition to the group welcome.
-                </Typography>
-                <FormControlLabel
-                  control={<Switch checked={!!w.dm_enabled} onChange={e => updateSetting('welcome.dm_enabled', e.target.checked)} />}
-                  label="Send DM to new members"
-                />
-                {w.dm_enabled && (
-                  <TextField fullWidth multiline rows={3} label="DM Message" sx={{ mt: 2 }}
-                    value={w.dm_message || ''}
-                    onChange={e => updateSetting('welcome.dm_message', e.target.value)}
-                    helperText="Placeholders: {first_name}, {group_name}, {username}" />
-                )}
-              </CardContent>
-            </Card>
+            {!isOfficial && (
+              <Card sx={{ mt: 2 }}>
+                <CardContent>
+                  <Typography variant="subtitle1" fontWeight={600} mb={1}>Private Welcome DM</Typography>
+                  <Typography variant="body2" color="text.secondary" mb={2}>
+                    Send a private message to each new member in addition to the group welcome.
+                  </Typography>
+                  <Alert severity="warning" sx={{ mb: 2 }}>
+                    DMs only work for users who have already started this bot in Telegram. Sending unsolicited DMs may cause Telegram to restrict your bot.
+                  </Alert>
+                  <FormControlLabel
+                    control={<Switch checked={!!w.dm_enabled} onChange={e => updateSetting('welcome.dm_enabled', e.target.checked)} />}
+                    label="Send DM to new members"
+                  />
+                  {w.dm_enabled && (
+                    <TextField fullWidth multiline rows={3} label="DM Message" sx={{ mt: 2 }}
+                      value={w.dm_message || ''}
+                      onChange={e => updateSetting('welcome.dm_message', e.target.value)}
+                      helperText="Placeholders: {first_name}, {group_name}, {username}" />
+                  )}
+                </CardContent>
+              </Card>
+            )}
           </>
         )}
 
@@ -2071,16 +2172,20 @@ export default function GroupSettings() {
                   </Typography>
 
                   <Typography variant="subtitle2" fontWeight={600} mb={1}>Escalation Admins</Typography>
-                  <Typography variant="caption" color="text.secondary" display="block" mb={1}>
-                    Enter Telegram user IDs of admins who should receive escalation DMs.
-                    Each admin must have started a DM with the bot first.
-                  </Typography>
+                  <Alert severity="warning" sx={{ mb: 1.5 }} icon={false}>
+                    <Typography variant="caption">
+                      Each admin <strong>must have started a DM</strong> with this bot in Telegram first. DMs will silently fail otherwise.
+                      Telegram does not allow bots to initiate DMs with users who haven't started them.
+                    </Typography>
+                  </Alert>
                   <Stack spacing={1} mb={1}>
                     {adminIds.map((aid, idx) => (
                       <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <TextField
                           size="small"
-                          label={`Admin ${idx + 1} Telegram ID`}
+                          type="text"
+                          label={`Admin ${idx + 1} — Telegram ID or @username`}
+                          placeholder="e.g. 123456789 or @username"
                           value={aid}
                           onChange={(e) => {
                             const updated = [...adminIds];
@@ -2102,7 +2207,7 @@ export default function GroupSettings() {
                     Add Admin
                   </Button>
                   <Typography variant="caption" color="text.secondary" display="block" mt={1}>
-                    Selected admins receive DMs when any AI or Automation issue occurs.
+                    Selected admins receive a private DM when any AI or Automation issue occurs. Enter numeric Telegram user IDs or @usernames.
                   </Typography>
                 </CardContent>
               </Card>
@@ -2386,29 +2491,68 @@ export default function GroupSettings() {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {auditLogs.map((log) => (
-                    <TableRow key={log.id} hover>
-                      <TableCell>
-                        <Chip label={log.action_type} color={ACTION_COLORS[log.action_type] || 'default'} size="small" />
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">
-                          {log.target_username ? `@${log.target_username}` : log.target_user_id || '—'}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">
-                          {log.moderator_username ? `@${log.moderator_username}` : log.moderator_id || '—'}
-                        </Typography>
-                      </TableCell>
-                      <TableCell><Typography variant="body2" color="text.secondary">{log.reason || '-'}</Typography></TableCell>
-                      <TableCell>
-                        <Typography variant="caption" color="text.secondary">
-                          {log.timestamp ? new Date(log.timestamp).toLocaleString() : '-'}
-                        </Typography>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {auditLogs.map((log) => {
+                    const isExpanded = expandedLogId === log.id;
+                    const linkType = classifyReason(log.reason, log.action_type);
+                    return (
+                      <React.Fragment key={log.id}>
+                        <TableRow
+                          hover
+                          onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
+                          sx={{ cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
+                        >
+                          <TableCell>
+                            <Chip label={log.action_type} color={ACTION_COLORS[log.action_type] || 'default'} size="small" />
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {log.target_username ? `@${log.target_username}` : log.target_user_id || '—'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {log.moderator_username ? `@${log.moderator_username}` : log.moderator_id || '—'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                              <Typography variant="body2" color="text.secondary">{log.reason || '—'}</Typography>
+                              {linkType && <Chip label={linkType.label} color={linkType.color} size="small" sx={{ height: 18, fontSize: '0.7rem' }} />}
+                            </Box>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="caption" color="text.secondary">
+                              {log.timestamp ? new Date(log.timestamp).toLocaleString() : '—'}
+                            </Typography>
+                          </TableCell>
+                        </TableRow>
+                        {isExpanded && (
+                          <TableRow>
+                            <TableCell colSpan={5} sx={{ bgcolor: 'rgba(255,255,255,0.02)', py: 1.5, px: 2.5 }}>
+                              <Stack spacing={0.75}>
+                                {log.reason && (
+                                  <Typography variant="caption" color="text.primary">
+                                    <strong>Reason:</strong> {log.reason}
+                                  </Typography>
+                                )}
+                                {linkType && (
+                                  <Typography variant="caption" color="text.secondary">
+                                    <strong>Link type:</strong> {linkType.label}
+                                    {linkType.label === 'Telegizer link' && ' — Telegizer-generated invite links are never deleted by AutoMod.'}
+                                  </Typography>
+                                )}
+                                {log.metadata && typeof log.metadata === 'object' && Object.keys(log.metadata).length > 0 && (
+                                  <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                                    {JSON.stringify(log.metadata, null, 2)}
+                                  </Typography>
+                                )}
+                              </Stack>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </TableContainer>
@@ -2454,37 +2598,72 @@ export default function GroupSettings() {
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {warnings.map((w) => (
-                        <TableRow key={w.id} hover>
-                          <TableCell>
-                            <Typography variant="body2" fontWeight={500}>
-                              {w.target_username ? `@${w.target_username}` : w.target_user_id}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            <Typography variant="body2" color={w.reason ? 'text.primary' : 'text.disabled'}>
-                              {w.reason || '—'}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            <Typography variant="body2">
-                              {w.moderator_username ? `@${w.moderator_username}` : w.moderator_user_id}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            <Typography variant="caption" color="text.secondary">
-                              {w.created_at ? new Date(w.created_at).toLocaleString() : '—'}
-                            </Typography>
-                          </TableCell>
-                          <TableCell align="center">
-                            <Tooltip title="Remove this warning">
-                              <IconButton size="small" color="error" onClick={() => handleRemoveWarning(w.id)}>
-                                <Delete fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {warnings.map((w) => {
+                        const isExpanded = expandedWarnId === w.id;
+                        const linkType = classifyReason(w.reason);
+                        return (
+                          <React.Fragment key={w.id}>
+                            <TableRow
+                              hover
+                              onClick={() => setExpandedWarnId(isExpanded ? null : w.id)}
+                              sx={{ cursor: 'pointer' }}
+                            >
+                              <TableCell>
+                                <Typography variant="body2" fontWeight={500}>
+                                  {w.target_username ? `@${w.target_username}` : w.target_user_id}
+                                </Typography>
+                              </TableCell>
+                              <TableCell>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                                  <Typography variant="body2" color={w.reason ? 'text.primary' : 'text.disabled'}>
+                                    {w.reason || '—'}
+                                  </Typography>
+                                  {linkType && <Chip label={linkType.label} color={linkType.color} size="small" sx={{ height: 18, fontSize: '0.7rem' }} />}
+                                </Box>
+                              </TableCell>
+                              <TableCell>
+                                <Typography variant="body2">
+                                  {w.moderator_username ? `@${w.moderator_username}` : w.moderator_user_id}
+                                </Typography>
+                              </TableCell>
+                              <TableCell>
+                                <Typography variant="caption" color="text.secondary">
+                                  {w.created_at ? new Date(w.created_at).toLocaleString() : '—'}
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="center">
+                                <Tooltip title="Remove this warning">
+                                  <IconButton size="small" color="error" onClick={(e) => { e.stopPropagation(); handleRemoveWarning(w.id); }}>
+                                    <Delete fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                              </TableCell>
+                            </TableRow>
+                            {isExpanded && (
+                              <TableRow>
+                                <TableCell colSpan={5} sx={{ bgcolor: 'rgba(255,255,255,0.02)', py: 1.5, px: 2.5 }}>
+                                  <Stack spacing={0.75}>
+                                    {w.reason && (
+                                      <Typography variant="caption" color="text.primary">
+                                        <strong>Warning reason:</strong> {w.reason}
+                                      </Typography>
+                                    )}
+                                    {linkType && (
+                                      <Typography variant="caption" color="text.secondary">
+                                        <strong>Detected as:</strong> {linkType.label}
+                                        {linkType.label === 'Telegizer link' && ' — Telegizer-generated invite links should not trigger warnings. Check your AutoMod whitelist.'}
+                                      </Typography>
+                                    )}
+                                    <Typography variant="caption" color="text.disabled">
+                                      Issued by: {w.moderator_username ? `@${w.moderator_username}` : w.moderator_user_id} · {w.created_at ? new Date(w.created_at).toLocaleString() : '—'}
+                                    </Typography>
+                                  </Stack>
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </TableContainer>

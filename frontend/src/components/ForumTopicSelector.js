@@ -17,6 +17,16 @@ import { settings as settingsApi } from '../services/api';
  *   label        – input label (default "Forum Topic")
  *   helperText   – shown below the selector
  */
+
+function parseTopicInput(val) {
+  if (!val || !val.trim()) return null;
+  // Extract from Telegram topic links: t.me/c/CHATID/THREAD_ID or any URL ending in /NUMBER
+  const match = val.match(/\/(\d+)\/?$/);
+  if (match) return parseInt(match[1], 10);
+  const n = parseInt(val, 10);
+  return isNaN(n) ? null : n;
+}
+
 export default function ForumTopicSelector({ botId, groupId, value, onChange, label = 'Forum Topic', helperText }) {
   const [topics, setTopics] = useState(null); // null = not yet loaded
   const [loading, setLoading] = useState(false);
@@ -65,9 +75,16 @@ export default function ForumTopicSelector({ botId, groupId, value, onChange, la
     }
   };
 
+  const handleManualChange = (e) => {
+    setManualValue(e.target.value);
+    // Live-parse as user types so pasting a full link works immediately
+    const parsed = parseTopicInput(e.target.value);
+    if (parsed !== null) onChange(parsed);
+  };
+
   const handleManualBlur = () => {
-    const n = parseInt(manualValue, 10);
-    onChange(isNaN(n) ? null : n);
+    const parsed = parseTopicInput(manualValue);
+    onChange(parsed);
   };
 
   return (
@@ -106,7 +123,7 @@ export default function ForumTopicSelector({ botId, groupId, value, onChange, la
             )}
 
             <MenuItem value="manual" sx={{ fontStyle: 'italic', fontSize: '0.82rem', color: 'text.secondary' }}>
-              Manual topic ID / Advanced
+              Enter topic ID or link…
             </MenuItem>
           </Select>
         </FormControl>
@@ -122,18 +139,19 @@ export default function ForumTopicSelector({ botId, groupId, value, onChange, la
         <TextField
           size="small"
           fullWidth
-          type="number"
-          label="Topic ID"
+          type="text"
+          label="Topic ID or link"
+          placeholder="e.g. 12345 or https://t.me/c/123/456"
           value={manualValue}
-          onChange={e => setManualValue(e.target.value)}
+          onChange={handleManualChange}
           onBlur={handleManualBlur}
           sx={{ mt: 1 }}
-          helperText="Enter the numeric forum thread ID from Telegram"
+          helperText="Enter a topic ID or paste a Telegram topic link — ID will be extracted automatically."
         />
       )}
 
       <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-        {helperText || 'Topics appear after the bot sees activity in them. Use manual ID if needed.'}
+        {helperText || 'Paste a topic link or enter a topic ID. Leave blank for the main group chat.'}
       </Typography>
     </Box>
   );
