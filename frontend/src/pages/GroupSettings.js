@@ -468,6 +468,7 @@ export default function GroupSettings() {
   const [membersSort, setMembersSort] = useState('xp');
   const [membersSortDir, setMembersSortDir] = useState('desc');
   const [membersWallet, setMembersWallet] = useState('');
+  const [membersWarnings, setMembersWarnings] = useState('');
   const [membersTimeRange, setMembersTimeRange] = useState('all');
 
   const [leaderboard, setLeaderboard] = useState([]);
@@ -554,6 +555,7 @@ export default function GroupSettings() {
         if (membersVerified) params.is_verified = membersVerified;
         if (membersMuted) params.is_muted = membersMuted;
         if (membersWallet) params.has_wallet = membersWallet;
+        if (membersWarnings) params.has_warnings = membersWarnings;
         if (membersTimeRange && membersTimeRange !== 'all') params.joined_within = membersTimeRange;
         params.sort_by = membersSort;
         params.sort_dir = membersSortDir;
@@ -565,7 +567,7 @@ export default function GroupSettings() {
     } catch {
       toast.error('Failed to load members');
     }
-  }, [botId, groupId, isOfficial, membersSearch, membersRole, membersVerified, membersMuted, membersWallet, membersTimeRange, membersSort, membersSortDir]);
+  }, [botId, groupId, isOfficial, membersSearch, membersRole, membersVerified, membersMuted, membersWallet, membersWarnings, membersTimeRange, membersSort, membersSortDir]);
 
   const exportMembersCSV = useCallback(() => {
     if (!members.length) return;
@@ -592,14 +594,16 @@ export default function GroupSettings() {
   const fetchLeaderboard = useCallback(async () => {
     setLeaderboardLoading(true);
     try {
-      const res = await settings.getLeaderboard(botId, groupId, { limit: 50 });
+      const params = { limit: 50 };
+      if (membersTimeRange && membersTimeRange !== 'all') params.period = membersTimeRange;
+      const res = await settings.getLeaderboard(botId, groupId, params);
       setLeaderboard(res.data.members || []);
     } catch {
       toast.error('Failed to load leaderboard');
     } finally {
       setLeaderboardLoading(false);
     }
-  }, [botId, groupId]);
+  }, [botId, groupId, membersTimeRange]);
 
   const fetchAuditLogs = useCallback(async (page = 1) => {
     try {
@@ -2684,6 +2688,7 @@ export default function GroupSettings() {
           const unverifiedCnt = members.filter(m => !m.is_verified).length;
           const walletYesCnt = members.filter(m => !!m.wallet_address).length;
           const walletNoCnt = members.filter(m => !m.wallet_address).length;
+          const warningsCnt = members.filter(m => (m.warnings ?? 0) > 0).length;
           return (
           <>
             {isOfficial && (
@@ -2726,9 +2731,12 @@ export default function GroupSettings() {
                   <Chip
                     label={`Total ${membersTotal}`}
                     size="small"
-                    variant={!membersVerified && !membersWallet ? 'filled' : 'outlined'}
-                    color={!membersVerified && !membersWallet ? 'primary' : 'default'}
-                    onClick={() => { setMembersVerified(''); setMembersWallet(''); setMembersPage(1); }}
+                    variant={!membersVerified && !membersWallet && !membersWarnings && !membersRole ? 'filled' : 'outlined'}
+                    color={!membersVerified && !membersWallet && !membersWarnings && !membersRole ? 'primary' : 'default'}
+                    onClick={() => {
+                      setMembersVerified(''); setMembersWallet(''); setMembersWarnings('');
+                      setMembersRole(''); setMembersMuted(''); setMembersPage(1);
+                    }}
                     sx={{ cursor: 'pointer' }}
                   />
                   <Chip
@@ -2759,10 +2767,32 @@ export default function GroupSettings() {
                     label={`Wallet No ${walletNoCnt}`}
                     size="small"
                     variant={membersWallet === 'false' ? 'filled' : 'outlined'}
-                    color={membersWallet === 'false' ? 'default' : 'default'}
+                    color={membersWallet === 'false' ? 'error' : 'default'}
                     onClick={() => { setMembersWallet(membersWallet === 'false' ? '' : 'false'); setMembersPage(1); }}
                     sx={{ cursor: 'pointer' }}
                   />
+                  <Chip
+                    label={`Warnings ${warningsCnt}`}
+                    size="small"
+                    variant={membersWarnings === 'true' ? 'filled' : 'outlined'}
+                    color={membersWarnings === 'true' ? 'error' : 'default'}
+                    onClick={() => { setMembersWarnings(membersWarnings === 'true' ? '' : 'true'); setMembersPage(1); }}
+                    sx={{ cursor: 'pointer' }}
+                  />
+                  {['mod', 'admin', 'vip'].map(role => {
+                    const cnt = members.filter(m => m.role === role).length;
+                    return (
+                      <Chip
+                        key={role}
+                        label={`${role.charAt(0).toUpperCase() + role.slice(1)} ${cnt}`}
+                        size="small"
+                        variant={membersRole === role ? 'filled' : 'outlined'}
+                        color={membersRole === role ? 'secondary' : 'default'}
+                        onClick={() => { setMembersRole(membersRole === role ? '' : role); setMembersPage(1); }}
+                        sx={{ cursor: 'pointer', textTransform: 'capitalize' }}
+                      />
+                    );
+                  })}
                 </Box>
                 {/* Search and sort controls */}
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, mb: 2 }}>
@@ -2885,11 +2915,36 @@ export default function GroupSettings() {
         {/* ANALYTICS › Leaderboard */}
         {cat === 'analytics' && subTab === leaderboardSubTabIdx && (
           <>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-              <EmojiEvents color="primary" />
-              <Typography variant="h6" fontWeight={600}>XP Leaderboard</Typography>
-              <Typography variant="body2" color="text.secondary">— top members ranked by XP</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, mb: 1.5 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <EmojiEvents color="primary" />
+                <Typography variant="h6" fontWeight={600}>XP Leaderboard</Typography>
+                <Typography variant="body2" color="text.secondary">— top members ranked by XP</Typography>
+              </Box>
+              <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
+                {[
+                  { key: 'all', label: 'All Time' },
+                  { key: '30d', label: '30 Days' },
+                  { key: '7d', label: '7 Days' },
+                  { key: '1d', label: 'Today' },
+                ].map(({ key, label }) => (
+                  <Chip
+                    key={key}
+                    label={label}
+                    size="small"
+                    variant={membersTimeRange === key ? 'filled' : 'outlined'}
+                    color={membersTimeRange === key ? 'primary' : 'default'}
+                    onClick={() => setMembersTimeRange(key)}
+                    sx={{ cursor: 'pointer' }}
+                  />
+                ))}
+              </Box>
             </Box>
+            {membersTimeRange !== 'all' && (
+              <Typography variant="caption" color="text.secondary" display="block" mb={1.5}>
+                Showing XP earned in the last {membersTimeRange === '1d' ? '24 hours' : membersTimeRange === '7d' ? '7 days' : '30 days'}.
+              </Typography>
+            )}
             {leaderboardLoading ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
             ) : (
