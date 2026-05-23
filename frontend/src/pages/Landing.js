@@ -171,21 +171,34 @@ const EARLY_FEEDBACK = [
   },
 ];
 
-function StatCard({ target, label, sub, color, delay, visible, reveal }) {
+function StatCard({ target, label, sub, color, icon, delay, visible, reveal }) {
   const count = useAnimatedCount(visible ? (target || 0) : 0);
   return (
     <Box sx={{
-      textAlign: 'center', p: { xs: 2, sm: 2.5 },
-      bgcolor: 'rgba(15,30,53,0.7)',
-      borderRadius: 2,
+      p: { xs: 2, sm: 2.5 },
+      bgcolor: 'rgba(15,30,53,0.75)',
+      borderRadius: 2.5,
       border: '1px solid rgba(255,255,255,0.07)',
+      position: 'relative',
+      overflow: 'hidden',
+      height: '100%',
+      '&::before': {
+        content: '""',
+        position: 'absolute', top: 0, left: 0, right: 0, height: '2px',
+        background: `linear-gradient(90deg, transparent, ${color === 'primary.main' ? '#2196f3' : color === 'secondary.main' ? '#ce93d8' : color === 'success.main' ? '#66bb6a' : color === 'warning.main' ? '#ffa726' : color === 'info.main' ? '#29b6f6' : '#ab47bc'}, transparent)`,
+      },
       ...reveal(visible, delay),
     }}>
-      <Typography variant="h4" fontWeight={900} color={color} sx={{ fontSize: { xs: '1.7rem', sm: '2.1rem' }, fontVariantNumeric: 'tabular-nums' }}>
-        {target != null ? formatStat(count) : '—'}
-      </Typography>
-      <Typography variant="body2" fontWeight={600} mt={0.25}>{label}</Typography>
-      <Typography variant="caption" color="text.disabled" display="block" mt={0.25} lineHeight={1.4}>{sub}</Typography>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 1 }}>
+        <Typography variant="h4" fontWeight={900} color={color} sx={{ fontSize: { xs: '1.55rem', sm: '2rem' }, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
+          {target != null ? formatStat(count) : '—'}
+        </Typography>
+        {icon && (
+          <Box sx={{ color, opacity: 0.4, mt: 0.25, '& svg': { fontSize: '1.2rem' } }}>{icon}</Box>
+        )}
+      </Box>
+      <Typography variant="body2" fontWeight={700} sx={{ fontSize: '0.78rem' }}>{label}</Typography>
+      <Typography variant="caption" color="text.disabled" display="block" mt={0.25} lineHeight={1.4} sx={{ fontSize: '0.68rem' }}>{sub}</Typography>
     </Box>
   );
 }
@@ -193,72 +206,176 @@ function StatCard({ target, label, sub, color, delay, visible, reveal }) {
 function LivePlatformStats({ proofRef, proofVisible, reveal, stats }) {
   const cards = [
     {
-      key: 'groups',
-      target: stats?.total_groups ?? null,
-      label: 'Active groups',
-      sub: 'communities managed right now',
-      color: 'secondary.main',
-    },
-    {
       key: 'members',
       target: stats?.total_members ?? null,
-      label: 'Members managed',
-      sub: 'total across all groups',
+      label: 'Members tracked',
+      sub: 'across all groups platform-wide',
       color: 'primary.main',
+      icon: <People />,
     },
     {
       key: 'mod',
       target: stats?.total_mod_actions ?? null,
       label: 'Mod actions taken',
-      sub: 'spam removed, bans, mutes — automated',
+      sub: 'spam, bans, mutes — automated',
       color: 'success.main',
+      icon: <Shield />,
     },
     {
-      key: 'ai',
-      target: stats?.total_ai_replies ?? null,
-      label: 'Auto-replies fired',
-      sub: 'bot answered so admins didn\'t have to',
+      key: 'new_members',
+      target: stats?.new_members_this_week ?? null,
+      label: 'New members this week',
+      sub: 'joined groups managed by Telegizer',
       color: 'warning.main',
+      icon: <TrendingDown sx={{ transform: 'rotate(180deg)' }} />,
+    },
+    {
+      key: 'groups',
+      target: stats?.total_groups ?? null,
+      label: 'Active groups',
+      sub: 'communities using Telegizer right now',
+      color: 'secondary.main',
+      icon: <People />,
+    },
+    {
+      key: 'official',
+      target: stats?.official_groups ?? null,
+      label: 'Groups on Telegizer bot',
+      sub: 'using the shared official bot',
+      color: 'info.main',
+      icon: <SmartToy />,
+    },
+    {
+      key: 'bots',
+      target: stats?.custom_bots ?? null,
+      label: 'Custom bots created',
+      sub: 'private branded bots built on Telegizer',
+      color: 'warning.main',
+      icon: <Bolt />,
     },
   ];
 
-  const updatedAt = stats?.updated_at
-    ? new Date(stats.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    : null;
-
   return (
-    <Box ref={proofRef} sx={{ bgcolor: '#060e1c', borderBottom: '1px solid', borderColor: 'divider', py: { xs: 5, md: 7 } }}>
-      <Container maxWidth="md">
-        <Box sx={{ textAlign: 'center', mb: 4, ...reveal(proofVisible) }}>
+    <Box ref={proofRef} sx={{ bgcolor: '#060e1c', borderBottom: '1px solid', borderColor: 'divider', py: { xs: 6, md: 9 } }}>
+      <Container maxWidth="lg">
+
+        {/* Header */}
+        <Box sx={{ textAlign: 'center', mb: 5, ...reveal(proofVisible) }}>
           <Chip
-            label={updatedAt ? `Live · Updated at ${updatedAt}` : 'Live platform data'}
+            label="Updated weekly from live Telegizer activity"
             size="small"
             sx={{
               bgcolor: 'rgba(33,150,243,0.1)', color: 'primary.light',
               fontWeight: 600, border: '1px solid rgba(33,150,243,0.25)', mb: 1.5,
+              fontSize: '0.72rem',
             }}
           />
-          <Typography variant="h5" fontWeight={800}>
-            A growing platform. Real numbers.
+          <Typography variant="h4" fontWeight={900} sx={{ fontSize: { xs: '1.6rem', md: '2.1rem' } }}>
+            Real groups. Real numbers.
           </Typography>
-          <Typography variant="body2" color="text.secondary" mt={0.5}>
-            Every group added increases these counters. These are live totals from the Telegizer platform.
+          <Typography variant="body1" color="text.secondary" mt={1} sx={{ maxWidth: 520, mx: 'auto' }}>
+            Every counter below comes directly from the Telegizer database — both official bot groups and custom bots included.
           </Typography>
         </Box>
-        <Grid container spacing={2} justifyContent="center">
+
+        {/* 6 stat cards */}
+        <Grid container spacing={2} sx={{ mb: 7 }}>
           {cards.map((c, i) => (
-            <Grid item xs={6} sm={3} key={c.key}>
-              <StatCard {...c} delay={i * 70} visible={proofVisible} reveal={reveal} />
+            <Grid item xs={6} sm={4} md={2} key={c.key}>
+              <StatCard {...c} delay={i * 60} visible={proofVisible} reveal={reveal} />
             </Grid>
           ))}
         </Grid>
-        {stats?.new_groups_this_week > 0 && (
-          <Box sx={{ textAlign: 'center', mt: 3, ...reveal(proofVisible, 350) }}>
-            <Typography variant="caption" color="text.disabled">
-              +{stats.new_groups_this_week} new group{stats.new_groups_this_week !== 1 ? 's' : ''} joined this week
-            </Typography>
+
+        {/* Dashboard proof panel */}
+        <Box sx={{ ...reveal(proofVisible, 300) }}>
+          <Box sx={{
+            borderRadius: 3,
+            border: '1px solid rgba(255,255,255,0.1)',
+            overflow: 'hidden',
+            bgcolor: 'rgba(10,20,40,0.8)',
+            boxShadow: '0 24px 80px rgba(0,0,0,0.5)',
+          }}>
+            {/* Browser chrome bar */}
+            <Box sx={{
+              px: 2, py: 1.25,
+              bgcolor: 'rgba(255,255,255,0.04)',
+              borderBottom: '1px solid rgba(255,255,255,0.07)',
+              display: 'flex', alignItems: 'center', gap: 1.5,
+            }}>
+              <Stack direction="row" spacing={0.75}>
+                {['#ff5f57', '#febc2e', '#28c840'].map((c) => (
+                  <Box key={c} sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: c, opacity: 0.85 }} />
+                ))}
+              </Stack>
+              <Box sx={{
+                flex: 1, mx: 2, bgcolor: 'rgba(255,255,255,0.05)',
+                borderRadius: 1, px: 1.5, py: 0.4,
+                display: 'flex', alignItems: 'center', gap: 1,
+              }}>
+                <Lock sx={{ fontSize: 10, color: 'success.main', opacity: 0.7 }} />
+                <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.68rem', fontFamily: 'monospace' }}>
+                  app.telegizer.com/analytics
+                </Typography>
+              </Box>
+              <Chip
+                label="Live dashboard"
+                size="small"
+                color="success"
+                variant="outlined"
+                sx={{ height: 20, fontSize: '0.65rem', fontWeight: 700, opacity: 0.8 }}
+              />
+            </Box>
+
+            {/* Screenshot */}
+            <Box
+              component="img"
+              src="/analytics-demo.png"
+              alt="Telegizer Group Analytics dashboard showing member growth, moderation actions, and level distribution"
+              sx={{
+                width: '100%',
+                display: 'block',
+                maxHeight: { xs: 280, sm: 400, md: 480 },
+                objectFit: 'cover',
+                objectPosition: 'top',
+              }}
+              onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+            />
+
+            {/* Fallback if image not found */}
+            <Box sx={{
+              display: 'none', alignItems: 'center', justifyContent: 'center',
+              height: 300, flexDirection: 'column', gap: 1.5,
+              bgcolor: 'rgba(255,255,255,0.02)',
+            }}>
+              <BarChart sx={{ fontSize: 48, color: 'primary.main', opacity: 0.4 }} />
+              <Typography variant="body2" color="text.disabled">Analytics dashboard screenshot</Typography>
+            </Box>
+
+            {/* Caption bar */}
+            <Box sx={{
+              px: 3, py: 1.5,
+              bgcolor: 'rgba(255,255,255,0.03)',
+              borderTop: '1px solid rgba(255,255,255,0.06)',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1,
+            }}>
+              <Stack direction="row" spacing={2} flexWrap="wrap">
+                {[
+                  { label: 'Member growth chart', color: 'primary' },
+                  { label: 'Level distribution', color: 'secondary' },
+                  { label: 'Mod action tracking', color: 'success' },
+                ].map((t) => (
+                  <Chip key={t.label} label={t.label} size="small" color={t.color} variant="outlined"
+                    sx={{ height: 20, fontSize: '0.65rem', fontWeight: 600 }} />
+                ))}
+              </Stack>
+              <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.68rem' }}>
+                Real dashboard. Real data. Your group, your metrics.
+              </Typography>
+            </Box>
           </Box>
-        )}
+        </Box>
+
       </Container>
     </Box>
   );
