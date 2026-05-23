@@ -25,7 +25,7 @@ function PageNav() {
 
 function Section({ title, children }) {
   return (
-    <Box sx={{ mb: 4 }}>
+    <Box sx={{ mb: { xs: 2.5, sm: 4 } }}>
       <Typography variant="h6" fontWeight={700} mb={1.5}>{title}</Typography>
       {children}
     </Box>
@@ -42,7 +42,7 @@ function P({ children }) {
 
 function UL({ items }) {
   return (
-    <Box component="ul" sx={{ pl: 3, mb: 1.5 }}>
+    <Box component="ul" sx={{ pl: { xs: 2, sm: 3 }, mb: 1.5 }}>
       {items.map((item) => (
         <Typography key={item} component="li" variant="body2" color="text.secondary" mb={0.5} lineHeight={1.8}>
           {item}
@@ -57,7 +57,7 @@ function PageFooter() {
   return (
     <>
       <Divider sx={{ mt: 6, mb: 3 }} />
-      <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap', pb: 6 }}>
+      <Box sx={{ display: 'flex', gap: { xs: 1.5, md: 3 }, flexWrap: 'wrap', pb: 6 }}>
         {[
           { label: 'Privacy Policy', path: '/privacy' },
           { label: 'Contact', path: '/contact' },

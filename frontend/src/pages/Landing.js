@@ -281,7 +281,7 @@ export default function Landing() {
               size="large"
               onClick={() => navigate('/register')}
               endIcon={<ArrowForward />}
-              sx={{ py: 1.75, px: 4, fontSize: '1.05rem', fontWeight: 700 }}
+              sx={{ py: { xs: 1.25, sm: 1.75 }, px: { xs: 2.5, sm: 4 }, fontSize: { xs: '0.92rem', sm: '1.05rem' }, fontWeight: 700 }}
             >
               Start Free — Takes 60 Seconds
             </Button>
@@ -289,7 +289,7 @@ export default function Landing() {
               variant="outlined"
               size="large"
               onClick={() => navigate('/pricing')}
-              sx={{ py: 1.75, px: 4, fontSize: '1.05rem' }}
+              sx={{ py: { xs: 1.25, sm: 1.75 }, px: { xs: 2.5, sm: 4 }, fontSize: { xs: '0.92rem', sm: '1.05rem' } }}
             >
               View Pricing
             </Button>
@@ -352,7 +352,7 @@ export default function Landing() {
                     ].map((item, i) => (
                       <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
                         <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: item.color, flexShrink: 0 }} />
-                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.68rem' }}>{item.text}</Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem' }}>{item.text}</Typography>
                       </Box>
                     ))}
                   </Box>
@@ -403,7 +403,7 @@ export default function Landing() {
           <Grid container spacing={3}>
             {PAIN_POINTS.map((p, i) => (
               <Grid item xs={12} sm={6} key={p.title} sx={reveal(painVisible, i * 80)}>
-                <Card sx={{ height: '100%', p: 1, borderColor: 'rgba(211,47,47,0.2)', bgcolor: 'rgba(211,47,47,0.03)' }}>
+                <Card sx={{ height: '100%', p: { xs: 1.5, sm: 1 }, borderColor: 'rgba(211,47,47,0.2)', bgcolor: 'rgba(211,47,47,0.03)' }}>
                   <CardContent>
                     <Box sx={{ color: 'error.main', mb: 1.5 }}>{p.icon}</Box>
                     <Typography variant="h6" fontWeight={700} mb={1}>{p.title}</Typography>
@@ -456,9 +456,9 @@ export default function Landing() {
                   {(f.badge || f.plan) && (
                     <Box sx={{ position: 'absolute', top: 12, right: 12, display: 'flex', gap: 0.5 }}>
                       {f.badge ? (
-                        <Chip label={f.badge} size="small" color={f.badgeColor || 'primary'} sx={{ fontSize: 10, height: 20 }} />
+                        <Chip label={f.badge} size="small" color={f.badgeColor || 'primary'} sx={{ fontSize: 11, height: 20 }} />
                       ) : (
-                        <Chip label={f.plan} size="small" color={f.planColor || 'default'} variant="outlined" sx={{ fontSize: 10, height: 20 }} />
+                        <Chip label={f.plan} size="small" color={f.planColor || 'default'} variant="outlined" sx={{ fontSize: 11, height: 20 }} />
                       )}
                     </Box>
                   )}
@@ -627,7 +627,7 @@ export default function Landing() {
             ))}
           </Grid>
           <Box sx={{ textAlign: 'center', mt: 4 }}>
-            <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 3, flexWrap: 'wrap', justifyContent: 'center' }}>
+            <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: { xs: 1.5, sm: 3 }, flexWrap: 'wrap', justifyContent: 'center' }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                 <CurrencyBitcoin fontSize="small" color="warning" />
                 <Typography variant="body2" color="text.secondary">300+ cryptos accepted</Typography>
@@ -769,7 +769,7 @@ export default function Landing() {
               size="large"
               onClick={() => navigate('/register')}
               endIcon={<ArrowForward />}
-              sx={{ bgcolor: 'white', color: '#0d2a5a', py: 1.75, px: 4, fontWeight: 700, '&:hover': { bgcolor: '#e8f0ff', transform: 'translateY(-1px)' } }}
+              sx={{ bgcolor: 'white', color: '#0d2a5a', py: { xs: 1.25, sm: 1.75 }, px: { xs: 2.5, sm: 4 }, fontWeight: 700, '&:hover': { bgcolor: '#e8f0ff', transform: 'translateY(-1px)' } }}
             >
               Create Free Account
             </Button>
@@ -777,7 +777,7 @@ export default function Landing() {
               variant="outlined"
               size="large"
               onClick={() => navigate('/pricing')}
-              sx={{ borderColor: 'rgba(255,255,255,0.35)', color: 'white', py: 1.75, px: 4, '&:hover': { borderColor: 'rgba(255,255,255,0.7)', bgcolor: 'rgba(255,255,255,0.07)' } }}
+              sx={{ borderColor: 'rgba(255,255,255,0.35)', color: 'white', py: { xs: 1.25, sm: 1.75 }, px: { xs: 2.5, sm: 4 }, '&:hover': { borderColor: 'rgba(255,255,255,0.7)', bgcolor: 'rgba(255,255,255,0.07)' } }}
             >
               See Pricing
             </Button>

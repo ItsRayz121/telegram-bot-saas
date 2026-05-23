@@ -88,7 +88,7 @@ export default function Register() {
         p: 2,
       }}
     >
-      <Card sx={{ width: '100%', maxWidth: 420 }}>
+      <Card sx={{ width: '100%', maxWidth: { xs: '95vw', sm: 420 } }}>
         <CardContent sx={{ p: { xs: 3, sm: 4 } }}>
           <Box sx={{ display: 'flex', justifyContent: 'center', mb: 1.5 }}>
             <TelegizerLogo size="lg" />

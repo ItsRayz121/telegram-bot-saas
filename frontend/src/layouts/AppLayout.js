@@ -155,8 +155,8 @@ export default function AppLayout({ children }) {
                   icon={item.icon}
                   sx={{
                     minWidth: 0,
-                    fontSize: '0.65rem',
-                    '& .MuiBottomNavigationAction-label': { fontSize: '0.65rem' },
+                    fontSize: '0.72rem',
+                    '& .MuiBottomNavigationAction-label': { fontSize: '0.72rem' },
                   }}
                 />
               ))}

@@ -267,12 +267,12 @@ export default function Pricing() {
                     <Box sx={{ mb: 2 }}>
                       {plan.id === 'free' ? (
                         <>
-                          <Typography component="span" fontWeight={800} sx={{ fontSize: { xs: '2.2rem', md: '2.8rem' } }}>$0</Typography>
+                          <Typography component="span" fontWeight={800} sx={{ fontSize: { xs: '1.9rem', sm: '2.4rem', md: '2.8rem' } }}>$0</Typography>
                           <Typography component="span" variant="body1" color="text.secondary"> / forever</Typography>
                         </>
                       ) : annual ? (
                         <>
-                          <Typography component="span" fontWeight={800} sx={{ fontSize: { xs: '2.2rem', md: '2.8rem' } }}>
+                          <Typography component="span" fontWeight={800} sx={{ fontSize: { xs: '1.9rem', sm: '2.4rem', md: '2.8rem' } }}>
                             ${Math.round(plan.annualPrice / 12)}
                           </Typography>
                           <Typography component="span" variant="body1" color="text.secondary">/month</Typography>
@@ -282,7 +282,7 @@ export default function Pricing() {
                         </>
                       ) : (
                         <>
-                          <Typography component="span" fontWeight={800} sx={{ fontSize: { xs: '2.2rem', md: '2.8rem' } }}>
+                          <Typography component="span" fontWeight={800} sx={{ fontSize: { xs: '1.9rem', sm: '2.4rem', md: '2.8rem' } }}>
                             ${plan.monthlyPrice}
                           </Typography>
                           <Typography component="span" variant="body1" color="text.secondary">/month</Typography>
@@ -348,7 +348,7 @@ export default function Pricing() {
         <Typography variant="h5" fontWeight={800} mb={4}>
           Everything side by side
         </Typography>
-        <TableContainer component={Paper} variant="outlined" sx={{ textAlign: 'left', mb: 2, borderRadius: 2 }}>
+        <TableContainer component={Paper} variant="outlined" sx={{ textAlign: 'left', mb: 2, borderRadius: 2, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
           <Table size="small">
             <TableHead>
               <TableRow sx={{ bgcolor: 'rgba(255,255,255,0.04)' }}>

@@ -99,7 +99,7 @@ export default function About() {
           <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}>
             <TelegizerLogo size="lg" variant="icon" />
           </Box>
-          <Typography variant="h3" fontWeight={800} mb={2}>
+          <Typography variant="h3" fontWeight={800} mb={2} sx={{ fontSize: { xs: '2rem', sm: '2.5rem', md: '3rem' } }}>
             We're building the command center for Telegram communities
           </Typography>
           <Typography variant="body1" color="text.secondary" maxWidth={600} mx="auto" lineHeight={1.8}>
@@ -124,7 +124,7 @@ export default function About() {
         <Grid container spacing={6} alignItems="center" mb={10}>
           <Grid item xs={12} md={6}>
             <Chip label="Our Mission" size="small" color="primary" sx={{ mb: 2 }} />
-            <Typography variant="h4" fontWeight={800} mb={3}>
+            <Typography variant="h4" fontWeight={800} mb={3} sx={{ fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' } }}>
               Community management should be effortless
             </Typography>
             <Typography variant="body1" color="text.secondary" lineHeight={1.9} mb={2}>
@@ -159,7 +159,7 @@ export default function About() {
         {/* Features grid */}
         <Box sx={{ textAlign: 'center', mb: 5 }}>
           <Chip label="What We've Built" size="small" color="primary" sx={{ mb: 2 }} />
-          <Typography variant="h4" fontWeight={800} mb={2}>Everything in one platform</Typography>
+          <Typography variant="h4" fontWeight={800} mb={2} sx={{ fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' } }}>Everything in one platform</Typography>
           <Typography variant="body1" color="text.secondary" maxWidth={500} mx="auto">
             12+ features that work together — not a dozen separate bots you have to juggle.
           </Typography>
@@ -184,12 +184,12 @@ export default function About() {
         {/* Timeline */}
         <Box sx={{ textAlign: 'center', mb: 5 }}>
           <Chip label="Our Story" size="small" color="primary" sx={{ mb: 2 }} />
-          <Typography variant="h4" fontWeight={800}>How we got here</Typography>
+          <Typography variant="h4" fontWeight={800} sx={{ fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' } }}>How we got here</Typography>
         </Box>
         <Box sx={{ maxWidth: 600, mx: 'auto', mb: 10 }}>
           {TIMELINE.map((t, i) => (
             <Box key={t.year} sx={{ display: 'flex', gap: 3, mb: 4, position: 'relative' }}>
-              <Box sx={{ flexShrink: 0, textAlign: 'right', width: 80 }}>
+              <Box sx={{ flexShrink: 0, textAlign: 'right', width: { xs: 60, md: 80 } }}>
                 <Typography variant="caption" color="primary.main" fontWeight={700}>{t.year}</Typography>
               </Box>
               <Box sx={{ position: 'relative' }}>
@@ -216,7 +216,7 @@ export default function About() {
         <Grid container spacing={6} alignItems="flex-start" mb={10}>
           <Grid item xs={12} md={5}>
             <Chip label="Our Values" size="small" color="primary" sx={{ mb: 2 }} />
-            <Typography variant="h4" fontWeight={800} mb={2}>How we operate</Typography>
+            <Typography variant="h4" fontWeight={800} mb={2} sx={{ fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' } }}>How we operate</Typography>
             <Typography variant="body1" color="text.secondary" lineHeight={1.9}>
               We're a small, focused team. No VC pressure, no growth-at-all-costs mindset.
               We build tools we'd use ourselves and treat our users the way we'd want to be treated.
@@ -239,19 +239,19 @@ export default function About() {
         {/* Founder */}
         <Box sx={{ textAlign: 'center', mb: 5 }}>
           <Chip label="The Founder" size="small" color="primary" sx={{ mb: 2 }} />
-          <Typography variant="h4" fontWeight={800} mb={1}>Built by someone who gets it</Typography>
+          <Typography variant="h4" fontWeight={800} mb={1} sx={{ fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' } }}>Built by someone who gets it</Typography>
           <Typography variant="body1" color="text.secondary" maxWidth={500} mx="auto" mb={6}>
             Telegizer is an independent product, built and maintained by one person who was tired of
             patching together five different bots to run a Telegram community.
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', justifyContent: 'center', mb: 10 }}>
-          <Card sx={{ maxWidth: 360, width: '100%', border: '1px solid', borderColor: 'divider' }}>
+          <Card sx={{ maxWidth: { xs: '100%', sm: 360 }, width: '100%', border: '1px solid', borderColor: 'divider' }}>
             <CardContent sx={{ textAlign: 'center', p: '28px !important' }}>
               <Avatar
                 src="/founder.jpg"
                 alt="Fazal Elahi — Founder of Telegizer"
-                sx={{ width: 120, height: 120, mx: 'auto', mb: 2.5, border: '3px solid', borderColor: 'primary.main' }}
+                sx={{ width: { xs: 80, sm: 120 }, height: { xs: 80, sm: 120 }, mx: 'auto', mb: 2.5, border: '3px solid', borderColor: 'primary.main' }}
               />
               <Typography variant="h6" fontWeight={700} mb={0.5}>Fazal Elahi</Typography>
               <Typography variant="body2" color="text.secondary" mb={0.5}>Founder & Developer</Typography>
@@ -299,7 +299,7 @@ export default function About() {
           borderRadius: 3, border: '1px solid', borderColor: 'divider',
           mb: 6,
         }}>
-          <Typography variant="h4" fontWeight={800} mb={2}>
+          <Typography variant="h4" fontWeight={800} mb={2} sx={{ fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' } }}>
             Ready to grow your Telegram community?
           </Typography>
           <Typography variant="body1" color="text.secondary" mb={4} maxWidth={480} mx="auto">
@@ -321,7 +321,7 @@ export default function About() {
         </Box>
 
         <Divider sx={{ mb: 3 }} />
-        <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap', pb: 4 }}>
+        <Box sx={{ display: 'flex', gap: { xs: 1.5, md: 3 }, flexWrap: 'wrap', pb: 4 }}>
           {[
             { label: 'Privacy Policy', path: '/privacy' },
             { label: 'Terms of Service', path: '/terms' },

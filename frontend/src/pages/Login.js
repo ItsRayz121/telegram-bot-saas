@@ -94,11 +94,11 @@ export default function Login() {
           p: 2,
         }}
       >
-        <Card sx={{ width: '100%', maxWidth: 420 }}>
+        <Card sx={{ width: '100%', maxWidth: { xs: '95vw', sm: 420 } }}>
           <CardContent sx={{ p: { xs: 3, sm: 4 } }}>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, mb: 1 }}>
               <Lock color="primary" />
-              <Typography variant="h5" fontWeight={700}>Two-Factor Auth</Typography>
+              <Typography variant="h5" fontWeight={700} sx={{ fontSize: { xs: '1.1rem', sm: '1.5rem' } }}>Two-Factor Auth</Typography>
             </Box>
             <Typography variant="body2" color="text.secondary" textAlign="center" mb={3}>
               Enter the 6-digit code from your authenticator app, or one of your backup codes.
@@ -156,7 +156,7 @@ export default function Login() {
         p: 2,
       }}
     >
-      <Card sx={{ width: '100%', maxWidth: 420 }}>
+      <Card sx={{ width: '100%', maxWidth: { xs: '95vw', sm: 420 } }}>
         <CardContent sx={{ p: { xs: 3, sm: 4 } }}>
           <Box sx={{ display: 'flex', justifyContent: 'center', mb: 1.5 }}>
             <TelegizerLogo size="lg" />

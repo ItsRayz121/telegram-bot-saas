@@ -192,12 +192,12 @@ export default function Contact() {
       {/* Hero */}
       <Box sx={{ py: { xs: 6, md: 8 }, textAlign: 'center', borderBottom: '1px solid', borderColor: 'divider' }}>
         <Container maxWidth="md">
-          <Typography variant="h3" fontWeight={800} mb={2}>Contact Us</Typography>
+          <Typography variant="h3" fontWeight={800} mb={2} sx={{ fontSize: { xs: '2rem', sm: '2.5rem', md: '3rem' } }}>Contact Us</Typography>
           <Typography variant="body1" color="text.secondary" maxWidth={520} mx="auto">
             We're a small team and we actually read every message. Tell us what you need and
             we'll get back to you quickly.
           </Typography>
-          <Box sx={{ display: 'flex', gap: 1.5, justifyContent: 'center', flexWrap: 'wrap', mt: 3 }}>
+          <Box sx={{ display: 'flex', gap: { xs: 0.75, sm: 1.5 }, justifyContent: 'center', flexWrap: 'wrap', mt: 3 }}>
             <Chip icon={<Schedule sx={{ fontSize: 14 }} />} label="Mon–Fri, 9am–6pm UTC" size="small" variant="outlined" />
             <Chip label="Average reply: under 24 hours" size="small" variant="outlined" color="success" />
           </Box>
@@ -207,7 +207,7 @@ export default function Contact() {
       <Container maxWidth="lg" sx={{ py: 6 }}>
 
         {/* Email channels */}
-        <Typography variant="h5" fontWeight={700} mb={3}>Email Channels</Typography>
+        <Typography variant="h5" fontWeight={700} mb={3} sx={{ fontSize: { xs: '1.2rem', sm: '1.5rem' } }}>Email Channels</Typography>
         <Grid container spacing={2} mb={6}>
           {CONTACT_CHANNELS.map((ch) => (
             <Grid item xs={12} sm={6} key={ch.title}>
@@ -217,7 +217,7 @@ export default function Contact() {
                     <Box sx={{ color: ch.color }}>{ch.icon}</Box>
                     <Box>
                       <Typography variant="subtitle2" fontWeight={700}>{ch.title}</Typography>
-                      <Chip label={ch.responseTime} size="small" sx={{ height: 18, fontSize: '0.65rem', mt: 0.25 }} />
+                      <Chip label={ch.responseTime} size="small" sx={{ height: 18, fontSize: '0.72rem', mt: 0.25 }} />
                     </Box>
                   </Box>
                   <Typography variant="body2" color="text.secondary" mb={1.5} lineHeight={1.7}>
@@ -233,7 +233,7 @@ export default function Contact() {
         </Grid>
 
         {/* Community */}
-        <Typography variant="h5" fontWeight={700} mb={3}>Community & Social</Typography>
+        <Typography variant="h5" fontWeight={700} mb={3} sx={{ fontSize: { xs: '1.2rem', sm: '1.5rem' } }}>Community & Social</Typography>
         <Grid container spacing={2} mb={6}>
           {SOCIAL_CHANNELS.map((ch) => (
             <Grid item xs={12} sm={6} key={ch.title}>
@@ -258,7 +258,7 @@ export default function Contact() {
         {/* Send us a message */}
         <Grid container spacing={4} mb={6}>
           <Grid item xs={12} md={6}>
-            <Typography variant="h5" fontWeight={700} mb={1}>Send Us a Message</Typography>
+            <Typography variant="h5" fontWeight={700} mb={1} sx={{ fontSize: { xs: '1.2rem', sm: '1.5rem' } }}>Send Us a Message</Typography>
             <Typography variant="body2" color="text.secondary" mb={2}>
               Fill in the form and we'll open your email client with everything pre-filled.
               You can also email us directly at{' '}
@@ -276,7 +276,7 @@ export default function Contact() {
 
           {/* FAQ */}
           <Grid item xs={12} md={6}>
-            <Typography variant="h5" fontWeight={700} mb={3}>Frequently Asked Questions</Typography>
+            <Typography variant="h5" fontWeight={700} mb={3} sx={{ fontSize: { xs: '1.2rem', sm: '1.5rem' } }}>Frequently Asked Questions</Typography>
             {FAQ.map((item) => (
               <Box key={item.q} sx={{ mb: 3 }}>
                 <Typography variant="subtitle2" fontWeight={700} mb={0.75}>{item.q}</Typography>
@@ -290,7 +290,7 @@ export default function Contact() {
         </Grid>
 
         <Divider sx={{ mb: 3 }} />
-        <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap', pb: 4 }}>
+        <Box sx={{ display: 'flex', gap: { xs: 1.5, md: 3 }, flexWrap: 'wrap', pb: 4 }}>
           {[
             { label: 'Privacy Policy', path: '/privacy' },
             { label: 'Terms of Service', path: '/terms' },
