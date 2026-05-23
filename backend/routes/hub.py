@@ -2181,20 +2181,14 @@ def custom_bot_webhook(bot_id):
 
         if chat_type in ("group", "supergroup") and telegram_group_id:
             if new_status in ("member", "administrator"):
-                # Send consent DM to the user who added the bot.
-                # Group is NOT auto-connected — user must confirm via the DM button.
-                if added_by_tg_id:
+                # Consent DM is sent ONLY for private groups (no public @username).
+                # Public groups are handled via /linkgroup in Group Management.
+                is_private = not chat.get("username")
+                if is_private and added_by_tg_id:
                     try:
                         token = _dec(bot.telegram_bot_token)
-                        is_public = bool(chat.get("username"))
-                        warning = (
-                            "⚠️ *Note: This is a public group.*\n"
-                            "Assistant Hub works best in private team groups. "
-                            "For public community management, use Group Management instead.\n\n"
-                        ) if is_public else ""
                         text = (
                             f"You've added me to *{group_name}*.\n\n"
-                            f"{warning}"
                             f"Before I start observing, here's what happens:\n"
                             f"• I'll analyze messages to surface tasks, reminders, and meetings\n"
                             f"• Raw messages are deleted after 72 hours\n"

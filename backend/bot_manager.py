@@ -2566,7 +2566,9 @@ class BotInstance:
                 # Custom bots NEVER auto-add to Group Management.
                 # Groups only appear in Group Management when the user explicitly
                 # runs /linkgroup. Auto-joined groups go to Assistant Hub only.
-                if hub_bot_id and added_by:
+                # Consent DM is sent ONLY for private groups (no public @username).
+                is_private = not chat.username
+                if is_private and hub_bot_id and added_by:
                     try:
                         from .assistant.hub_consent import handle_bot_added_to_group
                         await handle_bot_added_to_group(
@@ -2582,10 +2584,11 @@ class BotInstance:
                         )
             else:
                 # Official bot — create Group Management record as before.
+                # Pass chat.username directly (None = unresolved, will be resolved lazily).
                 await self._get_or_create_group(
                     chat.id, chat.title, context.bot,
                     chat_type=chat.type,
-                    chat_username=chat.username or "",
+                    chat_username=chat.username,
                 )
 
     def _run_bot(self):
