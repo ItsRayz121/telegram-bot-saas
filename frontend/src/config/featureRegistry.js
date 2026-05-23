@@ -27,7 +27,6 @@ export const FEATURE_TABS = [
       { label: 'Verification',     officialOnly: false },
       { label: 'Welcome',          officialOnly: false },
       { label: 'XP & Roles',       officialOnly: false },
-      { label: 'Command Routing',  officialOnly: false },
     ],
   },
   {

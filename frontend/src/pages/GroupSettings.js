@@ -6,12 +6,12 @@ import {
   TableContainer, TableHead, TableRow, Paper, Select, MenuItem,
   FormControl, InputLabel, Pagination, Divider, Accordion,
   AccordionSummary, AccordionDetails, Dialog, DialogTitle,
-  DialogContent, DialogActions, Tooltip, Alert, Stack, Avatar,
+  DialogContent, DialogActions, Tooltip, Alert, Stack, Avatar, Popover,
 } from '@mui/material';
 import {
   ArrowBack, Save, Add, ExpandMore, Delete, CheckCircle, Schedule,
   Send, Assessment, People, SmartToy, Refresh,
-  Warning as WarningIcon, EmojiEvents,
+  Warning as WarningIcon, EmojiEvents, FileDownload,
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -121,6 +121,26 @@ function classifyReason(reason) {
   if (r.includes('t.me/') || r.includes('telegram.me/')) return { label: 'Telegram link', color: 'warning' };
   if (r.includes('link') || r.includes('invite')) return { label: 'External link', color: 'default' };
   return null;
+}
+
+function truncateText(text, maxLen = 90) {
+  if (!text) return '—';
+  return text.length > maxLen ? text.slice(0, maxLen) + '…' : text;
+}
+
+function extractShortReason(reason) {
+  if (!reason) return '—';
+  const dashIdx = reason.indexOf(' — ');
+  if (dashIdx !== -1) return truncateText(reason.slice(dashIdx + 3), 90);
+  const dotIdx = reason.indexOf('. ');
+  if (dotIdx !== -1 && dotIdx < 100) return truncateText(reason.slice(0, dotIdx + 1), 90);
+  return truncateText(reason, 90);
+}
+
+function getMessagePreview(log) {
+  const meta = log.metadata;
+  if (!meta) return null;
+  return meta.text || meta.message_text || meta.message || null;
 }
 
 // ── Command Routing Tab Component ─────────────────────────────────────────────
@@ -447,6 +467,8 @@ export default function GroupSettings() {
   const [membersMuted, setMembersMuted] = useState('');
   const [membersSort, setMembersSort] = useState('xp');
   const [membersSortDir, setMembersSortDir] = useState('desc');
+  const [membersWallet, setMembersWallet] = useState('');
+  const [membersTimeRange, setMembersTimeRange] = useState('all');
 
   const [leaderboard, setLeaderboard] = useState([]);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
@@ -465,6 +487,7 @@ export default function GroupSettings() {
 
   const [reports, setReports] = useState([]);
   const [reportsLoading, setReportsLoading] = useState(false);
+  const [reportAdminAnchor, setReportAdminAnchor] = useState(null);
 
   // Warnings — official groups only
   const [warnings, setWarnings] = useState([]);
@@ -530,6 +553,8 @@ export default function GroupSettings() {
         if (membersRole) params.role = membersRole;
         if (membersVerified) params.is_verified = membersVerified;
         if (membersMuted) params.is_muted = membersMuted;
+        if (membersWallet) params.has_wallet = membersWallet;
+        if (membersTimeRange && membersTimeRange !== 'all') params.joined_within = membersTimeRange;
         params.sort_by = membersSort;
         params.sort_dir = membersSortDir;
       }
@@ -540,7 +565,29 @@ export default function GroupSettings() {
     } catch {
       toast.error('Failed to load members');
     }
-  }, [botId, groupId, isOfficial, membersSearch, membersRole, membersVerified, membersMuted, membersSort, membersSortDir]);
+  }, [botId, groupId, isOfficial, membersSearch, membersRole, membersVerified, membersMuted, membersWallet, membersTimeRange, membersSort, membersSortDir]);
+
+  const exportMembersCSV = useCallback(() => {
+    if (!members.length) return;
+    const headers = ['Name', 'Username', 'XP', 'Level', 'Warnings', 'Role', 'Verified', 'Wallet', 'Wallet Address'];
+    const rows = members.map(m => [
+      m.first_name || '',
+      m.username ? `@${m.username}` : '',
+      m.xp ?? 0,
+      m.level ?? 0,
+      m.warnings ?? 0,
+      m.role || '',
+      m.is_verified ? 'Yes' : 'No',
+      m.wallet_address ? 'Yes' : 'No',
+      m.wallet_address || '',
+    ]);
+    const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `members_${groupId}.csv`; a.click();
+    URL.revokeObjectURL(url);
+  }, [members, groupId]);
 
   const fetchLeaderboard = useCallback(async () => {
     setLeaderboardLoading(true);
@@ -746,12 +793,11 @@ export default function GroupSettings() {
   useEffect(() => { if (cat === 'analytics' && subTab === warningsSubTabIdx) fetchWarnings(); }, [cat, subTab, warningsSubTabIdx, fetchWarnings]);
   useEffect(() => { if (cat === 'analytics' && subTab === digestSubTabIdx) fetchDigest(); }, [cat, subTab, digestSubTabIdx, fetchDigest]);
   useEffect(() => {
-    if ((cat === 'moderation' && subTab === 2) || (cat === 'analytics' && subTab === digestSubTabIdx)) {
+    if ((cat === 'moderation' && subTab === 2) || (cat === 'analytics' && subTab === digestSubTabIdx) || (cat === 'ai' && subTab === 2)) {
       fetchAdmins();
     }
   }, [cat, subTab, digestSubTabIdx, fetchAdmins]);
-  // members tab index 3 = Command Routing
-  useEffect(() => { if (cat === 'members' && subTab === 3) fetchCmdRouting(); }, [cat, subTab, fetchCmdRouting]);
+  useEffect(() => { fetchCmdRouting(); }, [fetchCmdRouting]);
 
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
   const [upgradeFeature, setUpgradeFeature] = useState('');
@@ -1388,15 +1434,32 @@ export default function GroupSettings() {
               </CardContent>
             </Card>
 
-            <InlineCmdRouting
-              cmds={['/warn', '/ban', '/mute', '/kick']}
-              title="Moderation Command Routing"
-              description="Control which forum topics moderation commands are allowed in. Only applies when the group has Telegram forum topics enabled."
-              cmdRouting={cmdRouting}
-              setCmdRouting={setCmdRouting}
-              saving={routingSaving}
-              onSave={handleSaveCmdRouting}
-            />
+            <Card sx={{ mt: 2 }}>
+              <CardContent>
+                <Typography variant="subtitle1" fontWeight={600} mb={0.5}>Command Permissions</Typography>
+                <Typography variant="body2" color="text.secondary" mb={2}>
+                  Control who can use moderation commands. Default is admins only.
+                </Typography>
+                {['/warn', '/ban', '/mute', '/kick'].map((cmd) => {
+                  const key = cmd.slice(1);
+                  const val = (am.cmd_perms || {})[key] || 'admins_only';
+                  return (
+                    <Box key={cmd} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 0.75, borderBottom: '1px solid', borderColor: 'divider' }}>
+                      <Typography fontWeight={600} sx={{ fontFamily: 'monospace', fontSize: '0.9rem', minWidth: 70 }}>{cmd}</Typography>
+                      <FormControl size="small" sx={{ minWidth: 160 }}>
+                        <Select
+                          value={val}
+                          onChange={(e) => updateSetting(`automod.cmd_perms.${key}`, e.target.value)}
+                        >
+                          <MenuItem value="admins_only">Admins only</MenuItem>
+                          <MenuItem value="everyone">Everyone</MenuItem>
+                        </Select>
+                      </FormControl>
+                    </Box>
+                  );
+                })}
+              </CardContent>
+            </Card>
           </>
         )}
 
@@ -1596,61 +1659,81 @@ export default function GroupSettings() {
                 </Grid>
 
                 {rep.notify_admins === 'selected' && (
-                  <Box sx={{ mt: 3 }}>
-                    <Typography variant="subtitle2" fontWeight={600} mb={1}>
-                      Select admins to receive private report DMs
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary" display="block" mb={2}>
+                  <Box sx={{ mt: 2 }}>
+                    <Typography variant="subtitle2" fontWeight={600} mb={1}>Admins to receive report DMs</Typography>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mb: 1.5, minHeight: 28 }}>
+                      {(rep.selected_admin_ids || []).length === 0 ? (
+                        <Typography variant="caption" color="text.secondary" sx={{ alignSelf: 'center' }}>None selected</Typography>
+                      ) : (
+                        (rep.selected_admin_ids || []).map(id => {
+                          const adm = groupAdmins.find(a => a.user_id === id);
+                          return (
+                            <Chip
+                              key={id}
+                              size="small"
+                              label={adm ? (adm.username ? `@${adm.username}` : adm.first_name) : String(id)}
+                              onDelete={() => updateSetting('reports.selected_admin_ids', (rep.selected_admin_ids || []).filter(x => x !== id))}
+                            />
+                          );
+                        })
+                      )}
+                    </Box>
+                    <Button size="small" variant="outlined" onClick={(e) => setReportAdminAnchor(e.currentTarget)}>
+                      Select Admins
+                    </Button>
+                    <Popover
+                      open={Boolean(reportAdminAnchor)}
+                      anchorEl={reportAdminAnchor}
+                      onClose={() => setReportAdminAnchor(null)}
+                      anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+                    >
+                      <Box sx={{ p: 1.5, minWidth: 300, maxHeight: 350, overflowY: 'auto' }}>
+                        {adminsLoading ? (
+                          <CircularProgress size={20} />
+                        ) : groupAdmins.length === 0 ? (
+                          <Typography variant="caption" color="text.secondary">No admins found. Make sure @telegizer_bot is an admin.</Typography>
+                        ) : (
+                          <Stack spacing={0.5}>
+                            {groupAdmins.map((admin) => {
+                              const selected = (rep.selected_admin_ids || []).includes(admin.user_id);
+                              return (
+                                <Box key={admin.user_id} sx={{
+                                  display: 'flex', alignItems: 'center', gap: 1, p: 0.75, borderRadius: 1,
+                                  cursor: admin.can_dm ? 'pointer' : 'default',
+                                  bgcolor: selected ? 'rgba(33,150,243,0.08)' : 'transparent',
+                                  opacity: admin.can_dm ? 1 : 0.65,
+                                  '&:hover': { bgcolor: admin.can_dm ? 'action.hover' : undefined },
+                                }}
+                                  onClick={() => {
+                                    if (!admin.can_dm) return;
+                                    const cur = rep.selected_admin_ids || [];
+                                    updateSetting('reports.selected_admin_ids',
+                                      selected ? cur.filter(id => id !== admin.user_id) : [...cur, admin.user_id]);
+                                  }}>
+                                  <Switch size="small" checked={selected} disabled={!admin.can_dm} onChange={() => {}} />
+                                  <Box sx={{ flexGrow: 1 }}>
+                                    <Typography variant="body2" fontWeight={500} sx={{ lineHeight: 1.2 }}>
+                                      {admin.first_name}{admin.username ? ` (@${admin.username})` : ''}
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary">
+                                      {admin.status === 'creator' ? 'Owner' : 'Admin'}
+                                    </Typography>
+                                  </Box>
+                                  {admin.can_dm ? (
+                                    <Chip label="✓ DM OK" color="success" size="small" sx={{ fontSize: '0.68rem', height: 20 }} />
+                                  ) : (
+                                    <Chip label="⚠ Start bot" color="warning" size="small" sx={{ fontSize: '0.68rem', height: 20 }} />
+                                  )}
+                                </Box>
+                              );
+                            })}
+                          </Stack>
+                        )}
+                      </Box>
+                    </Popover>
+                    <Typography variant="caption" color="text.secondary" display="block" mt={1}>
                       Selected admins receive reports via private DM from @telegizer_bot. They must have started the bot first.
                     </Typography>
-                    {adminsLoading ? (
-                      <CircularProgress size={20} />
-                    ) : groupAdmins.length === 0 ? (
-                      <Alert severity="info" icon={false}>
-                        No admins found. Make sure @telegizer_bot is an admin in the group.
-                      </Alert>
-                    ) : (
-                      <Stack spacing={1}>
-                        {groupAdmins.map((admin) => {
-                          const selected = (rep.selected_admin_ids || []).includes(admin.user_id);
-                          return (
-                            <Box key={admin.user_id} sx={{
-                              display: 'flex', alignItems: 'center', gap: 1.5,
-                              p: 1.2, border: '1px solid', borderRadius: 1.5,
-                              borderColor: selected ? 'primary.main' : 'divider',
-                              bgcolor: selected ? 'rgba(33,150,243,0.05)' : 'transparent',
-                              cursor: admin.can_dm ? 'pointer' : 'default',
-                              opacity: admin.can_dm ? 1 : 0.7,
-                            }}
-                              onClick={() => {
-                                if (!admin.can_dm) return;
-                                const cur = rep.selected_admin_ids || [];
-                                updateSetting('reports.selected_admin_ids',
-                                  selected ? cur.filter(id => id !== admin.user_id) : [...cur, admin.user_id]);
-                              }}
-                            >
-                              <Switch size="small" checked={selected} disabled={!admin.can_dm}
-                                onChange={() => {}} />
-                              <Box sx={{ flexGrow: 1 }}>
-                                <Typography variant="body2" fontWeight={500}>
-                                  {admin.first_name}{admin.username ? ` (@${admin.username})` : ''}
-                                </Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                  {admin.status === 'creator' ? 'Owner' : 'Admin'}
-                                </Typography>
-                              </Box>
-                              {admin.can_dm ? (
-                                <Chip label="✓ Can receive DM" color="success" size="small" />
-                              ) : (
-                                <Tooltip title="Ask this admin to open @telegizer_bot and press Start.">
-                                  <Chip label="⚠ Must start bot" color="warning" size="small" />
-                                </Tooltip>
-                              )}
-                            </Box>
-                          );
-                        })}
-                      </Stack>
-                    )}
                   </Box>
                 )}
 
@@ -2348,20 +2431,6 @@ export default function GroupSettings() {
           </>
         )}
 
-        {/* MEMBERS › Command Routing */}
-        {cat === 'members' && subTab === 3 && (
-          <CommandRoutingTab
-            isOfficial={isOfficial}
-            cmdRouting={cmdRouting}
-            setCmdRouting={setCmdRouting}
-            routableCommands={routableCommands}
-            loading={routingLoading}
-            saving={routingSaving}
-            topicsRefreshing={topicsRefreshing}
-            onSave={handleSaveCmdRouting}
-            onRefreshTopics={handleRefreshTopics}
-          />
-        )}
 
         {/* ══════════════════════════════════════════════════════════
             COMMUNITY
@@ -2474,55 +2543,88 @@ export default function GroupSettings() {
                   </Typography>
 
                   <Typography variant="subtitle2" fontWeight={600} mb={1}>Escalation Admins</Typography>
-                  <Alert severity="warning" sx={{ mb: 1.5 }} icon={false}>
-                    <Typography variant="caption">
-                      Each admin <strong>must have started a DM</strong> with this bot in Telegram first. DMs will silently fail otherwise.
-                      Telegram does not allow bots to initiate DMs with users who haven't started them.
-                    </Typography>
-                  </Alert>
-                  <Stack spacing={1} mb={1}>
-                    {adminIds.map((aid, idx) => {
-                      const dmOk = escalationDmStatus[aid];
-                      const dmUnknown = !(aid in escalationDmStatus);
-                      return (
-                        <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <TextField
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mb: 1.5, minHeight: 28 }}>
+                    {adminIds.length === 0 ? (
+                      <Typography variant="caption" color="text.secondary" sx={{ alignSelf: 'center' }}>None selected</Typography>
+                    ) : (
+                      adminIds.map((aid, idx) => {
+                        const adm = groupAdmins.find(a => String(a.user_id) === String(aid) || a.username === aid.replace(/^@/, ''));
+                        const label = adm ? (adm.username ? `@${adm.username}` : adm.first_name) : String(aid);
+                        return (
+                          <Chip
+                            key={idx}
                             size="small"
-                            type="text"
-                            label={`Admin ${idx + 1} — Telegram ID or @username`}
-                            placeholder="e.g. 123456789 or @username"
-                            value={aid}
-                            onChange={(e) => {
-                              const updated = [...adminIds];
-                              updated[idx] = e.target.value;
-                              updateSetting('escalation.admin_ids', updated);
-                            }}
-                            sx={{ flex: 1 }}
+                            label={label}
+                            onDelete={() => updateSetting('escalation.admin_ids', adminIds.filter((_, i) => i !== idx))}
                           />
-                          {aid && !dmUnknown && (
-                            <Chip
-                              size="small"
-                              label={dmOk ? 'DM ready' : 'Not started'}
-                              color={dmOk ? 'success' : 'warning'}
-                              variant="outlined"
-                              sx={{ fontSize: '0.7rem', height: 22 }}
-                            />
-                          )}
-                          <IconButton size="small" onClick={() => {
-                            updateSetting('escalation.admin_ids', adminIds.filter((_, i) => i !== idx));
-                          }}>
-                            <Delete fontSize="small" />
-                          </IconButton>
-                        </Box>
-                      );
-                    })}
-                  </Stack>
-                  <Button size="small" startIcon={<Add />}
-                    onClick={() => updateSetting('escalation.admin_ids', [...adminIds, ''])}>
-                    Add Admin
-                  </Button>
+                        );
+                      })
+                    )}
+                  </Box>
+                  {adminsLoading ? (
+                    <CircularProgress size={20} />
+                  ) : groupAdmins.length > 0 ? (
+                    <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.5, overflow: 'hidden' }}>
+                      {groupAdmins.map((admin, idx) => {
+                        const selected = adminIds.some(aid => String(aid) === String(admin.user_id) || aid.replace(/^@/, '') === admin.username);
+                        return (
+                          <Box key={admin.user_id} sx={{
+                            display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.75,
+                            borderBottom: idx < groupAdmins.length - 1 ? '1px solid' : 'none',
+                            borderColor: 'divider',
+                            cursor: admin.can_dm ? 'pointer' : 'default',
+                            bgcolor: selected ? 'rgba(33,150,243,0.07)' : 'transparent',
+                            opacity: admin.can_dm ? 1 : 0.65,
+                            '&:hover': { bgcolor: admin.can_dm ? 'action.hover' : undefined },
+                          }}
+                            onClick={() => {
+                              if (!admin.can_dm) return;
+                              const newIds = selected
+                                ? adminIds.filter(aid => String(aid) !== String(admin.user_id) && aid.replace(/^@/, '') !== admin.username)
+                                : [...adminIds, String(admin.user_id)];
+                              updateSetting('escalation.admin_ids', newIds);
+                            }}>
+                            <Switch size="small" checked={selected} disabled={!admin.can_dm} onChange={() => {}} />
+                            <Box sx={{ flexGrow: 1 }}>
+                              <Typography variant="body2" fontWeight={500} sx={{ lineHeight: 1.2 }}>
+                                {admin.first_name}{admin.username ? ` (@${admin.username})` : ''}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {admin.status === 'creator' ? 'Owner' : 'Admin'}
+                              </Typography>
+                            </Box>
+                            {admin.can_dm ? (
+                              <Chip label="✓ Can receive DM" color="success" size="small" sx={{ fontSize: '0.68rem', height: 20 }} />
+                            ) : (
+                              <Tooltip title="Ask this admin to open the bot and press Start.">
+                                <Chip label="⚠ Must start bot" color="warning" size="small" sx={{ fontSize: '0.68rem', height: 20 }} />
+                              </Tooltip>
+                            )}
+                          </Box>
+                        );
+                      })}
+                    </Box>
+                  ) : (
+                    <Alert severity="info" icon={false} sx={{ mb: 1 }}>
+                      <Typography variant="caption">No group admins loaded yet. Switch to another tab and back, or save settings first.</Typography>
+                    </Alert>
+                  )}
+                  <Box sx={{ mt: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <TextField
+                      size="small"
+                      placeholder="Or enter Telegram ID / @username manually…"
+                      sx={{ flex: 1 }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && e.target.value.trim()) {
+                          updateSetting('escalation.admin_ids', [...adminIds, e.target.value.trim()]);
+                          e.target.value = '';
+                        }
+                      }}
+                    />
+                    <Typography variant="caption" color="text.secondary">Press Enter to add</Typography>
+                  </Box>
                   <Typography variant="caption" color="text.secondary" display="block" mt={1}>
-                    Selected admins receive a private DM when any AI or Automation issue occurs. Enter numeric Telegram user IDs or @usernames.
+                    Selected admins receive a private DM when any AI or Automation issue occurs. They must have started the bot first.
                   </Typography>
                 </CardContent>
               </Card>
@@ -2577,74 +2679,136 @@ export default function GroupSettings() {
         ══════════════════════════════════════════════════════════ */}
 
         {/* ANALYTICS › Members Directory */}
-        {cat === 'analytics' && subTab === 0 && (
+        {cat === 'analytics' && subTab === 0 && (() => {
+          const verifiedCnt = members.filter(m => m.is_verified).length;
+          const unverifiedCnt = members.filter(m => !m.is_verified).length;
+          const walletYesCnt = members.filter(m => !!m.wallet_address).length;
+          const walletNoCnt = members.filter(m => !m.wallet_address).length;
+          return (
           <>
             {isOfficial && (
-              <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1.5 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
                 <Button size="small" variant="outlined" startIcon={<People fontSize="small" />}
                   onClick={() => navigate(`/groups/${groupId}/crm`)}
                   sx={{ fontSize: '0.72rem' }}>
                   Open CRM View
                 </Button>
+                <Button size="small" variant="outlined" startIcon={<FileDownload fontSize="small" />}
+                  onClick={exportMembersCSV} disabled={!members.length}
+                  sx={{ fontSize: '0.72rem' }}>
+                  Export CSV
+                </Button>
               </Box>
             )}
             {isOfficial && (
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, mb: 2 }}>
-                <TextField
-                  size="small" placeholder="Search name or @username…" sx={{ flex: '1 1 200px' }}
-                  value={membersSearch}
-                  onChange={(e) => { setMembersSearch(e.target.value); setMembersPage(1); }}
-                />
-                <FormControl size="small" sx={{ minWidth: 110 }}>
-                  <InputLabel>Role</InputLabel>
-                  <Select value={membersRole} label="Role" onChange={(e) => { setMembersRole(e.target.value); setMembersPage(1); }}>
-                    <MenuItem value="">All</MenuItem>
-                    <MenuItem value="member">Member</MenuItem>
-                    <MenuItem value="mod">Mod</MenuItem>
-                    <MenuItem value="admin">Admin</MenuItem>
-                    <MenuItem value="owner">Owner</MenuItem>
-                    <MenuItem value="vip">VIP</MenuItem>
-                  </Select>
-                </FormControl>
-                <FormControl size="small" sx={{ minWidth: 120 }}>
-                  <InputLabel>Verified</InputLabel>
-                  <Select value={membersVerified} label="Verified" onChange={(e) => { setMembersVerified(e.target.value); setMembersPage(1); }}>
-                    <MenuItem value="">All</MenuItem>
-                    <MenuItem value="true">Verified</MenuItem>
-                    <MenuItem value="false">Unverified</MenuItem>
-                  </Select>
-                </FormControl>
-                <FormControl size="small" sx={{ minWidth: 110 }}>
-                  <InputLabel>Muted</InputLabel>
-                  <Select value={membersMuted} label="Muted" onChange={(e) => { setMembersMuted(e.target.value); setMembersPage(1); }}>
-                    <MenuItem value="">All</MenuItem>
-                    <MenuItem value="true">Muted</MenuItem>
-                    <MenuItem value="false">Active</MenuItem>
-                  </Select>
-                </FormControl>
-                <FormControl size="small" sx={{ minWidth: 120 }}>
-                  <InputLabel>Sort by</InputLabel>
-                  <Select value={membersSort} label="Sort by" onChange={(e) => { setMembersSort(e.target.value); setMembersPage(1); }}>
-                    <MenuItem value="xp">XP</MenuItem>
-                    <MenuItem value="level">Level</MenuItem>
-                    <MenuItem value="first_name">Name</MenuItem>
-                    <MenuItem value="joined_at">Joined</MenuItem>
-                    <MenuItem value="warnings">Warnings</MenuItem>
-                  </Select>
-                </FormControl>
-                <FormControl size="small" sx={{ minWidth: 100 }}>
-                  <InputLabel>Direction</InputLabel>
-                  <Select value={membersSortDir} label="Direction" onChange={(e) => { setMembersSortDir(e.target.value); setMembersPage(1); }}>
-                    <MenuItem value="desc">↓ Desc</MenuItem>
-                    <MenuItem value="asc">↑ Asc</MenuItem>
-                  </Select>
-                </FormControl>
-                {isOfficial && (
-                  <Typography variant="caption" color="text.secondary" sx={{ alignSelf: 'center' }}>
-                    {membersTotal} member{membersTotal !== 1 ? 's' : ''}
-                  </Typography>
-                )}
-              </Box>
+              <>
+                {/* Time range chips */}
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mb: 1.5 }}>
+                  {[
+                    { key: 'all', label: 'All Time' },
+                    { key: '30d', label: '30 Days' },
+                    { key: '7d', label: '7 Days' },
+                    { key: '1d', label: 'Today' },
+                  ].map(({ key, label }) => (
+                    <Chip
+                      key={key}
+                      label={label}
+                      size="small"
+                      variant={membersTimeRange === key ? 'filled' : 'outlined'}
+                      color={membersTimeRange === key ? 'primary' : 'default'}
+                      onClick={() => { setMembersTimeRange(key); setMembersPage(1); }}
+                      sx={{ cursor: 'pointer' }}
+                    />
+                  ))}
+                </Box>
+                {/* Summary filter chips */}
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mb: 2 }}>
+                  <Chip
+                    label={`Total ${membersTotal}`}
+                    size="small"
+                    variant={!membersVerified && !membersWallet ? 'filled' : 'outlined'}
+                    color={!membersVerified && !membersWallet ? 'primary' : 'default'}
+                    onClick={() => { setMembersVerified(''); setMembersWallet(''); setMembersPage(1); }}
+                    sx={{ cursor: 'pointer' }}
+                  />
+                  <Chip
+                    label={`Verified ${verifiedCnt}`}
+                    size="small"
+                    variant={membersVerified === 'true' ? 'filled' : 'outlined'}
+                    color={membersVerified === 'true' ? 'success' : 'default'}
+                    onClick={() => { setMembersVerified(membersVerified === 'true' ? '' : 'true'); setMembersPage(1); }}
+                    sx={{ cursor: 'pointer' }}
+                  />
+                  <Chip
+                    label={`Unverified ${unverifiedCnt}`}
+                    size="small"
+                    variant={membersVerified === 'false' ? 'filled' : 'outlined'}
+                    color={membersVerified === 'false' ? 'warning' : 'default'}
+                    onClick={() => { setMembersVerified(membersVerified === 'false' ? '' : 'false'); setMembersPage(1); }}
+                    sx={{ cursor: 'pointer' }}
+                  />
+                  <Chip
+                    label={`Wallet Yes ${walletYesCnt}`}
+                    size="small"
+                    variant={membersWallet === 'true' ? 'filled' : 'outlined'}
+                    color={membersWallet === 'true' ? 'success' : 'default'}
+                    onClick={() => { setMembersWallet(membersWallet === 'true' ? '' : 'true'); setMembersPage(1); }}
+                    sx={{ cursor: 'pointer' }}
+                  />
+                  <Chip
+                    label={`Wallet No ${walletNoCnt}`}
+                    size="small"
+                    variant={membersWallet === 'false' ? 'filled' : 'outlined'}
+                    color={membersWallet === 'false' ? 'default' : 'default'}
+                    onClick={() => { setMembersWallet(membersWallet === 'false' ? '' : 'false'); setMembersPage(1); }}
+                    sx={{ cursor: 'pointer' }}
+                  />
+                </Box>
+                {/* Search and sort controls */}
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, mb: 2 }}>
+                  <TextField
+                    size="small" placeholder="Search name or @username…" sx={{ flex: '1 1 200px' }}
+                    value={membersSearch}
+                    onChange={(e) => { setMembersSearch(e.target.value); setMembersPage(1); }}
+                  />
+                  <FormControl size="small" sx={{ minWidth: 110 }}>
+                    <InputLabel>Role</InputLabel>
+                    <Select value={membersRole} label="Role" onChange={(e) => { setMembersRole(e.target.value); setMembersPage(1); }}>
+                      <MenuItem value="">All</MenuItem>
+                      <MenuItem value="member">Member</MenuItem>
+                      <MenuItem value="mod">Mod</MenuItem>
+                      <MenuItem value="admin">Admin</MenuItem>
+                      <MenuItem value="owner">Owner</MenuItem>
+                      <MenuItem value="vip">VIP</MenuItem>
+                    </Select>
+                  </FormControl>
+                  <FormControl size="small" sx={{ minWidth: 110 }}>
+                    <InputLabel>Muted</InputLabel>
+                    <Select value={membersMuted} label="Muted" onChange={(e) => { setMembersMuted(e.target.value); setMembersPage(1); }}>
+                      <MenuItem value="">All</MenuItem>
+                      <MenuItem value="true">Muted</MenuItem>
+                      <MenuItem value="false">Active</MenuItem>
+                    </Select>
+                  </FormControl>
+                  <FormControl size="small" sx={{ minWidth: 120 }}>
+                    <InputLabel>Sort by</InputLabel>
+                    <Select value={membersSort} label="Sort by" onChange={(e) => { setMembersSort(e.target.value); setMembersPage(1); }}>
+                      <MenuItem value="xp">XP</MenuItem>
+                      <MenuItem value="level">Level</MenuItem>
+                      <MenuItem value="first_name">Name</MenuItem>
+                      <MenuItem value="joined_at">Joined</MenuItem>
+                      <MenuItem value="warnings">Warnings</MenuItem>
+                    </Select>
+                  </FormControl>
+                  <FormControl size="small" sx={{ minWidth: 100 }}>
+                    <InputLabel>Direction</InputLabel>
+                    <Select value={membersSortDir} label="Direction" onChange={(e) => { setMembersSortDir(e.target.value); setMembersPage(1); }}>
+                      <MenuItem value="desc">↓ Desc</MenuItem>
+                      <MenuItem value="asc">↑ Asc</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Box>
+              </>
             )}
             <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', overflowX: 'auto' }}>
               <Table size="small">
@@ -2715,7 +2879,8 @@ export default function GroupSettings() {
               </Box>
             )}
           </>
-        )}
+          );
+        })()}
 
         {/* ANALYTICS › Leaderboard */}
         {cat === 'analytics' && subTab === leaderboardSubTabIdx && (
@@ -2798,17 +2963,20 @@ export default function GroupSettings() {
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell>Action</TableCell>
-                    <TableCell>Target</TableCell>
-                    <TableCell>Moderator</TableCell>
-                    <TableCell>Reason / Description</TableCell>
-                    <TableCell>Time</TableCell>
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>Action</TableCell>
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>Target</TableCell>
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>Moderator</TableCell>
+                    <TableCell sx={{ maxWidth: 200 }}>Reason</TableCell>
+                    <TableCell sx={{ maxWidth: 180 }}>Msg Preview</TableCell>
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>Time</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {auditLogs.map((log) => {
                     const isExpanded = expandedLogId === log.id;
                     const linkType = classifyReason(log.reason, log.action_type);
+                    const shortReason = extractShortReason(log.reason);
+                    const msgPreview = getMessagePreview(log);
                     return (
                       <React.Fragment key={log.id}>
                         <TableRow
@@ -2820,34 +2988,50 @@ export default function GroupSettings() {
                             <Chip label={log.action_type} color={ACTION_COLORS[log.action_type] || 'default'} size="small" />
                           </TableCell>
                           <TableCell>
-                            <Typography variant="body2">
+                            <Typography variant="body2" sx={{ whiteSpace: 'nowrap' }}>
                               {log.target_username ? `@${log.target_username}` : log.target_user_id || '—'}
                             </Typography>
                           </TableCell>
                           <TableCell>
-                            <Typography variant="body2">
+                            <Typography variant="body2" sx={{ whiteSpace: 'nowrap' }}>
                               {log.moderator_username ? `@${log.moderator_username}` : log.moderator_id || '—'}
                             </Typography>
                           </TableCell>
-                          <TableCell>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                              <Typography variant="body2" color="text.secondary">{log.reason || '—'}</Typography>
-                              {linkType && <Chip label={linkType.label} color={linkType.color} size="small" sx={{ height: 18, fontSize: '0.7rem' }} />}
+                          <TableCell sx={{ maxWidth: 200 }}>
+                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+                              <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.4 }}>
+                                {shortReason}
+                              </Typography>
+                              {linkType && <Chip label={linkType.label} color={linkType.color} size="small" sx={{ height: 16, fontSize: '0.65rem', width: 'fit-content' }} />}
                             </Box>
                           </TableCell>
+                          <TableCell sx={{ maxWidth: 180 }}>
+                            {msgPreview ? (
+                              <Typography variant="caption" color="text.disabled" sx={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.4 }}>
+                                {msgPreview}
+                              </Typography>
+                            ) : (
+                              <Typography variant="caption" color="text.disabled">—</Typography>
+                            )}
+                          </TableCell>
                           <TableCell>
-                            <Typography variant="caption" color="text.secondary">
+                            <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
                               {log.timestamp ? new Date(log.timestamp).toLocaleString() : '—'}
                             </Typography>
                           </TableCell>
                         </TableRow>
                         {isExpanded && (
                           <TableRow>
-                            <TableCell colSpan={5} sx={{ bgcolor: 'rgba(255,255,255,0.02)', py: 1.5, px: 2.5 }}>
+                            <TableCell colSpan={6} sx={{ bgcolor: 'rgba(255,255,255,0.02)', py: 1.5, px: 2.5 }}>
                               <Stack spacing={0.75}>
                                 {log.reason && (
                                   <Typography variant="caption" color="text.primary">
-                                    <strong>Reason:</strong> {log.reason}
+                                    <strong>Full Reason:</strong> {log.reason}
+                                  </Typography>
+                                )}
+                                {msgPreview && (
+                                  <Typography variant="caption" color="text.secondary">
+                                    <strong>Removed Message:</strong> {msgPreview}
                                   </Typography>
                                 )}
                                 {linkType && (
