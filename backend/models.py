@@ -338,6 +338,11 @@ class Group(db.Model):
     # Telegram chat type: group | supergroup | channel | private
     # Set at creation time; used to exclude private groups from listings.
     chat_type = db.Column(db.String(20), default="group", nullable=False)
+    # Public @username of the Telegram group.
+    # NULL  = not yet resolved (old records — shown for backwards compat).
+    # ""    = confirmed private (no username) — excluded from Group Management.
+    # "foo" = public group with @username — shown in Group Management.
+    chat_username = db.Column(db.String(255), nullable=True)
     # Dedicated column so timezone is queryable and not buried in the JSON blob.
     # Authoritative source; groups.settings["timezone"] is kept in sync.
     timezone = db.Column(db.String(50), default="UTC", nullable=True)

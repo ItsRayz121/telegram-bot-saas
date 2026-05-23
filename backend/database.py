@@ -14,7 +14,7 @@ class DatabaseManager:
 
     @staticmethod
     def get_or_create_group(bot_id, telegram_group_id, group_name=None,
-                             member_count=None, chat_type="group"):
+                             member_count=None, chat_type="group", chat_username=None):
         # Never create a Group record for private chats — custom bots observe only.
         if chat_type == "private":
             return None
@@ -49,6 +49,7 @@ class DatabaseManager:
                 settings=get_default_settings(),
                 telegram_member_count=member_count or 0,
                 chat_type=chat_type,
+                chat_username=chat_username,
             )
             db.session.add(group)
             db.session.commit()
@@ -59,6 +60,9 @@ class DatabaseManager:
                 changed = True
             if member_count and group.telegram_member_count != member_count:
                 group.telegram_member_count = member_count
+                changed = True
+            if chat_username is not None and group.chat_username != chat_username:
+                group.chat_username = chat_username
                 changed = True
             if changed:
                 db.session.commit()

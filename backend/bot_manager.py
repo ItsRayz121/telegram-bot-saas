@@ -215,7 +215,7 @@ class BotInstance:
                 return None
             return GroupContext.from_group(group)
 
-    async def _get_or_create_group(self, chat_id, chat_title=None, bot=None, chat_type="group"):
+    async def _get_or_create_group(self, chat_id, chat_title=None, bot=None, chat_type="group", chat_username=None):
         member_count = None
         if bot:
             try:
@@ -225,7 +225,8 @@ class BotInstance:
         with self.app_context.app_context():
             from .database import DatabaseManager
             group = DatabaseManager.get_or_create_group(
-                self.bot_id, chat_id, chat_title, member_count, chat_type=chat_type
+                self.bot_id, chat_id, chat_title, member_count, chat_type=chat_type,
+                chat_username=chat_username,
             )
             if not group:
                 return None
@@ -2544,8 +2545,13 @@ class BotInstance:
                     pass
 
             if not _skip_group_mgmt:
-                # Group Management record
-                await self._get_or_create_group(chat.id, chat.title, context.bot, chat_type=chat.type)
+                # Group Management record — store chat.username so private groups
+                # (no username) can be filtered out in get_bot_groups.
+                await self._get_or_create_group(
+                    chat.id, chat.title, context.bot,
+                    chat_type=chat.type,
+                    chat_username=chat.username or "",
+                )
 
             # Assistant Hub consent flow — find this custom bot's HubBotIdentity mirror
             if added_by and self.app_context:

@@ -223,7 +223,41 @@ def get_bot_groups(bot_id):
         Group.chat_type != "private",
     ).all()
 
-    groups = [g for g in all_groups if g.telegram_group_id not in hub_private_tg_ids]
+    # Resolve chat_username for any group that hasn't been classified yet (NULL).
+    # chat_username == ""  → confirmed private; excluded from Group Management.
+    # chat_username is not NULL and non-empty → public group; shown.
+    # chat_username is NULL → unknown (old record); shown for backwards compat.
+    unresolved = [g for g in all_groups if g.chat_username is None]
+    if unresolved:
+        try:
+            token = bot.get_token()
+            for g in unresolved:
+                try:
+                    resp = http_requests.get(
+                        f"https://api.telegram.org/bot{token}/getChat",
+                        params={"chat_id": g.telegram_group_id},
+                        timeout=3,
+                    )
+                    data = resp.json()
+                    if data.get("ok"):
+                        username = data["result"].get("username") or ""
+                        g.chat_username = username
+                    else:
+                        # Telegram returned an error — treat as private to be safe.
+                        g.chat_username = ""
+                except Exception:
+                    # Network / timeout — leave as NULL; show the group.
+                    pass
+            db.session.commit()
+        except Exception:
+            pass
+
+    # Exclude confirmed-private groups that are not already handled as Hub groups.
+    groups = [
+        g for g in all_groups
+        if g.telegram_group_id not in hub_private_tg_ids
+        and g.chat_username != ""
+    ]
     return jsonify({"groups": [g.to_dict() for g in groups]}), 200
 
 

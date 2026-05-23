@@ -371,6 +371,16 @@ def init_db():
             "groups.chat_type column",
         )
 
+        # ── groups.chat_username column ──────────────────────────────────────────
+        # NULL = not yet resolved (old records).
+        # ""   = confirmed private (no @username).
+        # Non-empty = public group with @username.
+        _run_alter(
+            db.engine,
+            "ALTER TABLE groups ADD COLUMN IF NOT EXISTS chat_username VARCHAR(255)",
+            "groups.chat_username column",
+        )
+
         # ── Global escalation events table ────────────────────────────────────────
         # db.create_all() creates the table; add indexes idempotently.
         _run_alter(
