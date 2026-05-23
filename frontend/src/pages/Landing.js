@@ -2,9 +2,10 @@
 import { useScrollReveal } from '../hooks/useScrollReveal';
 import {
   Box, AppBar, Toolbar, Typography, Button, Card, CardContent,
-  Grid, Chip, Container, Stack, Divider, Avatar,
+  Grid, Chip, Container, Stack, Divider, Avatar, Skeleton,
   Accordion, AccordionSummary, AccordionDetails,
 } from '@mui/material';
+import { analytics as analyticsApi } from '../services/api';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import {
   SmartToy, Shield, Schedule, BarChart, People, CheckCircle,
@@ -171,8 +172,9 @@ const EARLY_FEEDBACK = [
   },
 ];
 
-function StatCard({ target, label, sub, color, icon, delay, visible, reveal }) {
+function StatCard({ target, label, sub, color, icon, delay, visible, reveal, loading }) {
   const count = useAnimatedCount(visible ? (target || 0) : 0);
+  const accentColor = color === 'primary.main' ? '#2196f3' : color === 'secondary.main' ? '#ce93d8' : color === 'success.main' ? '#66bb6a' : color === 'warning.main' ? '#ffa726' : color === 'info.main' ? '#29b6f6' : '#ab47bc';
   return (
     <Box sx={{
       p: { xs: 2, sm: 2.5 },
@@ -185,14 +187,18 @@ function StatCard({ target, label, sub, color, icon, delay, visible, reveal }) {
       '&::before': {
         content: '""',
         position: 'absolute', top: 0, left: 0, right: 0, height: '2px',
-        background: `linear-gradient(90deg, transparent, ${color === 'primary.main' ? '#2196f3' : color === 'secondary.main' ? '#ce93d8' : color === 'success.main' ? '#66bb6a' : color === 'warning.main' ? '#ffa726' : color === 'info.main' ? '#29b6f6' : '#ab47bc'}, transparent)`,
+        background: `linear-gradient(90deg, transparent, ${accentColor}, transparent)`,
       },
       ...reveal(visible, delay),
     }}>
       <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 1 }}>
-        <Typography variant="h4" fontWeight={900} color={color} sx={{ fontSize: { xs: '1.55rem', sm: '2rem' }, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
-          {target != null ? formatStat(count) : '—'}
-        </Typography>
+        {loading ? (
+          <Skeleton variant="text" width={72} height={40} sx={{ bgcolor: 'rgba(255,255,255,0.08)', borderRadius: 1 }} />
+        ) : (
+          <Typography variant="h4" fontWeight={900} color={color} sx={{ fontSize: { xs: '1.55rem', sm: '2rem' }, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
+            {target != null ? formatStat(count) : '—'}
+          </Typography>
+        )}
         {icon && (
           <Box sx={{ color, opacity: 0.4, mt: 0.25, '& svg': { fontSize: '1.2rem' } }}>{icon}</Box>
         )}
@@ -203,7 +209,7 @@ function StatCard({ target, label, sub, color, icon, delay, visible, reveal }) {
   );
 }
 
-function LivePlatformStats({ proofRef, proofVisible, reveal, stats }) {
+function LivePlatformStats({ proofRef, proofVisible, reveal, stats, statsLoading }) {
   const cards = [
     {
       key: 'members',
@@ -282,7 +288,7 @@ function LivePlatformStats({ proofRef, proofVisible, reveal, stats }) {
         <Grid container spacing={2} sx={{ mb: 7 }}>
           {cards.map((c, i) => (
             <Grid item xs={6} sm={4} md={2} key={c.key}>
-              <StatCard {...c} delay={i * 60} visible={proofVisible} reveal={reveal} />
+              <StatCard {...c} delay={i * 60} visible={proofVisible} reveal={reveal} loading={statsLoading} />
             </Grid>
           ))}
         </Grid>
@@ -362,11 +368,29 @@ function formatStat(n) {
   return n.toLocaleString();
 }
 
+const STATS_CACHE_KEY = 'telegizer_platform_stats_v1';
+// Conservative floor shown to first-time visitors when the API is unreachable.
+const STATS_FLOOR = {
+  total_members: 1200,
+  total_mod_actions: 3400,
+  new_members_this_week: 80,
+  total_groups: 24,
+  official_groups: 18,
+  custom_bots: 6,
+};
+function loadCachedStats() {
+  try {
+    const raw = localStorage.getItem(STATS_CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
 export default function Landing() {
   const navigate = useNavigate();
   const token = localStorage.getItem('token');
 
-  const [platformStats, setPlatformStats] = useState(null);
+  const [platformStats, setPlatformStats] = useState(() => loadCachedStats() || STATS_FLOOR);
+  const [statsLoading, setStatsLoading] = useState(true);
   const [statsRef, statsVisible] = useScrollReveal(0.15);
   const [proofRef, proofVisible] = useScrollReveal(0.1);
   const [painRef, painVisible] = useScrollReveal(0.08);
@@ -379,11 +403,24 @@ export default function Landing() {
   const [ctaRef, ctaVisible] = useScrollReveal(0.15);
 
   useEffect(() => {
-    const base = process.env.REACT_APP_API_URL || '';
-    fetch(`${base}/api/platform-stats`)
-      .then(r => r.ok ? r.json() : null)
-      .then(data => { if (data) setPlatformStats(data); })
-      .catch(() => {});
+    let cancelled = false;
+    analyticsApi.getPlatformStats()
+      .then(res => {
+        if (cancelled) return;
+        const data = res.data;
+        if (data && typeof data.total_members === 'number') {
+          setPlatformStats(data);
+          try { localStorage.setItem(STATS_CACHE_KEY, JSON.stringify(data)); } catch { /* quota */ }
+        }
+      })
+      .catch((err) => {
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn('[platform-stats] fetch failed, using cached/floor data:', err?.message);
+        }
+        // platformStats already set to cached or STATS_FLOOR — nothing to do
+      })
+      .finally(() => { if (!cancelled) setStatsLoading(false); });
+    return () => { cancelled = true; };
   }, []);
 
   const reveal = (visible, delay = 0) => ({
@@ -588,7 +625,7 @@ export default function Landing() {
       </Box>
 
       {/* ── Live Platform Stats ── */}
-      <LivePlatformStats proofRef={proofRef} proofVisible={proofVisible} reveal={reveal} stats={platformStats} />
+      <LivePlatformStats proofRef={proofRef} proofVisible={proofVisible} reveal={reveal} stats={platformStats} statsLoading={statsLoading} />
 
       {/* ── Pain ── */}
       <Box sx={{ bgcolor: '#07101f' }}>

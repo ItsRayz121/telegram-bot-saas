@@ -439,7 +439,7 @@ export const analytics = {
     botId === 'official'
       ? api.get(`/api/official-groups/${groupId}/analytics`, { params })
       : api.get(`/api/bots/${botId}/groups/${groupId}/analytics`, { params }),
-  getPlatformStats: () => api.get('/api/platform/stats'),
+  getPlatformStats: () => api.get('/api/platform-stats'),
   // Official bot ecosystem analytics
   getOfficialGroupAnalytics: (groupId, params) =>
     api.get(`/api/official-groups/${groupId}/analytics`, { params }),
