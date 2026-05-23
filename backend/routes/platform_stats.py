@@ -14,7 +14,7 @@ MOD_EVENT_TYPES = {
 
 
 @platform_stats_bp.route("/api/platform-stats", methods=["GET"])
-@rate_limit(max_requests=60, window_seconds=60)
+@rate_limit(requests_per_minute=60)
 def get_platform_stats():
     """Return aggregate platform stats for the public landing page."""
     week_ago = datetime.utcnow() - timedelta(days=7)
