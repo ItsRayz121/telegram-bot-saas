@@ -291,43 +291,11 @@ function LivePlatformStats({ proofRef, proofVisible, reveal, stats }) {
         <Box sx={{ ...reveal(proofVisible, 300) }}>
           <Box sx={{
             borderRadius: 3,
-            border: '1px solid rgba(255,255,255,0.1)',
+            border: '1px solid rgba(255,255,255,0.12)',
             overflow: 'hidden',
-            bgcolor: 'rgba(10,20,40,0.8)',
-            boxShadow: '0 24px 80px rgba(0,0,0,0.5)',
+            boxShadow: '0 32px 96px rgba(0,0,0,0.55)',
           }}>
-            {/* Browser chrome bar */}
-            <Box sx={{
-              px: 2, py: 1.25,
-              bgcolor: 'rgba(255,255,255,0.04)',
-              borderBottom: '1px solid rgba(255,255,255,0.07)',
-              display: 'flex', alignItems: 'center', gap: 1.5,
-            }}>
-              <Stack direction="row" spacing={0.75}>
-                {['#ff5f57', '#febc2e', '#28c840'].map((c) => (
-                  <Box key={c} sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: c, opacity: 0.85 }} />
-                ))}
-              </Stack>
-              <Box sx={{
-                flex: 1, mx: 2, bgcolor: 'rgba(255,255,255,0.05)',
-                borderRadius: 1, px: 1.5, py: 0.4,
-                display: 'flex', alignItems: 'center', gap: 1,
-              }}>
-                <Lock sx={{ fontSize: 10, color: 'success.main', opacity: 0.7 }} />
-                <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.68rem', fontFamily: 'monospace' }}>
-                  app.telegizer.com/analytics
-                </Typography>
-              </Box>
-              <Chip
-                label="Live dashboard"
-                size="small"
-                color="success"
-                variant="outlined"
-                sx={{ height: 20, fontSize: '0.65rem', fontWeight: 700, opacity: 0.8 }}
-              />
-            </Box>
-
-            {/* Screenshot */}
+            {/* Real analytics screenshot */}
             <Box
               component="img"
               src="/analytics-demo.png"
@@ -335,22 +303,11 @@ function LivePlatformStats({ proofRef, proofVisible, reveal, stats }) {
               sx={{
                 width: '100%',
                 display: 'block',
-                maxHeight: { xs: 280, sm: 400, md: 480 },
+                maxHeight: { xs: 320, sm: 440, md: 520 },
                 objectFit: 'cover',
                 objectPosition: 'top',
               }}
-              onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
             />
-
-            {/* Fallback if image not found */}
-            <Box sx={{
-              display: 'none', alignItems: 'center', justifyContent: 'center',
-              height: 300, flexDirection: 'column', gap: 1.5,
-              bgcolor: 'rgba(255,255,255,0.02)',
-            }}>
-              <BarChart sx={{ fontSize: 48, color: 'primary.main', opacity: 0.4 }} />
-              <Typography variant="body2" color="text.disabled">Analytics dashboard screenshot</Typography>
-            </Box>
 
             {/* Caption bar */}
             <Box sx={{

@@ -79,7 +79,6 @@ export const FEATURE_TABS = [
       { label: 'Audit Log',   officialOnly: false },
       { label: 'Warnings',    officialOnly: false },
       { label: 'Digest',      officialOnly: false },
-      { label: 'Escalations', officialOnly: false },
     ],
   },
 ];

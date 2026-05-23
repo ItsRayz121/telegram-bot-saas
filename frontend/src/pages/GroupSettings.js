@@ -6,11 +6,11 @@ import {
   TableContainer, TableHead, TableRow, Paper, Select, MenuItem,
   FormControl, InputLabel, Pagination, Divider, Accordion,
   AccordionSummary, AccordionDetails, Dialog, DialogTitle,
-  DialogContent, DialogActions, Tooltip, Alert, Stack,
+  DialogContent, DialogActions, Tooltip, Alert, Stack, Avatar,
 } from '@mui/material';
 import {
   ArrowBack, Save, Add, ExpandMore, Delete, CheckCircle, Schedule,
-  Send, Assessment, People, SmartToy,
+  Send, Assessment, People, SmartToy, Refresh,
   Warning as WarningIcon, EmojiEvents,
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -320,6 +320,108 @@ function CommandRoutingTab({
 }
 
 
+// ── Reusable inline command routing block ─────────────────────────────────────
+// Renders a compact scope selector + topic picker for each command in `cmds`.
+// Share the same cmdRouting state + handleSaveCmdRouting from GroupSettings.
+function InlineCmdRouting({ cmds, title, description, cmdRouting, setCmdRouting, saving, onSave }) {
+  const topics = cmdRouting.topics || [];
+  return (
+    <Card sx={{ mt: 2 }}>
+      <CardContent>
+        <Typography variant="subtitle1" fontWeight={600} mb={0.5}>{title || 'Command Routing'}</Typography>
+        {description && (
+          <Typography variant="body2" color="text.secondary" mb={2}>{description}</Typography>
+        )}
+        <Divider sx={{ mb: 2 }} />
+        {cmds.map((cmd) => {
+          const rule = (cmdRouting.commands || {})[cmd] || { scope: 'all_group', topic_ids: [] };
+          return (
+            <Box key={cmd} sx={{ mb: 2 }}>
+              <Stack direction="row" alignItems="center" spacing={2} flexWrap="wrap" mb={1}>
+                <Typography fontWeight={600} sx={{ minWidth: 130, fontFamily: 'monospace' }}>{cmd}</Typography>
+                <FormControl size="small" sx={{ minWidth: 200 }}>
+                  <InputLabel>Access</InputLabel>
+                  <Select
+                    value={rule.scope}
+                    label="Access"
+                    onChange={(e) => {
+                      setCmdRouting((prev) => ({
+                        ...prev,
+                        commands: { ...prev.commands, [cmd]: { ...rule, scope: e.target.value } },
+                      }));
+                    }}
+                  >
+                    {SCOPE_OPTIONS.map((o) => (
+                      <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Stack>
+              {rule.scope === 'specific_topics' && (
+                <Box sx={{ ml: 0.5 }}>
+                  {topics.length === 0 ? (
+                    <TextField
+                      size="small"
+                      fullWidth
+                      label="Topic ID or link"
+                      placeholder="e.g. 12345 or https://t.me/c/123/456"
+                      value={rule.manual_topic_input || (rule.topic_ids?.[0] ? String(rule.topic_ids[0]) : '')}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        const parsed = parseTopicInput(raw);
+                        setCmdRouting((prev) => ({
+                          ...prev,
+                          commands: {
+                            ...prev.commands,
+                            [cmd]: { ...rule, manual_topic_input: raw, topic_ids: parsed ? [String(parsed)] : [] },
+                          },
+                        }));
+                      }}
+                      helperText="No forum topics detected yet. Paste a topic link or enter the topic ID directly."
+                    />
+                  ) : (
+                    <Stack direction="row" flexWrap="wrap" gap={1}>
+                      {topics.map((t) => {
+                        const checked = (rule.topic_ids || []).includes(String(t.thread_id));
+                        return (
+                          <FormControlLabel
+                            key={t.thread_id}
+                            control={
+                              <Switch
+                                size="small"
+                                checked={checked}
+                                onChange={(e) => {
+                                  const current = rule.topic_ids || [];
+                                  const updated = e.target.checked
+                                    ? [...new Set([...current, String(t.thread_id)])]
+                                    : current.filter((id) => id !== String(t.thread_id));
+                                  setCmdRouting((prev) => ({
+                                    ...prev,
+                                    commands: { ...prev.commands, [cmd]: { ...rule, topic_ids: updated } },
+                                  }));
+                                }}
+                              />
+                            }
+                            label={t.name}
+                          />
+                        );
+                      })}
+                    </Stack>
+                  )}
+                </Box>
+              )}
+            </Box>
+          );
+        })}
+        <Button variant="contained" size="small" disabled={saving} onClick={onSave} sx={{ mt: 1 }}>
+          {saving ? <CircularProgress size={16} sx={{ mr: 1 }} /> : null}
+          Save Routing
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function GroupSettings() {
   const navigate = useNavigate();
   const { id: rawBotId, groupId } = useParams();
@@ -348,10 +450,6 @@ export default function GroupSettings() {
 
   const [leaderboard, setLeaderboard] = useState([]);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
-
-  const [escalations, setEscalations] = useState([]);
-  const [escalationsLoading, setEscalationsLoading] = useState(false);
-  const [escalationFilter, setEscalationFilter] = useState('');  // '' | 'pending' | 'resolved'
 
   const [auditLogs, setAuditLogs] = useState([]);
   const [auditTotal, setAuditTotal] = useState(0);
@@ -391,7 +489,15 @@ export default function GroupSettings() {
   const [routingLoading, setRoutingLoading] = useState(false);
   const [routingSaving, setRoutingSaving] = useState(false);
   const [topicsRefreshing, setTopicsRefreshing] = useState(false);
-  const [routableCommands, setRoutableCommands] = useState(['/xp', '/rank', '/leaderboard', '/level', '/rules', '/help', '/stats']);
+  const [routableCommands, setRoutableCommands] = useState([
+    '/xp', '/rank', '/leaderboard', '/level',
+    '/warn', '/ban', '/mute', '/kick',
+    '/verify',
+    '/invite', '/ref',
+    '/ask',
+    '/role',
+    '/rules', '/help', '/stats',
+  ]);
 
   const isMounted = React.useRef(true);
   React.useEffect(() => {
@@ -488,19 +594,6 @@ export default function GroupSettings() {
       toast.error('Failed to load warnings');
     } finally {
       setWarningsLoading(false);
-    }
-  }, [botId, groupId]);
-
-  const fetchEscalations = useCallback(async (statusFilter) => {
-    setEscalationsLoading(true);
-    try {
-      const params = statusFilter ? { status: statusFilter } : {};
-      const res = await settings.listEscalations(botId, groupId, params);
-      setEscalations(res.data.escalations || []);
-    } catch {
-      toast.error('Failed to load escalations');
-    } finally {
-      setEscalationsLoading(false);
     }
   }, [botId, groupId]);
 
@@ -644,8 +737,6 @@ export default function GroupSettings() {
   const auditLogSubTabIdx     = getSubTabIndex(CATEGORIES, 'analytics', 'Audit Log');
   const warningsSubTabIdx     = getSubTabIndex(CATEGORIES, 'analytics', 'Warnings');
   const digestSubTabIdx       = getSubTabIndex(CATEGORIES, 'analytics', 'Digest');
-  const escalationsSubTabIdx  = getSubTabIndex(CATEGORIES, 'analytics', 'Escalations');
-
   useEffect(() => { fetchSettings(); }, [fetchSettings]);
   useEffect(() => { if (cat === 'analytics' && subTab === 0) fetchMembers(membersPage); }, [cat, subTab, membersPage, fetchMembers]);
   useEffect(() => { if (cat === 'analytics' && subTab === leaderboardSubTabIdx) fetchLeaderboard(); }, [cat, subTab, leaderboardSubTabIdx, fetchLeaderboard]);
@@ -654,10 +745,6 @@ export default function GroupSettings() {
   useEffect(() => { if (cat === 'moderation' && subTab === 2) fetchReports(); }, [cat, subTab, fetchReports]);
   useEffect(() => { if (cat === 'analytics' && subTab === warningsSubTabIdx) fetchWarnings(); }, [cat, subTab, warningsSubTabIdx, fetchWarnings]);
   useEffect(() => { if (cat === 'analytics' && subTab === digestSubTabIdx) fetchDigest(); }, [cat, subTab, digestSubTabIdx, fetchDigest]);
-  useEffect(() => {
-    if (cat === 'analytics' && subTab === escalationsSubTabIdx)
-      fetchEscalations(escalationFilter);
-  }, [cat, subTab, escalationsSubTabIdx, escalationFilter, fetchEscalations]); // eslint-disable-line
   useEffect(() => {
     if ((cat === 'moderation' && subTab === 2) || (cat === 'analytics' && subTab === digestSubTabIdx)) {
       fetchAdmins();
@@ -1049,18 +1136,70 @@ export default function GroupSettings() {
                     label="Warn user"
                   />
                 </Box>
-                <TextField
-                  fullWidth
-                  label="Trusted Admins / Trusted Users"
-                  placeholder="e.g. 123456789, 987654321"
-                  value={((am.smart_mod || {}).trusted_users || []).join(', ')}
-                  onChange={(e) => updateSetting(
-                    'automod.smart_mod.trusted_users',
-                    e.target.value.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n))
+                <Box sx={{ mt: 2 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                    <Typography variant="subtitle2" fontWeight={600}>Group Admins</Typography>
+                    <Tooltip title="Refresh admin list">
+                      <IconButton size="small" onClick={fetchAdmins} disabled={adminsLoading}>
+                        {adminsLoading ? <CircularProgress size={16} /> : <Refresh fontSize="small" />}
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+                  <Typography variant="caption" color="text.secondary" display="block" mb={1.5}>
+                    Toggle trusted bypass ON for admins whose messages should skip all smart moderation checks.
+                  </Typography>
+                  {groupAdmins.length === 0 ? (
+                    <Alert severity="info" icon={false} sx={{ mb: 1 }}>
+                      <Typography variant="caption">
+                        Click Refresh to load group admins. Admins must be registered in the bot.
+                      </Typography>
+                    </Alert>
+                  ) : (
+                    <Stack spacing={1}>
+                      {groupAdmins.map((admin) => {
+                        const trusted = ((am.smart_mod || {}).trusted_users || []).includes(admin.user_id);
+                        return (
+                          <Box key={admin.user_id} sx={{
+                            display: 'flex', alignItems: 'center', gap: 1.5,
+                            p: 1, border: '1px solid', borderRadius: 1.5,
+                            borderColor: trusted ? 'success.main' : 'divider',
+                            bgcolor: trusted ? 'rgba(76,175,80,0.04)' : 'transparent',
+                          }}>
+                            <Avatar sx={{ width: 32, height: 32, fontSize: '0.85rem', bgcolor: 'primary.main' }}>
+                              {(admin.first_name || '?')[0].toUpperCase()}
+                            </Avatar>
+                            <Box sx={{ flexGrow: 1 }}>
+                              <Typography variant="body2" fontWeight={500}>
+                                {admin.first_name}{admin.username ? ` (@${admin.username})` : ''}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {admin.status === 'creator' ? 'Owner' : 'Admin'}
+                              </Typography>
+                            </Box>
+                            {admin.can_dm ? (
+                              <Chip label="✅ Started bot" color="success" size="small" variant="outlined" />
+                            ) : (
+                              <Tooltip title="Ask this admin to start @telegizer_bot first.">
+                                <Chip label="⚠️ Not started" color="warning" size="small" variant="outlined" />
+                              </Tooltip>
+                            )}
+                            <Switch
+                              size="small"
+                              checked={trusted}
+                              onChange={(e) => {
+                                const cur = ((am.smart_mod || {}).trusted_users || []);
+                                const updated = e.target.checked
+                                  ? [...new Set([...cur, admin.user_id])]
+                                  : cur.filter(id => id !== admin.user_id);
+                                updateSetting('automod.smart_mod.trusted_users', updated);
+                              }}
+                            />
+                          </Box>
+                        );
+                      })}
+                    </Stack>
                   )}
-                  sx={{ mt: 2 }}
-                  helperText="Enter Telegram user IDs (comma-separated). Messages from these users bypass all smart moderation checks. Group admins are not automatically trusted — add them here if needed."
-                />
+                </Box>
               </CardContent>
             </Card>
 
@@ -1248,6 +1387,16 @@ export default function GroupSettings() {
                 </Box>
               </CardContent>
             </Card>
+
+            <InlineCmdRouting
+              cmds={['/warn', '/ban', '/mute', '/kick']}
+              title="Moderation Command Routing"
+              description="Control which forum topics moderation commands are allowed in. Only applies when the group has Telegram forum topics enabled."
+              cmdRouting={cmdRouting}
+              setCmdRouting={setCmdRouting}
+              saving={routingSaving}
+              onSave={handleSaveCmdRouting}
+            />
           </>
         )}
 
@@ -1578,6 +1727,7 @@ export default function GroupSettings() {
 
         {/* MEMBERS › Verification */}
         {cat === 'members' && subTab === 0 && (
+          <>
           <Card>
             <CardContent>
               <Typography variant="h6" fontWeight={600} mb={2}>Verification Settings</Typography>
@@ -1670,16 +1820,18 @@ export default function GroupSettings() {
               </FormControl>
 
               {(v.destination === 'topic') && (
-                <Box sx={{ mb: 2 }}>
-                  <ForumTopicSelector
-                    botId={botId}
-                    groupId={groupId}
-                    value={v.destination_topic_id || null}
-                    onChange={(id) => updateSetting('verification.destination_topic_id', id)}
-                    label="Verification Topic"
-                    helperText="Topic where the bot sends verification prompts."
-                  />
-                </Box>
+                <TextField
+                  fullWidth
+                  label="Verification Topic"
+                  placeholder="e.g. 12345 or https://t.me/c/123/456"
+                  value={v.destination_topic_id || ''}
+                  onChange={(e) => {
+                    const parsed = parseTopicInput(e.target.value);
+                    updateSetting('verification.destination_topic_id', parsed ? String(parsed) : e.target.value);
+                  }}
+                  helperText="Paste a Telegram topic link or enter the topic ID. Leave blank for main group chat."
+                  sx={{ mb: 2 }}
+                />
               )}
 
               {(v.destination === 'dedicated_group' || v.destination === 'channel') && (
@@ -1704,6 +1856,17 @@ export default function GroupSettings() {
               )}
             </CardContent>
           </Card>
+
+          <InlineCmdRouting
+            cmds={['/verify']}
+            title="Verification Command Routing"
+            description="Control which forum topics the /verify command is allowed in."
+            cmdRouting={cmdRouting}
+            setCmdRouting={setCmdRouting}
+            saving={routingSaving}
+            onSave={handleSaveCmdRouting}
+          />
+          </>
         )}
 
         {/* MEMBERS › Welcome */}
@@ -1817,12 +1980,16 @@ export default function GroupSettings() {
                       onChange={(e) => updateSetting('levels.xp_cooldown_seconds', parseInt(e.target.value))} />
                   </Grid>
                   <Grid item xs={12} sm={4}>
-                    <ForumTopicSelector
-                      botId={botId}
-                      groupId={groupId}
-                      value={l.levelup_topic_id || null}
-                      onChange={(id) => updateSetting('levels.levelup_topic_id', id)}
+                    <TextField
+                      fullWidth
                       label="Level-up Topic"
+                      placeholder="e.g. 12345 or https://t.me/c/123/456"
+                      value={l.levelup_topic_id || ''}
+                      onChange={(e) => {
+                        const parsed = parseTopicInput(e.target.value);
+                        updateSetting('levels.levelup_topic_id', parsed ? String(parsed) : e.target.value);
+                      }}
+                      helperText="Paste a Telegram topic link or enter the topic ID. Leave blank for main group chat."
                     />
                   </Grid>
                   <Grid item xs={12} sm={8}>
@@ -1964,6 +2131,16 @@ export default function GroupSettings() {
                 </Button>
               </CardContent>
             </Card>
+
+            <InlineCmdRouting
+              cmds={['/role']}
+              title="Role Command Routing"
+              description="Control which forum topics the /role command is allowed in."
+              cmdRouting={cmdRouting}
+              setCmdRouting={setCmdRouting}
+              saving={routingSaving}
+              onSave={handleSaveCmdRouting}
+            />
 
             <Card sx={{ mt: 2 }}>
               <CardContent>
@@ -2229,6 +2406,15 @@ export default function GroupSettings() {
               </CardContent>
             </Card>
             <InviteLinks botId={botId} groupId={groupId} />
+            <InlineCmdRouting
+              cmds={['/invite', '/ref']}
+              title="Invite Command Routing"
+              description="Control which forum topics invite and referral commands are allowed in."
+              cmdRouting={cmdRouting}
+              setCmdRouting={setCmdRouting}
+              saving={routingSaving}
+              onSave={handleSaveCmdRouting}
+            />
           </>
         )}
 
@@ -2238,7 +2424,18 @@ export default function GroupSettings() {
 
         {/* AI › Knowledge Base */}
         {cat === 'ai' && subTab === 0 && (
-          <KnowledgeBase botId={botId} groupId={groupId} settings={settingsData} updateSetting={updateSetting} />
+          <>
+            <KnowledgeBase botId={botId} groupId={groupId} settings={settingsData} updateSetting={updateSetting} />
+            <InlineCmdRouting
+              cmds={['/ask']}
+              title="AI Command Routing"
+              description="Control which forum topics the /ask command is allowed in."
+              cmdRouting={cmdRouting}
+              setCmdRouting={setCmdRouting}
+              saving={routingSaving}
+              onSave={handleSaveCmdRouting}
+            />
+          </>
         )}
 
         {/* AI › Webhooks */}
@@ -3051,82 +3248,6 @@ export default function GroupSettings() {
               </Card>
             </>
           )
-        )}
-
-        {/* ANALYTICS › Escalations log */}
-        {cat === 'analytics' && subTab === escalationsSubTabIdx && (
-          <>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-              <Typography variant="h6" fontWeight={600}>Escalation Log</Typography>
-              <Box sx={{ display: 'flex', gap: 1 }}>
-                {['', 'pending', 'resolved', 'ignored'].map(f => (
-                  <Button key={f} size="small"
-                    variant={escalationFilter === f ? 'contained' : 'outlined'}
-                    onClick={() => setEscalationFilter(f)}>
-                    {f === '' ? 'All' : f.charAt(0).toUpperCase() + f.slice(1)}
-                  </Button>
-                ))}
-                <Button size="small" onClick={() => fetchEscalations(escalationFilter)} disabled={escalationsLoading}>
-                  Refresh
-                </Button>
-              </Box>
-            </Box>
-            {escalationsLoading ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
-            ) : escalations.length === 0 ? (
-              <Alert severity="info">No escalation events found. Enable Global Escalation in AI &amp; Integrations → Escalation.</Alert>
-            ) : (
-              <Stack spacing={1.5}>
-                {escalations.map(ev => (
-                  <Card key={ev.id} sx={{ borderLeft: `4px solid ${ev.status === 'resolved' ? '#4caf50' : ev.status === 'ignored' ? '#9e9e9e' : '#ff9800'}` }}>
-                    <CardContent sx={{ pb: '12px !important' }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
-                        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                          <Chip size="small" label={ev.issue_type?.replace('_', ' ').toUpperCase()} sx={{ fontSize: '0.7rem' }} />
-                          <Chip size="small"
-                            label={ev.status}
-                            color={ev.status === 'resolved' ? 'success' : ev.status === 'ignored' ? 'default' : 'warning'}
-                          />
-                          {ev.learned && <Chip size="small" label="KB learned" color="info" />}
-                        </Box>
-                        <Typography variant="caption" color="text.secondary">
-                          {new Date(ev.created_at).toLocaleString()}
-                        </Typography>
-                      </Box>
-                      {ev.user_username && (
-                        <Typography variant="caption" color="text.secondary" display="block">
-                          User: @{ev.user_username}
-                        </Typography>
-                      )}
-                      <Typography variant="body2" sx={{ mt: 0.5, fontStyle: 'italic', color: 'text.secondary' }}>
-                        {(ev.original_content || '').slice(0, 200)}{(ev.original_content || '').length > 200 ? '…' : ''}
-                      </Typography>
-                      {ev.admin_answer && (
-                        <Box sx={{ mt: 1, p: 1, bgcolor: 'action.hover', borderRadius: 1 }}>
-                          <Typography variant="caption" fontWeight={600}>Admin answer:</Typography>
-                          <Typography variant="body2">{ev.admin_answer}</Typography>
-                        </Box>
-                      )}
-                      {ev.status === 'pending' && (
-                        <Box sx={{ mt: 1, display: 'flex', gap: 1 }}>
-                          <Button size="small" variant="outlined" color="success"
-                            onClick={() => settings.patchEscalation(botId, groupId, ev.id, { status: 'resolved' })
-                              .then(() => fetchEscalations(escalationFilter))}>
-                            Mark Resolved
-                          </Button>
-                          <Button size="small" variant="outlined" color="inherit"
-                            onClick={() => settings.patchEscalation(botId, groupId, ev.id, { status: 'ignored' })
-                              .then(() => fetchEscalations(escalationFilter))}>
-                            Ignore
-                          </Button>
-                        </Box>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
-              </Stack>
-            )}
-          </>
         )}
 
       </Box>
