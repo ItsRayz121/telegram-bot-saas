@@ -2527,8 +2527,25 @@ class BotInstance:
         added_by = result.from_user
 
         if new_status in ("member", "administrator"):
-            # Group Management record
-            await self._get_or_create_group(chat.id, chat.title, context.bot, chat_type=chat.type)
+            # Private groups connected via a custom bot belong in Assistant Hub only.
+            # Check before creating a Group Management record.
+            _skip_group_mgmt = False
+            if not chat.username and self.app_context:
+                try:
+                    with self.app_context.app_context():
+                        from .models import Bot, CustomBot
+                        _br = Bot.query.get(self.bot_id)
+                        if _br and _br.bot_username and CustomBot.query.filter_by(
+                            bot_username=_br.bot_username,
+                            owner_user_id=_br.user_id,
+                        ).first():
+                            _skip_group_mgmt = True
+                except Exception:
+                    pass
+
+            if not _skip_group_mgmt:
+                # Group Management record
+                await self._get_or_create_group(chat.id, chat.title, context.bot, chat_type=chat.type)
 
             # Assistant Hub consent flow — find this custom bot's HubBotIdentity mirror
             if added_by and self.app_context:

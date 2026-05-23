@@ -60,6 +60,14 @@ def list_groups():
             TelegramGroup.group_context == "group_management",
             TelegramGroup.group_context == None,  # noqa: E711 — SQL IS NULL
         ),
+        # Private groups from custom bots belong in Assistant Hub only.
+        # TelegramGroup.username is NULL for private groups (no public @username).
+        db.not_(
+            db.and_(
+                TelegramGroup.linked_via_bot_type == "custom",
+                TelegramGroup.username == None,  # noqa: E711 — SQL IS NULL
+            )
+        ),
     ).order_by(TelegramGroup.linked_at.desc()).all()
 
     groups_data = [g.to_dict() for g in groups]
