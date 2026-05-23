@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { useScrollReveal } from '../hooks/useScrollReveal';
 import {
   Box, AppBar, Toolbar, Typography, Button, Card, CardContent,
@@ -171,10 +171,128 @@ const EARLY_FEEDBACK = [
   },
 ];
 
+function StatCard({ target, label, sub, color, delay, visible, reveal }) {
+  const count = useAnimatedCount(visible ? (target || 0) : 0);
+  return (
+    <Box sx={{
+      textAlign: 'center', p: { xs: 2, sm: 2.5 },
+      bgcolor: 'rgba(15,30,53,0.7)',
+      borderRadius: 2,
+      border: '1px solid rgba(255,255,255,0.07)',
+      ...reveal(visible, delay),
+    }}>
+      <Typography variant="h4" fontWeight={900} color={color} sx={{ fontSize: { xs: '1.7rem', sm: '2.1rem' }, fontVariantNumeric: 'tabular-nums' }}>
+        {target != null ? formatStat(count) : '—'}
+      </Typography>
+      <Typography variant="body2" fontWeight={600} mt={0.25}>{label}</Typography>
+      <Typography variant="caption" color="text.disabled" display="block" mt={0.25} lineHeight={1.4}>{sub}</Typography>
+    </Box>
+  );
+}
+
+function LivePlatformStats({ proofRef, proofVisible, reveal, stats }) {
+  const cards = [
+    {
+      key: 'groups',
+      target: stats?.total_groups ?? null,
+      label: 'Active groups',
+      sub: 'communities managed right now',
+      color: 'secondary.main',
+    },
+    {
+      key: 'members',
+      target: stats?.total_members ?? null,
+      label: 'Members managed',
+      sub: 'total across all groups',
+      color: 'primary.main',
+    },
+    {
+      key: 'mod',
+      target: stats?.total_mod_actions ?? null,
+      label: 'Mod actions taken',
+      sub: 'spam removed, bans, mutes — automated',
+      color: 'success.main',
+    },
+    {
+      key: 'ai',
+      target: stats?.total_ai_replies ?? null,
+      label: 'Auto-replies fired',
+      sub: 'bot answered so admins didn\'t have to',
+      color: 'warning.main',
+    },
+  ];
+
+  const updatedAt = stats?.updated_at
+    ? new Date(stats.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : null;
+
+  return (
+    <Box ref={proofRef} sx={{ bgcolor: '#060e1c', borderBottom: '1px solid', borderColor: 'divider', py: { xs: 5, md: 7 } }}>
+      <Container maxWidth="md">
+        <Box sx={{ textAlign: 'center', mb: 4, ...reveal(proofVisible) }}>
+          <Chip
+            label={updatedAt ? `Live · Updated at ${updatedAt}` : 'Live platform data'}
+            size="small"
+            sx={{
+              bgcolor: 'rgba(33,150,243,0.1)', color: 'primary.light',
+              fontWeight: 600, border: '1px solid rgba(33,150,243,0.25)', mb: 1.5,
+            }}
+          />
+          <Typography variant="h5" fontWeight={800}>
+            A growing platform. Real numbers.
+          </Typography>
+          <Typography variant="body2" color="text.secondary" mt={0.5}>
+            Every group added increases these counters. These are live totals from the Telegizer platform.
+          </Typography>
+        </Box>
+        <Grid container spacing={2} justifyContent="center">
+          {cards.map((c, i) => (
+            <Grid item xs={6} sm={3} key={c.key}>
+              <StatCard {...c} delay={i * 70} visible={proofVisible} reveal={reveal} />
+            </Grid>
+          ))}
+        </Grid>
+        {stats?.new_groups_this_week > 0 && (
+          <Box sx={{ textAlign: 'center', mt: 3, ...reveal(proofVisible, 350) }}>
+            <Typography variant="caption" color="text.disabled">
+              +{stats.new_groups_this_week} new group{stats.new_groups_this_week !== 1 ? 's' : ''} joined this week
+            </Typography>
+          </Box>
+        )}
+      </Container>
+    </Box>
+  );
+}
+
+function useAnimatedCount(target, duration = 1400) {
+  const [display, setDisplay] = useState(0);
+  const frameRef = useRef(null);
+  useEffect(() => {
+    if (!target) { setDisplay(0); return; }
+    const start = performance.now();
+    const step = (now) => {
+      const progress = Math.min((now - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplay(Math.round(eased * target));
+      if (progress < 1) frameRef.current = requestAnimationFrame(step);
+    };
+    frameRef.current = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frameRef.current);
+  }, [target, duration]);
+  return display;
+}
+
+function formatStat(n) {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M+';
+  if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'K+';
+  return n.toLocaleString();
+}
+
 export default function Landing() {
   const navigate = useNavigate();
   const token = localStorage.getItem('token');
 
+  const [platformStats, setPlatformStats] = useState(null);
   const [statsRef, statsVisible] = useScrollReveal(0.15);
   const [proofRef, proofVisible] = useScrollReveal(0.1);
   const [painRef, painVisible] = useScrollReveal(0.08);
@@ -185,6 +303,14 @@ export default function Landing() {
   const [pricingRef, pricingVisible] = useScrollReveal(0.05);
   const [faqRef, faqVisible] = useScrollReveal(0.1);
   const [ctaRef, ctaVisible] = useScrollReveal(0.15);
+
+  useEffect(() => {
+    const base = process.env.REACT_APP_API_URL || '';
+    fetch(`${base}/api/platform-stats`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setPlatformStats(data); })
+      .catch(() => {});
+  }, []);
 
   const reveal = (visible, delay = 0) => ({
     opacity: visible ? 1 : 0,
@@ -387,47 +513,8 @@ export default function Landing() {
         </Container>
       </Box>
 
-      {/* ── Live Proof Strip ── */}
-      <Box ref={proofRef} sx={{ bgcolor: '#060e1c', borderBottom: '1px solid', borderColor: 'divider', py: { xs: 5, md: 7 }, ...reveal(proofVisible) }}>
-        <Container maxWidth="md">
-          <Box sx={{ textAlign: 'center', mb: 4 }}>
-            <Chip
-              label="Live data · Verified from a real community on Telegizer"
-              size="small"
-              sx={{ bgcolor: 'rgba(33,150,243,0.1)', color: 'primary.light', fontWeight: 600, border: '1px solid rgba(33,150,243,0.25)', mb: 1.5 }}
-            />
-            <Typography variant="h5" fontWeight={800}>
-              Real numbers. Real groups.
-            </Typography>
-            <Typography variant="body2" color="text.secondary" mt={0.5}>
-              These figures come directly from a live Telegizer-powered community.
-            </Typography>
-          </Box>
-          <Grid container spacing={2} justifyContent="center">
-            {[
-              { value: '8,568', label: 'Members tracked', sub: 'in one group', color: 'primary.main' },
-              { value: '220', label: 'Mod actions', sub: 'last 30 days — automated', color: 'success.main' },
-              { value: '79', label: 'New members tracked', sub: 'growth data captured automatically', color: 'info.main' },
-              { value: '6+', label: 'Active groups', sub: 'managed from one dashboard', color: 'secondary.main' },
-            ].map((s, i) => (
-              <Grid item xs={6} sm={3} key={s.label} sx={reveal(proofVisible, i * 70)}>
-                <Box sx={{
-                  textAlign: 'center', p: { xs: 2, sm: 2.5 },
-                  bgcolor: 'rgba(15,30,53,0.7)',
-                  borderRadius: 2,
-                  border: '1px solid rgba(255,255,255,0.07)',
-                }}>
-                  <Typography variant="h4" fontWeight={900} color={s.color} sx={{ fontSize: { xs: '1.7rem', sm: '2.1rem' } }}>
-                    {s.value}
-                  </Typography>
-                  <Typography variant="body2" fontWeight={600} mt={0.25}>{s.label}</Typography>
-                  <Typography variant="caption" color="text.disabled" display="block" mt={0.25} lineHeight={1.4}>{s.sub}</Typography>
-                </Box>
-              </Grid>
-            ))}
-          </Grid>
-        </Container>
-      </Box>
+      {/* ── Live Platform Stats ── */}
+      <LivePlatformStats proofRef={proofRef} proofVisible={proofVisible} reveal={reveal} stats={platformStats} />
 
       {/* ── Pain ── */}
       <Box sx={{ bgcolor: '#07101f' }}>
