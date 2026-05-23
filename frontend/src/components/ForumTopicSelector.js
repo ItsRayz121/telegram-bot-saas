@@ -76,13 +76,16 @@ export default function ForumTopicSelector({ botId, groupId, value, onChange, la
   };
 
   const handleManualChange = (e) => {
-    setManualValue(e.target.value);
-    // Live-parse as user types so pasting a full link works immediately
-    const parsed = parseTopicInput(e.target.value);
-    if (parsed !== null) onChange(parsed);
+    const raw = e.target.value;
+    setManualValue(raw);
+    // Only fire onChange when we have a confident parse — never call onChange(null) mid-type,
+    // because incomplete URLs (e.g. "https://t.me") would wipe a previously saved ID.
+    const parsed = parseTopicInput(raw);
+    if (parsed !== null && parsed !== value) onChange(parsed);
   };
 
   const handleManualBlur = () => {
+    // On blur, always commit the final parsed value (including null to clear)
     const parsed = parseTopicInput(manualValue);
     onChange(parsed);
   };

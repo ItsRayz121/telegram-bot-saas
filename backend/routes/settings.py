@@ -181,7 +181,19 @@ def get_group_settings(bot_id, group_id):
         bot, group, err = _get_bot_and_group(user, bot_id, group_id)
         if err:
             return err
-        return jsonify({"settings": group.settings, "group": group.to_dict()})
+        # Annotate escalation admin DM eligibility (has the admin started the bot?)
+        escalation_dm_status = {}
+        try:
+            admin_ids = (group.settings or {}).get("escalation", {}).get("admins", [])
+            for admin_id in admin_ids:
+                if admin_id:
+                    started = TelegramBotStarted.query.filter_by(
+                        telegram_user_id=str(admin_id).lstrip("@")
+                    ).first()
+                    escalation_dm_status[str(admin_id)] = started is not None
+        except Exception:
+            pass
+        return jsonify({"settings": group.settings, "group": group.to_dict(), "escalation_dm_status": escalation_dm_status})
     except Exception as e:
         logger.error(f"get_group_settings error: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500

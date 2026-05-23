@@ -358,6 +358,7 @@ export default function GroupSettings() {
   const [auditPage, setAuditPage] = useState(1);
   const [expandedLogId, setExpandedLogId] = useState(null);
   const [expandedWarnId, setExpandedWarnId] = useState(null);
+  const [escalationDmStatus, setEscalationDmStatus] = useState({});
 
   const [autoResponses, setAutoResponses] = useState([]);
   const [arDialogOpen, setArDialogOpen] = useState(false);
@@ -405,6 +406,7 @@ export default function GroupSettings() {
       if (!isMounted.current) return;
       setGroupData(res.data.group);
       setSettingsData(res.data.settings);
+      if (res.data.escalation_dm_status) setEscalationDmStatus(res.data.escalation_dm_status);
     } catch {
       if (!isMounted.current) return;
       toast.error('Failed to load settings');
@@ -1962,6 +1964,109 @@ export default function GroupSettings() {
                 </Button>
               </CardContent>
             </Card>
+
+            <Card sx={{ mt: 2 }}>
+              <CardContent>
+                <Typography variant="subtitle1" fontWeight={600} mb={0.5}>XP Command Routing</Typography>
+                <Typography variant="body2" color="text.secondary" mb={2}>
+                  Control which forum topics the <code>/xp</code>, <code>/rank</code>, and <code>/leaderboard</code> commands are allowed in.
+                  Only applies when the group has Telegram forum topics enabled.
+                </Typography>
+                <Divider sx={{ mb: 2 }} />
+                {['/xp', '/rank', '/leaderboard'].map((cmd) => {
+                  const rule = (cmdRouting.commands || {})[cmd] || { scope: 'all_group', topic_ids: [] };
+                  const topics = cmdRouting.topics || [];
+                  return (
+                    <Box key={cmd} sx={{ mb: 2 }}>
+                      <Stack direction="row" alignItems="center" spacing={2} flexWrap="wrap" mb={1}>
+                        <Typography fontWeight={600} sx={{ minWidth: 130, fontFamily: 'monospace' }}>{cmd}</Typography>
+                        <FormControl size="small" sx={{ minWidth: 200 }}>
+                          <InputLabel>Access</InputLabel>
+                          <Select
+                            value={rule.scope}
+                            label="Access"
+                            onChange={(e) => {
+                              setCmdRouting((prev) => ({
+                                ...prev,
+                                commands: { ...prev.commands, [cmd]: { ...rule, scope: e.target.value } },
+                              }));
+                            }}
+                          >
+                            {SCOPE_OPTIONS.map((o) => (
+                              <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      </Stack>
+
+                      {rule.scope === 'specific_topics' && (
+                        <Box sx={{ ml: 0.5 }}>
+                          {topics.length === 0 ? (
+                            <TextField
+                              size="small"
+                              fullWidth
+                              label="Topic ID or link"
+                              placeholder="e.g. 12345 or https://t.me/c/123/456"
+                              value={rule.manual_topic_input || (rule.topic_ids?.[0] ? String(rule.topic_ids[0]) : '')}
+                              onChange={(e) => {
+                                const raw = e.target.value;
+                                const parsed = parseTopicInput(raw);
+                                setCmdRouting((prev) => ({
+                                  ...prev,
+                                  commands: {
+                                    ...prev.commands,
+                                    [cmd]: { ...rule, manual_topic_input: raw, topic_ids: parsed ? [String(parsed)] : [] },
+                                  },
+                                }));
+                              }}
+                              helperText="No forum topics detected yet. Paste a Telegram topic link or enter the topic ID directly."
+                            />
+                          ) : (
+                            <Stack direction="row" flexWrap="wrap" gap={1}>
+                              {topics.map((t) => {
+                                const checked = (rule.topic_ids || []).includes(String(t.thread_id));
+                                return (
+                                  <FormControlLabel
+                                    key={t.thread_id}
+                                    control={
+                                      <Switch
+                                        size="small"
+                                        checked={checked}
+                                        onChange={(e) => {
+                                          const current = rule.topic_ids || [];
+                                          const updated = e.target.checked
+                                            ? [...new Set([...current, String(t.thread_id)])]
+                                            : current.filter((id) => id !== String(t.thread_id));
+                                          setCmdRouting((prev) => ({
+                                            ...prev,
+                                            commands: { ...prev.commands, [cmd]: { ...rule, topic_ids: updated } },
+                                          }));
+                                        }}
+                                      />
+                                    }
+                                    label={t.name}
+                                  />
+                                );
+                              })}
+                            </Stack>
+                          )}
+                        </Box>
+                      )}
+                    </Box>
+                  );
+                })}
+                <Button
+                  variant="contained"
+                  size="small"
+                  disabled={saving}
+                  onClick={handleSaveCmdRouting}
+                  sx={{ mt: 1 }}
+                >
+                  {saving ? <CircularProgress size={16} sx={{ mr: 1 }} /> : null}
+                  Save Routing
+                </Button>
+              </CardContent>
+            </Card>
           </>
         )}
 
@@ -2179,28 +2284,41 @@ export default function GroupSettings() {
                     </Typography>
                   </Alert>
                   <Stack spacing={1} mb={1}>
-                    {adminIds.map((aid, idx) => (
-                      <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <TextField
-                          size="small"
-                          type="text"
-                          label={`Admin ${idx + 1} — Telegram ID or @username`}
-                          placeholder="e.g. 123456789 or @username"
-                          value={aid}
-                          onChange={(e) => {
-                            const updated = [...adminIds];
-                            updated[idx] = e.target.value;
-                            updateSetting('escalation.admin_ids', updated);
-                          }}
-                          sx={{ flex: 1 }}
-                        />
-                        <IconButton size="small" onClick={() => {
-                          updateSetting('escalation.admin_ids', adminIds.filter((_, i) => i !== idx));
-                        }}>
-                          <Delete fontSize="small" />
-                        </IconButton>
-                      </Box>
-                    ))}
+                    {adminIds.map((aid, idx) => {
+                      const dmOk = escalationDmStatus[aid];
+                      const dmUnknown = !(aid in escalationDmStatus);
+                      return (
+                        <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <TextField
+                            size="small"
+                            type="text"
+                            label={`Admin ${idx + 1} — Telegram ID or @username`}
+                            placeholder="e.g. 123456789 or @username"
+                            value={aid}
+                            onChange={(e) => {
+                              const updated = [...adminIds];
+                              updated[idx] = e.target.value;
+                              updateSetting('escalation.admin_ids', updated);
+                            }}
+                            sx={{ flex: 1 }}
+                          />
+                          {aid && !dmUnknown && (
+                            <Chip
+                              size="small"
+                              label={dmOk ? 'DM ready' : 'Not started'}
+                              color={dmOk ? 'success' : 'warning'}
+                              variant="outlined"
+                              sx={{ fontSize: '0.7rem', height: 22 }}
+                            />
+                          )}
+                          <IconButton size="small" onClick={() => {
+                            updateSetting('escalation.admin_ids', adminIds.filter((_, i) => i !== idx));
+                          }}>
+                            <Delete fontSize="small" />
+                          </IconButton>
+                        </Box>
+                      );
+                    })}
                   </Stack>
                   <Button size="small" startIcon={<Add />}
                     onClick={() => updateSetting('escalation.admin_ids', [...adminIds, ''])}>
@@ -2598,42 +2716,42 @@ export default function GroupSettings() {
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {warnings.map((w) => {
-                        const isExpanded = expandedWarnId === w.id;
-                        const linkType = classifyReason(w.reason);
+                      {warnings.map((warning) => {
+                        const isExpanded = expandedWarnId === warning.id;
+                        const linkType = classifyReason(warning.reason);
                         return (
-                          <React.Fragment key={w.id}>
+                          <React.Fragment key={warning.id}>
                             <TableRow
                               hover
-                              onClick={() => setExpandedWarnId(isExpanded ? null : w.id)}
+                              onClick={() => setExpandedWarnId(isExpanded ? null : warning.id)}
                               sx={{ cursor: 'pointer' }}
                             >
                               <TableCell>
                                 <Typography variant="body2" fontWeight={500}>
-                                  {w.target_username ? `@${w.target_username}` : w.target_user_id}
+                                  {warning.target_username ? `@${warning.target_username}` : warning.target_user_id}
                                 </Typography>
                               </TableCell>
                               <TableCell>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                                  <Typography variant="body2" color={w.reason ? 'text.primary' : 'text.disabled'}>
-                                    {w.reason || '—'}
+                                  <Typography variant="body2" color={warning.reason ? 'text.primary' : 'text.disabled'}>
+                                    {warning.reason || '—'}
                                   </Typography>
                                   {linkType && <Chip label={linkType.label} color={linkType.color} size="small" sx={{ height: 18, fontSize: '0.7rem' }} />}
                                 </Box>
                               </TableCell>
                               <TableCell>
                                 <Typography variant="body2">
-                                  {w.moderator_username ? `@${w.moderator_username}` : w.moderator_user_id}
+                                  {warning.moderator_username ? `@${warning.moderator_username}` : warning.moderator_user_id}
                                 </Typography>
                               </TableCell>
                               <TableCell>
                                 <Typography variant="caption" color="text.secondary">
-                                  {w.created_at ? new Date(w.created_at).toLocaleString() : '—'}
+                                  {warning.created_at ? new Date(warning.created_at).toLocaleString() : '—'}
                                 </Typography>
                               </TableCell>
                               <TableCell align="center">
                                 <Tooltip title="Remove this warning">
-                                  <IconButton size="small" color="error" onClick={(e) => { e.stopPropagation(); handleRemoveWarning(w.id); }}>
+                                  <IconButton size="small" color="error" onClick={(e) => { e.stopPropagation(); handleRemoveWarning(warning.id); }}>
                                     <Delete fontSize="small" />
                                   </IconButton>
                                 </Tooltip>
@@ -2643,9 +2761,9 @@ export default function GroupSettings() {
                               <TableRow>
                                 <TableCell colSpan={5} sx={{ bgcolor: 'rgba(255,255,255,0.02)', py: 1.5, px: 2.5 }}>
                                   <Stack spacing={0.75}>
-                                    {w.reason && (
+                                    {warning.reason && (
                                       <Typography variant="caption" color="text.primary">
-                                        <strong>Warning reason:</strong> {w.reason}
+                                        <strong>Warning reason:</strong> {warning.reason}
                                       </Typography>
                                     )}
                                     {linkType && (
@@ -2655,7 +2773,7 @@ export default function GroupSettings() {
                                       </Typography>
                                     )}
                                     <Typography variant="caption" color="text.disabled">
-                                      Issued by: {w.moderator_username ? `@${w.moderator_username}` : w.moderator_user_id} · {w.created_at ? new Date(w.created_at).toLocaleString() : '—'}
+                                      Issued by: {warning.moderator_username ? `@${warning.moderator_username}` : warning.moderator_user_id} · {warning.created_at ? new Date(warning.created_at).toLocaleString() : '—'}
                                     </Typography>
                                   </Stack>
                                 </TableCell>

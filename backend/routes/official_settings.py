@@ -80,7 +80,18 @@ def get_official_settings(group_id):
         tg, err = _get_official_group(user, group_id)
         if err:
             return err
-        return jsonify({"settings": tg.settings or {}, "group": _group_to_dict(tg)})
+        # Annotate escalation admin DM eligibility
+        escalation_dm_status = {}
+        try:
+            admin_ids = (tg.settings or {}).get("escalation", {}).get("admins", [])
+            for admin_id in admin_ids:
+                if admin_id:
+                    escalation_dm_status[str(admin_id)] = TelegramBotStarted.has_started(
+                        str(admin_id).lstrip("@")
+                    )
+        except Exception:
+            pass
+        return jsonify({"settings": tg.settings or {}, "group": _group_to_dict(tg), "escalation_dm_status": escalation_dm_status})
     except Exception as e:
         logger.error(f"get_official_settings error: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
@@ -106,6 +117,8 @@ def update_official_settings(group_id):
             "digest", "xp", "timezone",
             # features added post-launch
             "social_replies", "image_ai", "raids", "admin_alerts",
+            # sections missing from original list — added to fix silent save failures
+            "escalation", "reactions", "invites",
         }
         unknown = set(data.keys()) - _ALLOWED_SETTING_KEYS
         if unknown:

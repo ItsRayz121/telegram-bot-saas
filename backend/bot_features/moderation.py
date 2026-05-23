@@ -400,6 +400,10 @@ class ModerationSystem:
         if not URL_PATTERN.search(text):
             return False
 
+        # Never block platform-generated invite links for this group
+        if self._is_platform_invite_link(group.id, text):
+            return False
+
         whitelist = cfg.get("whitelist", [])
         urls = URL_PATTERN.findall(text)
         for url in urls:
@@ -801,7 +805,7 @@ class ModerationSystem:
 
         # Re-check external links on normalized text
         ext_cfg = settings.get("external_links", {})
-        if ext_cfg.get("enabled") and URL_PATTERN.search(normalized):
+        if ext_cfg.get("enabled") and URL_PATTERN.search(normalized) and not self._is_platform_invite_link(group.id, normalized):
             whitelist = ext_cfg.get("whitelist", [])
             for url in URL_PATTERN.findall(normalized):
                 if not any(w in url for w in whitelist):
