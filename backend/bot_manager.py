@@ -2467,10 +2467,25 @@ class BotInstance:
         if not query:
             return
 
-        await query.answer()
         data = query.data or ""
         parts = data.split(":")
         user = query.from_user
+
+        # Hub consent / intro buttons — handle before generic answer() so
+        # handle_consent_callback can answer with its own alert if needed.
+        if data.startswith("hub_consent:") or data.startswith("hub_intro:"):
+            try:
+                from .assistant.hub_consent import handle_consent_callback
+                await handle_consent_callback(update, context, self.app_context)
+            except Exception as _ce:
+                logger.warning("Hub consent callback error: %s", _ce)
+                try:
+                    await query.answer()
+                except Exception:
+                    pass
+            return
+
+        await query.answer()
 
         if parts[0] == "verify":
             method = parts[1]
@@ -2528,35 +2543,11 @@ class BotInstance:
         added_by = result.from_user
 
         if new_status in ("member", "administrator"):
-            # Private groups connected via a custom bot belong in Assistant Hub only.
-            # Check before creating a Group Management record.
-            _skip_group_mgmt = False
-            if not chat.username and self.app_context:
-                try:
-                    with self.app_context.app_context():
-                        from .models import Bot, CustomBot
-                        _br = Bot.query.get(self.bot_id)
-                        if _br and _br.bot_username and CustomBot.query.filter_by(
-                            bot_username=_br.bot_username,
-                            owner_user_id=_br.user_id,
-                        ).first():
-                            _skip_group_mgmt = True
-                except Exception:
-                    pass
+            is_custom_bot = False
+            hub_bot_id = None
 
-            if not _skip_group_mgmt:
-                # Group Management record — store chat.username so private groups
-                # (no username) can be filtered out in get_bot_groups.
-                await self._get_or_create_group(
-                    chat.id, chat.title, context.bot,
-                    chat_type=chat.type,
-                    chat_username=chat.username or "",
-                )
-
-            # Assistant Hub consent flow — find this custom bot's HubBotIdentity mirror
-            if added_by and self.app_context:
+            if self.app_context:
                 try:
-                    hub_bot_id = None
                     with self.app_context.app_context():
                         from .models import Bot, CustomBot
                         bot_rec = Bot.query.get(self.bot_id)
@@ -2565,10 +2556,18 @@ class BotInstance:
                                 bot_username=bot_rec.bot_username,
                                 owner_user_id=bot_rec.user_id,
                             ).first()
-                            if cb and cb.hub_bot_id:
+                            if cb:
+                                is_custom_bot = True
                                 hub_bot_id = cb.hub_bot_id
+                except Exception:
+                    pass
 
-                    if hub_bot_id:
+            if is_custom_bot:
+                # Custom bots NEVER auto-add to Group Management.
+                # Groups only appear in Group Management when the user explicitly
+                # runs /linkgroup. Auto-joined groups go to Assistant Hub only.
+                if hub_bot_id and added_by:
+                    try:
                         from .assistant.hub_consent import handle_bot_added_to_group
                         await handle_bot_added_to_group(
                             bot=context.bot,
@@ -2577,10 +2576,17 @@ class BotInstance:
                             added_by_tg_id=str(added_by.id),
                             hub_bot_id=hub_bot_id,
                         )
-                except Exception as _hub_e:
-                    logger.warning(
-                        "Custom bot Hub consent flow failed for chat %s: %s", chat.id, _hub_e
-                    )
+                    except Exception as _hub_e:
+                        logger.warning(
+                            "Custom bot Hub consent flow failed for chat %s: %s", chat.id, _hub_e
+                        )
+            else:
+                # Official bot — create Group Management record as before.
+                await self._get_or_create_group(
+                    chat.id, chat.title, context.bot,
+                    chat_type=chat.type,
+                    chat_username=chat.username or "",
+                )
 
     def _run_bot(self):
         import time

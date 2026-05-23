@@ -28,7 +28,7 @@ def register_webhook(bot_id: str, token: str, base_url: str) -> bool:
             f"https://api.telegram.org/bot{token}/setWebhook",
             json={
                 "url": webhook_url,
-                "allowed_updates": ["message", "edited_message", "my_chat_member"],
+                "allowed_updates": ["message", "edited_message", "my_chat_member", "callback_query"],
             },
             timeout=10,
         )

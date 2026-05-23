@@ -2135,12 +2135,26 @@ def use_knowledge_card(card_id):
 
 # ── Sprint 7C: Custom bot webhook receiver ────────────────────────────────────
 
+def _tg_post(token: str, method: str, **kwargs):
+    """Synchronous Telegram Bot API call from Flask webhook handler."""
+    import requests as _requests
+    try:
+        _requests.post(
+            f"https://api.telegram.org/bot{token}/{method}",
+            json=kwargs,
+            timeout=5,
+        )
+    except Exception as _e:
+        _log.warning("_tg_post %s failed: %s", method, _e)
+
+
 @hub_bp.route("/webhook/<bot_id>", methods=["POST"])
 def custom_bot_webhook(bot_id):
     """
     Receive Telegram updates for a custom bot via webhook.
     Handles:
-      - my_chat_member: auto-connect group to Hub (user set up this bot intentionally)
+      - my_chat_member: send Hub consent DM when bot is added to a group
+      - callback_query: handle consent/cancel/intro button taps
       - message/@mention: dispatch to hub_reply
     No JWT — Telegram calls this directly.
     """
@@ -2162,55 +2176,48 @@ def custom_bot_webhook(bot_id):
         new_status = (my_chat_member.get("new_chat_member") or {}).get("status", "")
         telegram_group_id = chat.get("id")
         group_name = chat.get("title") or f"Group {telegram_group_id}"
+        added_by = my_chat_member.get("from") or {}
+        added_by_tg_id = added_by.get("id")
 
         if chat_type in ("group", "supergroup") and telegram_group_id:
             if new_status in ("member", "administrator"):
-                # Auto-connect: user deliberately added their custom Hub bot to this group.
-                # No consent DM needed — bot registration itself is the consent signal.
-                try:
-                    existing = HubConnectedGroup.query.filter_by(
-                        bot_id=bot.id,
-                        telegram_group_id=telegram_group_id,
-                    ).first()
-                    if existing:
-                        # Re-added: reactivate if paused
-                        existing.is_active = True
-                        existing.pause_reason = None
-                        existing.group_name = group_name
-                    else:
-                        from ..assistant.hub_plan_limits import check_connected_groups, PlanLimitError
-                        user = User.query.get(bot.user_id)
-                        plan = user.subscription_tier if user else "free"
-                        try:
-                            check_connected_groups(
-                                user_id=bot.user_id,
-                                bot_id=bot.id,
-                                bot_type="custom",
-                                plan=plan,
-                            )
-                        except PlanLimitError:
-                            _log.info("custom_bot_webhook: plan limit reached, skipping connect bot=%s group=%s", bot_id, telegram_group_id)
-                            return jsonify({"ok": True}), 200
-
-                        import uuid as _uuid_mod
-                        new_group = HubConnectedGroup(
-                            id=str(_uuid_mod.uuid4()),
-                            bot_id=bot.id,
-                            user_id=bot.user_id,
-                            telegram_group_id=telegram_group_id,
-                            group_name=group_name,
-                            is_active=True,
-                            consent_confirmed_at=datetime.utcnow(),
-                            is_public_group=bool(chat.get("username")),
+                # Send consent DM to the user who added the bot.
+                # Group is NOT auto-connected — user must confirm via the DM button.
+                if added_by_tg_id:
+                    try:
+                        token = _dec(bot.telegram_bot_token)
+                        is_public = bool(chat.get("username"))
+                        warning = (
+                            "⚠️ *Note: This is a public group.*\n"
+                            "Assistant Hub works best in private team groups. "
+                            "For public community management, use Group Management instead.\n\n"
+                        ) if is_public else ""
+                        text = (
+                            f"You've added me to *{group_name}*.\n\n"
+                            f"{warning}"
+                            f"Before I start observing, here's what happens:\n"
+                            f"• I'll analyze messages to surface tasks, reminders, and meetings\n"
+                            f"• Raw messages are deleted after 72 hours\n"
+                            f"• Extracted items are stored in your Telegizer account\n\n"
+                            f"Do you want me to start observing this group?"
                         )
-                        db.session.add(new_group)
-                    db.session.commit()
-                    _log.info("custom_bot_webhook: group %s connected to bot %s", telegram_group_id, bot_id)
-                except Exception as exc:
-                    _log.warning("custom_bot_webhook: group connect failed bot=%s group=%s: %s", bot_id, telegram_group_id, exc)
+                        bot_tag = bot.id
+                        keyboard = {"inline_keyboard": [[
+                            {"text": "✓ Start Observing",
+                             "callback_data": f"hub_consent:start:{telegram_group_id}:{bot_tag}"},
+                            {"text": "✗ Cancel — Remove Me",
+                             "callback_data": f"hub_consent:cancel:{telegram_group_id}:{bot_tag}"},
+                        ]]}
+                        _tg_post(token, "sendMessage",
+                                 chat_id=added_by_tg_id,
+                                 text=text,
+                                 parse_mode="Markdown",
+                                 reply_markup=keyboard)
+                        _log.info("custom_bot_webhook: consent DM sent bot=%s group=%s", bot_id, telegram_group_id)
+                    except Exception as exc:
+                        _log.warning("custom_bot_webhook: consent DM failed bot=%s group=%s: %s", bot_id, telegram_group_id, exc)
 
             elif new_status in ("left", "kicked"):
-                # Bot removed: deactivate the connected group record
                 try:
                     existing = HubConnectedGroup.query.filter_by(
                         bot_id=bot.id,
@@ -2218,10 +2225,123 @@ def custom_bot_webhook(bot_id):
                     ).first()
                     if existing:
                         existing.is_active = False
-                        existing.pause_reason = "error"
+                        existing.pause_reason = "removed"
                         db.session.commit()
                 except Exception as exc:
                     _log.warning("custom_bot_webhook: group deactivate failed bot=%s group=%s: %s", bot_id, telegram_group_id, exc)
+
+        return jsonify({"ok": True}), 200
+
+    # ── Handle consent / intro button taps ────────────────────────────────────
+    callback_query = payload.get("callback_query")
+    if callback_query:
+        cq_id = callback_query.get("id")
+        data = callback_query.get("data", "")
+        from_user = callback_query.get("from") or {}
+        from_tg_id = from_user.get("id")
+        message = callback_query.get("message") or {}
+        message_id = message.get("message_id")
+        dm_chat_id = (message.get("chat") or {}).get("id")  # DM chat = user's private chat
+
+        try:
+            token = _dec(bot.telegram_bot_token)
+        except Exception:
+            return jsonify({"ok": True}), 200
+
+        # Dismiss the loading spinner
+        _tg_post(token, "answerCallbackQuery", callback_query_id=cq_id)
+
+        parts = data.split(":")
+
+        if data.startswith("hub_consent:start:") and len(parts) >= 4:
+            telegram_group_id = int(parts[2])
+            try:
+                from ..assistant.hub_plan_limits import check_connected_groups, PlanLimitError
+                user = User.query.get(bot.user_id)
+                plan = user.subscription_tier if user else "free"
+                check_connected_groups(
+                    user_id=bot.user_id, bot_id=bot.id,
+                    bot_type="custom", plan=plan,
+                )
+                existing = HubConnectedGroup.query.filter_by(
+                    bot_id=bot.id, telegram_group_id=telegram_group_id,
+                ).first()
+                if existing:
+                    existing.is_active = True
+                    existing.pause_reason = None
+                    existing.consent_confirmed_at = datetime.utcnow()
+                else:
+                    # Fetch group info for is_public_group
+                    import requests as _requests
+                    is_public = False
+                    group_name = f"Group {telegram_group_id}"
+                    try:
+                        r = _requests.get(
+                            f"https://api.telegram.org/bot{token}/getChat",
+                            params={"chat_id": telegram_group_id}, timeout=4,
+                        ).json()
+                        if r.get("ok"):
+                            is_public = bool(r["result"].get("username"))
+                            group_name = r["result"].get("title") or group_name
+                    except Exception:
+                        pass
+                    existing = HubConnectedGroup(
+                        id=str(uuid.uuid4()),
+                        bot_id=bot.id,
+                        user_id=bot.user_id,
+                        telegram_group_id=telegram_group_id,
+                        group_name=group_name,
+                        is_active=True,
+                        consent_confirmed_at=datetime.utcnow(),
+                        is_public_group=is_public,
+                    )
+                    db.session.add(existing)
+                db.session.commit()
+                _tg_post(token, "editMessageText",
+                         chat_id=dm_chat_id, message_id=message_id,
+                         text=f"✅ *{group_name} connected.*\n\nI'll observe this group and surface tasks, decisions, and meetings in your Hub.",
+                         parse_mode="Markdown")
+                # Ask about intro message
+                _tg_post(token, "sendMessage",
+                         chat_id=dm_chat_id,
+                         text="Do you want to let the group know I'm here?",
+                         reply_markup={"inline_keyboard": [[
+                             {"text": "✓ Send Introduction", "callback_data": f"hub_intro:send:{telegram_group_id}"},
+                             {"text": "Skip", "callback_data": f"hub_intro:skip:{telegram_group_id}"},
+                         ]]})
+            except Exception as exc:
+                _log.warning("custom_bot_webhook: consent confirm failed: %s", exc)
+                _tg_post(token, "editMessageText",
+                         chat_id=dm_chat_id, message_id=message_id,
+                         text="⚠️ Something went wrong. Please try again.")
+
+        elif data.startswith("hub_consent:cancel:") and len(parts) >= 3:
+            telegram_group_id = int(parts[2])
+            _tg_post(token, "editMessageText",
+                     chat_id=dm_chat_id, message_id=message_id,
+                     text="Got it. I'll leave the group now. No data was collected.")
+            _tg_post(token, "leaveChat", chat_id=telegram_group_id)
+
+        elif data.startswith("hub_intro:send:") and len(parts) >= 3:
+            telegram_group_id = int(parts[2])
+            try:
+                user = User.query.get(bot.user_id)
+                first_name = (user.full_name or "").split()[0] if user and user.full_name else "the owner"
+                _tg_post(token, "sendMessage",
+                         chat_id=telegram_group_id,
+                         text=(f"👋 Hi, I'm {bot.display_name or 'your assistant'}. "
+                               f"I'll help {first_name} track tasks and meetings from this group. "
+                               f"I won't respond to messages unless @mentioned."))
+                _tg_post(token, "editMessageText",
+                         chat_id=dm_chat_id, message_id=message_id,
+                         text="✅ Introduction sent to the group.")
+            except Exception as exc:
+                _log.warning("custom_bot_webhook: intro send failed: %s", exc)
+
+        elif data.startswith("hub_intro:skip:"):
+            _tg_post(token, "editMessageText",
+                     chat_id=dm_chat_id, message_id=message_id,
+                     text="Skipped. I'll observe silently.")
 
         return jsonify({"ok": True}), 200
 
