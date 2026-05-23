@@ -220,9 +220,7 @@ def get_bot_groups(bot_id):
 
     all_groups = Group.query.filter(
         Group.bot_id == bot_id,
-        # Regular "group" type chats can never have a public @username in Telegram
-        # (only supergroups can), so they are always private — exclude them.
-        Group.chat_type == "supergroup",
+        Group.chat_type != "private",
     ).all()
 
     groups = [g for g in all_groups if g.telegram_group_id not in hub_private_tg_ids]
