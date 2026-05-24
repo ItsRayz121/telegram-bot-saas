@@ -143,6 +143,27 @@ function getMessagePreview(log) {
   return meta.text || meta.message_text || meta.message || null;
 }
 
+function categorizeReason(reason) {
+  if (!reason) return '—';
+  const r = reason.toLowerCase();
+  if (r.includes('t.me/+') || r.includes('joinchat') || (r.includes('invite') && r.includes('link'))) return 'Invite link';
+  if (r.includes('telegizer') || r.includes('tracked link')) return 'Telegizer link';
+  if (r.includes('t.me/') || r.includes('telegram.me/')) return 'Telegram link';
+  if (r.includes('http') || r.includes('external link') || r.includes('url')) return 'External link';
+  if (r.includes('spam') || r.includes('promotional') || r.includes('adverti')) return 'Spam';
+  if (r.includes('unrelated') || r.includes('off-topic') || r.includes('off topic') || r.includes('different community') || r.includes('not related')) return 'Off-topic';
+  if (r.includes('bad word') || r.includes('profanity') || r.includes('inappropriate language')) return 'Bad words';
+  if (r.includes('caps') || r.includes('uppercase')) return 'Caps lock';
+  if (r.includes('forward')) return 'Forwarded msg';
+  if (r.includes('emoji')) return 'Excessive emojis';
+  if (r.includes('link')) return 'Contains link';
+  const dashIdx = reason.indexOf(' — ');
+  const base = dashIdx !== -1 ? reason.slice(dashIdx + 3) : reason;
+  const dotIdx = base.indexOf('. ');
+  if (dotIdx > 0 && dotIdx < 55) return base.slice(0, dotIdx);
+  return base.slice(0, 38) + (base.length > 38 ? '…' : '');
+}
+
 // ── Command Routing Tab Component ─────────────────────────────────────────────
 
 const SCOPE_OPTIONS = [
@@ -493,6 +514,7 @@ export default function GroupSettings() {
   // Warnings — official groups only
   const [warnings, setWarnings] = useState([]);
   const [warningsLoading, setWarningsLoading] = useState(false);
+  const [warningsSearch, setWarningsSearch] = useState('');
 
   const [raidOpen, setRaidOpen] = useState(false);
 
@@ -571,10 +593,11 @@ export default function GroupSettings() {
 
   const exportMembersCSV = useCallback(() => {
     if (!members.length) return;
-    const headers = ['Name', 'Username', 'XP', 'Level', 'Warnings', 'Role', 'Verified', 'Wallet', 'Wallet Address'];
+    const headers = ['Name', 'Username', 'Telegram ID', 'XP', 'Level', 'Warnings', 'Role', 'Verified', 'Wallet Submitted', 'Wallet Address'];
     const rows = members.map(m => [
       m.first_name || '',
       m.username ? `@${m.username}` : '',
+      m.user_id || m.telegram_id || m.id || '',
       m.xp ?? 0,
       m.level ?? 0,
       m.warnings ?? 0,
@@ -2797,14 +2820,16 @@ export default function GroupSettings() {
                 {/* Search and sort controls */}
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, mb: 2 }}>
                   <TextField
-                    size="small" placeholder="Search name or @username…" sx={{ flex: '1 1 200px' }}
+                    size="small"
+                    placeholder="Search name, @username, Telegram ID, wallet…"
+                    sx={{ flex: '1 1 240px' }}
                     value={membersSearch}
                     onChange={(e) => { setMembersSearch(e.target.value); setMembersPage(1); }}
                   />
                   <FormControl size="small" sx={{ minWidth: 110 }}>
                     <InputLabel>Role</InputLabel>
                     <Select value={membersRole} label="Role" onChange={(e) => { setMembersRole(e.target.value); setMembersPage(1); }}>
-                      <MenuItem value="">All</MenuItem>
+                      <MenuItem value="">All Roles</MenuItem>
                       <MenuItem value="member">Member</MenuItem>
                       <MenuItem value="mod">Mod</MenuItem>
                       <MenuItem value="admin">Admin</MenuItem>
@@ -2813,6 +2838,14 @@ export default function GroupSettings() {
                     </Select>
                   </FormControl>
                   <FormControl size="small" sx={{ minWidth: 110 }}>
+                    <InputLabel>Level</InputLabel>
+                    <Select value={membersSort === 'level' ? membersSort : ''} label="Level"
+                      onChange={(e) => { if (e.target.value) { setMembersSort('level'); setMembersSortDir('desc'); } setMembersPage(1); }}>
+                      <MenuItem value="">Any Level</MenuItem>
+                      <MenuItem value="level">Sort by Level</MenuItem>
+                    </Select>
+                  </FormControl>
+                  <FormControl size="small" sx={{ minWidth: 100 }}>
                     <InputLabel>Muted</InputLabel>
                     <Select value={membersMuted} label="Muted" onChange={(e) => { setMembersMuted(e.target.value); setMembersPage(1); }}>
                       <MenuItem value="">All</MenuItem>
@@ -2820,7 +2853,7 @@ export default function GroupSettings() {
                       <MenuItem value="false">Active</MenuItem>
                     </Select>
                   </FormControl>
-                  <FormControl size="small" sx={{ minWidth: 120 }}>
+                  <FormControl size="small" sx={{ minWidth: 130 }}>
                     <InputLabel>Sort by</InputLabel>
                     <Select value={membersSort} label="Sort by" onChange={(e) => { setMembersSort(e.target.value); setMembersPage(1); }}>
                       <MenuItem value="xp">XP</MenuItem>
@@ -2828,11 +2861,14 @@ export default function GroupSettings() {
                       <MenuItem value="first_name">Name</MenuItem>
                       <MenuItem value="joined_at">Joined</MenuItem>
                       <MenuItem value="warnings">Warnings</MenuItem>
+                      <MenuItem value="role">Role</MenuItem>
+                      <MenuItem value="is_verified">Status</MenuItem>
+                      <MenuItem value="wallet_address">Wallet</MenuItem>
                     </Select>
                   </FormControl>
-                  <FormControl size="small" sx={{ minWidth: 100 }}>
-                    <InputLabel>Direction</InputLabel>
-                    <Select value={membersSortDir} label="Direction" onChange={(e) => { setMembersSortDir(e.target.value); setMembersPage(1); }}>
+                  <FormControl size="small" sx={{ minWidth: 95 }}>
+                    <InputLabel>Order</InputLabel>
+                    <Select value={membersSortDir} label="Order" onChange={(e) => { setMembersSortDir(e.target.value); setMembersPage(1); }}>
                       <MenuItem value="desc">↓ Desc</MenuItem>
                       <MenuItem value="asc">↑ Asc</MenuItem>
                     </Select>
@@ -3015,89 +3051,80 @@ export default function GroupSettings() {
               </Alert>
             ) : (
             <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', overflowX: 'auto' }}>
-              <Table size="small">
+              <Table size="small" sx={{ tableLayout: 'fixed', minWidth: 640 }}>
                 <TableHead>
-                  <TableRow>
-                    <TableCell sx={{ whiteSpace: 'nowrap' }}>Action</TableCell>
-                    <TableCell sx={{ whiteSpace: 'nowrap' }}>Target</TableCell>
-                    <TableCell sx={{ whiteSpace: 'nowrap' }}>Moderator</TableCell>
-                    <TableCell sx={{ maxWidth: 200 }}>Reason</TableCell>
-                    <TableCell sx={{ maxWidth: 180 }}>Msg Preview</TableCell>
-                    <TableCell sx={{ whiteSpace: 'nowrap' }}>Time</TableCell>
+                  <TableRow sx={{ '& th': { py: 0.75, fontSize: '0.75rem', fontWeight: 700, whiteSpace: 'nowrap' } }}>
+                    <TableCell sx={{ width: 90 }}>Action</TableCell>
+                    <TableCell sx={{ width: 110 }}>Target</TableCell>
+                    <TableCell sx={{ width: 110 }}>Moderator</TableCell>
+                    <TableCell sx={{ width: 130 }}>Reason</TableCell>
+                    <TableCell>Msg Preview</TableCell>
+                    <TableCell sx={{ width: 120 }}>Time</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {auditLogs.map((log) => {
                     const isExpanded = expandedLogId === log.id;
-                    const linkType = classifyReason(log.reason, log.action_type);
-                    const shortReason = extractShortReason(log.reason);
+                    const linkType = classifyReason(log.reason);
+                    const shortLabel = categorizeReason(log.reason);
                     const msgPreview = getMessagePreview(log);
+                    const cellSx = { py: 0.5, overflow: 'hidden' };
                     return (
                       <React.Fragment key={log.id}>
                         <TableRow
                           hover
                           onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
-                          sx={{ cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
+                          sx={{ cursor: 'pointer', '& td': { borderBottom: isExpanded ? 'none' : undefined } }}
                         >
-                          <TableCell>
-                            <Chip label={log.action_type} color={ACTION_COLORS[log.action_type] || 'default'} size="small" />
+                          <TableCell sx={cellSx}>
+                            <Chip label={log.action_type} color={ACTION_COLORS[log.action_type] || 'default'} size="small" sx={{ height: 20, fontSize: '0.68rem' }} />
                           </TableCell>
-                          <TableCell>
-                            <Typography variant="body2" sx={{ whiteSpace: 'nowrap' }}>
+                          <TableCell sx={{ ...cellSx, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            <Typography variant="caption" noWrap>
                               {log.target_username ? `@${log.target_username}` : log.target_user_id || '—'}
                             </Typography>
                           </TableCell>
-                          <TableCell>
-                            <Typography variant="body2" sx={{ whiteSpace: 'nowrap' }}>
+                          <TableCell sx={{ ...cellSx, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            <Typography variant="caption" noWrap>
                               {log.moderator_username ? `@${log.moderator_username}` : log.moderator_id || '—'}
                             </Typography>
                           </TableCell>
-                          <TableCell sx={{ maxWidth: 200 }}>
-                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
-                              <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.4 }}>
-                                {shortReason}
-                              </Typography>
-                              {linkType && <Chip label={linkType.label} color={linkType.color} size="small" sx={{ height: 16, fontSize: '0.65rem', width: 'fit-content' }} />}
-                            </Box>
+                          <TableCell sx={cellSx}>
+                            <Typography variant="caption" color="text.secondary" noWrap title={log.reason || ''}>
+                              {shortLabel}
+                            </Typography>
                           </TableCell>
-                          <TableCell sx={{ maxWidth: 180 }}>
-                            {msgPreview ? (
-                              <Typography variant="caption" color="text.disabled" sx={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.4 }}>
-                                {msgPreview}
-                              </Typography>
-                            ) : (
-                              <Typography variant="caption" color="text.disabled">—</Typography>
-                            )}
+                          <TableCell sx={{ ...cellSx, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            <Typography variant="caption" color="text.disabled" noWrap title={msgPreview || ''}>
+                              {msgPreview || '—'}
+                            </Typography>
                           </TableCell>
-                          <TableCell>
-                            <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
-                              {log.timestamp ? new Date(log.timestamp).toLocaleString() : '—'}
+                          <TableCell sx={cellSx}>
+                            <Typography variant="caption" color="text.secondary" noWrap>
+                              {log.timestamp ? new Date(log.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
                             </Typography>
                           </TableCell>
                         </TableRow>
                         {isExpanded && (
                           <TableRow>
-                            <TableCell colSpan={6} sx={{ bgcolor: 'rgba(255,255,255,0.02)', py: 1.5, px: 2.5 }}>
+                            <TableCell colSpan={6} sx={{ py: 1.5, px: 2.5, bgcolor: 'rgba(255,255,255,0.025)' }}>
                               <Stack spacing={0.75}>
                                 {log.reason && (
-                                  <Typography variant="caption" color="text.primary">
-                                    <strong>Full Reason:</strong> {log.reason}
-                                  </Typography>
+                                  <Box>
+                                    <Typography variant="caption" fontWeight={700} color="text.secondary" display="block">Full Reason</Typography>
+                                    <Typography variant="caption" color="text.primary">{log.reason}</Typography>
+                                  </Box>
                                 )}
                                 {msgPreview && (
-                                  <Typography variant="caption" color="text.secondary">
-                                    <strong>Removed Message:</strong> {msgPreview}
-                                  </Typography>
+                                  <Box>
+                                    <Typography variant="caption" fontWeight={700} color="text.secondary" display="block">Removed Message</Typography>
+                                    <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msgPreview}</Typography>
+                                  </Box>
                                 )}
                                 {linkType && (
-                                  <Typography variant="caption" color="text.secondary">
-                                    <strong>Link type:</strong> {linkType.label}
-                                    {linkType.label === 'Telegizer link' && ' — Telegizer-generated invite links are never deleted by AutoMod.'}
-                                  </Typography>
-                                )}
-                                {log.metadata && typeof log.metadata === 'object' && Object.keys(log.metadata).length > 0 && (
-                                  <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                                    {JSON.stringify(log.metadata, null, 2)}
+                                  <Typography variant="caption" color="text.disabled">
+                                    Link type: <strong>{linkType.label}</strong>
+                                    {linkType.label === 'Telegizer link' && ' — Telegizer invite links are never deleted by AutoMod.'}
                                   </Typography>
                                 )}
                               </Stack>
@@ -3121,10 +3148,20 @@ export default function GroupSettings() {
         )}
 
         {/* ANALYTICS › Warnings */}
-        {cat === 'analytics' && subTab === warningsSubTabIdx && (
+        {cat === 'analytics' && subTab === warningsSubTabIdx && (() => {
+          const filteredWarnings = warningsSearch.trim()
+            ? warnings.filter(w => {
+                const q = warningsSearch.toLowerCase();
+                return (w.target_username || '').toLowerCase().includes(q)
+                  || String(w.target_user_id || '').includes(q)
+                  || (w.reason || '').toLowerCase().includes(q)
+                  || (w.moderator_username || '').toLowerCase().includes(q);
+              })
+            : warnings;
+          return (
           <Card>
             <CardContent>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <WarningIcon color="warning" />
                   <Typography variant="h6" fontWeight={600}>Active Warnings</Typography>
@@ -3132,84 +3169,89 @@ export default function GroupSettings() {
                 </Box>
                 <Button size="small" onClick={fetchWarnings} disabled={warningsLoading}>Refresh</Button>
               </Box>
-              <Typography variant="body2" color="text.secondary" mb={2}>
-                Active warnings issued by admins via <code>/warn</code>. Remove a warning to reduce a member's warning count.
+              <Typography variant="body2" color="text.secondary" mb={1.5}>
+                Active warnings issued by admins via <code>/warn</code>. Click any row to see full details.
               </Typography>
+              {warnings.length > 0 && (
+                <TextField
+                  size="small" fullWidth
+                  placeholder="Search member, reason, moderator…"
+                  value={warningsSearch}
+                  onChange={(e) => setWarningsSearch(e.target.value)}
+                  sx={{ mb: 1.5 }}
+                />
+              )}
               {warningsLoading ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}><CircularProgress size={24} /></Box>
               ) : warnings.length === 0 ? (
                 <Alert severity="success" icon={<CheckCircle />}>No active warnings in this group.</Alert>
+              ) : filteredWarnings.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">No warnings match your search.</Typography>
               ) : (
                 <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', overflowX: 'auto' }}>
-                  <Table size="small" sx={{ minWidth: 460 }}>
+                  <Table size="small" sx={{ tableLayout: 'fixed', minWidth: 500 }}>
                     <TableHead>
-                      <TableRow>
-                        <TableCell>Warned Member</TableCell>
+                      <TableRow sx={{ '& th': { py: 0.75, fontSize: '0.75rem', fontWeight: 700, whiteSpace: 'nowrap' } }}>
+                        <TableCell sx={{ width: 130 }}>Member</TableCell>
                         <TableCell>Reason</TableCell>
-                        <TableCell>Issued By</TableCell>
-                        <TableCell>Date</TableCell>
-                        <TableCell align="center">Remove</TableCell>
+                        <TableCell sx={{ width: 120 }}>Issued By</TableCell>
+                        <TableCell sx={{ width: 110 }}>Date</TableCell>
+                        <TableCell sx={{ width: 56 }} align="center">Del</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {warnings.map((warning) => {
+                      {filteredWarnings.map((warning) => {
                         const isExpanded = expandedWarnId === warning.id;
-                        const linkType = classifyReason(warning.reason);
+                        const shortLabel = categorizeReason(warning.reason);
+                        const cellSx = { py: 0.5, overflow: 'hidden' };
                         return (
                           <React.Fragment key={warning.id}>
                             <TableRow
                               hover
                               onClick={() => setExpandedWarnId(isExpanded ? null : warning.id)}
-                              sx={{ cursor: 'pointer' }}
+                              sx={{ cursor: 'pointer', '& td': { borderBottom: isExpanded ? 'none' : undefined } }}
                             >
-                              <TableCell>
-                                <Typography variant="body2" fontWeight={500}>
+                              <TableCell sx={cellSx}>
+                                <Typography variant="caption" fontWeight={600} noWrap>
                                   {warning.target_username ? `@${warning.target_username}` : warning.target_user_id}
                                 </Typography>
                               </TableCell>
-                              <TableCell>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                                  <Typography variant="body2" color={warning.reason ? 'text.primary' : 'text.disabled'}>
-                                    {warning.reason || '—'}
-                                  </Typography>
-                                  {linkType && <Chip label={linkType.label} color={linkType.color} size="small" sx={{ height: 18, fontSize: '0.7rem' }} />}
-                                </Box>
+                              <TableCell sx={cellSx}>
+                                <Typography variant="caption" color="text.secondary" noWrap title={warning.reason || ''}>
+                                  {shortLabel}
+                                </Typography>
                               </TableCell>
-                              <TableCell>
-                                <Typography variant="body2">
+                              <TableCell sx={cellSx}>
+                                <Typography variant="caption" noWrap>
                                   {warning.moderator_username ? `@${warning.moderator_username}` : warning.moderator_user_id}
                                 </Typography>
                               </TableCell>
-                              <TableCell>
-                                <Typography variant="caption" color="text.secondary">
-                                  {warning.created_at ? new Date(warning.created_at).toLocaleString() : '—'}
+                              <TableCell sx={cellSx}>
+                                <Typography variant="caption" color="text.secondary" noWrap>
+                                  {warning.created_at ? new Date(warning.created_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
                                 </Typography>
                               </TableCell>
-                              <TableCell align="center">
-                                <Tooltip title="Remove this warning">
+                              <TableCell sx={cellSx} align="center">
+                                <Tooltip title="Remove warning">
                                   <IconButton size="small" color="error" onClick={(e) => { e.stopPropagation(); handleRemoveWarning(warning.id); }}>
-                                    <Delete fontSize="small" />
+                                    <Delete sx={{ fontSize: 16 }} />
                                   </IconButton>
                                 </Tooltip>
                               </TableCell>
                             </TableRow>
                             {isExpanded && (
                               <TableRow>
-                                <TableCell colSpan={5} sx={{ bgcolor: 'rgba(255,255,255,0.02)', py: 1.5, px: 2.5 }}>
+                                <TableCell colSpan={5} sx={{ py: 1.5, px: 2.5, bgcolor: 'rgba(255,255,255,0.025)' }}>
                                   <Stack spacing={0.75}>
                                     {warning.reason && (
-                                      <Typography variant="caption" color="text.primary">
-                                        <strong>Warning reason:</strong> {warning.reason}
-                                      </Typography>
-                                    )}
-                                    {linkType && (
-                                      <Typography variant="caption" color="text.secondary">
-                                        <strong>Detected as:</strong> {linkType.label}
-                                        {linkType.label === 'Telegizer link' && ' — Telegizer-generated invite links should not trigger warnings. Check your AutoMod whitelist.'}
-                                      </Typography>
+                                      <Box>
+                                        <Typography variant="caption" fontWeight={700} color="text.secondary" display="block">Full Reason</Typography>
+                                        <Typography variant="caption" color="text.primary">{warning.reason}</Typography>
+                                      </Box>
                                     )}
                                     <Typography variant="caption" color="text.disabled">
-                                      Issued by: {warning.moderator_username ? `@${warning.moderator_username}` : warning.moderator_user_id} · {warning.created_at ? new Date(warning.created_at).toLocaleString() : '—'}
+                                      Issued by: {warning.moderator_username ? `@${warning.moderator_username}` : warning.moderator_user_id}
+                                      {' · '}{warning.created_at ? new Date(warning.created_at).toLocaleString() : '—'}
                                     </Typography>
                                   </Stack>
                                 </TableCell>
@@ -3224,7 +3266,9 @@ export default function GroupSettings() {
               )}
             </CardContent>
           </Card>
-        )}
+          );
+        })()}
+
 
         {/* ANALYTICS › Digest */}
         {cat === 'analytics' && subTab === digestSubTabIdx && (
