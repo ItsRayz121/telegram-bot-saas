@@ -466,7 +466,7 @@ function UsersTab({ onAdminError }) {
         <Typography variant="caption" color="text.secondary" alignSelf="center" mr={0.5}>Tier:</Typography>
         {[['', 'All'], ['free', 'Free'], ['pro', 'Pro'], ['enterprise', 'Enterprise']].map(([val, label]) => (
           <Chip key={val} label={label} size="small"
-            color={tierFilter === val ? (val === '' ? 'default' : val === 'enterprise' ? 'secondary' : 'primary') : 'default'}
+            color={tierFilter === val ? (val === 'enterprise' ? 'secondary' : 'primary') : 'default'}
             variant={tierFilter === val ? 'filled' : 'outlined'}
             onClick={() => { setTierFilter(val); setPage(1); fetchUsers(1, search, val, statusFilter); }}
           />
@@ -478,7 +478,7 @@ function UsersTab({ onAdminError }) {
         <Typography variant="caption" color="text.secondary" alignSelf="center" mr={0.5}>Status:</Typography>
         {[['', 'All'], ['active', 'Active'], ['banned', 'Banned'], ['suspicious', 'Suspicious']].map(([val, label]) => (
           <Chip key={val} label={label} size="small"
-            color={tierFilter === val ? 'default' : statusFilter === val ? (val === 'banned' ? 'error' : val === 'suspicious' ? 'warning' : val === 'active' ? 'success' : 'default') : 'default'}
+            color={statusFilter === val ? (val === 'banned' ? 'error' : val === 'suspicious' ? 'warning' : val === 'active' ? 'success' : 'primary') : 'default'}
             variant={statusFilter === val ? 'filled' : 'outlined'}
             onClick={() => { setStatusFilter(val); setPage(1); fetchUsers(1, search, tierFilter, val); }}
           />
