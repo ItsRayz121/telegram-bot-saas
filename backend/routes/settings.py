@@ -474,6 +474,7 @@ def get_custom_bot_warnings(bot_id, group_id):
                 "moderator_user_id": log.moderator_id,
                 "moderator_username": log.moderator_username,
                 "reason": log.reason,
+                "message_text": (log.extra_data or {}).get("message_text"),
                 "active": True,
                 "created_at": log.timestamp.isoformat(),
                 "total_warnings": (log.extra_data or {}).get("total_warnings"),

@@ -126,8 +126,10 @@ function classifyReason(reason) {
 
 function getMessagePreview(log) {
   const meta = log.metadata;
-  if (!meta) return null;
-  return meta.text || meta.message_text || meta.message || null;
+  const extra = log.extra_data;
+  if (meta) return meta.message_text || meta.text || meta.message || null;
+  if (extra) return extra.message_text || extra.text || extra.message || null;
+  return null;
 }
 
 function categorizeReason(reason) {
@@ -2906,7 +2908,8 @@ export default function GroupSettings() {
                     <TableHead>
                       <TableRow sx={{ '& th': { py: 0.75, fontSize: '0.75rem', fontWeight: 700, whiteSpace: 'nowrap' } }}>
                         <TableCell sx={{ width: 130 }}>Member</TableCell>
-                        <TableCell>Reason</TableCell>
+                        <TableCell sx={{ width: 110 }}>Reason</TableCell>
+                        <TableCell>Msg Preview</TableCell>
                         <TableCell sx={{ width: 120 }}>Issued By</TableCell>
                         <TableCell sx={{ width: 110 }}>Date</TableCell>
                         <TableCell sx={{ width: 56 }} align="center">Del</TableCell>
@@ -2916,6 +2919,7 @@ export default function GroupSettings() {
                       {filteredWarnings.map((warning) => {
                         const isExpanded = expandedWarnId === warning.id;
                         const shortLabel = categorizeReason(warning.reason);
+                        const warnMsgPreview = warning.message_text || null;
                         const cellSx = { py: 0.5, overflow: 'hidden' };
                         return (
                           <React.Fragment key={warning.id}>
@@ -2932,6 +2936,11 @@ export default function GroupSettings() {
                               <TableCell sx={cellSx}>
                                 <Typography variant="caption" color="text.secondary" noWrap title={warning.reason || ''}>
                                   {shortLabel}
+                                </Typography>
+                              </TableCell>
+                              <TableCell sx={{ ...cellSx, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                <Typography variant="caption" color="text.disabled" noWrap title={warnMsgPreview || ''}>
+                                  {warnMsgPreview || '—'}
                                 </Typography>
                               </TableCell>
                               <TableCell sx={cellSx}>
@@ -2954,12 +2963,18 @@ export default function GroupSettings() {
                             </TableRow>
                             {isExpanded && (
                               <TableRow>
-                                <TableCell colSpan={5} sx={{ py: 1.5, px: 2.5, bgcolor: 'rgba(255,255,255,0.025)' }}>
+                                <TableCell colSpan={6} sx={{ py: 1.5, px: 2.5, bgcolor: 'rgba(255,255,255,0.025)' }}>
                                   <Stack spacing={0.75}>
                                     {warning.reason && (
                                       <Box>
                                         <Typography variant="caption" fontWeight={700} color="text.secondary" display="block">Full Reason</Typography>
                                         <Typography variant="caption" color="text.primary">{warning.reason}</Typography>
+                                      </Box>
+                                    )}
+                                    {warnMsgPreview && (
+                                      <Box>
+                                        <Typography variant="caption" fontWeight={700} color="text.secondary" display="block">Warned Message</Typography>
+                                        <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{warnMsgPreview}</Typography>
                                       </Box>
                                     )}
                                     <Typography variant="caption" color="text.disabled">

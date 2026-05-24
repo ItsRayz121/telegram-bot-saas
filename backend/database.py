@@ -143,10 +143,14 @@ class DatabaseManager:
         return level
 
     @staticmethod
-    def add_warning(group_id, target_user_id, target_username, moderator_id, moderator_username, reason):
+    def add_warning(group_id, target_user_id, target_username, moderator_id, moderator_username, reason, message_text=None):
         member = DatabaseManager.get_or_create_member(group_id, target_user_id, target_username)
         member.warnings += 1
         db.session.commit()
+
+        extra = {"total_warnings": member.warnings}
+        if message_text:
+            extra["message_text"] = message_text[:500]
 
         DatabaseManager.log_action(
             group_id=group_id,
@@ -156,7 +160,7 @@ class DatabaseManager:
             moderator_id=str(moderator_id),
             moderator_username=moderator_username,
             reason=reason,
-            extra_data={"total_warnings": member.warnings},
+            extra_data=extra,
         )
 
         return member.warnings

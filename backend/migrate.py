@@ -493,6 +493,13 @@ def init_db():
             "members.engagement_score",
         )
 
+        # ── official_warnings.message_text — store the offending message text ──
+        _run_alter(
+            db.engine,
+            "ALTER TABLE official_warnings ADD COLUMN IF NOT EXISTS message_text TEXT",
+            "official_warnings.message_text",
+        )
+
         print("Migration complete.")
 
     # One-shot Telegram account backfill (moved above; comment kept for reference).

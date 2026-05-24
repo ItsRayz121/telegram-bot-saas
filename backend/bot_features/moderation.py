@@ -730,6 +730,7 @@ class ModerationSystem:
         with self.app.app_context():
             from ..database import DatabaseManager
 
+            msg_text = (message.text or message.caption or "")[:500] or None
             if warn or action == "warn":
                 total = DatabaseManager.add_warning(
                     group_id=group.id,
@@ -738,6 +739,7 @@ class ModerationSystem:
                     moderator_id="automod",
                     moderator_username="AutoMod",
                     reason=reason,
+                    message_text=msg_text,
                 )
                 try:
                     msg = await bot.send_message(
@@ -787,6 +789,7 @@ class ModerationSystem:
                 moderator_id="automod",
                 moderator_username="AutoMod",
                 reason=reason,
+                extra_data={"message_text": msg_text} if msg_text else None,
             )
 
     # ── Smart Moderation: Layer 2 ─────────────────────────────────────────────

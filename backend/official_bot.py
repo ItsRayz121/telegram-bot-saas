@@ -3252,8 +3252,10 @@ async def _automod_execute(bot, message, group_id: str, flask_app, rule: str, ac
     """Delete the offending message and apply the configured action."""
     chat_id = message.chat_id
     user_id = message.from_user.id
+    username = message.from_user.username if message.from_user else None
     first_name = (message.from_user.first_name or "User") if message.from_user else "User"
     rule_label = rule.replace("_", " ")
+    msg_text = (message.text or message.caption or "").strip()[:500] or None
 
     try:
         await bot.delete_message(chat_id=chat_id, message_id=message.message_id)
@@ -3295,9 +3297,17 @@ async def _automod_execute(bot, message, group_id: str, flask_app, rule: str, ac
             _log.warning("[OfficialBot] AutoMod kick failed: %s", exc)
 
     _log.info("[OfficialBot] AutoMod: group=%s user=%s rule=%s action=%s", group_id, user_id, rule, action)
+    meta = {
+        "target_user_id": str(user_id),
+        "target_username": username or "",
+        "moderator_username": "AutoMod",
+        "rule": rule,
+        "action": action,
+    }
+    if msg_text:
+        meta["message_text"] = msg_text
     _log_event(flask_app, group_id, "automod_action",
-               f"User {user_id}: {rule} → {action}",
-               {"telegram_user_id": str(user_id), "rule": rule, "action": action})
+               f"User {user_id}: {rule} → {action}", meta)
 
 
 async def _automod_check(bot, message, am_cfg: dict, group_id: str, flask_app) -> bool:
@@ -3779,6 +3789,10 @@ async def cmd_warn(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             with flask_app.app_context():
                 from .models import db, OfficialMember, OfficialWarning
+                replied_text = None
+                if update.message and update.message.reply_to_message:
+                    rt = update.message.reply_to_message
+                    replied_text = (rt.text or rt.caption or "")[:500] or None
                 w = OfficialWarning(
                     telegram_group_id=group_id,
                     target_user_id=str(target_id),
@@ -3786,6 +3800,7 @@ async def cmd_warn(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     moderator_user_id=str(update.effective_user.id),
                     moderator_username=update.effective_user.username or "",
                     reason=reason,
+                    message_text=replied_text,
                 )
                 db.session.add(w)
                 db.session.commit()

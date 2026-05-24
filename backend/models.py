@@ -1273,6 +1273,7 @@ class OfficialWarning(db.Model):
     moderator_user_id = db.Column(db.String(255), nullable=False)
     moderator_username = db.Column(db.String(255), nullable=True)
     reason = db.Column(db.Text, nullable=True)
+    message_text = db.Column(db.Text, nullable=True)
     active = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
 
@@ -1285,6 +1286,7 @@ class OfficialWarning(db.Model):
             "moderator_user_id": self.moderator_user_id,
             "moderator_username": self.moderator_username,
             "reason": self.reason,
+            "message_text": self.message_text,
             "active": self.active,
             "created_at": self.created_at.isoformat(),
         }
