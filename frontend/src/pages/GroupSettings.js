@@ -360,17 +360,15 @@ export default function GroupSettings() {
   const fetchMembers = useCallback(async (page = 1) => {
     try {
       const params = { page, per_page: 20 };
-      if (isOfficial) {
-        if (membersSearch) params.q = membersSearch;
-        if (membersRole) params.role = membersRole;
-        if (membersVerified) params.is_verified = membersVerified;
-        if (membersMuted) params.is_muted = membersMuted;
-        if (membersWallet) params.has_wallet = membersWallet;
-        if (membersWarnings) params.has_warnings = membersWarnings;
-        if (membersTimeRange && membersTimeRange !== 'all') params.joined_within = membersTimeRange;
-        params.sort_by = membersSort;
-        params.sort_dir = membersSortDir;
-      }
+      if (membersSearch) params.q = membersSearch;
+      if (membersRole) params.role = membersRole;
+      if (membersVerified) params.is_verified = membersVerified;
+      if (membersMuted) params.is_muted = membersMuted;
+      if (membersWallet) params.has_wallet = membersWallet;
+      if (membersWarnings) params.has_warnings = membersWarnings;
+      if (membersTimeRange && membersTimeRange !== 'all') params.joined_within = membersTimeRange;
+      params.sort_by = membersSort;
+      params.sort_dir = membersSortDir;
       const res = await settings.getMembers(botId, groupId, params);
       setMembers(res.data.members);
       setMembersTotal(res.data.total || 0);
@@ -2495,154 +2493,152 @@ export default function GroupSettings() {
                 </Button>
               </Box>
             )}
-            {isOfficial && (
-              <>
-                {/* Time range chips */}
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mb: 1.5 }}>
-                  {[
-                    { key: 'all', label: 'All Time' },
-                    { key: '30d', label: '30 Days' },
-                    { key: '7d', label: '7 Days' },
-                    { key: '1d', label: 'Today' },
-                  ].map(({ key, label }) => (
+            <>
+              {/* Time range chips */}
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mb: 1.5 }}>
+                {[
+                  { key: 'all', label: 'All Time' },
+                  { key: '30d', label: '30 Days' },
+                  { key: '7d', label: '7 Days' },
+                  { key: '1d', label: 'Today' },
+                ].map(({ key, label }) => (
+                  <Chip
+                    key={key}
+                    label={label}
+                    size="small"
+                    variant={membersTimeRange === key ? 'filled' : 'outlined'}
+                    color={membersTimeRange === key ? 'primary' : 'default'}
+                    onClick={() => { setMembersTimeRange(key); setMembersPage(1); }}
+                    sx={{ cursor: 'pointer' }}
+                  />
+                ))}
+              </Box>
+              {/* Summary filter chips */}
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mb: 2 }}>
+                <Chip
+                  label={`Total ${membersTotal}`}
+                  size="small"
+                  variant={!membersVerified && !membersWallet && !membersWarnings && !membersRole ? 'filled' : 'outlined'}
+                  color={!membersVerified && !membersWallet && !membersWarnings && !membersRole ? 'primary' : 'default'}
+                  onClick={() => {
+                    setMembersVerified(''); setMembersWallet(''); setMembersWarnings('');
+                    setMembersRole(''); setMembersMuted(''); setMembersPage(1);
+                  }}
+                  sx={{ cursor: 'pointer' }}
+                />
+                <Chip
+                  label={`Verified ${verifiedCnt}`}
+                  size="small"
+                  variant={membersVerified === 'true' ? 'filled' : 'outlined'}
+                  color={membersVerified === 'true' ? 'success' : 'default'}
+                  onClick={() => { setMembersVerified(membersVerified === 'true' ? '' : 'true'); setMembersPage(1); }}
+                  sx={{ cursor: 'pointer' }}
+                />
+                <Chip
+                  label={`Unverified ${unverifiedCnt}`}
+                  size="small"
+                  variant={membersVerified === 'false' ? 'filled' : 'outlined'}
+                  color={membersVerified === 'false' ? 'warning' : 'default'}
+                  onClick={() => { setMembersVerified(membersVerified === 'false' ? '' : 'false'); setMembersPage(1); }}
+                  sx={{ cursor: 'pointer' }}
+                />
+                <Chip
+                  label={`Wallet Yes ${walletYesCnt}`}
+                  size="small"
+                  variant={membersWallet === 'true' ? 'filled' : 'outlined'}
+                  color={membersWallet === 'true' ? 'success' : 'default'}
+                  onClick={() => { setMembersWallet(membersWallet === 'true' ? '' : 'true'); setMembersPage(1); }}
+                  sx={{ cursor: 'pointer' }}
+                />
+                <Chip
+                  label={`Wallet No ${walletNoCnt}`}
+                  size="small"
+                  variant={membersWallet === 'false' ? 'filled' : 'outlined'}
+                  color={membersWallet === 'false' ? 'error' : 'default'}
+                  onClick={() => { setMembersWallet(membersWallet === 'false' ? '' : 'false'); setMembersPage(1); }}
+                  sx={{ cursor: 'pointer' }}
+                />
+                <Chip
+                  label={`Warnings ${warningsCnt}`}
+                  size="small"
+                  variant={membersWarnings === 'true' ? 'filled' : 'outlined'}
+                  color={membersWarnings === 'true' ? 'error' : 'default'}
+                  onClick={() => { setMembersWarnings(membersWarnings === 'true' ? '' : 'true'); setMembersPage(1); }}
+                  sx={{ cursor: 'pointer' }}
+                />
+                {['mod', 'admin', 'vip'].map(role => {
+                  const cnt = members.filter(m => m.role === role).length;
+                  return (
                     <Chip
-                      key={key}
-                      label={label}
+                      key={role}
+                      label={`${role.charAt(0).toUpperCase() + role.slice(1)} ${cnt}`}
                       size="small"
-                      variant={membersTimeRange === key ? 'filled' : 'outlined'}
-                      color={membersTimeRange === key ? 'primary' : 'default'}
-                      onClick={() => { setMembersTimeRange(key); setMembersPage(1); }}
-                      sx={{ cursor: 'pointer' }}
+                      variant={membersRole === role ? 'filled' : 'outlined'}
+                      color={membersRole === role ? 'secondary' : 'default'}
+                      onClick={() => { setMembersRole(membersRole === role ? '' : role); setMembersPage(1); }}
+                      sx={{ cursor: 'pointer', textTransform: 'capitalize' }}
                     />
-                  ))}
-                </Box>
-                {/* Summary filter chips */}
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mb: 2 }}>
-                  <Chip
-                    label={`Total ${membersTotal}`}
-                    size="small"
-                    variant={!membersVerified && !membersWallet && !membersWarnings && !membersRole ? 'filled' : 'outlined'}
-                    color={!membersVerified && !membersWallet && !membersWarnings && !membersRole ? 'primary' : 'default'}
-                    onClick={() => {
-                      setMembersVerified(''); setMembersWallet(''); setMembersWarnings('');
-                      setMembersRole(''); setMembersMuted(''); setMembersPage(1);
-                    }}
-                    sx={{ cursor: 'pointer' }}
-                  />
-                  <Chip
-                    label={`Verified ${verifiedCnt}`}
-                    size="small"
-                    variant={membersVerified === 'true' ? 'filled' : 'outlined'}
-                    color={membersVerified === 'true' ? 'success' : 'default'}
-                    onClick={() => { setMembersVerified(membersVerified === 'true' ? '' : 'true'); setMembersPage(1); }}
-                    sx={{ cursor: 'pointer' }}
-                  />
-                  <Chip
-                    label={`Unverified ${unverifiedCnt}`}
-                    size="small"
-                    variant={membersVerified === 'false' ? 'filled' : 'outlined'}
-                    color={membersVerified === 'false' ? 'warning' : 'default'}
-                    onClick={() => { setMembersVerified(membersVerified === 'false' ? '' : 'false'); setMembersPage(1); }}
-                    sx={{ cursor: 'pointer' }}
-                  />
-                  <Chip
-                    label={`Wallet Yes ${walletYesCnt}`}
-                    size="small"
-                    variant={membersWallet === 'true' ? 'filled' : 'outlined'}
-                    color={membersWallet === 'true' ? 'success' : 'default'}
-                    onClick={() => { setMembersWallet(membersWallet === 'true' ? '' : 'true'); setMembersPage(1); }}
-                    sx={{ cursor: 'pointer' }}
-                  />
-                  <Chip
-                    label={`Wallet No ${walletNoCnt}`}
-                    size="small"
-                    variant={membersWallet === 'false' ? 'filled' : 'outlined'}
-                    color={membersWallet === 'false' ? 'error' : 'default'}
-                    onClick={() => { setMembersWallet(membersWallet === 'false' ? '' : 'false'); setMembersPage(1); }}
-                    sx={{ cursor: 'pointer' }}
-                  />
-                  <Chip
-                    label={`Warnings ${warningsCnt}`}
-                    size="small"
-                    variant={membersWarnings === 'true' ? 'filled' : 'outlined'}
-                    color={membersWarnings === 'true' ? 'error' : 'default'}
-                    onClick={() => { setMembersWarnings(membersWarnings === 'true' ? '' : 'true'); setMembersPage(1); }}
-                    sx={{ cursor: 'pointer' }}
-                  />
-                  {['mod', 'admin', 'vip'].map(role => {
-                    const cnt = members.filter(m => m.role === role).length;
-                    return (
-                      <Chip
-                        key={role}
-                        label={`${role.charAt(0).toUpperCase() + role.slice(1)} ${cnt}`}
-                        size="small"
-                        variant={membersRole === role ? 'filled' : 'outlined'}
-                        color={membersRole === role ? 'secondary' : 'default'}
-                        onClick={() => { setMembersRole(membersRole === role ? '' : role); setMembersPage(1); }}
-                        sx={{ cursor: 'pointer', textTransform: 'capitalize' }}
-                      />
-                    );
-                  })}
-                </Box>
-                {/* Search and sort controls */}
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, mb: 2 }}>
-                  <TextField
-                    size="small"
-                    placeholder="Search name, @username, Telegram ID, wallet…"
-                    sx={{ flex: '1 1 240px' }}
-                    value={membersSearch}
-                    onChange={(e) => { setMembersSearch(e.target.value); setMembersPage(1); }}
-                  />
-                  <FormControl size="small" sx={{ minWidth: 110 }}>
-                    <InputLabel>Role</InputLabel>
-                    <Select value={membersRole} label="Role" onChange={(e) => { setMembersRole(e.target.value); setMembersPage(1); }}>
-                      <MenuItem value="">All Roles</MenuItem>
-                      <MenuItem value="member">Member</MenuItem>
-                      <MenuItem value="mod">Mod</MenuItem>
-                      <MenuItem value="admin">Admin</MenuItem>
-                      <MenuItem value="owner">Owner</MenuItem>
-                      <MenuItem value="vip">VIP</MenuItem>
-                    </Select>
-                  </FormControl>
-                  <FormControl size="small" sx={{ minWidth: 110 }}>
-                    <InputLabel>Level</InputLabel>
-                    <Select value={membersSort === 'level' ? membersSort : ''} label="Level"
-                      onChange={(e) => { if (e.target.value) { setMembersSort('level'); setMembersSortDir('desc'); } setMembersPage(1); }}>
-                      <MenuItem value="">Any Level</MenuItem>
-                      <MenuItem value="level">Sort by Level</MenuItem>
-                    </Select>
-                  </FormControl>
-                  <FormControl size="small" sx={{ minWidth: 100 }}>
-                    <InputLabel>Muted</InputLabel>
-                    <Select value={membersMuted} label="Muted" onChange={(e) => { setMembersMuted(e.target.value); setMembersPage(1); }}>
-                      <MenuItem value="">All</MenuItem>
-                      <MenuItem value="true">Muted</MenuItem>
-                      <MenuItem value="false">Active</MenuItem>
-                    </Select>
-                  </FormControl>
-                  <FormControl size="small" sx={{ minWidth: 130 }}>
-                    <InputLabel>Sort by</InputLabel>
-                    <Select value={membersSort} label="Sort by" onChange={(e) => { setMembersSort(e.target.value); setMembersPage(1); }}>
-                      <MenuItem value="xp">XP</MenuItem>
-                      <MenuItem value="level">Level</MenuItem>
-                      <MenuItem value="first_name">Name</MenuItem>
-                      <MenuItem value="joined_at">Joined</MenuItem>
-                      <MenuItem value="warnings">Warnings</MenuItem>
-                      <MenuItem value="role">Role</MenuItem>
-                      <MenuItem value="is_verified">Status</MenuItem>
-                      <MenuItem value="wallet_address">Wallet</MenuItem>
-                    </Select>
-                  </FormControl>
-                  <FormControl size="small" sx={{ minWidth: 95 }}>
-                    <InputLabel>Order</InputLabel>
-                    <Select value={membersSortDir} label="Order" onChange={(e) => { setMembersSortDir(e.target.value); setMembersPage(1); }}>
-                      <MenuItem value="desc">↓ Desc</MenuItem>
-                      <MenuItem value="asc">↑ Asc</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Box>
-              </>
-            )}
+                  );
+                })}
+              </Box>
+              {/* Search and sort controls */}
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, mb: 2 }}>
+                <TextField
+                  size="small"
+                  placeholder="Search name, @username, Telegram ID, wallet…"
+                  sx={{ flex: '1 1 240px' }}
+                  value={membersSearch}
+                  onChange={(e) => { setMembersSearch(e.target.value); setMembersPage(1); }}
+                />
+                <FormControl size="small" sx={{ minWidth: 110 }}>
+                  <InputLabel>Role</InputLabel>
+                  <Select value={membersRole} label="Role" onChange={(e) => { setMembersRole(e.target.value); setMembersPage(1); }}>
+                    <MenuItem value="">All Roles</MenuItem>
+                    <MenuItem value="member">Member</MenuItem>
+                    <MenuItem value="mod">Mod</MenuItem>
+                    <MenuItem value="admin">Admin</MenuItem>
+                    <MenuItem value="owner">Owner</MenuItem>
+                    <MenuItem value="vip">VIP</MenuItem>
+                  </Select>
+                </FormControl>
+                <FormControl size="small" sx={{ minWidth: 110 }}>
+                  <InputLabel>Level</InputLabel>
+                  <Select value={membersSort === 'level' ? membersSort : ''} label="Level"
+                    onChange={(e) => { if (e.target.value) { setMembersSort('level'); setMembersSortDir('desc'); } setMembersPage(1); }}>
+                    <MenuItem value="">Any Level</MenuItem>
+                    <MenuItem value="level">Sort by Level</MenuItem>
+                  </Select>
+                </FormControl>
+                <FormControl size="small" sx={{ minWidth: 100 }}>
+                  <InputLabel>Muted</InputLabel>
+                  <Select value={membersMuted} label="Muted" onChange={(e) => { setMembersMuted(e.target.value); setMembersPage(1); }}>
+                    <MenuItem value="">All</MenuItem>
+                    <MenuItem value="true">Muted</MenuItem>
+                    <MenuItem value="false">Active</MenuItem>
+                  </Select>
+                </FormControl>
+                <FormControl size="small" sx={{ minWidth: 130 }}>
+                  <InputLabel>Sort by</InputLabel>
+                  <Select value={membersSort} label="Sort by" onChange={(e) => { setMembersSort(e.target.value); setMembersPage(1); }}>
+                    <MenuItem value="xp">XP</MenuItem>
+                    <MenuItem value="level">Level</MenuItem>
+                    <MenuItem value="first_name">Name</MenuItem>
+                    <MenuItem value="joined_at">Joined</MenuItem>
+                    <MenuItem value="warnings">Warnings</MenuItem>
+                    <MenuItem value="role">Role</MenuItem>
+                    <MenuItem value="is_verified">Status</MenuItem>
+                    <MenuItem value="wallet_address">Wallet</MenuItem>
+                  </Select>
+                </FormControl>
+                <FormControl size="small" sx={{ minWidth: 95 }}>
+                  <InputLabel>Order</InputLabel>
+                  <Select value={membersSortDir} label="Order" onChange={(e) => { setMembersSortDir(e.target.value); setMembersPage(1); }}>
+                    <MenuItem value="desc">↓ Desc</MenuItem>
+                    <MenuItem value="asc">↑ Asc</MenuItem>
+                  </Select>
+                </FormControl>
+              </Box>
+            </>
             <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', overflowX: 'auto' }}>
               <Table size="small">
                 <TableHead>

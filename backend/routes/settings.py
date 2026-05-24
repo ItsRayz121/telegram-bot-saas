@@ -294,14 +294,45 @@ def get_members(bot_id, group_id):
             return err
         page = request.args.get("page", 1, type=int)
         per_page = min(request.args.get("per_page", 50, type=int), 100)
-        search = request.args.get("search", "")
+        search = request.args.get("q", "") or request.args.get("search", "")
+        role_filter = request.args.get("role", "")
+        is_verified = request.args.get("is_verified", "")
+        has_wallet = request.args.get("has_wallet", "")
+        has_warnings = request.args.get("has_warnings", "")
+        is_muted = request.args.get("is_muted", "")
+        sort_by = request.args.get("sort_by", "xp")
+        sort_dir = request.args.get("sort_dir", "desc")
+
         query = Member.query.filter_by(group_id=group.id)
         if search:
             query = query.filter(
                 (Member.username.ilike(f"%{search}%")) |
                 (Member.first_name.ilike(f"%{search}%"))
             )
-        query = query.order_by(Member.xp.desc())
+        if role_filter:
+            query = query.filter(Member.role == role_filter)
+        if is_verified:
+            query = query.filter(Member.is_verified == (is_verified.lower() == "true"))
+        if has_wallet:
+            if has_wallet.lower() == "true":
+                query = query.filter(Member.wallet_address.isnot(None), Member.wallet_address != "")
+            else:
+                query = query.filter(
+                    (Member.wallet_address.is_(None)) | (Member.wallet_address == "")
+                )
+        if has_warnings:
+            if has_warnings.lower() == "true":
+                query = query.filter(Member.warnings > 0)
+        if is_muted:
+            query = query.filter(Member.is_muted == (is_muted.lower() == "true"))
+
+        _sort_map = {
+            "xp": Member.xp, "level": Member.level, "first_name": Member.first_name,
+            "joined_at": Member.joined_at, "warnings": Member.warnings, "role": Member.role,
+            "is_verified": Member.is_verified, "wallet_address": Member.wallet_address,
+        }
+        sort_col = _sort_map.get(sort_by, Member.xp)
+        query = query.order_by(sort_col.desc() if sort_dir == "desc" else sort_col.asc())
         paginated = query.paginate(page=page, per_page=per_page, error_out=False)
         return jsonify({
             "members": [m.to_dict() for m in paginated.items],

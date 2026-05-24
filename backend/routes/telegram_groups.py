@@ -1332,6 +1332,8 @@ def list_official_members(group_id):
     is_verified = request.args.get("is_verified")
     is_muted = request.args.get("is_muted")
     is_admin = request.args.get("is_admin")
+    has_wallet = request.args.get("has_wallet")
+    has_warnings = request.args.get("has_warnings")
     sort_by = request.args.get("sort_by", "xp")
     sort_dir = request.args.get("sort_dir", "desc")
 
@@ -1352,6 +1354,15 @@ def list_official_members(group_id):
         query = query.filter(OfficialMember.is_muted == (is_muted.lower() == "true"))
     if is_admin is not None:
         query = query.filter(OfficialMember.is_admin == (is_admin.lower() == "true"))
+    if has_wallet is not None:
+        if has_wallet.lower() == "true":
+            query = query.filter(OfficialMember.wallet_address.isnot(None), OfficialMember.wallet_address != "")
+        else:
+            query = query.filter(
+                db.or_(OfficialMember.wallet_address.is_(None), OfficialMember.wallet_address == "")
+            )
+    if has_warnings is not None and has_warnings.lower() == "true":
+        query = query.filter(OfficialMember.warnings > 0)
 
     col = getattr(OfficialMember, sort_by, OfficialMember.xp)
     query = query.order_by(col.desc() if sort_dir == "desc" else col.asc())
