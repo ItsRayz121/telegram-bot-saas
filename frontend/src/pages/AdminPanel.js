@@ -12,7 +12,7 @@ import {
   LinkOff, Lock, Warning, TrendingUp, People, AttachMoney,
   History, FolderOpen, Campaign, VerifiedUser, Refresh,
   CheckCircleOutline, Cancel, Circle, Flag,
-  Security, AccountTree, TrendingDown, Payment,
+  Security, AccountTree, TrendingDown, Payment, FileDownload,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -360,6 +360,28 @@ function UsersTab({ onAdminError }) {
 
   const refresh = () => fetchUsers(page, search, tierFilter, statusFilter);
 
+  const exportUsersCSV = async () => {
+    try {
+      const res = await admin.getUsers({ page: 1, per_page: 9999, search, tier: tierFilter, status: statusFilter });
+      const all = res.data.users || [];
+      const headers = ['Name', 'Email', 'User ID', 'Plan', 'Email Verified', 'Status', 'Joined'];
+      const rows = all.map(u => [
+        u.full_name || '',
+        u.email || '',
+        u.id || '',
+        u.subscription_tier || '',
+        u.email_verified ? 'Yes' : 'No',
+        u.is_banned ? 'Banned' : u.is_suspicious ? 'Suspicious' : 'Active',
+        u.created_at ? new Date(u.created_at).toLocaleDateString() : '',
+      ]);
+      const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'users.csv'; a.click();
+      URL.revokeObjectURL(url);
+    } catch { toast.error('Export failed'); }
+  };
+
   const openDetail = async (user) => {
     try {
       const res = await admin.getUser(user.id);
@@ -424,34 +446,43 @@ function UsersTab({ onAdminError }) {
   return (
     <Box>
       {/* Filters row */}
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} mb={2}>
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} mb={1.5} alignItems={{ sm: 'center' }}>
         <TextField
           size="small" placeholder="Search email or name…" value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1); fetchUsers(1, e.target.value, tierFilter, statusFilter); }}
           InputProps={{ startAdornment: <InputAdornment position="start"><Search fontSize="small" /></InputAdornment> }}
           sx={{ flex: 1 }}
         />
-        <FormControl size="small" sx={{ minWidth: 120 }}>
-          <InputLabel>Tier</InputLabel>
-          <Select value={tierFilter} label="Tier" onChange={(e) => { setTierFilter(e.target.value); setPage(1); fetchUsers(1, search, e.target.value, statusFilter); }}>
-            <MenuItem value="">All</MenuItem>
-            <MenuItem value="free">Free</MenuItem>
-            <MenuItem value="pro">Pro</MenuItem>
-            <MenuItem value="enterprise">Enterprise</MenuItem>
-          </Select>
-        </FormControl>
-        <FormControl size="small" sx={{ minWidth: 130 }}>
-          <InputLabel>Status</InputLabel>
-          <Select value={statusFilter} label="Status" onChange={(e) => { setStatusFilter(e.target.value); setPage(1); fetchUsers(1, search, tierFilter, e.target.value); }}>
-            <MenuItem value="">All</MenuItem>
-            <MenuItem value="active">Active</MenuItem>
-            <MenuItem value="banned">Banned</MenuItem>
-            <MenuItem value="suspicious">Suspicious</MenuItem>
-          </Select>
-        </FormControl>
-        <Typography variant="body2" color="text.secondary" alignSelf="center" whiteSpace="nowrap">
+        <Typography variant="body2" color="text.secondary" whiteSpace="nowrap">
           {total.toLocaleString()} users
         </Typography>
+        <Button size="small" variant="outlined" startIcon={<FileDownload />} onClick={exportUsersCSV}>
+          Export CSV
+        </Button>
+      </Stack>
+
+      {/* Tier filter chips */}
+      <Stack direction="row" spacing={0.75} mb={0.75} flexWrap="wrap" useFlexGap>
+        <Typography variant="caption" color="text.secondary" alignSelf="center" mr={0.5}>Tier:</Typography>
+        {[['', 'All'], ['free', 'Free'], ['pro', 'Pro'], ['enterprise', 'Enterprise']].map(([val, label]) => (
+          <Chip key={val} label={label} size="small"
+            color={tierFilter === val ? (val === '' ? 'default' : val === 'enterprise' ? 'secondary' : 'primary') : 'default'}
+            variant={tierFilter === val ? 'filled' : 'outlined'}
+            onClick={() => { setTierFilter(val); setPage(1); fetchUsers(1, search, val, statusFilter); }}
+          />
+        ))}
+      </Stack>
+
+      {/* Status filter chips */}
+      <Stack direction="row" spacing={0.75} mb={2} flexWrap="wrap" useFlexGap>
+        <Typography variant="caption" color="text.secondary" alignSelf="center" mr={0.5}>Status:</Typography>
+        {[['', 'All'], ['active', 'Active'], ['banned', 'Banned'], ['suspicious', 'Suspicious']].map(([val, label]) => (
+          <Chip key={val} label={label} size="small"
+            color={tierFilter === val ? 'default' : statusFilter === val ? (val === 'banned' ? 'error' : val === 'suspicious' ? 'warning' : val === 'active' ? 'success' : 'default') : 'default'}
+            variant={statusFilter === val ? 'filled' : 'outlined'}
+            onClick={() => { setStatusFilter(val); setPage(1); fetchUsers(1, search, tierFilter, val); }}
+          />
+        ))}
       </Stack>
 
       {loading ? (

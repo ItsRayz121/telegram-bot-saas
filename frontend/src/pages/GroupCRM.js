@@ -9,7 +9,7 @@ import {
 import {
   ArrowBack, Search, People, Refresh,
   Close, Edit, Save, Warning, VerifiedUser, Message,
-  EmojiEvents, Label,
+  EmojiEvents, Label, FileDownload,
 } from '@mui/icons-material';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -277,6 +277,9 @@ export default function GroupCRM() {
   const [searchInput, setSearchInput] = useState('');
   const [tagFilter, setTagFilter] = useState('');
   const [sort, setSort] = useState('score');
+  const [timeRange, setTimeRange] = useState('all');
+  const [verifiedFilter, setVerifiedFilter] = useState('');
+  const [warningsFilter, setWarningsFilter] = useState('');
 
   const [selectedMember, setSelectedMember] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -297,6 +300,9 @@ export default function GroupCRM() {
     const params = { page: p, sort };
     if (search) params.q = search;
     if (tagFilter) params.tag = tagFilter;
+    if (verifiedFilter) params.is_verified = verifiedFilter;
+    if (warningsFilter) params.has_warnings = warningsFilter;
+    if (timeRange && timeRange !== 'all') params.period = timeRange;
 
     crmApi.members(groupId, params)
       .then(r => {
@@ -307,7 +313,38 @@ export default function GroupCRM() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [groupId, search, tagFilter, sort]);
+  }, [groupId, search, tagFilter, sort, verifiedFilter, warningsFilter, timeRange]);
+
+  const exportCRMCsv = useCallback(async () => {
+    try {
+      const params = { page: 1, per_page: 9999, sort };
+      if (search) params.q = search;
+      if (tagFilter) params.tag = tagFilter;
+      if (verifiedFilter) params.is_verified = verifiedFilter;
+      if (warningsFilter) params.has_warnings = warningsFilter;
+      if (timeRange && timeRange !== 'all') params.period = timeRange;
+      const r = await crmApi.members(groupId, params);
+      const all = r.data.members || [];
+      const headers = ['Name', 'Username', 'Telegram ID', 'Score', 'Messages', 'XP', 'Level', 'Warnings', 'Tags', 'Joined'];
+      const rows = all.map(m => [
+        m.first_name || '',
+        m.username ? `@${m.username}` : '',
+        m.telegram_user_id || '',
+        m.engagement_score ?? 0,
+        m.message_count ?? 0,
+        m.xp ?? 0,
+        m.level ?? 0,
+        m.warnings ?? 0,
+        (m.crm_tags || []).join('; '),
+        m.joined_at ? new Date(m.joined_at).toLocaleDateString() : '',
+      ]);
+      const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = `crm_${groupId}.csv`; a.click();
+      URL.revokeObjectURL(url);
+    } catch { toast.error('Export failed'); }
+  }, [groupId, search, tagFilter, sort, verifiedFilter, warningsFilter, timeRange]);
 
   useEffect(() => { fetchMembers(1); }, [fetchMembers]);
 
@@ -386,7 +423,7 @@ export default function GroupCRM() {
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={6} sm={4}>
+            <Grid item xs={6} sm={2}>
               <FormControl fullWidth size="small">
                 <InputLabel>Sort by</InputLabel>
                 <Select value={sort} label="Sort by" onChange={e => setSort(e.target.value)}>
@@ -398,7 +435,53 @@ export default function GroupCRM() {
                 </Select>
               </FormControl>
             </Grid>
+            <Grid item xs={12} sm={2} sx={{ display: 'flex', justifyContent: { xs: 'flex-start', sm: 'flex-end' } }}>
+              <Button size="small" variant="outlined" startIcon={<FileDownload />} onClick={exportCRMCsv}>
+                Export CSV
+              </Button>
+            </Grid>
           </Grid>
+
+          {/* Filter chips */}
+          <Stack direction="row" spacing={0.75} mt={1.5} flexWrap="wrap" useFlexGap>
+            <Chip
+              label="All"
+              size="small"
+              color={!verifiedFilter && !warningsFilter ? 'primary' : 'default'}
+              onClick={() => { setVerifiedFilter(''); setWarningsFilter(''); }}
+            />
+            <Chip
+              label="Verified"
+              size="small"
+              color={verifiedFilter === 'yes' ? 'success' : 'default'}
+              onClick={() => setVerifiedFilter(verifiedFilter === 'yes' ? '' : 'yes')}
+            />
+            <Chip
+              label="Unverified"
+              size="small"
+              color={verifiedFilter === 'no' ? 'warning' : 'default'}
+              onClick={() => setVerifiedFilter(verifiedFilter === 'no' ? '' : 'no')}
+            />
+            <Chip
+              label="Has Warnings"
+              size="small"
+              color={warningsFilter === 'yes' ? 'error' : 'default'}
+              onClick={() => setWarningsFilter(warningsFilter === 'yes' ? '' : 'yes')}
+            />
+          </Stack>
+
+          {/* Time range chips */}
+          <Stack direction="row" spacing={0.75} mt={1} flexWrap="wrap" useFlexGap>
+            {[['all', 'All Time'], ['1d', 'Today'], ['7d', '7 Days'], ['30d', '30 Days']].map(([val, label]) => (
+              <Chip
+                key={val}
+                label={label}
+                size="small"
+                color={timeRange === val ? 'primary' : 'default'}
+                onClick={() => setTimeRange(val)}
+              />
+            ))}
+          </Stack>
         </CardContent>
       </Card>
 
