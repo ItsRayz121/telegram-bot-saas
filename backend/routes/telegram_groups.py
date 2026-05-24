@@ -495,12 +495,25 @@ def get_leaderboard(group_id):
         return jsonify({"error": "Group not found"}), 404
 
     limit = min(request.args.get("limit", 20, type=int), 100)
-    members = (
-        OfficialMember.query.filter_by(telegram_group_id=group_id)
-        .order_by(OfficialMember.xp.desc())
-        .limit(limit)
-        .all()
-    )
+    period = request.args.get("period", "all")
+    has_wallet = request.args.get("has_wallet")
+
+    period_col_map = {
+        "1d": OfficialMember.xp_1d,
+        "7d": OfficialMember.xp_7d,
+        "30d": OfficialMember.xp_30d,
+    }
+    sort_col = period_col_map.get(period, OfficialMember.xp)
+
+    members_q = OfficialMember.query.filter_by(telegram_group_id=group_id)
+    if period != "all":
+        members_q = members_q.filter(sort_col > 0)
+    if has_wallet == "true":
+        members_q = members_q.filter(
+            OfficialMember.wallet_address.isnot(None),
+            OfficialMember.wallet_address != "",
+        )
+    members = members_q.order_by(sort_col.desc()).limit(limit).all()
     return jsonify({"members": [m.to_dict() for m in members]}), 200
 
 
@@ -1336,6 +1349,12 @@ def list_official_members(group_id):
     has_warnings = request.args.get("has_warnings")
     sort_by = request.args.get("sort_by", "xp")
     sort_dir = request.args.get("sort_dir", "desc")
+    period = request.args.get("period", "all")
+
+    # When sorting by XP and a time period is set, sort by the period column instead
+    period_col_map = {"1d": "xp_1d", "7d": "xp_7d", "30d": "xp_30d"}
+    if period != "all" and sort_by == "xp":
+        sort_by = period_col_map.get(period, "xp")
 
     query = OfficialMember.query.filter_by(telegram_group_id=group_id)
 

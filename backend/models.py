@@ -401,6 +401,9 @@ class Member(db.Model):
     crm_tags = db.Column(db.JSON, nullable=True)
     crm_notes = db.Column(db.Text, nullable=True)
     engagement_score = db.Column(db.Integer, nullable=True)
+    xp_1d  = db.Column(db.Integer, default=0, nullable=False)
+    xp_7d  = db.Column(db.Integer, default=0, nullable=False)
+    xp_30d = db.Column(db.Integer, default=0, nullable=False)
 
     __table_args__ = (db.UniqueConstraint("group_id", "telegram_user_id", name="unique_group_member"),)
 
@@ -442,6 +445,9 @@ class Member(db.Model):
             "crm_tags": self.crm_tags or [],
             "crm_notes": self.crm_notes or "",
             "engagement_score": self.engagement_score,
+            "xp_1d": self.xp_1d or 0,
+            "xp_7d": self.xp_7d or 0,
+            "xp_30d": self.xp_30d or 0,
         }
 
 
@@ -1136,6 +1142,9 @@ class OfficialMember(db.Model):
     crm_tags = db.Column(db.JSON, nullable=True)          # list of tag strings
     crm_notes = db.Column(db.Text, nullable=True)         # admin freetext notes
     engagement_score = db.Column(db.Integer, nullable=True)  # 0–100, computed
+    xp_1d  = db.Column(db.Integer, default=0, nullable=False)
+    xp_7d  = db.Column(db.Integer, default=0, nullable=False)
+    xp_30d = db.Column(db.Integer, default=0, nullable=False)
 
     __table_args__ = (
         db.UniqueConstraint("telegram_group_id", "telegram_user_id", name="uq_official_member"),
@@ -1204,6 +1213,9 @@ class OfficialMember(db.Model):
             "crm_tags": self.crm_tags or [],
             "crm_notes": self.crm_notes or "",
             "engagement_score": self.engagement_score,
+            "xp_1d": self.xp_1d or 0,
+            "xp_7d": self.xp_7d or 0,
+            "xp_30d": self.xp_30d or 0,
         }
 
 

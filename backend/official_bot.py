@@ -3475,6 +3475,9 @@ async def _apply_xp_penalty(flask_app, group_id: str, user_id: int, action: str)
             ).first()
             if m:
                 m.xp = max(0, (m.xp or 0) + penalty)  # penalty values are negative
+                m.xp_1d  = max(0, (m.xp_1d  or 0) + penalty)
+                m.xp_7d  = max(0, (m.xp_7d  or 0) + penalty)
+                m.xp_30d = max(0, (m.xp_30d or 0) + penalty)
                 db.session.commit()
     except Exception as exc:
         _log.debug("[OfficialBot] XP penalty (%s) failed: %s", action, exc)
@@ -4118,6 +4121,9 @@ async def _award_xp(flask_app, group_id: str, user, xp_gain: int = None):
 
             old_level = m.level
             m.xp = (m.xp or 0) + xp_gain
+            m.xp_1d  = (m.xp_1d  or 0) + xp_gain
+            m.xp_7d  = (m.xp_7d  or 0) + xp_gain
+            m.xp_30d = (m.xp_30d or 0) + xp_gain
             m.message_count = (m.message_count or 0) + 1
             m.last_message_at = now
             m.last_xp_at = now
@@ -5139,6 +5145,9 @@ async def on_reaction(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 db.session.add(m)
             m.xp = (m.xp or 0) + xp_amount
+            m.xp_1d  = (m.xp_1d  or 0) + xp_amount
+            m.xp_7d  = (m.xp_7d  or 0) + xp_amount
+            m.xp_30d = (m.xp_30d or 0) + xp_amount
             m.level = _level_from_xp(m.xp)
             db.session.commit()
     except Exception as exc:

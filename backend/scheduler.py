@@ -133,6 +133,22 @@ def make_celery(app=None):
                 "task": "backend.scheduler.hub_send_daily_digests",
                 "schedule": 600.0,    # every 10 minutes (checks if digest time reached per user)
             },
+            # ── XP period snapshot resets ─────────────────────────────────────
+            "reset-xp-daily": {
+                "task": "backend.scheduler.reset_xp_period",
+                "schedule": crontab(hour=0, minute=0),
+                "args": ["1d"],
+            },
+            "reset-xp-weekly": {
+                "task": "backend.scheduler.reset_xp_period",
+                "schedule": crontab(hour=0, minute=0, day_of_week=1),
+                "args": ["7d"],
+            },
+            "reset-xp-monthly": {
+                "task": "backend.scheduler.reset_xp_period",
+                "schedule": crontab(hour=0, minute=0, day_of_month=1),
+                "args": ["30d"],
+            },
         },
     )
 
@@ -1493,3 +1509,21 @@ def hard_delete_user(user_id: int):
 
     except Exception as exc:
         logger.error("hard_delete_user error for user %s: %s", user_id, exc)
+
+
+@celery_app.task(name="backend.scheduler.reset_xp_period")
+def reset_xp_period(period):
+    """Reset period XP snapshot columns (xp_1d/xp_7d/xp_30d) for all members."""
+    col_map = {"1d": "xp_1d", "7d": "xp_7d", "30d": "xp_30d"}
+    col = col_map.get(period)
+    if not col:
+        return
+    try:
+        from .models import db
+        from sqlalchemy import text as _text
+        db.session.execute(_text(f"UPDATE official_members SET {col} = 0"))
+        db.session.execute(_text(f"UPDATE members SET {col} = 0"))
+        db.session.commit()
+        logger.info("reset_xp_period: reset %s for all members", col)
+    except Exception as exc:
+        logger.error("reset_xp_period failed for %s: %s", period, exc)

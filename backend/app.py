@@ -473,6 +473,7 @@ def create_app():
         _run_linked_telegram_accounts_migration()
         _run_onboarding_emails_migration()
         _run_assistant_v2_migrations()
+        _run_xp_period_migrations()
 
         # Encryption self-check — must run after all migrations so tokens exist
         from .utils.encryption import startup_encryption_selfcheck
@@ -1101,6 +1102,33 @@ def _run_assistant_v2_migrations():
         _mig_log.info("assistant_v2 migrations complete")
     except Exception as exc:
         _mig_log.warning("assistant_v2 migrations failed: %s", exc)
+
+
+def _run_xp_period_migrations():
+    """Add xp_1d/xp_7d/xp_30d period snapshot columns to members and official_members."""
+    _mig_log = logging.getLogger("migrations")
+    stmts = [
+        "ALTER TABLE official_members ADD COLUMN IF NOT EXISTS xp_1d INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE official_members ADD COLUMN IF NOT EXISTS xp_7d INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE official_members ADD COLUMN IF NOT EXISTS xp_30d INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE members ADD COLUMN IF NOT EXISTS xp_1d INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE members ADD COLUMN IF NOT EXISTS xp_7d INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE members ADD COLUMN IF NOT EXISTS xp_30d INTEGER NOT NULL DEFAULT 0",
+    ]
+    try:
+        with db.engine.connect() as conn:
+            for sql in stmts:
+                try:
+                    conn.execute(text(sql))
+                    conn.commit()
+                except Exception:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+        _mig_log.info("xp_period migrations complete")
+    except Exception as exc:
+        _mig_log.warning("xp_period migrations failed: %s", exc)
 
 
 def _backfill_group_defaults():

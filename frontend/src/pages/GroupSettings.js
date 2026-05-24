@@ -281,21 +281,17 @@ export default function GroupSettings() {
   const [saving, setSaving] = useState(false);
 
   const [members, setMembers] = useState([]);
-  const [membersTotal, setMembersTotal] = useState(0);
+  const [, setMembersTotal] = useState(0);
   const [membersPage, setMembersPage] = useState(1);
   const [membersPages, setMembersPages] = useState(1);
   const [membersSearch, setMembersSearch] = useState('');
-  const [membersRole, setMembersRole] = useState('');
-  const [membersVerified, setMembersVerified] = useState('');
-  const [membersMuted, setMembersMuted] = useState('');
   const [membersSort, setMembersSort] = useState('xp');
-  const [membersSortDir, setMembersSortDir] = useState('desc');
-  const [membersWallet, setMembersWallet] = useState('');
-  const [membersWarnings, setMembersWarnings] = useState('');
   const [membersTimeRange, setMembersTimeRange] = useState('all');
 
   const [leaderboard, setLeaderboard] = useState([]);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+  const [leaderboardTimeRange, setLeaderboardTimeRange] = useState('all');
+  const [leaderboardWalletOnly, setLeaderboardWalletOnly] = useState(false);
 
   const [auditLogs, setAuditLogs] = useState([]);
   const [auditTotal, setAuditTotal] = useState(0);
@@ -361,14 +357,9 @@ export default function GroupSettings() {
     try {
       const params = { page, per_page: 20 };
       if (membersSearch) params.q = membersSearch;
-      if (membersRole) params.role = membersRole;
-      if (membersVerified) params.is_verified = membersVerified;
-      if (membersMuted) params.is_muted = membersMuted;
-      if (membersWallet) params.has_wallet = membersWallet;
-      if (membersWarnings) params.has_warnings = membersWarnings;
-      if (membersTimeRange && membersTimeRange !== 'all') params.joined_within = membersTimeRange;
+      if (membersTimeRange && membersTimeRange !== 'all') params.period = membersTimeRange;
       params.sort_by = membersSort;
-      params.sort_dir = membersSortDir;
+      params.sort_dir = 'desc';
       const res = await settings.getMembers(botId, groupId, params);
       setMembers(res.data.members);
       setMembersTotal(res.data.total || 0);
@@ -376,16 +367,18 @@ export default function GroupSettings() {
     } catch {
       toast.error('Failed to load members');
     }
-  }, [botId, groupId, isOfficial, membersSearch, membersRole, membersVerified, membersMuted, membersWallet, membersWarnings, membersTimeRange, membersSort, membersSortDir]);
+  }, [botId, groupId, membersSearch, membersTimeRange, membersSort]);
 
   const exportMembersCSV = useCallback(() => {
     if (!members.length) return;
-    const headers = ['Name', 'Username', 'Telegram ID', 'XP', 'Level', 'Warnings', 'Role', 'Verified', 'Wallet Submitted', 'Wallet Address'];
+    const xpField = { '1d': 'xp_1d', '7d': 'xp_7d', '30d': 'xp_30d' }[membersTimeRange] || 'xp';
+    const xpLabel = membersTimeRange === '1d' ? 'XP (Today)' : membersTimeRange === '7d' ? 'XP (7d)' : membersTimeRange === '30d' ? 'XP (30d)' : 'XP';
+    const headers = ['Name', 'Username', 'Telegram ID', xpLabel, 'Level', 'Warnings', 'Role', 'Verified', 'Wallet Submitted', 'Wallet Address'];
     const rows = members.map(m => [
       m.first_name || '',
       m.username ? `@${m.username}` : '',
-      m.user_id || m.telegram_id || m.id || '',
-      m.xp ?? 0,
+      m.telegram_user_id || m.user_id || m.id || '',
+      m[xpField] ?? 0,
       m.level ?? 0,
       m.warnings ?? 0,
       m.role || '',
@@ -399,13 +392,36 @@ export default function GroupSettings() {
     const a = document.createElement('a');
     a.href = url; a.download = `members_${groupId}.csv`; a.click();
     URL.revokeObjectURL(url);
-  }, [members, groupId]);
+  }, [members, groupId, membersTimeRange]);
+
+  const exportLeaderboardCSV = useCallback(() => {
+    if (!leaderboard.length) return;
+    const xpField = { '1d': 'xp_1d', '7d': 'xp_7d', '30d': 'xp_30d' }[leaderboardTimeRange] || 'xp';
+    const xpLabel = leaderboardTimeRange === '1d' ? 'XP (Today)' : leaderboardTimeRange === '7d' ? 'XP (7d)' : leaderboardTimeRange === '30d' ? 'XP (30d)' : 'XP (All Time)';
+    const headers = ['Rank', 'Name', 'Username', xpLabel, 'Level', 'Role', 'Wallet Address'];
+    const rows = leaderboard.map((m, i) => [
+      i + 1,
+      m.first_name || '',
+      m.username ? `@${m.username}` : '',
+      m[xpField] ?? 0,
+      m.level ?? 0,
+      m.role || '',
+      m.wallet_address || '',
+    ]);
+    const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `leaderboard_${groupId}_${leaderboardTimeRange}.csv`; a.click();
+    URL.revokeObjectURL(url);
+  }, [leaderboard, groupId, leaderboardTimeRange]);
 
   const fetchLeaderboard = useCallback(async () => {
     setLeaderboardLoading(true);
     try {
       const params = { limit: 50 };
-      if (membersTimeRange && membersTimeRange !== 'all') params.period = membersTimeRange;
+      if (leaderboardTimeRange && leaderboardTimeRange !== 'all') params.period = leaderboardTimeRange;
+      if (leaderboardWalletOnly) params.has_wallet = 'true';
       const res = await settings.getLeaderboard(botId, groupId, params);
       setLeaderboard(res.data.members || []);
     } catch {
@@ -413,7 +429,7 @@ export default function GroupSettings() {
     } finally {
       setLeaderboardLoading(false);
     }
-  }, [botId, groupId, membersTimeRange]);
+  }, [botId, groupId, leaderboardTimeRange, leaderboardWalletOnly]);
 
   const fetchAuditLogs = useCallback(async (page = 1) => {
     try {
@@ -2472,11 +2488,6 @@ export default function GroupSettings() {
 
         {/* ANALYTICS › Members Directory */}
         {cat === 'analytics' && subTab === 0 && (() => {
-          const verifiedCnt = members.filter(m => m.is_verified).length;
-          const unverifiedCnt = members.filter(m => !m.is_verified).length;
-          const walletYesCnt = members.filter(m => !!m.wallet_address).length;
-          const walletNoCnt = members.filter(m => !m.wallet_address).length;
-          const warningsCnt = members.filter(m => (m.warnings ?? 0) > 0).length;
           return (
           <>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
@@ -2511,74 +2522,6 @@ export default function GroupSettings() {
                   />
                 ))}
               </Box>
-              {/* Summary filter chips */}
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mb: 2 }}>
-                <Chip
-                  label={`Total ${membersTotal}`}
-                  size="small"
-                  variant={!membersVerified && !membersWallet && !membersWarnings && !membersRole ? 'filled' : 'outlined'}
-                  color={!membersVerified && !membersWallet && !membersWarnings && !membersRole ? 'primary' : 'default'}
-                  onClick={() => {
-                    setMembersVerified(''); setMembersWallet(''); setMembersWarnings('');
-                    setMembersRole(''); setMembersMuted(''); setMembersPage(1);
-                  }}
-                  sx={{ cursor: 'pointer' }}
-                />
-                <Chip
-                  label={`Verified ${verifiedCnt}`}
-                  size="small"
-                  variant={membersVerified === 'true' ? 'filled' : 'outlined'}
-                  color={membersVerified === 'true' ? 'success' : 'default'}
-                  onClick={() => { setMembersVerified(membersVerified === 'true' ? '' : 'true'); setMembersPage(1); }}
-                  sx={{ cursor: 'pointer' }}
-                />
-                <Chip
-                  label={`Unverified ${unverifiedCnt}`}
-                  size="small"
-                  variant={membersVerified === 'false' ? 'filled' : 'outlined'}
-                  color={membersVerified === 'false' ? 'warning' : 'default'}
-                  onClick={() => { setMembersVerified(membersVerified === 'false' ? '' : 'false'); setMembersPage(1); }}
-                  sx={{ cursor: 'pointer' }}
-                />
-                <Chip
-                  label={`Wallet Yes ${walletYesCnt}`}
-                  size="small"
-                  variant={membersWallet === 'true' ? 'filled' : 'outlined'}
-                  color={membersWallet === 'true' ? 'success' : 'default'}
-                  onClick={() => { setMembersWallet(membersWallet === 'true' ? '' : 'true'); setMembersPage(1); }}
-                  sx={{ cursor: 'pointer' }}
-                />
-                <Chip
-                  label={`Wallet No ${walletNoCnt}`}
-                  size="small"
-                  variant={membersWallet === 'false' ? 'filled' : 'outlined'}
-                  color={membersWallet === 'false' ? 'error' : 'default'}
-                  onClick={() => { setMembersWallet(membersWallet === 'false' ? '' : 'false'); setMembersPage(1); }}
-                  sx={{ cursor: 'pointer' }}
-                />
-                <Chip
-                  label={`Warnings ${warningsCnt}`}
-                  size="small"
-                  variant={membersWarnings === 'true' ? 'filled' : 'outlined'}
-                  color={membersWarnings === 'true' ? 'error' : 'default'}
-                  onClick={() => { setMembersWarnings(membersWarnings === 'true' ? '' : 'true'); setMembersPage(1); }}
-                  sx={{ cursor: 'pointer' }}
-                />
-                {['mod', 'admin', 'vip'].map(role => {
-                  const cnt = members.filter(m => m.role === role).length;
-                  return (
-                    <Chip
-                      key={role}
-                      label={`${role.charAt(0).toUpperCase() + role.slice(1)} ${cnt}`}
-                      size="small"
-                      variant={membersRole === role ? 'filled' : 'outlined'}
-                      color={membersRole === role ? 'secondary' : 'default'}
-                      onClick={() => { setMembersRole(membersRole === role ? '' : role); setMembersPage(1); }}
-                      sx={{ cursor: 'pointer', textTransform: 'capitalize' }}
-                    />
-                  );
-                })}
-              </Box>
               {/* Search and sort controls */}
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, mb: 2 }}>
                 <TextField
@@ -2588,33 +2531,6 @@ export default function GroupSettings() {
                   value={membersSearch}
                   onChange={(e) => { setMembersSearch(e.target.value); setMembersPage(1); }}
                 />
-                <FormControl size="small" sx={{ minWidth: 110 }}>
-                  <InputLabel>Role</InputLabel>
-                  <Select value={membersRole} label="Role" onChange={(e) => { setMembersRole(e.target.value); setMembersPage(1); }}>
-                    <MenuItem value="">All Roles</MenuItem>
-                    <MenuItem value="member">Member</MenuItem>
-                    <MenuItem value="mod">Mod</MenuItem>
-                    <MenuItem value="admin">Admin</MenuItem>
-                    <MenuItem value="owner">Owner</MenuItem>
-                    <MenuItem value="vip">VIP</MenuItem>
-                  </Select>
-                </FormControl>
-                <FormControl size="small" sx={{ minWidth: 110 }}>
-                  <InputLabel>Level</InputLabel>
-                  <Select value={membersSort === 'level' ? membersSort : ''} label="Level"
-                    onChange={(e) => { if (e.target.value) { setMembersSort('level'); setMembersSortDir('desc'); } setMembersPage(1); }}>
-                    <MenuItem value="">Any Level</MenuItem>
-                    <MenuItem value="level">Sort by Level</MenuItem>
-                  </Select>
-                </FormControl>
-                <FormControl size="small" sx={{ minWidth: 100 }}>
-                  <InputLabel>Muted</InputLabel>
-                  <Select value={membersMuted} label="Muted" onChange={(e) => { setMembersMuted(e.target.value); setMembersPage(1); }}>
-                    <MenuItem value="">All</MenuItem>
-                    <MenuItem value="true">Muted</MenuItem>
-                    <MenuItem value="false">Active</MenuItem>
-                  </Select>
-                </FormControl>
                 <FormControl size="small" sx={{ minWidth: 130 }}>
                   <InputLabel>Sort by</InputLabel>
                   <Select value={membersSort} label="Sort by" onChange={(e) => { setMembersSort(e.target.value); setMembersPage(1); }}>
@@ -2623,16 +2539,7 @@ export default function GroupSettings() {
                     <MenuItem value="first_name">Name</MenuItem>
                     <MenuItem value="joined_at">Joined</MenuItem>
                     <MenuItem value="warnings">Warnings</MenuItem>
-                    <MenuItem value="role">Role</MenuItem>
-                    <MenuItem value="is_verified">Status</MenuItem>
                     <MenuItem value="wallet_address">Wallet</MenuItem>
-                  </Select>
-                </FormControl>
-                <FormControl size="small" sx={{ minWidth: 95 }}>
-                  <InputLabel>Order</InputLabel>
-                  <Select value={membersSortDir} label="Order" onChange={(e) => { setMembersSortDir(e.target.value); setMembersPage(1); }}>
-                    <MenuItem value="desc">↓ Desc</MenuItem>
-                    <MenuItem value="asc">↑ Asc</MenuItem>
                   </Select>
                 </FormControl>
               </Box>
@@ -2642,7 +2549,9 @@ export default function GroupSettings() {
                 <TableHead>
                   <TableRow>
                     <TableCell>User</TableCell>
-                    <TableCell align="right">XP</TableCell>
+                    <TableCell align="right">
+                      {membersTimeRange === '1d' ? 'XP (Today)' : membersTimeRange === '7d' ? 'XP (7d)' : membersTimeRange === '30d' ? 'XP (30d)' : 'XP'}
+                    </TableCell>
                     <TableCell align="right">Level</TableCell>
                     <TableCell align="right">Warnings</TableCell>
                     <TableCell>Role</TableCell>
@@ -2652,14 +2561,16 @@ export default function GroupSettings() {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {members.map((m) => (
+                  {members.map((m) => {
+                    const xpField = { '1d': 'xp_1d', '7d': 'xp_7d', '30d': 'xp_30d' }[membersTimeRange] || 'xp';
+                    return (
                     <TableRow key={m.id} hover>
                       <TableCell>
                         <Typography variant="body2" fontWeight={500}>
                           {m.first_name}{m.username ? ` (@${m.username})` : ''}
                         </Typography>
                       </TableCell>
-                      <TableCell align="right">{(m.xp ?? 0).toLocaleString()}</TableCell>
+                      <TableCell align="right">{(m[xpField] ?? 0).toLocaleString()}</TableCell>
                       <TableCell align="right">{m.level}</TableCell>
                       <TableCell align="right">{m.warnings}</TableCell>
                       <TableCell><Chip label={m.role} size="small" variant="outlined" /></TableCell>
@@ -2695,7 +2606,8 @@ export default function GroupSettings() {
                         )}
                       </TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
             </TableContainer>
@@ -2710,7 +2622,9 @@ export default function GroupSettings() {
         })()}
 
         {/* ANALYTICS › Leaderboard */}
-        {cat === 'analytics' && subTab === leaderboardSubTabIdx && (
+        {cat === 'analytics' && subTab === leaderboardSubTabIdx && (() => {
+          const lbXpField = { '1d': 'xp_1d', '7d': 'xp_7d', '30d': 'xp_30d' }[leaderboardTimeRange] || 'xp';
+          return (
           <>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, mb: 1.5 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -2718,7 +2632,7 @@ export default function GroupSettings() {
                 <Typography variant="h6" fontWeight={600}>XP Leaderboard</Typography>
                 <Typography variant="body2" color="text.secondary">— top members ranked by XP</Typography>
               </Box>
-              <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
+              <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', alignItems: 'center' }}>
                 {[
                   { key: 'all', label: 'All Time' },
                   { key: '30d', label: '30 Days' },
@@ -2729,17 +2643,30 @@ export default function GroupSettings() {
                     key={key}
                     label={label}
                     size="small"
-                    variant={membersTimeRange === key ? 'filled' : 'outlined'}
-                    color={membersTimeRange === key ? 'primary' : 'default'}
-                    onClick={() => setMembersTimeRange(key)}
+                    variant={leaderboardTimeRange === key ? 'filled' : 'outlined'}
+                    color={leaderboardTimeRange === key ? 'primary' : 'default'}
+                    onClick={() => setLeaderboardTimeRange(key)}
                     sx={{ cursor: 'pointer' }}
                   />
                 ))}
+                <Chip
+                  label="Has Wallet"
+                  size="small"
+                  variant={leaderboardWalletOnly ? 'filled' : 'outlined'}
+                  color={leaderboardWalletOnly ? 'success' : 'default'}
+                  onClick={() => setLeaderboardWalletOnly(v => !v)}
+                  sx={{ cursor: 'pointer' }}
+                />
+                <Button size="small" variant="outlined" startIcon={<FileDownload fontSize="small" />}
+                  onClick={exportLeaderboardCSV} disabled={!leaderboard.length}
+                  sx={{ fontSize: '0.72rem' }}>
+                  Export CSV
+                </Button>
               </Box>
             </Box>
-            {membersTimeRange !== 'all' && (
+            {leaderboardTimeRange !== 'all' && (
               <Typography variant="caption" color="text.secondary" display="block" mb={1.5}>
-                Showing XP earned in the last {membersTimeRange === '1d' ? '24 hours' : membersTimeRange === '7d' ? '7 days' : '30 days'}.
+                Showing XP earned in the last {leaderboardTimeRange === '1d' ? '24 hours' : leaderboardTimeRange === '7d' ? '7 days' : '30 days'}.
               </Typography>
             )}
             {leaderboardLoading ? (
@@ -2751,9 +2678,12 @@ export default function GroupSettings() {
                     <TableRow>
                       <TableCell align="center">#</TableCell>
                       <TableCell>User</TableCell>
-                      <TableCell align="right">XP</TableCell>
+                      <TableCell align="right">
+                        {leaderboardTimeRange === '1d' ? 'XP (Today)' : leaderboardTimeRange === '7d' ? 'XP (7d)' : leaderboardTimeRange === '30d' ? 'XP (30d)' : 'XP'}
+                      </TableCell>
                       <TableCell align="right">Level</TableCell>
                       <TableCell>Role</TableCell>
+                      <TableCell>Wallet Address</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -2775,16 +2705,37 @@ export default function GroupSettings() {
                         </TableCell>
                         <TableCell align="right">
                           <Typography variant="body2" fontWeight={600} color="primary.main">
-                            {(m.xp ?? 0).toLocaleString()}
+                            {(m[lbXpField] ?? 0).toLocaleString()}
                           </Typography>
                         </TableCell>
                         <TableCell align="right">{m.level}</TableCell>
                         <TableCell><Chip label={m.role} size="small" variant="outlined" /></TableCell>
+                        <TableCell sx={{ maxWidth: 180 }}>
+                          {m.wallet_address ? (
+                            <Tooltip title={m.wallet_address} arrow>
+                              <Typography
+                                variant="body2"
+                                sx={{
+                                  fontFamily: 'monospace', fontSize: '0.75rem',
+                                  overflow: 'hidden', textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap', cursor: 'pointer', color: 'primary.main',
+                                }}
+                                onClick={() => navigator.clipboard.writeText(m.wallet_address)}
+                              >
+                                {m.wallet_address.length > 16
+                                  ? `${m.wallet_address.slice(0, 8)}…${m.wallet_address.slice(-6)}`
+                                  : m.wallet_address}
+                              </Typography>
+                            </Tooltip>
+                          ) : (
+                            <Typography variant="body2" color="text.disabled">—</Typography>
+                          )}
+                        </TableCell>
                       </TableRow>
                     ))}
                     {leaderboard.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={5} align="center">
+                        <TableCell colSpan={6} align="center">
                           <Typography variant="body2" color="text.secondary" py={2}>
                             No members with XP yet. Members earn XP by sending messages and using commands.
                           </Typography>
@@ -2796,7 +2747,8 @@ export default function GroupSettings() {
               </TableContainer>
             )}
           </>
-        )}
+          );
+        })()}
 
         {/* ANALYTICS › Audit Log / Mod Log */}
         {cat === 'analytics' && subTab === auditLogSubTabIdx && (

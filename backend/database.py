@@ -110,6 +110,9 @@ class DatabaseManager:
 
         old_level = member.level
         member.xp += xp_amount
+        member.xp_1d  = (member.xp_1d  or 0) + xp_amount
+        member.xp_7d  = (member.xp_7d  or 0) + xp_amount
+        member.xp_30d = (member.xp_30d or 0) + xp_amount
         member.last_xp_at = datetime.utcnow()
 
         new_level = DatabaseManager._calculate_level(member.xp)
@@ -166,6 +169,9 @@ class DatabaseManager:
         ).first()
         if member and penalty_xp < 0:
             member.xp = max(0, member.xp + penalty_xp)
+            member.xp_1d  = max(0, (member.xp_1d  or 0) + penalty_xp)
+            member.xp_7d  = max(0, (member.xp_7d  or 0) + penalty_xp)
+            member.xp_30d = max(0, (member.xp_30d or 0) + penalty_xp)
             member.level = DatabaseManager._calculate_level(member.xp)
             db.session.commit()
 

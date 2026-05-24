@@ -302,6 +302,12 @@ def get_members(bot_id, group_id):
         is_muted = request.args.get("is_muted", "")
         sort_by = request.args.get("sort_by", "xp")
         sort_dir = request.args.get("sort_dir", "desc")
+        period = request.args.get("period", "all")
+
+        # When sorting by XP and a time period is set, sort by the period column instead
+        _period_col_names = {"1d": "xp_1d", "7d": "xp_7d", "30d": "xp_30d"}
+        if period != "all" and sort_by == "xp":
+            sort_by = _period_col_names.get(period, "xp")
 
         query = Member.query.filter_by(group_id=group.id)
         if search:
@@ -330,6 +336,7 @@ def get_members(bot_id, group_id):
             "xp": Member.xp, "level": Member.level, "first_name": Member.first_name,
             "joined_at": Member.joined_at, "warnings": Member.warnings, "role": Member.role,
             "is_verified": Member.is_verified, "wallet_address": Member.wallet_address,
+            "xp_1d": Member.xp_1d, "xp_7d": Member.xp_7d, "xp_30d": Member.xp_30d,
         }
         sort_col = _sort_map.get(sort_by, Member.xp)
         query = query.order_by(sort_col.desc() if sort_dir == "desc" else sort_col.asc())
@@ -415,12 +422,25 @@ def get_custom_bot_leaderboard(bot_id, group_id):
         if err:
             return err
         limit = min(request.args.get("limit", 20, type=int), 100)
-        members = (
-            Member.query.filter_by(group_id=group.id)
-            .order_by(Member.xp.desc())
-            .limit(limit)
-            .all()
-        )
+        period = request.args.get("period", "all")
+        has_wallet_filter = request.args.get("has_wallet")
+
+        period_col_map = {
+            "1d": Member.xp_1d,
+            "7d": Member.xp_7d,
+            "30d": Member.xp_30d,
+        }
+        sort_col = period_col_map.get(period, Member.xp)
+
+        members_q = Member.query.filter_by(group_id=group.id)
+        if period != "all":
+            members_q = members_q.filter(sort_col > 0)
+        if has_wallet_filter == "true":
+            members_q = members_q.filter(
+                Member.wallet_address.isnot(None),
+                Member.wallet_address != "",
+            )
+        members = members_q.order_by(sort_col.desc()).limit(limit).all()
         return jsonify({"members": [m.to_dict() for m in members]})
     except Exception as e:
         logger.error(f"get_custom_bot_leaderboard error: {e}", exc_info=True)
