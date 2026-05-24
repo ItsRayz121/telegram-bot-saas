@@ -466,6 +466,33 @@ def get_custom_bot_warnings(bot_id, group_id):
         return jsonify({"error": str(e)}), 500
 
 
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/warnings/<int:warning_id>", methods=["DELETE"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def delete_custom_bot_warning(bot_id, group_id, warning_id):
+    try:
+        user = _get_current_user()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        bot, group, err = _get_bot_and_group(user, bot_id, group_id)
+        if err:
+            return err
+        log = AuditLog.query.filter_by(id=warning_id, group_id=group.id, action_type="warn").first_or_404()
+        member = Member.query.filter_by(
+            group_id=group.id,
+            telegram_user_id=str(log.target_user_id),
+        ).first()
+        if member and (member.warnings or 0) > 0:
+            member.warnings -= 1
+        db.session.delete(log)
+        db.session.commit()
+        return jsonify({"message": "Warning removed"}), 200
+    except Exception as e:
+        logger.error(f"delete_custom_bot_warning error: {e}", exc_info=True)
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
 @settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/scheduled-messages", methods=["GET"])
 @jwt_required()
 @rate_limit(requests_per_minute=60)

@@ -250,6 +250,7 @@ export default function App() {
             <Route path="/bot/:id"                  element={<AppRoute><BotSettings /></AppRoute>} />
             <Route path="/bot/:id/group/:groupId"            element={<AppRoute><KeyedGroupSettings /></AppRoute>} />
             <Route path="/bot/:id/group/:groupId/analytics"  element={<AppRoute><GroupAnalytics /></AppRoute>} />
+            <Route path="/bot/:id/group/:groupId/crm"        element={<AppRoute><GroupCRM /></AppRoute>} />
 
             {/* ── Referrals ─────────────────────────────────────────────────── */}
             <Route path="/referrals" element={<AppRoute><Referrals /></AppRoute>} />

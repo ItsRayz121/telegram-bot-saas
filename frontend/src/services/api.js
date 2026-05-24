@@ -206,7 +206,7 @@ export const settings = {
   removeWarning: (botId, groupId, warningId) =>
     botId === 'official'
       ? api.delete(`/api/telegram-groups/${groupId}/warnings/${warningId}`)
-      : Promise.resolve({ data: { message: 'ok' } }), // custom bot warnings are AuditLog entries — no delete needed
+      : api.delete(`/api/bots/${botId}/groups/${groupId}/warnings/${warningId}`),
 
   // Escalation log: lists EscalationEvent records for this group
   listEscalations: (botId, groupId, params) =>
@@ -765,11 +765,26 @@ export const marketplace = {
 };
 
 export const crm = {
-  overview: (gid) => api.get(`/api/crm/${gid}/overview`),
-  members: (gid, params) => api.get(`/api/crm/${gid}/members`, { params }),
-  getMember: (gid, uid) => api.get(`/api/crm/${gid}/members/${uid}`),
-  updateMember: (gid, uid, data) => api.patch(`/api/crm/${gid}/members/${uid}`, data),
-  computeScores: (gid) => api.post(`/api/crm/${gid}/compute-scores`),
+  overview: (gid, botId) =>
+    botId && botId !== 'official'
+      ? api.get(`/api/bots/${botId}/groups/${gid}/crm/overview`)
+      : api.get(`/api/crm/${gid}/overview`),
+  members: (gid, params, botId) =>
+    botId && botId !== 'official'
+      ? api.get(`/api/bots/${botId}/groups/${gid}/crm/members`, { params })
+      : api.get(`/api/crm/${gid}/members`, { params }),
+  getMember: (gid, uid, botId) =>
+    botId && botId !== 'official'
+      ? api.get(`/api/bots/${botId}/groups/${gid}/crm/members/${uid}`)
+      : api.get(`/api/crm/${gid}/members/${uid}`),
+  updateMember: (gid, uid, data, botId) =>
+    botId && botId !== 'official'
+      ? api.patch(`/api/bots/${botId}/groups/${gid}/crm/members/${uid}`, data)
+      : api.patch(`/api/crm/${gid}/members/${uid}`, data),
+  computeScores: (gid, botId) =>
+    botId && botId !== 'official'
+      ? api.post(`/api/bots/${botId}/groups/${gid}/crm/compute-scores`)
+      : api.post(`/api/crm/${gid}/compute-scores`),
 };
 
 export const directory = {

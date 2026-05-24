@@ -398,8 +398,28 @@ class Member(db.Model):
     last_xp_at = db.Column(db.DateTime, nullable=True)
     wallet_address = db.Column(db.String(500), nullable=True)
     wallet_submitted_at = db.Column(db.DateTime, nullable=True)
+    crm_tags = db.Column(db.JSON, nullable=True)
+    crm_notes = db.Column(db.Text, nullable=True)
+    engagement_score = db.Column(db.Integer, nullable=True)
 
     __table_args__ = (db.UniqueConstraint("group_id", "telegram_user_id", name="unique_group_member"),)
+
+    def compute_engagement_score(self):
+        from datetime import datetime
+        score = 0
+        score += min(40, int(((self.level or 1) / 10) * 40))
+        score += min(15, int(((self.xp or 0) / 1000) * 15))
+        if self.last_message_at:
+            days = (datetime.utcnow() - self.last_message_at).days
+            score += 20 if days <= 1 else 15 if days <= 3 else 10 if days <= 7 else 5 if days <= 14 else 0
+        if self.is_verified:
+            score += 10
+        if self.wallet_address:
+            score += 5
+        score -= min(score, (self.warnings or 0) * 10)
+        if self.is_muted:
+            score = max(0, score - 15)
+        return max(0, min(100, score))
 
     def to_dict(self):
         return {
@@ -419,6 +439,9 @@ class Member(db.Model):
             "last_message_at": self.last_message_at.isoformat() if self.last_message_at else None,
             "wallet_address": self.wallet_address,
             "wallet_submitted_at": self.wallet_submitted_at.isoformat() if self.wallet_submitted_at else None,
+            "crm_tags": self.crm_tags or [],
+            "crm_notes": self.crm_notes or "",
+            "engagement_score": self.engagement_score,
         }
 
 

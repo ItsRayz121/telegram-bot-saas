@@ -476,6 +476,23 @@ def init_db():
             "hub_bot_settings.tone",
         )
 
+        # ── Member CRM fields (custom-bot group parity) ───────────────────────
+        _run_alter(
+            db.engine,
+            "ALTER TABLE members ADD COLUMN IF NOT EXISTS crm_tags JSONB",
+            "members.crm_tags",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE members ADD COLUMN IF NOT EXISTS crm_notes TEXT",
+            "members.crm_notes",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE members ADD COLUMN IF NOT EXISTS engagement_score INTEGER",
+            "members.engagement_score",
+        )
+
         print("Migration complete.")
 
     # One-shot Telegram account backfill (moved above; comment kept for reference).

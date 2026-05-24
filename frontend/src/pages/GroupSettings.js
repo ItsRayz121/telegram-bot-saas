@@ -2479,20 +2479,18 @@ export default function GroupSettings() {
           const warningsCnt = members.filter(m => (m.warnings ?? 0) > 0).length;
           return (
           <>
-            {isOfficial && (
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
-                <Button size="small" variant="outlined" startIcon={<People fontSize="small" />}
-                  onClick={() => navigate(`/groups/${groupId}/crm`)}
-                  sx={{ fontSize: '0.72rem' }}>
-                  Open CRM View
-                </Button>
-                <Button size="small" variant="outlined" startIcon={<FileDownload fontSize="small" />}
-                  onClick={exportMembersCSV} disabled={!members.length}
-                  sx={{ fontSize: '0.72rem' }}>
-                  Export CSV
-                </Button>
-              </Box>
-            )}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
+              <Button size="small" variant="outlined" startIcon={<People fontSize="small" />}
+                onClick={() => navigate(isOfficial ? `/groups/${groupId}/crm` : `/bot/${botId}/group/${groupId}/crm`)}
+                sx={{ fontSize: '0.72rem' }}>
+                Open CRM View
+              </Button>
+              <Button size="small" variant="outlined" startIcon={<FileDownload fontSize="small" />}
+                onClick={exportMembersCSV} disabled={!members.length}
+                sx={{ fontSize: '0.72rem' }}>
+                Export CSV
+              </Button>
+            </Box>
             <>
               {/* Time range chips */}
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mb: 1.5 }}>
@@ -2803,11 +2801,11 @@ export default function GroupSettings() {
         {/* ANALYTICS › Audit Log / Mod Log */}
         {cat === 'analytics' && subTab === auditLogSubTabIdx && (
           <>
-            {isOfficial && (
-              <Typography variant="body2" color="text.secondary" mb={1.5}>
-                Moderation actions (bans, kicks, mutes, warns, purges) logged by @telegizer_bot in this group.
-              </Typography>
-            )}
+            <Typography variant="body2" color="text.secondary" mb={1.5}>
+              {isOfficial
+                ? 'Moderation actions (bans, kicks, mutes, warns, purges) logged by @telegizer_bot in this group.'
+                : 'Moderation actions (bans, kicks, mutes, warns, purges) logged by your bot in this group.'}
+            </Typography>
             {auditLogs.length === 0 ? (
               <Alert severity="info" icon={false}>
                 No moderation events recorded yet. Events appear here after admins use commands like /ban, /kick, /mute, or /warn.

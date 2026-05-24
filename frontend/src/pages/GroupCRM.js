@@ -58,7 +58,7 @@ function MemberAvatar({ member }) {
 
 // ── Member detail drawer ──────────────────────────────────────────────────────
 
-function MemberDrawer({ member, groupId, open, onClose, onUpdated }) {
+function MemberDrawer({ member, groupId, botId, open, onClose, onUpdated }) {
   const [tags, setTags] = useState(member?.crm_tags || []);
   const [notes, setNotes] = useState(member?.crm_notes || '');
   const [saving, setSaving] = useState(false);
@@ -79,7 +79,7 @@ function MemberDrawer({ member, groupId, open, onClose, onUpdated }) {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const res = await crmApi.updateMember(groupId, member.telegram_user_id, { crm_tags: tags, crm_notes: notes });
+      const res = await crmApi.updateMember(groupId, member.telegram_user_id, { crm_tags: tags, crm_notes: notes }, botId);
       onUpdated(res.data);
       toast.success('Saved');
     } catch {
@@ -261,7 +261,7 @@ function OverviewCards({ overview, computing, onCompute }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function GroupCRM() {
-  const { groupId } = useParams();
+  const { id: botId, groupId } = useParams();
   const navigate = useNavigate();
 
   const [group, setGroup] = useState(null);
@@ -291,8 +291,9 @@ export default function GroupCRM() {
   }, [searchInput]);
 
   useEffect(() => {
-    api.get(`/api/groups/${groupId}`).then(r => setGroup(r.data)).catch(() => {});
-    crmApi.overview(groupId).then(r => setOverview(r.data)).catch(() => {});
+    (botId ? api.get(`/api/bots/${botId}/groups/${groupId}/settings`) : api.get(`/api/groups/${groupId}`))
+      .then(r => setGroup(r.data)).catch(() => {});
+    crmApi.overview(groupId, botId).then(r => setOverview(r.data)).catch(() => {});
   }, [groupId]);
 
   const fetchMembers = useCallback((p = 1) => {
@@ -304,7 +305,7 @@ export default function GroupCRM() {
     if (warningsFilter) params.has_warnings = warningsFilter;
     if (timeRange && timeRange !== 'all') params.period = timeRange;
 
-    crmApi.members(groupId, params)
+    crmApi.members(groupId, params, botId)
       .then(r => {
         setMembers(r.data.members);
         setTotal(r.data.total);
@@ -323,7 +324,7 @@ export default function GroupCRM() {
       if (verifiedFilter) params.is_verified = verifiedFilter;
       if (warningsFilter) params.has_warnings = warningsFilter;
       if (timeRange && timeRange !== 'all') params.period = timeRange;
-      const r = await crmApi.members(groupId, params);
+      const r = await crmApi.members(groupId, params, botId);
       const all = r.data.members || [];
       const headers = ['Name', 'Username', 'Telegram ID', 'Score', 'Messages', 'XP', 'Level', 'Warnings', 'Tags', 'Joined'];
       const rows = all.map(m => [
@@ -351,10 +352,9 @@ export default function GroupCRM() {
   const handleCompute = async () => {
     setComputing(true);
     try {
-      const res = await crmApi.computeScores(groupId);
+      const res = await crmApi.computeScores(groupId, botId);
       toast.success(`Scored ${res.data.updated} members`);
-      // Refresh
-      crmApi.overview(groupId).then(r => setOverview(r.data)).catch(() => {});
+      crmApi.overview(groupId, botId).then(r => setOverview(r.data)).catch(() => {});
       fetchMembers(page);
     } catch {
       toast.error('Compute failed');
@@ -377,7 +377,7 @@ export default function GroupCRM() {
     <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: 1100, mx: 'auto' }}>
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3, flexWrap: 'wrap' }}>
-        <IconButton size="small" onClick={() => navigate(`/groups/${groupId}`)}>
+        <IconButton size="small" onClick={() => navigate(botId ? `/bot/${botId}/group/${groupId}` : `/groups/${groupId}`)}>
           <ArrowBack />
         </IconButton>
         <Box sx={{ flex: 1 }}>
@@ -590,6 +590,7 @@ export default function GroupCRM() {
       <MemberDrawer
         member={selectedMember}
         groupId={groupId}
+        botId={botId}
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         onUpdated={handleMemberUpdated}
