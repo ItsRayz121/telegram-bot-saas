@@ -29,6 +29,7 @@ export default function InviteLinks({ botId, groupId }) {
     } catch { toast.error('Failed to load invite links'); }
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, [botId, groupId, timeFilter]);
 
   const handleCreate = async () => {

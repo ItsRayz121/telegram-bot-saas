@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
   Box, Card, CardContent, Typography, Button, TextField, Grid,
-  Switch, FormControlLabel, Dialog, DialogTitle, DialogContent,
+  Switch, Dialog, DialogTitle, DialogContent,
   DialogActions, IconButton, Chip, Alert, Tooltip, Collapse,
-  List, ListItem, ListItemText, Divider,
+  Divider,
 } from '@mui/material';
 import { Add, Delete, Edit, ContentCopy, ExpandMore, ExpandLess, Webhook } from '@mui/icons-material';
 import { toast } from 'react-toastify';
@@ -25,6 +25,7 @@ export default function WebhookManager({ botId, groupId }) {
     } catch { toast.error('Failed to load webhooks'); }
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, [botId, groupId]);
 
   const handleCreate = async () => {

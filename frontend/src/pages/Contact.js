@@ -123,7 +123,6 @@ function ContactForm() {
     if (!form.name || !form.email || !form.message) return;
     setSending(true);
     // Opens mailto as a fallback — replace with a real form endpoint if needed
-    const body = encodeURIComponent(`From: ${form.name} <${form.email}>\nSubject: ${form.subject}\n\n${form.message}`);
     openSupportEmail();
     setTimeout(() => {
       setSending(false);

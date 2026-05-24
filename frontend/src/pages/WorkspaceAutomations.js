@@ -8,7 +8,7 @@ import {
 } from '@mui/material';
 import {
   Add, Delete, AutoMode, ExpandMore, ExpandLess, PlayArrow, Pause,
-  ArrowBack, BoltOutlined, ContentCopy, Webhook,
+  ArrowBack, BoltOutlined, ContentCopy,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';

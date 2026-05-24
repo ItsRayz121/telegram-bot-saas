@@ -11,7 +11,7 @@ import {
   Card, CardContent, Alert, Divider, Dialog, DialogTitle,
   DialogContent, DialogActions, TextField, Avatar,
   MenuItem, Select, FormControl, InputLabel, Snackbar,
-  Switch, FormControlLabel, List, ListItem, ListItemText, ListItemSecondaryAction,
+  Switch, List, ListItem, ListItemText, ListItemSecondaryAction,
 } from '@mui/material';
 import { ArrowBack, SmartToy, Groups, Delete, Save, AutoAwesome } from '@mui/icons-material';
 import { hub } from '../services/api';

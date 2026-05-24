@@ -8,7 +8,7 @@ import {
 } from '@mui/material';
 import {
   Add, SmartToy, Delete, Refresh, OpenInNew, Groups,
-  Settings, CheckCircle, Warning, BarChart, Bolt, Psychology, Lock,
+  BarChart, Psychology, Lock,
 } from '@mui/icons-material';
 import { track } from '../services/analytics';
 import { toast } from 'react-toastify';
@@ -49,19 +49,6 @@ function StatusChip({ status }) {
   };
   const { label, color } = map[status] || { label: 'Active', color: 'success' };
   return <Chip label={label} color={color} size="small" />;
-}
-
-function PermSummary({ perms }) {
-  if (!perms || Object.keys(perms).length === 0) {
-    return <Chip label="Permissions unknown" color="default" size="small" />;
-  }
-  const granted = Object.values(perms).filter(Boolean).length;
-  const total   = Object.keys(perms).length;
-  if (granted === total) {
-    return <Chip label="Full permissions" color="success" size="small" icon={<CheckCircle sx={{ fontSize: '14px !important' }} />} />;
-  }
-  const missing = total - granted;
-  return <Chip label={`${missing} perm${missing > 1 ? 's' : ''} missing`} color="warning" size="small" icon={<Warning sx={{ fontSize: '14px !important' }} />} />;
 }
 
 export default function MyBots() {
@@ -159,10 +146,6 @@ export default function MyBots() {
       toast.error('Failed to disconnect bot');
     }
   };
-
-  // Classify custom bot groups (linked_via_bot_type === custom bot id or username)
-  const customBotGroups = (g) =>
-    officialGroups.filter((og) => og.linked_via_bot_type !== 'official');
 
   const user = _getUser();
 

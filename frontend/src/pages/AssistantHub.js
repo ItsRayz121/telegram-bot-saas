@@ -21,18 +21,6 @@ import { assistant, assistantBot as assistantBotApi, meetings as meetingsApi, hu
 
 const DISMISS_KEY = 'hub_connect_banner_dismissed';
 
-function relTime(isoStr) {
-  if (!isoStr) return null;
-  const diff = Date.now() - new Date(isoStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 2) return 'Just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  if (Math.floor(hrs / 24) === 1) return 'Yesterday';
-  return `${Math.floor(hrs / 24)}d ago`;
-}
-
 // ── Connect Bot Banner ────────────────────────────────────────────────────────
 
 function ConnectBotBanner({ botUsername, connectedGroups, onDismiss }) {

@@ -13,10 +13,6 @@ import {
 import { workspaceAI, telegramAccount, auth as authApi } from '../services/api';
 import PlanGate from '../components/PlanGate';
 
-function _getUser() {
-  try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; }
-}
-
 const PROVIDERS = [
   { id: 'gemini',     label: 'Gemini',     defaultModel: 'gemini-2.0-flash',          needsBase: false },
   { id: 'openai',     label: 'OpenAI',     defaultModel: 'gpt-4o-mini',               needsBase: false },
@@ -394,7 +390,6 @@ export default function AssistantAISettings() {
   }
 
   const plan = settings?.plan || {};
-  const platformAvailable = settings?.platform_key_active && plan.subscription_active !== false;
 
   return (
     <PlanGate plan="pro" userTier={userTier} feature="AI Settings">

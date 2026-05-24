@@ -3,11 +3,11 @@ import {
   Box, Typography, Card, CardContent, Button, Chip, CircularProgress,
   Alert, Grid, IconButton, Tooltip, Dialog, DialogTitle, DialogContent,
   DialogActions, TextField, Select, MenuItem, FormControl, InputLabel,
-  ToggleButtonGroup, ToggleButton, Divider, Menu,
+  ToggleButtonGroup, ToggleButton, Menu,
 } from '@mui/material';
 import {
   CheckBox, Add, Edit, Delete, MoreVert, Psychology,
-  FlagOutlined, Groups, RadioButtonUnchecked, CheckCircle,
+  FlagOutlined, RadioButtonUnchecked, CheckCircle,
 } from '@mui/icons-material';
 import { tasks as tasksApi, telegramGroups as groupsApi } from '../services/api';
 

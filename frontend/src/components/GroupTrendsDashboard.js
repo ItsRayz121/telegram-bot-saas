@@ -10,7 +10,6 @@ import {
 import { assistant } from '../services/api';
 
 const HEALTH_COLOR = { healthy: '#4caf50', watch: '#ff9800', critical: '#f44336' };
-const SENTIMENT_COLOR = { positive: '#4caf50', neutral: '#90a4ae', negative: '#f44336' };
 
 function EmptyState({ message = 'No data yet — signals are computed every 2 hours.' }) {
   return (
@@ -57,7 +56,7 @@ export default function GroupTrendsDashboard() {
       dateMap[d.date][`${key}_members`] = d.active_members;
     });
   });
-  const chartData = Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date));
+  Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date));
 
   // Single group selected — detailed view
   const activeTrend = selectedGroup ? trends.find(t => t.group_id === selectedGroup) : trends[0];

@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, TextField, Chip,
-  Alert, CircularProgress, Divider, InputAdornment, IconButton, Tooltip, Grid,
+  Alert, CircularProgress, Divider, InputAdornment, IconButton, Tooltip,
 } from '@mui/material';
 import {
   SmartToy, CheckCircle, ErrorOutline, Visibility, VisibilityOff,
-  Delete, Add, Refresh, OpenInNew, ContentCopy, ArrowForward,
+  Delete, Add, Refresh, OpenInNew, ContentCopy,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { assistantBot as assistantBotApi, assistant } from '../services/api';
@@ -119,10 +119,9 @@ function TelegizerBotCard({ botUsername }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function AssistantBotSettings() {
-  const navigate = useNavigate();
+  useNavigate();
   const user = _getUser();
   const plan = user.subscription_tier || 'free';
-  const isPro = plan === 'pro' || plan === 'enterprise';
 
   const [bot, setBot] = useState(undefined);
   const [platformBotUsername, setPlatformBotUsername] = useState('');

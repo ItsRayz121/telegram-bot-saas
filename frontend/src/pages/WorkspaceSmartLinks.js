@@ -3,13 +3,13 @@ import {
   Box, Typography, Card, CardContent, Button, IconButton, Chip,
   Dialog, DialogTitle, DialogContent, DialogActions, TextField,
   Switch, FormControlLabel, ToggleButton, ToggleButtonGroup,
-  Tooltip, CircularProgress, Alert, Divider, Grid, Select,
+  Tooltip, CircularProgress, Alert, Divider, Select,
   MenuItem, FormControl, InputLabel,
 } from '@mui/material';
 import {
-  Add, Edit, Delete, Link, Public, Groups, ContentCopy,
+  Add, Edit, Delete, Link, Public, Groups,
   CalendarMonth, Slideshow, Language, Support, QuestionAnswer,
-  MenuBook, Sell, VideoCall, CheckCircle, Circle,
+  MenuBook, Sell, VideoCall, CheckCircle,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { workspace as wsApi, telegramGroups as tgApi } from '../services/api';

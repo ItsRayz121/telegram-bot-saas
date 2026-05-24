@@ -327,12 +327,13 @@ function OnboardingCard({ botList, onAddBot, navigate, user, officialGroupCount 
   );
 }
 
-// ── Invite Card ────────────────────────────────────────────────────────────────
+// ── Invite Card (preserved for future reactivation) ────────────────────────────
 const REFERRAL_MILESTONES = [
   { count: 3,  days: 7,  label: '7 days Pro' },
   { count: 10, days: 30, label: '1 month Pro' },
 ];
 
+// eslint-disable-next-line no-unused-vars
 function InviteCard({ userId }) {
   const [copied, setCopied] = useState(false);
   const [stats, setStats] = useState(null);
@@ -410,7 +411,8 @@ function InviteCard({ userId }) {
   );
 }
 
-// ── Referral Leaderboard Card ──────────────────────────────────────────────────
+// ── Referral Leaderboard Card (preserved for future reactivation) ──────────────
+// eslint-disable-next-line no-unused-vars
 function LeaderboardCard() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);

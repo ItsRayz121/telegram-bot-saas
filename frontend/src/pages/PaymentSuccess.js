@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { openSupportEmail } from '../config/support';
 import {
   Box, Card, CardContent, Typography, Button, CircularProgress,

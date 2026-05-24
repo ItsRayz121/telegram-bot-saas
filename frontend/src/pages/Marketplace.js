@@ -2,14 +2,13 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, Chip, Grid,
   TextField, InputAdornment, Select, MenuItem, FormControl,
-  InputLabel, CircularProgress, Avatar, Stack, Divider,
+  InputLabel, CircularProgress, Avatar, Stack,
   Dialog, DialogTitle, DialogContent, DialogActions,
   ToggleButton, ToggleButtonGroup, Alert, Tabs, Tab,
 } from '@mui/material';
 import {
   Handshake, Search, Campaign, Groups, People, Shield,
-  AttachMoney, Add, OpenInNew, CheckCircle, Schedule,
-  TrendingUp, Gavel,
+  AttachMoney, Add, Gavel,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';

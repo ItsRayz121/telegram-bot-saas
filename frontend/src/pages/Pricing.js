@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box, AppBar, Toolbar, Typography, Button, Card, CardContent,
   Grid, Chip, List, ListItem, ListItemIcon, ListItemText,
@@ -115,7 +115,7 @@ const COMPARISON = [
 
 export default function Pricing() {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState('');
+  const [loading] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedTier, setSelectedTier] = useState(null);
   const [methodLoading, setMethodLoading] = useState('');

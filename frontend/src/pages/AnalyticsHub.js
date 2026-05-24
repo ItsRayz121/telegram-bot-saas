@@ -4,15 +4,14 @@ import {
   Box, Typography, Tabs, Tab, Card, CardContent, Grid,
   CircularProgress, Alert, Button, FormControl, InputLabel,
   Select, MenuItem, Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, Paper, Chip,
+  TableHead, TableRow, Chip,
 } from '@mui/material';
 import {
-  BarChart as BarChartIcon, Groups, Tv, TrendingUp,
+  BarChart as BarChartIcon, Groups, Tv,
   PersonAdd, Shield, Bolt, OpenInNew,
 } from '@mui/icons-material';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  LineChart, Line,
 } from 'recharts';
 import { analytics as analyticsApi, telegramGroups as groupsApi, channels as chApi, auth } from '../services/api';
 

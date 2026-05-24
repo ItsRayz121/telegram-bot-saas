@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, Chip, Grid,
   TextField, InputAdornment, Select, MenuItem, FormControl,
-  InputLabel, CircularProgress, Alert, Avatar, Stack, Divider,
+  InputLabel, CircularProgress, Avatar, Stack, Divider,
   ToggleButton, ToggleButtonGroup, Tooltip,
 } from '@mui/material';
 import {
@@ -140,7 +140,7 @@ function ListingCard({ listing }) {
 // ── Original Directory component (preserved in full for future reactivation) ──
 function DirectoryFull() {
   const navigate = useNavigate();
-  const location = useLocation();
+  useLocation();
 
   const [listings, setListings] = useState([]);
   const [total, setTotal] = useState(0);

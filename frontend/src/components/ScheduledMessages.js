@@ -33,11 +33,13 @@ export default function ScheduledMessages({ botId, groupId, defaultTimezone }) {
     }
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, [botId, groupId]);
 
   // Keep default timezone in sync if the group setting changes
   useEffect(() => {
     setForm(prev => ({ ...prev, timezone: defaultTimezone || browserTz }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [defaultTimezone]);
 
   const handleCreate = async () => {

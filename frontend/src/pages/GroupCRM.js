@@ -7,7 +7,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableRow, TableContainer, Paper,
 } from '@mui/material';
 import {
-  ArrowBack, Search, People, TrendingUp, Refresh,
+  ArrowBack, Search, People, Refresh,
   Close, Edit, Save, Warning, VerifiedUser, Message,
   EmojiEvents, Label,
 } from '@mui/icons-material';

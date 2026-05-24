@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Box, Typography, Card, CardContent, Grid, Button, Chip,
+  Box, Typography, Card, CardContent, Button, Chip,
   LinearProgress, Table, TableBody, TableCell, TableRow,
-  Skeleton, Divider, Avatar, Tooltip, IconButton,
+  Skeleton, Avatar, Tooltip, IconButton,
 } from '@mui/material';
 import {
   ContentCopy, CheckCircle, EmojiEvents, People, CardGiftcard,
-  HelpOutline, OpenInNew, Share, Telegram,
+  Share, Telegram,
 } from '@mui/icons-material';
 import { referrals as referralsApi } from '../services/api';
 import { track } from '../services/analytics';

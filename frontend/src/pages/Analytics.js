@@ -2,13 +2,13 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box, AppBar, Toolbar, Typography, IconButton, Card, CardContent,
   Grid, CircularProgress, Select, MenuItem, FormControl, InputLabel,
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   Avatar, useMediaQuery, useTheme,
 } from '@mui/material';
 import { ArrowBack, Group, PersonAdd, Shield, TrendingUp } from '@mui/icons-material';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend, BarChart, Bar,
+  PieChart, Pie, Cell, BarChart, Bar,
 } from 'recharts';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';

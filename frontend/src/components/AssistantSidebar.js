@@ -7,16 +7,15 @@
  */
 
 import React, {
-  useState, useEffect, useRef, useCallback, useContext,
+  useState, useEffect, useRef, useCallback,
 } from 'react';
 import {
-  Box, Typography, TextField, IconButton, Chip, Paper, Drawer,
-  Fab, CircularProgress, Alert, Divider, Tooltip, useMediaQuery,
-  useTheme, Badge, Collapse,
+  Box, Typography, TextField, IconButton, Chip, Drawer,
+  Fab, CircularProgress, Alert, Tooltip,
 } from '@mui/material';
 import {
-  Send, SmartToy, ChevronRight, ChevronLeft, Close,
-  Refresh, LightbulbOutlined, ContentCopy, ZoomIn,
+  Send, SmartToy, ChevronRight, ChevronLeft,
+  Refresh, ContentCopy, ZoomIn,
 } from '@mui/icons-material';
 import { assistant } from '../services/api';
 
@@ -32,8 +31,8 @@ function MarkdownText({ content, fontSize = '0.82rem' }) {
           return <Typography key={i} fontSize="0.85rem" fontWeight={700} mt={0.5} mb={0.25}>{renderInline(text)}</Typography>;
         }
         // Bullet list
-        if (/^[•\-\*]\s/.test(line)) {
-          const text = line.replace(/^[•\-\*]\s/, '');
+        if (/^[•\-*]\s/.test(line)) {
+          const text = line.replace(/^[•\-*]\s/, '');
           return (
             <Typography key={i} fontSize={fontSize} sx={{ display: 'flex', gap: 0.5, lineHeight: 1.6 }}>
               <span style={{ flexShrink: 0 }}>•</span>

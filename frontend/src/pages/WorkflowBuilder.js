@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, Chip, CircularProgress,
-  Alert, Grid, IconButton, Select, MenuItem, FormControl, InputLabel,
+  Alert, IconButton, Select, MenuItem, FormControl, InputLabel,
   TextField, Dialog, DialogTitle, DialogContent, DialogActions,
-  Divider, Tooltip, Switch, FormControlLabel,
+  Divider, Tooltip, Switch,
 } from '@mui/material';
 import {
   AutoMode, Add, Delete, ArrowDownward, Edit, PlayArrow,

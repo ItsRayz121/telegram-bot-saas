@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, Chip, CircularProgress,
   Alert, Grid, IconButton, TextField, Dialog, DialogTitle, DialogContent,
-  DialogActions, InputAdornment, LinearProgress, Tooltip, Divider,
+  DialogActions, InputAdornment, Tooltip, Divider,
 } from '@mui/material';
 import {
   LibraryBooks, Upload, Delete, Search, QuestionAnswer,

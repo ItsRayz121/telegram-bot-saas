@@ -5,13 +5,13 @@ import {
   TableContainer, TableHead, TableRow, Paper, Chip, Button, Dialog,
   DialogTitle, DialogContent, DialogActions, MenuItem, Select,
   FormControl, InputLabel, Pagination, InputAdornment, Tabs, Tab,
-  Alert, Tooltip, Divider, Badge, LinearProgress, Stack,
+  Alert, Tooltip, LinearProgress, Stack,
 } from '@mui/material';
 import {
   ArrowBack, Search, Block, CheckCircle, Delete, Groups, SmartToy,
-  LinkOff, Lock, Warning, TrendingUp, People, AttachMoney, Notifications,
-  History, Dns, FolderOpen, Campaign, VerifiedUser, Refresh,
-  CheckCircleOutline, Cancel, MoreHoriz, Circle, Flag,
+  LinkOff, Lock, Warning, TrendingUp, People, AttachMoney,
+  History, FolderOpen, Campaign, VerifiedUser, Refresh,
+  CheckCircleOutline, Cancel, Circle, Flag,
   Security, AccountTree, TrendingDown, Payment,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';

@@ -8,7 +8,7 @@ import {
 } from '@mui/material';
 import {
   Add, Delete, Send, ExpandMore, ExpandLess, CheckCircle,
-  Cancel, ArrowBack, Circle, FilterList, PlayArrow, Pause,
+  Cancel, ArrowBack, FilterList, PlayArrow, Pause,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';

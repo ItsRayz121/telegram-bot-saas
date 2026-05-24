@@ -2,11 +2,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, Chip, CircularProgress,
   Alert, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
-  ToggleButton, ToggleButtonGroup, Menu, MenuItem, IconButton, Tooltip,
+  MenuItem, IconButton, Tooltip,
   Select, FormControl, InputLabel,
 } from '@mui/material';
 import {
-  Add, AutoAwesome, Edit, Delete, EditNote, FilterList, Close,
+  Add, AutoAwesome, Edit, Delete, EditNote, Close,
 } from '@mui/icons-material';
 import { notes, telegramGroups } from '../services/api';
 import { useNavigate } from 'react-router-dom';

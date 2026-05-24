@@ -6,7 +6,7 @@ import {
   DialogTitle, DialogContent, DialogActions,
 } from '@mui/material';
 import {
-  ArrowBack, Send, CheckCircle, Cancel, Gavel,
+  ArrowBack, Send, CheckCircle, Cancel,
   AttachMoney, LocalShipping, Handshake, Warning,
 } from '@mui/icons-material';
 import { useParams, useNavigate } from 'react-router-dom';

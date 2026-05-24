@@ -6,7 +6,7 @@ import {
   Menu, MenuItem, IconButton, Collapse, LinearProgress,
 } from '@mui/material';
 import {
-  Home, Groups, Campaign, AutoMode, Explore, BarChart,
+  Home, Groups, Campaign, AutoMode, Explore,
   CreditCard, Settings, Add, AccountCircle, Logout,
   AdminPanelSettings, ExpandMore, ExpandLess,
   Psychology, ChevronLeft, ChevronRight,
@@ -19,29 +19,6 @@ import { PALETTE } from '../theme';
 
 const SIDEBAR_WIDTH = 240;
 const SIDEBAR_COLLAPSED_WIDTH = 56;
-
-// ── Status dot ─────────────────────────────────────────────────────────────────
-function StatusDot({ status, permissions }) {
-  const hasPerm = permissions && Object.values(permissions).some(Boolean);
-  const color =
-    status === 'active' && hasPerm  ? '#22c55e'
-    : status === 'active' && !hasPerm ? '#f59e0b'
-    : '#ef4444';
-  return (
-    <Box
-      sx={{
-        width: 7, height: 7, borderRadius: '50%', bgcolor: color,
-        flexShrink: 0, ml: 0.5,
-        boxShadow: color === '#22c55e'
-          ? '0 0 6px rgba(34,197,94,0.6)'
-          : color === '#f59e0b'
-          ? '0 0 6px rgba(245,158,11,0.5)'
-          : '0 0 6px rgba(239,68,68,0.5)',
-        animation: 'breathe 2.8s ease-in-out infinite',
-      }}
-    />
-  );
-}
 
 // ── Section label ──────────────────────────────────────────────────────────────
 function SectionLabel({ label }) {
@@ -331,13 +308,12 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
-  const [groups, setGroups] = useState([]);
-  const [groupsLoading, setGroupsLoading] = useState(true);
+  const [, setGroups] = useState([]);
+  const [, setGroupsLoading] = useState(true);
   const [channels, setChannels] = useState([]);
   const [channelsLoading, setChannelsLoading] = useState(true);
   const [user, setUser] = useState(null);
   const [anchorEl, setAnchorEl] = useState(null);
-  const [showAllGroups, setShowAllGroups] = useState(false);
 
   const isActive = useCallback(
     (path, exact = false) =>
@@ -347,7 +323,7 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
 
   const groupActive   = isActive('/groups');
   const channelActive = isActive('/channels');
-  const [groupsOpen, setGroupsOpen]     = useState(groupActive);
+  const [, setGroupsOpen]     = useState(groupActive);
   const [channelsOpen, setChannelsOpen] = useState(channelActive);
 
   const assistantActive = isActive('/hub') || isActive('/workspace');

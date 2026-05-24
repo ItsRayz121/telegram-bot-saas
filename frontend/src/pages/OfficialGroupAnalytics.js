@@ -7,7 +7,7 @@ import {
   TableCell, TableContainer, TableHead, TableRow, Paper,
 } from '@mui/material';
 import {
-  PersonAdd, Shield, CheckCircle, Cancel, BarChart,
+  PersonAdd, Shield, CheckCircle,
   Lock, TrendingUp, Bolt,
 } from '@mui/icons-material';
 import {

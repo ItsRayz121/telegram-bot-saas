@@ -55,7 +55,7 @@ export default function HubWorkspace() {
   const [groups, setGroups] = useState([]);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [botRegOpen, setBotRegOpen] = useState(false);
-  const [allBots, setAllBots] = useState([]);
+  const [, setAllBots] = useState([]);
   const plan = (() => {
     try { return JSON.parse(localStorage.getItem('user') || '{}').subscription_tier || 'free'; } catch { return 'free'; }
   })();
@@ -173,6 +173,7 @@ function HubOverview({ botData, groups, botId }) {
       .then(r => setData(r.data))
       .catch(() => {})
       .finally(() => setLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupFilter]);
 
   useEffect(() => { load(); }, [load]);
@@ -321,6 +322,7 @@ function HubTasks({ groups, botId }) {
       .then(r => setTasks(r.data.tasks || []))
       .catch(() => {})
       .finally(() => setLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, groupFilter]);
 
   useEffect(() => { load(); }, [load]);
@@ -467,6 +469,7 @@ function HubReminders({ groups, botId }) {
       .then(r => setReminders(r.data.reminders || []))
       .catch(() => {})
       .finally(() => setLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter, groupFilter]);
 
   useEffect(() => { load(); }, [load]);
@@ -578,6 +581,7 @@ function HubNotes({ groups, botId }) {
       .then(r => setNotes(r.data.notes || []))
       .catch(() => {})
       .finally(() => setLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceFilter, groupFilter]);
 
   useEffect(() => { load(); }, [load]);
@@ -697,6 +701,7 @@ function HubTemplates({ botId }) {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -906,6 +911,7 @@ function HubKnowledge({ botId }) {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -1208,7 +1214,7 @@ function HubAutomation() {
 
 // ── Settings tab ───────────────────────────────────────────────────────────────
 function HubSettings({ botData, groups, setGroups }) {
-  const [settings, setSettings] = useState(null);
+  const [, setSettings] = useState(null);
   const [personality, setPersonality] = useState('');
   const [language, setLanguage] = useState('en');
   const [sensitivity, setSensitivity] = useState('standard');

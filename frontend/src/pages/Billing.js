@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { openSupportEmail } from '../config/support';
 import {
   Box, AppBar, Toolbar, Typography, Button, Card, CardContent,
@@ -29,27 +29,6 @@ const TIER_PRICES = { free: '$0', pro: '$19/mo', enterprise: '$49/mo' };
 const PROVIDER_LABELS = { nowpayments: 'Crypto (NOWPayments)' };
 const STATUS_COLORS = { confirmed: 'success', pending: 'warning', failed: 'error' };
 
-// Centralized payment provider config — flip `enabled` / `comingSoon` here only.
-const PAYMENT_PROVIDERS = [
-  {
-    id: 'crypto',
-    label: 'Pay with Crypto',
-    sub: 'USDT, BTC, ETH, BNB and 300+ coins via NOWPayments',
-    badge: 'Recommended',
-    badgeColor: 'success',
-    enabled: true,
-    comingSoon: false,
-  },
-  {
-    id: 'card',
-    label: 'Pay with Card',
-    sub: 'Visa, Mastercard, Apple Pay and more',
-    badge: 'Coming Soon',
-    badgeColor: 'default',
-    enabled: false,
-    comingSoon: true,
-  },
-];
 
 export default function Billing() {
   const navigate = useNavigate();
@@ -63,7 +42,6 @@ export default function Billing() {
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [verifying, setVerifying] = useState(false);
-  const [cardLoading, setCardLoading] = useState(false);
   const [cryptoLoading, setCryptoLoading] = useState(false);
 
   const fetchSub = useCallback(async () => {
@@ -138,20 +116,6 @@ export default function Billing() {
       setVerifying(false);
     }
   }, [fetchSub]);
-
-  const handleCardCheckout = useCallback(async (tier, interval = 'monthly') => {
-    setCardLoading(true);
-    try {
-      const res = await billing.createLsCheckout({ tier, interval });
-      if (res.data.checkout_url) {
-        window.location.href = res.data.checkout_url;
-      }
-    } catch (err) {
-      const msg = err?.response?.data?.error || 'Failed to start checkout';
-      toast.error(msg);
-      setCardLoading(false);
-    }
-  }, []);
 
   const handleCryptoCheckout = useCallback(async (targetTier, interval = 'monthly') => {
     setCryptoLoading(true);

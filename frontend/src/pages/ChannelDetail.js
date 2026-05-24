@@ -6,7 +6,7 @@ import {
   Paper, Divider, Stack, ToggleButtonGroup, ToggleButton,
 } from '@mui/material';
 import {
-  ArrowBack, Refresh, People, Visibility, ThumbUp,
+  ArrowBack, Refresh, Visibility, ThumbUp,
   Image, VideoLibrary, Poll, ArticleOutlined,
   TrendingUp, TrendingDown, Remove, Shield, InfoOutlined,
 } from '@mui/icons-material';
@@ -282,7 +282,7 @@ export default function ChannelDetail() {
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      const res = await chApi.refresh(cid);
+      await chApi.refresh(cid);
       // Reload channel with current period filter to get fresh period metrics
       await load();
       await loadPosts(1);

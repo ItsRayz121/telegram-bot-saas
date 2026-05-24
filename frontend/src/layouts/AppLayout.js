@@ -3,7 +3,6 @@ import {
   Box, AppBar, Toolbar, IconButton, Typography, Drawer,
   useMediaQuery, useTheme, Paper, BottomNavigation, BottomNavigationAction,
 } from '@mui/material';
-import { alpha } from '@mui/material/styles';
 import { PALETTE } from '../theme';
 import { Menu as MenuIcon, Home, Groups, AutoMode, Psychology, AccountCircle } from '@mui/icons-material';
 import Sidebar, { SIDEBAR_WIDTH, SIDEBAR_COLLAPSED_WIDTH } from '../components/Sidebar';

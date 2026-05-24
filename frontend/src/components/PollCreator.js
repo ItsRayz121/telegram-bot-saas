@@ -32,10 +32,12 @@ export default function PollCreator({ botId, groupId, defaultTimezone }) {
     } catch { toast.error('Failed to load polls'); }
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, [botId, groupId]);
 
   useEffect(() => {
     setForm(prev => ({ ...prev, timezone: defaultTimezone || browserTz }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [defaultTimezone]);
 
   const addOption = () => {
