@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom';
-import { Box, CircularProgress } from '@mui/material';
+import { Box, CircularProgress, Typography, Button } from '@mui/material';
 import { ThemeProvider } from '@mui/material/styles';
 import telegizer from './theme';
 import CssBaseline from '@mui/material/CssBaseline';
@@ -149,7 +149,19 @@ function AdminRoute({ children }) {
       </Box>
     );
   }
-  if (status === 'denied') return <Navigate to="/dashboard" replace />;
+  if (status === 'denied') {
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', gap: 2, px: 2, textAlign: 'center' }}>
+        <Typography variant="h6" fontWeight={700}>Admin Access Required</Typography>
+        <Typography variant="body2" color="text.secondary">
+          Your account does not have admin privileges. Contact a platform administrator if you believe this is an error.
+        </Typography>
+        <Button variant="outlined" onClick={() => { window.location.href = '/dashboard'; }}>
+          Return to Dashboard
+        </Button>
+      </Box>
+    );
+  }
   return <AppLayout>{children}</AppLayout>;
 }
 

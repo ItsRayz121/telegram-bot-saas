@@ -32,6 +32,7 @@ import {
   PRO_GATED_LABELS,
 } from '../config/featureRegistry';
 import StickyFooter from '../components/StickyFooter';
+import PlanGate from '../components/PlanGate';
 
 function ProBadge() {
   return <Chip label="Pro" color="primary" size="small" sx={{ ml: 1, height: 18, fontSize: '0.65rem', fontWeight: 700 }} />;
@@ -332,6 +333,11 @@ export default function GroupSettings() {
   // Command routing / topic access control
   const [cmdRouting, setCmdRouting] = useState({ topics: [], commands: {}, restricted_reply: 'silent', restricted_message: '⚠️ This command is only available in the {topic} topic.' });
   const [routingSaving, setRoutingSaving] = useState(false);
+
+  const [userTier] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('user') || '{}').subscription_tier || 'free'; }
+    catch { return 'free'; }
+  });
 
   const isMounted = React.useRef(true);
   React.useEffect(() => {
@@ -899,16 +905,18 @@ export default function GroupSettings() {
               </CardContent>
             </Card>
 
-            {/* Smart Moderation — 3-layer AI-powered system */}
+            {/* Smart Moderation — 3-layer AI-powered system (Pro only) */}
             <Card variant="outlined" sx={{ mt: 2 }}>
               <CardContent>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                   <Typography variant="h6" fontWeight={600}>Smart Moderation</Typography>
                   <Chip label="AI-Powered" size="small" color="primary" variant="outlined" />
+                  <ProBadge />
                 </Box>
                 <Typography variant="body2" color="text.secondary" mb={2}>
                   Three-layer system: fast rules → hidden URL detection → AI relevance check. AI is only called when the first two layers pass.
                 </Typography>
+                <PlanGate plan="pro" userTier={userTier} feature="Smart Moderation">
                 <FormControlLabel
                   control={<Switch checked={!!(am.smart_mod || {}).enabled}
                     onChange={(e) => updateSetting('automod.smart_mod.enabled', e.target.checked)} />}
@@ -1056,6 +1064,7 @@ export default function GroupSettings() {
                     </Stack>
                   )}
                 </Box>
+                </PlanGate>
               </CardContent>
             </Card>
 

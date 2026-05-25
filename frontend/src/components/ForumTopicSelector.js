@@ -18,6 +18,9 @@ import { settings as settingsApi } from '../services/api';
  *   helperText   – shown below the selector
  */
 
+// Sentinel for "Main group chat" — avoids MUI treating value="" as "nothing selected"
+const MAIN_CHAT_VALUE = '__main__';
+
 function parseTopicInput(val) {
   if (!val || !val.trim()) return null;
   // Extract from Telegram topic links: t.me/c/CHATID/THREAD_ID or any URL ending in /NUMBER
@@ -54,16 +57,16 @@ export default function ForumTopicSelector({ botId, groupId, value, onChange, la
     : false;
   const hasSavedUnknown = value && topics !== null && !valueInTopics;
 
-  // Select value: '' = main chat, 'manual' = manual entry, number string = topic
+  // Select value: MAIN_CHAT_VALUE = main chat, 'manual' = manual entry, number string = topic
   const selectValue = manualMode
     ? 'manual'
     : value
       ? (valueInTopics ? String(value) : 'manual')
-      : '';
+      : MAIN_CHAT_VALUE;
 
   const handleSelectChange = (e) => {
     const v = e.target.value;
-    if (v === '') {
+    if (v === MAIN_CHAT_VALUE) {
       setManualMode(false);
       onChange(null);
     } else if (v === 'manual') {
@@ -96,7 +99,7 @@ export default function ForumTopicSelector({ botId, groupId, value, onChange, la
         <FormControl size="small" fullWidth>
           <InputLabel>{label}</InputLabel>
           <Select value={selectValue} label={label} onChange={handleSelectChange}>
-            <MenuItem value="">Main group chat</MenuItem>
+            <MenuItem value={MAIN_CHAT_VALUE}>Main group chat</MenuItem>
 
             {loading && (
               <MenuItem disabled>

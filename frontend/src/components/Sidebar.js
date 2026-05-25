@@ -6,11 +6,11 @@ import {
   Menu, MenuItem, IconButton, Collapse, LinearProgress,
 } from '@mui/material';
 import {
-  Home, Groups, Campaign, AutoMode, Explore,
+  Home, Groups, Campaign, AutoMode,
   CreditCard, Settings, Add, AccountCircle, Logout,
   AdminPanelSettings, ExpandMore, ExpandLess,
   Psychology, ChevronLeft, ChevronRight,
-  SmartToy, EmojiEvents, Store, CheckCircle, RadioButtonUnchecked,
+  SmartToy, EmojiEvents, CheckCircle, RadioButtonUnchecked,
 } from '@mui/icons-material';
 import TelegizerLogo from './TelegizerLogo';
 import { telegramGroups as tgApi, auth as authApi, channels as chApi } from '../services/api';
@@ -625,8 +625,6 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
         {/* GROWTH */}
         <SectionLabel label="Growth" />
         <NavItem label="Referrals"   icon={EmojiEvents} path="/referrals"   active={isActive('/referrals')}   onClick={() => nav('/referrals')} />
-        <NavItem label="Marketplace" icon={Store}       path="/marketplace" active={isActive('/marketplace')} onClick={() => nav('/marketplace')} />
-        <NavItem label="Directory"   icon={Explore}     path="/directory"   active={isActive('/directory')}   onClick={() => nav('/directory')} />
 
         {/* ACCOUNT */}
         <SectionLabel label="Account" />
