@@ -3247,6 +3247,33 @@ async def _safe_delete(bot, chat_id, message_id):
 
 # ─── AutoMod helper ───────────────────────────────────────────────────────────
 
+def _msg_preview(msg, max_len=500):
+    """Return a best-effort text preview of a Telegram message before deletion."""
+    text = (msg.text or msg.caption or "").strip()
+    if not text:
+        entities = list(msg.entities or []) + list(msg.caption_entities or [])
+        urls = [getattr(e, "url", None) for e in entities if getattr(e, "url", None)]
+        if urls:
+            text = "  ".join(urls[:3])
+    if not text:
+        if getattr(msg, "photo", None):          text = "📷 Photo"
+        elif getattr(msg, "video", None):        text = "🎥 Video"
+        elif getattr(msg, "voice", None):        text = "🎤 Voice message"
+        elif getattr(msg, "audio", None):        text = "🎵 Audio"
+        elif getattr(msg, "document", None):     text = "📄 Document"
+        elif getattr(msg, "sticker", None):
+            emoji = getattr(msg.sticker, "emoji", "") or ""
+            text = f"🎴 Sticker {emoji}".strip()
+        elif getattr(msg, "animation", None):    text = "🎞️ GIF"
+        elif getattr(msg, "video_note", None):   text = "📹 Video note"
+        elif getattr(msg, "contact", None):      text = "📞 Contact"
+        elif getattr(msg, "location", None):     text = "📍 Location"
+        elif getattr(msg, "poll", None):         text = "📊 Poll"
+    if not text:
+        return None
+    return (text[: max_len - 1] + "…") if len(text) >= max_len else text
+
+
 async def _automod_execute(bot, message, group_id: str, flask_app, rule: str, action: str,
                            mute_minutes: int = 5, notify_seconds: int = 10):
     """Delete the offending message and apply the configured action."""
@@ -3255,7 +3282,7 @@ async def _automod_execute(bot, message, group_id: str, flask_app, rule: str, ac
     username = message.from_user.username if message.from_user else None
     first_name = (message.from_user.first_name or "User") if message.from_user else "User"
     rule_label = rule.replace("_", " ")
-    msg_text = (message.text or message.caption or "").strip()[:500] or None
+    msg_text = _msg_preview(message)
 
     try:
         await bot.delete_message(chat_id=chat_id, message_id=message.message_id)

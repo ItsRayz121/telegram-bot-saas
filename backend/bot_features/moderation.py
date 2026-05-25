@@ -68,6 +68,53 @@ LANGUAGE_RANGES = {
 }
 
 
+def _extract_message_text(message, max_len=500):
+    """Return a best-effort text preview of a Telegram message.
+    Call BEFORE delete_message so the message object is guaranteed fresh.
+    """
+    # 1. Plain text or caption
+    text = (message.text or message.caption or "").strip()
+
+    # 2. Fallback: URLs embedded in TextLink entities (hyperlinked text like "Click here")
+    if not text:
+        entities = list(message.entities or []) + list(message.caption_entities or [])
+        urls = [getattr(e, "url", None) for e in entities if getattr(e, "url", None)]
+        if urls:
+            text = "  ".join(urls[:3])
+
+    # 3. Fallback: descriptive media-type label for non-text messages
+    if not text:
+        if getattr(message, "photo", None):
+            text = "📷 Photo"
+        elif getattr(message, "video", None):
+            text = "🎥 Video"
+        elif getattr(message, "voice", None):
+            text = "🎤 Voice message"
+        elif getattr(message, "audio", None):
+            text = "🎵 Audio"
+        elif getattr(message, "document", None):
+            text = "📄 Document"
+        elif getattr(message, "sticker", None):
+            emoji = getattr(message.sticker, "emoji", "") or ""
+            text = f"🎴 Sticker {emoji}".strip()
+        elif getattr(message, "animation", None):
+            text = "🎞️ GIF/Animation"
+        elif getattr(message, "video_note", None):
+            text = "📹 Video note"
+        elif getattr(message, "contact", None):
+            text = "📞 Contact"
+        elif getattr(message, "location", None):
+            text = "📍 Location"
+        elif getattr(message, "poll", None):
+            text = "📊 Poll"
+        else:
+            return None
+
+    if len(text) >= max_len:
+        text = text[: max_len - 1] + "…"
+    return text or None
+
+
 def normalize_homoglyphs(text):
     return unicodedata.normalize("NFKD", text)
 
@@ -713,6 +760,9 @@ class ModerationSystem:
         user_id = message.from_user.id if message.from_user else None
         username = message.from_user.username if message.from_user else None
 
+        # Capture message content BEFORE deletion — while the object is guaranteed fresh
+        msg_text = _extract_message_text(message)
+
         try:
             await bot.delete_message(chat_id=chat_id, message_id=message.message_id)
         except Exception:
@@ -730,7 +780,6 @@ class ModerationSystem:
         with self.app.app_context():
             from ..database import DatabaseManager
 
-            msg_text = (message.text or message.caption or "")[:500] or None
             if warn or action == "warn":
                 total = DatabaseManager.add_warning(
                     group_id=group.id,

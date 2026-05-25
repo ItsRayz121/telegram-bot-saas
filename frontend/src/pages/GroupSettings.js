@@ -133,6 +133,12 @@ function getMessagePreview(log) {
   return null;
 }
 
+function formatMsgPreview(text, maxLen = 150) {
+  if (!text) return null;
+  const clean = text.replace(/\s+/g, ' ').trim();
+  return clean.length > maxLen ? clean.slice(0, maxLen) + '…' : clean;
+}
+
 function categorizeReason(reason) {
   if (!reason) return '—';
   const r = reason.toLowerCase();
@@ -2791,7 +2797,8 @@ export default function GroupSettings() {
                     const isExpanded = expandedLogId === log.id;
                     const linkType = classifyReason(log.reason);
                     const shortLabel = categorizeReason(log.reason);
-                    const msgPreview = getMessagePreview(log);
+                    const msgPreviewRaw = getMessagePreview(log);
+                    const msgPreview = formatMsgPreview(msgPreviewRaw);
                     const cellSx = { py: 0.5, overflow: 'hidden' };
                     return (
                       <React.Fragment key={log.id}>
@@ -2819,7 +2826,7 @@ export default function GroupSettings() {
                             </Typography>
                           </TableCell>
                           <TableCell sx={{ ...cellSx, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            <Typography variant="caption" color="text.disabled" noWrap title={msgPreview || ''}>
+                            <Typography variant="caption" color="text.disabled" noWrap title={msgPreviewRaw || ''}>
                               {msgPreview || '—'}
                             </Typography>
                           </TableCell>
@@ -2839,10 +2846,10 @@ export default function GroupSettings() {
                                     <Typography variant="caption" color="text.primary">{log.reason}</Typography>
                                   </Box>
                                 )}
-                                {msgPreview && (
+                                {msgPreviewRaw && (
                                   <Box>
                                     <Typography variant="caption" fontWeight={700} color="text.secondary" display="block">Removed Message</Typography>
-                                    <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msgPreview}</Typography>
+                                    <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msgPreviewRaw}</Typography>
                                   </Box>
                                 )}
                                 {linkType && (
@@ -2928,7 +2935,8 @@ export default function GroupSettings() {
                       {filteredWarnings.map((warning) => {
                         const isExpanded = expandedWarnId === warning.id;
                         const shortLabel = categorizeReason(warning.reason);
-                        const warnMsgPreview = warning.message_text || null;
+                        const warnMsgRaw     = warning.message_text || null;
+                        const warnMsgPreview = formatMsgPreview(warnMsgRaw);
                         const cellSx = { py: 0.5, overflow: 'hidden' };
                         return (
                           <React.Fragment key={warning.id}>
@@ -2948,7 +2956,7 @@ export default function GroupSettings() {
                                 </Typography>
                               </TableCell>
                               <TableCell sx={{ ...cellSx, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                <Typography variant="caption" color="text.disabled" noWrap title={warnMsgPreview || ''}>
+                                <Typography variant="caption" color="text.disabled" noWrap title={warnMsgRaw || ''}>
                                   {warnMsgPreview || '—'}
                                 </Typography>
                               </TableCell>
@@ -2980,10 +2988,10 @@ export default function GroupSettings() {
                                         <Typography variant="caption" color="text.primary">{warning.reason}</Typography>
                                       </Box>
                                     )}
-                                    {warnMsgPreview && (
+                                    {warnMsgRaw && (
                                       <Box>
                                         <Typography variant="caption" fontWeight={700} color="text.secondary" display="block">Warned Message</Typography>
-                                        <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{warnMsgPreview}</Typography>
+                                        <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{warnMsgRaw}</Typography>
                                       </Box>
                                     )}
                                     <Typography variant="caption" color="text.disabled">
