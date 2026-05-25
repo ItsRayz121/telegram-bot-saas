@@ -61,11 +61,14 @@ def list_groups():
             TelegramGroup.group_context == None,  # noqa: E711 — SQL IS NULL
         ),
         # Private groups from custom bots belong in Assistant Hub only.
-        # TelegramGroup.username is NULL for private groups (no public @username).
+        # A group is private when username IS NULL *or* username == "" (empty string).
         db.not_(
             db.and_(
                 TelegramGroup.linked_via_bot_type == "custom",
-                TelegramGroup.username == None,  # noqa: E711 — SQL IS NULL
+                db.or_(
+                    TelegramGroup.username.is_(None),    # SQL IS NULL
+                    TelegramGroup.username == "",         # empty string stored by bot_manager
+                ),
             )
         ),
     ).order_by(TelegramGroup.linked_at.desc()).limit(500).all()
@@ -323,6 +326,28 @@ def unlink_group(group_id):
     tg = _owns_group(user.id, group_id)
     if not tg:
         return jsonify({"error": "Group not found"}), 404
+
+    # Deactivate matching HubConnectedGroup so Assistant Hub stays in sync.
+    # The TelegramGroup stores linked_bot_id → CustomBot.id; we follow the FK
+    # chain: CustomBot → hub_bot_id → HubBotIdentity → HubConnectedGroup.
+    if tg.linked_bot_id:
+        try:
+            cb = CustomBot.query.filter_by(id=tg.linked_bot_id).first()
+            if cb and cb.hub_bot_id:
+                from ..assistant.hub_models import HubConnectedGroup as _HCG
+                hub_grp = _HCG.query.filter_by(
+                    bot_id=cb.hub_bot_id,
+                    telegram_group_id=tg.telegram_group_id,
+                    user_id=user.id,
+                ).first()
+                if hub_grp:
+                    hub_grp.is_active = False
+                    hub_grp.pause_reason = "user_unlinked"
+        except Exception as _e:
+            import logging as _log
+            _log.getLogger(__name__).warning(
+                "unlink_group: hub sync failed for tg=%s: %s", group_id, _e
+            )
 
     tg.owner_user_id = None
     tg.bot_status = "pending"

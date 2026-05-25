@@ -193,9 +193,28 @@ def _resolve_bot(user: User, bot_id_param: str | None = None) -> HubBotIdentity:
 
 def _bot_card_data(bot: HubBotIdentity, user_id: int) -> dict:
     """Assemble JSON for a bot card."""
-    group_count = HubConnectedGroup.query.filter_by(
-        bot_id=bot.id, user_id=user_id, is_active=True
-    ).count()
+    # For custom bots, groups live in BOTH telegram_groups (linked via /link_group)
+    # and hub_connected_groups (connected via Hub UI). Count the union by telegram_group_id.
+    if bot.bot_type == "custom" and bot.custom_bot_id:
+        from ..models import TelegramGroup
+        gm_tg_ids = {
+            str(g.telegram_group_id)
+            for g in TelegramGroup.query.filter_by(
+                linked_bot_id=bot.custom_bot_id,
+                is_disabled=False,
+            ).all()
+        }
+        hub_tg_ids = {
+            str(g.telegram_group_id)
+            for g in HubConnectedGroup.query.filter_by(
+                bot_id=bot.id, user_id=user_id, is_active=True
+            ).all()
+        }
+        group_count = len(gm_tg_ids | hub_tg_ids)
+    else:
+        group_count = HubConnectedGroup.query.filter_by(
+            bot_id=bot.id, user_id=user_id, is_active=True
+        ).count()
 
     pending_tasks = HubTask.query.filter_by(
         bot_id=bot.id, user_id=user_id, status="pending"
@@ -1459,6 +1478,44 @@ def _group_dict(group: HubConnectedGroup) -> dict:
     }
 
 
+def _tg_group_as_hub_dict(tg, bot_id: str) -> dict:
+    """Convert a TelegramGroup (Group Management record) into the hub group dict shape.
+
+    Used when a custom bot's group was linked via /link_group but has no
+    HubConnectedGroup row yet.  The id is prefixed 'gm:' so the frontend can
+    distinguish source and route unlink calls correctly.
+    """
+    is_public = bool(tg.username)  # empty-string or None → private
+    return {
+        "id": f"gm:{tg.id}",          # virtual id; not a HubConnectedGroup row
+        "source": "group_management",  # frontend uses this to pick the right unlink endpoint
+        "gm_id": tg.id,               # real TelegramGroup.id for unlink
+        "bot_id": bot_id,
+        "telegram_group_id": tg.telegram_group_id,
+        "group_name": tg.title or "",
+        "display_name": tg.title or "",
+        "category": "community" if is_public else "team",
+        "is_active": tg.bot_status == "active",
+        "pause_reason": None,
+        "consent_confirmed_at": None,
+        "intro_sent": False,
+        "is_public_group": is_public,
+        "is_knowledge_channel": False,
+        "silence_start": None,
+        "silence_end": None,
+        "silence_window_start": None,
+        "silence_window_end": None,
+        "extract_tasks": True,
+        "extract_reminders": True,
+        "extract_decisions": True,
+        "extract_meetings": True,
+        "last_batch_at": None,
+        "joined_at": tg.linked_at.isoformat() if tg.linked_at else None,
+        "member_count": tg.member_count,
+        "linked_via_bot_type": tg.linked_via_bot_type,
+    }
+
+
 def _parse_time(raw):
     if not raw or not isinstance(raw, str):
         return None
@@ -1974,18 +2031,33 @@ def delete_custom_bot(bot_id):
 @hub_bp.route("/bots/<bot_id>/groups", methods=["GET"])
 @jwt_required()
 def list_custom_bot_hub_groups(bot_id):
-    """Return Assistant Hub connected groups for a specific custom bot (assistant_hub context only)."""
+    """Return all groups for a custom bot: union of Hub-native and Group-Management linked groups."""
     user = _current_user()
     bot = HubBotIdentity.query.filter_by(
         id=bot_id, user_id=user.id, bot_type="custom"
     ).first_or_404()
-    groups = HubConnectedGroup.query.filter_by(
+
+    hub_groups = HubConnectedGroup.query.filter_by(
         bot_id=bot.id, user_id=user.id
     ).order_by(HubConnectedGroup.joined_at.desc()).all()
-    return jsonify({
-        "groups": [_group_dict(g) for g in groups],
-        "total": len(groups),
-    })
+
+    hub_tg_ids = {str(g.telegram_group_id) for g in hub_groups}
+    result = [_group_dict(g) for g in hub_groups]
+
+    # Also surface groups that were linked via Group Management (/link_group command)
+    # but have no matching HubConnectedGroup record yet.
+    if bot.custom_bot_id:
+        from ..models import TelegramGroup
+        gm_groups = TelegramGroup.query.filter_by(
+            linked_bot_id=bot.custom_bot_id,
+            is_disabled=False,
+        ).all()
+        for tg in gm_groups:
+            if str(tg.telegram_group_id) not in hub_tg_ids:
+                result.append(_tg_group_as_hub_dict(tg, bot.id))
+
+    result.sort(key=lambda x: x.get("joined_at") or "", reverse=True)
+    return jsonify({"groups": result, "total": len(result)})
 
 
 @hub_bp.route("/bots/<bot_id>/groups/<group_id>", methods=["PATCH"])
@@ -2002,6 +2074,162 @@ def update_custom_bot_group(bot_id, group_id):
             setattr(group, field, data[field])
     db.session.commit()
     return jsonify({"ok": True, "group": _group_dict(group)})
+
+
+@hub_bp.route("/bots/<bot_id>/groups/<group_id>/disconnect", methods=["DELETE"])
+@jwt_required()
+def disconnect_custom_bot_group(bot_id, group_id):
+    """
+    Disconnect a group from a custom bot.
+
+    group_id may be either:
+      - A HubConnectedGroup UUID  → delete from hub_connected_groups and null-out TelegramGroup
+      - A 'gm:<TelegramGroup.id>' virtual id → unlink only from telegram_groups (group was never
+        added to hub_connected_groups, was only linked via /link_group command)
+    """
+    user = _current_user()
+    bot = HubBotIdentity.query.filter_by(
+        id=bot_id, user_id=user.id, bot_type="custom"
+    ).first_or_404()
+
+    delete_data = request.args.get("delete_data", "false").lower() == "true"
+
+    if group_id.startswith("gm:"):
+        # Group-Management-only record: just unlink TelegramGroup
+        real_gm_id = group_id[3:]
+        from ..models import TelegramGroup as _TG
+        tg = _TG.query.filter_by(id=real_gm_id, owner_user_id=user.id).first_or_404()
+        tg.owner_user_id = None
+        tg.bot_status = "pending"
+        tg.linked_bot_id = None
+        tg.linked_via_bot_type = "official"
+        tg.linked_at = None
+        db.session.commit()
+        return jsonify({"ok": True, "source": "group_management"})
+
+    # Hub-native HubConnectedGroup record
+    group = HubConnectedGroup.query.filter_by(
+        id=group_id, bot_id=bot_id, user_id=user.id
+    ).first_or_404()
+
+    if delete_data:
+        HubTask.query.filter_by(source_group_id=group.id, user_id=user.id).delete()
+        HubReminder.query.filter_by(source_group_id=group.id, user_id=user.id).delete()
+        HubDecision.query.filter_by(source_group_id=group.id, user_id=user.id).delete()
+        HubMeeting.query.filter_by(source_group_id=group.id, user_id=user.id).delete()
+        HubNote.query.filter_by(source_group_id=group.id, user_id=user.id).delete()
+
+    telegram_group_id = group.telegram_group_id
+
+    # Also unlink from Group Management side if a TelegramGroup record exists
+    if bot.custom_bot_id:
+        try:
+            from ..models import TelegramGroup as _TG
+            _TG.query.filter_by(
+                linked_bot_id=bot.custom_bot_id,
+                telegram_group_id=telegram_group_id,
+                owner_user_id=user.id,
+            ).update({
+                "linked_bot_id": None,
+                "linked_via_bot_type": "official",
+                "owner_user_id": None,
+                "bot_status": "pending",
+                "linked_at": None,
+            })
+        except Exception as _e:
+            _log.warning("disconnect_custom_bot_group: TG sync failed: %s", _e)
+
+    db.session.delete(group)
+    db.session.commit()
+    _try_leave_group(telegram_group_id)
+    return jsonify({"ok": True, "deleted_data": delete_data, "source": "hub"})
+
+
+# ── Sync / migration endpoint ─────────────────────────────────────────────────
+
+@hub_bp.route("/bots/sync-groups", methods=["POST"])
+@jwt_required()
+def sync_bot_groups():
+    """
+    One-time (idempotent) migration: for every TelegramGroup linked to one of the
+    user's custom bots, ensure a matching HubConnectedGroup row exists so that
+    Assistant Hub and Group Management stay consistent.
+
+    Also fixes the reverse: deactivates HubConnectedGroup rows whose matching
+    TelegramGroup has been unlinked (owner_user_id IS NULL).
+
+    Safe to call repeatedly — creates missing rows only, never overwrites existing ones.
+    """
+    user = _current_user()
+
+    from ..models import TelegramGroup, CustomBot
+    custom_bots = CustomBot.query.filter_by(owner_user_id=user.id).all()
+
+    created = 0
+    deactivated = 0
+
+    for cb in custom_bots:
+        if not cb.hub_bot_id:
+            continue
+
+        bot = HubBotIdentity.query.filter_by(id=cb.hub_bot_id, user_id=user.id).first()
+        if not bot:
+            continue
+
+        # Forward sync: TelegramGroup → HubConnectedGroup
+        tg_groups = TelegramGroup.query.filter_by(
+            linked_bot_id=cb.id,
+            owner_user_id=user.id,
+            is_disabled=False,
+        ).all()
+
+        for tg in tg_groups:
+            existing = HubConnectedGroup.query.filter_by(
+                bot_id=bot.id,
+                telegram_group_id=tg.telegram_group_id,
+                user_id=user.id,
+            ).first()
+            if existing:
+                # Reactivate if it was deactivated due to a stale unlink
+                if not existing.is_active:
+                    existing.is_active = True
+                    existing.pause_reason = None
+                    deactivated -= 1  # undo the count below if we just reactivated
+            else:
+                is_public = bool(tg.username)
+                hcg = HubConnectedGroup(
+                    id=str(uuid.uuid4()),
+                    bot_id=bot.id,
+                    user_id=user.id,
+                    telegram_group_id=tg.telegram_group_id,
+                    group_name=tg.title or "",
+                    is_public_group=is_public,
+                    member_count_at_join=tg.member_count or 0,
+                    is_active=True,
+                    joined_at=tg.linked_at or datetime.utcnow(),
+                )
+                db.session.add(hcg)
+                created += 1
+
+        # Reverse sync: deactivate HubConnectedGroup rows whose TelegramGroup was unlinked
+        hub_groups = HubConnectedGroup.query.filter_by(
+            bot_id=bot.id, user_id=user.id, is_active=True
+        ).all()
+        linked_tg_ids = {tg.telegram_group_id for tg in tg_groups}
+        for hg in hub_groups:
+            if hg.telegram_group_id not in linked_tg_ids:
+                # Check whether the TelegramGroup still belongs to this user at all
+                tg_check = TelegramGroup.query.filter_by(
+                    telegram_group_id=hg.telegram_group_id,
+                    owner_user_id=user.id,
+                ).first()
+                if not tg_check:
+                    hg.is_active = False
+                    hg.pause_reason = "user_unlinked"
+                    deactivated += 1
+
+    db.session.commit()
+    return jsonify({"ok": True, "created": created, "deactivated": deactivated})
 
 
 # ── Sprint 7: Knowledge Cards ─────────────────────────────────────────────────
