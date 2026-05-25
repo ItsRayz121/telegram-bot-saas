@@ -361,7 +361,7 @@ export default function GroupSettings() {
     } catch {
       if (!isMounted.current) return;
       toast.error('Failed to load settings');
-      navigate(isOfficial ? '/my-groups' : `/bot/${botId}`);
+      navigate(isOfficial ? '/groups' : `/bot/${botId}`);
     } finally {
       if (isMounted.current) setLoading(false);
     }
@@ -773,7 +773,7 @@ export default function GroupSettings() {
 
       <AppBar position="sticky" elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
         <Toolbar>
-          <IconButton edge="start" onClick={() => navigate(isOfficial ? '/my-groups' : `/bot/${botId}`)} sx={{ mr: 1 }}>
+          <IconButton edge="start" onClick={() => navigate(isOfficial ? '/groups' : `/bot/${botId}`)} sx={{ mr: 1 }}>
             <ArrowBack />
           </IconButton>
           {/* Breadcrumb nav links */}
@@ -782,7 +782,7 @@ export default function GroupSettings() {
               Dashboard
             </Button>
             <Box component="span" sx={{ color: 'text.disabled', fontSize: '0.75rem' }}>/</Box>
-            <Button size="small" variant="text" onClick={() => navigate(isOfficial ? '/my-groups' : `/bot/${botId}`)} sx={{ fontSize: '0.75rem', px: 1, py: 0.25, minWidth: 0, color: 'text.secondary' }}>
+            <Button size="small" variant="text" onClick={() => navigate(isOfficial ? '/groups' : `/bot/${botId}`)} sx={{ fontSize: '0.75rem', px: 1, py: 0.25, minWidth: 0, color: 'text.secondary' }}>
               {isOfficial ? 'My Groups' : 'Bot Settings'}
             </Button>
             <Box component="span" sx={{ color: 'text.disabled', fontSize: '0.75rem' }}>/</Box>

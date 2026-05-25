@@ -338,15 +338,27 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
     authApi.getMe().then(r => {
       setUser(r.data.user);
       localStorage.setItem('user', JSON.stringify(r.data.user));
-    }).catch(() => {});
+    }).catch((err) => {
+      if (process.env.NODE_ENV !== 'production') console.warn('[sidebar] getMe failed', err);
+    });
   }, []);
 
   useEffect(() => {
-    tgApi.list().then(r => setGroups(r.data.groups || [])).catch(() => {}).finally(() => setGroupsLoading(false));
+    tgApi.list()
+      .then(r => setGroups(r.data.groups || []))
+      .catch((err) => {
+        if (process.env.NODE_ENV !== 'production') console.warn('[sidebar] groups load failed', err);
+      })
+      .finally(() => setGroupsLoading(false));
   }, []);
 
   useEffect(() => {
-    chApi.list().then(r => setChannels(r.data.channels || [])).catch(() => {}).finally(() => setChannelsLoading(false));
+    chApi.list()
+      .then(r => setChannels(r.data.channels || []))
+      .catch((err) => {
+        if (process.env.NODE_ENV !== 'production') console.warn('[sidebar] channels load failed', err);
+      })
+      .finally(() => setChannelsLoading(false));
   }, []);
 
   const plan      = user?.subscription_tier || 'free';

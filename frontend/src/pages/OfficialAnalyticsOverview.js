@@ -113,7 +113,7 @@ export default function OfficialAnalyticsOverview() {
       <TopNav hasSidebar
         breadcrumb={[
           { label: 'Dashboard', path: '/dashboard' },
-          { label: 'My Bots', path: '/my-bots' },
+          { label: 'My Bots', path: '/custom-bots' },
           { label: 'Analytics Overview' },
         ]}
         actions={
@@ -144,7 +144,7 @@ export default function OfficialAnalyticsOverview() {
 
           {data?.total_groups === 0 ? (
             <Alert severity="info" action={
-              <Button color="inherit" size="small" onClick={() => navigate('/my-groups')}>
+              <Button color="inherit" size="small" onClick={() => navigate('/groups')}>
                 My Groups
               </Button>
             }>
@@ -239,7 +239,7 @@ export default function OfficialAnalyticsOverview() {
                                       size="small"
                                       variant="text"
                                       sx={{ fontSize: '0.7rem', px: 1, py: 0 }}
-                                      onClick={() => navigate(`/my-groups/${g.group_id}/analytics`)}
+                                      onClick={() => navigate(`/groups/${g.group_id}/analytics`)}
                                     >
                                       View
                                     </Button>

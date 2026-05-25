@@ -283,7 +283,7 @@ export default function MyBots() {
                       size="small"
                       color={g.bot_status === 'active' ? 'success' : 'default'}
                       variant="outlined"
-                      onClick={() => navigate(`/my-groups/${g.telegram_group_id}`)}
+                      onClick={() => navigate(`/groups/${g.telegram_group_id}`)}
                       sx={{ cursor: 'pointer' }}
                     />
                   ))}
@@ -292,7 +292,7 @@ export default function MyBots() {
                       label={`+${officialGroups.length - 6} more`}
                       size="small"
                       variant="outlined"
-                      onClick={() => navigate('/my-groups')}
+                      onClick={() => navigate('/groups')}
                       sx={{ cursor: 'pointer' }}
                     />
                   )}
@@ -405,7 +405,7 @@ export default function MyBots() {
                           size="small"
                           variant="contained"
                           startIcon={<Groups />}
-                          onClick={() => navigate(`/my-groups?bot_id=${bot.id}`)}
+                          onClick={() => navigate(`/groups?bot_id=${bot.id}`)}
                           sx={{ flex: 1 }}
                         >
                           Groups

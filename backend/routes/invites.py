@@ -35,7 +35,7 @@ def list_invite_links(bot_id, group_id):
         return jsonify({"error": "Group not found"}), 404
 
     time_filter = request.args.get("time_filter", "all")  # 1d | 7d | 30d | all
-    links = InviteLink.query.filter_by(group_id=group.id).order_by(InviteLink.created_at.desc()).all()
+    links = InviteLink.query.filter_by(group_id=group.id).order_by(InviteLink.created_at.desc()).limit(500).all()
 
     result = []
     for link in links:

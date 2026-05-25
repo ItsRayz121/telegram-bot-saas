@@ -4,7 +4,7 @@ import {
   Box, Container, Typography, Card, CardContent, Grid,
   CircularProgress, Alert, Chip, Button, FormControl,
   InputLabel, Select, MenuItem, Table, TableBody,
-  TableCell, TableContainer, TableHead, TableRow, Paper,
+  TableCell, TableContainer, TableHead, TableRow, Paper, Stack,
 } from '@mui/material';
 import {
   PersonAdd, Shield, CheckCircle,
@@ -14,7 +14,6 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, BarChart as RBarChart, Bar,
 } from 'recharts';
-import { toast } from 'react-toastify';
 import { analytics as analyticsApi, telegramGroups, auth } from '../services/api';
 import TopNav from '../components/TopNav';
 
@@ -93,10 +92,12 @@ export default function OfficialGroupAnalytics() {
   const [data, setData] = useState(null);
   const [days, setDays] = useState(30);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [tier, setTier] = useState('free');
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const [groupRes, analyticsRes, meRes] = await Promise.all([
         telegramGroups.get(groupId),
@@ -107,12 +108,11 @@ export default function OfficialGroupAnalytics() {
       setData(analyticsRes.data.analytics);
       setTier(meRes.data.user?.subscription_tier || 'free');
     } catch (err) {
-      toast.error('Failed to load analytics');
-      navigate('/my-groups');
+      setLoadError(err?.response?.data?.error || 'Failed to load analytics');
     } finally {
       setLoading(false);
     }
-  }, [groupId, days, navigate]);
+  }, [groupId, days]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -151,8 +151,8 @@ export default function OfficialGroupAnalytics() {
       <TopNav hasSidebar
         breadcrumb={[
           { label: 'Dashboard', path: '/dashboard' },
-          { label: 'My Groups', path: '/my-groups' },
-          { label: group?.title || groupId, path: `/my-groups/${groupId}` },
+          { label: 'My Groups', path: '/groups' },
+          { label: group?.title || groupId, path: `/groups/${groupId}` },
           { label: 'Analytics' },
         ]}
         actions={
@@ -172,6 +172,20 @@ export default function OfficialGroupAnalytics() {
         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 10 }}>
           <CircularProgress />
         </Box>
+      ) : loadError ? (
+        <Container maxWidth="sm" sx={{ py: 6 }}>
+          <Alert
+            severity="error"
+            action={
+              <Stack direction="row" spacing={1}>
+                <Button color="inherit" size="small" onClick={fetchAll}>Retry</Button>
+                <Button color="inherit" size="small" onClick={() => navigate('/groups')}>Back to groups</Button>
+              </Stack>
+            }
+          >
+            {loadError}
+          </Alert>
+        </Container>
       ) : (
         <Container maxWidth="lg" sx={{ py: 4 }}>
           {/* Title row */}

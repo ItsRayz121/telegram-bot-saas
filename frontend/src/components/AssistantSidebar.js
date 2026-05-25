@@ -136,9 +136,9 @@ function MessageBubble({ msg, onSuggestion, isLast, onExpand }) {
       {/* Suggestion chips — only on last bot message */}
       {!isUser && isLast && msg.suggestions?.length > 0 && (
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.75, pl: 3 }}>
-          {msg.suggestions.map((s, i) => (
+          {msg.suggestions.map((s) => (
             <Chip
-              key={i}
+              key={s.value || s.label}
               label={s.label}
               size="small"
               variant="outlined"

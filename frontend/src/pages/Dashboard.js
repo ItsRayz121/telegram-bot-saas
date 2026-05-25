@@ -114,7 +114,13 @@ function OnboardingCard({ botList, onAddBot, navigate, user, officialGroupCount 
     Object.entries(stepMap).forEach(([step, done]) => {
       if (done && !syncedRef.current.has(step)) {
         syncedRef.current.add(step);
-        auth.markOnboardingStep(step).catch(() => {});
+        auth.markOnboardingStep(step).catch((err) => {
+          // Allow retry on next render if the write failed.
+          syncedRef.current.delete(step);
+          if (process.env.NODE_ENV !== 'production') {
+            console.warn('[onboarding] markOnboardingStep failed', step, err);
+          }
+        });
       }
     });
   }, [user?.email_verified, hasBots, hasGroups]);
@@ -161,7 +167,7 @@ function OnboardingCard({ botList, onAddBot, navigate, user, officialGroupCount 
       label: 'Enable AutoMod to protect your group',
       done: !!(user?.onboarding_completed_steps?.includes('automod_enabled')),
       action: hasGroups ? (
-        <Button size="small" variant="outlined" onClick={() => navigate('/my-groups')} sx={{ mt: 1 }}>
+        <Button size="small" variant="outlined" onClick={() => navigate('/groups')} sx={{ mt: 1 }}>
           Open Group Settings
         </Button>
       ) : null,
@@ -171,7 +177,7 @@ function OnboardingCard({ botList, onAddBot, navigate, user, officialGroupCount 
       label: 'Schedule your first automated post',
       done: !!(user?.onboarding_completed_steps?.includes('schedule_created')),
       action: hasGroups ? (
-        <Button size="small" variant="outlined" onClick={() => navigate('/my-groups')} sx={{ mt: 1 }}>
+        <Button size="small" variant="outlined" onClick={() => navigate('/groups')} sx={{ mt: 1 }}>
           Open Scheduler
         </Button>
       ) : null,
@@ -210,7 +216,7 @@ function OnboardingCard({ botList, onAddBot, navigate, user, officialGroupCount 
               Your bot is live. Send a message in your group and watch AutoMod in action.
             </Typography>
           </Box>
-          <Button size="small" variant="outlined" color="success" onClick={() => navigate('/my-groups')}>
+          <Button size="small" variant="outlined" color="success" onClick={() => navigate('/groups')}>
             Open Groups
           </Button>
           <IconButton size="small" onClick={handleDismiss} sx={{ ml: 1 }}>

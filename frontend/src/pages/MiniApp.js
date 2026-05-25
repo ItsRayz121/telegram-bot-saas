@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box, Typography, Card, CardContent, CircularProgress, Button,
   Avatar, Chip, List, ListItemButton, ListItemText, ListItemAvatar,
@@ -8,7 +8,6 @@ import {
   Groups, OpenInNew, Link as LinkIcon, CheckCircle, ErrorOutline,
   Bolt, CardGiftcard, Settings,
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
 import { useTelegram } from '../contexts/TelegramContext';
 import TelegizerLogo from '../components/TelegizerLogo';
 import MiniAppReferrals from './MiniAppReferrals';
@@ -70,10 +69,19 @@ function NoWebAppScreen() {
 // ── Group item ────────────────────────────────────────────────────────────────
 
 function GroupItem({ group, onClick }) {
-  const { haptic } = useTelegram();
+  const { haptic, tg } = useTelegram();
+  const handle = () => {
+    haptic.impact('light');
+    // Prefer Telegram's openLink so we stay inside Telegram; fall back to onClick handler.
+    const url = `https://telegizer.com/groups/${group.telegram_group_id}`;
+    if (tg?.openLink) {
+      try { tg.openLink(url); return; } catch {}
+    }
+    if (onClick) onClick();
+  };
   return (
     <ListItemButton
-      onClick={() => { haptic.impact('light'); onClick(); }}
+      onClick={handle}
       sx={{ borderRadius: 2, mb: 0.5 }}
     >
       <ListItemAvatar>
@@ -150,8 +158,12 @@ function OnboardingChecklist({ groups }) {
 // ── Home tab ──────────────────────────────────────────────────────────────────
 
 function HomeTab() {
-  const navigate = useNavigate();
-  const { tgUser, appUser, groups, haptic } = useTelegram();
+  const { tgUser, appUser, groups, haptic, tg } = useTelegram();
+  const openOnWeb = (path) => {
+    const url = `https://telegizer.com${path}`;
+    if (tg?.openLink) { try { tg.openLink(url); return; } catch {} }
+    window.open(url, '_blank', 'noopener');
+  };
 
   const plan = appUser?.subscription_tier || 'free';
   const planColor = plan === 'enterprise' ? 'secondary' : plan === 'pro' ? 'primary' : 'default';
@@ -188,7 +200,7 @@ function HomeTab() {
           </Card>
         ))}
         <Card sx={{ flex: 1, cursor: 'pointer' }}
-          onClick={() => { haptic.impact('light'); navigate('/workspace'); }}>
+          onClick={() => { haptic.impact('light'); openOnWeb('/workspace'); }}>
           <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 }, textAlign: 'center' }}>
             <Bolt sx={{ fontSize: 22, color: 'primary.main' }} />
             <Typography variant="caption" color="text.secondary" display="block">Workspace</Typography>
@@ -214,8 +226,7 @@ function HomeTab() {
           ) : (
             <List dense disablePadding>
               {groups.map(g => (
-                <GroupItem key={g.telegram_group_id} group={g}
-                  onClick={() => navigate(`/groups/${g.telegram_group_id}`)} />
+                <GroupItem key={g.telegram_group_id} group={g} />
               ))}
             </List>
           )}
@@ -236,8 +247,20 @@ function HomeTab() {
 // ── Main (tab shell) ──────────────────────────────────────────────────────────
 
 export default function MiniApp() {
-  const { status, authError, haptic } = useTelegram();
+  const { status, authError, haptic, tg } = useTelegram();
   const [tab, setTab] = useState(0);
+
+  // Wire Telegram system BackButton: visible on any non-Home tab, returns to Home.
+  useEffect(() => {
+    const btn = tg?.BackButton;
+    if (!btn) return;
+    if (tab === 0) { try { btn.hide(); } catch {} return; }
+    const handler = () => setTab(0);
+    try { btn.show(); btn.onClick(handler); } catch {}
+    return () => {
+      try { btn.offClick(handler); btn.hide(); } catch {}
+    };
+  }, [tg, tab]);
 
   if (status === 'loading') return <LoadingScreen />;
   if (status === 'not_linked') return <NotLinkedScreen />;
@@ -271,8 +294,8 @@ export default function MiniApp() {
           showLabels
           sx={{ bgcolor: 'background.paper' }}
         >
-          {tabs.map((t, i) => (
-            <BottomNavigationAction key={i} label={t.label} icon={t.icon}
+          {tabs.map((t) => (
+            <BottomNavigationAction key={t.label} label={t.label} icon={t.icon}
               sx={{ '&.Mui-selected': { color: 'primary.main' }, color: 'text.secondary', fontSize: '0.7rem' }}
             />
           ))}

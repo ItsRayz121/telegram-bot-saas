@@ -8,6 +8,9 @@ import { useNavigate } from 'react-router-dom';
 const TIER_ORDER = { free: 0, pro: 1, enterprise: 2 };
 
 function userMeetsPlan(userTier, requiredPlan) {
+  if (userTier && !(userTier in TIER_ORDER) && process.env.NODE_ENV !== 'production') {
+    console.warn('[PlanGate] unknown user tier from backend:', userTier);
+  }
   return (TIER_ORDER[userTier] || 0) >= (TIER_ORDER[requiredPlan] || 0);
 }
 

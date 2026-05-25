@@ -3,7 +3,7 @@ import {
   Box, AppBar, Toolbar, Typography, IconButton, Card, CardContent,
   Grid, CircularProgress, Select, MenuItem, FormControl, InputLabel,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  Avatar, useMediaQuery, useTheme,
+  Avatar, useMediaQuery, useTheme, Alert, Button,
 } from '@mui/material';
 import { ArrowBack, Group, PersonAdd, Shield, TrendingUp } from '@mui/icons-material';
 import {
@@ -11,7 +11,6 @@ import {
   PieChart, Pie, Cell, BarChart, Bar,
 } from 'recharts';
 import { useNavigate, useParams } from 'react-router-dom';
-import { toast } from 'react-toastify';
 import { analytics } from '../services/api';
 
 const PIE_COLORS = ['#2196f3', '#7c4dff', '#00bcd4', '#4caf50', '#ff9800', '#f44336'];
@@ -61,19 +60,20 @@ export default function GroupAnalytics() {
   const [data, setData] = useState(null);
   const [days, setDays] = useState(30);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const res = await analytics.getGroupAnalytics(botId, groupId, { days });
       setData(res.data.analytics);
-    } catch {
-      toast.error('Failed to load analytics');
-      navigate(`/bot/${botId}`);
+    } catch (err) {
+      setLoadError(err?.response?.data?.error || 'Failed to load analytics');
     } finally {
       setLoading(false);
     }
-  }, [botId, groupId, days, navigate]);
+  }, [botId, groupId, days]);
 
   useEffect(() => {
     fetchData();
@@ -114,6 +114,20 @@ export default function GroupAnalytics() {
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}>
           <CircularProgress />
+        </Box>
+      ) : loadError ? (
+        <Box sx={{ maxWidth: 600, mx: 'auto', p: { xs: 2, md: 3 } }}>
+          <Alert
+            severity="error"
+            action={
+              <>
+                <Button color="inherit" size="small" onClick={fetchData}>Retry</Button>
+                <Button color="inherit" size="small" onClick={() => navigate(`/bot/${botId}`)}>Back</Button>
+              </>
+            }
+          >
+            {loadError}
+          </Alert>
         </Box>
       ) : (
         <Box sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 2, md: 3 } }}>

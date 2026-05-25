@@ -46,7 +46,7 @@ def list_polls(bot_id, group_id):
     _, group = _get_group(user, bot_id, group_id)
     if not group:
         return jsonify({"error": "Group not found"}), 404
-    polls = Poll.query.filter_by(group_id=group.id).order_by(Poll.created_at.desc()).all()
+    polls = Poll.query.filter_by(group_id=group.id).order_by(Poll.created_at.desc()).limit(500).all()
     return jsonify({"polls": [p.to_dict() for p in polls]})
 
 

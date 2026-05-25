@@ -63,9 +63,9 @@ export default function ComingSoonPage({ icon: Icon, title, subtitle, features =
         {/* Feature preview cards */}
         {features.length > 0 && (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, textAlign: 'left' }}>
-            {features.map((f, i) => (
+            {features.map((f) => (
               <Card
-                key={i}
+                key={f.title || f.label || f.name}
                 sx={{
                   opacity: 0.65, border: '1px dashed',
                   borderColor: PALETTE.border2,

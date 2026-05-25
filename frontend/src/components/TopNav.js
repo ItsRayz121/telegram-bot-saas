@@ -116,8 +116,8 @@ function SupportPopover() {
 const NAV_ITEMS = [
   { label: 'Home',      path: '/',          icon: Home,      exact: true },
   { label: 'Dashboard', path: '/dashboard', icon: Dashboard  },
-  { label: 'My Groups', path: '/my-groups', icon: Groups     },
-  { label: 'My Bots',   path: '/my-bots',   icon: SmartToy   },
+  { label: 'My Groups', path: '/groups',      icon: Groups     },
+  { label: 'My Bots',   path: '/custom-bots', icon: SmartToy   },
   { label: 'Billing',   path: '/billing',   icon: CreditCard },
 ];
 

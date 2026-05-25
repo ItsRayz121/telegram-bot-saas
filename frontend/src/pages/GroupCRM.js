@@ -5,6 +5,7 @@ import {
   InputLabel, CircularProgress, Alert, Avatar, Stack, Divider,
   Drawer, IconButton, Tooltip, LinearProgress,
   Table, TableBody, TableCell, TableHead, TableRow, TableContainer, Paper,
+  useMediaQuery, useTheme,
 } from '@mui/material';
 import {
   ArrowBack, Search, People, Refresh,
@@ -263,6 +264,8 @@ function OverviewCards({ overview, computing, onCompute }) {
 export default function GroupCRM() {
   const { id: botId, groupId } = useParams();
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isXs = useMediaQuery(theme.breakpoints.down('sm'));
 
   const [group, setGroup] = useState(null);
   const [overview, setOverview] = useState(null);
@@ -506,16 +509,16 @@ export default function GroupCRM() {
             </Box>
           ) : (
             <TableContainer component={Paper} elevation={0} sx={{ bgcolor: 'transparent', overflowX: 'auto' }}>
-              <Table size="small" sx={{ minWidth: 560 }}>
+              <Table size="small" sx={{ minWidth: isXs ? 0 : 560 }}>
                 <TableHead>
                   <TableRow>
                     <TableCell sx={{ fontWeight: 600, fontSize: '0.72rem', color: 'text.secondary' }}>Member</TableCell>
                     <TableCell sx={{ fontWeight: 600, fontSize: '0.72rem', color: 'text.secondary' }}>Score</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 600, fontSize: '0.72rem', color: 'text.secondary' }}>Msgs</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 600, fontSize: '0.72rem', color: 'text.secondary' }}>XP</TableCell>
+                    {!isXs && <TableCell align="right" sx={{ fontWeight: 600, fontSize: '0.72rem', color: 'text.secondary' }}>Msgs</TableCell>}
+                    {!isXs && <TableCell align="right" sx={{ fontWeight: 600, fontSize: '0.72rem', color: 'text.secondary' }}>XP</TableCell>}
                     <TableCell align="right" sx={{ fontWeight: 600, fontSize: '0.72rem', color: 'text.secondary' }}>Warns</TableCell>
-                    <TableCell sx={{ fontWeight: 600, fontSize: '0.72rem', color: 'text.secondary' }}>Tags</TableCell>
-                    <TableCell sx={{ fontWeight: 600, fontSize: '0.72rem', color: 'text.secondary' }}>Joined</TableCell>
+                    {!isXs && <TableCell sx={{ fontWeight: 600, fontSize: '0.72rem', color: 'text.secondary' }}>Tags</TableCell>}
+                    {!isXs && <TableCell sx={{ fontWeight: 600, fontSize: '0.72rem', color: 'text.secondary' }}>Joined</TableCell>}
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -538,34 +541,42 @@ export default function GroupCRM() {
                             {m.is_verified && <VerifiedUser sx={{ fontSize: 13, color: 'primary.main' }} />}
                           </Box>
                         </TableCell>
-                        <TableCell sx={{ minWidth: 130 }}>
+                        <TableCell sx={{ minWidth: isXs ? 90 : 130 }}>
                           <ScoreBar score={m.engagement_score} />
                         </TableCell>
-                        <TableCell align="right">
-                          <Typography variant="caption">{(m.message_count || 0).toLocaleString()}</Typography>
-                        </TableCell>
-                        <TableCell align="right">
-                          <Typography variant="caption">{m.xp || 0}</Typography>
-                        </TableCell>
+                        {!isXs && (
+                          <TableCell align="right">
+                            <Typography variant="caption">{(m.message_count || 0).toLocaleString()}</Typography>
+                          </TableCell>
+                        )}
+                        {!isXs && (
+                          <TableCell align="right">
+                            <Typography variant="caption">{m.xp || 0}</Typography>
+                          </TableCell>
+                        )}
                         <TableCell align="right">
                           {m.warnings > 0 && (
                             <Chip label={m.warnings} size="small" color="error" sx={{ height: 16, fontSize: '0.65rem', fontWeight: 700 }} />
                           )}
                         </TableCell>
-                        <TableCell>
-                          <Stack direction="row" spacing={0.5} flexWrap="wrap">
-                            {(m.crm_tags || []).map(t => (
-                              <Chip key={t} label={t} size="small"
-                                color={TAG_COLORS[t] || 'default'}
-                                sx={{ height: 16, fontSize: '0.58rem' }} />
-                            ))}
-                          </Stack>
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="caption" color="text.disabled">
-                            {m.joined_at ? new Date(m.joined_at).toLocaleDateString() : '—'}
-                          </Typography>
-                        </TableCell>
+                        {!isXs && (
+                          <TableCell>
+                            <Stack direction="row" spacing={0.5} flexWrap="wrap">
+                              {(m.crm_tags || []).map(t => (
+                                <Chip key={t} label={t} size="small"
+                                  color={TAG_COLORS[t] || 'default'}
+                                  sx={{ height: 16, fontSize: '0.58rem' }} />
+                              ))}
+                            </Stack>
+                          </TableCell>
+                        )}
+                        {!isXs && (
+                          <TableCell>
+                            <Typography variant="caption" color="text.disabled">
+                              {m.joined_at ? new Date(m.joined_at).toLocaleDateString() : '—'}
+                            </Typography>
+                          </TableCell>
+                        )}
                       </TableRow>
                     );
                   })}

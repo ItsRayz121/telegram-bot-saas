@@ -68,7 +68,7 @@ def list_groups():
                 TelegramGroup.username == None,  # noqa: E711 — SQL IS NULL
             )
         ),
-    ).order_by(TelegramGroup.linked_at.desc()).all()
+    ).order_by(TelegramGroup.linked_at.desc()).limit(500).all()
 
     groups_data = [g.to_dict() for g in groups]
 
@@ -863,7 +863,7 @@ def list_official_polls(group_id):
         return jsonify({"error": "Group not found"}), 404
     polls = OfficialPoll.query.filter_by(
         telegram_group_id=group_id
-    ).order_by(OfficialPoll.scheduled_at.asc()).all()
+    ).order_by(OfficialPoll.scheduled_at.asc()).limit(500).all()
     return jsonify([p.to_dict() for p in polls])
 
 
@@ -939,7 +939,7 @@ def list_knowledge_docs(group_id):
 
     docs = KnowledgeDocument.query.filter_by(
         telegram_group_id=group_id
-    ).order_by(KnowledgeDocument.created_at.desc()).all()
+    ).order_by(KnowledgeDocument.created_at.desc()).limit(500).all()
     return jsonify({"documents": [d.to_dict() for d in docs]}), 200
 
 
@@ -1011,7 +1011,7 @@ def list_auto_responses(group_id):
 
     responses = AutoResponse.query.filter_by(
         telegram_group_id=group_id
-    ).order_by(AutoResponse.created_at.asc()).all()
+    ).order_by(AutoResponse.created_at.asc()).limit(500).all()
     return jsonify({"auto_responses": [r.to_dict() for r in responses]}), 200
 
 

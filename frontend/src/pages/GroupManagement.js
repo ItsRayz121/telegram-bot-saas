@@ -53,7 +53,7 @@ export default function GroupManagement() {
       setCommands(cmdRes.data.commands || []);
     } catch {
       toast.error('Failed to load group');
-      navigate('/my-groups');
+      navigate('/groups');
     } finally {
       setLoading(false);
     }
@@ -176,7 +176,7 @@ export default function GroupManagement() {
       <Container maxWidth="lg">
         {/* Header */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 4 }}>
-          <IconButton onClick={() => navigate('/my-groups')}><ArrowBack /></IconButton>
+          <IconButton onClick={() => navigate('/groups')}><ArrowBack /></IconButton>
           <Box sx={{ flex: 1 }}>
             <Typography variant="h5" fontWeight={700}>{group.title}</Typography>
             <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>

@@ -22,6 +22,10 @@ def make_celery(app=None):
         result_serializer="json",
         timezone="UTC",
         enable_utc=True,
+        # Global timeouts so a hung Telegram/Gemini call cannot pin a worker.
+        # Per-task overrides can still be set via @celery.task(soft_time_limit=...).
+        task_soft_time_limit=120,
+        task_time_limit=180,
         beat_schedule={
             "send-scheduled-messages": {
                 "task": "backend.scheduler.send_scheduled_messages",
