@@ -13,7 +13,7 @@ import {
   HelpOutline, ExpandMore, ExpandLess, ArrowBack,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
-import { telegramGroups, settings as settingsApi } from '../services/api';
+import { telegramGroups, bots as botsApi, settings as settingsApi } from '../services/api';
 import { track } from '../services/analytics';
 import TopNav from '../components/TopNav';
 
@@ -171,7 +171,11 @@ export default function MyGroups() {
   const handleUnlink = async () => {
     if (!unlinkTarget) return;
     try {
-      await telegramGroups.unlink(unlinkTarget.telegram_group_id);
+      if (unlinkTarget.source === 'legacy' && unlinkTarget.legacy_bot_id) {
+        await botsApi.disconnectGroup(unlinkTarget.legacy_bot_id, unlinkTarget.id);
+      } else {
+        await telegramGroups.unlink(unlinkTarget.telegram_group_id);
+      }
       toast.success(`Group "${unlinkTarget.title}" unlinked`);
       setUnlinkTarget(null);
       load({ silent: true });
@@ -508,15 +512,15 @@ export default function MyGroups() {
                         >
                           Analytics
                         </Button>
-                        <Tooltip title={g.source === 'legacy' ? 'Use the bot page to manage legacy groups' : isCustomBot ? 'Unlink from custom bot' : 'Unlink group'}>
+                        <Tooltip title={g.source === 'legacy' && !g.legacy_bot_id ? 'Use the bot page to manage legacy groups' : isCustomBot ? 'Unlink from custom bot' : 'Unlink group'}>
                           <span style={{ flex: 1, display: 'flex' }}>
                             <Button
                               size="small"
-                              variant={g.source === 'legacy' ? 'outlined' : 'outlined'}
+                              variant="outlined"
                               color="error"
                               startIcon={<LinkOff sx={{ fontSize: '0.95rem !important' }} />}
                               onClick={() => setUnlinkTarget(g)}
-                              disabled={g.source === 'legacy'}
+                              disabled={g.source === 'legacy' && !g.legacy_bot_id}
                               sx={{
                                 flex: 1,
                                 fontSize: '0.72rem',

@@ -352,6 +352,8 @@ def unlink_group(group_id):
     tg.owner_user_id = None
     tg.bot_status = "pending"
     tg.linked_at = None
+    tg.linked_bot_id = None
+    tg.linked_via_bot_type = "official"
     db.session.commit()
 
     ev = BotEvent(
