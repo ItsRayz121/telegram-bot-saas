@@ -2485,6 +2485,19 @@ class BotInstance:
                     pass
             return
 
+        # Hub group-type disambiguation (custom bots, small private groups).
+        if data.startswith("hub_classify:"):
+            try:
+                from .assistant.hub_consent import handle_classify_callback
+                await handle_classify_callback(update, context, self.app_context)
+            except Exception as _ce:
+                logger.warning("Hub classify callback error: %s", _ce)
+                try:
+                    await query.answer()
+                except Exception:
+                    pass
+            return
+
         await query.answer()
 
         if parts[0] == "verify":
@@ -2564,23 +2577,40 @@ class BotInstance:
 
             if is_custom_bot:
                 # Custom bots NEVER auto-add to Group Management.
-                # Groups only appear in Group Management when the user explicitly
-                # runs /linkgroup. Auto-joined groups go to Assistant Hub only.
-                # Consent DM is sent ONLY for private groups (no public @username).
+                # For private groups:
+                #   < 10 members → disambiguation DM (Hub vs Community Moderation)
+                #   ≥ 10 members → Hub consent DM directly (larger private groups lean Hub)
+                # Public groups are ignored here; user runs /linkgroup explicitly.
                 is_private = not chat.username
                 if is_private and hub_bot_id and added_by:
+                    member_count = 0
                     try:
-                        from .assistant.hub_consent import handle_bot_added_to_group
-                        await handle_bot_added_to_group(
-                            bot=context.bot,
-                            flask_app=self.app_context,
-                            chat=chat,
-                            added_by_tg_id=str(added_by.id),
-                            hub_bot_id=hub_bot_id,
-                        )
+                        member_count = await context.bot.get_chat_member_count(chat.id)
+                    except Exception:
+                        pass
+                    try:
+                        if member_count < 10:
+                            from .assistant.hub_consent import send_group_type_dm
+                            await send_group_type_dm(
+                                bot=context.bot,
+                                flask_app=self.app_context,
+                                chat=chat,
+                                added_by_tg_id=str(added_by.id),
+                                hub_bot_id=hub_bot_id,
+                                member_count=member_count,
+                            )
+                        else:
+                            from .assistant.hub_consent import handle_bot_added_to_group
+                            await handle_bot_added_to_group(
+                                bot=context.bot,
+                                flask_app=self.app_context,
+                                chat=chat,
+                                added_by_tg_id=str(added_by.id),
+                                hub_bot_id=hub_bot_id,
+                            )
                     except Exception as _hub_e:
                         logger.warning(
-                            "Custom bot Hub consent flow failed for chat %s: %s", chat.id, _hub_e
+                            "Custom bot group flow failed for chat %s: %s", chat.id, _hub_e
                         )
             else:
                 # Official bot — create Group Management record as before.

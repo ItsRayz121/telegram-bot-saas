@@ -15,6 +15,11 @@ Consent callback_data prefixes:
   hub_consent:public_cancel:<telegram_group_id> — public-group warning: Cancel
   hub_intro:send:<telegram_group_id>         — user tapped [✓ Send Brief Introduction]
   hub_intro:skip:<telegram_group_id>         — user tapped [Skip]
+
+Disambiguation callback_data prefixes (custom bots, small private groups):
+  hub_classify:hub:<telegram_group_id>:<bot_tag>    — user chose Assistant Hub
+  hub_classify:mod:<telegram_group_id>:<bot_tag>    — user chose Community Moderation
+  hub_classify:cancel:<telegram_group_id>:<bot_tag> — user chose Remove Me
 """
 import logging
 import uuid
@@ -345,6 +350,221 @@ async def _confirm_consent(
         )
     except Exception:
         pass
+
+
+# ── Custom bot: small private group disambiguation ────────────────────────────
+
+async def send_group_type_dm(
+    bot, flask_app, chat, added_by_tg_id: str,
+    hub_bot_id: str | None = None,
+    member_count: int = 0,
+):
+    """
+    Send a disambiguation DM when a custom bot is added to a small private group
+    (< 10 members). Asks the owner to choose between Assistant Hub and Community
+    Moderation so the group lands in the right section of the dashboard.
+    """
+    if not added_by_tg_id:
+        return
+
+    with flask_app.app_context():
+        user = _user_by_tg_id(added_by_tg_id)
+        if not user:
+            _log.debug("Group classify DM: no Telegizer account for tg_id=%s", added_by_tg_id)
+            return
+
+        from ..assistant.hub_models import HubConnectedGroup
+        from ..models import TelegramGroup
+
+        telegram_group_id = chat.id
+        group_name = chat.title or f"Group {telegram_group_id}"
+
+        # Skip if already classified in either system
+        existing_hub = HubConnectedGroup.query.filter_by(
+            telegram_group_id=telegram_group_id,
+            user_id=user.id,
+        ).first()
+        existing_mod = TelegramGroup.query.filter_by(
+            telegram_group_id=str(telegram_group_id),
+            owner_user_id=user.id,
+            bot_status="active",
+        ).first()
+        if existing_hub or existing_mod:
+            return
+
+    member_str = f"{member_count} member{'s' if member_count != 1 else ''}"
+    text = (
+        f"You've added me to *{_esc(group_name)}* ({member_str}).\n\n"
+        f"This is a small private group. How should I be used here?\n\n"
+        f"🤖 *Assistant Hub* — I observe silently and surface tasks, reminders, and meetings "
+        f"in your personal dashboard. No moderation.\n\n"
+        f"🛡 *Community Moderation* — I manage the group with welcome messages, rules enforcement, "
+        f"anti-spam, and member verification."
+    )
+
+    bot_tag_str = hub_bot_id if hub_bot_id else "official"
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton(
+                "🤖 Assistant Hub",
+                callback_data=f"hub_classify:hub:{telegram_group_id}:{bot_tag_str}",
+            ),
+            InlineKeyboardButton(
+                "🛡 Community Moderation",
+                callback_data=f"hub_classify:mod:{telegram_group_id}:{bot_tag_str}",
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                "✗ Remove Me",
+                callback_data=f"hub_classify:cancel:{telegram_group_id}:{bot_tag_str}",
+            ),
+        ],
+    ])
+
+    try:
+        await bot.send_message(
+            chat_id=int(added_by_tg_id),
+            text=text,
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=keyboard,
+        )
+    except (Forbidden, BadRequest) as e:
+        _log.warning("Group classify DM failed for tg_user=%s: %s", added_by_tg_id, e)
+
+
+async def handle_classify_callback(update, context, flask_app):
+    """
+    Handles hub_classify:* callbacks from the group type disambiguation DM.
+    Returns True if it consumed the callback, False otherwise.
+    """
+    query = update.callback_query
+    if not query:
+        return False
+
+    data = query.data or ""
+    if not data.startswith("hub_classify:"):
+        return False
+
+    await query.answer()
+
+    parts = data.split(":")
+    if len(parts) < 4:
+        return True
+
+    action = parts[1]           # "hub", "mod", or "cancel"
+    telegram_group_id = int(parts[2])
+    bot_tag = parts[3]
+    hub_bot_id = None if bot_tag == "official" else bot_tag
+    telegram_user_id = query.from_user.id
+
+    if action == "hub":
+        # User chose Assistant Hub — send the standard consent DM
+        group_name = f"Group {telegram_group_id}"
+        member_count = 0
+        try:
+            chat_obj = await context.bot.get_chat(telegram_group_id)
+            group_name = chat_obj.title or group_name
+            member_count = await context.bot.get_chat_member_count(telegram_group_id)
+        except Exception:
+            pass
+
+        await query.edit_message_text(
+            f"🤖 Setting up *{_esc(group_name)}* as an Assistant Hub group...",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        await _send_consent_dm(
+            bot=context.bot,
+            telegram_user_id=telegram_user_id,
+            telegram_group_id=telegram_group_id,
+            group_name=group_name,
+            is_public=False,
+            is_large=False,
+            member_count=member_count,
+            hub_bot_id=hub_bot_id,
+        )
+
+    elif action == "mod":
+        await _create_group_management_record(
+            query=query,
+            bot=context.bot,
+            flask_app=flask_app,
+            telegram_user_id=telegram_user_id,
+            telegram_group_id=telegram_group_id,
+            hub_bot_id=hub_bot_id,
+        )
+
+    elif action == "cancel":
+        await query.edit_message_text("Got it. I'll leave the group now. No data was collected.")
+        try:
+            await context.bot.leave_chat(telegram_group_id)
+        except Exception as e:
+            _log.debug("Hub classify: leave_chat failed for %s: %s", telegram_group_id, e)
+
+    return True
+
+
+async def _create_group_management_record(
+    query, bot, flask_app,
+    telegram_user_id: int, telegram_group_id: int,
+    hub_bot_id: str | None = None,
+):
+    """Create a TelegramGroup record for the Community Moderation path."""
+    group_name = f"Group {telegram_group_id}"
+    try:
+        chat_obj = await bot.get_chat(telegram_group_id)
+        group_name = chat_obj.title or group_name
+    except Exception:
+        pass
+
+    with flask_app.app_context():
+        from ..models import db, TelegramGroup
+        from datetime import datetime as _dt
+
+        user = _user_by_tg_id(str(telegram_user_id))
+        if not user:
+            await query.edit_message_text(
+                "⚠️ Could not find your Telegizer account. "
+                "Please connect your Telegram account at telegizer.com/settings."
+            )
+            return
+
+        group_id_str = str(telegram_group_id)
+        tg = TelegramGroup.query.filter_by(telegram_group_id=group_id_str).first()
+        if not tg:
+            tg = TelegramGroup(
+                telegram_group_id=group_id_str,
+                title=group_name,
+                bot_status="active",
+                owner_user_id=user.id,
+                linked_at=_dt.utcnow(),
+                linked_via_bot_type="custom",
+                group_context="group_management",
+            )
+            db.session.add(tg)
+        elif not tg.owner_user_id or tg.bot_status != "active":
+            tg.owner_user_id = user.id
+            tg.bot_status = "active"
+            tg.linked_at = _dt.utcnow()
+            tg.linked_via_bot_type = "custom"
+            tg.group_context = "group_management"
+
+        db.session.commit()
+
+        from ..config import Config as _Config
+        frontend = getattr(_Config, "FRONTEND_URL", "https://telegizer.com")
+
+    await query.edit_message_text(
+        f"✅ *{_esc(group_name)}* added to Community Moderation.\n\n"
+        f"Open your dashboard to configure moderation settings for this group.",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton(
+                "⚙️ Open Dashboard",
+                url=f"{frontend}/group-management",
+            )],
+        ]),
+    )
 
 
 async def _cancel_consent(query, bot, flask_app, telegram_user_id: int, telegram_group_id: int):
