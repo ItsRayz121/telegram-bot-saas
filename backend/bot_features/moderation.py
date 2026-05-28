@@ -759,6 +759,7 @@ class ModerationSystem:
         chat_id = message.chat.id
         user_id = message.from_user.id if message.from_user else None
         username = message.from_user.username if message.from_user else None
+        first_name = message.from_user.first_name if message.from_user else None
 
         # Capture message content BEFORE deletion — while the object is guaranteed fresh
         msg_text = _extract_message_text(message)
@@ -793,7 +794,7 @@ class ModerationSystem:
                 try:
                     msg = await bot.send_message(
                         chat_id=chat_id,
-                        text=f"⚠️ {username or user_id}: {reason} (Warning {total})",
+                        text=f"⚠️ {('@' + username) if username else (first_name or str(user_id))}: {reason} (Warning {total})",
                     )
                     if auto_delete_warn and msg:
                         _asyncio.ensure_future(self._delayed_delete(bot, chat_id, msg.message_id, auto_delete_warn))
@@ -852,8 +853,8 @@ class ModerationSystem:
         if normalized == text:
             return False  # nothing was obfuscated
 
-        username = message.from_user.username or str(message.from_user.id) if message.from_user else "user"
-        topic = cfg.get("group_topic", "")
+        username = ('@' + message.from_user.username) if (message.from_user and message.from_user.username) else ((message.from_user.first_name if message.from_user else None) or "user")
+        topic = group.group_name or ""
 
         # Re-check external links on normalized text
         ext_cfg = settings.get("external_links", {})
@@ -894,8 +895,8 @@ class ModerationSystem:
             return False
 
         if PROMO_PATTERNS.search(text):
-            username = message.from_user.username or str(message.from_user.id) if message.from_user else "user"
-            topic = cfg.get("group_topic", "")
+            username = ('@' + message.from_user.username) if (message.from_user and message.from_user.username) else ((message.from_user.first_name if message.from_user else None) or "user")
+            topic = group.group_name or ""
             msg = format_violation_message(
                 username,
                 "promotional content, advertisements, and referral solicitation are not allowed in this group",
