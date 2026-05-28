@@ -116,9 +116,15 @@ class Config:
     MAX_DAILY_AI_SPEND_USD = float(os.environ.get("MAX_DAILY_AI_SPEND_USD", "50"))
 
 
-    # Official Telegizer shared bot (serves all users/groups)
+    # Official Telegizer shared bot (management/community features)
     TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
     TELEGRAM_BOT_USERNAME = os.environ.get("TELEGRAM_BOT_USERNAME", "telegizer_bot")
+
+    # Telegizer Echo — dedicated official assistant bot (Observer/Hub features)
+    # Set ECHO_BOT_TOKEN and ECHO_BOT_USERNAME in Railway → Variables.
+    # When not set, the assistant hub falls back to TELEGRAM_BOT_USERNAME for display.
+    ECHO_BOT_TOKEN = os.environ.get("ECHO_BOT_TOKEN", "")
+    ECHO_BOT_USERNAME = os.environ.get("ECHO_BOT_USERNAME", "")
     _admin_env = os.environ.get("ADMIN_EMAILS", "")
     ADMIN_EMAILS = [e.strip().lower() for e in _admin_env.split(",") if e.strip()]
 

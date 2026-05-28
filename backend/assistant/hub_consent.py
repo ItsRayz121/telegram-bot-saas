@@ -227,18 +227,19 @@ async def _confirm_consent(
                 await query.edit_message_text("⚠️ Custom bot not found. It may have been deleted.")
                 return
         else:
-            # Official bot path — lazy-create if not exists
+            # Official (Echo) bot path — lazy-create if not exists
             bot_identity = HubBotIdentity.query.filter_by(
                 user_id=user.id, bot_type="official"
             ).first()
             if not bot_identity:
                 from ..config import Config as _Config
+                _echo_username = _Config.ECHO_BOT_USERNAME or _Config.TELEGRAM_BOT_USERNAME or "telegizer_bot"
                 bot_identity = HubBotIdentity(
                     id=str(uuid.uuid4()),
                     user_id=user.id,
                     bot_type="official",
-                    display_name="Telegizer Official Assistant",
-                    telegram_bot_username=_Config.TELEGRAM_BOT_USERNAME or "telegizer_bot",
+                    display_name="Telegizer Echo",
+                    telegram_bot_username=_echo_username,
                     is_active=True,
                 )
                 db.session.add(bot_identity)

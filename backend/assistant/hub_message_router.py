@@ -37,30 +37,37 @@ def _has_trigger(text: str) -> bool:
     return any(p.search(text) for p in _TRIGGER_PATTERNS)
 
 
-def buffer_hub_message(flask_app, telegram_group_id: int, message) -> None:
+def buffer_hub_message(flask_app, telegram_group_id: int, message, hub_bot_id: str | None = None) -> None:
     """
-    Entry point from official_bot.on_message().
-    Silently no-ops if group is not a connected Hub group.
+    Entry point from any hub-aware bot's on_message handler.
+
+    hub_bot_id — when provided, only buffers if the connected group belongs to
+    that specific HubBotIdentity (prevents cross-bot double-buffering during
+    the transition period where both the main bot and Echo are in the same group).
+    When None the old behaviour is preserved (first active group matches).
     """
     try:
         with flask_app.app_context():
-            _do_buffer(flask_app, telegram_group_id, message)
+            _do_buffer(flask_app, telegram_group_id, message, hub_bot_id=hub_bot_id)
     except Exception as exc:
         _log.debug("hub_message_router: unhandled error for group %s: %s", telegram_group_id, exc)
 
 
-def _do_buffer(flask_app, telegram_group_id: int, message) -> None:
+def _do_buffer(flask_app, telegram_group_id: int, message, hub_bot_id: str | None = None) -> None:
     from ..assistant.hub_models import HubConnectedGroup
     import redis as _redis_module
     import os
 
-    # Lookup connected Hub group record
-    group = HubConnectedGroup.query.filter_by(
+    # Lookup connected Hub group record — filter by bot when caller provides hub_bot_id
+    q = HubConnectedGroup.query.filter_by(
         telegram_group_id=telegram_group_id,
         is_active=True,
     ).filter(
         HubConnectedGroup.consent_confirmed_at.isnot(None)
-    ).first()
+    )
+    if hub_bot_id:
+        q = q.filter_by(bot_id=hub_bot_id)
+    group = q.first()
 
     if not group:
         return  # group not connected to Hub or paused

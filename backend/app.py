@@ -76,6 +76,7 @@ from .routes.platform_stats import platform_stats_bp
 from .assistant import hub_models as _hub_models_import  # noqa: F401 — ensures models registered with db.create_all()
 from .bot_manager import BotManager
 from .official_bot import start_official_bot
+from .echo_bot import start_echo_bot
 
 _scheduler_log = logging.getLogger(__name__)
 
@@ -542,6 +543,33 @@ def create_app():
                     _bot_log.critical(
                         "Official bot start permanently failed after %d attempts — "
                         "TELEGRAM_BOT_TOKEN may be invalid or Telegram API unreachable.",
+                        _max_attempts,
+                    )
+
+        # --- Start Telegizer Echo assistant bot with retry ---
+        for _attempt in range(1, _max_attempts + 1):
+            try:
+                start_echo_bot(app)
+                _bot_log.info("Echo bot started successfully (attempt %d)", _attempt)
+                break
+            except Exception as exc:
+                _bot_log.error(
+                    "Echo bot start failed (attempt %d/%d): %s",
+                    _attempt, _max_attempts, exc, exc_info=True,
+                )
+                try:
+                    import sentry_sdk
+                    sentry_sdk.capture_exception(exc)
+                except Exception:
+                    pass
+                if _attempt < _max_attempts:
+                    _backoff = min(120, 10 * (2 ** (_attempt - 1)))
+                    _bot_log.info("Retrying Echo bot start in %ds…", _backoff)
+                    time.sleep(_backoff)
+                else:
+                    _bot_log.critical(
+                        "Echo bot start permanently failed after %d attempts — "
+                        "ECHO_BOT_TOKEN may be invalid or Telegram API unreachable.",
                         _max_attempts,
                     )
 

@@ -144,19 +144,53 @@ def _get_or_create_global(user_id: int) -> AssistantHubGlobal:
     return record
 
 
+def _echo_display_name() -> str:
+    """Canonical display name for the official Echo assistant bot."""
+    return "Telegizer Echo"
+
+
+def _echo_bot_username() -> str:
+    """
+    Username for the Echo assistant bot.
+    Falls back to the main bot's username if ECHO_BOT_USERNAME is not yet set —
+    this keeps the Hub functional during the transition window.
+    """
+    return Config.ECHO_BOT_USERNAME or Config.TELEGRAM_BOT_USERNAME or "telegizer_bot"
+
+
 def _get_or_create_official_bot(user_id: int) -> HubBotIdentity:
-    """Return (or lazy-create) the official bot identity for the user."""
+    """
+    Return (or lazy-create) the official assistant bot identity for the user.
+
+    The 'official' bot_type now represents Telegizer Echo — the dedicated
+    assistant/observer bot.  display_name and telegram_bot_username are kept
+    in sync with Echo's config on every read so existing rows are updated
+    without a separate migration script.
+    """
     bot = HubBotIdentity.query.filter_by(user_id=user_id, bot_type="official").first()
     if bot is not None:
+        # Keep existing rows in sync with Echo's current config.
+        # This is the safe data migration: no schema change, just an
+        # incremental update whenever the record is loaded.
+        changed = False
+        if bot.display_name != _echo_display_name():
+            bot.display_name = _echo_display_name()
+            changed = True
+        echo_un = _echo_bot_username()
+        if bot.telegram_bot_username != echo_un:
+            bot.telegram_bot_username = echo_un
+            changed = True
+        if changed:
+            db.session.commit()
         return bot
 
     bot = HubBotIdentity(
         id=str(uuid.uuid4()),
         user_id=user_id,
         bot_type="official",
-        display_name="Telegizer Official Assistant",
-        telegram_bot_token=None,   # uses shared @telegizer_bot token
-        telegram_bot_username=Config.TELEGRAM_BOT_USERNAME or "telegizer_bot",
+        display_name=_echo_display_name(),
+        telegram_bot_token=None,   # platform-level token (ECHO_BOT_TOKEN env var)
+        telegram_bot_username=_echo_bot_username(),
         is_active=True,
     )
     db.session.add(bot)
