@@ -18,11 +18,11 @@ import {
 import { Close, ContentCopy, Check, SmartToy } from '@mui/icons-material';
 import { hub } from '../../services/api';
 
-const BOT_USERNAME = process.env.REACT_APP_TELEGRAM_BOT_USERNAME || 'telegizer_bot';
+const OFFICIAL_BOT_USERNAME = process.env.REACT_APP_TELEGRAM_BOT_USERNAME || 'telegizer_bot';
 const POLL_INTERVAL_MS = 4000;
 const POLL_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
-export default function AddToGroupFlow({ open, onClose, onGroupConnected }) {
+export default function AddToGroupFlow({ open, onClose, onGroupConnected, botId = null, botUsername = null }) {
   const [step, setStep] = useState(0); // 0=instructions 1=waiting 2=consent_pending 3=connected
   const [copied, setCopied] = useState(false);
   const [newGroup, setNewGroup] = useState(null);
@@ -52,9 +52,12 @@ export default function AddToGroupFlow({ open, onClose, onGroupConnected }) {
     if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
   }
 
+  const _listGroups = () => botId ? hub.listBotGroups(botId) : hub.listOfficialGroups();
+  const displayUsername = botUsername || OFFICIAL_BOT_USERNAME;
+
   function _startPolling() {
     // Snapshot current groups so we can detect the new one
-    hub.listOfficialGroups().then(r => {
+    _listGroups().then(r => {
       knownGroupsRef.current = new Set((r.data.groups || []).map(g => g.id));
     }).catch(() => {
       knownGroupsRef.current = new Set();
@@ -62,7 +65,7 @@ export default function AddToGroupFlow({ open, onClose, onGroupConnected }) {
 
     pollRef.current = setInterval(async () => {
       try {
-        const r = await hub.listOfficialGroups();
+        const r = await _listGroups();
         const groups = r.data.groups || [];
         const known = knownGroupsRef.current || new Set();
         const found = groups.find(g => !known.has(g.id));
@@ -88,7 +91,7 @@ export default function AddToGroupFlow({ open, onClose, onGroupConnected }) {
   }
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(`@${BOT_USERNAME}`).catch(() => {});
+    navigator.clipboard.writeText(`@${displayUsername}`).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -129,7 +132,7 @@ export default function AddToGroupFlow({ open, onClose, onGroupConnected }) {
               </Box>
             </Box>
             <Typography variant="body2" textAlign="center" mb={2}>
-              Add <strong>@{BOT_USERNAME}</strong> to your private Telegram group.
+              Add <strong>@{displayUsername}</strong> to your private Telegram group.
               No admin permissions needed.
               Once added, I'll DM you to confirm.
             </Typography>
@@ -152,7 +155,7 @@ export default function AddToGroupFlow({ open, onClose, onGroupConnected }) {
             <CircularProgress size={48} sx={{ mb: 2 }} />
             <Typography variant="body2" fontWeight={600}>Waiting for you to add the bot…</Typography>
             <Typography variant="caption" color="text.secondary" display="block" mt={0.5}>
-              Watching for @{BOT_USERNAME} to join a group
+              Watching for @{displayUsername} to join a group
             </Typography>
           </Box>
         )}
@@ -162,7 +165,7 @@ export default function AddToGroupFlow({ open, onClose, onGroupConnected }) {
           <Box sx={{ textAlign: 'center', py: 2 }}>
             <Typography fontSize="2.5rem" mb={1}>📲</Typography>
             <Typography variant="body2" fontWeight={600} gutterBottom>
-              Check your Telegram DM from @{BOT_USERNAME}
+              Check your Telegram DM from @{displayUsername}
             </Typography>
             <Typography variant="caption" color="text.secondary">
               Tap <strong>✓ Start Observing</strong> in the message to confirm.

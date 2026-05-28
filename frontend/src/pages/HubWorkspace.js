@@ -144,7 +144,7 @@ export function TabContent({ tab, botData, groups, setGroups, botId }) {
     case 'templates':  return <HubTemplates botId={botId} />;
     case 'knowledge':  return <HubKnowledge botId={botId} />;
     case 'automation': return <HubAutomation />;
-    case 'settings':   return <HubSettings botData={botData} groups={groups} setGroups={setGroups} />;
+    case 'settings':   return <HubSettings botData={botData} groups={groups} setGroups={setGroups} botId={botId} />;
     default:           return <TabComingSoon tab={tab} />;
   }
 }
@@ -184,7 +184,7 @@ function HubOverview({ botData, groups, botId }) {
     return (
       <EmptyState icon="🤖" title="Add the Telegizer bot to your private groups to get started."
         body="The assistant will silently observe and surface tasks, decisions, and meetings here."
-        action={<Button variant="contained" size="small" onClick={() => navigate('/hub/official/settings')}>+ Add to Group</Button>}
+        action={<Button variant="contained" size="small" onClick={() => navigate(botId ? `/hub/bots/${botId}/settings` : '/hub/official/settings')}>+ Add to Group</Button>}
       />
     );
   }
@@ -1213,7 +1213,7 @@ function HubAutomation() {
 }
 
 // ── Settings tab ───────────────────────────────────────────────────────────────
-function HubSettings({ botData, groups, setGroups }) {
+function HubSettings({ botData, groups, setGroups, botId = null }) {
   const [, setSettings] = useState(null);
   const [personality, setPersonality] = useState('');
   const [language, setLanguage] = useState('en');
@@ -1485,7 +1485,8 @@ function HubSettings({ botData, groups, setGroups }) {
         </CardContent>
       </Card>
 
-      <AddToGroupFlow open={addFlowOpen} onClose={() => setAddFlowOpen(false)} onGroupConnected={handleGroupConnected} />
+      <AddToGroupFlow open={addFlowOpen} onClose={() => setAddFlowOpen(false)} onGroupConnected={handleGroupConnected}
+        botId={botId} botUsername={botData?.telegram_bot_username || null} />
       <GroupSettingsOverlay open={Boolean(overlayGroup)} group={overlayGroup} onClose={() => setOverlayGroup(null)}
         onUpdated={handleGroupUpdated} onDisconnected={handleGroupDisconnected} />
       <MemoryOverlay
