@@ -599,10 +599,19 @@ class BotInstance:
 
     # ── menu callback dispatcher ────────────────────────────────────────────────
 
-    async def _handle_menu_callback(self, query, user, data):
+    async def _handle_menu_callback(self, query, user, data, own_username=None):
         """Handle all menu:* callback queries from the /start menu."""
         frontend = self._frontend()
         official_un = self._official_bot_username()
+        # own_username: the username of THIS bot (may differ from official bot for custom bots)
+        if not own_username:
+            try:
+                with self.app_context.app_context():
+                    from .models import Bot as _BotM
+                    _br = _BotM.query.get(self.bot_id)
+                    own_username = (_br.bot_username if _br else None) or official_un
+            except Exception:
+                own_username = official_un
 
         # ── Back to main menu ─────────────────────────────────────────────────
         if data == "menu:main":
@@ -618,7 +627,7 @@ class BotInstance:
                         created_by_telegram_user_id=str(user.id), used_at=None,
                     ).filter(TelegramGroupLinkCode.expires_at > _dt.utcnow()).count()
 
-            keyboard = self._build_main_menu_keyboard(frontend, official_un, is_linked, pending_count)
+            keyboard = self._build_main_menu_keyboard(frontend, own_username, is_linked, pending_count)
             await query.edit_message_text(
                 "👋 <b>Telegizer Hub</b>\n\nChoose an option below:",
                 parse_mode="HTML", reply_markup=keyboard,
@@ -697,8 +706,7 @@ class BotInstance:
 
         # ── Add Group ─────────────────────────────────────────────────────────
         if data == "menu:add_group":
-            bot_username = query.message.reply_markup and official_un
-            add_url = f"https://t.me/{official_un}?startgroup=setup"
+            add_url = f"https://t.me/{own_username}?startgroup=setup"
             await query.edit_message_text(
                 "<b>Add Group to Telegizer</b>\n\n"
                 "1️⃣ Add me to your group using the button below\n"
@@ -2526,7 +2534,8 @@ class BotInstance:
 
         elif data.startswith("menu:") or data.startswith("show_code:"):
             try:
-                await self._handle_menu_callback(query, user, data)
+                await self._handle_menu_callback(query, user, data,
+                                                  own_username=getattr(context.bot, "username", None))
             except Exception as e:
                 logger.error(f"Menu callback error bot={self.bot_id} data={data}: {e}", exc_info=True)
                 try:
@@ -2562,7 +2571,8 @@ class BotInstance:
             if self.app_context:
                 try:
                     with self.app_context.app_context():
-                        from .models import Bot, CustomBot
+                        from .models import db, Bot, CustomBot
+                        from .assistant.hub_models import HubBotIdentity
                         bot_rec = Bot.query.get(self.bot_id)
                         if bot_rec and bot_rec.bot_username:
                             cb = CustomBot.query.filter_by(
@@ -2572,6 +2582,24 @@ class BotInstance:
                             if cb:
                                 is_custom_bot = True
                                 hub_bot_id = cb.hub_bot_id
+
+                            # If CustomBot.hub_bot_id is NULL or no CustomBot row found,
+                            # fall back to a direct HubBotIdentity lookup by username so the
+                            # observer DM can still be sent and private groups never fall
+                            # through to the Group Management path.
+                            if not hub_bot_id and bot_rec.bot_username:
+                                hub_ident = HubBotIdentity.query.filter_by(
+                                    telegram_bot_username=bot_rec.bot_username,
+                                    user_id=bot_rec.user_id,
+                                    bot_type="custom",
+                                    is_active=True,
+                                ).first()
+                                if hub_ident:
+                                    is_custom_bot = True
+                                    hub_bot_id = hub_ident.id
+                                    if cb:
+                                        cb.hub_bot_id = hub_ident.id
+                                        db.session.commit()
                 except Exception:
                     pass
 
@@ -2582,6 +2610,30 @@ class BotInstance:
                 #   ≥ 10 members → Hub consent DM directly (larger private groups lean Hub)
                 # Public groups are ignored here; user runs /linkgroup explicitly.
                 is_private = not chat.username
+                # Warn the admin if the bot was added as a plain member (privacy mode may be on).
+                # Bots with privacy mode enabled can't read messages unless they are admins.
+                if new_status == "member" and added_by and is_private:
+                    try:
+                        bot_info = await context.bot.get_me()
+                        if not getattr(bot_info, "can_read_all_group_messages", False):
+                            await context.bot.send_message(
+                                chat_id=added_by.id,
+                                text=(
+                                    f"⚠️ *Privacy mode is ON for @{bot_info.username}.*\n\n"
+                                    "I was added as a regular member, so I *cannot read group messages* "
+                                    "unless privacy mode is disabled on BotFather or I'm made an admin.\n\n"
+                                    "To fix this:\n"
+                                    "1. Open @BotFather → /mybots → select the bot\n"
+                                    "2. Bot Settings → Group Privacy → Turn Off\n"
+                                    "   — OR —\n"
+                                    "3. Promote me to admin in the group\n\n"
+                                    "Silent observation and task extraction will not work until this is resolved."
+                                ),
+                                parse_mode="Markdown",
+                            )
+                    except Exception as _pm_e:
+                        logger.debug("Privacy mode check/warn failed for chat %s: %s", chat.id, _pm_e)
+
                 if is_private and hub_bot_id and added_by:
                     member_count = 0
                     try:
@@ -2770,6 +2822,15 @@ class BotInstance:
                     await app.bot.set_my_description(custom_desc or "Community Manager Bot")
         except Exception as _e:
             logger.warning(f"Bot {self.bot_id}: set_my_description failed: {_e}")
+
+        # If this bot had a webhook registered (e.g. via Hub custom-bot creation),
+        # it must be deleted before polling starts — Telegram routes all updates to
+        # the webhook and getUpdates returns nothing while one is active.
+        try:
+            await app.bot.delete_webhook(drop_pending_updates=False)
+            logger.info(f"Bot {self.bot_id}: webhook deleted, starting polling")
+        except Exception as _whe:
+            logger.warning(f"Bot {self.bot_id}: delete_webhook failed (ok if none set): {_whe}")
 
         await app.updater.start_polling(drop_pending_updates=True)
 

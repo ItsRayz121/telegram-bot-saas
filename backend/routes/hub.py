@@ -1887,14 +1887,14 @@ def create_custom_bot():
         _log.warning("create_custom_bot: group_management mirror failed: %s", _e)
         db.session.rollback()
 
-    # Register Telegram webhook (best-effort — don't fail if BASE_URL not set)
-    base_url = Config.BACKEND_URL
-    if base_url:
-        try:
-            from ..assistant.hub_custom_bot_runner import register_webhook
-            register_webhook(bot.id, token, base_url)
-        except Exception as exc:
-            _log.warning("create_custom_bot: webhook registration failed: %s", exc)
+    # NOTE: webhook registration is intentionally skipped here.
+    # The bot is served via a long-polling thread (started above) that handles ALL
+    # update types — including hub_consent callbacks.  Registering a webhook would
+    # conflict with the polling thread: Telegram routes updates to the webhook and
+    # getUpdates returns nothing, breaking every inline button and command.
+    # The hub webhook route (/api/hub/webhook/<bot_id>) is kept for bots that are
+    # registered in HubBotIdentity WITHOUT a corresponding Bot polling record, but
+    # that path is no longer used by default.
 
     return jsonify({"bot": _bot_card_data(bot, user.id)}), 201
 
@@ -2393,6 +2393,23 @@ def custom_bot_webhook(bot_id):
     bot = HubBotIdentity.query.filter_by(id=bot_id, bot_type="custom", is_active=True).first()
     if not bot:
         return jsonify({"ok": False}), 404
+
+    # If this bot has an active polling thread (Bot/BotManager), skip processing here.
+    # The polling thread is the authoritative handler; the webhook would be stale.
+    # Return 200 so Telegram doesn't retry and block the update queue.
+    try:
+        from ..models import Bot as _BotModel
+        from ..utils.encryption import hash_token as _hash_token
+        _raw_token = _dec(bot.telegram_bot_token) if bot.telegram_bot_token else None
+        if _raw_token:
+            _poll_bot = _BotModel.query.filter_by(
+                bot_token_hash=_hash_token(_raw_token), is_active=True
+            ).first()
+            if _poll_bot:
+                _log.debug("custom_bot_webhook: skipping — polling thread active for bot_id=%s", bot_id)
+                return jsonify({"ok": True}), 200
+    except Exception as _chk_e:
+        _log.debug("custom_bot_webhook: polling check failed (ok): %s", _chk_e)
 
     payload = request.get_json(force=True, silent=True) or {}
 
