@@ -1394,20 +1394,6 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await _handle_verification_callback(update, context)
         return
 
-    # ── Assistant Hub consent / intro callbacks (PHASE 4 REMOVAL TARGET) ────────
-    # TODO Phase 4: Remove this block once Telegizer Echo is confirmed working.
-    # Echo handles these callbacks via echo_bot.py / hub_bot_handler.py.
-    # Kept here so in-flight consent DMs sent by the main bot (before Echo took
-    # over) can still be resolved by the user without a broken button.
-    if data.startswith("hub_consent:") or data.startswith("hub_intro:"):
-        try:
-            from .assistant.hub_consent import handle_consent_callback
-            consumed = await handle_consent_callback(update, context, flask_app)
-            if consumed:
-                return
-        except Exception as _hub_exc:
-            _log.debug("Hub consent callback error: %s", _hub_exc)
-        return
 
     await query.answer()
 
@@ -2243,23 +2229,6 @@ async def on_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
                    {"added_by_telegram_id": added_by})
         if flask_app:
             await _refresh_permissions(context.bot, group_id, flask_app)
-
-        # ── Assistant Hub consent flow (PHASE 4 REMOVAL TARGET) ───────────────
-        # TODO Phase 4: Remove this block once Telegizer Echo is confirmed working.
-        # Echo handles hub consent via echo_bot.py / hub_bot_handler.py.
-        # Keeping this here during transition so groups that have ONLY the main
-        # bot (not Echo yet) still get the consent DM.
-        if flask_app and added_by:
-            try:
-                from .assistant.hub_consent import handle_bot_added_to_group
-                await handle_bot_added_to_group(
-                    bot=context.bot,
-                    flask_app=flask_app,
-                    chat=chat,
-                    added_by_tg_id=added_by,
-                )
-            except Exception as _hub_exc:
-                _log.debug("Hub consent handler error: %s", _hub_exc)
 
         # Check if the user who added the bot is at their group quota; if so DM them a warning.
         if flask_app and added_by:
