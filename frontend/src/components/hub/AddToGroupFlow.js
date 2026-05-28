@@ -144,7 +144,7 @@ export default function AddToGroupFlow({ open, onClose, onGroupConnected, botId 
               color={copied ? 'success' : 'primary'}
               sx={{ mb: 1 }}
             >
-              {copied ? 'Copied!' : `Copy @${BOT_USERNAME}`}
+              {copied ? 'Copied!' : `Copy @${OFFICIAL_BOT_USERNAME}`}
             </Button>
           </Box>
         )}

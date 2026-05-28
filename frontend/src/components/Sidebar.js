@@ -11,6 +11,7 @@ import {
   AdminPanelSettings, ExpandMore, ExpandLess,
   Psychology, ChevronLeft, ChevronRight,
   SmartToy, EmojiEvents, CheckCircle, RadioButtonUnchecked,
+  BarChart,
 } from '@mui/icons-material';
 import TelegizerLogo from './TelegizerLogo';
 import { telegramGroups as tgApi, auth as authApi, channels as chApi } from '../services/api';
@@ -396,6 +397,7 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
       { label: 'Groups',      icon: Groups,      path: '/groups' },
       { label: 'My Bots',     icon: SmartToy,    path: '/custom-bots' },
       { label: 'Hub',         icon: Psychology,  path: '/hub', ai: true },
+      { label: 'Analytics',   icon: BarChart,    path: '/analytics' },
       { label: 'Referrals',   icon: EmojiEvents, path: '/referrals' },
       { label: 'Billing',     icon: CreditCard,  path: '/billing' },
       { label: 'Settings',    icon: Settings,    path: '/settings' },
@@ -613,13 +615,6 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
                 primary="Channels"
                 primaryTypographyProps={{ fontSize: '0.82rem', fontWeight: channelActive ? 600 : 400, noWrap: true }}
               />
-              <IconButton
-                size="small"
-                onClick={(e) => { e.stopPropagation(); nav('/channels'); }}
-                sx={{ width: 20, height: 20, mr: 0.25, color: 'text.disabled', '&:hover': { color: 'text.secondary' } }}
-              >
-                <Add sx={{ fontSize: 14 }} />
-              </IconButton>
             </ListItemButton>
           </ListItem>
         )}
@@ -631,6 +626,11 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
         {/* WORKSPACE */}
         <HubSectionLabel />
         <NavItem label="Hub" icon={Psychology} path="/hub" active={assistantActive} aiAccent onClick={() => nav('/hub')} />
+
+        {/* ANALYTICS */}
+        <SectionLabel label="Analytics" />
+        <NavItem label="Analytics" icon={BarChart} path="/analytics" active={isActive('/analytics')} onClick={() => nav('/analytics')} />
+
         <SectionLabel label="Automation" />
         <NavItem label="Automation" icon={AutoMode} path="/automation" active={automationActive} onClick={() => nav('/automation')} />
 

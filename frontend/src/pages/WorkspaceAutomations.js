@@ -15,7 +15,7 @@ import { toast } from 'react-toastify';
 import { automations as autoApi, telegramGroups as tgApi } from '../services/api';
 import PlanGate from '../components/PlanGate';
 import { track } from '../services/analytics';
-import { WebhooksSection } from './Integrations';
+import { WebhooksSection } from '../components/WebhooksSection';
 
 function _getUser() {
   try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; }

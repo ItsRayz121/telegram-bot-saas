@@ -4,17 +4,17 @@ import {
   useMediaQuery, useTheme, Paper, BottomNavigation, BottomNavigationAction,
 } from '@mui/material';
 import { PALETTE } from '../theme';
-import { Menu as MenuIcon, Home, Groups, AutoMode, Psychology, AccountCircle } from '@mui/icons-material';
+import { Menu as MenuIcon, Home, Groups, Psychology, AccountCircle, SmartToy } from '@mui/icons-material';
 import Sidebar, { SIDEBAR_WIDTH, SIDEBAR_COLLAPSED_WIDTH } from '../components/Sidebar';
 import { DesktopAssistantSidebar, MobileAssistantFab } from '../components/AssistantSidebar';
 import TelegizerLogo from '../components/TelegizerLogo';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 const BOTTOM_NAV_ITEMS = [
-  { label: 'Home', icon: <Home />, path: '/dashboard' },
-  { label: 'Groups', icon: <Groups />, path: '/groups' },
-  { label: 'Automations', icon: <AutoMode />, path: '/workspace/automations' },
-  { label: 'AI Hub', icon: <Psychology />, path: '/workspace' },
+  { label: 'Home',    icon: <Home />,         path: '/dashboard' },
+  { label: 'Groups',  icon: <Groups />,        path: '/groups' },
+  { label: 'My Bots', icon: <SmartToy />,      path: '/custom-bots' },
+  { label: 'AI Hub',  icon: <Psychology />,    path: '/hub' },
   { label: 'Account', icon: <AccountCircle />, path: '/settings' },
 ];
 

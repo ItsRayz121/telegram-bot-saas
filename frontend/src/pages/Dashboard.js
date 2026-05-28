@@ -6,7 +6,9 @@ import {
   TextField, IconButton, Chip, CircularProgress, Tooltip, Menu, MenuItem,
   Avatar, LinearProgress, Alert, Stepper, Step, StepLabel, StepContent,
   InputAdornment, Skeleton, Table, TableBody, TableCell, TableContainer, TableRow, Collapse,
+  useTheme,
 } from '@mui/material';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import {
   Add, Delete, Settings, BarChart, SmartToy, AccountCircle,
   PowerSettingsNew, Upgrade, CheckCircle, Close, ContentCopy,
@@ -158,7 +160,7 @@ function OnboardingCard({ botList, onAddBot, navigate, user, officialGroupCount 
             2. In Telegram, make @telegizer_bot an <strong>admin</strong> (Settings → Administrators).
           </Typography>
           <Typography variant="caption" color="text.secondary" display="block">
-            3. Type <code>/linkgroup</code> in the group chat. The bot will confirm and the group appears here.
+            3. Type <code>/linkgroup</code> in the group chat. If your Telegram account is linked in Settings, the group links automatically. Otherwise, copy the code the bot shows and paste it at Groups → Add Group.
           </Typography>
         </Box>
       ),
@@ -560,6 +562,8 @@ function OfficialBotSection({ user, navigate, officialGroupCount }) {
 // ── Main Dashboard ─────────────────────────────────────────────────────────────
 export default function Dashboard() {
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [searchParams] = useSearchParams();
   const [botList, setBotList] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -783,8 +787,8 @@ export default function Dashboard() {
 
   return (
     <Box sx={{ minHeight: '100vh' }}>
-      {/* ── AppBar ── */}
-      <AppBar position="sticky" elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
+      {/* ── AppBar (desktop only — AppLayout renders its own mobile top bar) ── */}
+      {!isMobile && <AppBar position="sticky" elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
         <Toolbar sx={{ gap: 0.5, minHeight: { xs: 52, sm: 64 }, flexWrap: { xs: 'wrap', sm: 'nowrap' } }}>
           <Box
             onClick={() => navigate('/dashboard')}
@@ -927,7 +931,7 @@ export default function Dashboard() {
             <MenuItem onClick={handleLogout}>Logout</MenuItem>
           </Menu>
         </Toolbar>
-      </AppBar>
+      </AppBar>}
 
       <Box sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 2, md: 3 } }}>
 
