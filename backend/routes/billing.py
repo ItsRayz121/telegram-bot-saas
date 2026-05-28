@@ -18,7 +18,7 @@ billing_bp = Blueprint("billing", __name__, url_prefix="/api/billing")
 
 _TIER_DURATION_MONTHLY = 30
 _TIER_DURATION_ANNUAL = 365
-_TIER_PRICES_USD = {"pro": {"monthly": 19, "annual": 152}, "enterprise": {"monthly": 49, "annual": 392}}
+_TIER_PRICES_USD = {"pro": {"monthly": 9, "annual": 86}, "enterprise": {"monthly": 49, "annual": 392}}
 
 
 def _get_current_user():

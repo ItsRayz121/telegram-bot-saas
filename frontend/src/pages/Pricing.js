@@ -34,8 +34,8 @@ const PLANS = [
   {
     id: 'pro',
     name: 'Pro',
-    monthlyPrice: 19,
-    annualPrice: 152,
+    monthlyPrice: 9,
+    annualPrice: 72,
     color: 'primary',
     popular: true,
     tagline: 'For serious community builders',

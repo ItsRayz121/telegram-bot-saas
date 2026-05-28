@@ -202,8 +202,8 @@ class Config:
         },
         "pro": {
             "name": "Pro",
-            "price": 1900,         # $19/mo in cents
-            "price_annual": 18240, # $152/yr (~$12.67/mo, save ~33%)
+            "price": 900,          # $9/mo in cents
+            "price_annual": 8640,  # $86.40/yr (~$7.20/mo, save ~20%)
             "max_bots": 3,
             "ai_tokens_day": 500_000,
             "features": [

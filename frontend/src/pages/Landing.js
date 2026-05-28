@@ -126,8 +126,8 @@ const PLANS = [
   },
   {
     name: 'Pro',
-    price: '$19',
-    daily: '$0.63/day',
+    price: '$9',
+    daily: '$0.30/day',
     period: '/month',
     color: 'primary',
     popular: true,
@@ -919,7 +919,7 @@ export default function Landing() {
             },
             {
               q: 'What is included in Free vs Pro vs Enterprise?',
-              a: 'Free: 1 bot, basic moderation, welcome messages, XP system. Pro ($19/mo): 3 bots, unlimited groups, advanced AutoMod, scheduled messages, analytics, AI knowledge base. Enterprise ($49/mo): 50 bots, all Pro features plus API access, dedicated support, SLA.'
+              a: 'Free: 1 bot, basic moderation, welcome messages, XP system. Pro ($9/mo): 3 bots, unlimited groups, advanced AutoMod, scheduled messages, analytics, AI knowledge base. Enterprise ($49/mo): 50 bots, all Pro features plus API access, dedicated support, SLA.'
             },
             {
               q: 'Do you store my bot token securely?',

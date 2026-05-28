@@ -280,7 +280,7 @@ def send_onboarding_day7_email(to_email, full_name):
     content = f"""
     <p>Hi <strong>{full_name}</strong>,</p>
     <p>You've been on Telegizer for a week — great to have you!</p>
-    <p>If you're managing an active community, upgrading to <strong>Pro ($19/mo)</strong> unlocks:</p>
+    <p>If you're managing an active community, upgrading to <strong>Pro ($9/mo)</strong> unlocks:</p>
     <ul class="feature-list">
       <li>3 custom bots &amp; unlimited groups</li>
       <li>AI-powered auto-replies &amp; daily digests</li>
@@ -297,7 +297,7 @@ def send_onboarding_day7_email(to_email, full_name):
         to_email,
         "Ready to level up your Telegram community?",
         _base_template(content, "Upgrade to Pro", unsubscribe_url=unsub_url),
-        text_body=f"Hi {full_name}, upgrade to Telegizer Pro ($19/mo) for unlimited bots, "
+        text_body=f"Hi {full_name}, upgrade to Telegizer Pro ($9/mo) for unlimited bots, "
                   f"AI features, and advanced analytics. View pricing at {pricing_url}",
         unsubscribe_url=unsub_url,
     )

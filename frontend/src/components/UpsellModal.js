@@ -78,7 +78,7 @@ export default function UpsellModal({ open, onClose, feature, limitMessage }) {
         <Divider sx={{ my: 2 }} />
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Typography variant="h5" fontWeight={800} color="primary.main">$19</Typography>
+          <Typography variant="h5" fontWeight={800} color="primary.main">$9</Typography>
           <Typography variant="body2" color="text.secondary">/month</Typography>
           <Chip label="Save 33% annual" size="small" color="success" sx={{ ml: 'auto', fontSize: '0.68rem' }} />
         </Box>

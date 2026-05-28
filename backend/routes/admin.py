@@ -266,7 +266,7 @@ def get_revenue():
     last_month_revenue_cents = sum(p.amount_usd or 0 for p in last_month_payments)
 
     # MRR estimate: active subscribers × monthly price
-    pro_monthly_price = 1900   # cents ($19)
+    pro_monthly_price = 900    # cents ($9)
     enterprise_monthly_price = 4900  # cents ($49)
     pro_count = User.query.filter_by(subscription_tier="pro").count()
     enterprise_count = User.query.filter_by(subscription_tier="enterprise").count()
@@ -1200,8 +1200,8 @@ def fraud_payment_anomalies():
             "risk": "high" if int(row[2]) >= 4 else "medium",
         })
 
-    # Payments outside normal price range (not $19 / $49 / $190 / $490)
-    valid_amounts = [1900, 4900, 19000, 49000]
+    # Payments outside normal price range (not $9 / $49 / $90 / $490)
+    valid_amounts = [900, 4900, 9000, 49000]
     odd_payments = PaymentHistory.query.filter(
         PaymentHistory.status == "confirmed",
         PaymentHistory.amount_usd.isnot(None),
