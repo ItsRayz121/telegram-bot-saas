@@ -232,6 +232,56 @@ class ModerationSystem:
 
         return total_warnings
 
+    async def _apply_escalation(self, bot, chat_id, user_id, username, first_name, warn_count, mod_settings, auto_delete_seconds):
+        import asyncio as _aio
+        display = ('@' + username) if username else (first_name or str(user_id))
+        steps = sorted(mod_settings.get("escalation_steps", []),
+                       key=lambda s: s.get("at_warning", 99), reverse=True)
+        for step in steps:
+            if warn_count >= step.get("at_warning", 99):
+                action = step.get("action", "mute")
+                notif = None
+                try:
+                    if action == "mute":
+                        mins = step.get("duration_minutes", 60)
+                        until = datetime.utcnow() + timedelta(minutes=mins)
+                        await bot.restrict_chat_member(
+                            chat_id=chat_id, user_id=user_id,
+                            permissions=ChatPermissions(can_send_messages=False),
+                            until_date=until,
+                        )
+                        hrs = mins // 60
+                        dur_str = f"{hrs}h" if hrs >= 1 else f"{mins}m"
+                        notif = await bot.send_message(
+                            chat_id=chat_id,
+                            text=f"🔇 {display} muted {dur_str} — reached Warning #{warn_count}.",
+                        )
+                    elif action == "tempban":
+                        hours = step.get("duration_hours", 24)
+                        until = datetime.utcnow() + timedelta(hours=hours)
+                        await bot.ban_chat_member(chat_id=chat_id, user_id=user_id, until_date=until)
+                        days = hours // 24
+                        dur_str = f"{days}d" if days >= 1 else f"{hours}h"
+                        notif = await bot.send_message(
+                            chat_id=chat_id,
+                            text=f"🚫 {display} banned for {dur_str} — reached Warning #{warn_count}.",
+                        )
+                    elif action in ("ban", "kick"):
+                        await bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
+                        if action == "kick":
+                            await bot.unban_chat_member(chat_id=chat_id, user_id=user_id)
+                        icon = "🚫" if action == "ban" else "👢"
+                        verb = "banned" if action == "ban" else "kicked"
+                        notif = await bot.send_message(
+                            chat_id=chat_id,
+                            text=f"{icon} {display} {verb} — reached Warning #{warn_count}.",
+                        )
+                    if notif and auto_delete_seconds:
+                        _aio.ensure_future(self._delayed_delete(bot, chat_id, notif.message_id, auto_delete_seconds))
+                except Exception as e:
+                    logger.error(f"Escalation action '{action}' failed for {user_id}: {e}")
+                return  # only first matching step fires
+
     async def _delayed_delete(self, bot, chat_id, message_id, delay_seconds):
         import asyncio
         await asyncio.sleep(delay_seconds)
@@ -801,6 +851,14 @@ class ModerationSystem:
                 except Exception as e:
                     logger.error(f"AutoMod warn message error: {e}")
 
+                # Escalation: check if this warning count triggers a step
+                mod_s = group.settings.get("moderation", {})
+                if mod_s.get("escalation_enabled"):
+                    import asyncio as _aio
+                    _aio.ensure_future(self._apply_escalation(
+                        bot, chat_id, user_id, username, first_name, total, mod_s, auto_delete_action
+                    ))
+
             elif action == "mute":
                 until_date = datetime.utcnow() + timedelta(minutes=mute_duration)
                 try:
@@ -812,7 +870,7 @@ class ModerationSystem:
                     )
                     msg = await bot.send_message(
                         chat_id=chat_id,
-                        text=f"🔇 {username or user_id} muted for {mute_duration}m: {reason}",
+                        text=f"🔇 {('@' + username) if username else (first_name or str(user_id))} muted for {mute_duration}m: {reason}",
                     )
                     if auto_delete_action and msg:
                         _asyncio.ensure_future(self._delayed_delete(bot, chat_id, msg.message_id, auto_delete_action))
@@ -824,7 +882,7 @@ class ModerationSystem:
                     await bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
                     msg = await bot.send_message(
                         chat_id=chat_id,
-                        text=f"🚫 {username or user_id} banned: {reason}",
+                        text=f"🚫 {('@' + username) if username else (first_name or str(user_id))} banned: {reason}",
                     )
                     if auto_delete_action and msg:
                         _asyncio.ensure_future(self._delayed_delete(bot, chat_id, msg.message_id, auto_delete_action))

@@ -237,13 +237,12 @@ _DEFAULTS: dict = {
         "notify_on_action": True,
         "log_to_channel": False,
         "log_channel_id": "",
-        "escalation_enabled": False,
-        # Pre-configured 4-step ladder — activates when escalation_enabled = True.
+        "escalation_enabled": True,
+        # 3-strike ladder: warn freely → mute → mute hard → ban.
         "escalation_steps": [
-            {"at_warning": 3,  "time_window_hours": None, "action": "mute",    "duration_minutes": 30},
-            {"at_warning": 5,  "time_window_hours": None, "action": "mute",    "duration_minutes": 180},
-            {"at_warning": 7,  "time_window_hours": None, "action": "kick",    "duration_minutes": 0},
-            {"at_warning": 10, "time_window_hours": None, "action": "ban",     "duration_minutes": 0},
+            {"at_warning": 3, "time_window_hours": None, "action": "mute",    "duration_minutes": 60},
+            {"at_warning": 4, "time_window_hours": None, "action": "mute",    "duration_minutes": 1440},
+            {"at_warning": 5, "time_window_hours": None, "action": "tempban", "duration_hours": 720},
         ],
         "auto_delete_warn_seconds": 30,   # raised from 10 — visible for 30 s
         "auto_delete_action_seconds": 30, # raised from 10
