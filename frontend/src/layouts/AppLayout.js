@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import {
   Box, AppBar, Toolbar, IconButton, Typography, Drawer,
   useMediaQuery, useTheme, Paper, BottomNavigation, BottomNavigationAction,
@@ -14,7 +14,7 @@ const BOTTOM_NAV_ITEMS = [
   { label: 'Home',    icon: <Home />,         path: '/dashboard' },
   { label: 'Groups',  icon: <Groups />,        path: '/groups' },
   { label: 'My Bots', icon: <SmartToy />,      path: '/custom-bots' },
-  { label: 'AI Hub',  icon: <Psychology />,    path: '/hub' },
+  { label: 'Echo',     icon: <Psychology />,    path: '/ark' },
   { label: 'Account', icon: <AccountCircle />, path: '/settings' },
 ];
 
@@ -170,3 +170,4 @@ export default function AppLayout({ children }) {
     </Box>
   );
 }
+

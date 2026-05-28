@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import {
   Box, AppBar, Toolbar, Typography, Button, Card, CardContent,
   Grid, Chip, List, ListItem, ListItemIcon, ListItemText,
@@ -45,7 +45,7 @@ const PLANS = [
       'Everything in Free',
       'AI Auto-Reply (knowledge base Q&A)',
       'AI Group Digests (daily / weekly)',
-      'AI Assistant Hub (notes, tasks, queries)',
+      'Echo — AI Assistant (notes, tasks, queries)',
       '500k AI credits / day',
       'Bring your own AI API key (unlimited)',
       'Analytics dashboard (90 days)',
@@ -97,7 +97,7 @@ const COMPARISON = [
   { label: 'Analytics',               free: '7 days',    pro: '90 days',         ent: '90 days' },
   { label: 'AI auto-reply (Q&A)',     free: false,       pro: true,              ent: true },
   { label: 'AI group digests',        free: false,       pro: true,              ent: true },
-  { label: 'AI assistant hub',        free: false,       pro: true,              ent: true },
+  { label: 'Echo AI assistant',         free: false,       pro: true,              ent: true },
   { label: 'AI credits / day',        free: '10k',       pro: '500k',            ent: '500k' },
   { label: 'Bring your own API key',  free: false,       pro: true,              ent: true },
   { label: 'Message forwarding',      free: false,       pro: true,              ent: true },
@@ -476,3 +476,4 @@ export default function Pricing() {
     </Box>
   );
 }
+

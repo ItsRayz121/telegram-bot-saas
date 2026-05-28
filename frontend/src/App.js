@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom';
 import { Box, CircularProgress, Typography, Button } from '@mui/material';
 import { ThemeProvider } from '@mui/material/styles';
@@ -64,7 +64,7 @@ import JoinReferral from './pages/JoinReferral';
 import InviteLanding from './pages/InviteLanding';
 import Referrals from './pages/Referrals';
 
-// Assistant Hub (Sprint 1)
+// Echo (AI Assistant)
 import HubLanding from './pages/HubLanding';
 import HubWorkspace from './pages/HubWorkspace';
 import HubCustomBotWorkspace from './pages/HubCustomBotWorkspace';
@@ -218,12 +218,16 @@ export default function App() {
             <Route path="/channels"         element={<AppRoute><Channels /></AppRoute>} />
             <Route path="/channels/:cid"    element={<AppRoute><ChannelDetail /></AppRoute>} />
 
-            {/* ── Assistant Hub (/hub prefix) ───────────────────────────────── */}
-            <Route path="/hub"                         element={<AppRoute><HubLanding /></AppRoute>} />
-            <Route path="/hub/official"                element={<Navigate to="/hub/official/overview" replace />} />
-            <Route path="/hub/official/:tab"           element={<AppRoute><HubWorkspace /></AppRoute>} />
-            <Route path="/hub/bots/:botId"             element={<Navigate to="overview" replace />} />
-            <Route path="/hub/bots/:botId/:tab"        element={<AppRoute><HubCustomBotWorkspace /></AppRoute>} />
+            {/* ── Echo (/ark prefix) ────────────────────────────────────────── */}
+            <Route path="/ark"                         element={<AppRoute><HubLanding /></AppRoute>} />
+            <Route path="/ark/official"                element={<Navigate to="/ark/official/overview" replace />} />
+            <Route path="/ark/official/:tab"           element={<AppRoute><HubWorkspace /></AppRoute>} />
+            <Route path="/ark/bots/:botId"             element={<Navigate to="overview" replace />} />
+            <Route path="/ark/bots/:botId/:tab"        element={<AppRoute><HubCustomBotWorkspace /></AppRoute>} />
+            {/* legacy /hub redirects */}
+            <Route path="/hub"                         element={<Navigate to="/ark" replace />} />
+            <Route path="/hub/official/:tab"           element={<Navigate to="/ark/official/overview" replace />} />
+            <Route path="/hub/bots/:botId/:tab"        element={<Navigate to="/ark" replace />} />
 
             {/* ── Workspace ─────────────────────────────────────────────────── */}
             <Route path="/workspace"               element={<AppRoute><Workspace /></AppRoute>} />
@@ -309,3 +313,4 @@ function RedirectGroupId({ prefix, suffix = '' }) {
   const { groupId } = useParams();
   return <Navigate to={`${prefix}/${groupId}${suffix}`} replace />;
 }
+

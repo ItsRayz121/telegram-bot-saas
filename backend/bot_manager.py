@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import logging
 import threading
 from datetime import datetime, timedelta
@@ -526,12 +526,12 @@ class BotInstance:
 
         if redirect_to_hub:
             await update.message.reply_text(
-                "🤖 <b>Private groups use Assistant Hub.</b>\n\n"
+                "🤖 <b>Private groups use Echo.</b>\n\n"
                 "Your bot is already active as an AI assistant for this group. "
                 "Open your dashboard to confirm the connection and configure it.",
                 parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🤖 Assistant Hub", url=f"{frontend}/assistant-hub")],
+                    [InlineKeyboardButton("🤖 Echo", url=f"{frontend}/ark")],
                 ]),
             )
             return
@@ -2968,3 +2968,4 @@ class BotManager:
 
 
 bot_manager = BotManager()
+

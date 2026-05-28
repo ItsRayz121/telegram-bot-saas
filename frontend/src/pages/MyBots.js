@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box, Container, Typography, Button, Card, CardContent,
@@ -346,7 +346,7 @@ export default function MyBots() {
                           {bot.hub_bot_id && (
                             <Chip
                               icon={<Psychology sx={{ fontSize: '13px !important' }} />}
-                              label="Also in Assistant Hub"
+                              label="Also in Echo"
                               size="small"
                               color="secondary"
                               variant="outlined"
@@ -538,3 +538,4 @@ export default function MyBots() {
     </PlanGate>
   );
 }
+

@@ -1,4 +1,4 @@
-import os
+﻿import os
 import logging as _logging
 from datetime import timedelta
 from dotenv import load_dotenv
@@ -212,7 +212,7 @@ class Config:
                 "Everything in Free",
                 "AI Auto-Reply (knowledge base Q&A)",
                 "AI Group Digests (daily/weekly)",
-                "AI Assistant Hub (notes, tasks, queries)",
+                "Echo — AI Assistant (notes, tasks, queries)",
                 "500k AI credits / day",
                 "Bring your own AI API key",
                 "Advanced analytics (90 days)",
@@ -244,3 +244,4 @@ class Config:
             ],
         },
     }
+

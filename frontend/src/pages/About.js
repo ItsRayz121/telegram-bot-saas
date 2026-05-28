@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { openSupportEmail } from '../config/support';
 import {
   Box, AppBar, Toolbar, Typography, Button, Container, Divider,
@@ -72,7 +72,7 @@ const FEATURES = [
 const TIMELINE = [
   { year: '2024', label: 'Founded', desc: 'Started as a simple bot manager for a small Telegram community.' },
   { year: 'Q1 2025', label: 'First 100 Groups', desc: 'AutoMod, scheduled messages, and basic analytics launched.' },
-  { year: 'Q2 2025', label: 'AI Features', desc: 'AI Daily Digest, Auto-Reply, and the Assistant Hub went live.' },
+  { year: 'Q2 2025', label: 'AI Features', desc: 'AI Daily Digest, Auto-Reply, and Echo (AI Assistant) went live.' },
   { year: 'Q4 2025', label: 'Mini App', desc: 'Telegram Mini App launched — manage your community without leaving Telegram.' },
   { year: '2026', label: 'Full Platform', desc: 'Workspace, CRM, Channels, Marketplace, and Custom Bot Builder shipped.' },
 ];
@@ -343,3 +343,4 @@ export default function About() {
     </Box>
   );
 }
+

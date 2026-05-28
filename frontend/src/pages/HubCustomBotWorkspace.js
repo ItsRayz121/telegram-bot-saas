@@ -1,4 +1,4 @@
-/**
+﻿/**
  * /hub/bots/:botId/:tab — Custom bot workspace.
  * Uses the same 8 tabs as the official bot workspace, with all data scoped
  * to this bot's ID. The Settings tab shows bot-specific danger zone instead
@@ -51,8 +51,8 @@ export default function HubCustomBotWorkspace() {
   useEffect(() => { loadBot(); }, [loadBot]);
   useEffect(() => { loadGroups(); }, [loadGroups]);
 
-  const handleTabChange = (_, newTab) => navigate(`/hub/bots/${botId}/${newTab}`);
-  const handleDeleted = () => navigate('/hub');
+  const handleTabChange = (_, newTab) => navigate(`/ark/bots/${botId}/${newTab}`);
+  const handleDeleted = () => navigate('/ark');
 
   if (loading) {
     return (
@@ -66,7 +66,7 @@ export default function HubCustomBotWorkspace() {
     return (
       <Box sx={{ p: 3 }}>
         <Alert severity="error" action={
-          <Button size="small" onClick={() => navigate('/hub')}>Back to Hub</Button>
+          <Button size="small" onClick={() => navigate('/ark')}>Back to Echo</Button>
         }>
           Bot not found or you don't have access to it.
         </Alert>
@@ -81,8 +81,8 @@ export default function HubCustomBotWorkspace() {
       {/* Header */}
       <Box sx={{ px: { xs: 2, sm: 3 }, pt: 2, pb: 0, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
-          <Button size="small" startIcon={<ArrowBack sx={{ fontSize: 15 }} />} onClick={() => navigate('/hub')}
-            sx={{ minWidth: 0, color: 'text.secondary', fontWeight: 400, px: 0.5 }}>Hub</Button>
+          <Button size="small" startIcon={<ArrowBack sx={{ fontSize: 15 }} />} onClick={() => navigate('/ark')}
+            sx={{ minWidth: 0, color: 'text.secondary', fontWeight: 400, px: 0.5 }}>Echo</Button>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, minWidth: 0 }}>
             <Avatar sx={{ width: 24, height: 24, bgcolor: PALETTE.blue + '33', flexShrink: 0 }}>
               <SmartToy sx={{ fontSize: 14, color: PALETTE.blue }} />
@@ -427,3 +427,5 @@ function CustomBotSettings({ bot, onDeleted }) {
     </Box>
   );
 }
+
+

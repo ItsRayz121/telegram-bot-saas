@@ -1,4 +1,4 @@
-"""
+﻿"""
 Assistant Hub — Consent Flow & Group Connection handlers.
 
 These are called from official_bot.py when:
@@ -116,7 +116,7 @@ async def _send_consent_dm(
     if is_public or is_large:
         warning_text = (
             "⚠️ *Note: This looks like a public or large group.*\n"
-            "Assistant Hub works best in private team groups. "
+            "Echo works best in private team groups. "
             "For public community management, use Group Management instead.\n\n"
         )
 
@@ -396,7 +396,7 @@ async def send_group_type_dm(
     text = (
         f"You've added me to *{_esc(group_name)}* ({member_str}).\n\n"
         f"This is a small private group. How should I be used here?\n\n"
-        f"🤖 *Assistant Hub* — I observe silently and surface tasks, reminders, and meetings "
+        f"🤖 *Echo* — I observe silently and surface tasks, reminders, and meetings "
         f"in your personal dashboard. No moderation.\n\n"
         f"🛡 *Community Moderation* — I manage the group with welcome messages, rules enforcement, "
         f"anti-spam, and member verification."
@@ -406,7 +406,7 @@ async def send_group_type_dm(
     keyboard = InlineKeyboardMarkup([
         [
             InlineKeyboardButton(
-                "🤖 Assistant Hub",
+                "🤖 Echo",
                 callback_data=f"hub_classify:hub:{telegram_group_id}:{bot_tag_str}",
             ),
             InlineKeyboardButton(
@@ -470,7 +470,7 @@ async def handle_classify_callback(update, context, flask_app):
             pass
 
         await query.edit_message_text(
-            f"🤖 Setting up *{_esc(group_name)}* as an Assistant Hub group...",
+            f"🤖 Setting up *{_esc(group_name)}* as an Echo group...",
             parse_mode=ParseMode.MARKDOWN,
         )
         await _send_consent_dm(
@@ -642,3 +642,4 @@ def _user_by_tg_id(tg_id: str):
 def _esc(text: str) -> str:
     """Minimal Markdown escaping for group names in PTB MarkdownV1."""
     return text.replace("*", "\\*").replace("_", "\\_").replace("`", "\\`")
+

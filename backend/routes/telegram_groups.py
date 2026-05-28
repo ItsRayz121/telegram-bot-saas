@@ -1,4 +1,4 @@
-"""
+﻿"""
 API routes for the official Telegizer bot group ecosystem.
 
 Endpoints:
@@ -223,12 +223,12 @@ def link_group():
         if hub_clash:
             return jsonify({
                 "error": (
-                    "This group is already connected to Assistant Hub. "
-                    "Assistant Hub groups are separate from Group Management groups. "
-                    "To use it for Group Management, disconnect it from Assistant Hub first."
+                    "This group is already connected to Echo. "
+                    "Echo groups are separate from Group Management groups. "
+                    "To use it for Group Management, disconnect it from Echo first."
                 ),
                 "code": "HUB_GROUP_CONFLICT",
-                "hint": "Go to Assistant Hub → Groups → Disconnect, then try linking again.",
+                "hint": "Go to Echo → Groups → Disconnect, then try linking again.",
             }), 409
 
     # Enforce per-tier official group limit
@@ -1806,3 +1806,4 @@ def get_group_permissions(group_id):
         "permission_score": score,
         "access_tier": perms.get("access_tier", "Unknown"),
     }), 200
+

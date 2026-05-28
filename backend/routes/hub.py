@@ -674,7 +674,7 @@ def delete_all_data():
     for tg_id in telegram_group_ids:
         _try_leave_group(tg_id)
 
-    return jsonify({"ok": True, "message": "All Assistant Hub data deleted."})
+    return jsonify({"ok": True, "message": "All Echo data deleted."})
 
 
 @hub_bp.route("/bots/official/settings/retention", methods=["PATCH"])

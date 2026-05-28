@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Box, List, ListItem, ListItemButton, ListItemIcon, ListItemText,
@@ -222,7 +222,7 @@ function HubSectionLabel() {
           fontSize: '0.6rem', fontWeight: 700, color: PALETTE.text3,
         }}
       >
-        Assistant Hub
+        Echo
       </Typography>
       <Box className="ai-pulse-dot" sx={{ width: 5, height: 5 }} />
     </Box>
@@ -327,7 +327,7 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
   const [, setGroupsOpen]     = useState(groupActive);
   const [channelsOpen, setChannelsOpen] = useState(channelActive);
 
-  const assistantActive = isActive('/hub') || isActive('/workspace');
+  const assistantActive = isActive('/ark') || isActive('/hub') || isActive('/workspace');
   const automationActive = isActive('/automation') || isActive('/workspace/forwarding') || isActive('/workspace/automations') || isActive('/workflow-builder');
 
   useEffect(() => { if (isActive('/groups'))   setGroupsOpen(true);   }, [pathname, isActive]);
@@ -396,7 +396,7 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
       { label: 'Dashboard',   icon: Home,        path: '/dashboard', exact: true },
       { label: 'Groups',      icon: Groups,      path: '/groups' },
       { label: 'My Bots',     icon: SmartToy,    path: '/custom-bots' },
-      { label: 'Hub',         icon: Psychology,  path: '/hub', ai: true },
+      { label: 'Echo',         icon: Psychology,  path: '/ark', ai: true },
       { label: 'Analytics',   icon: BarChart,    path: '/analytics' },
       { label: 'Referrals',   icon: EmojiEvents, path: '/referrals' },
       { label: 'Billing',     icon: CreditCard,  path: '/billing' },
@@ -625,7 +625,7 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
 
         {/* WORKSPACE */}
         <HubSectionLabel />
-        <NavItem label="Hub" icon={Psychology} path="/hub" active={assistantActive} aiAccent onClick={() => nav('/hub')} />
+        <NavItem label="Echo" icon={Psychology} path="/ark" active={assistantActive} aiAccent onClick={() => nav('/ark')} />
 
         {/* ANALYTICS */}
         <SectionLabel label="Analytics" />
@@ -691,3 +691,4 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
 }
 
 export { SIDEBAR_WIDTH, SIDEBAR_COLLAPSED_WIDTH };
+

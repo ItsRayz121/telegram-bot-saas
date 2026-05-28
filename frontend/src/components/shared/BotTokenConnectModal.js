@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions,
   Button, TextField, Alert, Box, Typography, CircularProgress, Chip,
@@ -111,7 +111,7 @@ export default function BotTokenConnectModal({ open, onClose, onConnected, mode 
             </Box>
             <Box sx={{ mt: 1 }}>
               <Typography variant="caption" color="text.secondary">
-                This bot will be available in both <strong>Assistant Hub</strong> (private groups) and <strong>Group Management</strong> (public communities).
+                This bot will be available in both <strong>Echo</strong> (private groups) and <strong>Group Management</strong> (public communities).
               </Typography>
             </Box>
             {!preview.can_join_groups && (
@@ -151,3 +151,4 @@ export default function BotTokenConnectModal({ open, onClose, onConnected, mode 
     </Dialog>
   );
 }
+

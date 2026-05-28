@@ -1,4 +1,4 @@
-/**
+﻿/**
  * /hub/official/:tab — Official bot workspace.
  * Sprint 4: Overview, Tasks, Reminders, Notes tabs are fully live.
  */
@@ -76,14 +76,14 @@ export default function HubWorkspace() {
       .catch(() => {});
   }, []);
 
-  const handleTabChange = (_, newTab) => navigate(`/hub/official/${newTab}`);
+  const handleTabChange = (_, newTab) => navigate(`/ark/official/${newTab}`);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Header */}
       <Box sx={{ px: { xs: 2, sm: 3 }, pt: 2, pb: 0, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
-          <Button size="small" startIcon={<ArrowBack sx={{ fontSize: 15 }} />} onClick={() => navigate('/hub')}
+          <Button size="small" startIcon={<ArrowBack sx={{ fontSize: 15 }} />} onClick={() => navigate('/ark')}
             sx={{ minWidth: 0, color: 'text.secondary', fontWeight: 400, px: 0.5 }}>Hub</Button>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, minWidth: 0 }}>
             <SmartToy sx={{ fontSize: 20, color: 'primary.main', flexShrink: 0 }} />
@@ -184,7 +184,7 @@ function HubOverview({ botData, groups, botId }) {
     return (
       <EmptyState icon="🤖" title="Add the Telegizer bot to your private groups to get started."
         body="The assistant will silently observe and surface tasks, decisions, and meetings here."
-        action={<Button variant="contained" size="small" onClick={() => navigate(botId ? `/hub/bots/${botId}/settings` : '/hub/official/settings')}>+ Add to Group</Button>}
+        action={<Button variant="contained" size="small" onClick={() => navigate(botId ? `/ark/bots/${botId}/settings` : '/ark/official/settings')}>+ Add to Group</Button>}
       />
     );
   }
@@ -2113,7 +2113,7 @@ function OnboardingFlow({ open, onClose }) {
   const steps = [
     {
       emoji: '👋',
-      title: 'Welcome to Assistant Hub',
+      title: 'Welcome to Echo',
       body: 'Your AI-powered team memory. Connect a Telegram group and the assistant will quietly extract tasks, reminders, decisions, and meetings from every conversation — automatically.',
     },
     {
@@ -2155,7 +2155,7 @@ function OnboardingFlow({ open, onClose }) {
           onClick={() => {
             if (isLast) {
               onClose();
-              navigate('/hub/official/settings');
+              navigate('/ark/official/settings');
             } else {
               setStep(s => s + 1);
             }
@@ -2167,3 +2167,5 @@ function OnboardingFlow({ open, onClose }) {
     </Dialog>
   );
 }
+
+

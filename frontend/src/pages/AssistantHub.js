@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, Chip, CircularProgress,
   Alert, LinearProgress,
@@ -875,7 +875,7 @@ export default function AssistantHub() {
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
         <Psychology sx={{ fontSize: 26, color: 'primary.main' }} />
-        <Typography variant="h5" fontWeight={700}>Assistant Hub</Typography>
+        <Typography variant="h5" fontWeight={700}>Echo</Typography>
       </Box>
       <Typography color="text.secondary" fontSize="0.88rem" mb={2}>{today}</Typography>
 
@@ -941,3 +941,4 @@ export default function AssistantHub() {
     </Box>
   );
 }
+

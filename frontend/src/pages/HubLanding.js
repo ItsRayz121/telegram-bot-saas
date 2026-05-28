@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box, Typography, Button, Card, CardContent, Chip, Skeleton,
@@ -76,7 +76,7 @@ export default function HubLanding() {
           <Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.25 }}>
               <Typography variant="h5" fontWeight={800} letterSpacing="-0.02em">
-                AI Assistant Hub
+                Echo
               </Typography>
               <Box className="ai-pulse-dot" />
             </Box>
@@ -92,7 +92,7 @@ export default function HubLanding() {
       {/* ── Official Bot Card ── */}
       <Box sx={{ mb: 3 }}>
         {loading ? <OfficialBotSkeleton /> : (
-          <OfficialBotCard bot={officialBot} onManage={() => navigate('/hub/official/overview')} />
+          <OfficialBotCard bot={officialBot} onManage={() => navigate('/ark/official/overview')} />
         )}
       </Box>
 
@@ -139,7 +139,7 @@ function DecisionGuideCard({ plan }) {
             ))}
             <Button
               variant="contained" size="small" fullWidth sx={{ mt: 2 }}
-              onClick={() => navigate('/hub/workspace')}
+              onClick={() => navigate('/ark/workspace')}
             >
               Use Official Bot
             </Button>
@@ -165,7 +165,7 @@ function DecisionGuideCard({ plan }) {
             <Button
               variant={isPro ? 'contained' : 'outlined'}
               color="secondary" size="small" fullWidth sx={{ mt: 2 }}
-              onClick={() => navigate(isPro ? '/hub/custom-bot/new' : '/pricing')}
+              onClick={() => navigate(isPro ? '/ark/custom-bot/new' : '/pricing')}
             >
               {isPro ? 'Add Custom Bot' : 'Upgrade to Pro'}
             </Button>
@@ -260,7 +260,7 @@ function OfficialBotCard({ bot, onManage }) {
             variant="outlined"
             size="small"
             startIcon={<GroupAdd />}
-            onClick={() => navigate('/hub/official/settings')}
+            onClick={() => navigate('/ark/official/settings')}
           >
             Add to Group
           </Button>
@@ -407,7 +407,7 @@ function CustomBotsSection({ plan }) {
                   size="small"
                   variant="contained"
                   sx={{ fontSize: '0.72rem', flexShrink: 0, ml: 0.5 }}
-                  onClick={() => navigate(`/hub/bots/${bot.id}/overview`)}
+                  onClick={() => navigate(`/ark/bots/${bot.id}/overview`)}
                 >
                   Manage
                 </Button>
@@ -525,3 +525,4 @@ function formatRelative(isoString) {
   if (hrs < 24) return `${hrs}h ago`;
   return `${Math.floor(hrs / 24)}d ago`;
 }
+

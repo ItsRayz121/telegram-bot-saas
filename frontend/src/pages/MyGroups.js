@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Box, Container, Typography, Button, Card, CardContent,
@@ -713,30 +713,32 @@ export default function MyGroups() {
 
       {/* Hub conflict dialog */}
       <Dialog open={hubConflictOpen} onClose={() => setHubConflictOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Group Already in Assistant Hub</DialogTitle>
+        <DialogTitle>Group Already in Echo</DialogTitle>
         <DialogContent>
           <Typography variant="body2" sx={{ mb: 1 }}>
-            This group is already connected to <strong>Assistant Hub</strong>.
+            This group is already connected to <strong>Echo</strong>.
           </Typography>
           <Typography variant="body2" sx={{ mb: 1 }}>
-            Assistant Hub groups and Group Management groups are separate. Mixing them
+            Echo groups and Group Management groups are separate. Mixing them
             would apply moderation features (XP, welcome messages, analytics, warnings)
             to a private assistant group.
           </Typography>
           <Typography variant="body2">
-            To use this group for Group Management, first disconnect it from Assistant Hub.
+            To use this group for Group Management, first disconnect it from Echo.
           </Typography>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setHubConflictOpen(false)}>Cancel</Button>
           <Button
             variant="contained"
-            onClick={() => { setHubConflictOpen(false); navigate('/hub'); }}
+            onClick={() => { setHubConflictOpen(false); navigate('/ark'); }}
           >
-            Open Assistant Hub
+            Open Echo
           </Button>
         </DialogActions>
       </Dialog>
     </Box>
   );
 }
+
+
