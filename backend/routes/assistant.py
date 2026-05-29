@@ -204,12 +204,15 @@ def hub_summary():
         "recent_notes": [n.to_dict() for n in recent_notes],
         "digest_status": digest_status,
         "automation_activity": {
-            "auto_replies_today": 0,   # AutoReplyLog is Phase 2
+            "auto_replies_today": AutoReplyLog.query.filter(
+                AutoReplyLog.user_id == user.id,
+                AutoReplyLog.triggered_at >= today_start,
+            ).count(),
             "workflows_today": workflows_today,
         },
         "onboarding": {
             "has_active_group": len(active_groups) > 0,
-            "has_auto_reply": False,   # resolved client-side for simplicity
+            "has_auto_reply": AutoReplyLog.query.filter_by(user_id=user.id).count() > 0,
             "has_digest": any(
                 (g.settings or {}).get("digest", {}).get("enabled") for g in groups
             ),
