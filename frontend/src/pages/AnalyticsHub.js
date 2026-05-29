@@ -8,12 +8,16 @@ import {
 } from '@mui/material';
 import {
   BarChart as BarChartIcon, Groups, Tv,
-  PersonAdd, Shield, Bolt, OpenInNew,
+  PersonAdd, Shield, Bolt, OpenInNew, Psychology,
+  CheckBox, LibraryBooks, Notes, Link, NotificationsActive,
 } from '@mui/icons-material';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
-import { analytics as analyticsApi, telegramGroups as groupsApi, channels as chApi, auth } from '../services/api';
+import {
+  analytics as analyticsApi, telegramGroups as groupsApi, channels as chApi, auth,
+  assistant as assistantApi, hub, notes as notesApi, workspaceKnowledge as knowledgeApi,
+} from '../services/api';
 
 const CHART_STYLE = { background: '#161b22', border: '1px solid #30363d' };
 
@@ -286,9 +290,85 @@ function ChannelsTab() {
   );
 }
 
+// ── Assistant Tab ──────────────────────────────────────────────────────────────
+
+function AssistantTab() {
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState(null);
+
+  useEffect(() => {
+    const sevenDaysAgo = new Date(Date.now() - 7 * 86400000);
+    Promise.all([
+      hub.listTasks().catch(() => ({ data: { tasks: [] } })),
+      notesApi.list().catch(() => ({ data: { notes: [] } })),
+      knowledgeApi.list().catch(() => ({ data: { documents: [] } })),
+      assistantApi.getAutoReplyLogs().catch(() => ({ data: { logs: [] } })),
+      hub.listReminders().catch(() => ({ data: { reminders: [] } })),
+    ]).then(([tRes, nRes, kRes, aRes, rRes]) => {
+      const tasks = tRes.data.tasks || [];
+      const notes = nRes.data.notes || [];
+      const docs = kRes.data.documents || [];
+      const logs = aRes.data.logs || [];
+      const reminders = rRes.data.reminders || [];
+      const recentTriggers = logs.filter(l => new Date(l.triggered_at) >= sevenDaysAgo).length;
+      setStats({
+        tasks: { total: tasks.length, done: tasks.filter(t => t.status === 'done').length },
+        notes: { total: notes.length, ai: notes.filter(n => n.source === 'ai').length },
+        docs: docs.length,
+        triggers7d: recentTriggers,
+        reminders: { total: reminders.length },
+      });
+    }).finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}><CircularProgress size={32} /></Box>;
+  if (!stats) return null;
+
+  const items = [
+    { icon: <CheckBox />, label: 'Total Tasks', value: stats.tasks.total, sub: `${stats.tasks.done} done`, path: '/workspace/tasks', color: 'primary.main' },
+    { icon: <Notes />, label: 'Notes', value: stats.notes.total, sub: `${stats.notes.ai} AI-generated`, path: '/workspace/notes', color: 'success.main' },
+    { icon: <LibraryBooks />, label: 'Knowledge Docs', value: stats.docs, sub: null, path: '/workspace/knowledge', color: 'warning.main' },
+    { icon: <Link />, label: 'Auto-Reply Triggers (7d)', value: stats.triggers7d, sub: null, path: '/workspace/smart-links', color: 'secondary.main' },
+    { icon: <NotificationsActive />, label: 'Reminders', value: stats.reminders.total, sub: null, path: '/workspace/reminders', color: 'error.main' },
+  ];
+
+  return (
+    <Box>
+      <Typography fontSize="0.85rem" color="text.secondary" mb={2.5}>
+        Summary of your Echo Assistant activity across tasks, notes, knowledge, and automation.
+      </Typography>
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        {items.map(item => (
+          <Grid item xs={12} sm={6} md={4} key={item.label}>
+            <Card variant="outlined" sx={{ cursor: 'pointer', '&:hover': { borderColor: 'primary.main' } }}
+              onClick={() => navigate(item.path)}>
+              <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, py: '14px !important' }}>
+                <Box sx={{ p: 1.25, borderRadius: 2, bgcolor: `${item.color}22`, flexShrink: 0 }}>
+                  {React.cloneElement(item.icon, { sx: { color: item.color, fontSize: 20 } })}
+                </Box>
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography variant="h5" fontWeight={700} lineHeight={1.1}>{item.value}</Typography>
+                  <Typography variant="body2" color="text.secondary" fontSize="0.8rem">{item.label}</Typography>
+                  {item.sub && <Typography variant="caption" color="text.disabled">{item.sub}</Typography>}
+                </Box>
+                <OpenInNew sx={{ fontSize: 14, color: 'text.disabled' }} />
+              </CardContent>
+            </Card>
+          </Grid>
+        ))}
+      </Grid>
+      <Alert severity="info" icon={<Psychology />}
+        action={<Button size="small" onClick={() => navigate('/ark')}>Go to Echo</Button>}>
+        Detailed per-group extraction stats are in the Echo workspace.
+      </Alert>
+    </Box>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
-const TAB_MAP = { groups: 1, channels: 2 };
+const TAB_MAP = { groups: 1, channels: 2, assistant: 3 };
 
 export default function AnalyticsHub() {
   const [searchParams] = useSearchParams();
@@ -322,11 +402,14 @@ export default function AnalyticsHub() {
         <Tab label="Overview" />
         <Tab label="Groups" />
         <Tab label="Channels" />
+        <Tab label="Assistant" icon={<Psychology sx={{ fontSize: 15 }} />} iconPosition="start"
+          sx={{ textTransform: 'none', minHeight: 40 }} />
       </Tabs>
 
       {tab === 0 && <OverviewTab isPro={isPro} />}
       {tab === 1 && <GroupsTab />}
       {tab === 2 && <ChannelsTab />}
+      {tab === 3 && <AssistantTab />}
     </Box>
   );
 }
