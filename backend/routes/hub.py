@@ -21,6 +21,7 @@ from ..assistant.hub_models import (
 from ..assistant.hub_settings_resolver import get_effective_settings
 from ..assistant.hub_plan_limits import get_limits_for_plan, PlanLimitError
 from ..config import Config
+from ..middleware.rate_limit import rate_limit
 
 _log = logging.getLogger(__name__)
 

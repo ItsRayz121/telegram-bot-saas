@@ -105,6 +105,11 @@ class Config:
         )
     OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 
+    # Google Calendar OAuth2
+    GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+    GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+    GOOGLE_REDIRECT_URI = os.environ.get("GOOGLE_REDIRECT_URI", "")
+
     # Platform-wide Gemini key (kept for user workspace keys; not used as platform primary).
     PLATFORM_GEMINI_API_KEY = os.environ.get("PLATFORM_GEMINI_API_KEY", "")
 
