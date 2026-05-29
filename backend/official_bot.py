@@ -353,7 +353,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "\n\n💬 *Just chat with me naturally!*\n"
         "\"Schedule meeting Friday 3 PM\" · \"Show my reminders\" · "
         "\"Note this: ...\" · \"Any group issues today?\""
-    ) if is_linked else ""
+    ) if (is_linked and not Config.ECHO_BOT_TOKEN) else ""
 
     text = (
         f"👋 *Welcome to Telegizer, {first}!*\n\n"
@@ -1146,15 +1146,27 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ── Mode gate: only route to AI if user has activated assistant mode ─────
     # Users in "menu" mode get a nudge to open the menu instead of spamming AI.
     if _get_dm_mode(user.id) != "assistant":
-        await message.reply_text(
-            "Use the menu to navigate, or tap *AI Assistant* to chat with AI.",
-            parse_mode=ParseMode.MARKDOWN,
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🧠 AI Assistant", callback_data="menu:ai_assistant")],
-                [InlineKeyboardButton("📋 My Groups", callback_data="menu:my_groups"),
-                 InlineKeyboardButton("⚙️ Settings", callback_data="qs:groups")],
-            ]),
-        )
+        if Config.ECHO_BOT_TOKEN:
+            _echo_un = Config.ECHO_BOT_USERNAME or "Telegizer Echo"
+            await message.reply_text(
+                f"I handle community management.\n\n"
+                f"For AI assistance, message @{_echo_un}.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton(f"Open @{_echo_un}", url=f"https://t.me/{_echo_un}")],
+                    [InlineKeyboardButton("📋 My Groups", callback_data="menu:my_groups"),
+                     InlineKeyboardButton("⚙️ Settings", callback_data="qs:groups")],
+                ]),
+            )
+        else:
+            await message.reply_text(
+                "Use the menu to navigate, or tap *AI Assistant* to chat with AI.",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🧠 AI Assistant", callback_data="menu:ai_assistant")],
+                    [InlineKeyboardButton("📋 My Groups", callback_data="menu:my_groups"),
+                     InlineKeyboardButton("⚙️ Settings", callback_data="qs:groups")],
+                ]),
+            )
         return
 
     # ── AI assistant routing — only reached when mode == "assistant" ──────────
@@ -1963,6 +1975,19 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     elif data == "menu:ai_assistant":
+        if Config.ECHO_BOT_TOKEN:
+            _echo_un = Config.ECHO_BOT_USERNAME or "Telegizer Echo"
+            await query.edit_message_text(
+                f"🧠 *AI Assistant*\n\n"
+                f"AI features are handled by @{_echo_un}.\n\n"
+                f"Open Echo to chat, set reminders, manage tasks, and more.",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton(f"Open @{_echo_un}", url=f"https://t.me/{_echo_un}")],
+                    [InlineKeyboardButton("« Back to Menu", callback_data="menu:main")],
+                ]),
+            )
+            return
         _set_dm_mode(query.from_user.id, "assistant")
         await query.edit_message_text(
             "🧠 *AI Assistant — Active*\n\n"
