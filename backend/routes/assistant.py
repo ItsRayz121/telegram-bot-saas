@@ -304,7 +304,7 @@ def ask_groups():
         context_lines.append(f"[{grp}] {m.sender_name or 'User'}: {m.content}")
     context = "\n".join(context_lines)[:14000]
 
-    from ..assistant.ai_key_resolver import get_workspace_ai_key
+    from ..assistant.ai_key_resolver import get_workspace_ai_key, record_token_usage
     key_info = get_workspace_ai_key(user)
     if not key_info.get("api_key"):
         return jsonify({"error": "No AI key configured — set one in AI Settings"}), 400
@@ -318,6 +318,8 @@ def ask_groups():
 
     try:
         answer = _call_ai_text(key_info, prompt)
+        if key_info.get("source") == "platform":
+            record_token_usage(user, (len(prompt) + len(answer)) // 4)
     except Exception as exc:
         _log.warning("Cross-group ask failed: %s", exc)
         return jsonify({"error": "AI request failed"}), 502
@@ -495,9 +497,11 @@ def inline_ai():
     prompt = prompts.get(action, prompts["summarize"])
 
     try:
-        from ..assistant.ai_key_resolver import get_workspace_ai_key, QuotaExceededError
+        from ..assistant.ai_key_resolver import get_workspace_ai_key, QuotaExceededError, record_token_usage
         key_info = get_workspace_ai_key(user)
         result = _call_ai_text(key_info, prompt)
+        if key_info.get("source") == "platform":
+            record_token_usage(user, (len(prompt) + len(result)) // 4)
         return jsonify({"result": result, "action": action})
     except Exception as exc:
         _log.warning("inline_ai action=%s failed: %s", action, exc)
