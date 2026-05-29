@@ -4,15 +4,15 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions, TextField,
   Switch, FormControlLabel, ToggleButton, ToggleButtonGroup,
   Tooltip, CircularProgress, Alert, Divider, Select,
-  MenuItem, FormControl, InputLabel,
+  MenuItem, FormControl, InputLabel, Tabs, Tab,
 } from '@mui/material';
 import {
   Add, Edit, Delete, Link, Public, Groups,
   CalendarMonth, Slideshow, Language, Support, QuestionAnswer,
-  MenuBook, Sell, VideoCall, CheckCircle,
+  MenuBook, Sell, VideoCall, CheckCircle, History,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
-import { workspace as wsApi, telegramGroups as tgApi } from '../services/api';
+import { workspace as wsApi, telegramGroups as tgApi, assistant as assistantApi } from '../services/api';
 
 // ── Quick-add presets ──────────────────────────────────────────────────────────
 
@@ -313,6 +313,60 @@ function DeleteDialog({ open, link, onClose, onConfirm }) {
   );
 }
 
+// ── Trigger Log ────────────────────────────────────────────────────────────────
+
+function TriggerLog({ links, groups }) {
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    assistantApi.getAutoReplyLogs()
+      .then(r => setLogs(r.data.logs || []))
+      .catch(() => setError('Failed to load trigger log.'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const linkLabel = (id) => links.find(l => l.id === id)?.link_label || `Rule #${id}`;
+  const groupName = (gid) => groups.find(g => g.telegram_group_id === gid)?.name || gid;
+
+  if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}><CircularProgress size={28} /></Box>;
+  if (error) return <Alert severity="error">{error}</Alert>;
+
+  return (
+    <Box>
+      <Typography fontSize="0.82rem" color="text.secondary" mb={2}>
+        Last 100 auto-reply events across all your groups.
+      </Typography>
+      {logs.length === 0 ? (
+        <Card sx={{ textAlign: 'center', py: 6 }}>
+          <History sx={{ fontSize: 40, color: 'text.disabled', mb: 1.5 }} />
+          <Typography fontWeight={600} mb={0.5}>No triggers yet</Typography>
+          <Typography color="text.secondary" fontSize="0.85rem">
+            When a Smart Link fires in a group, it will appear here.
+          </Typography>
+        </Card>
+      ) : (
+        logs.map(log => (
+          <Card key={log.id} variant="outlined" sx={{ mb: 1 }}>
+            <CardContent sx={{ py: '10px !important', px: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+                <Chip label={linkLabel(log.auto_response_id)} size="small" color="primary" sx={{ fontSize: '0.7rem', height: 20 }} />
+                <Typography fontSize="0.8rem" color="text.secondary" sx={{ flex: 1, minWidth: 0 }} noWrap>
+                  "{log.message_text || log.trigger_text}"
+                </Typography>
+                <Typography fontSize="0.72rem" color="text.disabled" sx={{ flexShrink: 0 }}>
+                  {groupName(log.telegram_group_id)} · {new Date(log.triggered_at).toLocaleString()}
+                </Typography>
+              </Box>
+            </CardContent>
+          </Card>
+        ))
+      )}
+    </Box>
+  );
+}
+
 // ── Main page ──────────────────────────────────────────────────────────────────
 
 export default function WorkspaceSmartLinks() {
@@ -322,6 +376,7 @@ export default function WorkspaceSmartLinks() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [tab, setTab] = useState('links');
 
   const load = useCallback(async () => {
     try {
@@ -394,6 +449,16 @@ export default function WorkspaceSmartLinks() {
         </Button>
       </Box>
 
+      {/* Tab bar */}
+      <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}>
+        <Tab label="Smart Links" value="links" sx={{ fontSize: '0.85rem', textTransform: 'none', minHeight: 40 }} />
+        <Tab label="Trigger Log" value="log" icon={<History sx={{ fontSize: 16 }} />} iconPosition="start"
+          sx={{ fontSize: '0.85rem', textTransform: 'none', minHeight: 40 }} />
+      </Tabs>
+
+      {tab === 'log' && <TriggerLog links={links} groups={groups} />}
+
+      {tab === 'links' && <>
       {/* How it works banner */}
       <Alert severity="info" sx={{ mb: 3 }} icon={<Link />}>
         <Typography variant="body2">
@@ -464,6 +529,8 @@ export default function WorkspaceSmartLinks() {
           )}
         </>
       )}
+
+      </>}
 
       {/* Create / Edit dialog */}
       <SmartLinkDialog
