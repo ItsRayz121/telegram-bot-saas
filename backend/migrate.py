@@ -618,6 +618,13 @@ def init_hub_db():
         db.create_all()
         print("Assistant Hub tables created (new tables only).")
 
+        # Column additions (P2-7 meeting URL capture)
+        _run_alter(
+            db.engine,
+            "ALTER TABLE hub_meetings ADD COLUMN IF NOT EXISTS meeting_url VARCHAR(500)",
+            "hub_meetings.meeting_url",
+        )
+
         # Indexes — created via CREATE INDEX IF NOT EXISTS
         hub_indexes = [
             ("CREATE INDEX IF NOT EXISTS idx_hub_bot_identities_user ON hub_bot_identities(user_id, is_active)",

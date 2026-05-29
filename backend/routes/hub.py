@@ -780,6 +780,7 @@ def _meeting_dict(m):
     return {"id": m.id, "title": _dec(m.title),
             "scheduled_at": m.scheduled_at.isoformat() if m.scheduled_at else None,
             "participants": m.participants, "source_group_id": m.source_group_id,
+            "meeting_url": m.meeting_url,
             "created_at": m.created_at.isoformat()}
 
 def _note_dict(n):

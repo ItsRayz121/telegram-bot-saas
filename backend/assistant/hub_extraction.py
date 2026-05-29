@@ -209,7 +209,7 @@ def _call_openai(user, group, messages: list, bot_id: str, r) -> tuple:
         "- tasks: array of {title, assignee (name only or null), due_date (ISO 8601 date or null), priority (low/normal/high)}\n"
         "- reminders: array of {content, remind_at (ISO 8601 datetime or null)}\n"
         "- decisions: array of {content, made_by (name or null)}\n"
-        "- meetings: array of {title, scheduled_at (ISO 8601 datetime or null), participants (name array)}\n"
+        "- meetings: array of {title, scheduled_at (ISO 8601 datetime or null), participants (name array), meeting_url (Zoom/Meet/Calendly/Teams URL found in the message or null)}\n"
         "- important_notes: array of {content}\n"
         "- follow_ups: array of {commitment, committed_by (name or null), due_hint (e.g. 'by Friday', 'tomorrow', null)}\n"
         "  A follow_up is a commitment or promise made by someone that has NOT been confirmed as done in this conversation.\n"
@@ -432,6 +432,8 @@ def _write_items(validated: dict, group, bot_id: str, batch_id: str, db) -> dict
         if not isinstance(participants, list):
             participants = []
         participants = [str(p) for p in participants[:20]]
+        raw_url = mtg.get("meeting_url") or ""
+        meeting_url = str(raw_url)[:500] if raw_url and raw_url.startswith("http") else None
         meeting = HubMeeting(
             user_id=user_id,
             bot_id=bot_id,
@@ -439,6 +441,7 @@ def _write_items(validated: dict, group, bot_id: str, batch_id: str, db) -> dict
             title=_enc(title),
             scheduled_at=scheduled_at,
             participants=participants,
+            meeting_url=meeting_url,
             source_batch_id=batch_id,
         )
         db.session.add(meeting)

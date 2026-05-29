@@ -214,6 +214,7 @@ class HubMeeting(db.Model):
     title = db.Column(db.String(255))                                # ENCRYPTED
     scheduled_at = db.Column(db.DateTime(timezone=True))
     participants = db.Column(db.JSON, default=list)                  # list of names
+    meeting_url = db.Column(db.String(500), nullable=True)           # Zoom/Meet/Calendly link
     reminder_created = db.Column(db.Boolean, default=False, nullable=False)
     calendar_pushed = db.Column(db.Boolean, default=False, nullable=False)
     source_batch_id = db.Column(db.String(36), db.ForeignKey("hub_extraction_batches.id", ondelete="SET NULL"))
