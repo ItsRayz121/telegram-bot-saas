@@ -11,7 +11,7 @@ import {
   AdminPanelSettings, ExpandMore, ExpandLess,
   Psychology, ChevronLeft, ChevronRight,
   SmartToy, EmojiEvents, CheckCircle, RadioButtonUnchecked,
-  BarChart,
+  BarChart, CheckBox,
 } from '@mui/icons-material';
 import TelegizerLogo from './TelegizerLogo';
 import { telegramGroups as tgApi, auth as authApi, channels as chApi } from '../services/api';
@@ -327,7 +327,7 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
   const [, setGroupsOpen]     = useState(groupActive);
   const [channelsOpen, setChannelsOpen] = useState(channelActive);
 
-  const assistantActive = isActive('/ark') || isActive('/hub') || isActive('/workspace');
+  const assistantActive = isActive('/ark') || isActive('/hub') || isActive('/workspace') || isActive('/workspace/tasks');
   const automationActive = isActive('/automation') || isActive('/workspace/forwarding') || isActive('/workspace/automations') || isActive('/workflow-builder');
 
   useEffect(() => { if (isActive('/groups'))   setGroupsOpen(true);   }, [pathname, isActive]);
@@ -397,6 +397,7 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
       { label: 'Groups',      icon: Groups,      path: '/groups' },
       { label: 'My Bots',     icon: SmartToy,    path: '/custom-bots' },
       { label: 'Echo',         icon: Psychology,  path: '/ark', ai: true },
+      { label: 'Tasks',        icon: CheckBox,    path: '/workspace/tasks' },
       { label: 'Analytics',   icon: BarChart,    path: '/analytics' },
       { label: 'Referrals',   icon: EmojiEvents, path: '/referrals' },
       { label: 'Billing',     icon: CreditCard,  path: '/billing' },
@@ -626,6 +627,7 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
         {/* WORKSPACE */}
         <HubSectionLabel />
         <NavItem label="Echo" icon={Psychology} path="/ark" active={assistantActive} aiAccent onClick={() => nav('/ark')} />
+        <NavItem label="Tasks" icon={CheckBox} path="/workspace/tasks" active={isActive('/workspace/tasks')} onClick={() => nav('/workspace/tasks')} />
 
         {/* ANALYTICS */}
         <SectionLabel label="Analytics" />

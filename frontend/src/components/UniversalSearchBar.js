@@ -29,7 +29,7 @@ const TYPE_ROUTE = {
   meeting: null,         // no dedicated page yet — navigate to assistant hub
   reminder: '/assistant/reminders',
   note: '/assistant/notes',
-  task: '/assistant/tasks',
+  task: '/workspace/tasks',
   group: null,
 };
 
