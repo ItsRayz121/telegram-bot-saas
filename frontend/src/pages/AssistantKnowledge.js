@@ -2,13 +2,13 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, Chip, CircularProgress,
   Alert, Grid, IconButton, TextField, Dialog, DialogTitle, DialogContent,
-  DialogActions, InputAdornment, Tooltip, Divider,
+  DialogActions, InputAdornment, Tooltip, Divider, Tabs, Tab,
 } from '@mui/material';
 import {
   LibraryBooks, Upload, Delete, Search, QuestionAnswer,
-  InsertDriveFile, PictureAsPdf, Close, Send,
+  InsertDriveFile, PictureAsPdf, Close, Send, AutoAwesome, Note,
 } from '@mui/icons-material';
-import { workspaceKnowledge as knowledgeApi } from '../services/api';
+import { workspaceKnowledge as knowledgeApi, hub as hubApi } from '../services/api';
 import PlanGate from '../components/PlanGate';
 
 function _getUser() {
@@ -241,7 +241,118 @@ function SearchResultsPanel({ query, results, onClear }) {
   );
 }
 
+// ── Semantic Search tab ───────────────────────────────────────────────────────
+
+const RESULT_TYPE_ICON = { note: Note, knowledge_card: LibraryBooks };
+const RESULT_TYPE_LABEL = { note: 'Note', knowledge_card: 'Knowledge Card' };
+const RESULT_TYPE_COLOR = { note: 'primary', knowledge_card: 'secondary' };
+
+function SemanticSearchTab() {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState(null);
+  const [searching, setSearching] = useState(false);
+  const [error, setError] = useState('');
+
+  const search = async () => {
+    if (query.trim().length < 2) return;
+    setSearching(true);
+    setError('');
+    try {
+      const { data } = await hubApi.semanticSearch(query.trim());
+      setResults(data.results || []);
+    } catch (e) {
+      const msg = e?.response?.data?.error;
+      if (msg === 'No AI key configured — set one in AI Settings') {
+        setError('Semantic search requires an AI key. Set one in AI Settings.');
+      } else {
+        setError('Search failed. Please try again.');
+      }
+      setResults([]);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  return (
+    <Box>
+      <Typography fontSize="0.88rem" color="text.secondary" mb={2}>
+        Search semantically across your notes and knowledge cards using AI similarity.
+      </Typography>
+      <Box sx={{ display: 'flex', gap: 1, mb: 3 }}>
+        <TextField
+          size="small" fullWidth placeholder="e.g. follow-ups from last week, pricing decisions…"
+          value={query} onChange={e => setQuery(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && search()}
+          InputProps={{
+            startAdornment: <InputAdornment position="start"><AutoAwesome fontSize="small" sx={{ color: 'primary.main' }} /></InputAdornment>,
+            endAdornment: searching ? <InputAdornment position="end"><CircularProgress size={16} /></InputAdornment> : null,
+          }}
+        />
+        <Button variant="contained" onClick={search} disabled={searching || query.trim().length < 2}>
+          Search
+        </Button>
+      </Box>
+
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
+      {results !== null && results.length === 0 && (
+        <Alert severity="info">No results found for "{query}". Try a different phrasing.</Alert>
+      )}
+
+      {results && results.length > 0 && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          {results.map(r => {
+            const Icon = RESULT_TYPE_ICON[r.type] || LibraryBooks;
+            return (
+              <Card variant="outlined" key={r.id}>
+                <CardContent sx={{ pb: '12px !important' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+                    <Icon sx={{ fontSize: 20, color: 'text.secondary', mt: 0.25, flexShrink: 0 }} />
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 0.5, flexWrap: 'wrap' }}>
+                        <Chip
+                          label={RESULT_TYPE_LABEL[r.type] || r.type}
+                          size="small"
+                          color={RESULT_TYPE_COLOR[r.type] || 'default'}
+                          sx={{ fontSize: '0.65rem', height: 18 }}
+                        />
+                        {r.title && <Typography fontWeight={600} fontSize="0.85rem">{r.title}</Typography>}
+                        <Typography fontSize="0.72rem" color="text.disabled" sx={{ ml: 'auto' }}>
+                          {Math.round(r.score * 100)}% match
+                        </Typography>
+                      </Box>
+                      <Typography fontSize="0.8rem" color="text.secondary" sx={{
+                        overflow: 'hidden', display: '-webkit-box',
+                        WebkitLineClamp: 3, WebkitBoxOrient: 'vertical',
+                      }}>
+                        {r.content_preview}
+                      </Typography>
+                      {(r.tags || []).length > 0 && (
+                        <Box sx={{ display: 'flex', gap: 0.5, mt: 0.75, flexWrap: 'wrap' }}>
+                          {r.tags.map(t => <Chip key={t} label={t} size="small" sx={{ fontSize: '0.6rem', height: 16 }} />)}
+                        </Box>
+                      )}
+                    </Box>
+                  </Box>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </Box>
+      )}
+
+      {results === null && (
+        <Box sx={{ textAlign: 'center', py: 8, color: 'text.disabled' }}>
+          <AutoAwesome sx={{ fontSize: 40, mb: 1 }} />
+          <Typography>Enter a query to search by meaning, not just keywords</Typography>
+        </Box>
+      )}
+    </Box>
+  );
+}
+
 export default function AssistantKnowledge() {
+  const [tab, setTab] = useState(0);
   const [docs, setDocs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -287,62 +398,75 @@ export default function AssistantKnowledge() {
           <LibraryBooks sx={{ fontSize: 26, color: 'primary.main' }} />
           <Typography variant="h5" fontWeight={700}>Knowledge Base</Typography>
         </Box>
-        <Button variant="contained" size="small" startIcon={<Upload />} onClick={() => setUploadOpen(true)}>
-          Add Document
-        </Button>
+        {tab === 0 && (
+          <Button variant="contained" size="small" startIcon={<Upload />} onClick={() => setUploadOpen(true)}>
+            Add Document
+          </Button>
+        )}
       </Box>
-      <Typography color="text.secondary" fontSize="0.88rem" mb={3}>
+      <Typography color="text.secondary" fontSize="0.88rem" mb={2}>
         Upload docs, PDFs, and text — then ask the AI questions about them
       </Typography>
 
-      {error && <Alert severity="error" onClose={() => setError('')} sx={{ mb: 2 }}>{error}</Alert>}
+      <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}>
+        <Tab label="Documents" />
+        <Tab label="Semantic Search" icon={<AutoAwesome sx={{ fontSize: 16 }} />} iconPosition="start" />
+      </Tabs>
 
-      {/* Search bar */}
-      <Box sx={{ display: 'flex', gap: 1, mb: 3 }}>
-        <TextField
-          size="small" fullWidth placeholder="Search across all documents…"
-          value={searchQ} onChange={e => setSearchQ(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && search()}
-          InputProps={{
-            startAdornment: <InputAdornment position="start"><Search fontSize="small" /></InputAdornment>,
-            endAdornment: searching ? <InputAdornment position="end"><CircularProgress size={16} /></InputAdornment> : null,
-          }}
-        />
-        <Button variant="outlined" onClick={search} disabled={searching}>Search</Button>
-      </Box>
+      {tab === 0 && (
+        <>
+          {error && <Alert severity="error" onClose={() => setError('')} sx={{ mb: 2 }}>{error}</Alert>}
 
-      {searchResults !== null && (
-        <SearchResultsPanel query={searchQ} results={searchResults} onClear={() => { setSearchResults(null); setSearchQ(''); }} />
-      )}
+          {/* Keyword search bar */}
+          <Box sx={{ display: 'flex', gap: 1, mb: 3 }}>
+            <TextField
+              size="small" fullWidth placeholder="Search across all documents…"
+              value={searchQ} onChange={e => setSearchQ(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && search()}
+              InputProps={{
+                startAdornment: <InputAdornment position="start"><Search fontSize="small" /></InputAdornment>,
+                endAdornment: searching ? <InputAdornment position="end"><CircularProgress size={16} /></InputAdornment> : null,
+              }}
+            />
+            <Button variant="outlined" onClick={search} disabled={searching}>Search</Button>
+          </Box>
 
-      {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}><CircularProgress size={32} /></Box>
-      ) : docs.length === 0 ? (
-        <Card variant="outlined" sx={{ textAlign: 'center', py: 8 }}>
-          <LibraryBooks sx={{ fontSize: 48, color: 'text.disabled', mb: 1.5 }} />
-          <Typography fontWeight={600} mb={0.5}>No documents yet</Typography>
-          <Typography color="text.secondary" fontSize="0.85rem" mb={2}>
-            Upload PDFs, text files, or paste content to build your knowledge base.
-          </Typography>
-          <Button variant="contained" startIcon={<Upload />} onClick={() => setUploadOpen(true)}>
-            Add First Document
-          </Button>
-        </Card>
-      ) : (
-        <Grid container spacing={2}>
-          {docs.map(d => (
-            <Grid item xs={12} sm={6} md={4} key={d.id}>
-              <DocCard doc={d} onDelete={deleteDoc} onAsk={setAskDoc} />
+          {searchResults !== null && (
+            <SearchResultsPanel query={searchQ} results={searchResults} onClear={() => { setSearchResults(null); setSearchQ(''); }} />
+          )}
+
+          {loading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}><CircularProgress size={32} /></Box>
+          ) : docs.length === 0 ? (
+            <Card variant="outlined" sx={{ textAlign: 'center', py: 8 }}>
+              <LibraryBooks sx={{ fontSize: 48, color: 'text.disabled', mb: 1.5 }} />
+              <Typography fontWeight={600} mb={0.5}>No documents yet</Typography>
+              <Typography color="text.secondary" fontSize="0.85rem" mb={2}>
+                Upload PDFs, text files, or paste content to build your knowledge base.
+              </Typography>
+              <Button variant="contained" startIcon={<Upload />} onClick={() => setUploadOpen(true)}>
+                Add First Document
+              </Button>
+            </Card>
+          ) : (
+            <Grid container spacing={2}>
+              {docs.map(d => (
+                <Grid item xs={12} sm={6} md={4} key={d.id}>
+                  <DocCard doc={d} onDelete={deleteDoc} onAsk={setAskDoc} />
+                </Grid>
+              ))}
             </Grid>
-          ))}
-        </Grid>
+          )}
+
+          <UploadDialog open={uploadOpen} onClose={() => setUploadOpen(false)}
+            onUploaded={doc => { setDocs(prev => [doc, ...prev]); }} />
+          {askDoc && (
+            <AskDialog open={Boolean(askDoc)} doc={askDoc} onClose={() => setAskDoc(null)} />
+          )}
+        </>
       )}
 
-      <UploadDialog open={uploadOpen} onClose={() => setUploadOpen(false)}
-        onUploaded={doc => { setDocs(prev => [doc, ...prev]); }} />
-      {askDoc && (
-        <AskDialog open={Boolean(askDoc)} doc={askDoc} onClose={() => setAskDoc(null)} />
-      )}
+      {tab === 1 && <SemanticSearchTab />}
     </Box>
     </PlanGate>
   );

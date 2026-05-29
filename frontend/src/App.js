@@ -76,6 +76,7 @@ const AssistantDigests = React.lazy(() => import('./pages/AssistantDigests'));
 const AssistantAISettings = React.lazy(() => import('./pages/AssistantAISettings'));
 const AssistantTasks = React.lazy(() => import('./pages/AssistantTasks'));
 const AssistantKnowledge = React.lazy(() => import('./pages/AssistantKnowledge'));
+const AssistantMemory = React.lazy(() => import('./pages/AssistantMemory'));
 const AnalyticsHub = React.lazy(() => import('./pages/AnalyticsHub'));
 const WorkflowBuilder = React.lazy(() => import('./pages/WorkflowBuilder'));
 
@@ -241,6 +242,7 @@ export default function App() {
             <Route path="/workspace/ai-settings"   element={<AppRoute><React.Suspense fallback={null}><AssistantAISettings /></React.Suspense></AppRoute>} />
             <Route path="/workspace/tasks"         element={<AppRoute><React.Suspense fallback={null}><AssistantTasks /></React.Suspense></AppRoute>} />
             <Route path="/workspace/knowledge"     element={<AppRoute><React.Suspense fallback={null}><AssistantKnowledge /></React.Suspense></AppRoute>} />
+            <Route path="/workspace/memory"        element={<AppRoute><React.Suspense fallback={null}><AssistantMemory /></React.Suspense></AppRoute>} />
             <Route path="/workspace/assistant-bot" element={<AppRoute><React.Suspense fallback={null}><AssistantBotSettings /></React.Suspense></AppRoute>} />
             <Route path="/workflow-builder"        element={<AppRoute><React.Suspense fallback={null}><WorkflowBuilder /></React.Suspense></AppRoute>} />
 

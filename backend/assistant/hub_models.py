@@ -237,6 +237,7 @@ class HubNote(db.Model):
     tags = db.Column(db.JSON, default=list)
     source = db.Column(db.String(20), default="manual", nullable=False)
     source_batch_id = db.Column(db.String(36), db.ForeignKey("hub_extraction_batches.id", ondelete="SET NULL"))
+    embedding = db.Column(db.Text)                                     # JSON-encoded float list for semantic search
     created_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 

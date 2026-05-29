@@ -1,15 +1,16 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Box, Typography, Tabs, Tab, Card, CardContent, Grid,
   CircularProgress, Alert, Button, FormControl, InputLabel,
   Select, MenuItem, Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, Chip,
+  TableHead, TableRow, Chip, TextField, InputAdornment, Paper,
 } from '@mui/material';
 import {
   BarChart as BarChartIcon, Groups, Tv,
   PersonAdd, Shield, Bolt, OpenInNew, Psychology,
   CheckBox, LibraryBooks, Notes, Link, NotificationsActive,
+  Send, AutoAwesome,
 } from '@mui/icons-material';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -366,9 +367,131 @@ function AssistantTab() {
   );
 }
 
+// ── Insights Tab (Cross-Group Intelligence) ───────────────────────────────────
+
+const EXAMPLE_QUERIES = [
+  "What did my groups discuss most this week?",
+  "Were there any unresolved complaints?",
+  "Summarize key decisions from all groups",
+  "Which groups are most active?",
+  "Any mentions of pricing or payments?",
+];
+
+function InsightsTab() {
+  const [query, setQuery] = useState('');
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const bottomRef = useRef(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const ask = async (q) => {
+    const question = (q || query).trim();
+    if (!question) return;
+    setMessages(prev => [...prev, { role: 'user', text: question }]);
+    setQuery('');
+    setLoading(true);
+    try {
+      const { data } = await assistantApi.ask(question);
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        text: data.answer,
+        meta: `Searched ${data.groups_searched} group(s), ${data.messages_scanned} message(s)`,
+      }]);
+    } catch (e) {
+      const msg = e?.response?.data?.error || 'Query failed. Make sure you have groups connected.';
+      setMessages(prev => [...prev, { role: 'error', text: msg }]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Box>
+      <Typography fontSize="0.85rem" color="text.secondary" mb={2}>
+        Ask natural-language questions about your groups' recent conversations (last 72h).
+      </Typography>
+
+      {messages.length === 0 && (
+        <Box sx={{ mb: 3 }}>
+          <Typography fontSize="0.78rem" color="text.disabled" mb={1}>Try asking…</Typography>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+            {EXAMPLE_QUERIES.map(q => (
+              <Chip
+                key={q}
+                label={q}
+                size="small"
+                onClick={() => ask(q)}
+                sx={{ cursor: 'pointer', fontSize: '0.75rem' }}
+                icon={<AutoAwesome sx={{ fontSize: '13px !important' }} />}
+              />
+            ))}
+          </Box>
+        </Box>
+      )}
+
+      <Paper variant="outlined" sx={{ p: 2, mb: 2, minHeight: 180, maxHeight: 420, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+        {messages.length === 0 && (
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, flexDirection: 'column', color: 'text.disabled', gap: 1 }}>
+            <AutoAwesome sx={{ fontSize: 36 }} />
+            <Typography fontSize="0.85rem">Ask a question about your groups</Typography>
+          </Box>
+        )}
+        {messages.map((m, i) => (
+          <Box key={i} sx={{
+            alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
+            maxWidth: '85%',
+          }}>
+            <Paper
+              elevation={0}
+              sx={{
+                px: 1.5, py: 1,
+                bgcolor: m.role === 'user' ? 'primary.main' : m.role === 'error' ? 'error.dark' : 'rgba(255,255,255,0.05)',
+                borderRadius: 2,
+              }}
+            >
+              <Typography fontSize="0.83rem" sx={{ whiteSpace: 'pre-wrap', color: m.role === 'user' ? '#fff' : 'text.primary' }}>
+                {m.text}
+              </Typography>
+              {m.meta && (
+                <Typography fontSize="0.68rem" color="text.disabled" mt={0.5}>{m.meta}</Typography>
+              )}
+            </Paper>
+          </Box>
+        ))}
+        {loading && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.disabled' }}>
+            <CircularProgress size={14} /> <Typography fontSize="0.78rem">Searching groups…</Typography>
+          </Box>
+        )}
+        <div ref={bottomRef} />
+      </Paper>
+
+      <Box sx={{ display: 'flex', gap: 1 }}>
+        <TextField
+          fullWidth size="small"
+          placeholder="Ask anything about your groups…"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && !loading && ask()}
+          disabled={loading}
+          InputProps={{
+            startAdornment: <InputAdornment position="start"><AutoAwesome fontSize="small" sx={{ color: 'primary.main' }} /></InputAdornment>,
+          }}
+        />
+        <Button variant="contained" onClick={() => ask()} disabled={loading || !query.trim()} sx={{ minWidth: 44, px: 1.5 }}>
+          <Send fontSize="small" />
+        </Button>
+      </Box>
+    </Box>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
-const TAB_MAP = { groups: 1, channels: 2, assistant: 3 };
+const TAB_MAP = { groups: 1, channels: 2, assistant: 3, insights: 4 };
 
 export default function AnalyticsHub() {
   const [searchParams] = useSearchParams();
@@ -404,12 +527,15 @@ export default function AnalyticsHub() {
         <Tab label="Channels" />
         <Tab label="Assistant" icon={<Psychology sx={{ fontSize: 15 }} />} iconPosition="start"
           sx={{ textTransform: 'none', minHeight: 40 }} />
+        <Tab label="Insights" icon={<AutoAwesome sx={{ fontSize: 15 }} />} iconPosition="start"
+          sx={{ textTransform: 'none', minHeight: 40 }} />
       </Tabs>
 
       {tab === 0 && <OverviewTab isPro={isPro} />}
       {tab === 1 && <GroupsTab />}
       {tab === 2 && <ChannelsTab />}
       {tab === 3 && <AssistantTab />}
+      {tab === 4 && <InsightsTab />}
     </Box>
   );
 }

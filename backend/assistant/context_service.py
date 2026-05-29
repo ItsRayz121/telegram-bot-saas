@@ -42,6 +42,9 @@ class AssistantContext:
     knowledge_docs: list = field(default_factory=list)   # [{id, title, preview}]
     platform_today: dict = field(default_factory=dict)   # {messages_received, automations_fired, digests_sent}
     group_alerts: list = field(default_factory=list)     # [{group_title, health_status, ai_summary}] (Phase 3+)
+    memory_global: dict = field(default_factory=dict)    # {preferred_name, company, role, priorities, notes}
+    memory_people: list = field(default_factory=list)    # [{name, role, notes}]
+    memory_projects: list = field(default_factory=list)  # [{name, status, notes, deadline}]
 
     def to_prompt_text(self) -> str:
         """Render context as a concise text block for AI system prompts."""
@@ -105,6 +108,37 @@ class AssistantContext:
             lines.append(f"\nGroup alerts:")
             for a in self.group_alerts:
                 lines.append(f"  ⚠️ {a['group_title']}: {a['health_status']} — {a.get('ai_summary','')[:100]}")
+
+        if self.memory_global:
+            mg = self.memory_global
+            parts = []
+            if mg.get("preferred_name"):
+                parts.append(f"prefers to be called {mg['preferred_name']}")
+            if mg.get("company"):
+                parts.append(f"works at {mg['company']}")
+            if mg.get("role"):
+                parts.append(f"role: {mg['role']}")
+            if mg.get("priorities"):
+                parts.append(f"current priorities: {mg['priorities'][:120]}")
+            if parts:
+                lines.append(f"\nUser memory: {'; '.join(parts)}")
+            if mg.get("notes"):
+                lines.append(f"  Notes: {mg['notes'][:200]}")
+
+        if self.memory_people:
+            lines.append(f"\nKnown people ({len(self.memory_people)}):")
+            for p in self.memory_people[:8]:
+                role = f" ({p['role']})" if p.get("role") else ""
+                note = f" — {p['notes'][:80]}" if p.get("notes") else ""
+                lines.append(f"  • {p['name']}{role}{note}")
+
+        if self.memory_projects:
+            lines.append(f"\nKnown projects ({len(self.memory_projects)}):")
+            for pj in self.memory_projects[:6]:
+                status = f" [{pj['status']}]" if pj.get("status") else ""
+                deadline = f" due {pj['deadline']}" if pj.get("deadline") else ""
+                note = f" — {pj['notes'][:80]}" if pj.get("notes") else ""
+                lines.append(f"  • {pj['name']}{status}{deadline}{note}")
 
         if self.recent_conversation:
             lines.append("\nRecent conversation:")
@@ -383,6 +417,55 @@ class AssistantContextService:
         except Exception:
             pass
 
+        # ── Memory facts ──────────────────────────────────────────────────────
+        memory_global: dict = {}
+        memory_people: list = []
+        memory_projects: list = []
+        try:
+            from ..assistant.hub_models import HubMemoryGlobal, HubMemoryPerson, HubMemoryProject
+            from ..assistant.hub_crypto import _dec
+
+            mg = HubMemoryGlobal.query.filter_by(user_id=user_id).first()
+            if mg:
+                memory_global = {
+                    "preferred_name": mg.preferred_name or "",
+                    "company": mg.company_name or "",
+                    "role": mg.role or "",
+                    "priorities": _dec(mg.current_priorities) or "",
+                    "notes": _dec(mg.free_notes) or "",
+                }
+
+            people_raw = (
+                HubMemoryPerson.query
+                .filter_by(user_id=user_id)
+                .order_by(HubMemoryPerson.updated_at.desc())
+                .limit(20)
+                .all()
+            )
+            memory_people = [
+                {"name": p.name, "role": p.role or "", "notes": _dec(p.notes) or ""}
+                for p in people_raw
+            ]
+
+            projects_raw = (
+                HubMemoryProject.query
+                .filter_by(user_id=user_id)
+                .order_by(HubMemoryProject.updated_at.desc())
+                .limit(10)
+                .all()
+            )
+            memory_projects = [
+                {
+                    "name": pj.name,
+                    "status": pj.status or "",
+                    "notes": _dec(pj.context_notes) or "",
+                    "deadline": pj.deadline.strftime("%d %b %Y") if pj.deadline else "",
+                }
+                for pj in projects_raw
+            ]
+        except Exception as _mem_exc:
+            _log.warning("context_service memory query failed: %s", _mem_exc)
+
         return AssistantContext(
             user_id=user_id,
             full_name=user.full_name or "User",
@@ -399,5 +482,8 @@ class AssistantContextService:
             recent_conversation=recent_conversation,
             knowledge_docs=knowledge_docs,
             platform_today=platform_today,
-            group_alerts=[],  # Populated in Phase 3 via GroupDailySignal
+            group_alerts=[],
+            memory_global=memory_global,
+            memory_people=memory_people,
+            memory_projects=memory_projects,
         )

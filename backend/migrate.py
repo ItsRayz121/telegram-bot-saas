@@ -500,6 +500,27 @@ def init_db():
             "official_warnings.message_text",
         )
 
+        # ── P3-3: Google Calendar — token table (db.create_all handles creation) ─
+        _run_alter(
+            db.engine,
+            "CREATE INDEX IF NOT EXISTS ix_google_calendar_tokens_user_id ON google_calendar_tokens (user_id)",
+            "google_calendar_tokens.user_id index",
+        )
+
+        # ── P3-1: Semantic search — embedding column on hub_notes ────────────────
+        _run_alter(
+            db.engine,
+            "ALTER TABLE hub_notes ADD COLUMN IF NOT EXISTS embedding TEXT",
+            "hub_notes.embedding (semantic search)",
+        )
+
+        # ── P2-7: Meeting URL column on hub_meetings ──────────────────────────────
+        _run_alter(
+            db.engine,
+            "ALTER TABLE hub_meetings ADD COLUMN IF NOT EXISTS meeting_url VARCHAR(500)",
+            "hub_meetings.meeting_url",
+        )
+
         print("Migration complete.")
 
     # One-shot Telegram account backfill (moved above; comment kept for reference).

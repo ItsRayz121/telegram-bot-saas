@@ -877,12 +877,23 @@ export const hub = {
   createMemoryProject:  (data)       => api.post('/api/hub/memory/projects', data),
   updateMemoryProject:  (id, data)   => api.patch(`/api/hub/memory/projects/${id}`, data),
   deleteMemoryProject:  (id)         => api.delete(`/api/hub/memory/projects/${id}`),
+  listMemorySuggestions: (status)    => api.get('/api/hub/memory/suggestions', { params: { status: status || 'pending' } }),
+  resolveMemorySuggestion: (id, status) => api.patch(`/api/hub/memory/suggestions/${id}`, { status }),
+  semanticSearch: (query)            => api.post('/api/hub/search/semantic', { query }),
   // Follow-ups (Sprint 8)
   listFollowUps:        (status, groupId) => api.get('/api/hub/follow-ups', { params: { status, group_id: groupId } }),
   resolveFollowUp:      (id)         => api.patch(`/api/hub/follow-ups/${id}/resolve`),
   dismissFollowUp:      (id)         => api.patch(`/api/hub/follow-ups/${id}/dismiss`),
   // Cross-group AI summary (Sprint 8)
   crossGroupSummary:    (range, startDate, endDate) => api.post('/api/hub/cross-group-summary', { range, start_date: startDate, end_date: endDate }),
+};
+
+export const googleCalendar = {
+  getAuthUrl:      ()    => api.get('/api/calendar/auth-url'),
+  status:          ()    => api.get('/api/calendar/status'),
+  listEvents:      ()    => api.get('/api/calendar/events'),
+  syncReminder:    (id)  => api.post(`/api/calendar/sync-reminder/${id}`),
+  disconnect:      ()    => api.delete('/api/calendar/disconnect'),
 };
 
 export default api;

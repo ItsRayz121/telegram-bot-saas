@@ -8,12 +8,12 @@ import {
 import {
   ArrowBack, SmartToy, Person, Lock, DeleteForever, Schedule,
   Security, CheckCircle, ContentCopy, Telegram, LinkOff, OpenInNew,
-  Add, Star, StarBorder, Delete,
+  Add, Star, StarBorder, Delete, CalendarMonth,
 } from '@mui/icons-material';
 import { List, ListItem, ListItemText, ListItemSecondaryAction, Tooltip } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { auth, totp as totpApi, billing, userSettings, telegramAccount } from '../services/api';
+import { auth, totp as totpApi, billing, userSettings, telegramAccount, googleCalendar as calApi } from '../services/api';
 import { track } from '../services/analytics';
 import TimezoneSelect from '../components/TimezoneSelect';
 
@@ -507,6 +507,129 @@ function LinkedTelegramAccountsSection() {
   );
 }
 
+// ── Google Calendar Section ────────────────────────────────────────────────────
+function GoogleCalendarSection() {
+  const [status, setStatus] = useState(null);
+  const [events, setEvents] = useState(null);
+  const [loadingEvents, setLoadingEvents] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [error, setError] = useState('');
+
+  const loadStatus = useCallback(async () => {
+    try {
+      const { data } = await calApi.status();
+      setStatus(data);
+    } catch { setStatus({ connected: false }); }
+  }, []);
+
+  useEffect(() => { loadStatus(); }, [loadStatus]);
+
+  // Handle redirect-back from Google OAuth
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const cal = params.get('calendar');
+    if (cal === 'connected') {
+      loadStatus();
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (cal === 'error') {
+      setError('Google Calendar connection failed. Please try again.');
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [loadStatus]);
+
+  const connect = async () => {
+    setConnecting(true);
+    setError('');
+    try {
+      const { data } = await calApi.getAuthUrl();
+      window.location.href = data.auth_url;
+    } catch (e) {
+      const msg = e?.response?.data?.error;
+      if (msg?.includes('not configured')) setError('Google Calendar is not configured on this server yet.');
+      else setError('Failed to start Google OAuth. Please try again.');
+      setConnecting(false);
+    }
+  };
+
+  const disconnect = async () => {
+    if (!window.confirm('Disconnect Google Calendar?')) return;
+    setDisconnecting(true);
+    try {
+      await calApi.disconnect();
+      setStatus({ connected: false });
+      setEvents(null);
+    } catch { setError('Failed to disconnect.'); }
+    finally { setDisconnecting(false); }
+  };
+
+  const loadEvents = async () => {
+    setLoadingEvents(true);
+    try {
+      const { data } = await calApi.listEvents();
+      setEvents(data.events || []);
+    } catch { setEvents([]); }
+    finally { setLoadingEvents(false); }
+  };
+
+  if (!status) return <CircularProgress size={20} />;
+
+  return (
+    <Box>
+      {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
+      {status.connected ? (
+        <Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+            <CheckCircle color="success" />
+            <Box>
+              <Typography fontWeight={600} fontSize="0.9rem">Connected</Typography>
+              {status.email && <Typography fontSize="0.8rem" color="text.secondary">{status.email}</Typography>}
+            </Box>
+            <Button size="small" color="error" startIcon={<LinkOff />} sx={{ ml: 'auto' }} onClick={disconnect} disabled={disconnecting}>
+              {disconnecting ? 'Disconnecting…' : 'Disconnect'}
+            </Button>
+          </Box>
+          {events === null ? (
+            <Button size="small" variant="outlined" onClick={loadEvents} disabled={loadingEvents}>
+              {loadingEvents ? 'Loading…' : 'Show upcoming events'}
+            </Button>
+          ) : events.length === 0 ? (
+            <Alert severity="info">No upcoming events found.</Alert>
+          ) : (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              {events.slice(0, 8).map(e => (
+                <Box key={e.id} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 0.75, borderBottom: '1px solid', borderColor: 'divider' }}>
+                  <CalendarMonth sx={{ fontSize: 16, color: 'text.disabled', flexShrink: 0 }} />
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography fontSize="0.85rem" fontWeight={500} noWrap>{e.summary}</Typography>
+                    <Typography fontSize="0.72rem" color="text.secondary">
+                      {e.start ? new Date(e.start).toLocaleString() : 'All day'}
+                    </Typography>
+                  </Box>
+                  {e.html_link && (
+                    <IconButton size="small" href={e.html_link} target="_blank" rel="noopener noreferrer">
+                      <OpenInNew fontSize="small" />
+                    </IconButton>
+                  )}
+                </Box>
+              ))}
+            </Box>
+          )}
+        </Box>
+      ) : (
+        <Box>
+          <Typography variant="body2" color="text.secondary" mb={2}>
+            Connect your Google Calendar to sync reminders and meetings. Upcoming events will appear alongside your workspace schedule.
+          </Typography>
+          <Button variant="contained" startIcon={<CalendarMonth />} onClick={connect} disabled={connecting}>
+            {connecting ? 'Connecting…' : 'Connect Google Calendar'}
+          </Button>
+        </Box>
+      )}
+    </Box>
+  );
+}
+
 // ── Main Settings Page ─────────────────────────────────────────────────────────
 export default function Settings() {
   const navigate = useNavigate();
@@ -769,6 +892,11 @@ export default function Settings() {
               Save
             </Button>
           </Stack>
+        </Section>
+
+        {/* Google Calendar */}
+        <Section title="Google Calendar" icon={<CalendarMonth color="primary" />}>
+          <GoogleCalendarSection />
         </Section>
 
         {/* Data Privacy */}

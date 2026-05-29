@@ -2751,3 +2751,15 @@ class UserAssistantProfile(db.Model):
             "notes_saved": self.notes_saved,
             "tasks_created": self.tasks_created,
         }
+
+
+class GoogleCalendarToken(db.Model):
+    """OAuth 2.0 tokens for a user's connected Google Calendar account."""
+    __tablename__ = "google_calendar_tokens"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    email = db.Column(db.String(255))
+    token_json = db.Column(db.Text, nullable=False)  # Fernet-encrypted JSON token blob
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

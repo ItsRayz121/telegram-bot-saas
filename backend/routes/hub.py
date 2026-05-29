@@ -1242,6 +1242,11 @@ def create_note():
     )
     db.session.add(note)
     db.session.commit()
+    try:
+        from ..assistant.embedding_service import embed_note_background
+        embed_note_background(note.id, content)
+    except Exception:
+        pass
     return jsonify({"note": _note_dict(note)}), 201
 
 
@@ -1252,13 +1257,21 @@ def update_note(note_id):
     note = HubNote.query.filter_by(id=note_id, user_id=user.id).first_or_404()
     data = request.get_json(silent=True) or {}
 
+    new_content = None
     if "content" in data:
         from ..assistant.hub_crypto import _enc
-        note.content = _enc(data["content"][:2000])
+        new_content = data["content"][:2000]
+        note.content = _enc(new_content)
     if "tags" in data and isinstance(data["tags"], list):
         note.tags = data["tags"]
     note.updated_at = datetime.utcnow()
     db.session.commit()
+    if new_content:
+        try:
+            from ..assistant.embedding_service import embed_note_background
+            embed_note_background(note.id, new_content)
+        except Exception:
+            pass
     return jsonify({"note": _note_dict(note)})
 
 
@@ -1771,6 +1784,111 @@ def delete_memory_project(project_id):
     db.session.delete(pj)
     db.session.commit()
     return jsonify({"ok": True})
+
+
+@hub_bp.route("/memory/suggestions", methods=["GET"])
+@jwt_required()
+def list_memory_suggestions():
+    user = _current_user()
+    from ..assistant.hub_models import HubMemorySuggestion
+    status_filter = request.args.get("status", "pending")
+    suggestions = (
+        HubMemorySuggestion.query
+        .filter_by(user_id=user.id, status=status_filter)
+        .order_by(HubMemorySuggestion.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    return jsonify({"suggestions": [_suggestion_dict(s) for s in suggestions]})
+
+
+@hub_bp.route("/memory/suggestions/<suggestion_id>", methods=["PATCH"])
+@jwt_required()
+def resolve_memory_suggestion(suggestion_id):
+    """Approve or skip a memory suggestion. Approving creates the person/project record."""
+    user = _current_user()
+    from ..assistant.hub_models import HubMemorySuggestion
+    s = HubMemorySuggestion.query.filter_by(id=suggestion_id, user_id=user.id).first_or_404()
+    data = request.get_json(silent=True) or {}
+    new_status = data.get("status")
+    if new_status not in ("approved", "skipped"):
+        return jsonify({"error": "status must be approved or skipped"}), 400
+
+    s.status = new_status
+    s.resolved_at = datetime.utcnow()
+
+    if new_status == "approved":
+        suggested = s.suggested_data or {}
+        from ..assistant.hub_crypto import _enc
+        if s.suggestion_type == "person":
+            from ..assistant.hub_models import HubMemoryPerson
+            person = HubMemoryPerson(
+                id=str(uuid.uuid4()),
+                user_id=user.id,
+                name=suggested.get("name", "Unknown"),
+                role=suggested.get("role"),
+                notes=_enc(suggested.get("notes")) if suggested.get("notes") else None,
+                group_associations=suggested.get("group_associations") or [],
+                source="suggestion",
+            )
+            db.session.add(person)
+        elif s.suggestion_type == "project":
+            from ..assistant.hub_models import HubMemoryProject
+            project = HubMemoryProject(
+                id=str(uuid.uuid4()),
+                user_id=user.id,
+                name=suggested.get("name", "Unknown"),
+                status=suggested.get("status") or "active",
+                context_notes=_enc(suggested.get("context_notes")) if suggested.get("context_notes") else None,
+                group_associations=suggested.get("group_associations") or [],
+                source="suggestion",
+            )
+            db.session.add(project)
+
+    db.session.commit()
+    return jsonify({"suggestion": _suggestion_dict(s)})
+
+
+def _suggestion_dict(s) -> dict:
+    return {
+        "id": s.id,
+        "suggestion_type": s.suggestion_type,
+        "suggested_data": s.suggested_data or {},
+        "status": s.status,
+        "created_at": s.created_at.isoformat() if s.created_at else None,
+        "resolved_at": s.resolved_at.isoformat() if s.resolved_at else None,
+    }
+
+
+@hub_bp.route("/search/semantic", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=20)
+def semantic_search():
+    """Semantic similarity search across notes and knowledge cards."""
+    user = _current_user()
+    body = request.get_json(silent=True) or {}
+    query = (body.get("query") or "").strip()[:500]
+    if not query:
+        return jsonify({"error": "query required"}), 400
+
+    from ..assistant.ai_key_resolver import get_workspace_ai_key
+    key_info = get_workspace_ai_key(user)
+    api_key = key_info.get("api_key")
+    if not api_key:
+        return jsonify({"error": "No AI key configured — set one in AI Settings"}), 400
+
+    from ..assistant.embedding_service import semantic_search_notes, semantic_search_knowledge
+    note_results = semantic_search_notes(user.id, query, api_key, limit=8)
+    knowledge_results = semantic_search_knowledge(user.id, query, api_key, limit=8)
+
+    combined = note_results + knowledge_results
+    combined.sort(key=lambda x: x["score"], reverse=True)
+
+    return jsonify({
+        "results": combined[:15],
+        "notes_searched": len(note_results),
+        "knowledge_searched": len(knowledge_results),
+    })
 
 
 def _person_dict(p) -> dict:
