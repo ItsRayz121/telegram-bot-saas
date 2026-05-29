@@ -56,8 +56,9 @@ function TelegizerBotCard({ botUsername }) {
           {botUsername ? `@${botUsername}` : 'Official Telegizer bot'}
         </Typography>
         <Typography fontSize="0.82rem" color="text.secondary" mb={2}>
-          The official Telegizer bot is pre-configured and ready to use — no setup required.
-          DM it or add it to any group to use <strong>/remind</strong>, <strong>/note</strong>, <strong>/task</strong>, and <strong>/summary</strong> instantly.
+          The official Telegizer Echo bot is pre-configured and ready to use — no setup required.
+          Add it to any group and it will automatically extract tasks, reminders, and meetings from conversations.
+          Use <strong>/assist template-name</strong> in a connected group to post saved templates.
         </Typography>
 
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>

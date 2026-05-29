@@ -126,7 +126,7 @@ function OnboardingCard({ botList, onAddBot, navigate, user, officialGroupCount 
       }
     });
   }, [user?.email_verified, hasBots, hasGroups]);
-  const botUsername = 'telegizer_bot';
+  const botUsername = process.env.REACT_APP_TELEGRAM_BOT_USERNAME || 'telegizer_bot';
   const addGroupUrl = `https://t.me/${botUsername}?startgroup=setup`;
 
   const steps = [
@@ -502,7 +502,7 @@ function LeaderboardCard() {
 
 // ── Official Bot Section ───────────────────────────────────────────────────────
 function OfficialBotSection({ user, navigate, officialGroupCount }) {
-  const botUsername = 'telegizer_bot';
+  const botUsername = process.env.REACT_APP_TELEGRAM_BOT_USERNAME || 'telegizer_bot';
   const addGroupUrl = `https://t.me/${botUsername}?startgroup=setup`;
   return (
     <Card
