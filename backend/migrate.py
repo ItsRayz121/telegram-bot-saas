@@ -521,6 +521,13 @@ def init_db():
             "hub_meetings.meeting_url",
         )
 
+        # ── L7: Mirror legacy AssistantBot rows into HubBotIdentity ──────────────
+        # Registers each AssistantBot token under the new hub routing system so
+        # custom bots benefit from hub handlers going forward.
+        # AssistantBot rows are kept active for backward compatibility — the old
+        # assistant_bot_handler path still fires first for existing rows.
+        _migrate_assistant_bots_to_hub(app)
+
         print("Migration complete.")
 
     # One-shot Telegram account backfill (moved above; comment kept for reference).
@@ -627,6 +634,59 @@ def _backfill_bot_mirror_links(app):
             print(f"  ✓ Backfilled {linked} CustomBot ↔ HubBotIdentity links")
         else:
             print("  – Bot mirror backfill: no unlinked pairs found")
+
+
+def _migrate_assistant_bots_to_hub(app):
+    """Mirror each active AssistantBot row into HubBotIdentity (bot_type='custom').
+
+    Idempotent — skips any bot whose token is already registered as a HubBotIdentity.
+    AssistantBot rows are NOT deactivated so the legacy assistant_bot_handler path
+    continues to work for existing users. The HubBotIdentity row ensures the same
+    token is also visible to the hub routing path once the AssistantBot path is retired.
+    """
+    import uuid as _uuid
+    from .models import db, AssistantBot
+    from .assistant.hub_models import HubBotIdentity, HubBotSettings
+
+    with app.app_context():
+        bots = AssistantBot.query.filter_by(is_active=True).all()
+        created = 0
+        for ab in bots:
+            token = ab.bot_token  # decrypted via property
+            if not token:
+                continue
+            # Check by username first (token may be re-encrypted between runs)
+            existing = HubBotIdentity.query.filter_by(
+                user_id=ab.user_id,
+                bot_type="custom",
+                telegram_bot_username=ab.bot_username,
+            ).first()
+            if existing:
+                continue
+            hub = HubBotIdentity(
+                id=str(_uuid.uuid4()),
+                user_id=ab.user_id,
+                bot_type="custom",
+                display_name=ab.bot_name or ab.bot_username or "My Bot",
+                telegram_bot_token=token,
+                telegram_bot_username=ab.bot_username,
+                is_active=True,
+            )
+            db.session.add(hub)
+            db.session.flush()
+            settings = HubBotSettings(
+                id=str(_uuid.uuid4()),
+                bot_id=hub.id,
+                user_id=ab.user_id,
+            )
+            db.session.add(settings)
+            created += 1
+
+        if created:
+            db.session.commit()
+            print(f"  ✓ Mirrored {created} AssistantBot row(s) → HubBotIdentity")
+        else:
+            print("  – AssistantBot → HubBotIdentity: all already mirrored or none exist")
 
 
 def init_hub_db():

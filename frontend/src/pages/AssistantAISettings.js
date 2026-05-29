@@ -10,7 +10,7 @@ import {
   Delete, Send, Link as LinkIcon, AutoAwesome, VpnKey,
   BoltOutlined,
 } from '@mui/icons-material';
-import { workspaceAI, telegramAccount, auth as authApi } from '../services/api';
+import { workspaceAI, telegramAccount, auth as authApi, assistant } from '../services/api';
 import PlanGate from '../components/PlanGate';
 
 const PROVIDERS = [
@@ -275,15 +275,18 @@ export default function AssistantAISettings() {
   const [deleting, setDeleting] = useState(false);
   const [connectLoading, setConnectLoading] = useState(false);
   const [connectCode, setConnectCode] = useState(null);
+  const [botUsername, setBotUsername] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const [{ data }, meRes] = await Promise.all([
+      const [{ data }, meRes, hubRes] = await Promise.all([
         workspaceAI.getSettings(),
         authApi.getMe().catch(() => null),
+        assistant.hubSummary().catch(() => ({ data: {} })),
       ]);
+      setBotUsername(hubRes.data.bot_username || '');
       setSettings(data);
       if (meRes?.data?.user) {
         const freshTier = meRes.data.user.subscription_tier || 'free';
@@ -531,7 +534,7 @@ export default function AssistantAISettings() {
               </Box>
               {connectCode ? (
                 <Alert severity="info" sx={{ fontSize: '0.82rem' }}>
-                  Open Telegram and send this code to <strong>@telegizer_bot</strong>:{' '}
+                  Open Telegram and send this code to <strong>@{botUsername || 'telegizer_bot'}</strong>:{' '}
                   <strong>{connectCode}</strong>
                 </Alert>
               ) : (

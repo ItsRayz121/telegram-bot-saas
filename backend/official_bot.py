@@ -999,6 +999,18 @@ async def on_assistant_pick(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         return
 
+    if Config.ECHO_BOT_TOKEN:
+        _echo_un = Config.ECHO_BOT_USERNAME or "Telegizer Echo"
+        try:
+            await query.edit_message_reply_markup(reply_markup=None)
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"For AI assistance, message @{_echo_un}.",
+            )
+        except Exception:
+            pass
+        return
+
     try:
         await query.edit_message_reply_markup(reply_markup=None)
 
@@ -1155,6 +1167,19 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Also covers the case where awaiting_bot_token was lost after a bot restart —
         # if the message pattern matches a Telegram bot token, skip the assistant entirely.
         if not context.user_data.get("awaiting_bot_token") and not _looks_like_token:
+            # When Echo is configured Telegizer is community-management only.
+            # Redirect any free-text AI conversation to Echo.
+            if Config.ECHO_BOT_TOKEN:
+                _echo_un = Config.ECHO_BOT_USERNAME or "Telegizer Echo"
+                try:
+                    await message.reply_text(
+                        f"I handle community management for your groups.\n\n"
+                        f"For AI conversations, message @{_echo_un}.",
+                    )
+                except Exception:
+                    pass
+                return
+
             _reply_text = None
             _keyboard = None
             _unlinked = False
@@ -1399,6 +1424,15 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ── AI Assistant quick-action buttons ─────────────────────────────────────
     if data.startswith("ai:"):
+        if Config.ECHO_BOT_TOKEN:
+            _echo_un = Config.ECHO_BOT_USERNAME or "Telegizer Echo"
+            await query.edit_message_text(
+                f"AI features are handled by @{_echo_un}.",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("« Back", callback_data="menu:main"),
+                ]]),
+            )
+            return
         _ai_messages = {
             "ai:analyze_day":   "Analyze my day",
             "ai:schedule":      "What's on my schedule?",
@@ -2749,11 +2783,15 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     pass
 
     # ── Assistant Hub: buffer this message for extraction ─────────────────────
-    try:
-        from .assistant.hub_message_router import buffer_hub_message
-        buffer_hub_message(flask_app, chat.id, message)
-    except Exception:
-        pass
+    # Only buffer here when Echo is not configured. When ECHO_BOT_TOKEN is set,
+    # Echo handles buffering — doing it here too would double-buffer every message
+    # and consume extraction quota twice for groups that have both bots present.
+    if not Config.ECHO_BOT_TOKEN:
+        try:
+            from .assistant.hub_message_router import buffer_hub_message
+            buffer_hub_message(flask_app, chat.id, message)
+        except Exception:
+            pass
 
     # ── Assistant Hub: @mention reply engine ──────────────────────────────────
     msg_text = update.effective_message.text if update.effective_message else None
@@ -4926,6 +4964,11 @@ async def cmd_assist(update: Update, context: ContextTypes.DEFAULT_TYPE):
     If not found: replies with a helpful error.
     If no name given: lists available template names.
     """
+    # When Echo is configured it owns /assist — Telegizer silently steps back
+    # to avoid double-responses in groups that have both bots.
+    if Config.ECHO_BOT_TOKEN:
+        return
+
     if not _is_group_chat(update):
         return
 

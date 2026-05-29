@@ -18,12 +18,13 @@ hub_bot_id
             row with bot_type='custom'.
 """
 import logging
+from datetime import datetime
 
 from telegram import Update
 from telegram.constants import ChatType
 from telegram.ext import (
     Application, CallbackQueryHandler, ChatMemberHandler,
-    ContextTypes, MessageHandler, filters,
+    CommandHandler, ContextTypes, MessageHandler, filters,
 )
 
 _log = logging.getLogger(__name__)
@@ -114,6 +115,77 @@ async def _on_message(
         _log.debug("hub_bot_handler: buffer error: %s", exc)
 
 
+# ── /assist command ───────────────────────────────────────────────────────────
+
+async def _on_assist_command(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    hub_bot_id: str | None,
+):
+    """
+    /assist [template_name] — dispatch a Hub template into the current group.
+    Owned by Echo (and custom assistant bots) once ECHO_BOT_TOKEN is configured.
+    """
+    flask_app = context.bot_data.get("flask_app")
+    message = update.effective_message
+    chat = update.effective_chat
+
+    if not flask_app or not message or not chat or chat.type == ChatType.PRIVATE:
+        return
+
+    args = (message.text or "").split(maxsplit=1)
+    template_name = args[1].strip() if len(args) > 1 else ""
+
+    try:
+        with flask_app.app_context():
+            from .hub_models import HubConnectedGroup, HubTemplate
+            from ..models import db
+
+            q = HubConnectedGroup.query.filter_by(
+                telegram_group_id=chat.id,
+                is_active=True,
+            ).filter(HubConnectedGroup.consent_confirmed_at.isnot(None))
+            if hub_bot_id:
+                q = q.filter_by(bot_id=hub_bot_id)
+            connected = q.first()
+
+            if not connected:
+                return  # group not in Hub — silently ignore
+
+            if not template_name:
+                templates = HubTemplate.query.filter_by(
+                    bot_id=connected.bot_id, user_id=connected.user_id
+                ).order_by(HubTemplate.name.asc()).all()
+                if not templates:
+                    await message.reply_text(
+                        "No templates yet. Create some at your Telegizer dashboard."
+                    )
+                else:
+                    names = "\n".join(f"• /assist {t.name}" for t in templates)
+                    await message.reply_text(f"Available templates:\n{names}")
+                return
+
+            template = HubTemplate.query.filter(
+                HubTemplate.bot_id == connected.bot_id,
+                HubTemplate.user_id == connected.user_id,
+                db.func.lower(HubTemplate.name) == template_name.lower(),
+            ).first()
+
+            if not template:
+                await message.reply_text(
+                    f"Template '{template_name}' not found. Check your dashboard."
+                )
+                return
+
+            await message.reply_text(template.content)
+            template.use_count = (template.use_count or 0) + 1
+            template.last_used_at = datetime.utcnow()
+            db.session.commit()
+
+    except Exception as exc:
+        _log.debug("hub_bot_handler: /assist error chat=%s: %s", chat.id, exc)
+
+
 # ── Public registration entry point ──────────────────────────────────────────
 
 def register_hub_handlers(
@@ -138,6 +210,9 @@ def register_hub_handlers(
     async def _message_handler(update, ctx):
         await _on_message(update, ctx, hub_bot_id=hub_bot_id)
 
+    async def _assist_handler(update, ctx):
+        await _on_assist_command(update, ctx, hub_bot_id=hub_bot_id)
+
     # ChatMemberHandler: fires when *the bot itself* is added/removed.
     application.add_handler(
         ChatMemberHandler(_member_handler, ChatMemberHandler.MY_CHAT_MEMBER),
@@ -159,6 +234,12 @@ def register_hub_handlers(
             (filters.TEXT | filters.CAPTION) & filters.ChatType.GROUPS,
             _message_handler,
         ),
+        group=10,
+    )
+
+    # CommandHandler: /assist — template dispatch in groups.
+    application.add_handler(
+        CommandHandler("assist", _assist_handler),
         group=10,
     )
 

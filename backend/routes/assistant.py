@@ -199,7 +199,7 @@ def hub_summary():
         "telegram_username": user.telegram_username,
         "connected_groups": len(groups),
         "active_groups": len(active_groups),
-        "bot_username": Config.TELEGRAM_BOT_USERNAME,
+        "bot_username": Config.ECHO_BOT_USERNAME or Config.TELEGRAM_BOT_USERNAME,
         "reminders_today": [r.to_dict() for r in all_reminders],
         "recent_notes": [n.to_dict() for n in recent_notes],
         "digest_status": digest_status,
