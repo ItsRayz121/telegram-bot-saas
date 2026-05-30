@@ -429,7 +429,13 @@ def login():
             "locked_until": user.locked_until.isoformat(),
         }), 429
 
-    # Password check
+    # Password check — Telegram-only users have no password_hash
+    if not user.password_hash:
+        return jsonify({
+            "error": "This account uses Telegram login. Open the Telegizer Mini App to sign in.",
+            "code": "TELEGRAM_ONLY_ACCOUNT",
+        }), 401
+
     if not bcrypt.checkpw(password.encode("utf-8"), user.password_hash.encode("utf-8")):
         # Increment failure counter
         user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
@@ -834,7 +840,7 @@ def get_me():
         pass
 
     user_data = user.to_dict()
-    user_data["is_admin"] = user.email.lower() in Config.ADMIN_EMAILS
+    user_data["is_admin"] = bool(user.email) and user.email.lower() in Config.ADMIN_EMAILS
     return jsonify({"user": user_data}), 200
 
 
@@ -872,7 +878,7 @@ def update_me():
         return jsonify({"error": "Failed to save profile"}), 500
 
     user_data = user.to_dict()
-    user_data["is_admin"] = user.email.lower() in Config.ADMIN_EMAILS
+    user_data["is_admin"] = bool(user.email) and user.email.lower() in Config.ADMIN_EMAILS
     return jsonify({"user": user_data}), 200
 
 
@@ -978,6 +984,8 @@ def change_password():
     current_password = data.get("current_password", "")
     new_password = data.get("new_password", "")
 
+    if not user.password_hash:
+        return jsonify({"error": "This account uses Telegram login and has no password set.", "code": "TELEGRAM_ONLY_ACCOUNT"}), 400
     if not bcrypt.checkpw(current_password.encode("utf-8"), user.password_hash.encode("utf-8")):
         return jsonify({"error": "Current password is incorrect"}), 401
 
@@ -1006,10 +1014,12 @@ def delete_account():
     if not password:
         return jsonify({"error": "Password is required to delete account"}), 400
 
+    if not user.password_hash:
+        return jsonify({"error": "This account uses Telegram login. Use the Mini App to manage your account.", "code": "TELEGRAM_ONLY_ACCOUNT"}), 400
     if not bcrypt.checkpw(password.encode("utf-8"), user.password_hash.encode("utf-8")):
         return jsonify({"error": "Incorrect password"}), 401
 
-    if user.email.lower() in Config.ADMIN_EMAILS:
+    if user.email and user.email.lower() in Config.ADMIN_EMAILS:
         return jsonify({"error": "Admin accounts cannot be deleted via API"}), 403
 
     try:

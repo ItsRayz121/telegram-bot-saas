@@ -21,9 +21,10 @@ class User(db.Model):
     __tablename__ = "users"
 
     id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(255), unique=True, nullable=False, index=True)
-    password_hash = db.Column(db.String(255), nullable=False)
-    full_name = db.Column(db.String(255), nullable=False)
+    email = db.Column(db.String(255), unique=True, nullable=True, index=True)
+    password_hash = db.Column(db.String(255), nullable=True)
+    full_name = db.Column(db.String(255), nullable=True)
+    auth_provider = db.Column(db.String(20), nullable=False, default='email')  # 'email' | 'telegram' | 'both'
     subscription_tier = db.Column(db.String(50), default="free", nullable=False)
     subscription_expires = db.Column(db.DateTime, nullable=True)
     # Extended subscription lifecycle fields (1-A-01)
@@ -94,6 +95,10 @@ class User(db.Model):
     telegram_username = db.Column(db.String(255), nullable=True)
     telegram_first_name = db.Column(db.String(255), nullable=True)
     telegram_connected_at = db.Column(db.DateTime, nullable=True)
+    # Email-linking via Mini App OTP flow
+    email_link_pending = db.Column(db.String(255), nullable=True)       # email being linked
+    email_link_otp_hash = db.Column(db.String(64), nullable=True)       # SHA-256 of 6-digit OTP
+    email_link_otp_expires = db.Column(db.DateTime, nullable=True)
     # Workspace AI token usage tracking (reset daily)
     workspace_ai_tokens_today = db.Column(db.Integer, default=0, nullable=False)
     workspace_ai_tokens_reset_at = db.Column(db.DateTime, nullable=True)
@@ -152,6 +157,8 @@ class User(db.Model):
             "id": self.id,
             "email": self.email,
             "full_name": self.full_name,
+            "auth_provider": self.auth_provider or "email",
+            "email_linked": bool(self.email),
             "subscription_tier": self.subscription_tier,
             "subscription_expires": self.subscription_expires.isoformat() if self.subscription_expires else None,
             "is_banned": self.is_banned,

@@ -41,8 +41,10 @@ export function TelegramProvider({ children }) {
   const [appUser, setAppUser] = useState(null);
   const [groups, setGroups] = useState([]);
   const [tgTheme, setTgTheme] = useState(null);
-  const [status, setStatus] = useState('loading'); // loading | ok | not_linked | error | no_webapp | no_init_data
+  const [status, setStatus] = useState('loading'); // loading | ok | error | no_webapp | no_init_data
   const [authError, setAuthError] = useState(null);
+  const [emailLinked, setEmailLinked] = useState(false);
+  const [referralLink, setReferralLink] = useState(null);
 
   useEffect(() => {
     const webapp = window?.Telegram?.WebApp;
@@ -71,32 +73,39 @@ export function TelegramProvider({ children }) {
     // 2-G-02: TMA auth — token stored in memory only, never localStorage
     api.post('/api/miniapp/auth', { init_data: initData })
       .then(res => {
-        const { token, user, groups: grps } = res.data;
+        const { token, user, groups: grps, email_linked, referral_link } = res.data;
         setTmaToken(token);   // in-memory only
         setAppUser(user);
         setGroups(grps || []);
         setTgUser(webapp.initDataUnsafe?.user || null);
+        setEmailLinked(email_linked ?? Boolean(user?.email));
+        setReferralLink(referral_link || null);
         setStatus('ok');
       })
       .catch(err => {
-        const code = err.response?.data?.code;
-        const msg  = err.response?.data?.error || null;
-        if (code === 'NOT_LINKED') {
-          setStatus('not_linked');
-        } else {
-          setAuthError(msg);
-          setStatus('error');
-        }
+        const msg = err.response?.data?.error || null;
+        setAuthError(msg);
+        setStatus('error');
       });
   }, []);
 
-  const refetchGroups = useCallback(() => {
+  const refetchUser = useCallback(() => {
     tmaApi.get('/api/miniapp/me')
       .then(res => {
-        setAppUser(res.data.user);
-        setGroups(res.data.groups || []);
+        const { user, groups: grps, email_linked, referral_link } = res.data;
+        setAppUser(user);
+        setGroups(grps || []);
+        setEmailLinked(email_linked ?? Boolean(user?.email));
+        setReferralLink(referral_link || null);
       })
       .catch(() => {});
+  }, []);
+
+  // Called after a successful email link/merge to update in-memory state + token
+  const onEmailLinked = useCallback((newUser, newToken) => {
+    if (newToken) setTmaToken(newToken);
+    if (newUser) setAppUser(newUser);
+    setEmailLinked(true);
   }, []);
 
   // Haptic feedback helpers — silently no-op when not in Telegram
@@ -113,7 +122,13 @@ export function TelegramProvider({ children }) {
   }), [tg]);
 
   return (
-    <TelegramContext.Provider value={{ tg, tgUser, appUser, groups, tgTheme, status, authError, refetchGroups, haptic }}>
+    <TelegramContext.Provider value={{
+      tg, tgUser, appUser, groups, tgTheme,
+      status, authError,
+      emailLinked, referralLink,
+      refetchUser, onEmailLinked,
+      haptic,
+    }}>
       {children}
     </TelegramContext.Provider>
   );

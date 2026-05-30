@@ -99,6 +99,14 @@ def disconnect_telegram():
     if not user.telegram_user_id and not has_junction:
         return jsonify({"error": "No Telegram account connected"}), 400
 
+    # Block disconnect if Telegram is the user's only identity — they'd lock themselves out
+    if not user.email or not user.password_hash:
+        return jsonify({
+            "error": "Cannot disconnect Telegram — it is your only login method. "
+                     "Add an email and password first via 'Protect your account'.",
+            "code": "TELEGRAM_ONLY_ACCOUNT",
+        }), 400
+
     # Remove all junction table rows for this user
     UserTelegramAccount.query.filter_by(user_id=user.id).delete()
     # Clear legacy field too

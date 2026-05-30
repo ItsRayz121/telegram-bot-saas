@@ -5,13 +5,14 @@ import {
   Alert, Divider, Stack, BottomNavigation, BottomNavigationAction, Paper,
 } from '@mui/material';
 import {
-  Groups, OpenInNew, Link as LinkIcon, CheckCircle, ErrorOutline,
-  Bolt, CardGiftcard, Settings,
+  Groups, OpenInNew, CheckCircle, ErrorOutline,
+  Bolt, CardGiftcard, Settings, Shield,
 } from '@mui/icons-material';
 import { useTelegram } from '../contexts/TelegramContext';
 import TelegizerLogo from '../components/TelegizerLogo';
 import MiniAppReferrals from './MiniAppReferrals';
 import MiniAppSetup from './MiniAppSetup';
+import EmailLinkFlow from '../components/EmailLinkFlow';
 
 // ── Status screens ────────────────────────────────────────────────────────────
 
@@ -19,24 +20,7 @@ function LoadingScreen() {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: 2 }}>
       <CircularProgress size={36} />
-      <Typography color="text.secondary" variant="body2">Authenticating…</Typography>
-    </Box>
-  );
-}
-
-function NotLinkedScreen() {
-  return (
-    <Box sx={{ p: { xs: 2, md: 3 }, textAlign: 'center' }}>
-      <LinkIcon sx={{ fontSize: 56, color: 'warning.main', mb: 2 }} />
-      <Typography variant="h6" fontWeight={700} gutterBottom>Connect your Telegram account</Typography>
-      <Typography variant="body2" color="text.secondary" mb={3}>
-        Your Telegram account isn't linked to a Telegizer account yet.
-        Open the website → Settings → Link Telegram.
-      </Typography>
-      <Button variant="contained" startIcon={<OpenInNew />}
-        href="https://telegizer.com/settings" target="_blank" rel="noopener noreferrer">
-        Open Telegizer Settings
-      </Button>
+      <Typography color="text.secondary" variant="body2">Opening Telegizer…</Typography>
     </Box>
   );
 }
@@ -47,7 +31,7 @@ function ErrorScreen({ message }) {
       <ErrorOutline sx={{ fontSize: 56, color: 'error.main', mb: 2 }} />
       <Typography variant="h6" fontWeight={700} gutterBottom>Something went wrong</Typography>
       <Typography variant="body2" color="text.secondary" mb={2}>
-        {message || 'Could not authenticate with Telegizer. Please close and reopen the app.'}
+        {message || 'Could not open Telegizer. Please close and reopen the app.'}
       </Typography>
     </Box>
   );
@@ -72,7 +56,6 @@ function GroupItem({ group, onClick }) {
   const { haptic, tg } = useTelegram();
   const handle = () => {
     haptic.impact('light');
-    // Prefer Telegram's openLink so we stay inside Telegram; fall back to onClick handler.
     const url = `https://telegizer.com/groups/${group.telegram_group_id}`;
     if (tg?.openLink) {
       try { tg.openLink(url); return; } catch {}
@@ -80,10 +63,7 @@ function GroupItem({ group, onClick }) {
     if (onClick) onClick();
   };
   return (
-    <ListItemButton
-      onClick={handle}
-      sx={{ borderRadius: 2, mb: 0.5 }}
-    >
+    <ListItemButton onClick={handle} sx={{ borderRadius: 2, mb: 0.5 }}>
       <ListItemAvatar>
         <Avatar sx={{ bgcolor: 'primary.main', width: 38, height: 38, fontSize: '0.85rem' }}>
           {group.name?.[0]?.toUpperCase() || 'G'}
@@ -110,15 +90,15 @@ function GroupItem({ group, onClick }) {
 
 // ── Onboarding checklist ──────────────────────────────────────────────────────
 
-function OnboardingChecklist({ groups }) {
+function OnboardingChecklist({ groups, emailLinked }) {
   const hasGroup = groups.length > 0;
   const hasActive = groups.some(g => g.bot_status === 'active');
 
   const steps = [
-    { label: 'Create a Telegizer account', done: true },
-    { label: 'Link your Telegram account', done: true },
+    { label: 'Connected to Telegizer', done: true },
     { label: 'Add a group', done: hasGroup },
     { label: 'Bot is active in a group', done: hasActive },
+    { label: 'Protect your account', done: emailLinked },
   ];
 
   const allDone = steps.every(s => s.done);
@@ -155,10 +135,46 @@ function OnboardingChecklist({ groups }) {
   );
 }
 
+// ── Protect account banner ────────────────────────────────────────────────────
+
+function ProtectAccountBanner({ onOpen }) {
+  return (
+    <Card sx={{
+      mb: 2,
+      border: '1px solid',
+      borderColor: 'warning.main',
+      bgcolor: 'rgba(245,158,11,0.06)',
+    }}>
+      <CardContent sx={{ p: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+          <Shield sx={{ color: 'warning.main', mt: 0.25, flexShrink: 0 }} />
+          <Box sx={{ flex: 1 }}>
+            <Typography variant="subtitle2" fontWeight={700} mb={0.5}>
+              Protect your account
+            </Typography>
+            <Typography variant="body2" color="text.secondary" mb={1.5}>
+              Add an email and password so you can recover your account if you ever lose access to Telegram.
+            </Typography>
+            <Button
+              size="small"
+              variant="outlined"
+              color="warning"
+              onClick={onOpen}
+              startIcon={<Shield fontSize="small" />}
+            >
+              Add email &amp; password
+            </Button>
+          </Box>
+        </Box>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Home tab ──────────────────────────────────────────────────────────────────
 
-function HomeTab() {
-  const { tgUser, appUser, groups, haptic, tg } = useTelegram();
+function HomeTab({ onOpenEmailFlow }) {
+  const { tgUser, appUser, groups, emailLinked, haptic, tg } = useTelegram();
   const openOnWeb = (path) => {
     const url = `https://telegizer.com${path}`;
     if (tg?.openLink) { try { tg.openLink(url); return; } catch {} }
@@ -168,6 +184,12 @@ function HomeTab() {
   const plan = appUser?.subscription_tier || 'free';
   const planColor = plan === 'enterprise' ? 'secondary' : plan === 'pro' ? 'primary' : 'default';
 
+  // Display name: prefer Telegram first name, fall back to full_name, then username
+  const displayFirst =
+    tgUser?.first_name ||
+    appUser?.full_name?.split(' ')[0] ||
+    (appUser?.telegram_username ? `@${appUser.telegram_username}` : 'there');
+
   return (
     <Box>
       {/* Header */}
@@ -175,16 +197,25 @@ function HomeTab() {
         <TelegizerLogo size="sm" variant="icon" />
         <Box sx={{ flex: 1 }}>
           <Typography fontWeight={700} fontSize="0.95rem">
-            Hey, {tgUser?.first_name || appUser?.full_name?.split(' ')[0] || 'there'} 👋
+            Hey, {displayFirst} 👋
           </Typography>
-          <Typography variant="caption" color="text.secondary">{appUser?.email}</Typography>
+          <Typography variant="caption" color="text.secondary">
+            {appUser?.email
+              ? appUser.email
+              : appUser?.telegram_username
+              ? `@${appUser.telegram_username}`
+              : 'Telegram user'}
+          </Typography>
         </Box>
         <Chip label={plan.charAt(0).toUpperCase() + plan.slice(1)} color={planColor}
           size="small" sx={{ fontSize: '0.65rem' }} />
       </Box>
 
-      {/* Onboarding checklist — hides when complete */}
-      <OnboardingChecklist groups={groups} />
+      {/* Protect account banner — shown until email is linked */}
+      {!emailLinked && <ProtectAccountBanner onOpen={onOpenEmailFlow} />}
+
+      {/* Onboarding checklist — hides when all steps complete */}
+      <OnboardingChecklist groups={groups} emailLinked={emailLinked} />
 
       {/* Quick stats */}
       <Stack direction="row" spacing={1.5} mb={2.5}>
@@ -249,6 +280,7 @@ function HomeTab() {
 export default function MiniApp() {
   const { status, authError, haptic, tg } = useTelegram();
   const [tab, setTab] = useState(0);
+  const [emailFlowOpen, setEmailFlowOpen] = useState(false);
 
   // Wire Telegram system BackButton: visible on any non-Home tab, returns to Home.
   useEffect(() => {
@@ -263,7 +295,6 @@ export default function MiniApp() {
   }, [tg, tab]);
 
   if (status === 'loading') return <LoadingScreen />;
-  if (status === 'not_linked') return <NotLinkedScreen />;
   if (status === 'no_webapp' || status === 'no_init_data') return <NoWebAppScreen />;
   if (status === 'error') return <ErrorScreen message={authError} />;
 
@@ -275,9 +306,15 @@ export default function MiniApp() {
 
   return (
     <Box sx={{ maxWidth: 480, mx: 'auto', px: 2, pt: 1, pb: 'calc(64px + env(safe-area-inset-bottom, 0px))' }}>
-      {tab === 0 && <HomeTab />}
+      {tab === 0 && <HomeTab onOpenEmailFlow={() => setEmailFlowOpen(true)} />}
       {tab === 1 && <MiniAppReferrals />}
       {tab === 2 && <MiniAppSetup />}
+
+      {/* Email linking modal */}
+      <EmailLinkFlow
+        open={emailFlowOpen}
+        onClose={() => setEmailFlowOpen(false)}
+      />
 
       {/* Bottom navigation */}
       <Paper

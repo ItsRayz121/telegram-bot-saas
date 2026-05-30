@@ -555,6 +555,74 @@ def init_db():
         # assistant_bot_handler path still fires first for existing rows.
         _migrate_assistant_bots_to_hub(app)
 
+        # ── Telegram-first auth: make email/password optional ─────────────────────
+        # Pre-flight check: abort if any user has BOTH email=NULL AND
+        # telegram_user_id=NULL — that would violate the identity constraint.
+        # (Should be zero rows on a clean DB.)
+        _run_alter(
+            db.engine,
+            "DO $$ BEGIN "
+            "  IF EXISTS (SELECT 1 FROM users WHERE email IS NULL AND telegram_user_id IS NULL) THEN "
+            "    RAISE EXCEPTION 'Aborting: found users with neither email nor telegram_user_id. Fix these rows first.'; "
+            "  END IF; "
+            "END $$",
+            "users: pre-flight identity check (email OR telegram_user_id required)",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE users ALTER COLUMN email DROP NOT NULL",
+            "users.email nullable (Telegram-first auth)",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL",
+            "users.password_hash nullable (Telegram-first auth)",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE users ALTER COLUMN full_name DROP NOT NULL",
+            "users.full_name nullable (Telegram-first auth)",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(20) NOT NULL DEFAULT 'email'",
+            "users.auth_provider ('email' | 'telegram' | 'both')",
+        )
+        # Backfill auth_provider for any existing users with Telegram already linked
+        _run_alter(
+            db.engine,
+            "UPDATE users SET auth_provider = 'both' "
+            "WHERE telegram_user_id IS NOT NULL AND email IS NOT NULL AND auth_provider = 'email'",
+            "users.auth_provider backfill → 'both' for existing linked accounts",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_link_pending VARCHAR(255)",
+            "users.email_link_pending (Mini App OTP flow)",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_link_otp_hash VARCHAR(64)",
+            "users.email_link_otp_hash",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_link_otp_expires TIMESTAMP",
+            "users.email_link_otp_expires",
+        )
+        # Safety constraint: every row must have email OR telegram_user_id (not both NULL)
+        _run_alter(
+            db.engine,
+            "ALTER TABLE users DROP CONSTRAINT IF EXISTS chk_one_identity",
+            "users: drop old identity constraint if exists",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE users ADD CONSTRAINT chk_one_identity "
+            "CHECK (email IS NOT NULL OR telegram_user_id IS NOT NULL)",
+            "users: chk_one_identity constraint (email OR telegram_user_id required)",
+        )
+
         print("Migration complete.")
 
     # One-shot Telegram account backfill (moved above; comment kept for reference).

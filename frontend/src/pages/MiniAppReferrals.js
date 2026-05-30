@@ -18,7 +18,7 @@ const MILESTONES = [
 ];
 
 export default function MiniAppReferrals() {
-  const { appUser, tg, haptic } = useTelegram();
+  const { appUser, referralLink, tg, haptic } = useTelegram();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -30,13 +30,22 @@ export default function MiniAppReferrals() {
       .finally(() => setLoading(false));
   }, []);
 
-  const referralCode = appUser?.referral_code || '';
-  const referralUrl = `https://telegizer.com/join?ref=${referralCode}`;
+  // Telegram deep link is the primary — website link as fallback for non-Telegram sharing
+  const tgReferralUrl = referralLink || (
+    appUser?.referral_code
+      ? `https://t.me/TelegizerBot?start=ref_${appUser.referral_code}`
+      : null
+  );
+  const webReferralUrl = appUser?.referral_code
+    ? `https://telegizer.com/join?ref=${appUser.referral_code}`
+    : null;
+
   const referralCount = stats?.referral_count ?? 0;
 
   const handleCopy = () => {
     haptic.impact('light');
-    navigator.clipboard.writeText(referralUrl).then(() => {
+    const urlToCopy = tgReferralUrl || webReferralUrl || '';
+    navigator.clipboard.writeText(urlToCopy).then(() => {
       setCopied(true);
       toast.success('Link copied!');
       setTimeout(() => setCopied(false), 2000);
@@ -45,14 +54,17 @@ export default function MiniAppReferrals() {
 
   const handleShare = () => {
     haptic.impact('medium');
-    if (tg?.switchInlineQuery) {
-      // Share inside Telegram via inline mode
-      tg.switchInlineQuery(`Join Telegizer with my link: ${referralUrl}`, ['users', 'groups', 'channels']);
+    const shareUrl = tgReferralUrl || webReferralUrl || '';
+    const shareText = 'Automate your Telegram groups for free. Join with my referral link:';
+
+    if (tg?.switchInlineQuery && tgReferralUrl) {
+      // Native Telegram share — stays inside Telegram
+      tg.switchInlineQuery(`${shareText} ${tgReferralUrl}`, ['users', 'groups', 'channels']);
     } else if (navigator.share) {
       navigator.share({
         title: 'Telegizer — Telegram Group Automation',
-        text: 'Automate your Telegram groups for free. Join with my referral link:',
-        url: referralUrl,
+        text: shareText,
+        url: shareUrl,
       }).catch(() => {});
     } else {
       handleCopy();
@@ -71,7 +83,7 @@ export default function MiniAppReferrals() {
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5 }}>
         <CardGiftcard sx={{ color: 'primary.main', fontSize: 28 }} />
         <Box>
-          <Typography fontWeight={700} fontSize="1rem">Refer & Earn</Typography>
+          <Typography fontWeight={700} fontSize="1rem">Refer &amp; Earn</Typography>
           <Typography variant="caption" color="text.secondary">
             Share your link. Earn free Pro days.
           </Typography>
@@ -82,14 +94,14 @@ export default function MiniAppReferrals() {
       <Card sx={{ mb: 2 }}>
         <CardContent sx={{ p: 2 }}>
           <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={1}>
-            Your referral link
+            Your Telegram referral link
           </Typography>
           <Box sx={{
             bgcolor: 'rgba(37,99,235,0.08)', borderRadius: 2, p: 1.5, mb: 1.5,
             border: '1px solid rgba(37,99,235,0.2)', wordBreak: 'break-all',
           }}>
             <Typography variant="body2" fontFamily="monospace" fontSize="0.78rem">
-              {referralUrl}
+              {tgReferralUrl || webReferralUrl || '—'}
             </Typography>
           </Box>
           <Stack direction="row" spacing={1}>
@@ -109,6 +121,18 @@ export default function MiniAppReferrals() {
               Share
             </Button>
           </Stack>
+
+          {/* Show website link as secondary option */}
+          {webReferralUrl && (
+            <Box sx={{ mt: 1.5 }}>
+              <Typography variant="caption" color="text.disabled" display="block" mb={0.5}>
+                Website referral link
+              </Typography>
+              <Typography variant="caption" fontFamily="monospace" color="text.disabled" sx={{ wordBreak: 'break-all' }}>
+                {webReferralUrl}
+              </Typography>
+            </Box>
+          )}
         </CardContent>
       </Card>
 
@@ -164,8 +188,8 @@ export default function MiniAppReferrals() {
       </Card>
 
       <Alert severity="info" icon={false} sx={{ fontSize: '0.75rem' }}>
-        Rewards apply automatically when your referred user verifies their email.
-        You'll receive an email confirmation for each conversion.
+        Referral rewards are credited automatically after your referred user activates their account.
+        You'll receive a notification for each conversion.
       </Alert>
     </Box>
   );
