@@ -537,6 +537,16 @@ def init_db():
             "CREATE INDEX IF NOT EXISTS ix_promo_code_usages_user_id ON promo_code_usages (user_id)",
             "promo_code_usages.user_id index",
         )
+        _run_alter(
+            db.engine,
+            "CREATE INDEX IF NOT EXISTS ix_promo_code_usages_order_id ON promo_code_usages (order_id)",
+            "promo_code_usages.order_id index",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE promo_code_usages ADD COLUMN IF NOT EXISTS confirmed BOOLEAN NOT NULL DEFAULT FALSE",
+            "promo_code_usages.confirmed",
+        )
 
         # ── L7: Mirror legacy AssistantBot rows into HubBotIdentity ──────────────
         # Registers each AssistantBot token under the new hub routing system so

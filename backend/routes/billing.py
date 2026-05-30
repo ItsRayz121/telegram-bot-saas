@@ -532,6 +532,13 @@ def crypto_webhook():
     _activate_subscription(user, tier, provider="nowpayments",
                            payment_id=payment_id, amount_usd=amount_usd_dollars,
                            currency=pay_currency, billing_period=billing_period)
+
+    # Confirm any pending promo usage tied to this invoice.
+    promo_usage = PromoCodeUsage.query.filter_by(order_id=order_id).first()
+    if promo_usage and not promo_usage.confirmed:
+        promo_usage.confirmed = True
+        db.session.commit()
+
     logger.info("[NOWPAYMENTS] Upgraded user %d to %s (status=%s)", user.id, tier, payment_status)
     return jsonify({"status": "ok"})
 

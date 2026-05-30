@@ -1845,10 +1845,14 @@ function PromoCodesTab({ onAdminError }) {
 
   const openUsage = async (c) => {
     setUsageTarget(c);
+    setUsageData(null);
     try {
       const res = await admin.getPromoUsage(c.id);
       setUsageData(res.data);
-    } catch { toast.error('Failed to load usage'); }
+    } catch {
+      toast.error('Failed to load usage');
+      setUsageData({ usages: [], error: true });
+    }
   };
 
   if (loading) return <Box display="flex" justifyContent="center" mt={4}><CircularProgress /></Box>;
@@ -1974,7 +1978,7 @@ function PromoCodesTab({ onAdminError }) {
                     <TableRow key={u.id}>
                       <TableCell>{u.user_id}</TableCell>
                       <TableCell>${u.original_price?.toFixed(2)}</TableCell>
-                      <TableCell color="success">-${u.discount_amount?.toFixed(2)}</TableCell>
+                      <TableCell><Typography variant="body2" color="success.main">-${u.discount_amount?.toFixed(2)}</Typography></TableCell>
                       <TableCell>${u.final_price?.toFixed(2)}</TableCell>
                       <TableCell>{fmtDateTime(u.used_at)}</TableCell>
                     </TableRow>

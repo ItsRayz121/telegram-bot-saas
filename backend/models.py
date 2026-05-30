@@ -965,9 +965,10 @@ class PromoCode(db.Model):
             return False, "Code has reached its usage limit."
         if self.applicable_plans and plan not in self.applicable_plans:
             return False, f"Code is not valid for the {plan} plan."
-        # Per-user limit
+        # Per-user limit — only count confirmed (paid) usages so abandoned
+        # checkouts don't permanently block the user from retrying.
         user_uses = PromoCodeUsage.query.filter_by(
-            promo_code_id=self.id, user_id=user_id
+            promo_code_id=self.id, user_id=user_id, confirmed=True
         ).count()
         if user_uses >= self.max_uses_per_user:
             return False, "You have already used this code."
@@ -991,10 +992,14 @@ class PromoCodeUsage(db.Model):
     promo_code_id   = db.Column(db.Integer, db.ForeignKey("promo_codes.id"), nullable=False, index=True)
     user_id         = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
     used_at         = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    order_id        = db.Column(db.String(255), nullable=True)  # NOWPayments invoice / payment id
+    order_id        = db.Column(db.String(255), nullable=True, index=True)  # NOWPayments invoice / payment id
     original_price  = db.Column(db.Numeric(10, 2), nullable=True)
     discount_amount = db.Column(db.Numeric(10, 2), nullable=True)
     final_price     = db.Column(db.Numeric(10, 2), nullable=True)
+    # False = checkout initiated but payment not yet confirmed. True = payment confirmed.
+    # Per-user limit checks only count confirmed=True rows so abandoned checkouts
+    # don't permanently block re-use of the same code.
+    confirmed       = db.Column(db.Boolean, default=False, nullable=False)
 
     def to_dict(self):
         return {
