@@ -80,12 +80,16 @@ export default function Referrals() {
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
 
-  const inviteLink = stats?.referral_code
-    ? `${window.location.origin}/invite/${stats.referral_code}`
-    : '';
+  const botUsername = (process.env.REACT_APP_TELEGRAM_BOT_USERNAME || 'telegizer_bot').replace(/^@/, '');
+  const refCode  = stats?.referral_code;
+  // Telegram deep link is the primary referral link — opens the bot which launches the Mini App
+  const tgLink   = refCode ? `https://t.me/${botUsername}?start=ref_${refCode}` : '';
+  const webLink  = refCode ? `${window.location.origin}/invite/${refCode}` : '';
+  const inviteLink = tgLink || webLink;
 
   const handleTelegramShare = () => {
-    const url = `https://t.me/share/url?url=${encodeURIComponent(inviteLink)}&text=${encodeURIComponent('Join me on Telegizer — the easiest way to manage your Telegram community!')}`;
+    // Share the web invite URL via Telegram (so it works for non-Telegram recipients too)
+    const url = `https://t.me/share/url?url=${encodeURIComponent(webLink || inviteLink)}&text=${encodeURIComponent('Join me on Telegizer — the easiest way to manage your Telegram community!')}`;
     window.open(url, '_blank', 'noopener,noreferrer');
     track('referral_shared', { method: 'telegram' });
   };
@@ -110,6 +114,7 @@ export default function Referrals() {
     } else {
       handleCopy();
     }
+    track('referral_shared', { method: 'native' });
   };
 
   const total = stats?.total_referrals ?? 0;

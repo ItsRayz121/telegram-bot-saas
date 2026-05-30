@@ -351,21 +351,34 @@ const REFERRAL_MILESTONES = [
   { count: 10, days: 30, label: '1 month Pro' },
 ];
 
-// eslint-disable-next-line no-unused-vars
-function InviteCard({ userId }) {
+function InviteCard() {
   const [copied, setCopied] = useState(false);
   const [stats, setStats] = useState(null);
-  const inviteLink = `${window.location.origin}/register?ref=${userId}`;
+
+  const botUsername = (process.env.REACT_APP_TELEGRAM_BOT_USERNAME || 'telegizer_bot').replace(/^@/, '');
+  // Primary: Telegram deep link — opens the bot which redirects to the Mini App.
+  // Falls back to web invite page once stats load.
+  const refCode = stats?.referral_code;
+  const tgLink  = refCode ? `https://t.me/${botUsername}?start=ref_${refCode}` : '';
+  const webLink = refCode ? `${window.location.origin}/invite/${refCode}` : '';
+  const inviteLink = tgLink || webLink;
 
   useEffect(() => {
     referralsApi.getStats().then((r) => setStats(r.data)).catch(() => {});
   }, []);
 
   const handleCopy = () => {
+    if (!inviteLink) return;
     navigator.clipboard.writeText(inviteLink).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
+  };
+
+  const handleTelegramShare = () => {
+    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(webLink || inviteLink)}&text=${encodeURIComponent('Manage your Telegram groups with Telegizer — free!')}`;
+    window.open(shareUrl, '_blank', 'noopener,noreferrer');
+    track('referral_shared', { method: 'telegram' });
   };
 
   const total = stats?.total_referrals ?? 0;
@@ -385,11 +398,8 @@ function InviteCard({ userId }) {
             <Typography variant="body2" fontWeight={600} color="primary.main">
               {total}/{nextMilestone.count} referrals → {nextMilestone.label} free
             </Typography>
-            <LinearProgress
-              variant="determinate"
-              value={(total / nextMilestone.count) * 100}
-              sx={{ mt: 1, borderRadius: 2, height: 6 }}
-            />
+            <LinearProgress variant="determinate" value={(total / nextMilestone.count) * 100}
+              sx={{ mt: 1, borderRadius: 2, height: 6 }} />
           </Box>
         )}
         {lastMilestone && !nextMilestone && (
@@ -404,20 +414,31 @@ function InviteCard({ userId }) {
           Invite 3 → get 7 days Pro · Invite 10 → get 1 month Pro. Rewards apply automatically.
         </Typography>
 
-        <Box sx={{
-          display: 'flex', alignItems: 'center', gap: 1,
-          p: 1.5, bgcolor: 'background.default', borderRadius: 2,
-          border: '1px solid', borderColor: 'divider',
-        }}>
+        {/* Telegram-first referral link */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1.5, bgcolor: 'background.default', borderRadius: 2, border: '1px solid', borderColor: 'divider', mb: 1.5 }}>
+          <Telegram sx={{ fontSize: 16, color: '#0088cc', flexShrink: 0 }} />
           <Typography variant="caption" color="text.secondary" sx={{ flexGrow: 1, fontFamily: 'monospace', wordBreak: 'break-all' }}>
-            {inviteLink}
+            {inviteLink || 'Loading…'}
           </Typography>
-          <IconButton size="small" onClick={handleCopy} color={copied ? 'success' : 'default'}>
+          <IconButton size="small" onClick={handleCopy} color={copied ? 'success' : 'default'} disabled={!inviteLink}>
             {copied ? <CheckCircle fontSize="small" /> : <ContentCopy fontSize="small" />}
           </IconButton>
         </Box>
+
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+          <Button size="small" variant="outlined" startIcon={<ContentCopy fontSize="small" />}
+            onClick={handleCopy} disabled={!inviteLink}>
+            {copied ? 'Copied!' : 'Copy Link'}
+          </Button>
+          <Button size="small" variant="contained" startIcon={<Telegram fontSize="small" />}
+            onClick={handleTelegramShare} disabled={!inviteLink}
+            sx={{ bgcolor: '#0088cc', '&:hover': { bgcolor: '#006699' } }}>
+            Share on Telegram
+          </Button>
+        </Box>
+
         {copied && (
-          <Typography variant="caption" color="success.main" mt={0.5} display="block">Link copied!</Typography>
+          <Typography variant="caption" color="success.main" mt={0.75} display="block">Link copied!</Typography>
         )}
         {total > 0 && (
           <Typography variant="caption" color="text.disabled" display="block" mt={1}>
@@ -1207,7 +1228,7 @@ export default function Dashboard() {
 
         {/* ── Referrals widget — shown after first group is connected ── */}
         {!loading && officialGroupCount > 0 && (
-          <InviteCard userId={user.id} />
+          <InviteCard />
         )}
 
         {/* ── Upgrade CTA for free users with bots ── */}
