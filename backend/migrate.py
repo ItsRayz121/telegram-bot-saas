@@ -339,8 +339,11 @@ def init_db():
         )
         _run_alter(
             db.engine,
-            "ALTER TABLE hub_bot_identities ADD CONSTRAINT IF NOT EXISTS fk_hub_bot_custom_bot "
-            "FOREIGN KEY (custom_bot_id) REFERENCES custom_bots(id) ON DELETE SET NULL",
+            "DO $$ BEGIN "
+            "IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_hub_bot_custom_bot') THEN "
+            "ALTER TABLE hub_bot_identities ADD CONSTRAINT fk_hub_bot_custom_bot "
+            "FOREIGN KEY (custom_bot_id) REFERENCES custom_bots(id) ON DELETE SET NULL; "
+            "END IF; END $$",
             "hub_bot_identities.custom_bot_id FK constraint",
         )
 
@@ -435,12 +438,6 @@ def init_db():
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS chargeback_count INTEGER NOT NULL DEFAULT 0",
             "users.chargeback_count",
         )
-
-        # ── Backfill: create UserTelegramAccount rows for legacy User.telegram_user_id ──
-        # Runs AFTER all users-table ALTER statements so the SQLAlchemy User model
-        # (which includes aup_accepted_at, deleted_at, is_suspended, chargeback_count)
-        # doesn't query a schema that is missing those columns.
-        _backfill_telegram_accounts(app)
 
         # ── Phase 4: Auto-knowledge capture columns ───────────────────────────────
         _run_alter(
@@ -623,9 +620,14 @@ def init_db():
             "users: chk_one_identity constraint (email OR telegram_user_id required)",
         )
 
+        # ── Backfill: create UserTelegramAccount rows for legacy User.telegram_user_id ──
+        # Must run AFTER all users-table ALTER statements (including auth_provider)
+        # so SQLAlchemy's User model doesn't query columns that don't exist yet.
+        _backfill_telegram_accounts(app)
+
         print("Migration complete.")
 
-    # One-shot Telegram account backfill (moved above; comment kept for reference).
+    # One-shot Telegram account backfill (see above).
     # One-shot TOTP secret encryption migration.
     # Run with: MIGRATE_ENCRYPT_TOTP=1 python -m backend.migrate
     import os as _os
