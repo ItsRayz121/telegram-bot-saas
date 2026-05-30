@@ -51,6 +51,11 @@ export default function Billing() {
   const [promoValidating, setPromoValidating] = useState(false);
   const [promoResult, setPromoResult] = useState(null); // { valid, code, discount_amount, final_price, original_price, discount_type, discount_value, error }
 
+  const tier = subscription?.tier || 'free';
+  const expires = subscription?.expires ? new Date(subscription.expires) : null;
+  const isExpired = subscription?.is_expired;
+  const daysLeft = expires ? Math.max(0, Math.ceil((expires - Date.now()) / 86400000)) : null;
+
   const fetchSub = useCallback(async () => {
     try {
       const res = await billing.getSubscription();
@@ -173,11 +178,6 @@ export default function Billing() {
   }, []);
 
   useEffect(() => { fetchSub(); fetchHistory(0); }, [fetchSub, fetchHistory]);
-
-  const tier = subscription?.tier || 'free';
-  const expires = subscription?.expires ? new Date(subscription.expires) : null;
-  const isExpired = subscription?.is_expired;
-  const daysLeft = expires ? Math.max(0, Math.ceil((expires - Date.now()) / 86400000)) : null;
 
   return (
     <Box sx={{ minHeight: '100vh' }}>
