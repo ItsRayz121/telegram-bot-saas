@@ -254,25 +254,7 @@ function OnboardingCard({ botList, onAddBot, navigate, user, officialGroupCount,
   if (dismissed) return null;
 
   if (allDone) {
-    return (
-      <Card sx={{ mb: 3, border: '1px solid', borderColor: 'success.main', bgcolor: 'rgba(102,187,106,0.06)' }}>
-        <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, py: '12px !important' }}>
-          <CheckCircle sx={{ color: 'success.main', fontSize: 28, flexShrink: 0 }} />
-          <Box sx={{ flexGrow: 1 }}>
-            <Typography fontWeight={700} variant="body1">You're all set! 🎉</Typography>
-            <Typography variant="body2" color="text.secondary">
-              Your bot is live. Send a message in your group and watch AutoMod in action.
-            </Typography>
-          </Box>
-          <Button size="small" variant="outlined" color="success" onClick={() => navigate('/groups')}>
-            Open Groups
-          </Button>
-          <IconButton size="small" onClick={handleDismiss} sx={{ ml: 1 }}>
-            <Close fontSize="small" />
-          </IconButton>
-        </CardContent>
-      </Card>
-    );
+    return null;
   }
 
   return (
@@ -1226,10 +1208,6 @@ export default function Dashboard() {
           </Grid>
         )}
 
-        {/* ── Referrals widget — shown after first group is connected ── */}
-        {!loading && officialGroupCount > 0 && (
-          <InviteCard />
-        )}
 
         {/* ── Upgrade CTA for free users with bots ── */}
         {!loading && tier === 'free' && botList.length > 0 && (

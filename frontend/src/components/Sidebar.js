@@ -632,10 +632,6 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
         {/* WORKSPACE */}
         <HubSectionLabel />
         <NavItem label={assistantName} icon={Psychology} path="/ark" active={assistantActive} aiAccent onClick={() => nav('/ark')} />
-        <NavItem label="Tasks" icon={CheckBox} path="/workspace/tasks" active={isActive('/workspace/tasks')} onClick={() => nav('/workspace/tasks')} />
-        <NavItem label="Knowledge" icon={LibraryBooks} path="/workspace/knowledge" active={isActive('/workspace/knowledge')} onClick={() => nav('/workspace/knowledge')} />
-        <NavItem label="Memory" icon={ManageAccounts} path="/workspace/memory" active={isActive('/workspace/memory')} onClick={() => nav('/workspace/memory')} />
-        <NavItem label="Meeting Links" icon={VideoCall} path="/workspace/meeting-links" active={isActive('/workspace/meeting-links')} onClick={() => nav('/workspace/meeting-links')} />
 
         {/* ANALYTICS */}
         <SectionLabel label="Analytics" />
@@ -643,10 +639,6 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
 
         <SectionLabel label="Automation" />
         <NavItem label="Automation" icon={AutoMode} path="/automation" active={automationActive} onClick={() => nav('/automation')} />
-
-        {/* GROWTH */}
-        <SectionLabel label="Growth" />
-        <NavItem label="Referrals"   icon={EmojiEvents} path="/referrals"   active={isActive('/referrals')}   onClick={() => nav('/referrals')} />
 
         {/* ACCOUNT */}
         <SectionLabel label="Account" />

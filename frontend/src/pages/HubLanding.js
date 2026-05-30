@@ -98,35 +98,6 @@ export default function HubLanding() {
 
       <Divider sx={{ mb: 3, borderColor: PALETTE.border1 }} />
 
-      {/* ── No groups connected — show what Echo will do once they connect ── */}
-      {!loading && !(officialBot?.linked_groups?.length) && !(status?.custom_bots?.length) && (
-        <Card sx={{ mb: 3, border: '1px solid', borderColor: 'divider', bgcolor: 'rgba(157,108,247,0.04)' }}>
-          <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
-              <Psychology sx={{ color: 'secondary.main', fontSize: 28 }} />
-              <Box>
-                <Typography variant="subtitle1" fontWeight={700}>Echo starts working the moment you connect a group</Typography>
-                <Typography variant="body2" color="text.secondary">Here's what you'll unlock:</Typography>
-              </Box>
-            </Box>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} mb={2.5}>
-              {[
-                { icon: <Shield sx={{ fontSize: 18, color: '#f44336' }} />, title: 'AutoMod', desc: 'Auto-removes spam, scam links, and bad actors the moment they join.' },
-                { icon: <AutoAwesome sx={{ fontSize: 18, color: '#7c4dff' }} />, title: 'AI Insights', desc: 'Daily briefings, member trends, and natural-language queries on your group activity.' },
-                { icon: <Schedule sx={{ fontSize: 18, color: '#2196f3' }} />, title: 'Scheduler', desc: 'Automated posts and announcements — set once, runs forever.' },
-              ].map(({ icon, title, desc }) => (
-                <Box key={title} sx={{ flex: 1, p: 1.5, borderRadius: 2, bgcolor: 'background.default', border: '1px solid', borderColor: 'divider' }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>{icon}<Typography variant="body2" fontWeight={700}>{title}</Typography></Box>
-                  <Typography variant="caption" color="text.secondary" display="block">{desc}</Typography>
-                </Box>
-              ))}
-            </Stack>
-            <Button variant="contained" startIcon={<Groups />} onClick={() => navigate('/groups')} size="small">
-              Connect a Group to Start
-            </Button>
-          </CardContent>
-        </Card>
-      )}
 
       {/* ── First-visit decision guide ── */}
       {!loading && !status?.official_bot && !(status?.custom_bots?.length) && (
