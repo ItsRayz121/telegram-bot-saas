@@ -4,9 +4,9 @@ import {
   Alert, Stack, Tooltip, Select, MenuItem, FormControl, InputLabel, Button,
 } from '@mui/material';
 import {
-  VideoCall, Close, OpenInNew, Refresh, CalendarMonth,
+  VideoCall, Close, OpenInNew, Refresh, CalendarMonth, EventAvailable,
 } from '@mui/icons-material';
-import { assistant as assistantApi, telegramGroups as tgApi } from '../services/api';
+import { assistant as assistantApi, telegramGroups as tgApi, googleCalendar as calApi } from '../services/api';
 import { toast } from 'react-toastify';
 
 const PLATFORM_META = {
@@ -24,6 +24,8 @@ export default function AssistantMeetingLinks() {
   const [loading, setLoading] = useState(true);
   const [groups, setGroups] = useState([]);
   const [filterGroup, setFilterGroup] = useState('');
+  const [calConnected, setCalConnected] = useState(false);
+  const [syncingId, setSyncingId] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -41,9 +43,29 @@ export default function AssistantMeetingLinks() {
 
   useEffect(() => {
     tgApi.getGroups().then(r => setGroups(r.data?.groups || [])).catch(() => {});
+    calApi.status().then(r => setCalConnected(r.data?.connected || false)).catch(() => {});
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  const syncToCalendar = async (link) => {
+    setSyncingId(link.id);
+    try {
+      const { data } = await calApi.syncMeetingLink(link.id);
+      if (data.html_link) {
+        toast.success(
+          <span>Added to Google Calendar — <a href={data.html_link} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit' }}>View event</a></span>
+        );
+      } else {
+        toast.success('Event added to Google Calendar');
+      }
+    } catch (e) {
+      const msg = e?.response?.data?.error || 'Failed to sync to calendar.';
+      toast.error(msg);
+    } finally {
+      setSyncingId(null);
+    }
+  };
 
   const dismiss = async (id) => {
     try {
@@ -77,6 +99,17 @@ export default function AssistantMeetingLinks() {
         <Button size="small" startIcon={<Refresh fontSize="small" />} onClick={load} disabled={loading}>
           Refresh
         </Button>
+        {!calConnected && (
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<CalendarMonth fontSize="small" />}
+            onClick={() => window.location.href = '/settings?section=integrations'}
+            sx={{ ml: 'auto' }}
+          >
+            Connect Google Calendar
+          </Button>
+        )}
       </Box>
 
       {loading ? (
@@ -137,6 +170,20 @@ export default function AssistantMeetingLinks() {
                           <OpenInNew fontSize="small" />
                         </IconButton>
                       </Tooltip>
+                      {calConnected && (
+                        <Tooltip title="Add to Google Calendar">
+                          <IconButton
+                            size="small"
+                            color="primary"
+                            onClick={() => syncToCalendar(link)}
+                            disabled={syncingId === link.id}
+                          >
+                            {syncingId === link.id
+                              ? <CircularProgress size={14} />
+                              : <EventAvailable fontSize="small" />}
+                          </IconButton>
+                        </Tooltip>
+                      )}
                       <Tooltip title="Dismiss">
                         <IconButton size="small" color="default" onClick={() => dismiss(link.id)}>
                           <Close fontSize="small" />

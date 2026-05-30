@@ -268,6 +268,47 @@ def sync_reminder_to_calendar(reminder_id):
         return jsonify({"error": "Failed to sync to Google Calendar"}), 502
 
 
+@calendar_bp.route("/sync-meeting-link/<int:link_id>", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=10)
+def sync_meeting_link_to_calendar(link_id):
+    """Create a Google Calendar event from a captured meeting link."""
+    from ..assistant.hub_models import HubMeeting
+    user = _current_user()
+    row = GoogleCalendarToken.query.filter_by(user_id=user.id).first()
+    if not row:
+        return jsonify({"error": "Google Calendar not connected"}), 400
+
+    link = HubMeeting.query.filter_by(id=link_id, user_id=user.id).first_or_404()
+
+    try:
+        from googleapiclient.discovery import build as _gcal_build
+        from google.auth.transport.requests import Request
+
+        creds = _build_credentials(row)
+        if creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+            _save_credentials(user.id, creds, row.email)
+
+        service = _gcal_build("calendar", "v3", credentials=creds)
+        now = datetime.now(timezone.utc)
+        end = now + timedelta(hours=1)
+        title = f"Meeting: {link.group_title or 'Group'}" if link.group_title else "Meeting"
+        context = link.context_text or link.url
+
+        event = {
+            "summary": title,
+            "description": f"Captured from Telegram group.\n\nLink: {link.url}\n\nContext: {context}\n\nSynced via Telegizer",
+            "start": {"dateTime": now.isoformat(), "timeZone": "UTC"},
+            "end":   {"dateTime": end.isoformat(), "timeZone": "UTC"},
+        }
+        created = service.events().insert(calendarId="primary", body=event).execute()
+        return jsonify({"event_id": created.get("id"), "html_link": created.get("htmlLink")})
+    except Exception as exc:
+        _log.warning("calendar sync-meeting-link failed for user %s link %s: %s", user.id, link_id, exc)
+        return jsonify({"error": "Failed to sync to Google Calendar"}), 502
+
+
 @calendar_bp.route("/disconnect", methods=["DELETE"])
 @jwt_required()
 def disconnect_calendar():

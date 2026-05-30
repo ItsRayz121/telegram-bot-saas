@@ -1,14 +1,14 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, Chip, CircularProgress,
   Alert, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
-  MenuItem, IconButton, Tooltip,
+  MenuItem, IconButton, Tooltip, InputAdornment,
   Select, FormControl, InputLabel,
 } from '@mui/material';
 import {
-  Add, AutoAwesome, Edit, Delete, EditNote, Close,
+  Add, AutoAwesome, Edit, Delete, EditNote, Close, Search, Psychology,
 } from '@mui/icons-material';
-import { notes, telegramGroups } from '../services/api';
+import { notes, telegramGroups, hub as hubApi } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 
 const TAG_COLORS = {
@@ -237,6 +237,13 @@ export default function AssistantNotes() {
   const [filterSource, setFilterSource] = useState('');
   const [filterTag, setFilterTag] = useState('');
 
+  // Semantic search
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState(null);  // null = not searching
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState('');
+  const searchInputRef = useRef(null);
+
   const navigate = useNavigate();
 
   const load = useCallback(async () => {
@@ -266,6 +273,30 @@ export default function AssistantNotes() {
 
   const clearFilters = filterGroup || filterSource || filterTag;
 
+  const handleSearch = async () => {
+    if (searchQuery.trim().length < 2) return;
+    setSearching(true);
+    setSearchError('');
+    setSearchResults(null);
+    try {
+      const { data } = await hubApi.semanticSearch(searchQuery.trim());
+      setSearchResults(data.notes || []);
+    } catch (e) {
+      const msg = e?.response?.data?.error || '';
+      setSearchError(msg.includes('key') || msg.includes('AI')
+        ? 'Semantic search requires an AI key. Set one in AI Settings.'
+        : 'Search failed. Try again.');
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const clearSearch = () => {
+    setSearchQuery('');
+    setSearchResults(null);
+    setSearchError('');
+  };
+
   return (
     <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 760, mx: 'auto' }}>
       {/* Header */}
@@ -287,6 +318,47 @@ export default function AssistantNotes() {
       </Typography>
 
       {error && <Alert severity="error" onClose={() => setError('')} sx={{ mb: 2 }}>{error}</Alert>}
+
+      {/* Semantic Search */}
+      <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+        <TextField
+          inputRef={searchInputRef}
+          size="small"
+          fullWidth
+          placeholder="Search notes by meaning… (e.g. 'pricing decisions', 'action items')"
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && handleSearch()}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <Psychology sx={{ fontSize: 17, color: 'primary.main' }} />
+              </InputAdornment>
+            ),
+            endAdornment: searchResults !== null && (
+              <InputAdornment position="end">
+                <IconButton size="small" onClick={clearSearch}><Close sx={{ fontSize: 15 }} /></IconButton>
+              </InputAdornment>
+            ),
+          }}
+        />
+        <Button
+          variant="outlined"
+          size="small"
+          onClick={handleSearch}
+          disabled={searching || searchQuery.trim().length < 2}
+          startIcon={searching ? <CircularProgress size={14} /> : <Search />}
+          sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}
+        >
+          {searching ? 'Searching…' : 'AI Search'}
+        </Button>
+      </Box>
+
+      {searchError && (
+        <Alert severity="warning" onClose={() => setSearchError('')} sx={{ mb: 2, fontSize: '0.82rem' }}>
+          {searchError}
+        </Alert>
+      )}
 
       {/* Filters */}
       <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', mb: 2, alignItems: 'center' }}>
@@ -325,7 +397,28 @@ export default function AssistantNotes() {
       </Box>
 
       {/* List */}
-      {loading ? (
+      {searchResults !== null ? (
+        <>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+            <Typography fontSize="0.82rem" color="text.secondary">
+              {searchResults.length} result{searchResults.length !== 1 ? 's' : ''} for "{searchQuery}"
+            </Typography>
+            <Button size="small" startIcon={<Close />} onClick={clearSearch}>Clear search</Button>
+          </Box>
+          {searchResults.length === 0 ? (
+            <Card variant="outlined">
+              <CardContent sx={{ textAlign: 'center', py: 4 }}>
+                <Search sx={{ fontSize: 36, color: 'text.disabled', mb: 1 }} />
+                <Typography color="text.secondary" fontSize="0.88rem">No matching notes found.</Typography>
+              </CardContent>
+            </Card>
+          ) : (
+            searchResults.map(note => (
+              <NoteCard key={note.id} note={note} onEdit={n => setEditNote(n)} onDelete={handleDelete} />
+            ))
+          )}
+        </>
+      ) : loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
           <CircularProgress size={32} />
         </Box>

@@ -6,11 +6,11 @@ import {
 } from '@mui/material';
 import {
   AccessTime, Add, Delete, CheckCircle, RadioButtonUnchecked,
-  ArrowBack, Notifications,
+  ArrowBack, Notifications, EventAvailable,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { workspace } from '../services/api';
+import { workspace, googleCalendar as calApi } from '../services/api';
 
 const QUICK_TIMES = [
   { label: '30 min', minutes: 30 },
@@ -28,9 +28,28 @@ function toLocalDatetimeInput(date) {
   return d.toISOString().slice(0, 16);
 }
 
-function ReminderCard({ reminder, onDelete }) {
+function ReminderCard({ reminder, onDelete, calConnected }) {
   const isPast = new Date(reminder.remind_at) < new Date();
   const remind_dt = new Date(reminder.remind_at);
+  const [syncing, setSyncing] = useState(false);
+
+  const syncCal = async () => {
+    setSyncing(true);
+    try {
+      const { data } = await calApi.syncReminder(reminder.id);
+      if (data.html_link) {
+        toast.success(
+          <span>Added to Google Calendar — <a href={data.html_link} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit' }}>View event</a></span>
+        );
+      } else {
+        toast.success('Event added to Google Calendar');
+      }
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Failed to sync to calendar.');
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const timeLabel = remind_dt.toLocaleString(undefined, {
     weekday: 'short', month: 'short', day: 'numeric',
@@ -72,11 +91,20 @@ function ReminderCard({ reminder, onDelete }) {
             </Typography>
           )}
         </Box>
-        <Tooltip title="Delete">
-          <IconButton size="small" onClick={() => onDelete(reminder.id)} color="error">
-            <Delete fontSize="small" />
-          </IconButton>
-        </Tooltip>
+        <Box sx={{ display: 'flex', gap: 0.5 }}>
+          {calConnected && !reminder.is_delivered && (
+            <Tooltip title="Add to Google Calendar">
+              <IconButton size="small" color="primary" onClick={syncCal} disabled={syncing}>
+                {syncing ? <CircularProgress size={14} /> : <EventAvailable fontSize="small" />}
+              </IconButton>
+            </Tooltip>
+          )}
+          <Tooltip title="Delete">
+            <IconButton size="small" onClick={() => onDelete(reminder.id)} color="error">
+              <Delete fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Box>
       </CardContent>
     </Card>
   );
@@ -176,6 +204,11 @@ export default function WorkspaceReminders() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState(0); // 0=upcoming, 1=delivered
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [calConnected, setCalConnected] = useState(false);
+
+  useEffect(() => {
+    calApi.status().then(r => setCalConnected(r.data?.connected || false)).catch(() => {});
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -256,7 +289,7 @@ export default function WorkspaceReminders() {
         <Grid container spacing={1.5}>
           {reminders.map((r) => (
             <Grid item xs={12} key={r.id}>
-              <ReminderCard reminder={r} onDelete={handleDelete} />
+              <ReminderCard reminder={r} onDelete={handleDelete} calConnected={calConnected} />
             </Grid>
           ))}
         </Grid>

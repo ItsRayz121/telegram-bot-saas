@@ -905,6 +905,7 @@ export const googleCalendar = {
   status:          ()    => api.get('/api/calendar/status'),
   listEvents:      ()    => api.get('/api/calendar/events'),
   syncReminder:    (id)  => api.post(`/api/calendar/sync-reminder/${id}`),
+  syncMeetingLink: (id)  => api.post(`/api/calendar/sync-meeting-link/${id}`),
   disconnect:      ()    => api.delete('/api/calendar/disconnect'),
 };
 

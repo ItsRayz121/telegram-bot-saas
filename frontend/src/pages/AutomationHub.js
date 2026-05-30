@@ -5,9 +5,12 @@ import {
   Chip, Divider, Avatar,
 } from '@mui/material';
 import {
-  Send, AutoMode, ArrowForward, FlashOn, CallSplit,
+  Send, AutoMode, ArrowForward, FlashOn, CallSplit, AccountTree,
 } from '@mui/icons-material';
 import { PALETTE } from '../theme';
+
+const TEAL = '#14b8a6';
+const GLOW_TEAL = 'rgba(20,184,166,0.18)';
 
 const MODULES = [
   {
@@ -33,6 +36,18 @@ const MODULES = [
     description: 'Build trigger → condition → action automations. React to events in your groups automatically.',
     tags: ['Trigger', 'Condition', 'Action'],
     badge: 'Popular',
+  },
+  {
+    key: 'workflow-builder',
+    path: '/workflow-builder',
+    icon: AccountTree,
+    iconColor: TEAL,
+    iconBg: `${TEAL}18`,
+    glowColor: GLOW_TEAL,
+    title: 'Workflow Builder',
+    description: 'Visual node-based editor. Drag and connect triggers, conditions, and actions without writing any code.',
+    tags: ['Visual', 'No-Code', 'Pro'],
+    badge: 'New',
   },
 ];
 
@@ -157,7 +172,7 @@ export default function AutomationHub() {
       <Box sx={{ mt: 5, display: 'flex', alignItems: 'center', gap: 1 }}>
         <CallSplit sx={{ fontSize: 15, color: 'text.disabled' }} />
         <Typography variant="caption" color="text.disabled">
-          More automation modules coming — webhooks, scheduled posts, and AI-powered triggers.
+          More automation modules coming — webhooks, scheduled posts, and AI-powered triggers. Workflow Builder requires a Pro plan.
         </Typography>
       </Box>
     </Box>
