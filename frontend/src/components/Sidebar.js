@@ -472,9 +472,6 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
 
       </List>
 
-      {/* ── 5-step onboarding checklist ── */}
-      <OnboardingChecklist user={user} nav={nav} />
-
       {/* ── Plan upgrade banner ── */}
       {plan === 'free' && (
         <Box
