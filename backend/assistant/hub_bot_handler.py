@@ -20,8 +20,8 @@ hub_bot_id
 import logging
 from datetime import datetime
 
-from telegram import Update
-from telegram.constants import ChatType
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.constants import ChatType, ParseMode
 from telegram.ext import (
     Application, CallbackQueryHandler, ChatMemberHandler,
     CommandHandler, ContextTypes, MessageHandler, filters,
@@ -77,6 +77,11 @@ async def _on_callback_query(
         return
 
     data = query.data or ""
+
+    if data == "echo_noop":
+        await query.answer()
+        return
+
     if not (
         data.startswith("hub_consent:")
         or data.startswith("hub_intro:")
@@ -186,6 +191,87 @@ async def _on_assist_command(
         _log.debug("hub_bot_handler: /assist error chat=%s: %s", chat.id, exc)
 
 
+# ── /start ────────────────────────────────────────────────────────────────────
+
+async def _on_start(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    hub_bot_id: str | None,
+):
+    """Echo /start — greet the user and explain the Hub."""
+    if not update.effective_chat or update.effective_chat.type != ChatType.PRIVATE:
+        return
+
+    flask_app = context.bot_data.get("flask_app")
+    user = update.effective_user
+    first = user.first_name or "there"
+
+    is_linked = False
+    frontend = "https://telegizer.com"
+
+    if flask_app:
+        try:
+            with flask_app.app_context():
+                from ..config import Config as _Cfg
+                frontend = _Cfg.FRONTEND_URL or frontend
+                from ..models import TelegramBotStarted, db
+                TelegramBotStarted.record(user.id)
+                db.session.commit()
+                # Check if this Telegram user has a linked website account.
+                from ..models import User
+                linked = User.query.filter_by(
+                    telegram_user_id=str(user.id)
+                ).first()
+                is_linked = linked is not None
+        except Exception as exc:
+            _log.debug("_on_start: db lookup failed: %s", exc)
+
+    hub_url = f"{frontend}/ark/official/overview"
+    connect_url = f"{frontend}/settings"
+
+    text = (
+        f"👋 *Hi {first}! I'm Echo — your AI group observer.*\n\n"
+        "I watch your Telegram groups and automatically surface:\n"
+        "📋 *Tasks* · 📅 *Meetings* · 🔔 *Reminders* · ✅ *Decisions*\n\n"
+        "Add me to any group to start capturing insights.\n"
+        "Open your Hub to see everything in one place."
+    )
+
+    # "Add Me to a Group" deep-link — opens Telegram's group picker.
+    echo_un = ""
+    try:
+        from ..config import Config as _CfgUn
+        echo_un = _CfgUn.ECHO_BOT_USERNAME or ""
+        if echo_un.startswith("@"):
+            echo_un = echo_un[1:]
+    except Exception:
+        pass
+    add_to_group_url = f"https://t.me/{echo_un}?startgroup=true" if echo_un else None
+
+    keyboard = []
+
+    if is_linked:
+        keyboard.append([
+            InlineKeyboardButton("✅ Account Connected", callback_data="echo_noop"),
+        ])
+    else:
+        keyboard.append([
+            InlineKeyboardButton("🔗 Connect Account", url=connect_url),
+        ])
+
+    row2 = []
+    if add_to_group_url:
+        row2.append(InlineKeyboardButton("➕ Add Me to a Group", url=add_to_group_url))
+    row2.append(InlineKeyboardButton("📊 Open My Hub", url=hub_url))
+    keyboard.append(row2)
+
+    await update.message.reply_text(
+        text,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+
+
 # ── Public registration entry point ──────────────────────────────────────────
 
 def register_hub_handlers(
@@ -204,6 +290,9 @@ def register_hub_handlers(
     application.bot_data["flask_app"] = flask_app
 
     # Closure helpers capture hub_bot_id once at registration time.
+    async def _start_handler(update, ctx):
+        await _on_start(update, ctx, hub_bot_id=hub_bot_id)
+
     async def _member_handler(update, ctx):
         await _on_my_chat_member(update, ctx, hub_bot_id=hub_bot_id)
 
@@ -234,6 +323,12 @@ def register_hub_handlers(
             (filters.TEXT | filters.CAPTION) & filters.ChatType.GROUPS,
             _message_handler,
         ),
+        group=10,
+    )
+
+    # CommandHandler: /start — private DM welcome.
+    application.add_handler(
+        CommandHandler("start", _start_handler, filters=filters.ChatType.PRIVATE),
         group=10,
     )
 

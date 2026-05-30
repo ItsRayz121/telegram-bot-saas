@@ -349,17 +349,20 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as exc:
             _log.debug("cmd_start context fetch failed: %s", exc)
 
-    assistant_hint = (
-        "\n\n💬 *Just chat with me naturally!*\n"
-        "\"Schedule meeting Friday 3 PM\" · \"Show my reminders\" · "
-        "\"Note this: ...\" · \"Any group issues today?\""
-    ) if (is_linked and not Config.ECHO_BOT_TOKEN) else ""
-
     text = (
-        f"👋 *Welcome to Telegizer, {first}!*\n\n"
-        "Your all-in-one Telegram Group Management Hub.\n\n"
-        "Manage groups, automate moderation, and grow your community — "
-        f"all from one place.{assistant_hint}"
+        f"👋 *Welcome, {first}! I'm your Telegizer control center.*\n\n"
+        "Here's what I can do:\n\n"
+        "🏘️ *Group Management*\n"
+        "• Add groups, set up automod, welcome messages\n"
+        "• Track XP, run verification flows\n"
+        "• Schedule announcements & digests\n\n"
+        "🤖 *Bot Control*\n"
+        "• Connect your own Telegram bot\n"
+        "• Configure custom commands & auto-replies\n\n"
+        "🧠 *AI + Automation*\n"
+        "• AI assistant that watches your groups\n"
+        "• Smart reminders, meeting capture, task tracking\n\n"
+        "Just tap a button below or type a command."
     )
 
     keyboard = []
