@@ -2,19 +2,19 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Box, List, ListItem, ListItemButton, ListItemIcon, ListItemText,
-  Typography, Avatar, Chip, Divider, Skeleton, Tooltip,
+  Typography, Avatar, Chip, Divider, Tooltip,
   Menu, MenuItem, IconButton, Collapse, LinearProgress,
 } from '@mui/material';
 import {
-  Home, Groups, Campaign, AutoMode,
-  CreditCard, Settings, Add, AccountCircle, Logout,
+  Home, Groups, AutoMode,
+  CreditCard, Settings, AccountCircle, Logout,
   AdminPanelSettings, ExpandMore, ExpandLess,
   Psychology, ChevronLeft, ChevronRight,
-  SmartToy, EmojiEvents, CheckCircle, RadioButtonUnchecked,
-  BarChart, CheckBox, LibraryBooks, ManageAccounts, VideoCall,
+  EmojiEvents, CheckCircle, RadioButtonUnchecked,
+  CheckBox, LibraryBooks, ManageAccounts, VideoCall,
 } from '@mui/icons-material';
 import TelegizerLogo from './TelegizerLogo';
-import { telegramGroups as tgApi, auth as authApi, channels as chApi } from '../services/api';
+import { auth as authApi } from '../services/api';
 import { APP_VERSION, BUILD_TIME } from '../version';
 import { PALETTE } from '../theme';
 import useAssistantName from '../hooks/useAssistantName';
@@ -157,61 +157,6 @@ function NavItem({ label, path, icon: Icon, badge, badgeCount, active, onClick, 
   );
 }
 
-// ── Expandable section header ──────────────────────────────────────────────────
-function ExpandableHeader({ label, icon: Icon, path, active, open, onToggle, onNavigate }) {
-  return (
-    <ListItem disablePadding sx={{ display: 'block' }}>
-      <Box
-        sx={{
-          display: 'flex', alignItems: 'center',
-          mx: 0.75, mb: 0.2, borderRadius: 1.5,
-          bgcolor: active ? 'rgba(61,142,248,0.1)' : 'transparent',
-          boxShadow: active ? `inset 3px 0 0 ${PALETTE.blue}` : 'none',
-          transition: 'all 0.18s ease',
-          '&:hover': { bgcolor: active ? 'rgba(61,142,248,0.16)' : 'rgba(255,255,255,0.04)' },
-        }}
-      >
-        <ListItemButton
-          onClick={onNavigate}
-          sx={{
-            flex: 1, pl: 1.5, pr: 0.5, py: 0.65, minHeight: 36,
-            borderRadius: 1.5,
-            '&:hover': { bgcolor: 'transparent' },
-          }}
-        >
-          {Icon && (
-            <ListItemIcon sx={{ minWidth: 30, color: active ? PALETTE.blueLt : 'text.secondary' }}>
-              <Icon sx={{ fontSize: 17 }} />
-            </ListItemIcon>
-          )}
-          <ListItemText
-            primary={label}
-            primaryTypographyProps={{
-              fontSize: '0.82rem',
-              fontWeight: active ? 600 : 400,
-              noWrap: true,
-              color: active ? PALETTE.blueLt : 'text.secondary',
-            }}
-          />
-        </ListItemButton>
-        <IconButton
-          size="small"
-          onClick={(e) => { e.stopPropagation(); onToggle(); }}
-          sx={{
-            mr: 0.5, width: 22, height: 22,
-            color: 'text.disabled',
-            transition: 'transform 0.18s ease, color 0.15s',
-            transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
-            '&:hover': { color: 'text.secondary', bgcolor: 'rgba(255,255,255,0.06)' },
-          }}
-        >
-          <ExpandMore sx={{ fontSize: 15 }} />
-        </IconButton>
-      </Box>
-    </ListItem>
-  );
-}
-
 // ── AI Hub label with pulse dot ────────────────────────────────────────────────
 function HubSectionLabel() {
   return (
@@ -311,10 +256,6 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
-  const [, setGroups] = useState([]);
-  const [, setGroupsLoading] = useState(true);
-  const [channels, setChannels] = useState([]);
-  const [channelsLoading, setChannelsLoading] = useState(true);
   const [user, setUser] = useState(null);
   const [anchorEl, setAnchorEl] = useState(null);
 
@@ -324,16 +265,10 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
     [pathname]
   );
 
-  const groupActive   = isActive('/groups');
-  const channelActive = isActive('/channels');
-  const [, setGroupsOpen]     = useState(groupActive);
-  const [channelsOpen, setChannelsOpen] = useState(channelActive);
+  const groupActive = isActive('/groups');
 
   const assistantActive = isActive('/ark') || isActive('/hub') || isActive('/workspace');
   const automationActive = isActive('/automation') || isActive('/workspace/forwarding') || isActive('/workspace/automations') || isActive('/workflow-builder');
-
-  useEffect(() => { if (isActive('/groups'))   setGroupsOpen(true);   }, [pathname, isActive]);
-  useEffect(() => { if (isActive('/channels')) setChannelsOpen(true); }, [pathname, isActive]);
 
   useEffect(() => {
     const stored = localStorage.getItem('user');
@@ -346,29 +281,10 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
     });
   }, []);
 
-  useEffect(() => {
-    tgApi.list()
-      .then(r => setGroups(r.data.groups || []))
-      .catch((err) => {
-        if (process.env.NODE_ENV !== 'production') console.warn('[sidebar] groups load failed', err);
-      })
-      .finally(() => setGroupsLoading(false));
-  }, []);
-
-  useEffect(() => {
-    chApi.list()
-      .then(r => setChannels(r.data.channels || []))
-      .catch((err) => {
-        if (process.env.NODE_ENV !== 'production') console.warn('[sidebar] channels load failed', err);
-      })
-      .finally(() => setChannelsLoading(false));
-  }, []);
-
   const plan      = user?.subscription_tier || 'free';
   const planLabel = plan === 'enterprise' ? 'Enterprise' : plan === 'pro' ? 'Pro' : 'Free';
   const planColor = plan === 'enterprise' ? '#9d6cf7' : plan === 'pro' ? '#3d8ef8' : PALETTE.text3;
-  const isAdmin   = user?.is_admin;
-  const hasChannels = channels.length > 0;
+  const isAdmin = user?.is_admin;
 
   const handleLogout = () => {
     authApi.logout?.().catch(() => {});
@@ -395,18 +311,16 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
   // ── Collapsed view ────────────────────────────────────────────────────────
   if (collapsed) {
     const COLLAPSED_ITEMS = [
-      { label: 'Dashboard',   icon: Home,        path: '/dashboard', exact: true },
-      { label: 'Groups',      icon: Groups,      path: '/groups' },
-      { label: 'My Bots',     icon: SmartToy,    path: '/custom-bots' },
-      { label: assistantName,  icon: Psychology,  path: '/ark', ai: true },
+      { label: 'Dashboard',      icon: Home,           path: '/dashboard', exact: true },
+      { label: 'Groups',         icon: Groups,         path: '/groups' },
+      { label: assistantName,    icon: Psychology,     path: '/ark', ai: true },
       { label: 'Tasks',          icon: CheckBox,       path: '/workspace/tasks' },
       { label: 'Knowledge',      icon: LibraryBooks,   path: '/workspace/knowledge' },
       { label: 'Memory',         icon: ManageAccounts, path: '/workspace/memory' },
       { label: 'Meeting Links',  icon: VideoCall,      path: '/workspace/meeting-links' },
-      { label: 'Analytics',   icon: BarChart,    path: '/analytics' },
-      { label: 'Referrals',   icon: EmojiEvents, path: '/referrals' },
-      { label: 'Billing',     icon: CreditCard,  path: '/billing' },
-      { label: 'Settings',    icon: Settings,    path: '/settings' },
+      { label: 'Referrals',      icon: EmojiEvents,    path: '/referrals' },
+      { label: 'Automation',     icon: AutoMode,       path: '/automation' },
+      { label: 'Settings',       icon: Settings,       path: '/settings' },
     ];
     return (
       <Box sx={{ ...shellSx, alignItems: 'center', pt: 1 }}>
@@ -546,104 +460,15 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
         <SectionLabel label="Groups" />
         <NavItem label="Groups" path="/groups" icon={Groups} active={groupActive} onClick={() => nav('/groups')} />
 
-        {hasChannels ? (
-          <>
-            <ExpandableHeader
-              label="Channels" icon={Campaign} path="/channels"
-              active={channelActive} open={channelsOpen}
-              onToggle={() => setChannelsOpen(o => !o)}
-              onNavigate={() => nav('/channels')}
-            />
-            <Collapse in={channelsOpen} timeout={180} unmountOnExit>
-              {channelsLoading ? (
-                [1].map(i => (
-                  <ListItem key={i} sx={{ pl: 4, py: 0.3 }}>
-                    <Skeleton width={140} height={14} sx={{ bgcolor: 'rgba(255,255,255,0.06)' }} />
-                  </ListItem>
-                ))
-              ) : (
-                channels.map(channel => {
-                  const cPath   = `/channels/${channel.id}`;
-                  const cActive = isActive(cPath);
-                  return (
-                    <ListItem key={channel.id} disablePadding>
-                      <ListItemButton
-                        onClick={() => nav(cPath)}
-                        sx={{
-                          pl: 3.5, pr: 1.5, py: 0.4, mx: 0.75, mb: 0.1, borderRadius: 1.5,
-                          bgcolor: cActive ? 'rgba(61,142,248,0.12)' : 'transparent',
-                          transition: 'all 0.15s ease',
-                          '&:hover': { bgcolor: 'rgba(255,255,255,0.05)' },
-                        }}
-                      >
-                        <ListItemText
-                          primary={channel.title || channel.name}
-                          primaryTypographyProps={{
-                            fontSize: '0.78rem', fontWeight: cActive ? 600 : 400,
-                            noWrap: true, color: cActive ? PALETTE.blueLt : 'text.secondary',
-                          }}
-                        />
-                      </ListItemButton>
-                    </ListItem>
-                  );
-                })
-              )}
-              <ListItem disablePadding>
-                <ListItemButton
-                  onClick={() => nav('/channels')}
-                  sx={{ pl: 3.5, py: 0.4, mx: 0.75, mb: 0.25, borderRadius: 1.5, '&:hover': { bgcolor: 'rgba(255,255,255,0.04)' } }}
-                >
-                  <ListItemIcon sx={{ minWidth: 22 }}>
-                    <Add sx={{ fontSize: 14, color: 'text.disabled' }} />
-                  </ListItemIcon>
-                  <ListItemText primary="Add Channel" primaryTypographyProps={{ fontSize: '0.75rem', color: 'text.disabled' }} />
-                </ListItemButton>
-              </ListItem>
-            </Collapse>
-          </>
-        ) : (
-          <ListItem disablePadding sx={{ display: 'block' }}>
-            <ListItemButton
-              onClick={() => nav('/channels')}
-              sx={{
-                pl: 1.5, pr: 0.5, py: 0.65, mx: 0.75, mb: 0.2, borderRadius: 1.5, minHeight: 36,
-                bgcolor: channelActive ? 'rgba(61,142,248,0.12)' : 'transparent',
-                boxShadow: channelActive ? `inset 3px 0 0 ${PALETTE.blue}` : 'none',
-                color: channelActive ? PALETTE.blueLt : 'text.secondary',
-                transition: 'all 0.18s ease',
-                '&:hover': { bgcolor: 'rgba(255,255,255,0.05)', color: 'text.primary' },
-              }}
-            >
-              <ListItemIcon sx={{ minWidth: 30, color: 'inherit' }}>
-                <Campaign sx={{ fontSize: 17 }} />
-              </ListItemIcon>
-              <ListItemText
-                primary="Channels"
-                primaryTypographyProps={{ fontSize: '0.82rem', fontWeight: channelActive ? 600 : 400, noWrap: true }}
-              />
-            </ListItemButton>
-          </ListItem>
-        )}
-
-        {/* BOTS */}
-        <SectionLabel label="Bots" />
-        <NavItem label="My Bots" icon={SmartToy} path="/custom-bots" active={isActive('/custom-bots')} onClick={() => nav('/custom-bots')} />
-
-        {/* WORKSPACE */}
+        {/* ECHO */}
         <HubSectionLabel />
         <NavItem label={assistantName} icon={Psychology} path="/ark" active={assistantActive} aiAccent onClick={() => nav('/ark')} />
 
-        {/* ANALYTICS */}
-        <SectionLabel label="Analytics" />
-        <NavItem label="Analytics" icon={BarChart} path="/analytics" active={isActive('/analytics')} onClick={() => nav('/analytics')} />
-
+        {/* AUTOMATION */}
         <SectionLabel label="Automation" />
         <NavItem label="Automation" icon={AutoMode} path="/automation" active={automationActive} onClick={() => nav('/automation')} />
 
-        {/* ACCOUNT */}
-        <SectionLabel label="Account" />
-        <NavItem label="Billing"  path="/billing"  icon={CreditCard} active={isActive('/billing')}  onClick={() => nav('/billing')} />
-        <NavItem label="Settings" path="/settings" icon={Settings}   active={isActive('/settings')} onClick={() => nav('/settings')} />
+        <NavItem label="Settings" path="/settings" icon={Settings} active={isActive('/settings')} onClick={() => nav('/settings')} />
 
       </List>
 
