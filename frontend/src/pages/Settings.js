@@ -856,35 +856,46 @@ export default function Settings() {
           </Button>
         </Section>
 
-        {/* Change Password */}
-        <Section title="Change Password" icon={<Lock color="primary" />}>
-          <Stack spacing={2}>
-            <TextField
-              fullWidth type="password" label="Current Password"
-              value={currentPw} onChange={(e) => setCurrentPw(e.target.value)} size="small"
-            />
-            <TextField
-              fullWidth type="password" label="New Password"
-              value={newPw} onChange={(e) => setNewPw(e.target.value)}
-              size="small" helperText="At least 8 characters"
-            />
-            <TextField
-              fullWidth type="password" label="Confirm New Password"
-              value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} size="small"
-              error={confirmPw.length > 0 && newPw !== confirmPw}
-              helperText={confirmPw.length > 0 && newPw !== confirmPw ? 'Passwords do not match' : ''}
-            />
-            <Box>
-              <Button
-                variant="contained"
-                onClick={handleChangePassword}
-                disabled={pwLoading || !currentPw || !newPw || !confirmPw}
-              >
-                {pwLoading ? <CircularProgress size={20} color="inherit" /> : 'Update Password'}
+        {/* Change Password — hidden for Telegram-only users who have no password yet */}
+        {user.email ? (
+          <Section title="Change Password" icon={<Lock color="primary" />}>
+            <Stack spacing={2}>
+              <TextField
+                fullWidth type="password" label="Current Password"
+                value={currentPw} onChange={(e) => setCurrentPw(e.target.value)} size="small"
+              />
+              <TextField
+                fullWidth type="password" label="New Password"
+                value={newPw} onChange={(e) => setNewPw(e.target.value)}
+                size="small" helperText="At least 8 characters"
+              />
+              <TextField
+                fullWidth type="password" label="Confirm New Password"
+                value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} size="small"
+                error={confirmPw.length > 0 && newPw !== confirmPw}
+                helperText={confirmPw.length > 0 && newPw !== confirmPw ? 'Passwords do not match' : ''}
+              />
+              <Box>
+                <Button variant="contained" onClick={handleChangePassword}
+                  disabled={pwLoading || !currentPw || !newPw || !confirmPw}>
+                  {pwLoading ? <CircularProgress size={20} color="inherit" /> : 'Update Password'}
+                </Button>
+              </Box>
+            </Stack>
+          </Section>
+        ) : user.auth_provider === 'telegram' && (
+          <Section title="Account Security" icon={<Lock color="primary" />}>
+            <Alert severity="info" icon={<MailOutline />} sx={{ mb: 0 }}>
+              <Typography variant="body2" fontWeight={600} gutterBottom>Add a recovery email to enable password login</Typography>
+              <Typography variant="body2" color="text.secondary">
+                You signed in with Telegram. Adding an email lets you log in from any browser and recover your account if you ever lose Telegram access.
+              </Typography>
+              <Button size="small" variant="outlined" sx={{ mt: 1.5 }} onClick={() => navigate('/settings#telegram')}>
+                Add Email &amp; Password
               </Button>
-            </Box>
-          </Stack>
-        </Section>
+            </Alert>
+          </Section>
+        )}
 
         {/* Connect Telegram */}
         <Section title="Connect Telegram Account" icon={<Telegram color="primary" />}>
@@ -896,10 +907,12 @@ export default function Settings() {
           <LinkedTelegramAccountsSection />
         </Section>
 
-        {/* Two-Factor Authentication */}
-        <Section title="Two-Factor Authentication" icon={<Security color="primary" />}>
-          <TwoFactorSection user={user} onUserRefresh={fetchUser} />
-        </Section>
+        {/* Two-Factor Authentication — requires email/password */}
+        {user.email && (
+          <Section title="Two-Factor Authentication" icon={<Security color="primary" />}>
+            <TwoFactorSection user={user} onUserRefresh={fetchUser} />
+          </Section>
+        )}
 
         {/* Default Timezone */}
         <Section title="Default Timezone" icon={<Schedule color="primary" />}>

@@ -15,8 +15,9 @@ import {
   ArrowForward, CreditCard, People, Home, AttachMoney,
   Notifications, NotificationsNone, Search, ManageAccounts,
   EmojiEvents, ExpandMore, Groups, Telegram, OpenInNew,
-  HelpOutline, Campaign, Email,
+  HelpOutline, Campaign, Email, Refresh,
 } from '@mui/icons-material';
+import { track } from '../services/analytics';
 import Divider from '@mui/material/Divider';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import TelegizerLogo from '../components/TelegizerLogo';
@@ -92,76 +93,121 @@ function BotCardSkeleton() {
 }
 
 // ── Onboarding Card ────────────────────────────────────────────────────────────
-function OnboardingCard({ botList, onAddBot, navigate, user, officialGroupCount }) {
+function OnboardingCard({ botList, onAddBot, navigate, user, officialGroupCount, onGroupsRefresh }) {
   const [dismissed, setDismissed] = useState(
     () => localStorage.getItem('onboarding_dismissed') === '1'
   );
   const [expanded, setExpanded] = useState(
     () => localStorage.getItem('onboarding_expanded') !== '0'
   );
-  // Track which steps have been synced to backend this session
+  const [waitingForGroup, setWaitingForGroup] = useState(false);
+  const pollRef = React.useRef(null);
+
   const syncedRef = React.useRef(new Set(user?.onboarding_completed_steps || []));
+  const trackedRef = React.useRef(new Set());
 
   const hasBots = botList.length > 0;
   const hasGroups = (officialGroupCount ?? 0) > 0 || botList.some((b) => (b.group_count ?? 0) > 0);
-  const isTgConnected = user?.telegram_connected;
+  // Telegram-first users are always connected — auth_provider=telegram means TG is their identity
+  const isTgConnected = user?.telegram_connected || user?.auth_provider === 'telegram';
 
-  // Sync newly completed steps to backend (2-B-01)
+  // Sync completed steps to backend + fire PostHog events
   useEffect(() => {
     const stepMap = {
-      email_verified: user?.email_verified,
+      email_verified: user?.email_verified || isTgConnected,
       bot_connected: hasBots,
       group_linked: hasGroups,
     };
     Object.entries(stepMap).forEach(([step, done]) => {
       if (done && !syncedRef.current.has(step)) {
         syncedRef.current.add(step);
-        auth.markOnboardingStep(step).catch((err) => {
-          // Allow retry on next render if the write failed.
-          syncedRef.current.delete(step);
-          if (process.env.NODE_ENV !== 'production') {
-            console.warn('[onboarding] markOnboardingStep failed', step, err);
-          }
-        });
+        auth.markOnboardingStep(step).catch(() => { syncedRef.current.delete(step); });
+      }
+      if (done && !trackedRef.current.has(step)) {
+        trackedRef.current.add(step);
+        track('onboarding_step_completed', { step, step_number: Object.keys(stepMap).indexOf(step) + 1, total_steps: 5 });
       }
     });
-  }, [user?.email_verified, hasBots, hasGroups]);
+  }, [user?.email_verified, isTgConnected, hasBots, hasGroups]);
+
+  // Stop group-wait polling when group appears
+  useEffect(() => {
+    if (hasGroups && waitingForGroup) {
+      setWaitingForGroup(false);
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    }
+  }, [hasGroups, waitingForGroup]);
+
+  // Cleanup poll on unmount
+  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
+
   const botUsername = process.env.REACT_APP_TELEGRAM_BOT_USERNAME || 'telegizer_bot';
   const addGroupUrl = `https://t.me/${botUsername}?startgroup=setup`;
+
+  const handleOpenTelegram = () => {
+    track('onboarding_open_telegram_clicked');
+    setWaitingForGroup(true);
+    // Poll for group connection every 5s for up to 3 min
+    if (pollRef.current) clearInterval(pollRef.current);
+    let attempts = 0;
+    pollRef.current = setInterval(() => {
+      attempts++;
+      if (onGroupsRefresh) onGroupsRefresh();
+      if (attempts >= 36) { clearInterval(pollRef.current); pollRef.current = null; setWaitingForGroup(false); }
+    }, 5000);
+  };
 
   const steps = [
     { label: 'Create your account', done: true },
     {
-      label: 'Connect your Telegram account',
+      // For Telegram-first users this is already done — show the right message
+      label: isTgConnected ? 'Telegram account connected' : 'Connect your Telegram account',
       done: isTgConnected,
       action: !isTgConnected ? (
         <Button size="small" variant="contained" startIcon={<Telegram />} onClick={() => navigate('/settings')} sx={{ mt: 1 }}>
           Connect Telegram
         </Button>
       ) : null,
-      hint: 'Go to Settings → Connect Telegram. This lets you link groups automatically without entering codes.',
+      hint: isTgConnected
+        ? null  // Already done — no hint needed, label says it all
+        : 'Go to Settings → Connect Telegram. Once connected, groups link automatically — no codes needed.',
     },
     {
       label: 'Add @telegizer_bot to a Telegram group as admin',
       done: hasGroups,
       action: !hasGroups ? (
-        <Box sx={{ mt: 1, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-          <Button size="small" variant="contained" startIcon={<Telegram />} href={addGroupUrl} target="_blank" rel="noopener noreferrer">
+        <Box sx={{ mt: 1, display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+          <Button
+            size="small" variant="contained" startIcon={<Telegram />}
+            href={addGroupUrl} target="_blank" rel="noopener noreferrer"
+            onClick={handleOpenTelegram}
+          >
             Open Telegram to Add Bot
           </Button>
+          {waitingForGroup && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+              <CircularProgress size={14} />
+              <Typography variant="caption" color="text.secondary">Waiting for group…</Typography>
+              <Button size="small" variant="text" sx={{ p: 0, minWidth: 0 }} onClick={() => { if (onGroupsRefresh) onGroupsRefresh(); }}>
+                <Refresh sx={{ fontSize: 15 }} />
+              </Button>
+            </Box>
+          )}
         </Box>
       ) : null,
       hint: (
         <Box>
-          <Typography variant="caption" color="text.secondary" display="block">
-            1. Click "Open Telegram to Add Bot" → pick your group → tap Add.
-          </Typography>
-          <Typography variant="caption" color="text.secondary" display="block">
-            2. In Telegram, make @telegizer_bot an <strong>admin</strong> (Settings → Administrators).
-          </Typography>
-          <Typography variant="caption" color="text.secondary" display="block">
-            3. Type <code>/linkgroup</code> in the group chat. If your Telegram account is linked in Settings, the group links automatically. Otherwise, copy the code the bot shows and paste it at Groups → Add Group.
-          </Typography>
+          {isTgConnected ? (
+            <Alert severity="success" icon={<CheckCircle fontSize="small" />} sx={{ mb: 1, py: 0.5, fontSize: '0.78rem' }}>
+              Your Telegram is connected — after adding the bot as admin, just type <strong>/linkgroup</strong> in the group. It links automatically, no code needed.
+            </Alert>
+          ) : (
+            <>
+              <Typography variant="caption" color="text.secondary" display="block">1. Click "Open Telegram to Add Bot" → pick your group → tap Add.</Typography>
+              <Typography variant="caption" color="text.secondary" display="block">2. Make @{botUsername} an <strong>admin</strong> (Group Settings → Administrators).</Typography>
+              <Typography variant="caption" color="text.secondary" display="block">3. Type <code>/linkgroup</code> in the group → copy the code → paste it at Groups → Link Group.</Typography>
+            </>
+          )}
         </Box>
       ),
     },
@@ -173,7 +219,7 @@ function OnboardingCard({ botList, onAddBot, navigate, user, officialGroupCount 
           Open Group Settings
         </Button>
       ) : null,
-      hint: 'Go to My Groups → select your group → AutoMod tab → turn on spam detection and link filtering.',
+      hint: 'My Groups → select your group → Moderation → AutoMod → turn on spam and link filtering.',
     },
     {
       label: 'Schedule your first automated post',
@@ -183,7 +229,7 @@ function OnboardingCard({ botList, onAddBot, navigate, user, officialGroupCount 
           Open Scheduler
         </Button>
       ) : null,
-      hint: 'My Groups → Scheduled Messages → create a daily or weekly post so your group always has fresh content.',
+      hint: 'My Groups → select your group → Automation → Scheduler → create a recurring post.',
     },
   ];
 
@@ -202,11 +248,11 @@ function OnboardingCard({ botList, onAddBot, navigate, user, officialGroupCount 
     e.stopPropagation();
     setDismissed(true);
     localStorage.setItem('onboarding_dismissed', '1');
+    track('onboarding_dismissed', { completed_steps: completedCount, total_steps: steps.length });
   };
 
   if (dismissed) return null;
 
-  // Success state — show celebration card instead of hiding silently
   if (allDone) {
     return (
       <Card sx={{ mb: 3, border: '1px solid', borderColor: 'success.main', bgcolor: 'rgba(102,187,106,0.06)' }}>
@@ -240,56 +286,29 @@ function OnboardingCard({ botList, onAddBot, navigate, user, officialGroupCount 
         overflow: 'hidden',
       }}
     >
-      {/* ── Compact summary bar (always visible) ── */}
       <Box
         onClick={toggleExpand}
         sx={{
-          display: 'flex',
-          alignItems: 'center',
-          px: 2,
-          py: 1.25,
-          gap: { xs: 1, sm: 1.5 },
-          cursor: 'pointer',
-          userSelect: 'none',
-          '&:hover': { bgcolor: 'action.hover' },
-          transition: 'background-color 0.15s',
+          display: 'flex', alignItems: 'center', px: 2, py: 1.25,
+          gap: { xs: 1, sm: 1.5 }, cursor: 'pointer', userSelect: 'none',
+          '&:hover': { bgcolor: 'action.hover' }, transition: 'background-color 0.15s',
         }}
       >
         <CheckCircle sx={{ color: 'primary.main', fontSize: 17, flexShrink: 0 }} />
-
         <Typography variant="body2" fontWeight={600} sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
           Getting Started
         </Typography>
-
-        {/* Inline progress bar — fills available space */}
         <Box sx={{ flexGrow: 1, mx: { xs: 0.5, sm: 1 }, minWidth: 40 }}>
-          <LinearProgress
-            variant="determinate"
-            value={progressPct}
-            sx={{ height: 5, borderRadius: 3 }}
-          />
+          <LinearProgress variant="determinate" value={progressPct} sx={{ height: 5, borderRadius: 3 }} />
         </Box>
-
-        <Typography
-          variant="caption"
-          color="text.secondary"
-          sx={{ flexShrink: 0, whiteSpace: 'nowrap', display: { xs: 'none', sm: 'block' } }}
-        >
+        <Typography variant="caption" color="text.secondary"
+          sx={{ flexShrink: 0, whiteSpace: 'nowrap', display: { xs: 'none', sm: 'block' } }}>
           {completedCount}/{steps.length} completed
         </Typography>
-
-        {/* Chevron */}
-        <ExpandMore
-          sx={{
-            flexShrink: 0,
-            fontSize: 20,
-            color: 'text.secondary',
-            transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
-            transition: 'transform 0.25s ease',
-          }}
-        />
-
-        {/* Dismiss */}
+        <ExpandMore sx={{
+          flexShrink: 0, fontSize: 20, color: 'text.secondary',
+          transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.25s ease',
+        }} />
         <Tooltip title="Dismiss">
           <IconButton size="small" onClick={handleDismiss} sx={{ flexShrink: 0, p: 0.25 }}>
             <Close sx={{ fontSize: 16 }} />
@@ -297,31 +316,22 @@ function OnboardingCard({ botList, onAddBot, navigate, user, officialGroupCount 
         </Tooltip>
       </Box>
 
-      {/* ── Expanded checklist ── */}
       <Collapse in={expanded} timeout={250}>
         <Box sx={{ px: 2, pb: 2, pt: 0.5, borderTop: '1px solid', borderColor: 'divider' }}>
-          <Stepper
-            activeStep={activeStep}
-            orientation="vertical"
-            sx={{ '& .MuiStepLabel-label': { fontSize: '0.875rem' } }}
-          >
+          <Stepper activeStep={activeStep} orientation="vertical"
+            sx={{ '& .MuiStepLabel-label': { fontSize: '0.875rem' } }}>
             {steps.map((step, idx) => (
               <Step key={step.label} completed={step.done} expanded={idx === activeStep}>
                 <StepLabel StepIconProps={{ icon: step.done ? <CheckCircle color="success" /> : undefined }}>
-                  <Typography
-                    variant="body2"
-                    fontWeight={step.done ? 400 : 600}
-                    color={step.done ? 'text.disabled' : 'text.primary'}
-                  >
+                  <Typography variant="body2" fontWeight={step.done ? 400 : 600}
+                    color={step.done ? 'text.disabled' : 'text.primary'}>
                     {step.label}
                   </Typography>
                 </StepLabel>
                 {!step.done && (
                   <StepContent>
                     {step.hint && (
-                      <Typography variant="caption" color="text.secondary" display="block" mb={step.action ? 0 : 1}>
-                        {step.hint}
-                      </Typography>
+                      <Box mb={step.action ? 0 : 1}>{step.hint}</Box>
                     )}
                     {step.action}
                   </StepContent>
@@ -335,7 +345,7 @@ function OnboardingCard({ botList, onAddBot, navigate, user, officialGroupCount 
   );
 }
 
-// ── Invite Card (preserved for future reactivation) ────────────────────────────
+// ── Invite Card ────────────────────────────────────────────────────────────────
 const REFERRAL_MILESTONES = [
   { count: 3,  days: 7,  label: '7 days Pro' },
   { count: 10, days: 30, label: '1 month Pro' },
@@ -419,7 +429,6 @@ function InviteCard({ userId }) {
   );
 }
 
-// ── Referral Leaderboard Card (preserved for future reactivation) ──────────────
 // eslint-disable-next-line no-unused-vars
 function LeaderboardCard() {
   const [data, setData] = useState(null);
@@ -632,6 +641,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     Promise.all([refreshUser(), fetchBots(), fetchSubscription(), fetchOfficialGroups()]);
+    track('dashboard_viewed');
     return () => {
       if (tgPollRef.current) { clearInterval(tgPollRef.current); tgPollRef.current = null; }
     };
@@ -988,11 +998,12 @@ export default function Dashboard() {
         {/* ── Onboarding ── */}
         {!loading && (
           <OnboardingCard botList={botList} onAddBot={() => setAddOpen(true)} navigate={navigate}
-            user={user} officialGroupCount={officialGroupCount} />
+            user={user} officialGroupCount={officialGroupCount}
+            onGroupsRefresh={() => fetchOfficialGroups()} />
         )}
 
-        {/* ── Connect Telegram banner ── */}
-        {!user.telegram_connected && !tgConnecting && !tgConnectTimedOut && (
+        {/* ── Connect Telegram banner (only for non-TG users who haven't connected yet) ── */}
+        {!user.telegram_connected && user.auth_provider !== 'telegram' && !tgConnecting && !tgConnectTimedOut && (
           <Alert severity="info" icon={<Telegram />} sx={{ mb: 2 }}
             action={
               <Button size="small" color="info" variant="outlined" endIcon={<OpenInNew fontSize="small" />}
@@ -1192,6 +1203,11 @@ export default function Dashboard() {
               );
             })}
           </Grid>
+        )}
+
+        {/* ── Referrals widget — shown after first group is connected ── */}
+        {!loading && officialGroupCount > 0 && (
+          <InviteCard userId={user.id} />
         )}
 
         {/* ── Upgrade CTA for free users with bots ── */}

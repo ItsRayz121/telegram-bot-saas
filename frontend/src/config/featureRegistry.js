@@ -20,16 +20,7 @@ import {
 
 export const FEATURE_TABS = [
   {
-    id: 'members',
-    label: 'Members',
-    icon: Group,
-    subTabs: [
-      { label: 'Verification',     officialOnly: false },
-      { label: 'Welcome',          officialOnly: false },
-      { label: 'XP & Roles',       officialOnly: false },
-    ],
-  },
-  {
+    // Moderation first — highest-value feature for new users, drives the "Enable AutoMod" onboarding step
     id: 'moderation',
     label: 'Moderation',
     icon: Shield,
@@ -37,6 +28,16 @@ export const FEATURE_TABS = [
       { label: 'AutoMod',   officialOnly: false },
       { label: 'Behavior',  officialOnly: false },
       { label: 'Reports',   officialOnly: false },
+    ],
+  },
+  {
+    id: 'members',
+    label: 'Members',
+    icon: Group,
+    subTabs: [
+      { label: 'Verification',     officialOnly: false },
+      { label: 'Welcome',          officialOnly: false },
+      { label: 'XP & Roles',       officialOnly: false },
     ],
   },
   {

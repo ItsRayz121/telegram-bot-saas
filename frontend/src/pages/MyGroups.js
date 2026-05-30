@@ -11,6 +11,7 @@ import {
   Add, Groups, CheckCircle, LinkOff, Settings, Refresh,
   OpenInNew, Warning, Lock, Security, Cancel, BarChart,
   HelpOutline, ExpandMore, ExpandLess, ArrowBack,
+  Shield, AutoAwesome,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { telegramGroups, bots as botsApi, settings as settingsApi } from '../services/api';
@@ -95,6 +96,7 @@ export default function MyGroups() {
   const [linking, setLinking] = useState(false);
   const [unlinkTarget, setUnlinkTarget] = useState(null);
   const [hubConflictOpen, setHubConflictOpen] = useState(false);
+  const [celebrationGroup, setCelebrationGroup] = useState(null);
 
   // Per-card live permission state: { [groupId]: { loading, data } }
   const [permsState, setPermsState] = useState({});
@@ -151,11 +153,13 @@ export default function MyGroups() {
     setLinking(true);
     try {
       const res = await telegramGroups.link({ code: linkCode.trim().toUpperCase() });
-      toast.success(`Group "${res.data.group.title}" linked successfully!`);
       track('first_group_linked');
       setLinkOpen(false);
       setLinkCode('');
       load({ silent: true });
+      // Show celebration dialog on first group ever linked
+      const wasEmpty = allGroups.length === 0;
+      if (wasEmpty) setCelebrationGroup(res.data.group?.title || 'your group');
     } catch (err) {
       if (err.response?.data?.code === 'HUB_GROUP_CONFLICT') {
         setLinkOpen(false);
@@ -735,6 +739,37 @@ export default function MyGroups() {
           >
             Open Echo
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ── First group celebration dialog ── */}
+      <Dialog open={!!celebrationGroup} onClose={() => setCelebrationGroup(null)} maxWidth="xs" fullWidth>
+        <DialogContent sx={{ textAlign: 'center', pt: 4, pb: 3 }}>
+          <Box sx={{ fontSize: 52, mb: 1 }}>🎉</Box>
+          <Typography variant="h6" fontWeight={800} gutterBottom>Group Connected!</Typography>
+          <Typography variant="body2" color="text.secondary" mb={3}>
+            <strong>{celebrationGroup}</strong> is now linked to Telegizer. Here's what to do next:
+          </Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, textAlign: 'left', mb: 3 }}>
+            {[
+              { icon: <Shield sx={{ color: 'error.main', fontSize: 20 }} />, title: 'Enable AutoMod', desc: 'Auto-remove spam, bots, and scam links.', tab: 'moderation' },
+              { icon: <AutoAwesome sx={{ color: 'secondary.main', fontSize: 20 }} />, title: 'Set Up AI Assistant', desc: 'Echo observes your group and surfaces insights.', tab: 'ai' },
+            ].map(({ icon, title, desc }) => (
+              <Box key={title} sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start', p: 1.5, borderRadius: 2, bgcolor: 'background.default', border: '1px solid', borderColor: 'divider' }}>
+                {icon}
+                <Box>
+                  <Typography variant="body2" fontWeight={700}>{title}</Typography>
+                  <Typography variant="caption" color="text.secondary">{desc}</Typography>
+                </Box>
+              </Box>
+            ))}
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ justifyContent: 'center', gap: 1, pb: 3, pt: 0 }}>
+          <Button variant="contained" onClick={() => { setCelebrationGroup(null); navigate('/groups'); }}>
+            Open Group Settings
+          </Button>
+          <Button variant="outlined" onClick={() => setCelebrationGroup(null)}>Later</Button>
         </DialogActions>
       </Dialog>
     </Box>

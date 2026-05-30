@@ -22,6 +22,28 @@ import {
 
 const CHART_STYLE = { background: '#161b22', border: '1px solid #30363d' };
 
+function EmptyStateCard({ icon, title, description, primaryLabel, primaryAction, secondaryLabel, secondaryAction }) {
+  return (
+    <Card sx={{ textAlign: 'center', py: { xs: 5, md: 7 }, px: 3, border: '1px dashed', borderColor: 'divider', bgcolor: 'transparent' }}>
+      <Box sx={{ width: 64, height: 64, borderRadius: 3, mx: 'auto', mb: 2,
+        bgcolor: 'rgba(33,150,243,0.08)', border: '1px solid rgba(33,150,243,0.15)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {React.cloneElement(icon, { sx: { fontSize: 28, color: 'primary.main' } })}
+      </Box>
+      <Typography variant="h6" fontWeight={700} gutterBottom letterSpacing="-0.01em">{title}</Typography>
+      <Typography variant="body2" color="text.secondary" mb={3} sx={{ maxWidth: 360, mx: 'auto' }}>{description}</Typography>
+      <Box sx={{ display: 'flex', gap: 1.5, justifyContent: 'center', flexWrap: 'wrap' }}>
+        {primaryLabel && (
+          <Button variant="contained" size="small" onClick={primaryAction}>{primaryLabel}</Button>
+        )}
+        {secondaryLabel && (
+          <Button variant="outlined" size="small" onClick={secondaryAction}>{secondaryLabel}</Button>
+        )}
+      </Box>
+    </Card>
+  );
+}
+
 function StatCard({ icon, label, value, color = 'primary.main' }) {
   return (
     <Card variant="outlined">
@@ -89,7 +111,15 @@ function OverviewTab({ isPro }) {
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}><CircularProgress size={32} /></Box>
       ) : !data ? (
-        <Alert severity="info">No analytics data yet. Connect groups to the bot first.</Alert>
+        <EmptyStateCard
+          icon={<BarChartIcon />}
+          title="No analytics data yet"
+          description="Connect a group to the Official Bot and activity will appear here — member joins, AutoMod actions, commands, and more."
+          primaryLabel="Connect a Group"
+          primaryAction={() => navigate('/groups')}
+          secondaryLabel="View Groups"
+          secondaryAction={() => navigate('/groups')}
+        />
       ) : (
         <>
           <Grid container spacing={2} mb={3}>
@@ -195,9 +225,13 @@ function GroupsTab() {
 
   if (groups.length === 0) {
     return (
-      <Alert severity="info" action={<Button onClick={() => navigate('/groups')} size="small">My Groups</Button>}>
-        No groups connected. Add the bot to a Telegram group first.
-      </Alert>
+      <EmptyStateCard
+        icon={<Groups />}
+        title="No groups connected yet"
+        description="Add @telegizer_bot as admin to a Telegram group, then link it here. Per-group analytics — members joined, message volume, and AutoMod actions — appear automatically."
+        primaryLabel="Link a Group"
+        primaryAction={() => navigate('/groups')}
+      />
     );
   }
 
@@ -253,9 +287,13 @@ function ChannelsTab() {
 
   if (channels.length === 0) {
     return (
-      <Alert severity="info" action={<Button onClick={() => navigate('/channels')} size="small">My Channels</Button>}>
-        No channels connected yet.
-      </Alert>
+      <EmptyStateCard
+        icon={<Tv />}
+        title="No channels connected yet"
+        description="Connect a Telegram channel to track post reach, subscriber growth, and engagement over time."
+        primaryLabel="Add a Channel"
+        primaryAction={() => navigate('/channels')}
+      />
     );
   }
 

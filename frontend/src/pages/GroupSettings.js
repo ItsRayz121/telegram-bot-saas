@@ -12,6 +12,7 @@ import {
   ArrowBack, Save, Add, ExpandMore, Delete, CheckCircle, Schedule,
   Send, Assessment, People, SmartToy, Refresh,
   Warning as WarningIcon, EmojiEvents, FileDownload,
+  Shield, AutoAwesome, Bolt, Close,
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -285,6 +286,10 @@ export default function GroupSettings() {
   const [cat, setCat] = useState('moderation');
   const [subTab, setSubTab] = useState(0);
   const [groupData, setGroupData] = useState(null);
+  const firstVisitKey = `group_first_visit_${groupId || 'official'}`;
+  const [showFirstVisit, setShowFirstVisit] = useState(
+    () => localStorage.getItem(firstVisitKey) !== 'seen'
+  );
   const [settingsData, setSettingsData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -867,6 +872,39 @@ export default function GroupSettings() {
       </AppBar>
 
       <Box sx={{ maxWidth: 900, mx: 'auto', p: { xs: 2, md: 3 } }}>
+
+        {/* ── First-visit orientation banner ── */}
+        {showFirstVisit && !loading && (
+          <Alert
+            severity="success"
+            icon={<CheckCircle />}
+            sx={{ mb: 2 }}
+            action={
+              <IconButton size="small" onClick={() => {
+                setShowFirstVisit(false);
+                localStorage.setItem(firstVisitKey, 'seen');
+              }}>
+                <Close fontSize="small" />
+              </IconButton>
+            }
+          >
+            <Typography variant="body2" fontWeight={700} gutterBottom>Group connected — here's where to start:</Typography>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} mt={0.5}>
+              {[
+                { icon: <Shield sx={{ fontSize: 16, color: 'error.main' }} />, label: 'AutoMod', desc: 'Block spam', cat: 'moderation', sub: 0 },
+                { icon: <AutoAwesome sx={{ fontSize: 16, color: 'secondary.main' }} />, label: 'AI', desc: 'Knowledge base', cat: 'ai', sub: 0 },
+                { icon: <Bolt sx={{ fontSize: 16, color: 'primary.main' }} />, label: 'Scheduler', desc: 'Auto-posts', cat: 'automation', sub: 0 },
+              ].map(({ icon, label, desc, cat: c, sub }) => (
+                <Button key={label} size="small" variant="outlined" color="inherit"
+                  startIcon={icon}
+                  sx={{ fontSize: '0.75rem', borderColor: 'divider', color: 'text.primary' }}
+                  onClick={() => { setCat(c); setSubTab(sub); setShowFirstVisit(false); localStorage.setItem(firstVisitKey, 'seen'); }}>
+                  {label} — {desc}
+                </Button>
+              ))}
+            </Stack>
+          </Alert>
+        )}
 
         {/* ══════════════════════════════════════════════════════════
             MODERATION
