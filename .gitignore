@@ -1,3 +1,6 @@
+tma_screenshots/
+verify_tma*.js
+verify_settings.js
 __pycache__/
 *.py[cod]
 *$py.class
