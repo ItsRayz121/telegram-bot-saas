@@ -24,7 +24,7 @@ from datetime import datetime, timedelta
 
 import requests as _http
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand, ChatPermissions
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand, ChatPermissions, WebAppInfo
 from telegram.constants import ChatType, ParseMode
 from telegram.error import Forbidden, BadRequest
 from telegram.ext import (
@@ -365,16 +365,12 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Just tap a button below or type a command."
     )
 
-    keyboard = []
-
-    if is_linked:
-        keyboard.append([
-            InlineKeyboardButton("✅ Account Connected", callback_data="menu:account_info"),
-        ])
-    else:
-        keyboard.append([
-            InlineKeyboardButton("🔗 Connect Website Account", url=f"{frontend}/settings"),
-        ])
+    keyboard = [
+        # Row 0 — primary CTA: open Mini App (Telegram-first auth, zero friction)
+        [
+            InlineKeyboardButton("🚀 Open Telegizer App", web_app=WebAppInfo(url=f"{frontend}/mini-app")),
+        ],
+    ]
 
     if pending_groups:
         keyboard.append([
@@ -385,7 +381,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ])
 
     keyboard += [
-        # Row 1 — core group actions (action first, browse second)
+        # Row 1 — core group actions
         [
             InlineKeyboardButton("➕ Add Group", callback_data="menu:add_group"),
             InlineKeyboardButton("📋 My Groups", callback_data="menu:my_groups"),
@@ -395,7 +391,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("🤖 My Bots", callback_data="menu:my_bots"),
             InlineKeyboardButton("🔌 Connect Own Bot", callback_data="menu:connect_bot"),
         ],
-        # Row 3 — power features (AI + Automations) — open in Telegram where possible
+        # Row 3 — power features
         [
             InlineKeyboardButton("🧠 AI Assistant", callback_data="menu:ai_assistant"),
             InlineKeyboardButton("⚡ Automations", url=f"{frontend}/workspace/automations"),
