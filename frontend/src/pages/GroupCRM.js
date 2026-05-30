@@ -294,7 +294,7 @@ export default function GroupCRM() {
   }, [searchInput]);
 
   useEffect(() => {
-    (botId ? api.get(`/api/bots/${botId}/groups/${groupId}/settings`) : api.get(`/api/groups/${groupId}`))
+    (botId ? api.get(`/api/bots/${botId}/groups/${groupId}/settings`) : api.get(`/api/telegram-groups/${groupId}`))
       .then(r => setGroup(r.data)).catch(() => {});
     crmApi.overview(groupId, botId).then(r => setOverview(r.data)).catch(() => {});
   }, [groupId]);

@@ -7,7 +7,7 @@ import {
 import { Campaign, Groups, Explore, CheckCircle } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { directory as dirApi, channels as chApi } from '../services/api';
+import { directory as dirApi, channels as chApi, telegramGroups as tgApi } from '../services/api';
 import api from '../services/api';
 
 const CATEGORIES = [
@@ -45,7 +45,7 @@ export default function DirectorySubmit() {
   useEffect(() => {
     Promise.all([
       chApi.list(),
-      api.get('/api/groups'),
+      tgApi.list(),
       dirApi.mine(),
     ]).then(([chRes, grpRes, mineRes]) => {
       setChannels(chRes.data || []);

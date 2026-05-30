@@ -42,7 +42,7 @@ export default function AssistantMeetingLinks() {
   }, [filterGroup]);
 
   useEffect(() => {
-    tgApi.getGroups().then(r => setGroups(r.data?.groups || [])).catch(() => {});
+    tgApi.list().then(r => setGroups(r.data || [])).catch(() => {});
     calApi.status().then(r => setCalConnected(r.data?.connected || false)).catch(() => {});
   }, []);
 

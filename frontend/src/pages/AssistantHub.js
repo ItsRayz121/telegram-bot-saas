@@ -95,7 +95,7 @@ const FEATURE_TILES = [
   { label: 'Reminders', icon: NotificationsActive, path: '/workspace/reminders', color: '#f59e0b' },
   { label: 'Digests', icon: Summarize, path: '/workspace/digests', color: '#8b5cf6' },
   { label: 'Auto-Reply', icon: Reply, path: '/workspace/smart-links', color: '#ec4899' },
-  { label: 'Knowledge', icon: MenuBook, path: '/workspace/knowledge-base', color: '#06b6d4' },
+  { label: 'Knowledge', icon: MenuBook, path: '/workspace/knowledge', color: '#06b6d4' },
   { label: 'Automations', icon: AutoMode, path: '/workspace/automations', color: '#f97316' },
   { label: 'Analytics', icon: BarChart, path: '/analytics', color: '#64748b' },
 ];

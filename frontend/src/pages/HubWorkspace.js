@@ -109,7 +109,7 @@ export default function HubWorkspace() {
 
       {/* Tab content */}
       <Box sx={{ flex: 1, overflow: 'auto', p: { xs: 2, sm: 3 } }}>
-        <TabContent tab={tab} botData={botData} groups={groups} setGroups={setGroups} />
+        <TabContent tab={tab} botData={botData} groups={groups} setGroups={setGroups} botId="official" />
       </Box>
 
       <BotTokenConnectModal
