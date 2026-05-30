@@ -680,6 +680,8 @@ export const assistant = {
   chat: (message, timezone) => api.post('/api/assistant/chat', { message, timezone }),
   ask: (question) => api.post('/api/assistant/ask', { question }),
   getAutoReplyLogs: () => api.get('/api/assistant/autoreply-logs'),
+  getMeetingLinks: (params = {}) => api.get('/api/assistant/meeting-links', { params }),
+  dismissMeetingLink: (id) => api.post(`/api/assistant/meeting-links/${id}/dismiss`),
   // Group trend analytics (7/30-day history)
   groupTrends: (days = 7, groupId = null) => api.get('/api/assistant/group-trends', { params: { days, group_id: groupId } }),
   // Inline AI actions (summarize, suggest_automod, write_announcement, explain, improve_message)

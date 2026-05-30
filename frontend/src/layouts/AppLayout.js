@@ -1,4 +1,5 @@
 ﻿import React, { useState } from 'react';
+import useAssistantName from '../hooks/useAssistantName';
 import {
   Box, AppBar, Toolbar, IconButton, Typography, Drawer,
   useMediaQuery, useTheme, Paper, BottomNavigation, BottomNavigationAction,
@@ -10,15 +11,15 @@ import { DesktopAssistantSidebar, MobileAssistantFab } from '../components/Assis
 import TelegizerLogo from '../components/TelegizerLogo';
 import { useNavigate, useLocation } from 'react-router-dom';
 
-const BOTTOM_NAV_ITEMS = [
-  { label: 'Home',    icon: <Home />,         path: '/dashboard' },
-  { label: 'Groups',  icon: <Groups />,        path: '/groups' },
-  { label: 'My Bots', icon: <SmartToy />,      path: '/custom-bots' },
-  { label: 'Echo',     icon: <Psychology />,    path: '/ark' },
-  { label: 'Account', icon: <AccountCircle />, path: '/settings' },
-];
-
 export default function AppLayout({ children }) {
+  const assistantName = useAssistantName();
+  const BOTTOM_NAV_ITEMS = [
+    { label: 'Home',         icon: <Home />,         path: '/dashboard' },
+    { label: 'Groups',       icon: <Groups />,        path: '/groups' },
+    { label: 'My Bots',      icon: <SmartToy />,      path: '/custom-bots' },
+    { label: assistantName,  icon: <Psychology />,    path: '/ark' },
+    { label: 'Account',      icon: <AccountCircle />, path: '/settings' },
+  ];
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const isSmallDesktop = useMediaQuery(theme.breakpoints.down('lg'));

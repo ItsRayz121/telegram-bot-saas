@@ -11,12 +11,13 @@ import {
   AdminPanelSettings, ExpandMore, ExpandLess,
   Psychology, ChevronLeft, ChevronRight,
   SmartToy, EmojiEvents, CheckCircle, RadioButtonUnchecked,
-  BarChart, CheckBox, LibraryBooks, ManageAccounts,
+  BarChart, CheckBox, LibraryBooks, ManageAccounts, VideoCall,
 } from '@mui/icons-material';
 import TelegizerLogo from './TelegizerLogo';
 import { telegramGroups as tgApi, auth as authApi, channels as chApi } from '../services/api';
 import { APP_VERSION, BUILD_TIME } from '../version';
 import { PALETTE } from '../theme';
+import useAssistantName from '../hooks/useAssistantName';
 
 const SIDEBAR_WIDTH = 240;
 const SIDEBAR_COLLAPSED_WIDTH = 56;
@@ -306,6 +307,7 @@ function OnboardingChecklist({ user, nav }) {
 
 // ── Sidebar content ────────────────────────────────────────────────────────────
 export default function Sidebar({ onClose, collapsed, onToggle }) {
+  const assistantName = useAssistantName();
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
@@ -327,7 +329,7 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
   const [, setGroupsOpen]     = useState(groupActive);
   const [channelsOpen, setChannelsOpen] = useState(channelActive);
 
-  const assistantActive = isActive('/ark') || isActive('/hub') || isActive('/workspace') || isActive('/workspace/tasks') || isActive('/workspace/knowledge');
+  const assistantActive = isActive('/ark') || isActive('/hub') || isActive('/workspace');
   const automationActive = isActive('/automation') || isActive('/workspace/forwarding') || isActive('/workspace/automations') || isActive('/workflow-builder');
 
   useEffect(() => { if (isActive('/groups'))   setGroupsOpen(true);   }, [pathname, isActive]);
@@ -396,10 +398,11 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
       { label: 'Dashboard',   icon: Home,        path: '/dashboard', exact: true },
       { label: 'Groups',      icon: Groups,      path: '/groups' },
       { label: 'My Bots',     icon: SmartToy,    path: '/custom-bots' },
-      { label: 'Echo',         icon: Psychology,  path: '/ark', ai: true },
-      { label: 'Tasks',        icon: CheckBox,       path: '/workspace/tasks' },
-      { label: 'Knowledge',    icon: LibraryBooks,   path: '/workspace/knowledge' },
-      { label: 'Memory',       icon: ManageAccounts, path: '/workspace/memory' },
+      { label: assistantName,  icon: Psychology,  path: '/ark', ai: true },
+      { label: 'Tasks',          icon: CheckBox,       path: '/workspace/tasks' },
+      { label: 'Knowledge',      icon: LibraryBooks,   path: '/workspace/knowledge' },
+      { label: 'Memory',         icon: ManageAccounts, path: '/workspace/memory' },
+      { label: 'Meeting Links',  icon: VideoCall,      path: '/workspace/meeting-links' },
       { label: 'Analytics',   icon: BarChart,    path: '/analytics' },
       { label: 'Referrals',   icon: EmojiEvents, path: '/referrals' },
       { label: 'Billing',     icon: CreditCard,  path: '/billing' },
@@ -628,10 +631,11 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
 
         {/* WORKSPACE */}
         <HubSectionLabel />
-        <NavItem label="Echo" icon={Psychology} path="/ark" active={assistantActive} aiAccent onClick={() => nav('/ark')} />
+        <NavItem label={assistantName} icon={Psychology} path="/ark" active={assistantActive} aiAccent onClick={() => nav('/ark')} />
         <NavItem label="Tasks" icon={CheckBox} path="/workspace/tasks" active={isActive('/workspace/tasks')} onClick={() => nav('/workspace/tasks')} />
         <NavItem label="Knowledge" icon={LibraryBooks} path="/workspace/knowledge" active={isActive('/workspace/knowledge')} onClick={() => nav('/workspace/knowledge')} />
         <NavItem label="Memory" icon={ManageAccounts} path="/workspace/memory" active={isActive('/workspace/memory')} onClick={() => nav('/workspace/memory')} />
+        <NavItem label="Meeting Links" icon={VideoCall} path="/workspace/meeting-links" active={isActive('/workspace/meeting-links')} onClick={() => nav('/workspace/meeting-links')} />
 
         {/* ANALYTICS */}
         <SectionLabel label="Analytics" />

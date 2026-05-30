@@ -2877,3 +2877,34 @@ class GoogleCalendarToken(db.Model):
     token_json = db.Column(db.Text, nullable=False)  # Fernet-encrypted JSON token blob
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class GroupMeetingLink(db.Model):
+    """Meeting/video call links captured automatically from group messages."""
+    __tablename__ = "group_meeting_links"
+
+    id = db.Column(db.Integer, primary_key=True)
+    owner_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    telegram_group_id = db.Column(db.String(255), nullable=False, index=True)
+    group_title = db.Column(db.String(255), nullable=True)
+    url = db.Column(db.String(2000), nullable=False)
+    # zoom | meet | teams | calendly | webex | other
+    platform = db.Column(db.String(30), nullable=False, default="other")
+    # message excerpt that contained the link (truncated)
+    context_text = db.Column(db.String(500), nullable=True)
+    posted_by_username = db.Column(db.String(100), nullable=True)
+    captured_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+    is_dismissed = db.Column(db.Boolean, default=False, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "telegram_group_id": self.telegram_group_id,
+            "group_title": self.group_title,
+            "url": self.url,
+            "platform": self.platform,
+            "context_text": self.context_text,
+            "posted_by_username": self.posted_by_username,
+            "captured_at": self.captured_at.isoformat(),
+            "is_dismissed": self.is_dismissed,
+        }

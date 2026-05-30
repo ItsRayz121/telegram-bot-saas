@@ -17,6 +17,7 @@ import GroupTrendsDashboard from '../components/GroupTrendsDashboard';
 import { useMediaQuery, useTheme } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { assistant, assistantBot as assistantBotApi, meetings as meetingsApi, hub } from '../services/api';
+import useAssistantName from '../hooks/useAssistantName';
 
 
 const DISMISS_KEY = 'hub_connect_banner_dismissed';
@@ -827,6 +828,7 @@ function CrossGroupSummary() {
 // ── Main Hub ──────────────────────────────────────────────────────────────────
 
 export default function AssistantHub() {
+  const assistantName = useAssistantName();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -875,7 +877,7 @@ export default function AssistantHub() {
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
         <Psychology sx={{ fontSize: 26, color: 'primary.main' }} />
-        <Typography variant="h5" fontWeight={700}>Echo</Typography>
+        <Typography variant="h5" fontWeight={700}>{assistantName}</Typography>
       </Box>
       <Typography color="text.secondary" fontSize="0.88rem" mb={2}>{today}</Typography>
 

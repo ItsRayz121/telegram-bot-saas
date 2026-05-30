@@ -53,6 +53,27 @@ from .bot_features.levels import level_from_xp as _level_from_xp, xp_for_level a
 
 _log = logging.getLogger(__name__)
 
+# ─── Meeting link detection patterns (compiled once at module load) ───────────
+_MEETING_URL_RE = re.compile(
+    r"https?://(?:"
+    r"(?:[\w-]+\.)?zoom\.us/[jJwW]/[\w?=&%-]+"
+    r"|meet\.google\.com/[a-z]{3}-[a-z]{4}-[a-z]{3}"
+    r"|teams\.microsoft\.com/l/meetup-join/[\w%./!@#$^&*()_+=-]+"
+    r"|(?:[\w-]+\.)?calendly\.com/[\w/-]+"
+    r"|(?:[\w-]+\.)?webex\.com/meet/[\w/-]+"
+    r"|goto(?:meeting|webinar)\.com/join/\d+"
+    r")",
+    re.IGNORECASE,
+)
+_MEETING_PLATFORM_MAP = [
+    ("zoom",        re.compile(r"zoom\.us", re.I)),
+    ("meet",        re.compile(r"meet\.google\.com", re.I)),
+    ("teams",       re.compile(r"teams\.microsoft\.com", re.I)),
+    ("calendly",    re.compile(r"calendly\.com", re.I)),
+    ("webex",       re.compile(r"webex\.com", re.I)),
+    ("gotomeeting", re.compile(r"gotomeeting\.com|gotowebinar\.com", re.I)),
+]
+
 # ─── Telegram ToS outgoing rate limiter ──────────────────────────────────────
 # Telegram's Bot API allows at most 20 messages/second globally, but for a
 # single group the recommended limit is much lower. We enforce 20 msg/min
@@ -2522,6 +2543,21 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             await message.reply_text(reply)
                         except Exception:
                             pass
+                        # Log the trigger
+                        try:
+                            from .models import AutoReplyLog, db as _db
+                            log_user_id = ar.owner_user_id or (tg_group.owner_user_id if tg_group else None)
+                            if log_user_id:
+                                _db.session.add(AutoReplyLog(
+                                    user_id=log_user_id,
+                                    auto_response_id=ar.id,
+                                    telegram_group_id=group_id,
+                                    trigger_text=ar.trigger_text,
+                                    message_text=(text or "")[:500],
+                                ))
+                                _db.session.commit()
+                        except Exception:
+                            pass
                         break
         except Exception as exc:
             _log.debug("Auto-response check failed: %s", exc)
@@ -2601,6 +2637,35 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     _db.session.commit()
         except Exception:
             pass
+
+    # Meeting link capture — detect Zoom/Meet/Teams/Calendly/Webex URLs in group messages
+    if text and flask_app:
+        _meeting_urls = _MEETING_URL_RE.findall(text)
+        if _meeting_urls:
+            try:
+                with flask_app.app_context():
+                    from .models import GroupMeetingLink, TelegramGroup, db as _mdb
+                    _mtg_grp = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
+                    if _mtg_grp and _mtg_grp.owner_user_id:
+                        for _url in _meeting_urls[:5]:  # cap at 5 per message
+                            _platform = "other"
+                            for _name, _pat in _MEETING_PLATFORM_MAP:
+                                if _pat.search(_url):
+                                    _platform = _name
+                                    break
+                            _poster = message.from_user.username if message.from_user else None
+                            _mdb.session.add(GroupMeetingLink(
+                                owner_user_id=_mtg_grp.owner_user_id,
+                                telegram_group_id=group_id,
+                                group_title=group_title,
+                                url=_url,
+                                platform=_platform,
+                                context_text=(text or "")[:500],
+                                posted_by_username=_poster,
+                            ))
+                        _mdb.session.commit()
+            except Exception as _me:
+                _log.debug("Meeting link capture failed: %s", _me)
 
     # Reminder auto-detection: "remind me to X in Y / tomorrow / on Friday"
     if text and not text.startswith("/") and flask_app:

@@ -16,7 +16,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..models import (
     db, User, TelegramGroup, WorkspaceReminder, Note, DigestLog,
     AutomationExecution, AutomationWorkflow, BotDMMessage,
-    AutoReplyLog, MessageBuffer,
+    AutoReplyLog, MessageBuffer, GroupMeetingLink,
 )
 from ..middleware.rate_limit import rate_limit
 from ..config import Config
@@ -398,6 +398,34 @@ def autoreply_logs():
         .all()
     )
     return jsonify({"logs": [l.to_dict() for l in logs]})
+
+
+@assistant_bp.route("/meeting-links", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def meeting_links():
+    """GET /api/assistant/meeting-links — recent meeting links captured in user's groups."""
+    user = _current_user()
+    group_id = request.args.get("group_id")
+    dismissed = request.args.get("dismissed", "false").lower() == "true"
+
+    q = GroupMeetingLink.query.filter_by(owner_user_id=user.id, is_dismissed=dismissed)
+    if group_id:
+        q = q.filter_by(telegram_group_id=group_id)
+    links = q.order_by(GroupMeetingLink.captured_at.desc()).limit(100).all()
+    return jsonify({"links": [l.to_dict() for l in links]})
+
+
+@assistant_bp.route("/meeting-links/<int:link_id>/dismiss", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def dismiss_meeting_link(link_id):
+    """Mark a captured meeting link as dismissed."""
+    user = _current_user()
+    link = GroupMeetingLink.query.filter_by(id=link_id, owner_user_id=user.id).first_or_404()
+    link.is_dismissed = True
+    db.session.commit()
+    return jsonify({"ok": True})
 
 
 @assistant_bp.route("/group-trends", methods=["GET"])
