@@ -10,6 +10,7 @@ from ..models import (
     PaymentHistory, SubscriptionRenewal, UserNotification, AdminAnnouncement,
     ReportedMessage, OfficialReportedMessage,
     AutomationWorkflow, WorkspaceReminder, Note, Channel, KnowledgeDocument,
+    PromoCode, PromoCodeUsage,
 )
 from ..config import Config
 from ..middleware.rate_limit import rate_limit
@@ -1279,3 +1280,219 @@ def increment_chargeback(user_id):
     db.session.add(audit)
     db.session.commit()
     return jsonify({"user_id": user_id, "chargeback_count": user.chargeback_count})
+
+
+# ── Promo Codes ────────────────────────────────────────────────────────────────
+
+@admin_bp.route("/promo-codes", methods=["GET"])
+@admin_required
+@rate_limit(requests_per_minute=30)
+def list_promo_codes():
+    codes = PromoCode.query.order_by(PromoCode.created_at.desc()).all()
+    return jsonify({"promo_codes": [c.to_dict() for c in codes]})
+
+
+@admin_bp.route("/promo-codes", methods=["POST"])
+@admin_required
+@rate_limit(requests_per_minute=20)
+def create_promo_code():
+    admin_user = _get_current_user()
+    data = request.get_json() or {}
+
+    code = (data.get("code") or "").strip().upper()
+    if not code:
+        return jsonify({"error": "code is required"}), 400
+    if PromoCode.query.filter_by(code=code).first():
+        return jsonify({"error": "A code with this name already exists."}), 409
+
+    discount_type = data.get("discount_type", "percent")
+    if discount_type not in ("percent", "fixed", "trial_days"):
+        return jsonify({"error": "discount_type must be percent, fixed, or trial_days"}), 400
+
+    try:
+        discount_value = float(data.get("discount_value", 0))
+        if discount_value <= 0:
+            raise ValueError
+    except (TypeError, ValueError):
+        return jsonify({"error": "discount_value must be a positive number"}), 400
+
+    valid_until = None
+    if data.get("valid_until"):
+        try:
+            valid_until = datetime.fromisoformat(data["valid_until"].replace("Z", "+00:00"))
+        except ValueError:
+            return jsonify({"error": "Invalid valid_until format"}), 400
+
+    promo = PromoCode(
+        code=code,
+        discount_type=discount_type,
+        discount_value=discount_value,
+        applicable_plans=data.get("applicable_plans") or None,
+        max_uses=data.get("max_uses") or None,
+        max_uses_per_user=int(data.get("max_uses_per_user") or 1),
+        valid_until=valid_until,
+        is_active=bool(data.get("is_active", True)),
+        is_influencer_code=bool(data.get("is_influencer_code", False)),
+        influencer_name=data.get("influencer_name") or None,
+        label=data.get("label") or None,
+        created_by_user_id=admin_user.id,
+    )
+    db.session.add(promo)
+    db.session.commit()
+    return jsonify({"promo_code": promo.to_dict()}), 201
+
+
+@admin_bp.route("/promo-codes/<int:code_id>", methods=["PUT"])
+@admin_required
+@rate_limit(requests_per_minute=20)
+def update_promo_code(code_id):
+    promo = PromoCode.query.get(code_id)
+    if not promo:
+        return jsonify({"error": "Promo code not found"}), 404
+
+    data = request.get_json() or {}
+    if "is_active" in data:
+        promo.is_active = bool(data["is_active"])
+    if "discount_value" in data:
+        promo.discount_value = float(data["discount_value"])
+    if "discount_type" in data:
+        promo.discount_type = data["discount_type"]
+    if "max_uses" in data:
+        promo.max_uses = data["max_uses"] or None
+    if "valid_until" in data:
+        if data["valid_until"]:
+            try:
+                promo.valid_until = datetime.fromisoformat(data["valid_until"].replace("Z", "+00:00"))
+            except ValueError:
+                return jsonify({"error": "Invalid valid_until format"}), 400
+        else:
+            promo.valid_until = None
+    if "label" in data:
+        promo.label = data["label"] or None
+    if "influencer_name" in data:
+        promo.influencer_name = data["influencer_name"] or None
+    if "is_influencer_code" in data:
+        promo.is_influencer_code = bool(data["is_influencer_code"])
+    if "applicable_plans" in data:
+        promo.applicable_plans = data["applicable_plans"] or None
+
+    db.session.commit()
+    return jsonify({"promo_code": promo.to_dict()})
+
+
+@admin_bp.route("/promo-codes/<int:code_id>", methods=["DELETE"])
+@admin_required
+@rate_limit(requests_per_minute=20)
+def delete_promo_code(code_id):
+    promo = PromoCode.query.get(code_id)
+    if not promo:
+        return jsonify({"error": "Promo code not found"}), 404
+    promo.is_active = False
+    db.session.commit()
+    return jsonify({"message": "Promo code deactivated."})
+
+
+@admin_bp.route("/promo-codes/<int:code_id>/usage", methods=["GET"])
+@admin_required
+@rate_limit(requests_per_minute=30)
+def promo_code_usage(code_id):
+    promo = PromoCode.query.get(code_id)
+    if not promo:
+        return jsonify({"error": "Promo code not found"}), 404
+    usages = PromoCodeUsage.query.filter_by(promo_code_id=code_id).order_by(
+        PromoCodeUsage.used_at.desc()
+    ).limit(100).all()
+    return jsonify({
+        "code": promo.code,
+        "uses_count": promo.uses_count,
+        "usages": [u.to_dict() for u in usages],
+    })
+
+
+# ── Gift Subscription ──────────────────────────────────────────────────────────
+
+@admin_bp.route("/users/<int:user_id>/gift-subscription", methods=["POST"])
+@admin_required
+@rate_limit(requests_per_minute=10)
+def gift_subscription(user_id):
+    """Grant a user a free subscription without payment."""
+    admin_user = _get_current_user()
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    data = request.get_json() or {}
+    tier = data.get("tier", "pro")
+    if tier not in ("pro", "enterprise"):
+        return jsonify({"error": "tier must be pro or enterprise"}), 400
+
+    duration_days = int(data.get("duration_days", 30))
+    if duration_days < 1 or duration_days > 3650:
+        return jsonify({"error": "duration_days must be between 1 and 3650"}), 400
+
+    note = data.get("note") or ""
+
+    now = datetime.utcnow()
+    # Extend from existing expiry if subscription is still active
+    base = user.subscription_expires if (
+        user.subscription_expires and user.subscription_expires > now
+        and user.subscription_tier == tier
+    ) else now
+    expires = base + timedelta(days=duration_days)
+
+    user.subscription_tier = tier
+    user.subscription_expires = expires
+    user.subscription_expires_at = expires
+    user.subscription_grace_until = expires + timedelta(days=7)
+
+    renewal = SubscriptionRenewal(
+        user_id=user.id,
+        plan=tier,
+        interval="gift",
+        amount_usd=0,
+        payment_id=f"gift-by-admin-{admin_user.id}",
+        expires_at=expires,
+    )
+    db.session.add(renewal)
+
+    history = PaymentHistory(
+        user_id=user.id,
+        provider="manual",
+        payment_id=f"gift-admin-{admin_user.id}-{int(now.timestamp())}",
+        plan=tier,
+        billing_period="gift",
+        amount_usd=0,
+        currency="USD",
+        status="confirmed",
+        confirmed_at=now,
+        metadata_={"gifted_by": admin_user.id, "note": note, "duration_days": duration_days},
+    )
+    db.session.add(history)
+
+    audit = AdminAuditLog(
+        admin_id=admin_user.id,
+        action="gift_subscription",
+        method="POST",
+        path=f"/api/admin/users/{user_id}/gift-subscription",
+        payload_json=json.dumps({"tier": tier, "duration_days": duration_days, "note": note}),
+        ip_address=request.remote_addr,
+    )
+    db.session.add(audit)
+    db.session.commit()
+
+    try:
+        from ..routes.notifications import create_notification
+        create_notification(
+            user.id, "payment_confirmed",
+            f"🎁 {tier.capitalize()} Plan Gifted!",
+            f"An admin has gifted you a {tier.capitalize()} subscription valid until {expires.strftime('%Y-%m-%d')}.",
+        )
+    except Exception:
+        pass
+
+    _log.info("[ADMIN] Gifted %s to user %d for %d days by admin %d", tier, user_id, duration_days, admin_user.id)
+    return jsonify({
+        "message": f"Gifted {tier} for {duration_days} days.",
+        "user": user.to_dict(),
+        "expires_at": expires.isoformat(),
+    })

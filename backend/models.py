@@ -907,6 +907,108 @@ class SubscriptionRenewal(db.Model):
     expires_at  = db.Column(db.DateTime)
 
 
+class PromoCode(db.Model):
+    """Admin-created promo / discount codes applied at checkout."""
+    __tablename__ = "promo_codes"
+
+    id              = db.Column(db.Integer, primary_key=True)
+    code            = db.Column(db.String(50), unique=True, nullable=False, index=True)
+    # percent | fixed | trial_days
+    discount_type   = db.Column(db.String(20), nullable=False, default="percent")
+    discount_value  = db.Column(db.Numeric(10, 2), nullable=False)
+    # JSON list of plan tiers it applies to, e.g. ["pro","enterprise"]. None = all.
+    applicable_plans = db.Column(db.JSON, nullable=True)
+    max_uses        = db.Column(db.Integer, nullable=True)     # None = unlimited
+    uses_count      = db.Column(db.Integer, default=0, nullable=False)
+    max_uses_per_user = db.Column(db.Integer, default=1, nullable=False)
+    valid_from      = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    valid_until     = db.Column(db.DateTime, nullable=True)    # None = no expiry
+    is_active       = db.Column(db.Boolean, default=True, nullable=False)
+    # KOL / influencer tracking
+    is_influencer_code = db.Column(db.Boolean, default=False, nullable=False)
+    influencer_name = db.Column(db.String(100), nullable=True)
+    label           = db.Column(db.String(200), nullable=True) # internal note
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    created_at      = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    usages = db.relationship("PromoCodeUsage", backref="promo_code", lazy="dynamic")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "code": self.code,
+            "discount_type": self.discount_type,
+            "discount_value": float(self.discount_value),
+            "applicable_plans": self.applicable_plans,
+            "max_uses": self.max_uses,
+            "uses_count": self.uses_count,
+            "max_uses_per_user": self.max_uses_per_user,
+            "valid_from": self.valid_from.isoformat() if self.valid_from else None,
+            "valid_until": self.valid_until.isoformat() if self.valid_until else None,
+            "is_active": self.is_active,
+            "is_influencer_code": self.is_influencer_code,
+            "influencer_name": self.influencer_name,
+            "label": self.label,
+            "created_at": self.created_at.isoformat(),
+        }
+
+    def is_valid_for(self, user_id: int, plan: str) -> tuple[bool, str]:
+        """Return (ok, reason). reason is empty string when ok=True."""
+        now = datetime.utcnow()
+        if not self.is_active:
+            return False, "Code is no longer active."
+        if self.valid_from and now < self.valid_from:
+            return False, "Code is not yet valid."
+        if self.valid_until and now > self.valid_until:
+            return False, "Code has expired."
+        if self.max_uses is not None and self.uses_count >= self.max_uses:
+            return False, "Code has reached its usage limit."
+        if self.applicable_plans and plan not in self.applicable_plans:
+            return False, f"Code is not valid for the {plan} plan."
+        # Per-user limit
+        user_uses = PromoCodeUsage.query.filter_by(
+            promo_code_id=self.id, user_id=user_id
+        ).count()
+        if user_uses >= self.max_uses_per_user:
+            return False, "You have already used this code."
+        return True, ""
+
+    def compute_discount(self, base_amount_usd: float) -> float:
+        """Return discount amount in USD (positive value to subtract)."""
+        v = float(self.discount_value)
+        if self.discount_type == "percent":
+            return round(base_amount_usd * v / 100, 2)
+        if self.discount_type == "fixed":
+            return min(v, base_amount_usd)
+        return 0.0  # trial_days handled separately
+
+
+class PromoCodeUsage(db.Model):
+    """One record per successful promo-code redemption."""
+    __tablename__ = "promo_code_usages"
+
+    id              = db.Column(db.Integer, primary_key=True)
+    promo_code_id   = db.Column(db.Integer, db.ForeignKey("promo_codes.id"), nullable=False, index=True)
+    user_id         = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    used_at         = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    order_id        = db.Column(db.String(255), nullable=True)  # NOWPayments invoice / payment id
+    original_price  = db.Column(db.Numeric(10, 2), nullable=True)
+    discount_amount = db.Column(db.Numeric(10, 2), nullable=True)
+    final_price     = db.Column(db.Numeric(10, 2), nullable=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "promo_code_id": self.promo_code_id,
+            "user_id": self.user_id,
+            "used_at": self.used_at.isoformat(),
+            "order_id": self.order_id,
+            "original_price": float(self.original_price) if self.original_price else None,
+            "discount_amount": float(self.discount_amount) if self.discount_amount else None,
+            "final_price": float(self.final_price) if self.final_price else None,
+        }
+
+
 class SuspiciousActivity(db.Model):
     """Records suspicious signup and referral events for admin review.
     All identifiers are SHA-256 hashes — no raw IPs or fingerprints stored."""

@@ -10,6 +10,7 @@ import {
 import {
   ArrowBack, Upgrade, CheckCircle,
   CurrencyBitcoin, Refresh, ReceiptLong, Cancel, CreditCard, OpenInNew,
+  LocalOffer, CheckCircleOutline,
 } from '@mui/icons-material';
 import Skeleton from '@mui/material/Skeleton';
 import { useNavigate } from 'react-router-dom';
@@ -43,6 +44,9 @@ export default function Billing() {
   const [cancelling, setCancelling] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [cryptoLoading, setCryptoLoading] = useState(false);
+  const [promoCode, setPromoCode] = useState('');
+  const [promoValidating, setPromoValidating] = useState(false);
+  const [promoResult, setPromoResult] = useState(null); // { valid, code, discount_amount, final_price, original_price, discount_type, discount_value, error }
 
   const fetchSub = useCallback(async () => {
     try {
@@ -120,9 +124,16 @@ export default function Billing() {
   const handleCryptoCheckout = useCallback(async (targetTier, interval = 'monthly') => {
     setCryptoLoading(true);
     try {
-      const res = await billing.cryptoCheckout({ tier: targetTier, interval });
-      if (res.data.checkout_url || res.data.invoice_url) {
-        window.open(res.data.checkout_url || res.data.invoice_url, '_blank', 'noopener,noreferrer');
+      const payload = { tier: targetTier, interval };
+      if (promoResult?.valid && promoResult?.code) {
+        payload.promo_code = promoResult.code;
+      }
+      const res = await billing.cryptoCheckout(payload);
+      if (res.data.url || res.data.checkout_url || res.data.invoice_url) {
+        window.open(res.data.url || res.data.checkout_url || res.data.invoice_url, '_blank', 'noopener,noreferrer');
+        if (res.data.promo_applied) {
+          toast.success(`Promo applied! You saved $${res.data.discount_amount?.toFixed(2)}`);
+        }
       }
     } catch (err) {
       const msg = err?.response?.data?.error || 'Failed to start crypto checkout';
@@ -130,6 +141,32 @@ export default function Billing() {
     } finally {
       setCryptoLoading(false);
     }
+  }, [promoResult]);
+
+  const handlePromoApply = useCallback(async () => {
+    const code = promoCode.trim().toUpperCase();
+    if (!code) return;
+    setPromoValidating(true);
+    setPromoResult(null);
+    try {
+      const targetTier = tier === 'free' ? 'pro' : tier;
+      const res = await billing.validatePromo({ code, tier: targetTier });
+      setPromoResult(res.data);
+      if (res.data.valid) {
+        toast.success(`Code "${code}" applied — $${res.data.discount_amount?.toFixed(2)} off!`);
+      } else {
+        toast.error(res.data.error || 'Invalid code');
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Failed to validate code');
+    } finally {
+      setPromoValidating(false);
+    }
+  }, [promoCode, tier]);
+
+  const handlePromoRemove = useCallback(() => {
+    setPromoCode('');
+    setPromoResult(null);
   }, []);
 
   useEffect(() => { fetchSub(); fetchHistory(0); }, [fetchSub, fetchHistory]);
@@ -317,6 +354,68 @@ export default function Billing() {
                   Payment Methods
                 </Typography>
                 <Stack spacing={2}>
+
+                  {/* Promo Code */}
+                  <Box sx={{ p: { xs: 1.5, md: 2 }, border: '1px solid', borderColor: promoResult?.valid ? 'success.main' : 'divider', borderRadius: 2, bgcolor: promoResult?.valid ? 'rgba(34,197,94,0.04)' : undefined }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: promoResult ? 1.5 : 0 }}>
+                      <LocalOffer fontSize="small" color={promoResult?.valid ? 'success' : 'action'} />
+                      <Typography variant="body2" fontWeight={600} sx={{ flexGrow: 1 }}>
+                        {promoResult?.valid ? `Code "${promoResult.code}" applied` : 'Have a promo code?'}
+                      </Typography>
+                      {promoResult?.valid && (
+                        <Button size="small" color="error" onClick={handlePromoRemove} sx={{ minWidth: 0, px: 1 }}>
+                          Remove
+                        </Button>
+                      )}
+                    </Box>
+                    {!promoResult?.valid && (
+                      <Box sx={{ display: 'flex', gap: 1 }}>
+                        <TextField
+                          size="small"
+                          placeholder="Enter code"
+                          value={promoCode}
+                          onChange={e => { setPromoCode(e.target.value.toUpperCase()); setPromoResult(null); }}
+                          onKeyDown={e => e.key === 'Enter' && handlePromoApply()}
+                          inputProps={{ style: { fontFamily: 'monospace', letterSpacing: 2 } }}
+                          sx={{ flexGrow: 1 }}
+                          disabled={promoValidating}
+                        />
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          onClick={handlePromoApply}
+                          disabled={!promoCode.trim() || promoValidating}
+                          startIcon={promoValidating ? <CircularProgress size={13} /> : null}
+                        >
+                          {promoValidating ? 'Checking…' : 'Apply'}
+                        </Button>
+                      </Box>
+                    )}
+                    {promoResult && !promoResult.valid && (
+                      <Typography variant="caption" color="error.main" mt={0.5} display="block">
+                        {promoResult.error}
+                      </Typography>
+                    )}
+                    {promoResult?.valid && (
+                      <Stack spacing={0.5}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <Typography variant="body2" color="text.secondary">Original price</Typography>
+                          <Typography variant="body2" sx={{ textDecoration: 'line-through', color: 'text.disabled' }}>
+                            ${promoResult.original_price?.toFixed(2)}
+                          </Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <Typography variant="body2" color="success.main">Discount ({promoResult.discount_type === 'percent' ? `${promoResult.discount_value}%` : `$${promoResult.discount_value}`})</Typography>
+                          <Typography variant="body2" color="success.main">−${promoResult.discount_amount?.toFixed(2)}</Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 0.5, borderTop: '1px solid', borderColor: 'divider' }}>
+                          <Typography variant="body2" fontWeight={700}>You pay</Typography>
+                          <Typography variant="body2" fontWeight={700} color="success.main">${promoResult.final_price?.toFixed(2)}</Typography>
+                        </Box>
+                      </Stack>
+                    )}
+                  </Box>
+
                   {/* Crypto — PRIMARY CTA */}
                   <Box
                     role="button"

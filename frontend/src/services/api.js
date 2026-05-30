@@ -459,6 +459,8 @@ export const billing = {
   // Manual payment verification (1-I-02)
   verifyPayment: () => api.post('/api/billing/verify-payment'),
   cancelSubscription: () => api.delete('/api/billing/subscription'),
+  // Promo codes
+  validatePromo: (data) => api.post('/api/billing/promo/validate', data),
 };
 
 export const referrals = {
@@ -538,6 +540,14 @@ export const admin = {
   getFraudPaymentAnomalies: () => api.get('/api/admin/fraud/payment-anomalies'),
   getFraudChargebacks: () => api.get('/api/admin/fraud/chargebacks'),
   recordChargeback: (userId) => api.post(`/api/admin/fraud/chargebacks/${userId}/increment`),
+  // Gift subscription
+  giftSubscription: (userId, data) => api.post(`/api/admin/users/${userId}/gift-subscription`, data),
+  // Promo codes
+  getPromoCodes: () => api.get('/api/admin/promo-codes'),
+  createPromoCode: (data) => api.post('/api/admin/promo-codes', data),
+  updatePromoCode: (id, data) => api.put(`/api/admin/promo-codes/${id}`, data),
+  deletePromoCode: (id) => api.delete(`/api/admin/promo-codes/${id}`),
+  getPromoUsage: (id) => api.get(`/api/admin/promo-codes/${id}/usage`),
 };
 
 export const telegramGroups = {

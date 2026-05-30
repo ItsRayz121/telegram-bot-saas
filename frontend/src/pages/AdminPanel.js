@@ -341,6 +341,10 @@ function UsersTab({ onAdminError }) {
   const [actionLoading, setActionLoading] = useState('');
   const [banReason, setBanReason] = useState('Violation of terms of service');
   const [banDialogOpen, setBanDialogOpen] = useState(false);
+  const [giftDialogOpen, setGiftDialogOpen] = useState(false);
+  const [giftTier, setGiftTier] = useState('pro');
+  const [giftDays, setGiftDays] = useState(30);
+  const [giftNote, setGiftNote] = useState('');
 
   const fetchUsers = useCallback(async (p = 1, s = '', tier = '', status = '') => {
     setLoading(true);
@@ -427,6 +431,19 @@ function UsersTab({ onAdminError }) {
       refresh();
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to unban user');
+    } finally { setActionLoading(''); }
+  };
+
+  const handleGiftSubscription = async () => {
+    setActionLoading('gift');
+    try {
+      await admin.giftSubscription(selectedUser.id, { tier: giftTier, duration_days: giftDays, note: giftNote });
+      toast.success(`🎁 Gifted ${giftTier} for ${giftDays} days to ${selectedUser.email}`);
+      setGiftDialogOpen(false);
+      setDetailOpen(false);
+      refresh();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to gift subscription');
     } finally { setActionLoading(''); }
   };
 
@@ -591,8 +608,11 @@ function UsersTab({ onAdminError }) {
                   <MenuItem value="enterprise">Enterprise</MenuItem>
                 </Select>
               </FormControl>
-              <Button variant="outlined" fullWidth onClick={handleUpdateSub} disabled={actionLoading === 'sub'} sx={{ mb: 2 }}>
+              <Button variant="outlined" fullWidth onClick={handleUpdateSub} disabled={actionLoading === 'sub'} sx={{ mb: 1 }}>
                 {actionLoading === 'sub' ? <CircularProgress size={18} /> : 'Update Subscription'}
+              </Button>
+              <Button variant="contained" color="success" fullWidth onClick={() => setGiftDialogOpen(true)} disabled={!!actionLoading} sx={{ mb: 2 }}>
+                🎁 Gift Free Subscription
               </Button>
 
               <Grid container spacing={1}>
@@ -619,6 +639,38 @@ function UsersTab({ onAdminError }) {
           )}
         </DialogContent>
         <DialogActions><Button onClick={() => setDetailOpen(false)}>Close</Button></DialogActions>
+      </Dialog>
+
+      {/* Gift subscription dialog */}
+      <Dialog open={giftDialogOpen} onClose={() => setGiftDialogOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>🎁 Gift Subscription — {selectedUser?.email}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} pt={1}>
+            <FormControl fullWidth size="small">
+              <InputLabel>Plan</InputLabel>
+              <Select value={giftTier} label="Plan" onChange={e => setGiftTier(e.target.value)}>
+                <MenuItem value="pro">Pro</MenuItem>
+                <MenuItem value="enterprise">Enterprise</MenuItem>
+              </Select>
+            </FormControl>
+            <TextField
+              size="small" label="Duration (days)" type="number"
+              value={giftDays} onChange={e => setGiftDays(Number(e.target.value))}
+              inputProps={{ min: 1, max: 3650 }}
+            />
+            <TextField
+              size="small" label="Note (internal)" value={giftNote}
+              onChange={e => setGiftNote(e.target.value)}
+              placeholder="e.g. KOL partnership, support goodwill…"
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setGiftDialogOpen(false)}>Cancel</Button>
+          <Button variant="contained" color="success" onClick={handleGiftSubscription} disabled={actionLoading === 'gift'}>
+            {actionLoading === 'gift' ? <CircularProgress size={16} /> : `Gift ${giftDays} days`}
+          </Button>
+        </DialogActions>
       </Dialog>
 
       {/* Ban reason dialog */}
@@ -1724,6 +1776,222 @@ function ReportsTab({ onAdminError }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// TAB — PROMO CODES
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function PromoCodesTab({ onAdminError }) {
+  const [codes, setCodes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState(null);
+  const [usageTarget, setUsageTarget] = useState(null);
+  const [usageData, setUsageData] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const emptyForm = { code: '', discount_type: 'percent', discount_value: '', max_uses: '', valid_until: '', is_influencer_code: false, influencer_name: '', label: '', applicable_plans: [] };
+  const [form, setForm] = useState(emptyForm);
+
+  const fetchCodes = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await admin.getPromoCodes();
+      setCodes(res.data.promo_codes || []);
+    } catch (err) { onAdminError(err, 'Failed to load promo codes'); }
+    finally { setLoading(false); }
+  }, [onAdminError]);
+
+  useEffect(() => { fetchCodes(); }, [fetchCodes]);
+
+  const openCreate = () => { setForm(emptyForm); setEditTarget(null); setCreateOpen(true); };
+  const openEdit = (c) => {
+    setForm({
+      code: c.code, discount_type: c.discount_type, discount_value: String(c.discount_value),
+      max_uses: c.max_uses ? String(c.max_uses) : '', valid_until: c.valid_until ? c.valid_until.slice(0, 10) : '',
+      is_influencer_code: c.is_influencer_code, influencer_name: c.influencer_name || '',
+      label: c.label || '', applicable_plans: c.applicable_plans || [],
+    });
+    setEditTarget(c);
+    setCreateOpen(true);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const payload = {
+        ...form,
+        discount_value: parseFloat(form.discount_value),
+        max_uses: form.max_uses ? parseInt(form.max_uses) : null,
+        valid_until: form.valid_until || null,
+        applicable_plans: form.applicable_plans?.length ? form.applicable_plans : null,
+      };
+      if (editTarget) {
+        await admin.updatePromoCode(editTarget.id, payload);
+        toast.success('Promo code updated');
+      } else {
+        await admin.createPromoCode(payload);
+        toast.success('Promo code created');
+      }
+      setCreateOpen(false);
+      fetchCodes();
+    } catch (err) { toast.error(err.response?.data?.error || 'Save failed'); }
+    finally { setSaving(false); }
+  };
+
+  const handleToggle = async (c) => {
+    try {
+      await admin.updatePromoCode(c.id, { is_active: !c.is_active });
+      fetchCodes();
+    } catch { toast.error('Failed to toggle code'); }
+  };
+
+  const openUsage = async (c) => {
+    setUsageTarget(c);
+    try {
+      const res = await admin.getPromoUsage(c.id);
+      setUsageData(res.data);
+    } catch { toast.error('Failed to load usage'); }
+  };
+
+  if (loading) return <Box display="flex" justifyContent="center" mt={4}><CircularProgress /></Box>;
+
+  return (
+    <Box>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
+        <Typography variant="h6" fontWeight={700}>Promo Codes</Typography>
+        <Button variant="contained" onClick={openCreate}>+ New Code</Button>
+      </Stack>
+
+      <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider' }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Code</TableCell>
+              <TableCell>Discount</TableCell>
+              <TableCell>Uses</TableCell>
+              <TableCell>Valid Until</TableCell>
+              <TableCell>Type</TableCell>
+              <TableCell>Status</TableCell>
+              <TableCell align="right">Actions</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {codes.length === 0 ? <EmptyRow cols={7} message="No promo codes yet" /> : codes.map(c => (
+              <TableRow key={c.id} hover>
+                <TableCell>
+                  <Typography variant="body2" fontWeight={700} sx={{ fontFamily: 'monospace' }}>{c.code}</Typography>
+                  {c.label && <Typography variant="caption" color="text.secondary">{c.label}</Typography>}
+                </TableCell>
+                <TableCell>
+                  {c.discount_type === 'percent' ? `${c.discount_value}%` :
+                   c.discount_type === 'fixed' ? `$${c.discount_value}` : `+${c.discount_value} days`}
+                </TableCell>
+                <TableCell>{c.uses_count}{c.max_uses ? ` / ${c.max_uses}` : ''}</TableCell>
+                <TableCell>{c.valid_until ? fmtDate(c.valid_until) : '∞ No expiry'}</TableCell>
+                <TableCell>
+                  {c.is_influencer_code
+                    ? <Chip label={`KOL: ${c.influencer_name || 'unnamed'}`} size="small" color="secondary" />
+                    : <Chip label="Standard" size="small" />}
+                </TableCell>
+                <TableCell>
+                  <Chip label={c.is_active ? 'Active' : 'Disabled'} size="small" color={c.is_active ? 'success' : 'default'} />
+                </TableCell>
+                <TableCell align="right">
+                  <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                    <Button size="small" onClick={() => openUsage(c)}>Usage</Button>
+                    <Button size="small" onClick={() => openEdit(c)}>Edit</Button>
+                    <Button size="small" color={c.is_active ? 'error' : 'success'} onClick={() => handleToggle(c)}>
+                      {c.is_active ? 'Disable' : 'Enable'}
+                    </Button>
+                  </Stack>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+
+      {/* Create / Edit dialog */}
+      <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>{editTarget ? `Edit — ${editTarget.code}` : 'New Promo Code'}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} pt={1}>
+            <TextField size="small" label="Code" value={form.code} disabled={!!editTarget}
+              onChange={e => setForm(f => ({ ...f, code: e.target.value.toUpperCase() }))}
+              inputProps={{ style: { fontFamily: 'monospace', letterSpacing: 2 } }} />
+            <Stack direction="row" spacing={1.5}>
+              <FormControl size="small" sx={{ flex: 1 }}>
+                <InputLabel>Type</InputLabel>
+                <Select value={form.discount_type} label="Type" onChange={e => setForm(f => ({ ...f, discount_type: e.target.value }))}>
+                  <MenuItem value="percent">Percentage (%)</MenuItem>
+                  <MenuItem value="fixed">Fixed ($)</MenuItem>
+                  <MenuItem value="trial_days">Bonus Days</MenuItem>
+                </Select>
+              </FormControl>
+              <TextField size="small" label="Value" type="number" sx={{ flex: 1 }}
+                value={form.discount_value} onChange={e => setForm(f => ({ ...f, discount_value: e.target.value }))} />
+            </Stack>
+            <Stack direction="row" spacing={1.5}>
+              <TextField size="small" label="Max Uses (blank = unlimited)" type="number" sx={{ flex: 1 }}
+                value={form.max_uses} onChange={e => setForm(f => ({ ...f, max_uses: e.target.value }))} />
+              <TextField size="small" label="Expires (blank = never)" type="date" sx={{ flex: 1 }}
+                value={form.valid_until} onChange={e => setForm(f => ({ ...f, valid_until: e.target.value }))}
+                InputLabelProps={{ shrink: true }} />
+            </Stack>
+            <TextField size="small" label="Internal Label / Note" value={form.label}
+              onChange={e => setForm(f => ({ ...f, label: e.target.value }))} />
+            <Stack direction="row" spacing={1} alignItems="center">
+              <input type="checkbox" id="is_kol" checked={form.is_influencer_code}
+                onChange={e => setForm(f => ({ ...f, is_influencer_code: e.target.checked }))} />
+              <label htmlFor="is_kol"><Typography variant="body2">KOL / Influencer code</Typography></label>
+            </Stack>
+            {form.is_influencer_code && (
+              <TextField size="small" label="Influencer Name" value={form.influencer_name}
+                onChange={e => setForm(f => ({ ...f, influencer_name: e.target.value }))} />
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCreateOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={handleSave} disabled={saving}>
+            {saving ? <CircularProgress size={16} /> : editTarget ? 'Save Changes' : 'Create Code'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Usage dialog */}
+      <Dialog open={!!usageTarget} onClose={() => { setUsageTarget(null); setUsageData(null); }} maxWidth="sm" fullWidth>
+        <DialogTitle>Usage — {usageTarget?.code} ({usageTarget?.uses_count} uses)</DialogTitle>
+        <DialogContent>
+          {!usageData ? <CircularProgress /> : usageData.usages?.length === 0 ? (
+            <Typography color="text.secondary" py={2} textAlign="center">No usages yet.</Typography>
+          ) : (
+            <TableContainer>
+              <Table size="small">
+                <TableHead><TableRow>
+                  <TableCell>User ID</TableCell><TableCell>Original</TableCell><TableCell>Discount</TableCell><TableCell>Final</TableCell><TableCell>Date</TableCell>
+                </TableRow></TableHead>
+                <TableBody>
+                  {usageData.usages.map(u => (
+                    <TableRow key={u.id}>
+                      <TableCell>{u.user_id}</TableCell>
+                      <TableCell>${u.original_price?.toFixed(2)}</TableCell>
+                      <TableCell color="success">-${u.discount_amount?.toFixed(2)}</TableCell>
+                      <TableCell>${u.final_price?.toFixed(2)}</TableCell>
+                      <TableCell>{fmtDateTime(u.used_at)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </DialogContent>
+        <DialogActions><Button onClick={() => { setUsageTarget(null); setUsageData(null); }}>Close</Button></DialogActions>
+      </Dialog>
+    </Box>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -1738,6 +2006,7 @@ const TABS = [
   { label: 'Announce', icon: <Campaign fontSize="small" /> },
   { label: 'Audit Log', icon: <History fontSize="small" /> },
   { label: 'Reports', icon: <Flag fontSize="small" /> },
+  { label: 'Promo Codes', icon: <Payment fontSize="small" /> },
 ];
 
 export default function AdminPanel() {
@@ -1895,6 +2164,10 @@ export default function AdminPanel() {
 
         <TabPanel value={activeTab} index={9}>
           <ReportsTab onAdminError={handleAdminError} />
+        </TabPanel>
+
+        <TabPanel value={activeTab} index={10}>
+          <PromoCodesTab onAdminError={handleAdminError} />
         </TabPanel>
 
       </Box>

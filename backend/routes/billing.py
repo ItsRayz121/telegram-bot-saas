@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy.exc import IntegrityError
-from ..models import db, User, ProcessedPayment, PaymentHistory, PendingInvoice, SubscriptionRenewal
+from ..models import db, User, ProcessedPayment, PaymentHistory, PendingInvoice, SubscriptionRenewal, PromoCode, PromoCodeUsage
 from ..config import Config
 from ..middleware.rate_limit import rate_limit
 from ..notifications import send_subscription_confirmation, send_subscription_cancelled
@@ -202,6 +202,49 @@ def cancel_subscription():
     })
 
 
+# ─── Promo codes ─────────────────────────────────────────────────────────────
+
+@billing_bp.route("/promo/validate", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=20)
+def validate_promo():
+    """Validate a promo code and return the discount preview."""
+    user = _get_current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    data = request.get_json() or {}
+    code_str = (data.get("code") or "").strip().upper()
+    tier = data.get("tier", "pro")
+    billing_period = "annual" if data.get("annual") else "monthly"
+
+    if not code_str:
+        return jsonify({"error": "Code is required"}), 400
+
+    promo = PromoCode.query.filter_by(code=code_str).first()
+    if not promo:
+        return jsonify({"valid": False, "error": "Invalid promo code."}), 200
+
+    ok, reason = promo.is_valid_for(user.id, tier)
+    if not ok:
+        return jsonify({"valid": False, "error": reason}), 200
+
+    base = float(_TIER_PRICES_USD.get(tier, {}).get(billing_period, 0))
+    discount = promo.compute_discount(base)
+    final = max(0.0, round(base - discount, 2))
+
+    return jsonify({
+        "valid": True,
+        "code": promo.code,
+        "discount_type": promo.discount_type,
+        "discount_value": float(promo.discount_value),
+        "original_price": base,
+        "discount_amount": discount,
+        "final_price": final,
+        "trial_days": int(promo.discount_value) if promo.discount_type == "trial_days" else None,
+    })
+
+
 # ─── NOWPayments (crypto) ─────────────────────────────────────────────────────
 
 @billing_bp.route("/crypto/checkout", methods=["POST"])
@@ -235,8 +278,27 @@ def crypto_checkout():
     if not Config.NOWPAYMENTS_API_KEY:
         return jsonify({"error": "Crypto payments are not configured yet."}), 503
 
-    amount = _TIER_PRICES_USD[tier][billing_period]
+    base_amount = float(_TIER_PRICES_USD[tier][billing_period])
     period_label = "1 Year" if billing_period == "annual" else "1 Month"
+
+    # ── Promo code (optional) ─────────────────────────────────────────────────
+    promo_code_str = (data.get("promo_code") or "").strip().upper()
+    applied_promo = None
+    discount_amount = 0.0
+    amount = base_amount
+
+    if promo_code_str:
+        promo = PromoCode.query.filter_by(code=promo_code_str).first()
+        if promo:
+            ok, reason = promo.is_valid_for(user.id, tier)
+            if ok:
+                discount_amount = promo.compute_discount(base_amount)
+                amount = max(0.01, round(base_amount - discount_amount, 2))
+                applied_promo = promo
+            else:
+                return jsonify({"error": f"Promo code invalid: {reason}"}), 400
+        else:
+            return jsonify({"error": "Invalid promo code."}), 400
 
     try:
         resp = requests.post(
@@ -248,7 +310,10 @@ def crypto_checkout():
             json={
                 "price_amount": amount,
                 "price_currency": "usd",
-                "order_description": f"Telegizer {tier.capitalize()} Plan - {period_label}",
+                "order_description": (
+                    f"Telegizer {tier.capitalize()} Plan - {period_label}"
+                    + (f" (Promo: {promo_code_str})" if applied_promo else "")
+                ),
                 "success_url": f"{Config.FRONTEND_URL}/payment/success",
                 "cancel_url": f"{Config.FRONTEND_URL}/pricing",
                 "ipn_callback_url": f"{Config.BACKEND_URL}/api/billing/crypto/webhook",
@@ -275,11 +340,32 @@ def crypto_checkout():
             amount_usd=amount,
         )
         db.session.add(pending)
-        db.session.commit()
-        logger.info("[NOWPAYMENTS] Created pending invoice %s for user %d (%s/%s)",
-                    nowpayments_invoice_id, user.id, tier, billing_period)
 
-        return jsonify({"url": invoice_url})
+        # Record promo usage — locked to this invoice so we can confirm on webhook.
+        if applied_promo:
+            usage = PromoCodeUsage(
+                promo_code_id=applied_promo.id,
+                user_id=user.id,
+                order_id=nowpayments_invoice_id,
+                original_price=base_amount,
+                discount_amount=discount_amount,
+                final_price=amount,
+            )
+            db.session.add(usage)
+            applied_promo.uses_count = (applied_promo.uses_count or 0) + 1
+
+        db.session.commit()
+        logger.info("[NOWPAYMENTS] Created pending invoice %s for user %d (%s/%s) promo=%s",
+                    nowpayments_invoice_id, user.id, tier, billing_period,
+                    promo_code_str or "none")
+
+        return jsonify({
+            "url": invoice_url,
+            "promo_applied": applied_promo is not None,
+            "original_price": base_amount,
+            "discount_amount": discount_amount,
+            "final_price": amount,
+        })
     except requests.RequestException as e:
         logger.error(f"[NOWPAYMENTS] Checkout error for user {user.id}: {e}")
         return jsonify({"error": "Failed to create crypto payment. Please try again."}), 502

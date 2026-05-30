@@ -521,6 +521,23 @@ def init_db():
             "hub_meetings.meeting_url",
         )
 
+        # ── Promo codes (db.create_all handles table creation) ────────────────────
+        _run_alter(
+            db.engine,
+            "CREATE INDEX IF NOT EXISTS ix_promo_codes_code ON promo_codes (code)",
+            "promo_codes.code index",
+        )
+        _run_alter(
+            db.engine,
+            "CREATE INDEX IF NOT EXISTS ix_promo_code_usages_promo_code_id ON promo_code_usages (promo_code_id)",
+            "promo_code_usages.promo_code_id index",
+        )
+        _run_alter(
+            db.engine,
+            "CREATE INDEX IF NOT EXISTS ix_promo_code_usages_user_id ON promo_code_usages (user_id)",
+            "promo_code_usages.user_id index",
+        )
+
         # ── L7: Mirror legacy AssistantBot rows into HubBotIdentity ──────────────
         # Registers each AssistantBot token under the new hub routing system so
         # custom bots benefit from hub handlers going forward.
