@@ -118,7 +118,10 @@ function AppRoute({ children }) {
   const token = localStorage.getItem('token');
   if (!token) return <Navigate to="/login" replace />;
   const user = _storedUser();
-  if (user.email_verified === false) return <Navigate to="/verify-email" replace />;
+  // Telegram-only users have no email to verify — let them through.
+  // Email users must verify before accessing the dashboard.
+  const isTelegramOnly = user.auth_provider === 'telegram' && !user.email;
+  if (user.email_verified === false && !isTelegramOnly) return <Navigate to="/verify-email" replace />;
   return <AppLayout>{children}</AppLayout>;
 }
 
@@ -126,7 +129,8 @@ function PublicOnlyRoute({ children }) {
   const token = localStorage.getItem('token');
   if (!token) return children;
   const user = _storedUser();
-  if (user.email_verified === false) return <Navigate to="/verify-email" replace />;
+  const isTelegramOnly = user.auth_provider === 'telegram' && !user.email;
+  if (user.email_verified === false && !isTelegramOnly) return <Navigate to="/verify-email" replace />;
   return <Navigate to="/dashboard" replace />;
 }
 

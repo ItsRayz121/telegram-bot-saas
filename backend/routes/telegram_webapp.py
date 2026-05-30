@@ -32,12 +32,36 @@ from datetime import datetime, timedelta
 import bcrypt
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import (
-    create_access_token, jwt_required, get_jwt_identity,
+    create_access_token, create_refresh_token, jwt_required, get_jwt_identity,
 )
 
 from ..models import db, User, TelegramGroup, UserTelegramAccount
 from ..config import Config
 from ..middleware.rate_limit import rate_limit
+from ..middleware.csrf import generate_csrf_token
+
+
+def _set_miniapp_cookies(response, access_token: str, refresh_token: str = None):
+    """Set the same httpOnly auth cookies as normal login so the full dashboard works."""
+    is_prod = "postgres" in (current_app.config.get("SQLALCHEMY_DATABASE_URI") or "")
+    secure = current_app.config.get("JWT_COOKIE_SECURE", is_prod)
+    response.set_cookie(
+        "access_token", access_token,
+        httponly=True, secure=secure, samesite="Strict",
+        max_age=86400,
+    )
+    if refresh_token:
+        response.set_cookie(
+            "refresh_token", refresh_token,
+            httponly=True, secure=secure, samesite="Strict",
+            path="/api/auth/refresh",
+            max_age=2592000,
+        )
+    response.set_cookie(
+        "csrf_token", generate_csrf_token(),
+        httponly=False, secure=secure, samesite="Strict",
+    )
+    return response
 
 miniapp_bp = Blueprint("miniapp", __name__, url_prefix="/api/miniapp")
 _log = logging.getLogger(__name__)
@@ -261,13 +285,16 @@ def miniapp_auth():
 
     _log.info("miniapp_auth: ok user_id=%s tg_id=%s provider=%s", user.id, tg_id, user.auth_provider)
     token = create_access_token(identity=str(user.id))
-    return jsonify({
+    refresh_token = create_refresh_token(identity=str(user.id))
+    resp = jsonify({
         "token": token,
         "user": user.to_dict(),
         "groups": _user_groups(user),
         "referral_link": referral_link,
         "email_linked": bool(user.email),
     })
+    _set_miniapp_cookies(resp, token, refresh_token)
+    return resp
 
 
 # ── Me ─────────────────────────────────────────────────────────────────────────
@@ -542,14 +569,17 @@ def link_email_verify():
             return jsonify({"error": "Account merge failed — please try again"}), 500
 
         new_token = create_access_token(identity=str(existing.id))
+        new_refresh = create_refresh_token(identity=str(existing.id))
         _log.info("link_email_verify: merged tg_id=%s into existing user_id=%s",
                   existing.telegram_user_id, existing.id)
-        return jsonify({
+        merge_resp = jsonify({
             "status": "merged",
             "token": new_token,
             "user": existing.to_dict(),
             "groups": _user_groups(existing),
-        }), 200
+        })
+        _set_miniapp_cookies(merge_resp, new_token, new_refresh)
+        return merge_resp, 200
 
     # ── Normal case: link email to the current Telegram-only account ──────────
     pw_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")

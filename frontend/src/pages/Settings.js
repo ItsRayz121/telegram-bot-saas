@@ -8,7 +8,7 @@ import {
 import {
   ArrowBack, SmartToy, Person, Lock, DeleteForever, Schedule,
   Security, CheckCircle, ContentCopy, Telegram, LinkOff, OpenInNew,
-  Add, Star, StarBorder, Delete, CalendarMonth,
+  Add, Star, StarBorder, Delete, CalendarMonth, MailOutline,
 } from '@mui/icons-material';
 import { List, ListItem, ListItemText, ListItemSecondaryAction, Tooltip } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
@@ -779,22 +779,44 @@ export default function Settings() {
             </Box>
             <Divider />
             <Box>
-              <Typography variant="caption" color="text.secondary">Email</Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                <Typography variant="body1">{user.email || '—'}</Typography>
-                {user.email_verified === false && (
-                  <Chip
-                    label="Unverified"
-                    size="small"
-                    color="warning"
-                    onClick={() => navigate('/verify-email')}
-                    sx={{ cursor: 'pointer' }}
-                  />
-                )}
-                {user.email_verified === true && (
-                  <Chip label="Verified" size="small" color="success" icon={<CheckCircle />} />
-                )}
-              </Box>
+              {/* Telegram-only: no email linked yet */}
+              {!user.email && user.auth_provider === 'telegram' ? (
+                <>
+                  <Typography variant="caption" color="text.secondary">Recovery Email</Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mt: 0.25 }}>
+                    <MailOutline sx={{ fontSize: 18, color: 'text.disabled' }} />
+                    <Typography variant="body1" color="text.secondary" fontStyle="italic">Not added</Typography>
+                    <Chip
+                      label="Optional"
+                      size="small"
+                      variant="outlined"
+                      sx={{ fontSize: '0.65rem', height: 18 }}
+                    />
+                  </Box>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                    Add an email and password to log in from the website and recover your account.
+                  </Typography>
+                </>
+              ) : (
+                <>
+                  <Typography variant="caption" color="text.secondary">Email</Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                    <Typography variant="body1">{user.email || '—'}</Typography>
+                    {user.email && user.email_verified === false && (
+                      <Chip
+                        label="Unverified"
+                        size="small"
+                        color="warning"
+                        onClick={() => navigate('/verify-email')}
+                        sx={{ cursor: 'pointer' }}
+                      />
+                    )}
+                    {user.email_verified === true && (
+                      <Chip label="Verified" size="small" color="success" icon={<CheckCircle />} />
+                    )}
+                  </Box>
+                </>
+              )}
             </Box>
             <Divider />
             <Box>

@@ -348,11 +348,14 @@ def create_app():
             from .models import User as _User
             user = _User.query.get(int(uid))
             if user and not user.email_verified and scope != "email_verify_pending":
-                return jsonify({
-                    "error": "Please verify your email address before accessing this feature. "
-                             "Check your inbox for the verification link.",
-                    "code": "EMAIL_NOT_VERIFIED",
-                }), 403
+                # Telegram-only users authenticated via initData — no email to verify.
+                is_telegram_only = user.auth_provider == "telegram" and not user.email
+                if not is_telegram_only:
+                    return jsonify({
+                        "error": "Please verify your email address before accessing this feature. "
+                                 "Check your inbox for the verification link.",
+                        "code": "EMAIL_NOT_VERIFIED",
+                    }), 403
         except Exception:
             pass  # Bad/missing token — route handles its own auth check
         return None

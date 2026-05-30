@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import api from '../services/api';
 
-// 2-G-01: TMA-specific axios instance — uses in-memory Bearer token, never localStorage.
-// Token is injected via setTmaToken() after successful miniapp auth.
+// TMA-specific axios instance — uses in-memory Bearer token for Mini App API calls.
+// After auth, token is also written to localStorage so the full dashboard session works.
 const tmaApi = axios.create({
   baseURL: process.env.REACT_APP_API_URL || '',
   timeout: 30000,
@@ -70,11 +70,14 @@ export function TelegramProvider({ children }) {
       return;
     }
 
-    // 2-G-02: TMA auth — token stored in memory only, never localStorage
+    // TMA auth — backend sets httpOnly cookies; also store in localStorage so
+    // AppRoute guard and the full dashboard recognise the session immediately.
     api.post('/api/miniapp/auth', { init_data: initData })
       .then(res => {
         const { token, user, groups: grps, email_linked, referral_link } = res.data;
-        setTmaToken(token);   // in-memory only
+        setTmaToken(token);
+        localStorage.setItem('token', token);
+        localStorage.setItem('user', JSON.stringify(user));
         setAppUser(user);
         setGroups(grps || []);
         setTgUser(webapp.initDataUnsafe?.user || null);
@@ -101,10 +104,15 @@ export function TelegramProvider({ children }) {
       .catch(() => {});
   }, []);
 
-  // Called after a successful email link/merge to update in-memory state + token
   const onEmailLinked = useCallback((newUser, newToken) => {
-    if (newToken) setTmaToken(newToken);
-    if (newUser) setAppUser(newUser);
+    if (newToken) {
+      setTmaToken(newToken);
+      localStorage.setItem('token', newToken);
+    }
+    if (newUser) {
+      setAppUser(newUser);
+      localStorage.setItem('user', JSON.stringify(newUser));
+    }
     setEmailLinked(true);
   }, []);
 
