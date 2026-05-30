@@ -6,6 +6,7 @@ import {
   Grid, Table, TableBody, TableCell, TableContainer, TableHead,
   TableRow, TablePagination, Dialog, DialogTitle, DialogContent,
   DialogContentText, DialogActions, CircularProgress,
+  useTheme, useMediaQuery,
 } from '@mui/material';
 import {
   ArrowBack, Upgrade, CheckCircle,
@@ -32,6 +33,8 @@ const STATUS_COLORS = { confirmed: 'success', pending: 'warning', failed: 'error
 
 
 export default function Billing() {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const navigate = useNavigate();
   const [subscription, setSubscription] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -538,50 +541,79 @@ export default function Billing() {
                   </Box>
                 ) : (
                   <>
-                    <TableContainer sx={{ overflowX: 'auto' }}>
-                      <Table size="small" sx={{ minWidth: 560 }}>
-                        <TableHead>
-                          <TableRow>
-                            <TableCell>Date</TableCell>
-                            <TableCell>Plan</TableCell>
-                            <TableCell>Billing</TableCell>
-                            <TableCell>Provider</TableCell>
-                            <TableCell align="right">Amount</TableCell>
-                            <TableCell>Status</TableCell>
-                            <TableCell>Transaction ID</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {history.map((row) => (
-                            <TableRow key={row.id} hover>
-                              <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                                {new Date(row.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
-                              </TableCell>
-                              <TableCell>
-                                <Chip label={row.plan.charAt(0).toUpperCase() + row.plan.slice(1)}
-                                  size="small" color={row.plan === 'enterprise' ? 'secondary' : 'primary'} />
-                              </TableCell>
-                              <TableCell sx={{ fontSize: '0.75rem' }}>
-                                {(row.billing_period || 'monthly') === 'annual' ? 'Annual' : 'Monthly'}
-                              </TableCell>
-                              <TableCell sx={{ fontSize: '0.75rem' }}>
-                                {PROVIDER_LABELS[row.provider] || row.provider}
-                              </TableCell>
-                              <TableCell align="right" sx={{ fontWeight: 600 }}>
+                    {isMobile ? (
+                      <Stack spacing={1.5}>
+                        {history.map((row) => (
+                          <Box key={row.id} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.5, p: 1.5 }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.75 }}>
+                              <Typography variant="body2" fontWeight={600}>
                                 {row.amount_usd ? `$${(row.amount_usd / 100).toFixed(2)}` : '—'}
-                              </TableCell>
-                              <TableCell>
-                                <Chip label={row.status} size="small"
-                                  color={STATUS_COLORS[row.status] || 'default'} />
-                              </TableCell>
-                              <TableCell sx={{ fontSize: '0.72rem', color: 'text.secondary', fontFamily: 'monospace' }}>
-                                {row.payment_id_masked || '—'}
-                              </TableCell>
+                              </Typography>
+                              <Chip label={row.status} size="small" color={STATUS_COLORS[row.status] || 'default'} />
+                            </Box>
+                            <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mb: 0.75 }}>
+                              <Chip label={row.plan.charAt(0).toUpperCase() + row.plan.slice(1)} size="small"
+                                color={row.plan === 'enterprise' ? 'secondary' : 'primary'} />
+                              <Chip label={(row.billing_period || 'monthly') === 'annual' ? 'Annual' : 'Monthly'} size="small" variant="outlined" />
+                              <Chip label={PROVIDER_LABELS[row.provider] || row.provider} size="small" variant="outlined" />
+                            </Box>
+                            <Typography variant="caption" color="text.secondary" display="block">
+                              {new Date(row.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                            </Typography>
+                            {row.payment_id_masked && (
+                              <Typography variant="caption" color="text.disabled" sx={{ fontFamily: 'monospace', display: 'block', mt: 0.25 }}>
+                                {row.payment_id_masked}
+                              </Typography>
+                            )}
+                          </Box>
+                        ))}
+                      </Stack>
+                    ) : (
+                      <TableContainer sx={{ overflowX: 'auto' }}>
+                        <Table size="small" sx={{ minWidth: 560 }}>
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>Date</TableCell>
+                              <TableCell>Plan</TableCell>
+                              <TableCell>Billing</TableCell>
+                              <TableCell>Provider</TableCell>
+                              <TableCell align="right">Amount</TableCell>
+                              <TableCell>Status</TableCell>
+                              <TableCell>Transaction ID</TableCell>
                             </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </TableContainer>
+                          </TableHead>
+                          <TableBody>
+                            {history.map((row) => (
+                              <TableRow key={row.id} hover>
+                                <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                                  {new Date(row.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                                </TableCell>
+                                <TableCell>
+                                  <Chip label={row.plan.charAt(0).toUpperCase() + row.plan.slice(1)}
+                                    size="small" color={row.plan === 'enterprise' ? 'secondary' : 'primary'} />
+                                </TableCell>
+                                <TableCell sx={{ fontSize: '0.75rem' }}>
+                                  {(row.billing_period || 'monthly') === 'annual' ? 'Annual' : 'Monthly'}
+                                </TableCell>
+                                <TableCell sx={{ fontSize: '0.75rem' }}>
+                                  {PROVIDER_LABELS[row.provider] || row.provider}
+                                </TableCell>
+                                <TableCell align="right" sx={{ fontWeight: 600 }}>
+                                  {row.amount_usd ? `$${(row.amount_usd / 100).toFixed(2)}` : '—'}
+                                </TableCell>
+                                <TableCell>
+                                  <Chip label={row.status} size="small"
+                                    color={STATUS_COLORS[row.status] || 'default'} />
+                                </TableCell>
+                                <TableCell sx={{ fontSize: '0.72rem', color: 'text.secondary', fontFamily: 'monospace' }}>
+                                  {row.payment_id_masked || '—'}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    )}
                     <TablePagination
                       component="div"
                       count={historyTotal}

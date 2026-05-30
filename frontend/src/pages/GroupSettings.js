@@ -7,6 +7,7 @@ import {
   FormControl, InputLabel, Pagination, Divider, Accordion,
   AccordionSummary, AccordionDetails, Dialog, DialogTitle,
   DialogContent, DialogActions, Tooltip, Alert, Stack, Avatar, Popover,
+  useTheme, useMediaQuery,
 } from '@mui/material';
 import {
   ArrowBack, Save, Add, ExpandMore, Delete, CheckCircle, Schedule,
@@ -276,6 +277,8 @@ function InlineCmdRouting({ cmds, title, description, cmdRouting, setCmdRouting,
 }
 
 export default function GroupSettings() {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const navigate = useNavigate();
   const { id: rawBotId, groupId } = useParams();
   const botId = rawBotId || 'official';
@@ -1619,6 +1622,30 @@ export default function GroupSettings() {
                 {reportsLoading ? <CircularProgress size={24} /> : (
                   reports.length === 0 ? (
                     <Typography color="text.secondary">No reports yet.</Typography>
+                  ) : isMobile ? (
+                    <Stack spacing={1.5}>
+                      {reports.map((r) => (
+                        <Box key={r.id} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.5, p: 1.5 }}>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+                            <Chip label={r.status} size="small" color={r.status === 'open' ? 'warning' : 'success'} />
+                            {r.status === 'open' && (
+                              <Tooltip title="Mark resolved">
+                                <IconButton size="small" color="success" onClick={() => handleResolveReport(r.id)}>
+                                  <CheckCircle fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                          </Box>
+                          <Typography variant="body2" fontWeight={500}>
+                            @{r.reporter_username || r.reporter_user_id} → @{r.reported_username || r.reported_user_id}
+                          </Typography>
+                          {r.reason && <Typography variant="caption" color="text.secondary" display="block" mt={0.25}>{r.reason}</Typography>}
+                          <Typography variant="caption" color="text.disabled" display="block" mt={0.25}>
+                            {r.created_at ? new Date(r.created_at).toLocaleDateString() : ''}
+                          </Typography>
+                        </Box>
+                      ))}
+                    </Stack>
                   ) : (
                     <TableContainer sx={{ overflowX: 'auto' }}>
                       <Table size="small" sx={{ minWidth: 500 }}>
@@ -2225,6 +2252,39 @@ export default function GroupSettings() {
               </Box>
               {autoResponses.length === 0 ? (
                 <Typography color="text.secondary">No triggers configured yet.</Typography>
+              ) : isMobile ? (
+                <Stack spacing={1.5}>
+                  {autoResponses.map((ar) => (
+                    <Box key={ar.id} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.5, p: 1.5 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 0.5 }}>
+                        <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 600, wordBreak: 'break-all' }}>
+                          {ar.trigger_text}
+                        </Typography>
+                        <IconButton size="small" color="error" sx={{ flexShrink: 0, ml: 0.5 }}
+                          onClick={() => handleDeleteAutoResponse(ar.id)}>
+                          <Delete fontSize="small" />
+                        </IconButton>
+                      </Box>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 0.75, fontSize: '0.8rem' }} noWrap>
+                        {ar.response_text}
+                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                        <Chip label={ar.match_type} size="small" />
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+                          <Typography variant="caption" color="text.secondary">On</Typography>
+                          <Switch size="small" checked={ar.is_enabled} onChange={() => handleToggleAutoResponse(ar)} />
+                        </Box>
+                        <Tooltip title={ar.use_as_ai_knowledge ? 'AI uses this as knowledge' : 'Let AI use as knowledge'}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+                            <SmartToy fontSize="small" color={ar.use_as_ai_knowledge ? 'primary' : 'disabled'} />
+                            <Switch size="small" checked={!!ar.use_as_ai_knowledge}
+                              onChange={() => handleToggleAiKnowledge(ar)} color="secondary" />
+                          </Box>
+                        </Tooltip>
+                      </Box>
+                    </Box>
+                  ))}
+                </Stack>
               ) : (
                 <TableContainer sx={{ overflowX: 'auto' }}>
                   <Table size="small" sx={{ minWidth: 420 }}>
@@ -2599,73 +2659,111 @@ export default function GroupSettings() {
                 </FormControl>
               </Box>
             </>
-            <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', overflowX: 'auto' }}>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>User</TableCell>
-                    <TableCell align="right">
-                      {membersTimeRange === '1d' ? 'XP (Today)' : membersTimeRange === '7d' ? 'XP (7d)' : membersTimeRange === '30d' ? 'XP (30d)' : 'XP'}
-                    </TableCell>
-                    <TableCell align="right">Level</TableCell>
-                    <TableCell align="right">Warnings</TableCell>
-                    <TableCell>Role</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell>Wallet</TableCell>
-                    <TableCell>Wallet Address</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {members.map((m) => {
-                    const xpField = { '1d': 'xp_1d', '7d': 'xp_7d', '30d': 'xp_30d' }[membersTimeRange] || 'xp';
-                    return (
-                    <TableRow key={m.id} hover>
-                      <TableCell>
-                        <Typography variant="body2" fontWeight={500}>
+            {isMobile ? (
+              <Stack spacing={1.5}>
+                {members.map((m) => {
+                  const xpField = { '1d': 'xp_1d', '7d': 'xp_7d', '30d': 'xp_30d' }[membersTimeRange] || 'xp';
+                  return (
+                    <Box key={m.id} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.5, p: 1.5 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 0.75 }}>
+                        <Typography variant="body2" fontWeight={600}>
                           {m.first_name}{m.username ? ` (@${m.username})` : ''}
                         </Typography>
-                      </TableCell>
-                      <TableCell align="right">{(m[xpField] ?? 0).toLocaleString()}</TableCell>
-                      <TableCell align="right">{m.level}</TableCell>
-                      <TableCell align="right">{m.warnings}</TableCell>
-                      <TableCell><Chip label={m.role} size="small" variant="outlined" /></TableCell>
-                      <TableCell>
+                        <Chip label={m.role} size="small" variant="outlined" />
+                      </Box>
+                      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mb: 0.75 }}>
+                        <Chip label={`XP ${(m[xpField] ?? 0).toLocaleString()}`} size="small" color="primary" variant="outlined" />
+                        <Chip label={`Lv ${m.level}`} size="small" variant="outlined" />
+                        {m.warnings > 0 && <Chip label={`${m.warnings} warn`} size="small" color="warning" />}
                         {m.is_verified
                           ? <Chip label="Verified" color="success" size="small" />
                           : <Chip label="Unverified" color="default" size="small" />}
+                        {m.wallet_address && <Chip label="Wallet" color="success" size="small" />}
+                      </Box>
+                      {m.wallet_address && (
+                        <Typography
+                          variant="caption"
+                          sx={{ fontFamily: 'monospace', color: 'primary.main', cursor: 'pointer' }}
+                          onClick={() => navigator.clipboard.writeText(m.wallet_address)}
+                        >
+                          {m.wallet_address.length > 20
+                            ? `${m.wallet_address.slice(0, 10)}…${m.wallet_address.slice(-8)}`
+                            : m.wallet_address}
+                        </Typography>
+                      )}
+                    </Box>
+                  );
+                })}
+              </Stack>
+            ) : (
+              <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', overflowX: 'auto' }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>User</TableCell>
+                      <TableCell align="right">
+                        {membersTimeRange === '1d' ? 'XP (Today)' : membersTimeRange === '7d' ? 'XP (7d)' : membersTimeRange === '30d' ? 'XP (30d)' : 'XP'}
                       </TableCell>
-                      <TableCell>
-                        {m.wallet_address
-                          ? <Chip label="Yes" color="success" size="small" />
-                          : <Chip label="No" color="default" size="small" />}
-                      </TableCell>
-                      <TableCell sx={{ maxWidth: 180 }}>
-                        {m.wallet_address ? (
-                          <Tooltip title={m.wallet_address} arrow>
-                            <Typography
-                              variant="body2"
-                              sx={{
-                                fontFamily: 'monospace', fontSize: '0.75rem',
-                                overflow: 'hidden', textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap', cursor: 'pointer', color: 'primary.main',
-                              }}
-                              onClick={() => navigator.clipboard.writeText(m.wallet_address)}
-                            >
-                              {m.wallet_address.length > 16
-                                ? `${m.wallet_address.slice(0, 8)}…${m.wallet_address.slice(-6)}`
-                                : m.wallet_address}
-                            </Typography>
-                          </Tooltip>
-                        ) : (
-                          <Typography variant="body2" color="text.disabled">—</Typography>
-                        )}
-                      </TableCell>
+                      <TableCell align="right">Level</TableCell>
+                      <TableCell align="right">Warnings</TableCell>
+                      <TableCell>Role</TableCell>
+                      <TableCell>Status</TableCell>
+                      <TableCell>Wallet</TableCell>
+                      <TableCell>Wallet Address</TableCell>
                     </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </TableContainer>
+                  </TableHead>
+                  <TableBody>
+                    {members.map((m) => {
+                      const xpField = { '1d': 'xp_1d', '7d': 'xp_7d', '30d': 'xp_30d' }[membersTimeRange] || 'xp';
+                      return (
+                        <TableRow key={m.id} hover>
+                          <TableCell>
+                            <Typography variant="body2" fontWeight={500}>
+                              {m.first_name}{m.username ? ` (@${m.username})` : ''}
+                            </Typography>
+                          </TableCell>
+                          <TableCell align="right">{(m[xpField] ?? 0).toLocaleString()}</TableCell>
+                          <TableCell align="right">{m.level}</TableCell>
+                          <TableCell align="right">{m.warnings}</TableCell>
+                          <TableCell><Chip label={m.role} size="small" variant="outlined" /></TableCell>
+                          <TableCell>
+                            {m.is_verified
+                              ? <Chip label="Verified" color="success" size="small" />
+                              : <Chip label="Unverified" color="default" size="small" />}
+                          </TableCell>
+                          <TableCell>
+                            {m.wallet_address
+                              ? <Chip label="Yes" color="success" size="small" />
+                              : <Chip label="No" color="default" size="small" />}
+                          </TableCell>
+                          <TableCell sx={{ maxWidth: 180 }}>
+                            {m.wallet_address ? (
+                              <Tooltip title={m.wallet_address} arrow>
+                                <Typography
+                                  variant="body2"
+                                  sx={{
+                                    fontFamily: 'monospace', fontSize: '0.75rem',
+                                    overflow: 'hidden', textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap', cursor: 'pointer', color: 'primary.main',
+                                  }}
+                                  onClick={() => navigator.clipboard.writeText(m.wallet_address)}
+                                >
+                                  {m.wallet_address.length > 16
+                                    ? `${m.wallet_address.slice(0, 8)}…${m.wallet_address.slice(-6)}`
+                                    : m.wallet_address}
+                                </Typography>
+                              </Tooltip>
+                            ) : (
+                              <Typography variant="body2" color="text.disabled">—</Typography>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
             {membersPages > 1 && (
               <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
                 <Pagination count={membersPages} page={membersPage}
@@ -2726,6 +2824,37 @@ export default function GroupSettings() {
             )}
             {leaderboardLoading ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
+            ) : leaderboard.length === 0 ? (
+              <Typography variant="body2" color="text.secondary" py={2} textAlign="center">
+                No members with XP yet. Members earn XP by sending messages and using commands.
+              </Typography>
+            ) : isMobile ? (
+              <Stack spacing={1.5}>
+                {leaderboard.map((m, idx) => (
+                  <Box key={m.id} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.5, p: 1.5 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                      <Typography variant="body2" fontWeight={idx < 3 ? 800 : 600}
+                        color={idx === 0 ? '#FFD700' : idx === 1 ? '#C0C0C0' : idx === 2 ? '#CD7F32' : 'text.secondary'}>
+                        {idx < 3 ? ['🥇', '🥈', '🥉'][idx] : `#${idx + 1}`}
+                      </Typography>
+                      <Typography variant="body2" fontWeight={idx < 3 ? 700 : 400} sx={{ flex: 1 }} noWrap>
+                        {m.first_name}{m.username ? ` (@${m.username})` : ''}
+                      </Typography>
+                      <Typography variant="body2" fontWeight={700} color="primary.main">
+                        {(m[lbXpField] ?? 0).toLocaleString()} XP
+                      </Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                      <Chip label={`Lv ${m.level}`} size="small" variant="outlined" />
+                      <Chip label={m.role} size="small" variant="outlined" />
+                      {m.wallet_address && (
+                        <Chip label="Wallet" size="small" color="success"
+                          onClick={() => navigator.clipboard.writeText(m.wallet_address)} />
+                      )}
+                    </Box>
+                  </Box>
+                ))}
+              </Stack>
             ) : (
               <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', overflowX: 'auto' }}>
                 <Table size="small">
@@ -2788,15 +2917,6 @@ export default function GroupSettings() {
                         </TableCell>
                       </TableRow>
                     ))}
-                    {leaderboard.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={6} align="center">
-                          <Typography variant="body2" color="text.secondary" py={2}>
-                            No members with XP yet. Members earn XP by sending messages and using commands.
-                          </Typography>
-                        </TableCell>
-                      </TableRow>
-                    )}
                   </TableBody>
                 </Table>
               </TableContainer>
@@ -2817,6 +2937,55 @@ export default function GroupSettings() {
               <Alert severity="info" icon={false}>
                 No moderation events recorded yet. Events appear here after admins use commands like /ban, /kick, /mute, or /warn.
               </Alert>
+            ) : isMobile ? (
+              <Stack spacing={1.5}>
+                {auditLogs.map((log) => {
+                  const isExpanded = expandedLogId === log.id;
+                  const linkType = classifyReason(log.reason);
+                  const shortLabel = categorizeReason(log.reason);
+                  const msgPreviewRaw = getMessagePreview(log);
+                  const msgPreview = formatMsgPreview(msgPreviewRaw);
+                  return (
+                    <Box key={log.id}
+                      onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
+                      sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.5, p: 1.5, cursor: 'pointer' }}
+                    >
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+                        <Chip label={log.action_type} color={ACTION_COLORS[log.action_type] || 'default'} size="small" sx={{ height: 20, fontSize: '0.68rem' }} />
+                        <Typography variant="caption" color="text.secondary">
+                          {log.timestamp ? new Date(log.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                        </Typography>
+                      </Box>
+                      <Typography variant="caption" display="block">
+                        <strong>Target:</strong> {log.target_username ? `@${log.target_username}` : log.target_user_id || '—'}
+                        {' · '}<strong>By:</strong> {log.moderator_username ? `@${log.moderator_username}` : log.moderator_id || '—'}
+                      </Typography>
+                      {shortLabel && <Typography variant="caption" color="text.secondary" display="block">{shortLabel}</Typography>}
+                      {isExpanded && (
+                        <Box sx={{ mt: 1, pt: 1, borderTop: '1px solid', borderColor: 'divider' }}>
+                          <Stack spacing={0.5}>
+                            {log.reason && (
+                              <Box>
+                                <Typography variant="caption" fontWeight={700} color="text.secondary" display="block">Full Reason</Typography>
+                                <Typography variant="caption">{log.reason}</Typography>
+                              </Box>
+                            )}
+                            {msgPreviewRaw && (
+                              <Box>
+                                <Typography variant="caption" fontWeight={700} color="text.secondary" display="block">Removed Message</Typography>
+                                <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msgPreviewRaw}</Typography>
+                              </Box>
+                            )}
+                            {linkType && (
+                              <Typography variant="caption" color="text.disabled">Link type: <strong>{linkType.label}</strong></Typography>
+                            )}
+                          </Stack>
+                        </Box>
+                      )}
+                    </Box>
+                  );
+                })}
+              </Stack>
             ) : (
             <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', overflowX: 'auto' }}>
               <Table size="small" sx={{ tableLayout: 'fixed', minWidth: 640 }}>
@@ -2956,6 +3125,56 @@ export default function GroupSettings() {
                 <Alert severity="success" icon={<CheckCircle />}>No active warnings in this group.</Alert>
               ) : filteredWarnings.length === 0 ? (
                 <Typography variant="body2" color="text.secondary">No warnings match your search.</Typography>
+              ) : isMobile ? (
+                <Stack spacing={1.5}>
+                  {filteredWarnings.map((warning) => {
+                    const isExpanded = expandedWarnId === warning.id;
+                    const shortLabel = categorizeReason(warning.reason);
+                    const warnMsgRaw = warning.message_text || null;
+                    const warnMsgPreview = formatMsgPreview(warnMsgRaw);
+                    return (
+                      <Box key={warning.id}
+                        onClick={() => setExpandedWarnId(isExpanded ? null : warning.id)}
+                        sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.5, p: 1.5, cursor: 'pointer' }}
+                      >
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+                          <Typography variant="body2" fontWeight={600}>
+                            {warning.target_username ? `@${warning.target_username}` : warning.target_user_id}
+                          </Typography>
+                          <Tooltip title="Remove warning">
+                            <IconButton size="small" color="error" onClick={(e) => { e.stopPropagation(); handleRemoveWarning(warning.id); }}>
+                              <Delete sx={{ fontSize: 16 }} />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
+                        {shortLabel && <Typography variant="caption" color="text.secondary" display="block">{shortLabel}</Typography>}
+                        {warnMsgPreview && <Typography variant="caption" color="text.disabled" display="block" noWrap>{warnMsgPreview}</Typography>}
+                        <Typography variant="caption" color="text.disabled" display="block" mt={0.25}>
+                          By {warning.moderator_username ? `@${warning.moderator_username}` : warning.moderator_user_id}
+                          {' · '}{warning.created_at ? new Date(warning.created_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                        </Typography>
+                        {isExpanded && (
+                          <Box sx={{ mt: 1, pt: 1, borderTop: '1px solid', borderColor: 'divider' }}>
+                            <Stack spacing={0.5}>
+                              {warning.reason && (
+                                <Box>
+                                  <Typography variant="caption" fontWeight={700} color="text.secondary" display="block">Full Reason</Typography>
+                                  <Typography variant="caption">{warning.reason}</Typography>
+                                </Box>
+                              )}
+                              {warnMsgRaw && (
+                                <Box>
+                                  <Typography variant="caption" fontWeight={700} color="text.secondary" display="block">Warned Message</Typography>
+                                  <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{warnMsgRaw}</Typography>
+                                </Box>
+                              )}
+                            </Stack>
+                          </Box>
+                        )}
+                      </Box>
+                    );
+                  })}
+                </Stack>
               ) : (
                 <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', overflowX: 'auto' }}>
                   <Table size="small" sx={{ tableLayout: 'fixed', minWidth: 500 }}>

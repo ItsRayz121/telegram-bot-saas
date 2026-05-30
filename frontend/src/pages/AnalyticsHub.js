@@ -5,6 +5,7 @@ import {
   CircularProgress, Alert, Button, FormControl, InputLabel,
   Select, MenuItem, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, Chip, TextField, InputAdornment, Paper,
+  Stack, useTheme, useMediaQuery,
 } from '@mui/material';
 import {
   BarChart as BarChartIcon, Groups, Tv,
@@ -63,6 +64,8 @@ function StatCard({ icon, label, value, color = 'primary.main' }) {
 // ── Overview Tab ──────────────────────────────────────────────────────────────
 
 function OverviewTab({ isPro }) {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [days, setDays] = useState(30);
@@ -169,6 +172,21 @@ function OverviewTab({ isPro }) {
                   <Typography fontWeight={600} mb={2}>Most Active Groups</Typography>
                   {topGroups.length === 0 ? (
                     <Typography color="text.secondary" fontSize="0.84rem">No activity yet.</Typography>
+                  ) : isMobile ? (
+                    <Stack spacing={1}>
+                      {topGroups.map(g => (
+                        <Box key={g.group_id} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1.5 }}>
+                          <Box sx={{ minWidth: 0 }}>
+                            <Typography fontSize="0.83rem" fontWeight={500} noWrap>{g.title || g.group_id}</Typography>
+                            <Typography fontSize="0.75rem" color="text.secondary">{g.events} events</Typography>
+                          </Box>
+                          <Button size="small" sx={{ fontSize: '0.7rem', flexShrink: 0, ml: 1 }}
+                            onClick={() => navigate(`/groups/${g.group_id}/analytics`)}>
+                            View
+                          </Button>
+                        </Box>
+                      ))}
+                    </Stack>
                   ) : (
                     <TableContainer sx={{ overflowX: 'auto' }}>
                       <Table size="small">

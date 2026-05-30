@@ -2288,46 +2288,77 @@ async def on_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if flask_app:
             await _refresh_permissions(context.bot, group_id, flask_app)
 
-        # Check if the user who added the bot is at their group quota; if so DM them a warning.
+        auto_linked = False
+        limit_hit = False
+
+        # Try to auto-link the group when the adder has a linked website account.
         if flask_app and added_by:
             try:
                 with flask_app.app_context():
-                    from .models import TelegramGroup, TelegramBotStarted, User as _User
-                    started = TelegramBotStarted.query.filter_by(telegram_user_id=str(added_by)).first()
-                    if started:
-                        owner = _User.query.filter_by(telegram_user_id=str(added_by)).first()
-                        if owner:
-                            max_groups = Config.MAX_OFFICIAL_GROUPS.get(owner.subscription_tier, 3)
-                            current_count = TelegramGroup.query.filter_by(
-                                owner_user_id=owner.id, is_disabled=False
-                            ).count()
-                            if max_groups != -1 and current_count >= max_groups:
-                                try:
-                                    await context.bot.send_message(
-                                        chat_id=int(added_by),
-                                        text=(
-                                            f"⚠️ *Group limit reached*\n\n"
-                                            f"You've added the bot to *{group_title}* but your "
-                                            f"{owner.subscription_tier.capitalize()} plan allows "
-                                            f"{max_groups} linked group(s).\n\n"
-                                            f"To link this group, upgrade your plan or unlink an "
-                                            f"existing group from the dashboard."
-                                        ),
-                                        parse_mode=ParseMode.MARKDOWN,
-                                    )
-                                except Exception:
-                                    pass
+                    from .models import db, TelegramGroup, TelegramGroupLinkCode
+                    from datetime import datetime as _dt
+                    website_user = _user_by_tg_id(added_by)
+                    if website_user:
+                        max_groups = Config.MAX_OFFICIAL_GROUPS.get(website_user.subscription_tier, 3)
+                        current_count = TelegramGroup.query.filter_by(
+                            owner_user_id=website_user.id, is_disabled=False
+                        ).count()
+                        if max_groups != -1 and current_count >= max_groups:
+                            limit_hit = True
+                            try:
+                                await context.bot.send_message(
+                                    chat_id=int(added_by),
+                                    text=(
+                                        f"⚠️ *Group limit reached*\n\n"
+                                        f"You've added the bot to *{group_title}* but your "
+                                        f"{website_user.subscription_tier.capitalize()} plan allows "
+                                        f"{max_groups} linked group(s).\n\n"
+                                        f"To link this group, upgrade your plan or unlink an "
+                                        f"existing group from the dashboard."
+                                    ),
+                                    parse_mode=ParseMode.MARKDOWN,
+                                )
+                            except Exception:
+                                pass
+                        else:
+                            tg = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
+                            if tg:
+                                tg.owner_user_id = website_user.id
+                                tg.bot_status = "active"
+                                tg.linked_at = _dt.utcnow()
+                                tg.linked_via_bot_type = "official"
+                                TelegramGroupLinkCode.query.filter_by(
+                                    telegram_group_id=group_id,
+                                    created_by_telegram_user_id=str(added_by),
+                                    used_at=None,
+                                ).update({"expires_at": _dt.utcnow()})
+                                db.session.commit()
+                                auto_linked = True
+                                _log_event(flask_app, group_id, "group_auto_linked",
+                                           f"Group auto-linked to user {website_user.id}",
+                                           {"telegram_user_id": added_by})
             except Exception as exc:
-                _log.debug("Quota DM check failed: %s", exc)
+                _log.debug("Auto-link on join failed: %s", exc)
 
-        try:
-            await chat.send_message(
-                f"✅ *Telegizer connected.*\n\n"
-                f"Run `/linkgroup` here, then open @{bot_un} privately to complete setup.",
-                parse_mode=ParseMode.MARKDOWN,
-            )
-        except Exception as exc:
-            _log.debug("Group welcome failed: %s", exc)
+        if auto_linked:
+            try:
+                await chat.send_message(
+                    f"✅ *Group linked!*\n\n"
+                    f"This group is now connected to your Telegizer account. "
+                    f"Open the dashboard to configure it.",
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+            except Exception as exc:
+                _log.debug("Auto-link welcome failed: %s", exc)
+        else:
+            try:
+                await chat.send_message(
+                    f"✅ *Telegizer connected.*\n\n"
+                    f"Run `/linkgroup` here, then open @{bot_un} privately to complete setup.",
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+            except Exception as exc:
+                _log.debug("Group welcome failed: %s", exc)
 
     elif new_status in ("left", "kicked"):
         if flask_app:
