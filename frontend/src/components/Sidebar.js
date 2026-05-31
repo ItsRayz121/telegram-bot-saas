@@ -468,6 +468,8 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
         <SectionLabel label="Automation" />
         <NavItem label="Automation" icon={AutoMode} path="/automation" active={automationActive} onClick={() => nav('/automation')} />
 
+        <NavItem label="Referrals" path="/referrals" icon={EmojiEvents} active={isActive('/referrals')} onClick={() => nav('/referrals')} />
+
         <NavItem label="Settings" path="/settings" icon={Settings} active={isActive('/settings')} onClick={() => nav('/settings')} />
 
       </List>
