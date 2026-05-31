@@ -461,6 +461,8 @@ export const billing = {
   cancelSubscription: () => api.delete('/api/billing/subscription'),
   // Promo codes
   validatePromo: (data) => api.post('/api/billing/promo/validate', data),
+  // 14-day Pro trial
+  startTrial: () => api.post('/api/billing/start-trial'),
 };
 
 export const referrals = {

@@ -76,12 +76,13 @@ export default function HubLanding() {
           <Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.25 }}>
               <Typography variant="h5" fontWeight={800} letterSpacing="-0.02em">
-                Echo
+                Echo — AI Assistant Layer
               </Typography>
               <Box className="ai-pulse-dot" />
             </Box>
             <Typography variant="body2" color="text.secondary">
-              Quietly observes your groups. Surfaces what matters.
+              Works alongside Telegizer's moderation and automation. Extracts tasks, meetings,
+              and reminders from your group conversations — so nothing important gets missed.
             </Typography>
           </Box>
         </Box>
@@ -118,7 +119,8 @@ function DecisionGuideCard({ plan }) {
       <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
         <Typography variant="subtitle1" fontWeight={700} mb={0.5}>Which bot type is right for you?</Typography>
         <Typography variant="body2" color="text.secondary" mb={3}>
-          Get started in seconds with our shared bot, or bring your own for full branding control.
+          Telegizer gives you two ways to use Echo. Start instantly with the shared bot, or connect
+          your own branded bot for full control.
         </Typography>
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
           <Card variant="outlined" sx={{ flex: 1, p: 2 }}>

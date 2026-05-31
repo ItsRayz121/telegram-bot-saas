@@ -107,6 +107,33 @@ def get_plans():
     return jsonify({"plans": Config.PLANS})
 
 
+# ─── 14-day Pro trial ────────────────────────────────────────────────────────
+
+@billing_bp.route("/start-trial", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=5)
+def start_trial():
+    user = _get_current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    if user.trial_used:
+        return jsonify({"error": "You have already used your free trial."}), 400
+    if user.subscription_tier != "free":
+        return jsonify({"error": "Your account is already on a paid plan."}), 400
+
+    now = datetime.utcnow()
+    user.subscription_tier = "pro"
+    user.trial_ends_at = now + timedelta(days=14)
+    user.trial_used = True
+    db.session.commit()
+
+    logger.info("Trial started for user=%s ends=%s", user.id, user.trial_ends_at)
+    return jsonify({
+        "message": "14-day Pro trial activated!",
+        "trial_ends_at": user.trial_ends_at.isoformat(),
+    })
+
+
 # ─── Billing history ──────────────────────────────────────────────────────────
 
 @billing_bp.route("/history", methods=["GET"])

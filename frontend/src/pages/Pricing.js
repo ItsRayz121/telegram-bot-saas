@@ -6,7 +6,7 @@ import {
   DialogActions, Stack, Alert, Accordion, AccordionSummary, AccordionDetails,
   Divider, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
 } from '@mui/material';
-import { Check, Close, ArrowBack, CurrencyBitcoin, LocalOffer, ExpandMore, AutoAwesome, Bolt } from '@mui/icons-material';
+import { Check, Close, ArrowBack, CurrencyBitcoin, LocalOffer, ExpandMore, AutoAwesome, Bolt, Star } from '@mui/icons-material';
 import Switch from '@mui/material/Switch';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -122,6 +122,8 @@ export default function Pricing() {
   const [currentTier, setCurrentTier] = useState('free');
   const [subExpires, setSubExpires] = useState(null);
   const [annual, setAnnual] = useState(false);
+  const [trialLoading, setTrialLoading] = useState(false);
+  const [trialStarted, setTrialStarted] = useState(false);
   const token = localStorage.getItem('token');
 
   // Load current subscription so we can show correct "Current Plan" state
@@ -176,6 +178,22 @@ export default function Pricing() {
     if (methodLoading) return;
     setDialogOpen(false);
     setSelectedTier(null);
+  };
+
+  const handleStartTrial = async () => {
+    if (!token) { navigate('/register?trial=1'); return; }
+    setTrialLoading(true);
+    try {
+      await billing.startTrial();
+      setTrialStarted(true);
+      setCurrentTier('pro');
+      toast.success('14-day Pro trial activated! Enjoy full access.');
+      setTimeout(() => navigate('/dashboard'), 1500);
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Could not start trial. Please try again.');
+    } finally {
+      setTrialLoading(false);
+    }
   };
 
   const getPlanButtonLabel = (plan) => {
@@ -239,6 +257,41 @@ export default function Pricing() {
           />
         )}
 
+        {/* Trial banner — only shown to free users who haven't used trial */}
+        {token && currentTier === 'free' && !trialStarted && (
+          <Box
+            sx={{
+              mb: 4, p: { xs: 2, sm: 2.5 }, borderRadius: 2,
+              background: 'linear-gradient(135deg, rgba(33,150,243,0.10) 0%, rgba(124,58,237,0.08) 100%)',
+              border: '1px solid rgba(33,150,243,0.28)',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              flexWrap: 'wrap', gap: 2,
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <Star sx={{ color: '#f59e0b', fontSize: 22, flexShrink: 0 }} />
+              <Box sx={{ textAlign: 'left' }}>
+                <Typography fontWeight={700} fontSize="0.95rem">
+                  Try Pro free for 14 days
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Full access · No credit card · No auto-renew
+                </Typography>
+              </Box>
+            </Box>
+            <Button
+              variant="contained"
+              size="small"
+              onClick={handleStartTrial}
+              disabled={trialLoading}
+              startIcon={trialLoading ? <CircularProgress size={14} color="inherit" /> : <Star sx={{ fontSize: 16 }} />}
+              sx={{ fontWeight: 700, px: 3 }}
+            >
+              {trialLoading ? 'Starting…' : 'Start Free Trial'}
+            </Button>
+          </Box>
+        )}
+
         <Grid container spacing={3} justifyContent="center" sx={{ mb: 2 }}>
           {PLANS.map((plan) => (
             <Grid item xs={12} sm={6} md={4} key={plan.id}>
@@ -300,10 +353,20 @@ export default function Pricing() {
                       color={isCurrentPlan(plan.id) ? 'success' : plan.color === 'default' ? 'inherit' : plan.color}
                       onClick={() => handleUpgrade(plan.id)}
                       disabled={loading === plan.id || plan.id === 'free' || isCurrentPlan(plan.id)}
-                      sx={{ mb: 2.5 }}
+                      sx={{ mb: plan.id === 'pro' && token && currentTier === 'free' && !trialStarted ? 1 : 2.5 }}
                     >
                       {loading === plan.id ? <CircularProgress size={20} color="inherit" /> : getPlanButtonLabel(plan)}
                     </Button>
+                    {plan.id === 'pro' && token && currentTier === 'free' && !trialStarted && (
+                      <Button
+                        fullWidth variant="text" size="small"
+                        onClick={handleStartTrial}
+                        disabled={trialLoading}
+                        sx={{ mb: 1.5, color: 'primary.light', fontSize: '0.78rem' }}
+                      >
+                        {trialLoading ? 'Starting trial…' : 'or try free for 14 days →'}
+                      </Button>
+                    )}
 
                     <List dense disablePadding>
                       {plan.features.map((feature) => (

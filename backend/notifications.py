@@ -446,6 +446,98 @@ def send_subscription_expired(to_email: str, full_name: str, plan_name: str) -> 
     )
 
 
+def send_feature_highlight_email(to_email, full_name):
+    """Day-5 lifecycle email — spotlight AI features users haven't tried yet."""
+    dashboard_url = f"{current_app.config['FRONTEND_URL']}/ark"
+    pricing_url = f"{current_app.config['FRONTEND_URL']}/pricing"
+    unsub_url = f"{current_app.config['FRONTEND_URL']}/settings?unsubscribe=onboarding"
+    content = f"""
+    <p>Hi <strong>{full_name}</strong>,</p>
+    <p>Most Telegizer users start with moderation — but the platform goes much deeper.
+    Here's what community managers love after their first week:</p>
+    <ul class="feature-list">
+      <li><strong>Echo AI Assistant</strong> — observes your group and surfaces tasks, decisions, and action items automatically</li>
+      <li><strong>AI Knowledge Base</strong> — paste your FAQ once, the bot answers member questions 24/7</li>
+      <li><strong>Daily Digests</strong> — a summary of what happened in your group, delivered every morning</li>
+      <li><strong>Smart Reminders</strong> — set a reminder in plain text and Echo handles the rest</li>
+    </ul>
+    <p>These features are available on the Pro plan. If you haven't tried them yet, you're leaving the best part untouched.</p>
+    <a href="{dashboard_url}" class="btn">Explore Echo Assistant</a>
+    <p style="margin-top:16px;font-size:13px;color:#909090;">
+      Not on Pro yet? <a href="{pricing_url}" style="color:#667eea;">See what's included →</a>
+    </p>
+    """
+    return send_email(
+        to_email,
+        "The Telegizer feature most admins discover too late",
+        _base_template(content, "AI Features Spotlight", unsubscribe_url=unsub_url),
+        text_body=f"Hi {full_name}, Echo AI Assistant, Knowledge Base, and Daily Digests are the features "
+                  f"community managers love most. Explore them at {dashboard_url}",
+        unsubscribe_url=unsub_url,
+    )
+
+
+def send_community_growth_email(to_email, full_name):
+    """Day-21 lifecycle email — growth playbook / case study framing."""
+    dashboard_url = f"{current_app.config['FRONTEND_URL']}/dashboard"
+    unsub_url = f"{current_app.config['FRONTEND_URL']}/settings?unsubscribe=onboarding"
+    content = f"""
+    <p>Hi <strong>{full_name}</strong>,</p>
+    <p>Three weeks in — here are the moves that separate fast-growing communities from stagnant ones:</p>
+    <ul class="feature-list">
+      <li><strong>Post on a schedule</strong> — groups with 3+ scheduled posts per week retain 2× more members</li>
+      <li><strong>Gamify participation</strong> — XP + levels give members a reason to stay active every day</li>
+      <li><strong>Track your invite links</strong> — knowing your best acquisition source lets you double down on it</li>
+      <li><strong>Run a monthly poll</strong> — community input creates ownership and reduces churn</li>
+    </ul>
+    <p>All of this is built into Telegizer. The groups that grow consistently are the ones that use automation to stay consistent even when the admin is offline.</p>
+    <a href="{dashboard_url}" class="btn">Open Your Dashboard</a>
+    <div class="tip">
+      💡 <strong>Quick win:</strong> Go to your Groups page and enable a weekly scheduled recap post — takes 2 minutes, runs forever.
+    </div>
+    """
+    return send_email(
+        to_email,
+        "What growing Telegram communities do differently",
+        _base_template(content, "Growth Playbook", unsubscribe_url=unsub_url),
+        text_body=f"Hi {full_name}, the communities that grow fastest use scheduled posts, XP systems, "
+                  f"and invite tracking. Here's how to apply it: {dashboard_url}",
+        unsubscribe_url=unsub_url,
+    )
+
+
+def send_upgrade_nudge_email(to_email, full_name):
+    """Day-30 lifecycle email — final upgrade push for persistent free users."""
+    pricing_url = f"{current_app.config['FRONTEND_URL']}/pricing"
+    unsub_url = f"{current_app.config['FRONTEND_URL']}/settings?unsubscribe=onboarding"
+    content = f"""
+    <p>Hi <strong>{full_name}</strong>,</p>
+    <p>You've been running your community on Telegizer for a month — that's great.</p>
+    <p>If you're still on the Free plan, here's the honest truth: the features that make the biggest difference are on Pro.</p>
+    <ul class="feature-list">
+      <li>AI auto-replies that answer member questions without you</li>
+      <li>Daily group digests so you never miss what matters</li>
+      <li>90-day analytics so you can see what's actually working</li>
+      <li>Unlimited groups for your custom bot</li>
+      <li>Member CRM to track who your most valuable contributors are</li>
+    </ul>
+    <p><strong>Pro is $9/month.</strong> That's less than a coffee per week to run your community on autopilot.</p>
+    <a href="{pricing_url}" class="btn">Upgrade to Pro — $9/month</a>
+    <p style="margin-top:16px;font-size:13px;color:#909090;">
+      14-day money-back guarantee. Pay with crypto — no card required.
+    </p>
+    """
+    return send_email(
+        to_email,
+        "One month in — here's what Pro unlocks for $9",
+        _base_template(content, "Upgrade to Pro", unsubscribe_url=unsub_url),
+        text_body=f"Hi {full_name}, you've been on Telegizer for a month. Pro is $9/month and unlocks "
+                  f"AI auto-replies, digests, 90-day analytics, and unlimited groups. "
+                  f"14-day money-back guarantee. See pricing at {pricing_url}",
+        unsubscribe_url=unsub_url,
+    )
+
+
 def send_bot_added_notification(to_email, full_name, bot_name, bot_username):
     dashboard_url = f"{current_app.config['FRONTEND_URL']}/dashboard"
     content = f"""

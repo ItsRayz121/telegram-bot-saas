@@ -4,6 +4,7 @@ import {
   Box, List, ListItem, ListItemButton, ListItemIcon, ListItemText,
   Typography, Avatar, Chip, Divider, Tooltip,
   Menu, MenuItem, IconButton, Collapse, LinearProgress,
+  Dialog, DialogTitle, DialogContent, DialogActions, Button,
 } from '@mui/material';
 import {
   Home, Groups, AutoMode,
@@ -12,6 +13,7 @@ import {
   Psychology, ChevronLeft, ChevronRight,
   EmojiEvents, CheckCircle, RadioButtonUnchecked,
   CheckBox, LibraryBooks, ManageAccounts, VideoCall,
+  NewReleases,
 } from '@mui/icons-material';
 import TelegizerLogo from './TelegizerLogo';
 import { auth as authApi } from '../services/api';
@@ -21,6 +23,52 @@ import useAssistantName from '../hooks/useAssistantName';
 
 const SIDEBAR_WIDTH = 240;
 const SIDEBAR_COLLAPSED_WIDTH = 56;
+
+// ── What's New changelog ───────────────────────────────────────────────────────
+const CHANGELOG_VERSION = '2026-05-31';
+const CHANGELOG_KEY = 'telegizer_whats_new_seen';
+
+const CHANGELOG_ENTRIES = [
+  { date: 'May 2026', title: 'Celery scheduled tasks now live', body: 'Reminders, digests, onboarding emails, and subscription downgrades now fire reliably via the Celery worker.' },
+  { date: 'May 2026', title: '14-day Pro trial', body: 'All free users can now start a 14-day Pro trial with one click — no credit card required.' },
+  { date: 'May 2026', title: 'CSP security hardening', body: 'Removed unsafe-inline from Content Security Policy. XSS protection is now fully active.' },
+  { date: 'May 2026', title: 'Echo positioning clarified', body: 'Echo is now properly described as the AI assistant layer that works alongside Telegizer\'s moderation and automation — not a separate product.' },
+  { date: 'May 2026', title: 'Lifecycle email sequence expanded', body: 'Added day 5 (AI feature spotlight), day 21 (growth playbook), and day 30 (upgrade nudge) emails to the onboarding sequence.' },
+];
+
+function WhatsNewDialog({ open, onClose }) {
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+      <DialogTitle sx={{ fontWeight: 800, pb: 0 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <NewReleases color="primary" />
+          What's New
+        </Box>
+      </DialogTitle>
+      <DialogContent sx={{ pt: 1.5 }}>
+        {CHANGELOG_ENTRIES.map((entry, i) => (
+          <Box key={i} sx={{ mb: 2 }}>
+            <Typography variant="caption" color="text.disabled" display="block" mb={0.25}>
+              {entry.date}
+            </Typography>
+            <Typography variant="body2" fontWeight={700} mb={0.25}>
+              {entry.title}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" lineHeight={1.5} display="block">
+              {entry.body}
+            </Typography>
+            {i < CHANGELOG_ENTRIES.length - 1 && <Divider sx={{ mt: 1.5 }} />}
+          </Box>
+        ))}
+      </DialogContent>
+      <DialogActions sx={{ px: 2, pb: 2 }}>
+        <Button variant="contained" size="small" onClick={onClose} fullWidth>
+          Got it
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
 
 // ── Section label ──────────────────────────────────────────────────────────────
 function SectionLabel({ label }) {
@@ -258,6 +306,13 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
 
   const [user, setUser] = useState(null);
   const [anchorEl, setAnchorEl] = useState(null);
+  const [whatsNewOpen, setWhatsNewOpen] = useState(false);
+  const hasNewChangelog = localStorage.getItem(CHANGELOG_KEY) !== CHANGELOG_VERSION;
+
+  const handleWhatsNewClose = () => {
+    localStorage.setItem(CHANGELOG_KEY, CHANGELOG_VERSION);
+    setWhatsNewOpen(false);
+  };
 
   const isActive = useCallback(
     (path, exact = false) =>
@@ -499,8 +554,31 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
         </Box>
       )}
 
+      {/* ── What's New ── */}
+      <Box sx={{ px: 1, pb: 0.5 }}>
+        <ListItemButton
+          onClick={() => setWhatsNewOpen(true)}
+          sx={{
+            borderRadius: 1.5, py: 0.6, px: 1.5,
+            color: 'text.disabled',
+            '&:hover': { bgcolor: 'rgba(255,255,255,0.04)', color: 'text.secondary' },
+          }}
+        >
+          <ListItemIcon sx={{ minWidth: 28, color: 'inherit' }}>
+            <NewReleases sx={{ fontSize: 15 }} />
+          </ListItemIcon>
+          <ListItemText
+            primary="What's New"
+            primaryTypographyProps={{ fontSize: '0.76rem', fontWeight: 400 }}
+          />
+          {hasNewChangelog && (
+            <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: 'primary.main', flexShrink: 0 }} />
+          )}
+        </ListItemButton>
+      </Box>
+
       {/* Version footer */}
-      <Box sx={{ px: 2, pb: 1.5, pt: 0.5 }}>
+      <Box sx={{ px: 2, pb: 1.5, pt: 0.25 }}>
         <Typography
           variant="caption"
           color="text.disabled"
@@ -512,6 +590,8 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
           v{APP_VERSION}
         </Typography>
       </Box>
+
+      <WhatsNewDialog open={whatsNewOpen} onClose={handleWhatsNewClose} />
     </Box>
   );
 }

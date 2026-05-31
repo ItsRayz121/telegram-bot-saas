@@ -1175,7 +1175,8 @@ def send_lifecycle_emails():
         from .models import db, User, TelegramGroup, Bot
         from .notifications import (
             send_onboarding_day3_email, send_onboarding_day7_email,
-            send_subscription_expired,
+            send_feature_highlight_email, send_community_growth_email,
+            send_upgrade_nudge_email, send_subscription_expired,
         )
         from datetime import timedelta
         now = datetime.utcnow()
@@ -1210,6 +1211,19 @@ def send_lifecycle_emails():
                 except Exception as exc:
                     logger.debug("day3_no_group email failed user=%s: %s", u.id, exc)
 
+        # Day 5 — AI feature spotlight (all verified users, free tier)
+        lo, hi = _window(5)
+        day5 = User.query.filter(
+            User.email_verified == True,  # noqa: E712
+            User.subscription_tier == "free",
+            User.created_at.between(lo, hi),
+        ).all()
+        for u in day5:
+            try:
+                send_feature_highlight_email(u.email, u.full_name or u.email.split("@")[0])
+            except Exception as exc:
+                logger.debug("day5_feature email failed user=%s: %s", u.id, exc)
+
         # Day 14 — on free tier (trial ended), Pro feature showcase
         lo, hi = _window(14)
         day14 = User.query.filter(
@@ -1223,7 +1237,36 @@ def send_lifecycle_emails():
             except Exception as exc:
                 logger.debug("day14_upgrade email failed user=%s: %s", u.id, exc)
 
-        logger.info("[lifecycle_emails] day1=%d day3=%d day14=%d", len(day1), len(day3), len(day14))
+        # Day 21 — growth playbook for all free users still active
+        lo, hi = _window(21)
+        day21 = User.query.filter(
+            User.email_verified == True,  # noqa: E712
+            User.subscription_tier == "free",
+            User.created_at.between(lo, hi),
+        ).all()
+        for u in day21:
+            try:
+                send_community_growth_email(u.email, u.full_name or u.email.split("@")[0])
+            except Exception as exc:
+                logger.debug("day21_growth email failed user=%s: %s", u.id, exc)
+
+        # Day 30 — final upgrade nudge for persistent free users
+        lo, hi = _window(30)
+        day30 = User.query.filter(
+            User.email_verified == True,  # noqa: E712
+            User.subscription_tier == "free",
+            User.created_at.between(lo, hi),
+        ).all()
+        for u in day30:
+            try:
+                send_upgrade_nudge_email(u.email, u.full_name or u.email.split("@")[0])
+            except Exception as exc:
+                logger.debug("day30_nudge email failed user=%s: %s", u.id, exc)
+
+        logger.info(
+            "[lifecycle_emails] day1=%d day3=%d day5=%d day14=%d day21=%d day30=%d",
+            len(day1), len(day3), len(day5), len(day14), len(day21), len(day30),
+        )
     except Exception as exc:
         logger.error("send_lifecycle_emails error: %s", exc)
 
