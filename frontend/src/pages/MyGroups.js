@@ -344,28 +344,94 @@ export default function MyGroups() {
             </Button>
           </Card>
         ) : groups.length === 0 ? (
-          <Card
-            sx={{
-              textAlign: 'center', py: 7,
-              background: 'linear-gradient(135deg, rgba(61,142,248,0.05) 0%, transparent 100%)',
-              border: '1px dashed rgba(61,142,248,0.25)',
-            }}
-          >
-            <Box sx={{
-              width: 64, height: 64, borderRadius: 3, mx: 'auto', mb: 2,
-              background: 'rgba(61,142,248,0.1)', border: '1px solid rgba(61,142,248,0.2)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <Groups sx={{ fontSize: 30, color: 'rgba(61,142,248,0.7)' }} />
-            </Box>
-            <Typography variant="h6" gutterBottom fontWeight={700} letterSpacing="-0.01em">No groups linked yet</Typography>
-            <Typography variant="body2" color="text.secondary" mb={3}>
-              Add the Telegizer bot to your group then link it here.
-            </Typography>
-            <Button variant="contained" startIcon={<Add />} onClick={() => setLinkOpen(true)}>
-              Link Your First Group
-            </Button>
-          </Card>
+          <Box>
+            {/* Hero empty state */}
+            <Card
+              sx={{
+                mb: 3,
+                background: 'linear-gradient(135deg, rgba(61,142,248,0.05) 0%, transparent 100%)',
+                border: '1px dashed rgba(61,142,248,0.25)',
+              }}
+            >
+              <CardContent sx={{ p: { xs: 3, sm: 5 }, textAlign: 'center' }}>
+                <Box sx={{
+                  width: 64, height: 64, borderRadius: 3, mx: 'auto', mb: 2,
+                  background: 'rgba(61,142,248,0.1)', border: '1px solid rgba(61,142,248,0.2)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <Groups sx={{ fontSize: 30, color: 'rgba(61,142,248,0.7)' }} />
+                </Box>
+                <Typography variant="h6" fontWeight={700} letterSpacing="-0.01em" gutterBottom>
+                  No groups linked yet
+                </Typography>
+                <Typography variant="body2" color="text.secondary" mb={4} maxWidth={420} mx="auto">
+                  Connect your Telegram groups to unlock moderation, analytics, welcome messages, and AI-powered insights.
+                </Typography>
+
+                {/* 3-step guide */}
+                <Box sx={{ display: 'flex', gap: { xs: 1.5, sm: 3 }, justifyContent: 'center', mb: 4, flexWrap: 'wrap' }}>
+                  {[
+                    { step: '1', title: 'Add Bot as Admin', desc: `Add @${BOT_USERNAME} to your group with admin rights` },
+                    { step: '2', title: 'Run /linkgroup', desc: 'Type the command in your group to get a code' },
+                    { step: '3', title: 'Paste the Code', desc: 'Click Link Group below and enter the code' },
+                  ].map(({ step, title, desc }) => (
+                    <Box key={step} sx={{ flex: '1 1 140px', maxWidth: 180, textAlign: 'center' }}>
+                      <Box sx={{
+                        width: 32, height: 32, borderRadius: '50%', mx: 'auto', mb: 1,
+                        bgcolor: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        <Typography variant="caption" fontWeight={700} color="white">{step}</Typography>
+                      </Box>
+                      <Typography variant="body2" fontWeight={600} gutterBottom>{title}</Typography>
+                      <Typography variant="caption" color="text.secondary" display="block">{desc}</Typography>
+                    </Box>
+                  ))}
+                </Box>
+
+                {/* Dual CTAs */}
+                <Box sx={{ display: 'flex', gap: 1.5, justifyContent: 'center', flexWrap: 'wrap' }}>
+                  <Button
+                    variant="outlined"
+                    startIcon={<OpenInNew />}
+                    href={addToGroupUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Add Bot to Group
+                  </Button>
+                  <Button
+                    variant="contained"
+                    startIcon={<Add />}
+                    onClick={() => setLinkOpen(true)}
+                  >
+                    Link Group
+                  </Button>
+                </Box>
+              </CardContent>
+            </Card>
+
+            {/* Feature highlights (dimmed — unlock on connect) */}
+            <Grid container spacing={2}>
+              {[
+                { icon: <Shield sx={{ color: '#ef4444' }} />, title: 'AutoMod', desc: 'Block spam, scam links, and bots automatically' },
+                { icon: <AutoAwesome sx={{ color: '#8b5cf6' }} />, title: 'AI Digest', desc: 'Daily summaries of key decisions and topics' },
+                { icon: <BarChart sx={{ color: 'primary.main' }} />, title: 'Analytics', desc: 'Track member growth and engagement trends' },
+                { icon: <Settings sx={{ color: '#10b981' }} />, title: 'Welcome Messages', desc: 'Greet new members with a custom message' },
+              ].map(({ icon, title, desc }) => (
+                <Grid item xs={12} sm={6} key={title}>
+                  <Card sx={{ opacity: 0.55, border: '1px solid', borderColor: 'divider' }}>
+                    <CardContent sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', p: 2, '&:last-child': { pb: 2 } }}>
+                      {icon}
+                      <Box>
+                        <Typography variant="body2" fontWeight={600}>{title}</Typography>
+                        <Typography variant="caption" color="text.secondary">{desc}</Typography>
+                      </Box>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
+          </Box>
         ) : (
           <Grid container spacing={2}>
             {groups.map((g) => {

@@ -62,6 +62,7 @@ import Marketplace from './pages/Marketplace';
 import MarketplaceDeal from './pages/MarketplaceDeal';
 import JoinReferral from './pages/JoinReferral';
 import InviteLanding from './pages/InviteLanding';
+import TeamInvitePage from './pages/TeamInvitePage';
 import Referrals from './pages/Referrals';
 
 // Echo (AI Assistant)
@@ -196,6 +197,7 @@ export default function App() {
             <Route path="/status" element={<Status />} />
             <Route path="/join" element={<JoinReferral />} />
             <Route path="/invite/:code" element={<InviteLanding />} />
+            <Route path="/team/join/:token" element={<TeamInvitePage />} />
 
             {/* ── Auth (no sidebar) ─────────────────────────────────────────── */}
             <Route path="/login"          element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />

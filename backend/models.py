@@ -2908,3 +2908,88 @@ class GroupMeetingLink(db.Model):
             "captured_at": self.captured_at.isoformat(),
             "is_dismissed": self.is_dismissed,
         }
+
+
+# ── Team / Multi-user ─────────────────────────────────────────────────────────
+
+class Team(db.Model):
+    """A workspace team — one owner, multiple members sharing the same Telegizer account scope."""
+    __tablename__ = "teams"
+
+    id         = db.Column(db.Integer, primary_key=True)
+    name       = db.Column(db.String(200), nullable=False)
+    owner_id   = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    members = db.relationship("TeamMember", backref="team", cascade="all, delete-orphan", lazy="dynamic")
+    invites = db.relationship("TeamInvite", backref="team", cascade="all, delete-orphan", lazy="dynamic")
+
+    def to_dict(self, include_members=False, include_invites=False):
+        d = {
+            "id": self.id,
+            "name": self.name,
+            "owner_id": self.owner_id,
+            "created_at": self.created_at.isoformat(),
+        }
+        if include_members:
+            d["members"] = [m.to_dict() for m in self.members.all()]
+        if include_invites:
+            d["pending_invites"] = [
+                i.to_dict() for i in self.invites.filter_by(accepted_at=None).all()
+                if i.expires_at > datetime.utcnow()
+            ]
+        return d
+
+
+class TeamMember(db.Model):
+    """Associates a user with a team and assigns them a role."""
+    __tablename__ = "team_members"
+
+    id        = db.Column(db.Integer, primary_key=True)
+    team_id   = db.Column(db.Integer, db.ForeignKey("teams.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id   = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    # owner | admin | member
+    role      = db.Column(db.String(20), nullable=False, default="member")
+    joined_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (db.UniqueConstraint("team_id", "user_id", name="uq_team_member"),)
+
+    def to_dict(self):
+        user = User.query.get(self.user_id)
+        return {
+            "id": self.id,
+            "team_id": self.team_id,
+            "user_id": self.user_id,
+            "full_name": user.full_name if user else None,
+            "email": user.email if user else None,
+            "role": self.role,
+            "joined_at": self.joined_at.isoformat(),
+        }
+
+
+class TeamInvite(db.Model):
+    """A pending invitation for a user to join a team."""
+    __tablename__ = "team_invites"
+
+    id             = db.Column(db.Integer, primary_key=True)
+    team_id        = db.Column(db.Integer, db.ForeignKey("teams.id", ondelete="CASCADE"), nullable=False, index=True)
+    invited_by_id  = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    invited_email  = db.Column(db.String(255), nullable=False)
+    role           = db.Column(db.String(20), nullable=False, default="member")
+    token          = db.Column(db.String(64), unique=True, nullable=False, default=lambda: secrets.token_urlsafe(32))
+    expires_at     = db.Column(db.DateTime, nullable=False, default=lambda: datetime.utcnow() + timedelta(days=7))
+    accepted_at    = db.Column(db.DateTime, nullable=True)
+    created_at     = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "team_id": self.team_id,
+            "invited_by_id": self.invited_by_id,
+            "invited_email": self.invited_email,
+            "role": self.role,
+            "token": self.token,
+            "expires_at": self.expires_at.isoformat(),
+            "accepted_at": self.accepted_at.isoformat() if self.accepted_at else None,
+            "created_at": self.created_at.isoformat(),
+        }

@@ -911,4 +911,14 @@ export const googleCalendar = {
   disconnect:      ()    => api.delete('/api/calendar/disconnect'),
 };
 
+export const team = {
+  get:          ()              => api.get('/api/team'),
+  create:       (data)         => api.post('/api/team', data),
+  invite:       (data)         => api.post('/api/team/invite', data),
+  getInvite:    (token)        => api.get(`/api/team/invite/${token}`),
+  acceptInvite: (token)        => api.post(`/api/team/invite/${token}/accept`),
+  removeMember: (userId)       => api.delete(`/api/team/members/${userId}`),
+  cancelInvite: (inviteId)     => api.delete(`/api/team/invites/${inviteId}`),
+};
+
 export default api;

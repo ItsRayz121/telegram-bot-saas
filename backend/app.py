@@ -74,6 +74,7 @@ from .routes.integration_webhooks import integration_webhooks_bp
 from .routes.hub import hub_bp
 from .routes.platform_stats import platform_stats_bp
 from .routes.calendar import calendar_bp
+from .routes.team import team_bp
 from .assistant import hub_models as _hub_models_import  # noqa: F401 — ensures models registered with db.create_all()
 from .bot_manager import BotManager
 from .official_bot import start_official_bot
@@ -243,6 +244,7 @@ def create_app():
     app.register_blueprint(hub_bp)
     app.register_blueprint(platform_stats_bp)
     app.register_blueprint(calendar_bp)
+    app.register_blueprint(team_bp)
 
     app.bot_manager = bot_manager
 

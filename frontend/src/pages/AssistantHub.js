@@ -1,7 +1,7 @@
 ﻿import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, Chip, CircularProgress,
-  Alert, LinearProgress,
+  Alert, LinearProgress, Grid,
   IconButton, Tooltip, Collapse, Tabs, Tab,
   Select, MenuItem, FormControl, TextField, Divider,
 } from '@mui/material';
@@ -22,7 +22,119 @@ import useAssistantName from '../hooks/useAssistantName';
 
 const DISMISS_KEY = 'hub_connect_banner_dismissed';
 
-// ── Connect Bot Banner ────────────────────────────────────────────────────────
+const ECHO_FEATURES = [
+  { icon: Summarize,          color: '#8b5cf6', label: 'AI Digest',        desc: 'Daily summaries of decisions and key topics' },
+  { icon: NotificationsActive, color: '#f59e0b', label: 'Smart Reminders',  desc: 'Set reminders by messaging the bot in Telegram' },
+  { icon: Reply,              color: '#ec4899', label: 'Auto-Reply',        desc: 'Trigger responses to keywords automatically' },
+  { icon: EditNote,           color: '#3b82f6', label: 'Notes & Tasks',     desc: 'Extract and save information from conversations' },
+  { icon: BarChart,           color: '#64748b', label: 'Analytics',         desc: 'Track member growth and engagement trends' },
+  { icon: AutoMode,           color: '#f97316', label: 'Automations',       desc: 'Workflows and smart automation rules' },
+];
+
+// ── Zero State Hero ───────────────────────────────────────────────────────────
+
+function ZeroStateHero({ botUsername, onDismiss }) {
+  const [copied, setCopied] = useState(false);
+  const link = `https://t.me/${botUsername}?startgroup=true`;
+
+  const copyLink = () => {
+    navigator.clipboard.writeText(link).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return (
+    <Card
+      variant="outlined"
+      sx={{
+        mb: 3,
+        background: 'linear-gradient(135deg, rgba(61,142,248,0.06) 0%, rgba(157,108,247,0.04) 100%)',
+        borderColor: 'rgba(61,142,248,0.3)',
+      }}
+    >
+      <CardContent sx={{ p: { xs: 3, sm: 4 } }}>
+        {/* Dismiss button */}
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 0.5 }}>
+          <IconButton size="small" onClick={onDismiss} sx={{ color: 'text.disabled' }}>
+            <Close fontSize="small" />
+          </IconButton>
+        </Box>
+
+        {/* Icon + headline */}
+        <Box sx={{ textAlign: 'center', mb: 3 }}>
+          <Box sx={{
+            width: 60, height: 60, borderRadius: 3, mx: 'auto', mb: 2,
+            background: 'rgba(61,142,248,0.12)', border: '1px solid rgba(61,142,248,0.25)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Psychology sx={{ fontSize: 28, color: 'primary.main' }} />
+          </Box>
+          <Typography variant="h6" fontWeight={700} letterSpacing="-0.01em" gutterBottom>
+            Connect a group to get started
+          </Typography>
+          <Typography fontSize="0.88rem" color="text.secondary" maxWidth={440} mx="auto">
+            Echo observes your Telegram groups, extracts insights, and helps you stay on top
+            of everything — without reading every message.
+          </Typography>
+        </Box>
+
+        {/* Feature grid */}
+        <Grid container spacing={1.5} sx={{ mb: 3 }}>
+          {ECHO_FEATURES.map(({ icon: Icon, color, label, desc }) => (
+            <Grid item xs={12} sm={6} md={4} key={label}>
+              <Box sx={{
+                display: 'flex', gap: 1.5, alignItems: 'flex-start',
+                p: 1.5, borderRadius: 2,
+                bgcolor: 'background.default', border: '1px solid', borderColor: 'divider',
+              }}>
+                <Box sx={{
+                  width: 32, height: 32, borderRadius: 1.5, flexShrink: 0,
+                  bgcolor: color + '1a', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <Icon sx={{ fontSize: 16, color }} />
+                </Box>
+                <Box>
+                  <Typography fontSize="0.82rem" fontWeight={600}>{label}</Typography>
+                  <Typography fontSize="0.73rem" color="text.secondary">{desc}</Typography>
+                </Box>
+              </Box>
+            </Grid>
+          ))}
+        </Grid>
+
+        {/* CTAs */}
+        <Box sx={{ display: 'flex', gap: 1.5, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <Button
+            variant="contained"
+            startIcon={<OpenInNew />}
+            href={link}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Add Bot to Group
+          </Button>
+          <Tooltip title={copied ? 'Copied!' : 'Copy invite link'}>
+            <Button
+              variant="outlined"
+              startIcon={<ContentCopy />}
+              onClick={copyLink}
+            >
+              {copied ? 'Copied!' : 'Copy Bot Link'}
+            </Button>
+          </Tooltip>
+        </Box>
+
+        {/* Step hint */}
+        <Typography fontSize="0.75rem" color="text.disabled" textAlign="center" mt={2}>
+          After adding the bot as admin, run <code>/linkgroup</code> in the group then go to Groups → Link Group.
+        </Typography>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Compact Connect Banner (shown after hero is dismissed, still no groups) ───
 
 function ConnectBotBanner({ botUsername, connectedGroups, onDismiss }) {
   const [copied, setCopied] = useState(false);
@@ -860,7 +972,9 @@ export default function AssistantHub() {
     setBannerDismissed(true);
   };
 
-  const showBanner = !bannerDismissed && data && data.active_groups === 0;
+  const noGroups = data && data.active_groups === 0;
+  const showHero = !bannerDismissed && noGroups;
+  const showBanner = bannerDismissed && noGroups;
 
   if (loading) {
     return (
@@ -900,7 +1014,15 @@ export default function AssistantHub() {
 
           {error && <Alert severity="error" onClose={() => setError('')} sx={{ mb: 2 }}>{error}</Alert>}
 
-          {/* Connect Bot Banner */}
+          {/* Zero State Hero — shown first time, no groups connected */}
+          {showHero && (
+            <ZeroStateHero
+              botUsername={data.bot_username}
+              onDismiss={dismissBanner}
+            />
+          )}
+
+          {/* Compact Connect Banner — shown after hero dismissed, still no groups */}
           {showBanner && (
             <ConnectBotBanner
               botUsername={data.bot_username}

@@ -9,13 +9,14 @@ import {
   ArrowBack, SmartToy, Person, Lock, DeleteForever, Schedule,
   Security, CheckCircle, ContentCopy, Telegram, LinkOff, OpenInNew,
   Add, Star, StarBorder, Delete, CalendarMonth, MailOutline,
-  CardGiftcard, People,
+  CardGiftcard, People, Tour, Group, PersonAdd, Cancel,
 } from '@mui/icons-material';
-import { List, ListItem, ListItemText, ListItemSecondaryAction, Tooltip } from '@mui/material';
+import { List, ListItem, ListItemText, ListItemSecondaryAction, Tooltip, Select, MenuItem, FormControl, InputLabel, LinearProgress } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { auth, totp as totpApi, billing, userSettings, telegramAccount, googleCalendar as calApi, referrals as referralsApi } from '../services/api';
+import { auth, totp as totpApi, billing, userSettings, telegramAccount, googleCalendar as calApi, referrals as referralsApi, team as teamApi } from '../services/api';
 import { track } from '../services/analytics';
+import { resetTour } from '../components/OnboardingTour';
 import TimezoneSelect from '../components/TimezoneSelect';
 
 function safeParseUser() {
@@ -631,6 +632,225 @@ function GoogleCalendarSection() {
   );
 }
 
+// ── Team Section ──────────────────────────────────────────────────────────────
+const ROLE_LABELS = { owner: 'Owner', admin: 'Admin', member: 'Member' };
+const ROLE_COLORS = { owner: 'primary', admin: 'secondary', member: 'default' };
+
+function TeamSection() {
+  const [team, setTeam] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [teamName, setTeamName] = useState('');
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState('member');
+  const [inviting, setInviting] = useState(false);
+  const [inviteLink, setInviteLink] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const { data } = await teamApi.get();
+      setTeam(data.team || null);
+    } catch {
+      setTeam(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const createTeam = async () => {
+    if (!teamName.trim()) return;
+    setCreating(true);
+    try {
+      await teamApi.create({ name: teamName.trim() });
+      await load();
+      toast.success('Team created!');
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Failed to create team');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const invite = async () => {
+    if (!inviteEmail.trim()) return;
+    setInviting(true);
+    try {
+      const { data } = await teamApi.invite({ email: inviteEmail.trim(), role: inviteRole });
+      setInviteLink(data.invite_url);
+      setInviteEmail('');
+      toast.success('Invite created!');
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Failed to create invite');
+    } finally {
+      setInviting(false);
+    }
+  };
+
+  const removeMember = async (userId) => {
+    try {
+      await teamApi.removeMember(userId);
+      await load();
+      toast.success('Member removed');
+    } catch {
+      toast.error('Failed to remove member');
+    }
+  };
+
+  const copyLink = () => {
+    navigator.clipboard.writeText(inviteLink).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  if (loading) {
+    return (
+      <Section title="Team Members" icon={<Group color="primary" />}>
+        <LinearProgress />
+      </Section>
+    );
+  }
+
+  const me = safeParseUser();
+  const myRole = team?.members?.find(m => m.user_id === me.id)?.role;
+  const canManage = myRole === 'owner' || myRole === 'admin';
+
+  if (!team) {
+    return (
+      <Section title="Team Members" icon={<Group color="primary" />}>
+        <Typography variant="body2" color="text.secondary" mb={2}>
+          Create a team to invite collaborators to your workspace. Team members share access to your groups and settings.
+        </Typography>
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Team collaboration requires a <strong>Pro</strong> plan. Free users can create a team and invite up to 1 member.
+        </Alert>
+        <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <TextField
+            size="small"
+            label="Team name"
+            value={teamName}
+            onChange={e => setTeamName(e.target.value)}
+            placeholder="e.g. Acme Community"
+            sx={{ minWidth: 220 }}
+            onKeyDown={e => e.key === 'Enter' && createTeam()}
+          />
+          <Button
+            variant="contained"
+            startIcon={creating ? <CircularProgress size={16} color="inherit" /> : <Group />}
+            onClick={createTeam}
+            disabled={creating || !teamName.trim()}
+          >
+            Create Team
+          </Button>
+        </Box>
+      </Section>
+    );
+  }
+
+  return (
+    <Section title={`Team — ${team.name}`} icon={<Group color="primary" />}>
+      {/* Members list */}
+      <List dense disablePadding sx={{ mb: 2 }}>
+        {(team.members || []).map(m => (
+          <ListItem
+            key={m.user_id}
+            disablePadding
+            sx={{ py: 0.75, borderBottom: '1px solid', borderColor: 'divider' }}
+          >
+            <ListItemText
+              primary={m.full_name || m.email || `User #${m.user_id}`}
+              secondary={m.email}
+              primaryTypographyProps={{ variant: 'body2', fontWeight: 600 }}
+              secondaryTypographyProps={{ variant: 'caption' }}
+            />
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
+              <Chip label={ROLE_LABELS[m.role] || m.role} color={ROLE_COLORS[m.role]} size="small" />
+              {canManage && m.role !== 'owner' && m.user_id !== me.id && (
+                <Tooltip title="Remove member">
+                  <IconButton size="small" onClick={() => removeMember(m.user_id)} color="error">
+                    <Cancel sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </Tooltip>
+              )}
+            </Box>
+          </ListItem>
+        ))}
+      </List>
+
+      {/* Invite form — owners and admins only */}
+      {canManage && (
+        <Box>
+          <Typography variant="body2" fontWeight={600} mb={1.5}>Invite a new member</Typography>
+          <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'flex-start', mb: 1.5 }}>
+            <TextField
+              size="small"
+              label="Email address"
+              type="email"
+              value={inviteEmail}
+              onChange={e => setInviteEmail(e.target.value)}
+              placeholder="colleague@example.com"
+              sx={{ minWidth: 220, flex: 1 }}
+            />
+            <FormControl size="small" sx={{ minWidth: 120 }}>
+              <InputLabel>Role</InputLabel>
+              <Select label="Role" value={inviteRole} onChange={e => setInviteRole(e.target.value)}>
+                <MenuItem value="admin">Admin</MenuItem>
+                <MenuItem value="member">Member</MenuItem>
+              </Select>
+            </FormControl>
+            <Button
+              variant="contained"
+              startIcon={inviting ? <CircularProgress size={16} color="inherit" /> : <PersonAdd />}
+              onClick={invite}
+              disabled={inviting || !inviteEmail.trim()}
+            >
+              Invite
+            </Button>
+          </Box>
+
+          {/* Invite link copy */}
+          {inviteLink && (
+            <Alert
+              severity="success"
+              sx={{ mb: 1 }}
+              action={
+                <Button size="small" startIcon={<ContentCopy />} onClick={copyLink}>
+                  {copied ? 'Copied!' : 'Copy Link'}
+                </Button>
+              }
+            >
+              Invite link generated. Share it with your teammate.
+            </Alert>
+          )}
+
+          {/* Pending invites */}
+          {(team.pending_invites || []).length > 0 && (
+            <Box mt={2}>
+              <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+                Pending invites
+              </Typography>
+              {team.pending_invites.map(inv => (
+                <Box key={inv.id} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                  <Typography variant="caption" sx={{ flex: 1 }}>{inv.invited_email}</Typography>
+                  <Chip label={ROLE_LABELS[inv.role] || inv.role} size="small" variant="outlined" />
+                  <Tooltip title="Cancel invite">
+                    <IconButton size="small" onClick={() => teamApi.cancelInvite(inv.id).then(load)} color="error">
+                      <Cancel sx={{ fontSize: 14 }} />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+              ))}
+            </Box>
+          )}
+        </Box>
+      )}
+    </Section>
+  );
+}
+
 // ── Main Settings Page ─────────────────────────────────────────────────────────
 export default function Settings() {
   const navigate = useNavigate();
@@ -1004,6 +1224,23 @@ export default function Settings() {
         <Section title="Google Calendar" icon={<CalendarMonth color="primary" />}>
           <GoogleCalendarSection />
         </Section>
+
+        {/* Onboarding Tour */}
+        <Section title="Product Tour" icon={<Tour color="primary" />}>
+          <Typography variant="body2" color="text.secondary" mb={2}>
+            Replay the guided walkthrough to revisit the key features of Telegizer.
+          </Typography>
+          <Button
+            variant="outlined"
+            startIcon={<Tour />}
+            onClick={() => { resetTour(); window.location.reload(); }}
+          >
+            Retake Onboarding Tour
+          </Button>
+        </Section>
+
+        {/* Team Members */}
+        <TeamSection />
 
         {/* Data Privacy */}
         <Card sx={{ mb: 3 }}>

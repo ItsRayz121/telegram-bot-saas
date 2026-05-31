@@ -88,7 +88,7 @@ function SectionLabel({ label }) {
 }
 
 // ── Single nav item ────────────────────────────────────────────────────────────
-function NavItem({ label, path, icon: Icon, badge, badgeCount, active, onClick, indent, dimmed, collapsed, aiAccent }) {
+function NavItem({ label, path, icon: Icon, badge, badgeCount, active, onClick, indent, dimmed, collapsed, aiAccent, tourId }) {
   const navigate = useNavigate();
   const handleClick = onClick || (() => navigate(path));
 
@@ -105,7 +105,7 @@ function NavItem({ label, path, icon: Icon, badge, badgeCount, active, onClick, 
   if (collapsed) {
     return (
       <Tooltip title={label} placement="right">
-        <ListItem disablePadding sx={{ display: 'block' }}>
+        <ListItem id={tourId} disablePadding sx={{ display: 'block' }}>
           <ListItemButton
             onClick={handleClick}
             sx={{
@@ -133,7 +133,7 @@ function NavItem({ label, path, icon: Icon, badge, badgeCount, active, onClick, 
   }
 
   return (
-    <ListItem disablePadding sx={{ display: 'block' }}>
+    <ListItem id={tourId} disablePadding sx={{ display: 'block' }}>
       <ListItemButton
         onClick={handleClick}
         sx={{
@@ -509,23 +509,23 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
       {/* ── Nav list ── */}
       <List dense disablePadding sx={{ flex: 1, py: 0.5 }}>
 
-        <NavItem label="Dashboard" path="/dashboard" icon={Home} active={isActive('/dashboard', true)} onClick={() => nav('/dashboard')} />
+        <NavItem label="Dashboard" path="/dashboard" icon={Home} active={isActive('/dashboard', true)} onClick={() => nav('/dashboard')} tourId="tour-dashboard" />
 
         {/* GROUPS */}
         <SectionLabel label="Groups" />
-        <NavItem label="Groups" path="/groups" icon={Groups} active={groupActive} onClick={() => nav('/groups')} />
+        <NavItem label="Groups" path="/groups" icon={Groups} active={groupActive} onClick={() => nav('/groups')} tourId="tour-groups" />
 
         {/* ECHO */}
         <HubSectionLabel />
-        <NavItem label={assistantName} icon={Psychology} path="/ark" active={assistantActive} aiAccent onClick={() => nav('/ark')} />
+        <NavItem label={assistantName} icon={Psychology} path="/ark" active={assistantActive} aiAccent onClick={() => nav('/ark')} tourId="tour-echo" />
 
         {/* AUTOMATION */}
         <SectionLabel label="Automation" />
-        <NavItem label="Automation" icon={AutoMode} path="/automation" active={automationActive} onClick={() => nav('/automation')} />
+        <NavItem label="Automation" icon={AutoMode} path="/automation" active={automationActive} onClick={() => nav('/automation')} tourId="tour-automation" />
 
         <NavItem label="Referrals" path="/referrals" icon={EmojiEvents} active={isActive('/referrals')} onClick={() => nav('/referrals')} />
 
-        <NavItem label="Settings" path="/settings" icon={Settings} active={isActive('/settings')} onClick={() => nav('/settings')} />
+        <NavItem label="Settings" path="/settings" icon={Settings} active={isActive('/settings')} onClick={() => nav('/settings')} tourId="tour-settings" />
 
       </List>
 
