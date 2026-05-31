@@ -17,7 +17,7 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from ..models import IntegrationWebhook, User, db
 from ..middleware.rate_limit import rate_limit
-from ..integrations.dispatcher import SUPPORTED_EVENTS
+from ..integrations.dispatcher import SUPPORTED_EVENTS, EVENT_CATALOG
 
 _log = logging.getLogger(__name__)
 
@@ -186,3 +186,11 @@ def test_webhook(hook_id: int):
         })
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 200
+
+
+@integration_webhooks_bp.route("/event-types", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def list_event_types():
+    """Return the full event catalog with sample payloads."""
+    return jsonify({"events": EVENT_CATALOG})

@@ -125,6 +125,12 @@ class Config:
     TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
     TELEGRAM_BOT_USERNAME = os.environ.get("TELEGRAM_BOT_USERNAME", "telegizer_bot")
 
+    # Custom bot webhook mode — set to the public HTTPS URL of this service.
+    # When set, custom bots register a Telegram webhook instead of long-polling.
+    # Example: https://api.telegizer.com  (no trailing slash)
+    # Leave empty to keep polling mode (default / local dev).
+    CUSTOM_BOT_WEBHOOK_BASE_URL = os.environ.get("CUSTOM_BOT_WEBHOOK_BASE_URL", "")
+
     # Telegizer Echo — dedicated official assistant bot (Observer/Hub features)
     # Set ECHO_BOT_TOKEN and ECHO_BOT_USERNAME in Railway → Variables.
     # When not set, the assistant hub falls back to TELEGRAM_BOT_USERNAME for display.

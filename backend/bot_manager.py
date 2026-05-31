@@ -2823,35 +2823,82 @@ class BotInstance:
         except Exception as _e:
             logger.warning(f"Bot {self.bot_id}: set_my_description failed: {_e}")
 
-        # If this bot had a webhook registered (e.g. via Hub custom-bot creation),
-        # it must be deleted before polling starts — Telegram routes all updates to
-        # the webhook and getUpdates returns nothing while one is active.
-        try:
-            await app.bot.delete_webhook(drop_pending_updates=False)
-            logger.info(f"Bot {self.bot_id}: webhook deleted, starting polling")
-        except Exception as _whe:
-            logger.warning(f"Bot {self.bot_id}: delete_webhook failed (ok if none set): {_whe}")
+        from .config import Config
+        webhook_base = (Config.CUSTOM_BOT_WEBHOOK_BASE_URL or "").rstrip("/")
 
-        await app.updater.start_polling(drop_pending_updates=True)
+        if webhook_base:
+            # ── Webhook mode ──────────────────────────────────────────────────
+            import secrets as _secrets
+            webhook_secret = _secrets.token_urlsafe(32)
 
-        try:
-            while not self._stop_event.is_set():
-                await asyncio.sleep(1)
-        finally:
-            # Always shut down the Application cleanly so the next polling attempt
-            # does not get a Telegram Conflict error (409).
+            # Persist secret so the Flask route can validate incoming requests
             try:
-                await app.updater.stop()
-            except Exception:
-                pass
+                with self.app_context.app_context():
+                    from .models import db, Bot
+                    bot_rec = Bot.query.get(self.bot_id)
+                    if bot_rec:
+                        bot_rec.webhook_secret = webhook_secret
+                        db.session.commit()
+            except Exception as _se:
+                logger.warning(f"Bot {self.bot_id}: could not save webhook_secret: {_se}")
+
+            webhook_url = f"{webhook_base}/api/telegram/custom/{self.bot_id}"
             try:
-                await app.stop()
-            except Exception:
-                pass
+                await app.bot.set_webhook(
+                    url=webhook_url,
+                    secret_token=webhook_secret,
+                    drop_pending_updates=True,
+                )
+                logger.info(f"Bot {self.bot_id}: webhook registered at {webhook_url}")
+            except Exception as _whe:
+                logger.error(f"Bot {self.bot_id}: set_webhook failed: {_whe}")
+
+            # Keep the Application alive; updates arrive via Flask route
             try:
-                await app.shutdown()
-            except Exception:
-                pass
+                while not self._stop_event.is_set():
+                    await asyncio.sleep(1)
+            finally:
+                try:
+                    await app.bot.delete_webhook()
+                except Exception:
+                    pass
+                try:
+                    await app.stop()
+                except Exception:
+                    pass
+                try:
+                    await app.shutdown()
+                except Exception:
+                    pass
+        else:
+            # ── Polling mode (default / local dev) ────────────────────────────
+            # Delete any leftover webhook before polling — Telegram routes all
+            # updates to the webhook and getUpdates returns nothing while set.
+            try:
+                await app.bot.delete_webhook(drop_pending_updates=False)
+                logger.info(f"Bot {self.bot_id}: webhook deleted, starting polling")
+            except Exception as _whe:
+                logger.warning(f"Bot {self.bot_id}: delete_webhook failed (ok if none set): {_whe}")
+
+            await app.updater.start_polling(drop_pending_updates=True)
+
+            try:
+                while not self._stop_event.is_set():
+                    await asyncio.sleep(1)
+            finally:
+                # Shut down cleanly to avoid Telegram Conflict (409) on Railway deploys.
+                try:
+                    await app.updater.stop()
+                except Exception:
+                    pass
+                try:
+                    await app.stop()
+                except Exception:
+                    pass
+                try:
+                    await app.shutdown()
+                except Exception:
+                    pass
 
 
 class BotManager:
@@ -2965,6 +3012,31 @@ class BotManager:
         with self._lock:
             count = len(self.active_bots)
         logger.info(f"Started {count} bots")
+
+    def route_update(self, bot_id: int, update_data: dict) -> bool:
+        """Dispatch a Telegram update JSON to the correct bot's Application.
+
+        Called from the Flask webhook route. Uses run_coroutine_threadsafe to
+        bridge the Flask thread into the bot's asyncio event loop.
+        Returns True if routed, False if bot not found or loop unavailable.
+        """
+        with self._lock:
+            instance = self.active_bots.get(bot_id)
+        if not instance or not instance.application or not instance.loop:
+            logger.warning(f"route_update: bot {bot_id} not found or not ready")
+            return False
+        try:
+            from telegram import Update
+            update = Update.de_json(update_data, instance.application.bot)
+            future = asyncio.run_coroutine_threadsafe(
+                instance.application.process_update(update),
+                instance.loop,
+            )
+            future.result(timeout=30)
+            return True
+        except Exception as exc:
+            logger.error(f"route_update: bot {bot_id} processing error: {exc}")
+            return False
 
 
 bot_manager = BotManager()

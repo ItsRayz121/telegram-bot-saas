@@ -5,7 +5,7 @@ import {
   Chip, Divider, Avatar,
 } from '@mui/material';
 import {
-  Send, AutoMode, ArrowForward, FlashOn, CallSplit, AccountTree,
+  Send, AutoMode, ArrowForward, FlashOn, CallSplit, AccountTree, Code,
 } from '@mui/icons-material';
 import { PALETTE } from '../theme';
 
@@ -47,6 +47,18 @@ const MODULES = [
     title: 'Workflow Builder',
     description: 'Visual node-based editor. Drag and connect triggers, conditions, and actions without writing any code.',
     tags: ['Visual', 'No-Code', 'Pro'],
+    badge: 'New',
+  },
+  {
+    key: 'integrations',
+    path: '/integrations',
+    icon: Code,
+    iconColor: '#f97316',
+    iconBg: '#f9731618',
+    glowColor: 'rgba(249,115,22,0.15)',
+    title: 'Integrations',
+    description: 'Send real-time events to Zapier, Make, n8n, or any HTTP endpoint. Deliveries retry automatically.',
+    tags: ['Zapier', 'Make', 'Webhook'],
     badge: 'New',
   },
 ];

@@ -1,3 +1,4 @@
+import hmac
 import os
 import uuid
 import threading
@@ -93,7 +94,12 @@ import signal as _signal
 
 
 def _graceful_bot_shutdown(*_):
-    """Stop all custom bot pollers so Telegram releases their sessions."""
+    """Stop all custom bot pollers/webhook listeners and unblock retry sleeps."""
+    try:
+        from .integrations.dispatcher import signal_shutdown
+        signal_shutdown()
+    except Exception:
+        pass
     try:
         bot_manager.stop_all(timeout_per_bot=8)
     except Exception as exc:
@@ -247,6 +253,26 @@ def create_app():
     app.register_blueprint(team_bp)
 
     app.bot_manager = bot_manager
+
+    # ── Custom bot Telegram webhook receiver ──────────────────────────────────
+    @app.route("/api/telegram/custom/<int:bot_id>", methods=["POST"])
+    def custom_bot_webhook_update(bot_id):
+        """Receive Telegram updates for a custom bot running in webhook mode.
+
+        Telegram sends X-Telegram-Bot-Api-Secret-Token header; we validate it
+        against the per-bot webhook_secret stored in the DB before routing.
+        """
+        from .models import Bot
+        secret_header = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+        bot_rec = Bot.query.get(bot_id)
+        if not bot_rec or not bot_rec.webhook_secret:
+            return jsonify({"error": "not found"}), 404
+        if not hmac.compare_digest(secret_header, bot_rec.webhook_secret):
+            return jsonify({"error": "forbidden"}), 403
+
+        update_data = request.get_json(silent=True) or {}
+        bot_manager.route_update(bot_id, update_data)
+        return "", 200
 
     @app.route("/health")
     @app.route("/api/health")

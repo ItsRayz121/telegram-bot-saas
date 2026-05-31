@@ -279,6 +279,9 @@ class Bot(db.Model):
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     last_active = db.Column(db.DateTime, nullable=True)
+    # Secret token used to validate incoming Telegram webhook POSTs in webhook mode.
+    # Generated on first webhook registration; None means bot uses polling mode.
+    webhook_secret = db.Column(db.String(64), nullable=True)
 
     groups = db.relationship("Group", backref="bot", lazy=True, cascade="all, delete-orphan")
 

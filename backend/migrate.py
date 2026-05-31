@@ -26,6 +26,11 @@ def init_db():
         print("Applying schema additions…")
         _run_alter(
             db.engine,
+            "ALTER TABLE bots ADD COLUMN IF NOT EXISTS webhook_secret VARCHAR(64)",
+            "bots.webhook_secret",
+        )
+        _run_alter(
+            db.engine,
             "ALTER TABLE payment_history ADD COLUMN IF NOT EXISTS billing_period VARCHAR(10) DEFAULT 'monthly'",
             "payment_history.billing_period",
         )
