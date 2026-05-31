@@ -1515,7 +1515,7 @@ def hard_delete_user(user_id: int):
         logger.error("hard_delete_user error for user %s: %s", user_id, exc)
 
 
-@celery_app.task(name="backend.scheduler.reset_xp_period")
+@celery.task(name="backend.scheduler.reset_xp_period")
 def reset_xp_period(period):
     """Reset period XP snapshot columns (xp_1d/xp_7d/xp_30d) for all members."""
     col_map = {"1d": "xp_1d", "7d": "xp_7d", "30d": "xp_30d"}

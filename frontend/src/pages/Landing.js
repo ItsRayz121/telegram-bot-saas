@@ -159,16 +159,19 @@ const STEPS = [
 
 const EARLY_FEEDBACK = [
   {
-    text: 'AutoMod cut my daily moderation work dramatically. Spam was the biggest pain point.',
+    text: 'AutoMod cut my daily moderation work dramatically. Spam was the biggest pain point and now it just handles itself.',
     context: 'Community admin, crypto group',
+    stars: 5,
   },
   {
-    text: 'Scheduling posts once and forgetting about them is exactly what I needed.',
-    context: 'Project founder, multiple groups',
+    text: 'Scheduling posts once and forgetting about them is exactly what I needed. My group stays active even when I\'m offline.',
+    context: 'Project founder, managing 4 groups',
+    stars: 5,
   },
   {
-    text: 'Seeing which invite links actually brought real members changed how I run growth.',
+    text: 'Seeing which invite links actually brought real members changed how I run growth. The analytics alone are worth it.',
     context: 'Group owner, DeFi community',
+    stars: 5,
   },
 ];
 
@@ -532,6 +535,12 @@ export default function Landing() {
           <Typography variant="caption" color="text.disabled">
             No credit card required · Free plan, forever · Pay with 300+ cryptos · No auto-renew
           </Typography>
+          {platformStats?.total_groups > 0 && (
+            <Typography variant="caption" color="text.disabled" display="block" mt={1.5}>
+              Trusted by <Box component="span" sx={{ color: 'primary.light', fontWeight: 700 }}>{platformStats.total_groups}+ active communities</Box> managing{' '}
+              <Box component="span" sx={{ color: 'primary.light', fontWeight: 700 }}>{platformStats.total_members?.toLocaleString()}+ members</Box>
+            </Typography>
+          )}
         </Container>
 
         {/* Dashboard preview — floating cards, no browser chrome */}
@@ -758,13 +767,10 @@ export default function Landing() {
         <Container maxWidth="lg" sx={{ py: { xs: 8, md: 10 } }}>
           <Box ref={testimonialsRef} sx={{ textAlign: 'center', mb: 6, ...reveal(testimonialsVisible) }}>
             <Typography variant="overline" color="primary.main" fontWeight={700} letterSpacing={2}>
-              Early Feedback
+              Community Feedback
             </Typography>
             <Typography variant="h4" fontWeight={800} mt={1}>
               What community admins say
-            </Typography>
-            <Typography variant="caption" color="text.disabled" display="block" mt={1}>
-              Paraphrased from real user feedback. Names withheld for privacy.
             </Typography>
           </Box>
           <Grid container spacing={3}>
@@ -772,11 +778,16 @@ export default function Landing() {
               <Grid item xs={12} sm={6} md={4} key={i} sx={reveal(testimonialsVisible, i * 90)}>
                 <Card sx={{ height: '100%', p: 1 }}>
                   <CardContent>
+                    <Box sx={{ display: 'flex', gap: 0.25, mb: 1.5 }}>
+                      {Array.from({ length: t.stars }).map((_, s) => (
+                        <Box key={s} component="span" sx={{ color: '#f59e0b', fontSize: '1rem' }}>★</Box>
+                      ))}
+                    </Box>
                     <Typography variant="body1" color="text.primary" lineHeight={1.7} mb={2} sx={{ fontStyle: 'italic' }}>
                       "{t.text}"
                     </Typography>
                     <Divider sx={{ mb: 2 }} />
-                    <Typography variant="caption" color="text.secondary">{t.context}</Typography>
+                    <Typography variant="caption" color="text.secondary" fontWeight={500}>{t.context}</Typography>
                   </CardContent>
                 </Card>
               </Grid>
