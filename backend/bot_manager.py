@@ -201,6 +201,15 @@ class BotInstance:
         self.moderation = ModerationSystem(app_context)
         self.knowledge_base = KnowledgeBaseSystem(app_context)
 
+    def _record_health_error(self, detail: str):
+        """Record a polling failure for the admin Bot Health tab. Never raises."""
+        try:
+            from .health import record_bot_error
+            with self.app_context.app_context():
+                record_bot_error("custom", self.bot_id, "handler", detail)
+        except Exception:
+            pass
+
     def _get_group(self, chat_id):
         with self.app_context.app_context():
             from .models import Bot, Group
@@ -2702,6 +2711,7 @@ class BotInstance:
                     logger.error(
                         f"Bot {self.bot_id}: invalid/unauthorized token — stopping permanently: {e}"
                     )
+                    self._record_health_error("invalid token — stopped: %s" % e)
                     break
                 elif isinstance(e, Conflict):
                     wait = 15 * (attempt + 1)
@@ -2718,6 +2728,7 @@ class BotInstance:
                         f"Retrying in {wait}s (attempt {attempt + 1}/{max_retries})",
                         exc_info=True,
                     )
+                    self._record_health_error(f"polling crashed ({type(e).__name__}): {e}")
                     time.sleep(wait)
 
     async def _start_polling(self):

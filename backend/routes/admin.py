@@ -795,26 +795,29 @@ def admin_bot_health():
     except Exception as e:
         _log.warning("bot-health official summary failed: %s", e)
 
-    paginated = CustomBot.query.order_by(CustomBot.created_at.desc()).paginate(
+    # Query the Bot model — the canonical list shown on the user dashboard
+    # (every community/custom bot has a Bot row used by the polling engine).
+    paginated = Bot.query.order_by(Bot.created_at.desc()).paginate(
         page=page, per_page=per_page, error_out=False
     )
     bots = []
-    owner_ids = {b.owner_user_id for b in paginated.items if b.owner_user_id}
+    owner_ids = {b.user_id for b in paginated.items if b.user_id}
     owners = {}
     if owner_ids:
         for u in User.query.filter(User.id.in_(owner_ids)).all():
             owners[u.id] = u
     for b in paginated.items:
-        owner = owners.get(b.owner_user_id)
+        owner = owners.get(b.user_id)
         bots.append({
             "id": b.id,
             "bot_username": b.bot_username,
             "bot_name": b.bot_name,
             "owner_email": owner.email if owner else None,
-            "status": b.status,
+            "status": b.get_health_status(),      # active | idle | offline | unreachable
+            "is_active": b.is_active,
             "error_count_24h": int(counts_by_ref.get(str(b.id), 0)),
             "last_error_at": last_err_by_ref.get(str(b.id)),
-            "last_active": b.updated_at.isoformat() if b.updated_at else None,
+            "last_active": b.last_active.isoformat() if b.last_active else None,
         })
 
     total_errors_24h = 0
@@ -850,17 +853,17 @@ def admin_bot_health_ping():
     bot_id = data.get("id")
 
     token = None
-    custom_bot = None
+    bot_row = None
     if scope == "official":
         token = Config.TELEGRAM_BOT_TOKEN
         if not token:
             return jsonify({"ok": False, "error": "TELEGRAM_BOT_TOKEN not set"}), 200
     elif scope == "custom":
-        custom_bot = CustomBot.query.get(bot_id)
-        if not custom_bot:
+        bot_row = Bot.query.get(bot_id)
+        if not bot_row:
             return jsonify({"error": "Bot not found"}), 404
         try:
-            token = custom_bot.get_token()
+            token = bot_row.get_token()
         except Exception as e:
             return jsonify({"ok": False, "error": f"Token decrypt failed: {e}"}), 200
     else:
@@ -871,23 +874,19 @@ def admin_bot_health_ping():
         body = resp.json()
         if resp.status_code == 200 and body.get("ok"):
             username = body.get("result", {}).get("username")
-            if custom_bot is not None and custom_bot.status == "error":
-                custom_bot.status = "active"
-                db.session.commit()
-            return jsonify({"ok": True, "username": username})
+            # Note: a reachable token does NOT mean the bot is enabled — is_active
+            # may still be False (owner stopped it). We report reachability only and
+            # don't auto-flip is_active to avoid silently restarting a stopped bot.
+            return jsonify({"ok": True, "username": username, "is_active": bot_row.is_active if bot_row else True})
         err = body.get("description") or f"HTTP {resp.status_code}"
-        if custom_bot is not None:
-            custom_bot.status = "error"
-            db.session.commit()
+        if bot_row is not None:
             from ..health import record_bot_error
-            record_bot_error("custom", custom_bot.id, "handler", f"getMe: {err}")
+            record_bot_error("custom", bot_row.id, "handler", f"getMe: {err}")
         return jsonify({"ok": False, "error": err})
     except Exception as e:
-        if custom_bot is not None:
-            custom_bot.status = "error"
-            db.session.commit()
+        if bot_row is not None:
             from ..health import record_bot_error
-            record_bot_error("custom", custom_bot.id, "handler", f"getMe: {e}")
+            record_bot_error("custom", bot_row.id, "handler", f"getMe: {e}")
         return jsonify({"ok": False, "error": str(e)[:200]})
 
 

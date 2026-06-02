@@ -2027,10 +2027,17 @@ function BotHealthTab({ onAdminError }) {
     try {
       const res = await admin.pingBot({ scope, id });
       const ok = !!res.data.ok;
-      const text = ok ? `@${res.data.username || 'bot'} is alive` : (res.data.error || 'No response');
-      setPingResult((m) => ({ ...m, [key]: { ok, text } }));
-      ok ? toast.success(`✅ ${text}`) : toast.error(`❌ ${text}`);
-      fetch(page);   // refresh statuses (custom bot may have flipped to error/active)
+      const disabled = ok && res.data.is_active === false;
+      const text = ok
+        ? (disabled
+            ? `@${res.data.username || 'bot'} token works, but the bot is STOPPED (won't process messages until enabled)`
+            : `@${res.data.username || 'bot'} is alive`)
+        : (res.data.error || 'No response');
+      setPingResult((m) => ({ ...m, [key]: { ok: ok && !disabled, text } }));
+      if (!ok) toast.error(`❌ ${text}`);
+      else if (disabled) toast.warning(`⚠️ ${text}`);
+      else toast.success(`✅ ${text}`);
+      fetch(page);   // refresh statuses
     } catch (err) {
       setPingResult((m) => ({ ...m, [key]: { ok: false, text: 'Request failed' } }));
       toast.error('Ping request failed');
@@ -2060,16 +2067,18 @@ function BotHealthTab({ onAdminError }) {
       {/* Intro */}
       <Alert severity="info" sx={{ mb: 2, borderRadius: 2 }}>
         <Typography variant="body2">
-          Press <b>Ping</b> to test a bot live against Telegram right now. The <b>Errors (24h)</b>
-          {' '}column shows failures recorded automatically (AI, commands, handlers, webhooks) —
-          click a number to see details.
+          Press <b>Ping</b> to test a bot live against Telegram right now. <b>Status</b> reflects
+          recent activity: <b>active</b> = working,&nbsp;<b>idle</b> = no activity in 7+ days,
+          {' '}<b>offline</b> = stopped by owner, <b>unreachable</b> = silent 30+ days. The
+          {' '}<b>Errors (24h)</b> column shows failures recorded automatically (polling crashes,
+          AI, commands, webhooks) — click a number to see details.
         </Typography>
       </Alert>
 
       {/* Summary cards */}
       <Grid container spacing={2} mb={1}>
         <Grid item xs={6} md={3}>
-          <StatCard label="Custom bots" value={data?.totals?.total_custom_bots ?? 0} color="#7c4dff" icon={SmartToy} />
+          <StatCard label="Community bots" value={data?.totals?.total_custom_bots ?? 0} color="#7c4dff" icon={SmartToy} />
         </Grid>
         <Grid item xs={6} md={3}>
           <StatCard label="Errors (last 24h)" value={data?.totals?.errors_24h ?? 0}
@@ -2117,7 +2126,7 @@ function BotHealthTab({ onAdminError }) {
       </Card>
 
       <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
-        <Typography variant="subtitle1" fontWeight={700}>Custom bots</Typography>
+        <Typography variant="subtitle1" fontWeight={700}>Community bots</Typography>
         <Button size="small" startIcon={<Refresh />} onClick={() => fetch(page)}>Refresh</Button>
       </Stack>
 
@@ -2147,11 +2156,11 @@ function BotHealthTab({ onAdminError }) {
                       </TableCell>
                       <TableCell><Typography variant="body2">{b.owner_email || '—'}</Typography></TableCell>
                       <TableCell>
-                        <StatusChip label={b.status} />
+                        <StatusChip label={b.status} map={{ active: 'success', idle: 'warning', offline: 'default', unreachable: 'error' }} />
                         {pr && (
                           <Tooltip title={pr.text}>
                             <Chip size="small" sx={{ ml: 0.5 }} color={pr.ok ? 'success' : 'error'}
-                              label={pr.ok ? 'live' : 'down'} />
+                              label={pr.ok ? 'reachable' : 'down'} />
                           </Tooltip>
                         )}
                       </TableCell>
