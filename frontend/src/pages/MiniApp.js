@@ -1,8 +1,27 @@
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Box, CircularProgress, Typography, Button } from '@mui/material';
+import { Box, CircularProgress, Typography, Button, Paper } from '@mui/material';
 import { ErrorOutline } from '@mui/icons-material';
 import { useTelegram } from '../contexts/TelegramContext';
+
+// Snapshot of the live Telegram/browser state — used to diagnose why auth didn't start.
+function collectDiagnostics() {
+  const tg = (typeof window !== 'undefined' && window.Telegram && window.Telegram.WebApp) || null;
+  const u = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
+  return {
+    isTelegramFlag: typeof window !== 'undefined' ? !!window.__IS_TELEGRAM__ : false,
+    hasTelegramObj: typeof window !== 'undefined' ? !!window.Telegram : false,
+    hasWebApp: !!tg,
+    initDataLen: tg && tg.initData ? tg.initData.length : 0,
+    user: u ? `${u.id} ${u.first_name || ''}`.trim() : '(none)',
+    platform: tg ? tg.platform : '(n/a)',
+    version: tg ? tg.version : '(n/a)',
+    hash: typeof window !== 'undefined' ? (window.location.hash || '(empty)') : '',
+    href: typeof window !== 'undefined' ? window.location.href : '',
+    ua: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+    apiUrl: process.env.REACT_APP_API_URL || '(same-origin)',
+  };
+}
 
 function LoadingScreen() {
   return (
@@ -13,15 +32,42 @@ function LoadingScreen() {
   );
 }
 
-function ErrorScreen({ message }) {
+// Shows the failure reason + live Telegram state so we can see what the device provides.
+function DiagnosticScreen({ title, message, authError }) {
+  const d = collectDiagnostics();
+  const rows = [
+    ['__IS_TELEGRAM__', String(d.isTelegramFlag)],
+    ['window.Telegram', String(d.hasTelegramObj)],
+    ['WebApp object', String(d.hasWebApp)],
+    ['initData length', String(d.initDataLen)],
+    ['Telegram user', d.user],
+    ['platform', d.platform],
+    ['version', d.version],
+    ['API URL', d.apiUrl],
+    ['auth error', authError || '(none)'],
+    ['hash', d.hash],
+    ['UA', d.ua],
+  ];
   return (
-    <Box sx={{ p: 3, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', gap: 2 }}>
-      <ErrorOutline sx={{ fontSize: 56, color: 'error.main' }} />
-      <Typography variant="h6" fontWeight={700}>Authentication failed</Typography>
-      <Typography variant="body2" color="text.secondary">
-        {message || 'Could not open Telegizer. Please close and reopen the app.'}
-      </Typography>
-      <Button variant="outlined" onClick={() => window.location.reload()}>Retry</Button>
+    <Box sx={{ p: 2.5, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', minHeight: '100vh', gap: 2 }}>
+      <ErrorOutline sx={{ fontSize: 48, color: 'warning.main', mt: 2 }} />
+      <Typography variant="h6" fontWeight={700} textAlign="center">{title}</Typography>
+      <Typography variant="body2" color="text.secondary" textAlign="center">{message}</Typography>
+      <Paper variant="outlined" sx={{ p: 1.5, width: '100%', maxWidth: 480, bgcolor: 'rgba(0,0,0,0.3)' }}>
+        <Typography variant="caption" fontWeight={700} color="text.secondary">Diagnostics (screenshot this)</Typography>
+        <Box component="dl" sx={{ m: 0, mt: 1, display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 1.5, rowGap: 0.5 }}>
+          {rows.map(([k, v]) => (
+            <React.Fragment key={k}>
+              <Typography component="dt" variant="caption" sx={{ color: 'text.secondary', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{k}</Typography>
+              <Typography component="dd" variant="caption" sx={{ m: 0, fontFamily: 'monospace', wordBreak: 'break-all' }}>{v}</Typography>
+            </React.Fragment>
+          ))}
+        </Box>
+      </Paper>
+      <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', justifyContent: 'center' }}>
+        <Button variant="contained" onClick={() => window.location.reload()}>Retry</Button>
+        <Button variant="outlined" onClick={() => window.location.replace('/')}>Open website</Button>
+      </Box>
     </Box>
   );
 }
@@ -34,25 +80,24 @@ export default function MiniApp() {
     if (status === 'ok') {
       navigate('/dashboard', { replace: true });
     }
-    if (status === 'no_webapp') {
-      // Opened outside Telegram — go to the normal website.
-      window.location.replace('/');
-    }
     if (status === 'no_init_data') {
-      // initData missing but WebApp object exists (e.g. Telegram Desktop edge case).
-      // If there's already a valid session from a prior TMA auth, use it.
+      // initData missing but WebApp object exists — if a prior session exists, use it.
       const token = localStorage.getItem('token');
-      if (token) {
-        navigate('/dashboard', { replace: true });
-      }
+      if (token) navigate('/dashboard', { replace: true });
     }
   }, [status, navigate]);
 
-  if (status === 'error') return <ErrorScreen message={authError} />;
+  // NOTE: temporary diagnostics. Previously no_webapp silently redirected to '/',
+  // which hid the failure reason. Show the live Telegram state instead.
+  if (status === 'error') {
+    return <DiagnosticScreen title="Authentication failed" message="Telegram session reached the server but was rejected." authError={authError} />;
+  }
+  if (status === 'no_webapp') {
+    return <DiagnosticScreen title="Not detected as Telegram" message="window.Telegram.WebApp was never provided by the client." authError={authError} />;
+  }
   if (status === 'no_init_data') {
-    // No existing session to fall back to — show actionable error.
     const hasToken = !!localStorage.getItem('token');
-    if (!hasToken) return <ErrorScreen message="Could not read Telegram session data. Please close and reopen the app." />;
+    if (!hasToken) return <DiagnosticScreen title="No Telegram session data" message="The WebApp object exists, but initData was empty." authError={authError} />;
     return <LoadingScreen />;
   }
 
