@@ -62,6 +62,11 @@ def receive_telegram_update(token_hash: str):
             loop.close()
         except Exception as exc:
             _log.error("assistant update dispatch error: %s", exc, exc_info=True)
+            try:
+                from ..health import record_bot_error
+                record_bot_error("assistant", matched_assistant.id, "webhook", str(exc))
+            except Exception:
+                pass
         return jsonify({"ok": True}), 200
 
     # ── 2. Try custom Hub bot match (HubBotIdentity with bot_type='custom') ──
@@ -84,6 +89,11 @@ def receive_telegram_update(token_hash: str):
                 loop.close()
             except Exception as exc:
                 _log.error("hub custom bot dispatch error: %s", exc, exc_info=True)
+                try:
+                    from ..health import record_bot_error
+                    record_bot_error("custom", matched_hub.id, "webhook", str(exc))
+                except Exception:
+                    pass
             return jsonify({"ok": True}), 200
     except Exception as exc:
         _log.debug("hub bot match error: %s", exc)

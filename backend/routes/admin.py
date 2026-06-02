@@ -6,7 +6,7 @@ import json
 import logging
 from ..models import (
     db, User, Bot, Group, Member, SuspiciousActivity, Referral,
-    TelegramGroup, CustomBot, BotEvent, AdminAuditLog, DirectoryListing,
+    TelegramGroup, CustomBot, BotEvent, BotHealthEvent, AdminAuditLog, DirectoryListing,
     PaymentHistory, SubscriptionRenewal, UserNotification, AdminAnnouncement,
     ReportedMessage, OfficialReportedMessage,
     AutomationWorkflow, WorkspaceReminder, Note, Channel, KnowledgeDocument,
@@ -728,6 +728,185 @@ def admin_list_custom_bots():
         "pages": paginated.pages,
         "page": page,
     })
+
+
+# ── Bot Health ─────────────────────────────────────────────────────────────────
+
+@admin_bp.route("/bot-health", methods=["GET"])
+@admin_required
+@rate_limit(requests_per_minute=30)
+def admin_bot_health():
+    """Health overview: official bot + paginated custom bots with 24h error counts.
+
+    Errors come from the bot_health_events table (populated as failures happen).
+    Liveness is verified on demand via POST /bot-health/ping.
+    """
+    page = request.args.get("page", 1, type=int)
+    per_page = min(request.args.get("per_page", 25, type=int), 100)
+    since = datetime.utcnow() - timedelta(hours=24)
+
+    # One grouped query → {ref: count} for all custom-bot errors in the window.
+    counts_by_ref = {}
+    try:
+        rows = (
+            db.session.query(BotHealthEvent.ref, db.func.count(BotHealthEvent.id))
+            .filter(BotHealthEvent.created_at >= since, BotHealthEvent.scope == "custom")
+            .group_by(BotHealthEvent.ref)
+            .all()
+        )
+        counts_by_ref = {ref: cnt for ref, cnt in rows}
+    except Exception as e:
+        _log.warning("bot-health custom counts failed: %s", e)
+
+    # Last error timestamp per custom bot (most recent per ref).
+    last_err_by_ref = {}
+    try:
+        err_rows = (
+            BotHealthEvent.query.filter(BotHealthEvent.scope == "custom")
+            .order_by(BotHealthEvent.created_at.desc())
+            .limit(500)
+            .all()
+        )
+        for r in err_rows:
+            if r.ref and r.ref not in last_err_by_ref:
+                last_err_by_ref[r.ref] = r.created_at.isoformat()
+    except Exception as e:
+        _log.warning("bot-health last-error lookup failed: %s", e)
+
+    # Official bot summary.
+    official = {"error_count_24h": 0, "last_error": None}
+    try:
+        official["error_count_24h"] = BotHealthEvent.query.filter(
+            BotHealthEvent.scope.in_(["official", "ai"]),
+            BotHealthEvent.created_at >= since,
+        ).count()
+        last = (
+            BotHealthEvent.query.filter(BotHealthEvent.scope.in_(["official", "ai"]))
+            .order_by(BotHealthEvent.created_at.desc())
+            .first()
+        )
+        if last:
+            official["last_error"] = {
+                "detail": last.detail,
+                "category": last.category,
+                "ref": last.ref,
+                "created_at": last.created_at.isoformat(),
+            }
+    except Exception as e:
+        _log.warning("bot-health official summary failed: %s", e)
+
+    paginated = CustomBot.query.order_by(CustomBot.created_at.desc()).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+    bots = []
+    owner_ids = {b.owner_user_id for b in paginated.items if b.owner_user_id}
+    owners = {}
+    if owner_ids:
+        for u in User.query.filter(User.id.in_(owner_ids)).all():
+            owners[u.id] = u
+    for b in paginated.items:
+        owner = owners.get(b.owner_user_id)
+        bots.append({
+            "id": b.id,
+            "bot_username": b.bot_username,
+            "bot_name": b.bot_name,
+            "owner_email": owner.email if owner else None,
+            "status": b.status,
+            "error_count_24h": int(counts_by_ref.get(str(b.id), 0)),
+            "last_error_at": last_err_by_ref.get(str(b.id)),
+            "last_active": b.updated_at.isoformat() if b.updated_at else None,
+        })
+
+    total_errors_24h = 0
+    try:
+        total_errors_24h = BotHealthEvent.query.filter(
+            BotHealthEvent.created_at >= since
+        ).count()
+    except Exception:
+        pass
+
+    return jsonify({
+        "official": official,
+        "custom_bots": bots,
+        "total": paginated.total,
+        "pages": paginated.pages,
+        "page": page,
+        "totals": {
+            "total_custom_bots": paginated.total,
+            "errors_24h": total_errors_24h,
+        },
+    })
+
+
+@admin_bp.route("/bot-health/ping", methods=["POST"])
+@admin_required
+@rate_limit(requests_per_minute=30)
+def admin_bot_health_ping():
+    """Active reachability test — calls Telegram getMe with the bot's real token."""
+    import httpx
+
+    data = request.get_json() or {}
+    scope = data.get("scope")
+    bot_id = data.get("id")
+
+    token = None
+    custom_bot = None
+    if scope == "official":
+        token = Config.TELEGRAM_BOT_TOKEN
+        if not token:
+            return jsonify({"ok": False, "error": "TELEGRAM_BOT_TOKEN not set"}), 200
+    elif scope == "custom":
+        custom_bot = CustomBot.query.get(bot_id)
+        if not custom_bot:
+            return jsonify({"error": "Bot not found"}), 404
+        try:
+            token = custom_bot.get_token()
+        except Exception as e:
+            return jsonify({"ok": False, "error": f"Token decrypt failed: {e}"}), 200
+    else:
+        return jsonify({"error": "Invalid scope"}), 400
+
+    try:
+        resp = httpx.get(f"https://api.telegram.org/bot{token}/getMe", timeout=8.0)
+        body = resp.json()
+        if resp.status_code == 200 and body.get("ok"):
+            username = body.get("result", {}).get("username")
+            if custom_bot is not None and custom_bot.status == "error":
+                custom_bot.status = "active"
+                db.session.commit()
+            return jsonify({"ok": True, "username": username})
+        err = body.get("description") or f"HTTP {resp.status_code}"
+        if custom_bot is not None:
+            custom_bot.status = "error"
+            db.session.commit()
+            from ..health import record_bot_error
+            record_bot_error("custom", custom_bot.id, "handler", f"getMe: {err}")
+        return jsonify({"ok": False, "error": err})
+    except Exception as e:
+        if custom_bot is not None:
+            custom_bot.status = "error"
+            db.session.commit()
+            from ..health import record_bot_error
+            record_bot_error("custom", custom_bot.id, "handler", f"getMe: {e}")
+        return jsonify({"ok": False, "error": str(e)[:200]})
+
+
+@admin_bp.route("/bot-health/errors", methods=["GET"])
+@admin_required
+@rate_limit(requests_per_minute=60)
+def admin_bot_health_errors():
+    """Recent error rows for drill-down, optionally filtered by scope/ref."""
+    scope = request.args.get("scope")
+    ref = request.args.get("ref")
+    limit = min(request.args.get("limit", 50, type=int), 200)
+
+    q = BotHealthEvent.query
+    if scope:
+        q = q.filter(BotHealthEvent.scope == scope)
+    if ref:
+        q = q.filter(BotHealthEvent.ref == str(ref))
+    rows = q.order_by(BotHealthEvent.created_at.desc()).limit(limit).all()
+    return jsonify({"errors": [r.to_dict() for r in rows]})
 
 
 @admin_bp.route("/custom-bots/<int:bot_id>/disable", methods=["POST"])

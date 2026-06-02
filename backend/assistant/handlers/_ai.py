@@ -128,6 +128,15 @@ def _openai_compat_post(key_info: dict, api_key: str, preferred_model: str,
     raise last_exc or RuntimeError("All OpenAI-compat model candidates failed")
 
 
+def _record_ai_error(provider: str, model: str, exc: Exception) -> None:
+    """Log an AI failure to the Bot Health table. Never raises."""
+    try:
+        from ...health import record_bot_error
+        record_bot_error("ai", f"{provider}:{model}", "ai", str(exc))
+    except Exception:
+        pass
+
+
 def call_ai(key_info: dict, system: str, user_msg: str) -> str:
     """Call AI expecting a JSON response."""
     provider = key_info.get("provider", "gemini")
@@ -136,27 +145,31 @@ def call_ai(key_info: dict, system: str, user_msg: str) -> str:
 
     _log.debug("call_ai provider=%s model=%s msg_len=%d", provider, model, len(user_msg))
 
-    if provider == "gemini":
-        resp = _gemini_post(api_key, model, system, user_msg, json_mode=True)
-        return resp["candidates"][0]["content"]["parts"][0]["text"].strip()
+    try:
+        if provider == "gemini":
+            resp = _gemini_post(api_key, model, system, user_msg, json_mode=True)
+            return resp["candidates"][0]["content"]["parts"][0]["text"].strip()
 
-    if provider == "anthropic":
-        resp = _client.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={"x-api-key": api_key, "anthropic-version": "2023-06-01"},
-            json={
-                "model": model or "claude-haiku-4-5-20251001",
-                "max_tokens": 512,
-                "system": system,
-                "messages": [{"role": "user", "content": user_msg}],
-            },
-        )
-        if not resp.is_success:
-            _log.error("Anthropic API error %d: %s", resp.status_code, resp.text[:500])
-        resp.raise_for_status()
-        return resp.json()["content"][0]["text"].strip()
+        if provider == "anthropic":
+            resp = _client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={"x-api-key": api_key, "anthropic-version": "2023-06-01"},
+                json={
+                    "model": model or "claude-haiku-4-5-20251001",
+                    "max_tokens": 512,
+                    "system": system,
+                    "messages": [{"role": "user", "content": user_msg}],
+                },
+            )
+            if not resp.is_success:
+                _log.error("Anthropic API error %d: %s", resp.status_code, resp.text[:500])
+            resp.raise_for_status()
+            return resp.json()["content"][0]["text"].strip()
 
-    return _openai_compat_post(key_info, api_key, model, system, user_msg, json_mode=True)
+        return _openai_compat_post(key_info, api_key, model, system, user_msg, json_mode=True)
+    except Exception as exc:
+        _record_ai_error(provider, model, exc)
+        raise
 
 
 def call_ai_text(key_info: dict, system: str, user_msg: str) -> str:
@@ -165,27 +178,31 @@ def call_ai_text(key_info: dict, system: str, user_msg: str) -> str:
     api_key = key_info["api_key"]
     model = key_info.get("model", "gemini-1.5-flash-latest")
 
-    if provider == "gemini":
-        data = _gemini_post(api_key, model, system, user_msg, json_mode=False)
-        return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+    try:
+        if provider == "gemini":
+            data = _gemini_post(api_key, model, system, user_msg, json_mode=False)
+            return data["candidates"][0]["content"]["parts"][0]["text"].strip()
 
-    if provider == "anthropic":
-        resp = _client.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={"x-api-key": api_key, "anthropic-version": "2023-06-01"},
-            json={
-                "model": model or "claude-haiku-4-5-20251001",
-                "max_tokens": 1024,
-                "system": system,
-                "messages": [{"role": "user", "content": user_msg}],
-            },
-        )
-        if not resp.is_success:
-            _log.error("Anthropic API error %d: %s", resp.status_code, resp.text[:500])
-        resp.raise_for_status()
-        return resp.json()["content"][0]["text"].strip()
+        if provider == "anthropic":
+            resp = _client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={"x-api-key": api_key, "anthropic-version": "2023-06-01"},
+                json={
+                    "model": model or "claude-haiku-4-5-20251001",
+                    "max_tokens": 1024,
+                    "system": system,
+                    "messages": [{"role": "user", "content": user_msg}],
+                },
+            )
+            if not resp.is_success:
+                _log.error("Anthropic API error %d: %s", resp.status_code, resp.text[:500])
+            resp.raise_for_status()
+            return resp.json()["content"][0]["text"].strip()
 
-    return _openai_compat_post(key_info, api_key, model, system, user_msg, json_mode=False)
+        return _openai_compat_post(key_info, api_key, model, system, user_msg, json_mode=False)
+    except Exception as exc:
+        _record_ai_error(provider, model, exc)
+        raise
 
 
 def parse_json(text: str) -> dict:

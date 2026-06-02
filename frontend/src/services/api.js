@@ -522,6 +522,10 @@ export const admin = {
   // Custom Bots
   getCustomBots: (params) => api.get('/api/admin/custom-bots', { params }),
   disableCustomBot: (id) => api.post(`/api/admin/custom-bots/${id}/disable`),
+  // Bot Health
+  getBotHealth: (params) => api.get('/api/admin/bot-health', { params }),
+  pingBot: (body) => api.post('/api/admin/bot-health/ping', body),
+  getBotErrors: (params) => api.get('/api/admin/bot-health/errors', { params }),
   // Directory
   getDirectory: (params) => api.get('/api/admin/directory', { params }),
   moderateDirectory: (id, data) => api.post(`/api/admin/directory/${id}/moderate`, data),

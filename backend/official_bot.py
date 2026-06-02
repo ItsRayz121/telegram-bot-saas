@@ -2484,6 +2484,12 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                            f"/{cmd_raw}", {"command": cmd_raw})
             except Exception as exc:
                 _log.debug("Custom command reply failed: %s", exc)
+                try:
+                    from .health import record_bot_error
+                    record_bot_error("official", group_id, "command",
+                                     f"/{cmd_raw}: {exc}")
+                except Exception:
+                    pass
 
     # Word-method verification: check if message is a verification answer
     if not text.startswith("/"):
@@ -5599,6 +5605,15 @@ class OfficialBotRunner:
                 _log.warning("[OfficialBot] Network error (transient): %s", exc)
             else:
                 _log.error("[OfficialBot] Unhandled update error: %s", exc, exc_info=exc)
+                try:
+                    chat_id = None
+                    if update is not None and getattr(update, "effective_chat", None):
+                        chat_id = str(update.effective_chat.id)
+                    from .health import record_bot_error
+                    with flask_app.app_context():
+                        record_bot_error("official", chat_id or "official", "handler", str(exc))
+                except Exception:
+                    pass
 
         a.add_error_handler(_error_handler)
 

@@ -1734,6 +1734,36 @@ class BotEvent(db.Model):
         }
 
 
+class BotHealthEvent(db.Model):
+    """Append-only log of bot failures, surfaced in the admin Bot Health tab.
+
+    Only ERRORS are recorded (never successful messages) so write volume stays
+    low even with hundreds of custom bots. Liveness is checked on-demand via the
+    admin "Ping" button (Telegram getMe), not from this table.
+    """
+    __tablename__ = "bot_health_events"
+
+    id = db.Column(db.Integer, primary_key=True)
+    # official | custom | assistant | ai
+    scope = db.Column(db.String(20), nullable=False, index=True)
+    # custom bot id, telegram group id, 'official', or 'provider:model'
+    ref = db.Column(db.String(64), nullable=True, index=True)
+    # handler | ai | command | webhook
+    category = db.Column(db.String(20), nullable=False)
+    detail = db.Column(db.Text, nullable=True)  # truncated error message (<= 500 chars)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "scope": self.scope,
+            "ref": self.ref,
+            "category": self.category,
+            "detail": self.detail,
+            "created_at": self.created_at.isoformat(),
+        }
+
+
 # ── Official-group feature models (Phase 2 — full parity with custom bots) ──────
 
 class OfficialRaid(db.Model):

@@ -13,6 +13,7 @@ import {
   History, FolderOpen, Campaign, VerifiedUser, Refresh,
   CheckCircleOutline, Cancel, Circle, Flag,
   Security, AccountTree, TrendingDown, Payment, FileDownload,
+  MonitorHeart, NetworkCheck,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -1996,6 +1997,216 @@ function PromoCodesTab({ onAdminError }) {
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// TAB 11 — BOT HEALTH
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function BotHealthTab({ onAdminError }) {
+  const [data, setData] = useState(null);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [pinging, setPinging] = useState({});            // key (scope:id) -> bool
+  const [pingResult, setPingResult] = useState({});      // key -> {ok, text}
+  const [errorsFor, setErrorsFor] = useState(null);      // {scope, ref, label}
+  const [errors, setErrors] = useState([]);
+  const [errorsLoading, setErrorsLoading] = useState(false);
+
+  const fetch = useCallback(async (p = 1) => {
+    setLoading(true);
+    try {
+      const res = await admin.getBotHealth({ page: p, per_page: 25 });
+      setData(res.data);
+    } catch (err) { onAdminError(err, 'Failed to load bot health'); }
+    finally { setLoading(false); }
+  }, [onAdminError]);
+
+  useEffect(() => { fetch(); }, [fetch]);
+
+  const handlePing = async (scope, id) => {
+    const key = `${scope}:${id ?? ''}`;
+    setPinging((m) => ({ ...m, [key]: true }));
+    try {
+      const res = await admin.pingBot({ scope, id });
+      const ok = !!res.data.ok;
+      const text = ok ? `@${res.data.username || 'bot'} is alive` : (res.data.error || 'No response');
+      setPingResult((m) => ({ ...m, [key]: { ok, text } }));
+      ok ? toast.success(`✅ ${text}`) : toast.error(`❌ ${text}`);
+      fetch(page);   // refresh statuses (custom bot may have flipped to error/active)
+    } catch (err) {
+      setPingResult((m) => ({ ...m, [key]: { ok: false, text: 'Request failed' } }));
+      toast.error('Ping request failed');
+    } finally {
+      setPinging((m) => ({ ...m, [key]: false }));
+    }
+  };
+
+  const openErrors = async (scope, ref, label) => {
+    setErrorsFor({ scope, ref, label });
+    setErrorsLoading(true);
+    try {
+      const res = await admin.getBotErrors({ scope, ref, limit: 50 });
+      setErrors(res.data.errors || []);
+    } catch { setErrors([]); }
+    finally { setErrorsLoading(false); }
+  };
+
+  const official = data?.official || { error_count_24h: 0, last_error: null };
+  const officialKey = 'official:';
+  const officialPing = pingResult[officialKey];
+  const bots = data?.custom_bots || [];
+  const pages = data?.pages || 1;
+
+  return (
+    <Box>
+      {/* Intro */}
+      <Alert severity="info" sx={{ mb: 2, borderRadius: 2 }}>
+        <Typography variant="body2">
+          Press <b>Ping</b> to test a bot live against Telegram right now. The <b>Errors (24h)</b>
+          {' '}column shows failures recorded automatically (AI, commands, handlers, webhooks) —
+          click a number to see details.
+        </Typography>
+      </Alert>
+
+      {/* Summary cards */}
+      <Grid container spacing={2} mb={1}>
+        <Grid item xs={6} md={3}>
+          <StatCard label="Custom bots" value={data?.totals?.total_custom_bots ?? 0} color="#7c4dff" icon={SmartToy} />
+        </Grid>
+        <Grid item xs={6} md={3}>
+          <StatCard label="Errors (last 24h)" value={data?.totals?.errors_24h ?? 0}
+            color={(data?.totals?.errors_24h ?? 0) > 0 ? '#ef4444' : '#22c55e'} icon={Warning} />
+        </Grid>
+      </Grid>
+
+      {/* Official bot card */}
+      <Card sx={{ mb: 3, border: '1px solid', borderColor: 'divider' }}>
+        <CardContent>
+          <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ sm: 'center' }} justifyContent="space-between" spacing={1.5}>
+            <Box>
+              <Stack direction="row" alignItems="center" spacing={1}>
+                <MonitorHeart sx={{ color: '#7c4dff' }} />
+                <Typography variant="h6" fontWeight={700}>Official bot (@telegizer_bot)</Typography>
+                {officialPing && (
+                  <Chip size="small" color={officialPing.ok ? 'success' : 'error'}
+                    label={officialPing.ok ? 'Reachable' : 'Unreachable'} />
+                )}
+              </Stack>
+              <Typography variant="body2" color="text.secondary" mt={0.5}>
+                Errors (24h): <b style={{ color: official.error_count_24h > 0 ? '#ef4444' : 'inherit' }}>{official.error_count_24h}</b>
+                {official.last_error && (
+                  <> · last: {official.last_error.category} — {fmtDateTime(official.last_error.created_at)}</>
+                )}
+              </Typography>
+              {official.last_error?.detail && (
+                <Typography variant="caption" color="error" sx={{ fontFamily: 'monospace', display: 'block', mt: 0.5 }}>
+                  {official.last_error.detail}
+                </Typography>
+              )}
+            </Box>
+            <Stack direction="row" spacing={1}>
+              <Button variant="contained" startIcon={<NetworkCheck />}
+                disabled={!!pinging[officialKey]}
+                onClick={() => handlePing('official', null)}>
+                {pinging[officialKey] ? 'Pinging…' : 'Ping now'}
+              </Button>
+              {official.error_count_24h > 0 && (
+                <Button variant="outlined" onClick={() => openErrors('official', null, 'Official bot')}>View errors</Button>
+              )}
+            </Stack>
+          </Stack>
+        </CardContent>
+      </Card>
+
+      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
+        <Typography variant="subtitle1" fontWeight={700}>Custom bots</Typography>
+        <Button size="small" startIcon={<Refresh />} onClick={() => fetch(page)}>Refresh</Button>
+      </Stack>
+
+      {loading ? <Box display="flex" justifyContent="center" mt={4}><CircularProgress /></Box> : (
+        <>
+          <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', mb: 2, overflowX: 'auto' }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Bot</TableCell>
+                  <TableCell>Owner</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell align="right">Errors (24h)</TableCell>
+                  <TableCell>Last error</TableCell>
+                  <TableCell align="right">Test</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {bots.length === 0 ? <EmptyRow cols={6} /> : bots.map((b) => {
+                  const key = `custom:${b.id}`;
+                  const pr = pingResult[key];
+                  return (
+                    <TableRow key={b.id} hover>
+                      <TableCell>
+                        <Typography variant="body2" fontWeight={500}>@{b.bot_username}</Typography>
+                        {b.bot_name && <Typography variant="caption" color="text.secondary">{b.bot_name}</Typography>}
+                      </TableCell>
+                      <TableCell><Typography variant="body2">{b.owner_email || '—'}</Typography></TableCell>
+                      <TableCell>
+                        <StatusChip label={b.status} />
+                        {pr && (
+                          <Tooltip title={pr.text}>
+                            <Chip size="small" sx={{ ml: 0.5 }} color={pr.ok ? 'success' : 'error'}
+                              label={pr.ok ? 'live' : 'down'} />
+                          </Tooltip>
+                        )}
+                      </TableCell>
+                      <TableCell align="right">
+                        {b.error_count_24h > 0 ? (
+                          <Button size="small" color="error" sx={{ minWidth: 0 }}
+                            onClick={() => openErrors('custom', String(b.id), `@${b.bot_username}`)}>
+                            {b.error_count_24h}
+                          </Button>
+                        ) : <Typography variant="body2" color="text.secondary">0</Typography>}
+                      </TableCell>
+                      <TableCell><Typography variant="caption" color="text.secondary">{fmtDateTime(b.last_error_at)}</Typography></TableCell>
+                      <TableCell align="right">
+                        <Button size="small" variant="outlined" startIcon={<NetworkCheck fontSize="small" />}
+                          disabled={!!pinging[key]} onClick={() => handlePing('custom', b.id)}>
+                          {pinging[key] ? '…' : 'Ping'}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </TableContainer>
+          {pages > 1 && <Box display="flex" justifyContent="center"><Pagination count={pages} page={page} onChange={(_, p) => { setPage(p); fetch(p); }} color="primary" /></Box>}
+        </>
+      )}
+
+      {/* Errors drill-down dialog */}
+      <Dialog open={!!errorsFor} onClose={() => setErrorsFor(null)} maxWidth="md" fullWidth>
+        <DialogTitle>Recent errors — {errorsFor?.label}</DialogTitle>
+        <DialogContent dividers>
+          {errorsLoading ? <Box display="flex" justifyContent="center" py={3}><CircularProgress /></Box> : (
+            errors.length === 0 ? <Typography color="text.secondary" py={2}>No recorded errors.</Typography> : (
+              <Stack spacing={1.5}>
+                {errors.map((e) => (
+                  <Box key={e.id} sx={{ borderLeft: '3px solid', borderColor: 'error.main', pl: 1.5 }}>
+                    <Typography variant="caption" color="text.secondary">
+                      {fmtDateTime(e.created_at)} · {e.category}{e.ref ? ` · ${e.ref}` : ''}
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontFamily: 'monospace', wordBreak: 'break-word' }}>{e.detail || '(no detail)'}</Typography>
+                  </Box>
+                ))}
+              </Stack>
+            )
+          )}
+        </DialogContent>
+        <DialogActions><Button onClick={() => setErrorsFor(null)}>Close</Button></DialogActions>
+      </Dialog>
+    </Box>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -2011,6 +2222,7 @@ const TABS = [
   { label: 'Audit Log', icon: <History fontSize="small" /> },
   { label: 'Reports', icon: <Flag fontSize="small" /> },
   { label: 'Promo Codes', icon: <Payment fontSize="small" /> },
+  { label: 'Bot Health', icon: <MonitorHeart fontSize="small" /> },
 ];
 
 export default function AdminPanel() {
@@ -2172,6 +2384,10 @@ export default function AdminPanel() {
 
         <TabPanel value={activeTab} index={10}>
           <PromoCodesTab onAdminError={handleAdminError} />
+        </TabPanel>
+
+        <TabPanel value={activeTab} index={11}>
+          <BotHealthTab onAdminError={handleAdminError} />
         </TabPanel>
 
       </Box>
