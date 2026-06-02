@@ -42,7 +42,11 @@ export default function InviteLanding() {
   }, [code]);
 
   const handleGetStarted = () => {
-    navigate(`/register${code ? `?ref=${code}` : ''}`);
+    if (window?.Telegram?.WebApp?.initData) {
+      navigate('/mini-app', { replace: true });
+    } else {
+      navigate(`/register${code ? `?ref=${code}` : ''}`);
+    }
   };
 
   return (

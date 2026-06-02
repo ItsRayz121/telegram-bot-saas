@@ -130,6 +130,10 @@ function AppRoute({ children }) {
 }
 
 function PublicOnlyRoute({ children }) {
+  // If opened inside Telegram Mini App (any URL), always use TMA auth — never show email forms
+  if (window?.Telegram?.WebApp?.initData) {
+    return <Navigate to="/mini-app" replace />;
+  }
   const token = localStorage.getItem('token');
   if (!token) return children;
   const user = _storedUser();

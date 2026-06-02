@@ -37,7 +37,11 @@ export default function JoinReferral() {
   }, [ref]);
 
   const handleGetStarted = () => {
-    navigate(`/register${ref ? `?ref=${ref}` : ''}`);
+    if (window?.Telegram?.WebApp?.initData) {
+      navigate('/mini-app', { replace: true });
+    } else {
+      navigate(`/register${ref ? `?ref=${ref}` : ''}`);
+    }
   };
 
   return (

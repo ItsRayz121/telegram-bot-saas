@@ -32,18 +32,29 @@ export default function MiniApp() {
 
   useEffect(() => {
     if (status === 'ok') {
-      // Session is stored in localStorage + cookies by TelegramContext.
-      // Redirect to the full dashboard — no separate Mini App UI needed.
       navigate('/dashboard', { replace: true });
     }
     if (status === 'no_webapp') {
       // Opened outside Telegram — go to the normal website.
       window.location.replace('/');
     }
+    if (status === 'no_init_data') {
+      // initData missing but WebApp object exists (e.g. Telegram Desktop edge case).
+      // If there's already a valid session from a prior TMA auth, use it.
+      const token = localStorage.getItem('token');
+      if (token) {
+        navigate('/dashboard', { replace: true });
+      }
+    }
   }, [status, navigate]);
 
   if (status === 'error') return <ErrorScreen message={authError} />;
-  if (status === 'no_init_data') return <ErrorScreen message="Could not read Telegram session data. Please close and reopen the app." />;
+  if (status === 'no_init_data') {
+    // No existing session to fall back to — show actionable error.
+    const hasToken = !!localStorage.getItem('token');
+    if (!hasToken) return <ErrorScreen message="Could not read Telegram session data. Please close and reopen the app." />;
+    return <LoadingScreen />;
+  }
 
   return <LoadingScreen />;
 }
