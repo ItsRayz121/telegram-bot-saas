@@ -12,6 +12,7 @@ import CookieConsent from './components/CookieConsent';
 import DebugPanel from './components/DebugPanel';
 import AppLayout from './layouts/AppLayout';
 import { API_CONFIG_ERROR } from './services/api';
+import { isTelegramMiniApp } from './utils/telegram';
 
 // Pages — public
 import Landing from './pages/Landing';
@@ -132,7 +133,7 @@ function AppRoute({ children }) {
 // Any public/marketing page that should NEVER render inside Telegram.
 // When opened in the Mini App, bounce straight to TMA auth — no landing, no signup, no flash.
 function TelegramAware({ children }) {
-  if (window?.Telegram?.WebApp?.initData) {
+  if (isTelegramMiniApp()) {
     return <Navigate to="/mini-app" replace />;
   }
   return children;
@@ -140,7 +141,7 @@ function TelegramAware({ children }) {
 
 function PublicOnlyRoute({ children }) {
   // If opened inside Telegram Mini App (any URL), always use TMA auth — never show email forms
-  if (window?.Telegram?.WebApp?.initData) {
+  if (isTelegramMiniApp()) {
     return <Navigate to="/mini-app" replace />;
   }
   const token = localStorage.getItem('token');

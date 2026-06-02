@@ -47,49 +47,68 @@ export function TelegramProvider({ children }) {
   const [referralLink, setReferralLink] = useState(null);
 
   useEffect(() => {
-    const webapp = window?.Telegram?.WebApp;
-    if (!webapp) {
-      setStatus('no_webapp');
-      return;
-    }
-
-    webapp.ready();
-    webapp.expand();
-    // 2-G-01: match header/bg to Telegizer dark theme
-    try { webapp.setHeaderColor('#0f172a'); } catch {}
-    try { webapp.setBackgroundColor('#0f172a'); } catch {}
-    setTg(webapp);
-    setTgTheme(extractTgTheme(webapp));
-
-    // Keep theme in sync if Telegram sends theme updates
-    webapp.onEvent('themeChanged', () => setTgTheme(extractTgTheme(webapp)));
-
-    const initData = webapp.initData;
-    if (!initData) {
-      setStatus('no_init_data');
-      return;
-    }
+    let cancelled = false;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 25; // ~3.75s at 150ms — give the async SDK time to populate initData
 
     // TMA auth — backend sets httpOnly cookies; also store in localStorage so
     // AppRoute guard and the full dashboard recognise the session immediately.
-    api.post('/api/miniapp/auth', { init_data: initData })
-      .then(res => {
-        const { token, user, groups: grps, email_linked, referral_link } = res.data;
-        setTmaToken(token);
-        localStorage.setItem('token', token);
-        localStorage.setItem('user', JSON.stringify(user));
-        setAppUser(user);
-        setGroups(grps || []);
-        setTgUser(webapp.initDataUnsafe?.user || null);
-        setEmailLinked(email_linked ?? Boolean(user?.email));
-        setReferralLink(referral_link || null);
-        setStatus('ok');
-      })
-      .catch(err => {
-        const msg = err.response?.data?.error || null;
-        setAuthError(msg);
-        setStatus('error');
-      });
+    const doAuth = (webapp) => {
+      api.post('/api/miniapp/auth', { init_data: webapp.initData })
+        .then(res => {
+          if (cancelled) return;
+          const { token, user, groups: grps, email_linked, referral_link } = res.data;
+          setTmaToken(token);
+          localStorage.setItem('token', token);
+          localStorage.setItem('user', JSON.stringify(user));
+          setAppUser(user);
+          setGroups(grps || []);
+          setTgUser(webapp.initDataUnsafe?.user || null);
+          setEmailLinked(email_linked ?? Boolean(user?.email));
+          setReferralLink(referral_link || null);
+          setStatus('ok');
+        })
+        .catch(err => {
+          if (cancelled) return;
+          const msg = err.response?.data?.error || null;
+          setAuthError(msg);
+          setStatus('error');
+        });
+    };
+
+    const init = () => {
+      if (cancelled) return;
+      const webapp = window?.Telegram?.WebApp;
+
+      // SDK / native bridge not ready yet. If we know we're inside Telegram (launch
+      // hash captured in index.html), keep retrying briefly while the async SDK loads
+      // — instead of falsely bailing to 'no_webapp'/'no_init_data' on the first tick.
+      if (!webapp || !webapp.initData) {
+        if (window.__IS_TELEGRAM__ && attempts < MAX_ATTEMPTS) {
+          attempts += 1;
+          setTimeout(init, 150);
+          return;
+        }
+        setStatus(webapp ? 'no_init_data' : 'no_webapp');
+        return;
+      }
+
+      webapp.ready();
+      webapp.expand();
+      // 2-G-01: match header/bg to Telegizer dark theme
+      try { webapp.setHeaderColor('#0f172a'); } catch {}
+      try { webapp.setBackgroundColor('#0f172a'); } catch {}
+      setTg(webapp);
+      setTgTheme(extractTgTheme(webapp));
+
+      // Keep theme in sync if Telegram sends theme updates
+      webapp.onEvent('themeChanged', () => setTgTheme(extractTgTheme(webapp)));
+
+      doAuth(webapp);
+    };
+
+    init();
+    return () => { cancelled = true; };
   }, []);
 
   const refetchUser = useCallback(() => {

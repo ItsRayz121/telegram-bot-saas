@@ -10,6 +10,7 @@ import {
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { referrals } from '../services/api';
 import TelegizerLogo from '../components/TelegizerLogo';
+import { isTelegramMiniApp } from '../utils/telegram';
 
 const FEATURES = [
   { icon: Shield,    label: 'AutoMod',           desc: 'Spam, links, caps — removed automatically' },
@@ -37,7 +38,7 @@ export default function JoinReferral() {
   }, [ref]);
 
   const handleGetStarted = () => {
-    if (window?.Telegram?.WebApp?.initData) {
+    if (isTelegramMiniApp()) {
       navigate('/mini-app', { replace: true });
     } else {
       navigate(`/register${ref ? `?ref=${ref}` : ''}`);

@@ -97,18 +97,29 @@
 
     <!-- Privacy-first analytics (no cookies, GDPR compliant) -->
     <script defer data-domain="telegizer.com" src="https://plausible.io/js/script.js"></script>
-    <!-- Telegram Mini App SDK — loaded async, no-op on non-Telegram browsers.
-         Must not block page render on auth pages (forgot-password, login, etc.) -->
+    <!-- Telegram Mini App detection + SDK.
+         Capture the launch SYNCHRONOUSLY from the URL hash (#tgWebAppData=...),
+         which Telegram appends on every Mini App open BEFORE any SDK runs. This is
+         reliable even when the User-Agent lacks "Telegram" (common on Android
+         WebView) or the SDK is slow to load. window.__IS_TELEGRAM__ is then read by
+         the React app to redirect Mini App users straight to TMA auth. -->
     <script>
-      // Only load the Telegram SDK when running inside a Telegram WebView.
-      // window.Telegram is undefined in normal browsers, so this is a no-op for
-      // regular users and avoids a connection-timeout warning on auth pages.
-      if (navigator.userAgent && /Telegram/i.test(navigator.userAgent)) {
-        var _tgScript = document.createElement('script');
-        _tgScript.src = 'https://telegram.org/js/telegram-web-app.js';
-        _tgScript.async = true;
-        document.head.appendChild(_tgScript);
-      }
+      (function () {
+        try {
+          var h = window.location.hash || '';
+          var s = window.location.search || '';
+          window.__IS_TELEGRAM__ =
+            h.indexOf('tgWebAppData') !== -1 || s.indexOf('tgWebAppData') !== -1;
+        } catch (e) { window.__IS_TELEGRAM__ = false; }
+        // Load the SDK if this is a Mini App launch (by hash) or the UA hints Telegram.
+        // Harmless no-op for regular browsers.
+        var uaTelegram = navigator.userAgent && /Telegram/i.test(navigator.userAgent);
+        if (window.__IS_TELEGRAM__ || uaTelegram) {
+          var _tgScript = document.createElement('script');
+          _tgScript.src = 'https://telegram.org/js/telegram-web-app.js';
+          document.head.appendChild(_tgScript);
+        }
+      })();
     </script>
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
