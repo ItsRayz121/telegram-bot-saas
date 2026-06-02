@@ -129,6 +129,15 @@ function AppRoute({ children }) {
   return <AppLayout>{children}</AppLayout>;
 }
 
+// Any public/marketing page that should NEVER render inside Telegram.
+// When opened in the Mini App, bounce straight to TMA auth — no landing, no signup, no flash.
+function TelegramAware({ children }) {
+  if (window?.Telegram?.WebApp?.initData) {
+    return <Navigate to="/mini-app" replace />;
+  }
+  return children;
+}
+
 function PublicOnlyRoute({ children }) {
   // If opened inside Telegram Mini App (any URL), always use TMA auth — never show email forms
   if (window?.Telegram?.WebApp?.initData) {
@@ -192,7 +201,8 @@ export default function App() {
           <Routes>
 
             {/* ── Public (no sidebar) ─────────────────────────────────────── */}
-            <Route path="/" element={<Landing />} />
+            {/* Root + referral/invite entry pages: redirect to /mini-app when opened inside Telegram */}
+            <Route path="/" element={<TelegramAware><Landing /></TelegramAware>} />
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/payment/success" element={<PaymentSuccess />} />
             <Route path="/terms" element={<Terms />} />
@@ -201,8 +211,8 @@ export default function App() {
             <Route path="/contact" element={<Contact />} />
             <Route path="/about" element={<About />} />
             <Route path="/status" element={<Status />} />
-            <Route path="/join" element={<JoinReferral />} />
-            <Route path="/invite/:code" element={<InviteLanding />} />
+            <Route path="/join" element={<TelegramAware><JoinReferral /></TelegramAware>} />
+            <Route path="/invite/:code" element={<TelegramAware><InviteLanding /></TelegramAware>} />
             <Route path="/team/join/:token" element={<TeamInvitePage />} />
 
             {/* ── Auth (no sidebar) ─────────────────────────────────────────── */}
