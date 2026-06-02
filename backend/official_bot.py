@@ -335,6 +335,22 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("⚠️ Service temporarily unavailable. Try again shortly.")
         return
 
+    # ── Handle ?start=ref_<code> referral deep-link ───────────────────────────
+    # The account doesn't exist yet (it's auto-created when the Mini App opens), so
+    # stash the referral code keyed by Telegram user ID for miniapp_auth to consume.
+    if flask_app and args and args[0].startswith("ref_"):
+        ref_code = args[0][len("ref_"):].strip()
+        if ref_code:
+            try:
+                with flask_app.app_context():
+                    from .models import db, TelegramBotStarted
+                    # Ignore if this user already has an account (returning user, not a new referral)
+                    if not _user_by_tg_id(user.id):
+                        TelegramBotStarted.set_pending_referral(user.id, ref_code)
+                        db.session.commit()
+            except Exception as _exc:
+                _log.debug("pending referral capture failed: %s", _exc)
+
     # ── Regular /start: companion hub ────────────────────────────────────────
     pending_groups = []
     is_linked = False

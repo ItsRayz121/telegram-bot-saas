@@ -1145,6 +1145,9 @@ class TelegramBotStarted(db.Model):
     telegram_user_id = db.Column(db.String(255), unique=True, nullable=False, index=True)
     first_started_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     last_active_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    # Referral code captured from `/start ref_<code>` before the user has an account.
+    # Consumed when the Mini App auto-creates the user, then cleared.
+    pending_referral_code = db.Column(db.String(16), nullable=True)
 
     @staticmethod
     def record(user_id: str):
@@ -1158,6 +1161,27 @@ class TelegramBotStarted(db.Model):
     @staticmethod
     def has_started(user_id: str) -> bool:
         return TelegramBotStarted.query.filter_by(telegram_user_id=str(user_id)).first() is not None
+
+    @staticmethod
+    def set_pending_referral(user_id: str, ref_code: str):
+        """Stash a referral code from `/start ref_<code>` until the account is created.
+        Only stores if no code is already pending (first referral link wins)."""
+        existing = TelegramBotStarted.query.filter_by(telegram_user_id=str(user_id)).first()
+        if existing is None:
+            existing = TelegramBotStarted(telegram_user_id=str(user_id))
+            db.session.add(existing)
+        if not existing.pending_referral_code:
+            existing.pending_referral_code = ref_code[:16]
+
+    @staticmethod
+    def consume_pending_referral(user_id: str) -> str | None:
+        """Return and clear the pending referral code for a Telegram user, if any."""
+        existing = TelegramBotStarted.query.filter_by(telegram_user_id=str(user_id)).first()
+        if existing and existing.pending_referral_code:
+            code = existing.pending_referral_code
+            existing.pending_referral_code = None
+            return code
+        return None
 
 
 class TelegramGroup(db.Model):

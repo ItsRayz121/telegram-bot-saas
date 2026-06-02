@@ -625,6 +625,14 @@ def init_db():
             "users: chk_one_identity constraint (email OR telegram_user_id required)",
         )
 
+        # Telegram referral capture: ref code stashed at `/start ref_<code>` until
+        # the Mini App auto-creates the user (telegram_bot_started.pending_referral_code).
+        _run_alter(
+            db.engine,
+            "ALTER TABLE telegram_bot_started ADD COLUMN IF NOT EXISTS pending_referral_code VARCHAR(16)",
+            "telegram_bot_started.pending_referral_code (Telegram referral attribution)",
+        )
+
         # ── Backfill: create UserTelegramAccount rows for legacy User.telegram_user_id ──
         # Must run AFTER all users-table ALTER statements (including auth_provider)
         # so SQLAlchemy's User model doesn't query columns that don't exist yet.

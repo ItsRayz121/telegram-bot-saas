@@ -35,7 +35,7 @@ from flask_jwt_extended import (
     create_access_token, create_refresh_token, jwt_required, get_jwt_identity,
 )
 
-from ..models import db, User, TelegramGroup, UserTelegramAccount
+from ..models import db, User, TelegramGroup, UserTelegramAccount, Referral, TelegramBotStarted
 from ..config import Config
 from ..middleware.rate_limit import rate_limit
 from ..middleware.csrf import generate_csrf_token
@@ -121,6 +121,82 @@ def _user_groups(user: User):
         }
         for g in groups
     ]
+
+
+def _resolve_referral_code(parsed: dict, tg_id: str) -> str | None:
+    """Find the referral code for a brand-new Telegram user, from either source:
+    1. `start_param` in initData (Mini App launched via startapp=ref_<code>), or
+    2. the code stashed by the bot's `/start ref_<code>` handler.
+    """
+    sp = (parsed.get("start_param") or "").strip()
+    if sp.startswith("ref_"):
+        code = sp[len("ref_"):].strip()
+        if code:
+            return code
+    return TelegramBotStarted.consume_pending_referral(tg_id)
+
+
+def _trigger_referral_rewards_async(app, referrer_id: int, referred_first_name: str):
+    """Apply referral milestone rewards for the referrer in a background thread."""
+    def _reward():
+        try:
+            with app.app_context():
+                from ..routes.referrals import _apply_referral_rewards
+                from ..notifications import send_referral_conversion_email
+                r = User.query.get(referrer_id)
+                if not r:
+                    return
+                _apply_referral_rewards(r)
+                if r.email:  # referrer may be Telegram-only (no email to notify)
+                    total = Referral.query.filter_by(
+                        referrer_user_id=r.id, status="approved"
+                    ).count()
+                    try:
+                        send_referral_conversion_email(
+                            r.email,
+                            r.full_name.split()[0] if r.full_name else r.email,
+                            referred_first_name,
+                            total,
+                        )
+                    except Exception as exc:
+                        _log.debug("referral conversion email failed: %s", exc)
+        except Exception as exc:
+            _log.error("telegram referral reward failed for referrer=%s: %s", referrer_id, exc)
+
+    threading.Thread(target=_reward, daemon=True).start()
+
+
+def _attribute_telegram_referral(new_user: User, ref_code: str):
+    """Create + approve a Referral for a newly auto-created Telegram user.
+
+    Telegram's HMAC-verified identity (phone-backed account) is the anti-abuse
+    gate, so the referral is approved immediately — unlike email signup, which
+    defers approval until the email is verified. Self-referrals and duplicates
+    are skipped; the admin referral-farming detector catches bulk abuse.
+    """
+    referrer = User.query.filter_by(referral_code=ref_code).first()
+    if not referrer or referrer.id == new_user.id:
+        return
+    if Referral.query.filter_by(referred_user_id=new_user.id).first():
+        return
+
+    db.session.add(Referral(
+        referrer_user_id=referrer.id,
+        referred_user_id=new_user.id,
+        referral_code=ref_code,
+        status="approved",
+    ))
+    try:
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        _log.warning("telegram referral attribution failed: %s", exc)
+        return
+
+    _log.info("miniapp_auth: referral attributed referrer=%s referred=%s code=%s",
+              referrer.id, new_user.id, ref_code)
+    referred_first = (new_user.full_name or "Someone").split()[0] if new_user.full_name else "Someone"
+    _trigger_referral_rewards_async(current_app._get_current_object(), referrer.id, referred_first)
 
 
 def _send_otp_email_async(app, to_email: str, otp: str, is_merge: bool, display_name: str):
@@ -218,6 +294,7 @@ def miniapp_auth():
 
     # ── 1. Fast lookup on users.telegram_user_id ──────────────────────────────
     user = User.query.filter_by(telegram_user_id=tg_id).first()
+    created = False
 
     # ── 2. Check junction table (old link flow) and backfill if found ─────────
     if not user:
@@ -256,6 +333,7 @@ def miniapp_auth():
         db.session.add(user)
         try:
             db.session.commit()
+            created = True
         except Exception:
             db.session.rollback()
             # Race condition: another request created the same tg_id simultaneously
@@ -263,10 +341,17 @@ def miniapp_auth():
             if not user:
                 _log.error("miniapp_auth: failed to create user for tg_id=%s", tg_id)
                 return jsonify({"error": "Account creation failed — please try again"}), 500
-        _log.info("miniapp_auth: auto-created tg user_id=%s tg_id=%s", user.id, tg_id)
+        if created:
+            _log.info("miniapp_auth: auto-created tg user_id=%s tg_id=%s", user.id, tg_id)
 
     if user.is_banned:
         return jsonify({"error": "Account suspended"}), 403
+
+    # ── Referral attribution (new Telegram signups only) ──────────────────────
+    if created:
+        ref_code = _resolve_referral_code(parsed, tg_id)
+        if ref_code:
+            _attribute_telegram_referral(user, ref_code)
 
     # Refresh Telegram display name if it changed
     tg_username_now = tg_user.get("username")
@@ -476,6 +561,28 @@ def link_email_verify():
         PaymentHistory.query.filter_by(user_id=ghost_id).update({"user_id": target_id})
         SubscriptionRenewal.query.filter_by(user_id=ghost_id).update({"user_id": target_id})
         PromoCodeUsage.query.filter_by(user_id=ghost_id).update({"user_id": target_id})
+
+        # Referrals — two FKs (referrer_user_id, referred_user_id), a unique
+        # referred_user_id, and a unique (referrer, referred) pair. Drop self-referrals
+        # and rows that would collide with the target's existing referrals, then transfer
+        # the survivors. Deletes are flushed first so the bulk UPDATEs can't hit a
+        # unique-constraint violation mid-flush.
+        target_has_referrer = Referral.query.filter_by(referred_user_id=target_id).first() is not None
+        # (a) ghost as the referred party (1:1): keep target's existing referrer if any,
+        #     and never let the referrer end up referring the merged target itself.
+        gr = Referral.query.filter_by(referred_user_id=ghost_id).first()
+        if gr and (target_has_referrer or gr.referrer_user_id == target_id):
+            db.session.delete(gr)
+        # (b) ghost as the referrer: drop rows that would self-refer or duplicate target's.
+        for r in Referral.query.filter_by(referrer_user_id=ghost_id).all():
+            collides = Referral.query.filter_by(
+                referrer_user_id=target_id, referred_user_id=r.referred_user_id
+            ).first()
+            if r.referred_user_id == target_id or collides:
+                db.session.delete(r)
+        db.session.flush()
+        Referral.query.filter_by(referred_user_id=ghost_id).update({"referred_user_id": target_id})
+        Referral.query.filter_by(referrer_user_id=ghost_id).update({"referrer_user_id": target_id})
 
         # AssistantConversationState and PendingReminderState are 1:1 (unique on user_id).
         # Delete ghost rows — existing account may already have one, conflict would occur.
