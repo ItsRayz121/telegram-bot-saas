@@ -110,7 +110,13 @@
           var s = window.location.search || '';
           window.__IS_TELEGRAM__ =
             h.indexOf('tgWebAppData') !== -1 || s.indexOf('tgWebAppData') !== -1;
-        } catch (e) { window.__IS_TELEGRAM__ = false; }
+          // Capture the raw initData SYNCHRONOUSLY from the launch hash, before the
+          // SDK loads (and possibly rewrites the URL). tgWebAppData's value IS the
+          // initData string (URLSearchParams decodes it once). This lets auth proceed
+          // even if telegram-web-app.js is slow or fails to load (e.g. VPN / 2G).
+          var src = h.indexOf('tgWebAppData') !== -1 ? h.replace(/^#/, '') : s.replace(/^\?/, '');
+          window.__TG_INIT_DATA__ = src ? (new URLSearchParams(src).get('tgWebAppData') || null) : null;
+        } catch (e) { window.__IS_TELEGRAM__ = false; window.__TG_INIT_DATA__ = null; }
         // Load the SDK if this is a Mini App launch (by hash) or the UA hints Telegram.
         // Harmless no-op for regular browsers.
         var uaTelegram = navigator.userAgent && /Telegram/i.test(navigator.userAgent);

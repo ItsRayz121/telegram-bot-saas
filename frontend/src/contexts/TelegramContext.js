@@ -22,6 +22,32 @@ export { tmaApi };
 
 const TelegramContext = createContext(null);
 
+// Raw initData captured from the launch hash (set synchronously in index.html),
+// with a live re-parse fallback in case this code runs before the inline snippet.
+function getLaunchInitData() {
+  try {
+    if (typeof window === 'undefined') return null;
+    if (window.__TG_INIT_DATA__) return window.__TG_INIT_DATA__;
+    const h = (window.location.hash || '').replace(/^#/, '');
+    const s = (window.location.search || '').replace(/^\?/, '');
+    const src = h.indexOf('tgWebAppData') !== -1 ? h : (s.indexOf('tgWebAppData') !== -1 ? s : '');
+    return src ? (new URLSearchParams(src).get('tgWebAppData') || null) : null;
+  } catch {
+    return null;
+  }
+}
+
+// Pull the Telegram user object out of a raw initData string (used when the SDK
+// object isn't available but we have initData from the launch hash).
+function parseUserFromInitData(initData) {
+  try {
+    const u = new URLSearchParams(initData).get('user');
+    return u ? JSON.parse(u) : null;
+  } catch {
+    return null;
+  }
+}
+
 // Extract MUI-compatible palette from Telegram themeParams
 export function extractTgTheme(tg) {
   const p = tg?.themeParams || {};
@@ -53,8 +79,8 @@ export function TelegramProvider({ children }) {
 
     // TMA auth — backend sets httpOnly cookies; also store in localStorage so
     // AppRoute guard and the full dashboard recognise the session immediately.
-    const doAuth = (webapp) => {
-      api.post('/api/miniapp/auth', { init_data: webapp.initData })
+    const doAuth = (initData, webapp) => {
+      api.post('/api/miniapp/auth', { init_data: initData })
         .then(res => {
           if (cancelled) return;
           const { token, user, groups: grps, email_linked, referral_link } = res.data;
@@ -63,7 +89,7 @@ export function TelegramProvider({ children }) {
           localStorage.setItem('user', JSON.stringify(user));
           setAppUser(user);
           setGroups(grps || []);
-          setTgUser(webapp.initDataUnsafe?.user || null);
+          setTgUser(webapp?.initDataUnsafe?.user || parseUserFromInitData(initData) || null);
           setEmailLinked(email_linked ?? Boolean(user?.email));
           setReferralLink(referral_link || null);
           setStatus('ok');
@@ -79,11 +105,15 @@ export function TelegramProvider({ children }) {
     const init = () => {
       if (cancelled) return;
       const webapp = window?.Telegram?.WebApp;
+      // Prefer the SDK's initData, but fall back to the raw initData captured from the
+      // launch hash. This lets auth succeed even when telegram-web-app.js is slow or
+      // never loads (common on Android WebView over VPN / slow networks).
+      const initData = (webapp && webapp.initData) || getLaunchInitData();
 
-      // SDK / native bridge not ready yet. If we know we're inside Telegram (launch
-      // hash captured in index.html), keep retrying briefly while the async SDK loads
-      // — instead of falsely bailing to 'no_webapp'/'no_init_data' on the first tick.
-      if (!webapp || !webapp.initData) {
+      if (!initData) {
+        // No initData from either source yet. If we know we're inside Telegram (launch
+        // hash captured in index.html), keep retrying briefly while the async SDK loads
+        // — instead of falsely bailing to 'no_webapp'/'no_init_data' on the first tick.
         if (window.__IS_TELEGRAM__ && attempts < MAX_ATTEMPTS) {
           attempts += 1;
           setTimeout(init, 150);
@@ -93,18 +123,22 @@ export function TelegramProvider({ children }) {
         return;
       }
 
-      webapp.ready();
-      webapp.expand();
-      // 2-G-01: match header/bg to Telegizer dark theme
-      try { webapp.setHeaderColor('#0f172a'); } catch {}
-      try { webapp.setBackgroundColor('#0f172a'); } catch {}
-      setTg(webapp);
-      setTgTheme(extractTgTheme(webapp));
+      // Set up the SDK (theme, ready/expand, BackButton support) only if it loaded.
+      // Auth proceeds with hash-derived initData regardless.
+      if (webapp) {
+        webapp.ready();
+        webapp.expand();
+        // 2-G-01: match header/bg to Telegizer dark theme
+        try { webapp.setHeaderColor('#0f172a'); } catch {}
+        try { webapp.setBackgroundColor('#0f172a'); } catch {}
+        setTg(webapp);
+        setTgTheme(extractTgTheme(webapp));
 
-      // Keep theme in sync if Telegram sends theme updates
-      webapp.onEvent('themeChanged', () => setTgTheme(extractTgTheme(webapp)));
+        // Keep theme in sync if Telegram sends theme updates
+        webapp.onEvent('themeChanged', () => setTgTheme(extractTgTheme(webapp)));
+      }
 
-      doAuth(webapp);
+      doAuth(initData, webapp);
     };
 
     init();
