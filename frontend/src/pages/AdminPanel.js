@@ -2019,7 +2019,29 @@ function BotHealthTab({ onAdminError }) {
     finally { setLoading(false); }
   }, [onAdminError]);
 
-  useEffect(() => { fetch(); }, [fetch]);
+  const [hc, setHc] = useState(null);
+  const [hcRunning, setHcRunning] = useState(false);
+
+  const loadHc = useCallback(async () => {
+    try {
+      const res = await admin.getBotHealthCenter();
+      setHc(res.data);
+    } catch { /* health center is optional; ignore */ }
+  }, []);
+
+  useEffect(() => { fetch(); loadHc(); }, [fetch, loadHc]);
+
+  const runHealthCheck = async () => {
+    setHcRunning(true);
+    try {
+      const res = await admin.runBotHealthCheck();
+      const s = res.data.summary || {};
+      toast.success(`Checked ${s.checked ?? 0} bots · ${s.failed ?? 0} failing · ${s.alerts ?? 0} alerts sent`);
+      loadHc(); fetch(page);
+    } catch (err) {
+      toast.error(parseApiError(err).message);
+    } finally { setHcRunning(false); }
+  };
 
   const handlePing = async (scope, id) => {
     const key = `${scope}:${id ?? ''}`;
@@ -2074,6 +2096,34 @@ function BotHealthTab({ onAdminError }) {
           AI, commands, webhooks) — click a number to see details.
         </Typography>
       </Alert>
+
+      {/* Health Center — escalation grades (P1) */}
+      <Card sx={{ mb: 2, border: '1px solid', borderColor: 'divider' }}>
+        <CardContent>
+          <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1.5} flexWrap="wrap" gap={1}>
+            <Stack direction="row" alignItems="center" spacing={1}>
+              <MonitorHeart sx={{ color: '#3d8ef8' }} />
+              <Typography variant="subtitle1" fontWeight={700}>Bot Health Center</Typography>
+              <Typography variant="caption" color="text.secondary">
+                {hc ? `${hc.total_monitored} monitored · auto-pinged every 6h` : 'no ping data yet'}
+              </Typography>
+            </Stack>
+            <Button size="small" variant="contained" startIcon={<NetworkCheck />}
+              disabled={hcRunning} onClick={runHealthCheck}>
+              {hcRunning ? 'Checking…' : 'Run check now'}
+            </Button>
+          </Stack>
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+            {[
+              ['healthy', '#22c55e'], ['warning', '#f59e0b'], ['critical', '#ef4444'],
+              ['inactive', '#64748b'], ['archived', '#475569'],
+            ].map(([g, c]) => (
+              <Chip key={g} label={`${g}: ${hc?.summary?.[g] ?? 0}`} size="small"
+                sx={{ bgcolor: c, color: '#fff', fontWeight: 600 }} />
+            ))}
+          </Stack>
+        </CardContent>
+      </Card>
 
       {/* Summary cards */}
       <Grid container spacing={2} mb={1}>
@@ -2215,6 +2265,191 @@ function BotHealthTab({ onAdminError }) {
 }
 
 
+// ─── Diagnostics tab (read-only audit snapshot) ───────────────────────────────
+
+function KV({ label, value, color }) {
+  return (
+    <Stack direction="row" justifyContent="space-between" sx={{ py: 0.5, borderBottom: '1px solid', borderColor: 'divider' }}>
+      <Typography variant="body2" color="text.secondary">{label}</Typography>
+      <Typography variant="body2" fontWeight={600} sx={{ color }}>{value}</Typography>
+    </Stack>
+  );
+}
+
+function DiagnosticsTab({ onAdminError }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await admin.getDiagnostics();
+      setData(res.data);
+    } catch (err) {
+      const { message, is403 } = parseApiError(err);
+      if (is403) onAdminError?.(message); else toast.error(message);
+    } finally {
+      setLoading(false);
+    }
+  }, [onAdminError]);
+
+  const reconcile = useCallback(async (groupId) => {
+    try {
+      const res = await admin.reconcileGroup(groupId);
+      if (res.data.promoted) toast.success('Promoted to active');
+      else toast.info(res.data.reason || 'Not eligible yet');
+      load();
+    } catch (err) {
+      toast.error(parseApiError(err).message);
+    }
+  }, [load]);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (loading && !data) {
+    return <Box sx={{ display: 'flex', justifyContent: 'center', p: 6 }}><CircularProgress /></Box>;
+  }
+  if (!data) return null;
+
+  const { revenue, bots, groups, ai, health } = data;
+
+  return (
+    <Box>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2}>
+        <Box>
+          <Typography variant="h6" fontWeight={700}>Diagnostics</Typography>
+          <Typography variant="caption" color="text.secondary">
+            Read-only audit snapshot · generated {fmtDateTime(data.generated_at)}
+          </Typography>
+        </Box>
+        <Button startIcon={<Refresh />} onClick={load} variant="outlined" size="small">Refresh</Button>
+      </Stack>
+
+      <Alert severity="info" sx={{ mb: 2 }}>
+        No mutations, no live Telegram/AI calls — every number is derived from the database, safe to refresh.
+      </Alert>
+
+      <Grid container spacing={2}>
+        {/* Revenue (P4) */}
+        <Grid item xs={12} md={6}>
+          <Card sx={{ height: '100%' }}><CardContent>
+            <Typography fontWeight={700} mb={1}>💰 Revenue (P4) — paid rows only</Typography>
+            <KV label="MRR" value={usd(revenue.mrr_usd)} color="#22c55e" />
+            <KV label="ARR" value={usd(revenue.arr_usd)} color="#16a34a" />
+            <KV label="Paying subscribers" value={revenue.paying_subscribers} />
+            <KV label="Tier head-count (pro / ent)" value={`${revenue.tier_headcount.pro} / ${revenue.tier_headcount.enterprise}`} color="#94a3b8" />
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>{revenue.note}</Typography>
+            {revenue.contributing_rows.length > 0 ? (
+              <TableContainer sx={{ mt: 1.5 }}>
+                <Table size="small">
+                  <TableHead><TableRow>
+                    <TableCell>Email</TableCell><TableCell>Plan</TableCell>
+                    <TableCell align="right">Paid</TableCell><TableCell align="right">/mo</TableCell>
+                  </TableRow></TableHead>
+                  <TableBody>
+                    {revenue.contributing_rows.map((r) => (
+                      <TableRow key={r.user_id}>
+                        <TableCell>{r.email}</TableCell>
+                        <TableCell><Chip size="small" label={`${r.plan} · ${r.billing_period}`} /></TableCell>
+                        <TableCell align="right">{usd(r.amount_usd)}</TableCell>
+                        <TableCell align="right">{usd(r.monthly_value_usd)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            ) : (
+              <Alert severity="success" sx={{ mt: 1.5 }}>No qualifying paid rows → MRR/ARR correctly $0.</Alert>
+            )}
+          </CardContent></Card>
+        </Grid>
+
+        {/* Bots (P6) */}
+        <Grid item xs={12} md={6}>
+          <Card sx={{ height: '100%' }}><CardContent>
+            <Typography fontWeight={700} mb={1}>🤖 Bots (P6) — two tables reconciled</Typography>
+            <KV label="custom_bots table" value={bots.custom_bots_table} />
+            <KV label="legacy bots table" value={bots.legacy_bots_table} />
+            <KV label="same username in both" value={bots.in_both_tables_same_username} color="#f59e0b" />
+            <KV label="Unified distinct total" value={bots.unified_distinct_total} color="#3d8ef8" />
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>{bots.note}</Typography>
+          </CardContent></Card>
+        </Grid>
+
+        {/* AI availability (P2) */}
+        <Grid item xs={12} md={6}>
+          <Card sx={{ height: '100%' }}><CardContent>
+            <Typography fontWeight={700} mb={1}>🧠 AI availability (P2)</Typography>
+            <Stack direction="row" alignItems="center" spacing={1} mb={0.5}>
+              <Typography variant="body2">Official bot AI moderation:</Typography>
+              <Chip size="small" color={ai.official_bot.ai_moderation_wired ? 'success' : 'warning'}
+                label={ai.official_bot.ai_moderation_wired ? 'wired' : 'rule-based only'} />
+            </Stack>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>{ai.official_bot.note}</Typography>
+            <KV label="Custom-bot AI wired" value={ai.custom_bots.ai_moderation_wired ? 'yes' : 'no'} color="#22c55e" />
+            <KV label="Owners with workspace AI key" value={ai.custom_bots.owners_with_workspace_ai_key} />
+            <KV label="Platform AI key configured" value={ai.custom_bots.platform_ai_key_configured ? 'yes' : 'no'}
+              color={ai.custom_bots.platform_ai_key_configured ? '#22c55e' : '#ef4444'} />
+          </CardContent></Card>
+        </Grid>
+
+        {/* Health (P1) */}
+        <Grid item xs={12} md={6}>
+          <Card sx={{ height: '100%' }}><CardContent>
+            <Typography fontWeight={700} mb={1}>❤️ Bot health facts (P1)</Typography>
+            <KV label="Legacy bots by status" value={Object.entries(health.legacy_bots_by_status).map(([k, v]) => `${k}:${v}`).join('  ') || '—'} />
+            <KV label="Custom bots by status" value={Object.entries(health.custom_bots_by_status).map(([k, v]) => `${k}:${v}`).join('  ') || '—'} />
+            <KV label="Errors (24h) by scope" value={Object.entries(health.errors_24h_by_scope).map(([k, v]) => `${k}:${v}`).join('  ') || 'none'} />
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>{health.note}</Typography>
+          </CardContent></Card>
+        </Grid>
+
+        {/* Pending groups (P5) */}
+        <Grid item xs={12}>
+          <Card><CardContent>
+            <Typography fontWeight={700} mb={1}>
+              📭 Pending groups (P5) — {groups.pending_count} pending · {groups.active_count} active
+            </Typography>
+            {groups.rows.length === 0 ? (
+              <Alert severity="success">No pending groups.</Alert>
+            ) : (
+              <TableContainer>
+                <Table size="small">
+                  <TableHead><TableRow>
+                    <TableCell>Group</TableCell><TableCell>Owner?</TableCell>
+                    <TableCell>Recent activity</TableCell><TableCell>Why pending?</TableCell>
+                    <TableCell align="right">Action</TableCell>
+                  </TableRow></TableHead>
+                  <TableBody>
+                    {groups.rows.map((g) => (
+                      <TableRow key={g.telegram_group_id}>
+                        <TableCell>{g.title || g.telegram_group_id}</TableCell>
+                        <TableCell>{g.has_owner ? '✓' : '—'}</TableCell>
+                        <TableCell>{g.has_recent_activity_7d
+                          ? <Chip size="small" color="success" label="active" />
+                          : <Chip size="small" label="quiet" />}</TableCell>
+                        <TableCell><Typography variant="caption">{g.why_pending}</Typography></TableCell>
+                        <TableCell align="right">
+                          <Button size="small" variant={g.will_auto_promote ? 'contained' : 'outlined'}
+                            color={g.will_auto_promote ? 'success' : 'inherit'}
+                            onClick={() => reconcile(g.telegram_group_id)}>
+                            {g.will_auto_promote ? 'Activate' : 'Re-check'}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
+          </CardContent></Card>
+        </Grid>
+      </Grid>
+    </Box>
+  );
+}
+
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2232,6 +2467,7 @@ const TABS = [
   { label: 'Reports', icon: <Flag fontSize="small" /> },
   { label: 'Promo Codes', icon: <Payment fontSize="small" /> },
   { label: 'Bot Health', icon: <MonitorHeart fontSize="small" /> },
+  { label: 'Diagnostics', icon: <NetworkCheck fontSize="small" /> },
 ];
 
 export default function AdminPanel() {
@@ -2397,6 +2633,10 @@ export default function AdminPanel() {
 
         <TabPanel value={activeTab} index={11}>
           <BotHealthTab onAdminError={handleAdminError} />
+        </TabPanel>
+
+        <TabPanel value={activeTab} index={12}>
+          <DiagnosticsTab onAdminError={handleAdminError} />
         </TabPanel>
 
       </Box>

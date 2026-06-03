@@ -238,6 +238,58 @@ def get_stats():
     })
 
 
+def _compute_mrr(now):
+    """REAL paid-subscription MRR. Returns (mrr_cents:int, contributors:list).
+
+    Source of truth is PaymentHistory (one row per real payment webhook). We
+    take each user's most recent confirmed, non-zero payment and, if it is still
+    inside its billing window, count its monthly-normalized value. This
+    intentionally IGNORES subscription_tier, so free, trial, promo ($0), and
+    admin / manual grants (which never create a paid PaymentHistory row), plus
+    expired/lapsed plans, can never inflate MRR. No paid rows → MRR = $0.
+    """
+    monthly_window = timedelta(days=35)
+    annual_window = timedelta(days=370)
+    paid_rows = (
+        PaymentHistory.query
+        .filter(
+            PaymentHistory.status == "confirmed",
+            PaymentHistory.amount_usd.isnot(None),
+            PaymentHistory.amount_usd > 0,
+        )
+        .order_by(PaymentHistory.user_id.asc(), PaymentHistory.created_at.desc())
+        .all()
+    )
+    latest_paid_by_user: dict = {}
+    for p in paid_rows:
+        if p.user_id not in latest_paid_by_user:
+            latest_paid_by_user[p.user_id] = p  # first seen = most recent (created_at desc)
+
+    mrr_cents = 0.0
+    contributors: list = []
+    for uid, p in latest_paid_by_user.items():
+        period = (p.billing_period or "monthly").lower()
+        is_annual = period in ("annual", "yearly", "year")
+        window = annual_window if is_annual else monthly_window
+        if (now - p.created_at) > window:
+            continue  # last payment older than its billing window → lapsed
+        monthly_value = (p.amount_usd / 12.0) if is_annual else float(p.amount_usd)
+        mrr_cents += monthly_value
+        u = User.query.get(uid)
+        contributors.append({
+            "user_id": uid,
+            "email": (u.email if u else None),
+            "tier": (u.subscription_tier if u else None),
+            "plan": p.plan,
+            "provider": p.provider,
+            "billing_period": period,
+            "amount_usd": round((p.amount_usd or 0) / 100, 2),
+            "monthly_value_usd": round(monthly_value / 100, 2),
+            "last_payment_at": p.created_at.isoformat(),
+        })
+    return round(mrr_cents), contributors
+
+
 @admin_bp.route("/revenue", methods=["GET"])
 @admin_required
 @rate_limit(requests_per_minute=30)
@@ -266,13 +318,13 @@ def get_revenue():
     ).all()
     last_month_revenue_cents = sum(p.amount_usd or 0 for p in last_month_payments)
 
-    # MRR estimate: active subscribers × monthly price
-    pro_monthly_price = 900    # cents ($9)
-    enterprise_monthly_price = 4900  # cents ($49)
+    # MRR / ARR — REAL paid subscriptions only. See _compute_mrr() for the rules.
+    mrr_cents, revenue_contributors = _compute_mrr(now)
+    arr_cents = mrr_cents * 12
+
+    # Tier head-counts — informational only, NOT used for revenue.
     pro_count = User.query.filter_by(subscription_tier="pro").count()
     enterprise_count = User.query.filter_by(subscription_tier="enterprise").count()
-    mrr_cents = (pro_count * pro_monthly_price) + (enterprise_count * enterprise_monthly_price)
-    arr_cents = mrr_cents * 12
 
     # Payment method breakdown
     nowpayments_count = PaymentHistory.query.filter_by(provider="nowpayments", status="confirmed").count()
@@ -338,12 +390,15 @@ def get_revenue():
             "last_month": round(last_month_revenue_cents / 100, 2),
             "pro_subscribers": pro_count,
             "enterprise_subscribers": enterprise_count,
+            "paying_subscribers": len(revenue_contributors),
             "nowpayments_count": nowpayments_count,
             "lemonsqueezy_count": lemonsqueezy_count,
             "monthly_trend": trend,
             "churned_30d": churned_30d,
             "churned_30d_prev": churn_30d_prev,
             "cohort": cohort,
+            # Exact rows that make up MRR — auditable in the admin panel.
+            "contributing_subscriptions": revenue_contributors,
         }
     })
 
@@ -629,7 +684,18 @@ def admin_telegram_group_stats():
     pending = TelegramGroup.query.filter_by(bot_status="pending").count()
     removed = TelegramGroup.query.filter_by(bot_status="removed").count()
     disabled = TelegramGroup.query.filter_by(is_disabled=True).count()
-    total_custom_bots = CustomBot.query.count()
+    # Count bots across BOTH tables (legacy `bots` + new `custom_bots`),
+    # deduped by username, so this matches the unified admin bot list.
+    from ..models import Bot
+    _custom_usernames = {
+        u for (u,) in db.session.query(CustomBot.bot_username).all() if u
+    }
+    _legacy_usernames = {
+        u for (u,) in db.session.query(Bot.bot_username).all() if u
+    }
+    custom_bots_count = CustomBot.query.count()
+    legacy_only = len(_legacy_usernames - _custom_usernames)
+    total_custom_bots = custom_bots_count + legacy_only
     total_users_with_groups = db.session.query(
         TelegramGroup.owner_user_id
     ).filter(
@@ -685,6 +751,42 @@ def admin_unlink_group(group_id):
     return jsonify({"message": "Group unlinked by admin", "group": tg.to_dict()})
 
 
+@admin_bp.route("/telegram-groups/<group_id>/reconcile", methods=["POST"])
+@admin_required
+@rate_limit(requests_per_minute=20)
+def admin_reconcile_group(group_id):
+    """P5: manually run the pending→active promotion check on one group.
+
+    Promotes it if eligible (owner + recent activity + bot present); otherwise
+    returns the concrete reason it stays pending. Same logic as the hourly job.
+    """
+    from ..group_status import evaluate_pending, _has_recent_activity, reconcile_group
+    tg = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+
+    if tg.bot_status != "pending":
+        return jsonify({
+            "promoted": False,
+            "reason": f"Group is already '{tg.bot_status}', nothing to do.",
+            "group": tg.to_dict(),
+        })
+
+    reason = reconcile_group(tg)
+    if reason:
+        db.session.add(BotEvent(
+            telegram_group_id=tg.telegram_group_id,
+            event_type="group_auto_activated",
+            message=f"Admin reconcile promoted pending→active: {reason}",
+        ))
+        db.session.commit()
+        return jsonify({"promoted": True, "reason": reason, "group": tg.to_dict()})
+
+    # Not eligible — return the why.
+    _, why = evaluate_pending(tg, _has_recent_activity(tg))
+    return jsonify({"promoted": False, "reason": why, "group": tg.to_dict()})
+
+
 @admin_bp.route("/telegram-groups/<group_id>/events", methods=["GET"])
 @admin_required
 @rate_limit(requests_per_minute=30)
@@ -710,23 +812,229 @@ def admin_group_events(group_id):
 @admin_required
 @rate_limit(requests_per_minute=30)
 def admin_list_custom_bots():
+    """Unified bot list — UNIONs the new `custom_bots` table and the legacy
+    `bots` table so the admin count matches what users actually have.
+
+    The dashboard's "Community Bots" widget reads the legacy `bots` table while
+    MyBots reads `custom_bots`; previously this admin endpoint read only
+    `custom_bots`, so a user with legacy bots showed a lower count here. Every
+    row is tagged with `source` ("custom" | "legacy") so the two are clearly
+    distinguishable while still reconciling to one total.
+    """
+    from ..models import Bot
+
     page = request.args.get("page", 1, type=int)
     per_page = min(request.args.get("per_page", 50, type=int), 100)
-    paginated = CustomBot.query.order_by(CustomBot.created_at.desc()).paginate(
-        page=page, per_page=per_page, error_out=False
-    )
-    result = []
-    for bot in paginated.items:
+
+    # Cache owner lookups across both tables.
+    _owner_cache: dict = {}
+
+    def _owner(uid):
+        if uid not in _owner_cache:
+            _owner_cache[uid] = User.query.get(uid)
+        return _owner_cache[uid]
+
+    combined = []
+
+    # New custom bots.
+    for bot in CustomBot.query.all():
         d = bot.to_dict()
-        owner = User.query.get(bot.owner_user_id)
+        d["source"] = "custom"
+        owner = _owner(bot.owner_user_id)
         d["owner_email"] = owner.email if owner else None
         d["owner_tier"] = owner.subscription_tier if owner else None
-        result.append(d)
+        d["_sort"] = bot.created_at
+        combined.append(d)
+
+    # Legacy bots — normalize to the same shape.
+    seen_usernames = {b.get("bot_username") for b in combined if b.get("bot_username")}
+    for bot in Bot.query.all():
+        # Skip a legacy row if the same bot already appears as a custom bot.
+        if bot.bot_username and bot.bot_username in seen_usernames:
+            continue
+        owner = _owner(bot.user_id)
+        combined.append({
+            "id": bot.id,
+            "source": "legacy",
+            "bot_username": bot.bot_username,
+            "bot_name": bot.bot_name,
+            "status": bot.get_health_status(),
+            "linked_groups_count": len(bot.groups),
+            "created_at": bot.created_at.isoformat() if bot.created_at else None,
+            "owner_email": owner.email if owner else None,
+            "owner_tier": owner.subscription_tier if owner else None,
+            "_sort": bot.created_at,
+        })
+
+    # Sort newest-first and paginate in Python over the merged list.
+    combined.sort(key=lambda b: b.get("_sort") or datetime.min, reverse=True)
+    for b in combined:
+        b.pop("_sort", None)
+
+    total = len(combined)
+    start = (page - 1) * per_page
+    result = combined[start:start + per_page]
+    pages = (total + per_page - 1) // per_page if per_page else 1
+
     return jsonify({
         "bots": result,
-        "total": paginated.total,
-        "pages": paginated.pages,
+        "total": total,
+        "pages": pages,
         "page": page,
+        "counts": {
+            "custom_bots": CustomBot.query.count(),
+            "legacy_bots": Bot.query.count(),
+            "unified_total": total,
+        },
+    })
+
+
+# ── Diagnostics (read-only) ────────────────────────────────────────────────────
+
+@admin_bp.route("/diagnostics", methods=["GET"])
+@admin_required
+@rate_limit(requests_per_minute=20)
+def admin_diagnostics():
+    """One read-only snapshot that makes the audit findings auditable in-panel.
+
+    Performs NO mutations and NO live Telegram/AI calls — every fact is derived
+    from the database so it is safe to hit repeatedly. Sections:
+      • revenue   — exact rows that make up MRR (P4)
+      • bots      — counts from `bots` + `custom_bots`, reconciled (P6)
+      • groups    — per-group "why pending" reason from DB facts (P5)
+      • ai        — AI feature availability per official / custom / Echo (P2)
+      • health    — bot liveness/health facts (P1)
+    """
+    from ..models import Bot, MessageBuffer, UserApiKey
+    now = datetime.utcnow()
+
+    # ── Revenue (P4) — exact contributing rows ──
+    mrr_cents, contributors = _compute_mrr(now)
+    revenue = {
+        "mrr_usd": round(mrr_cents / 100, 2),
+        "arr_usd": round(mrr_cents * 12 / 100, 2),
+        "paying_subscribers": len(contributors),
+        "tier_headcount": {
+            "pro": User.query.filter_by(subscription_tier="pro").count(),
+            "enterprise": User.query.filter_by(subscription_tier="enterprise").count(),
+        },
+        "note": "MRR counts ONLY real PaymentHistory cash rows in-window. Tier head-counts are shown for contrast and are NOT revenue.",
+        "contributing_rows": contributors,
+    }
+
+    # ── Bots (P6) — reconcile the two tables ──
+    custom_total = CustomBot.query.count()
+    legacy_total = Bot.query.count()
+    custom_usernames = {u for (u,) in db.session.query(CustomBot.bot_username).all() if u}
+    legacy_usernames = {u for (u,) in db.session.query(Bot.bot_username).all() if u}
+    legacy_only = len(legacy_usernames - custom_usernames)
+    bots = {
+        "custom_bots_table": custom_total,
+        "legacy_bots_table": legacy_total,
+        "in_both_tables_same_username": len(custom_usernames & legacy_usernames),
+        "unified_distinct_total": custom_total + legacy_only,
+        "note": "Dashboard 'Community Bots' reads the legacy `bots` table; MyBots/admin read `custom_bots`. Unified total is the real distinct count.",
+    }
+
+    # ── Groups (P5) — DB-derived "why pending" ──
+    pending_groups = (
+        TelegramGroup.query.filter_by(bot_status="pending")
+        .order_by(TelegramGroup.created_at.desc())
+        .limit(100)
+        .all()
+    )
+    seven_days_ago = now - timedelta(days=7)
+    group_rows = []
+    for g in pending_groups:
+        last_msg = (
+            MessageBuffer.query
+            .filter_by(telegram_group_id=g.telegram_group_id)
+            .order_by(MessageBuffer.created_at.desc())
+            .first()
+        )
+        has_recent_activity = bool(last_msg and last_msg.created_at >= seven_days_ago)
+        has_owner = g.owner_user_id is not None
+        # Single source of truth — same logic the hourly auto-promote job uses.
+        from ..group_status import evaluate_pending
+        will_promote, reason = evaluate_pending(g, has_recent_activity)
+        group_rows.append({
+            "telegram_group_id": g.telegram_group_id,
+            "title": g.title,
+            "has_owner": has_owner,
+            "linked_bot_id": g.linked_bot_id,
+            "linked_at": g.linked_at.isoformat() if g.linked_at else None,
+            "last_activity_at": last_msg.created_at.isoformat() if last_msg else None,
+            "has_recent_activity_7d": has_recent_activity,
+            "will_auto_promote": will_promote,
+            "why_pending": reason,
+        })
+    groups = {
+        "pending_count": TelegramGroup.query.filter_by(bot_status="pending").count(),
+        "active_count": TelegramGroup.query.filter_by(bot_status="active").count(),
+        "rows": group_rows,
+    }
+
+    # ── AI availability (P2) ──
+    platform_key = bool(getattr(Config, "PLATFORM_OPENROUTER_API_KEY", None))
+    workspace_key_owners = (
+        db.session.query(UserApiKey.user_id)
+        .filter_by(scope="workspace", is_active=True)
+        .distinct().count()
+    )
+    ai = {
+        "official_bot": {
+            "ai_moderation_wired": False,
+            "mode": "rule_based_only",
+            "note": "Official bot runs inline rule-based AutoMod (bad-words + rate spam). Optional Smart AI Moderation is the planned P2 add-on; UI must not claim AI is active unless configured + enabled.",
+        },
+        "custom_bots": {
+            "ai_moderation_wired": True,
+            "total_bots": custom_total + legacy_only,
+            "owners_with_workspace_ai_key": workspace_key_owners,
+            "platform_ai_key_configured": platform_key,
+            "note": "AI relevance fires only when smart_mod.ai_enabled + group_topic set AND an AI key resolves (workspace key or platform key). Owner lookup now covers both Bot and CustomBot (P2 fix).",
+        },
+        "echo": {
+            "ai_wired": True,
+            "platform_ai_key_configured": platform_key,
+            "owners_with_workspace_ai_key": workspace_key_owners,
+            "note": "Echo handlers (replies, digests, notes, tasks, memory, search) are AI-key-gated. End-to-end correctness needs a runtime with a live key.",
+        },
+    }
+
+    # ── Health / liveness facts (P1) ──
+    since_24h = now - timedelta(hours=24)
+    legacy_health = {}
+    for b in Bot.query.all():
+        s = b.get_health_status()
+        legacy_health[s] = legacy_health.get(s, 0) + 1
+    custom_health = {}
+    for (st, cnt) in (
+        db.session.query(CustomBot.status, db.func.count(CustomBot.id))
+        .group_by(CustomBot.status).all()
+    ):
+        custom_health[st or "unknown"] = cnt
+    errors_by_scope = {
+        scope: cnt for (scope, cnt) in (
+            db.session.query(BotHealthEvent.scope, db.func.count(BotHealthEvent.id))
+            .filter(BotHealthEvent.created_at >= since_24h)
+            .group_by(BotHealthEvent.scope).all()
+        )
+    }
+    health = {
+        "legacy_bots_by_status": legacy_health,
+        "custom_bots_by_status": custom_health,
+        "errors_24h_by_scope": errors_by_scope,
+        "note": "Liveness here is derived from last_active age + recorded errors. Scheduled getMe pings + escalation come with the P1 Bot Health Center.",
+    }
+
+    return jsonify({
+        "generated_at": now.isoformat(),
+        "revenue": revenue,
+        "bots": bots,
+        "groups": groups,
+        "ai": ai,
+        "health": health,
     })
 
 
@@ -906,6 +1214,52 @@ def admin_bot_health_errors():
         q = q.filter(BotHealthEvent.ref == str(ref))
     rows = q.order_by(BotHealthEvent.created_at.desc()).limit(limit).all()
     return jsonify({"errors": [r.to_dict() for r in rows]})
+
+
+# ── Bot Health Center (P1) ─────────────────────────────────────────────────────
+
+@admin_bp.route("/bot-health-center", methods=["GET"])
+@admin_required
+@rate_limit(requests_per_minute=30)
+def admin_bot_health_center():
+    """Rolled-up health grades + per-bot state from the scheduled ping job."""
+    from ..models import BotHealthState
+    states = BotHealthState.query.order_by(BotHealthState.health_grade.asc()).all()
+    grades = ["healthy", "warning", "critical", "inactive", "archived"]
+    summary = {g: 0 for g in grades}
+    for s in states:
+        summary[s.health_grade] = summary.get(s.health_grade, 0) + 1
+
+    owner_ids = {s.owner_user_id for s in states if s.owner_user_id}
+    owners = {u.id: u for u in User.query.filter(User.id.in_(owner_ids)).all()} if owner_ids else {}
+
+    rows = []
+    for s in states:
+        d = s.to_dict()
+        owner = owners.get(s.owner_user_id)
+        d["owner_email"] = owner.email if owner else None
+        rows.append(d)
+
+    return jsonify({
+        "summary": summary,
+        "total_monitored": len(states),
+        "bots": rows,
+        "note": "State is refreshed by the scheduled getMe ping job (every 6h). Use 'Run check now' to refresh on demand.",
+    })
+
+
+@admin_bp.route("/bot-health-center/run", methods=["POST"])
+@admin_required
+@rate_limit(requests_per_minute=4)
+def admin_bot_health_center_run():
+    """Manually run the health-check sweep now (admins) — pings every bot."""
+    from ..bot_health_monitor import run_health_checks
+    try:
+        from ..scheduler import _send_telegram_dm
+    except Exception:
+        _send_telegram_dm = None
+    summary = run_health_checks(db, send_dm=_send_telegram_dm)
+    return jsonify({"message": "Health check complete", "summary": summary})
 
 
 @admin_bp.route("/custom-bots/<int:bot_id>/disable", methods=["POST"])

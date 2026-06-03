@@ -214,6 +214,8 @@ def _load_pending_verifications_from_db(flask_app):
 # _URL_RE, _TELEGRAM_LINK_RE, _EMAIL_RE, _EMOJI_RE, _LANG_RANGES are imported above.
 # Spam rate tracker — {"{chat_id}:{user_id}": [datetime, ...]}
 _spam_tracker: dict = {}
+# Per-(chat,user) cooldown for the OPTIONAL Smart AI Moderation layer.
+_official_ai_cooldown: dict = {}
 
 # Default word list for word-method verification
 _DEFAULT_VERIFY_WORDS = [
@@ -3646,6 +3648,70 @@ async def _automod_check(bot, message, am_cfg: dict, group_id: str, flask_app) -
                                    rule_key, mc.get("action", "delete"))
             return True
 
+    # ── Smart AI Moderation (OPTIONAL — off by default) ──────────────────────
+    # The official bot is rule-based by default. AI relevance/promo moderation
+    # runs ONLY when an admin explicitly enables Smart AI Moderation, sets a
+    # group topic, AND a workspace AI key resolves. Otherwise it silently no-ops
+    # so we never act as if AI is on when it isn't.
+    sm_cfg = am_cfg.get("smart_mod", {})
+    if (sm_cfg.get("enabled") and sm_cfg.get("ai_enabled") and text
+            and len((sm_cfg.get("group_topic") or "").strip()) > 0
+            and len(text.split()) >= 10):
+        if await _official_ai_moderation(bot, message, text, group_id, sm_cfg, flask_app):
+            return True
+
+    return False
+
+
+async def _official_ai_moderation(bot, message, text, group_id, sm_cfg, flask_app) -> bool:
+    """Optional Smart AI Moderation for official-bot groups. Returns True if the
+    message was blocked. No-ops (returns False) unless an AI key resolves for the
+    group owner — so the default experience stays rule-based."""
+    user_id = message.from_user.id if message.from_user else None
+    if not user_id:
+        return False
+    # Per-user cooldown so we don't spend tokens on every message.
+    key = (message.chat_id, user_id)
+    rate = sm_cfg.get("ai_rate_limit_seconds", 30)
+    now = datetime.utcnow()
+    last = _official_ai_cooldown.get(key)
+    if last and (now - last).total_seconds() < rate:
+        return False
+    _official_ai_cooldown[key] = now
+
+    topic = (sm_cfg.get("group_topic") or "").strip()
+    key_info = None
+    try:
+        with flask_app.app_context():
+            from .models import TelegramGroup, User
+            from .assistant.ai_key_resolver import get_workspace_ai_key
+            tg = TelegramGroup.query.filter_by(telegram_group_id=str(group_id)).first()
+            owner = User.query.get(tg.owner_user_id) if (tg and tg.owner_user_id) else None
+            if not owner:
+                return False
+            key_info = get_workspace_ai_key(owner)
+            if not key_info.get("api_key"):
+                return False  # AI not configured → stay rule-based, silently
+    except Exception as exc:
+        _log.debug("[OfficialBot] Smart AI key resolve failed: %s", exc)
+        return False
+
+    try:
+        from .bot_features.moderation import ModerationSystem
+        import asyncio as _aio
+        loop = _aio.get_running_loop()
+        verdict, _reason = await loop.run_in_executor(
+            None, ModerationSystem._call_ai_moderation,
+            text, topic, (message.chat.title or ""), key_info,
+        )
+    except Exception as exc:
+        _log.debug("[OfficialBot] Smart AI moderation call failed: %s", exc)
+        return False
+
+    if verdict in ("promotional", "irrelevant"):
+        await _automod_execute(bot, message, group_id, flask_app,
+                               "smart_ai", sm_cfg.get("action", "delete"))
+        return True
     return False
 
 

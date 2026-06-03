@@ -957,11 +957,18 @@ export default function GroupSettings() {
               <CardContent>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                   <Typography variant="h6" fontWeight={600}>Smart Moderation</Typography>
-                  <Chip label="AI-Powered" size="small" color="primary" variant="outlined" />
+                  <Chip
+                    label={(am.smart_mod || {}).ai_enabled ? 'AI Active' : 'Rule-based · AI optional'}
+                    size="small"
+                    color={(am.smart_mod || {}).ai_enabled ? 'primary' : 'default'}
+                    variant="outlined"
+                  />
                   <ProBadge />
                 </Box>
                 <Typography variant="body2" color="text.secondary" mb={2}>
-                  Three-layer system: fast rules → hidden URL detection → AI relevance check. AI is only called when the first two layers pass.
+                  Three-layer system: fast rules → hidden URL detection → optional AI relevance check.
+                  The AI layer runs <b>only</b> when you enable Layer 3 below <b>and</b> a workspace AI key
+                  is set (Settings → AI). Without a key, moderation stays rule-based.
                 </Typography>
                 <PlanGate plan="pro" userTier={userTier} feature="Smart Moderation">
                 <FormControlLabel

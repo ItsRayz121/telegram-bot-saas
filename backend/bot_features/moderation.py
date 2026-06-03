@@ -1024,6 +1024,41 @@ class ModerationSystem:
             logger.debug(f"AI moderation call failed: {e}")
             return "ok", ""
 
+    @staticmethod
+    def _resolve_group_owner(group, Bot, CustomBot, TelegramGroup, User):
+        """Resolve the human owner of a group across BOTH bot models.
+
+        Legacy bots store groups in the `groups` table (Group.bot_id → Bot).
+        Custom (bring-your-own) bots store them in `telegram_groups`
+        (TelegramGroup.linked_bot_id → CustomBot) and have NO legacy Bot row.
+        The original lookup only checked `Bot`, so AI moderation silently
+        disabled itself for every custom-bot group. We now try the legacy path
+        first, then fall back to the TelegramGroup → CustomBot path.
+        """
+        # Legacy path: Group.bot_id → Bot → owner.
+        legacy_bot_id = getattr(group, "bot_id", None)
+        if legacy_bot_id is not None:
+            bot_obj = Bot.query.get(legacy_bot_id)
+            if bot_obj:
+                owner = User.query.get(bot_obj.user_id)
+                if owner:
+                    return owner
+
+        # Custom-bot path: resolve via the TelegramGroup record.
+        tgid = getattr(group, "telegram_group_id", None)
+        if tgid is not None:
+            tg = TelegramGroup.query.filter_by(telegram_group_id=str(tgid)).first()
+            if tg:
+                if tg.owner_user_id:
+                    owner = User.query.get(tg.owner_user_id)
+                    if owner:
+                        return owner
+                if tg.linked_bot_id:
+                    cb = CustomBot.query.get(tg.linked_bot_id)
+                    if cb and cb.owner_user_id:
+                        return User.query.get(cb.owner_user_id)
+        return None
+
     async def check_ai_relevance(self, bot, message, text, group, settings):
         cfg = settings.get("smart_mod", {})
         if not cfg.get("enabled") or not cfg.get("ai_enabled"):
@@ -1047,10 +1082,10 @@ class ModerationSystem:
         self._ai_cooldown[key] = now
 
         with self.app.app_context():
-            from ..models import Bot, User
+            from ..models import Bot, CustomBot, TelegramGroup, User
             from ..assistant.ai_key_resolver import get_workspace_ai_key
-            bot_obj = Bot.query.get(group.bot_id)
-            owner = User.query.get(bot_obj.user_id) if bot_obj else None
+
+            owner = self._resolve_group_owner(group, Bot, CustomBot, TelegramGroup, User)
             if not owner:
                 return False
             key_info = get_workspace_ai_key(owner)

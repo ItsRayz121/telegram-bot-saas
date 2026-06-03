@@ -69,6 +69,16 @@ def make_celery(app=None):
                 "task": "backend.scheduler.check_inactive_groups",
                 "schedule": crontab(hour=9, minute=30),  # daily at 09:30 UTC
             },
+            # ── P5: auto-promote stuck pending groups ──────────────────────
+            "reconcile-pending-groups": {
+                "task": "backend.scheduler.reconcile_pending_groups_task",
+                "schedule": 3600.0,  # hourly
+            },
+            # ── P1: Bot Health Center — liveness pings + owner alerts ───────
+            "ping-all-bots": {
+                "task": "backend.scheduler.ping_all_bots",
+                "schedule": 21600.0,  # every 6 hours
+            },
             # ── Verification expiry cleanup ────────────────────────────────
             "expire-pending-verifications": {
                 "task": "backend.scheduler.expire_pending_verifications",
@@ -235,7 +245,7 @@ def send_scheduled_messages():
                             send_kwargs["message_thread_id"] = m.topic_id
                         from .official_bot import _can_send_to_group
                         if not _can_send_to_group(str(g.telegram_group_id)):
-                            continue
+                            return  # skip this message (continue is illegal inside this nested coroutine)
                         sent = await b.application.bot.send_message(**send_kwargs)
 
                         if m.pin_message:
@@ -856,6 +866,40 @@ def check_inactive_groups():
 
     except Exception as exc:
         logger.error("check_inactive_groups error: %s", exc)
+
+
+@celery.task(name="backend.scheduler.reconcile_pending_groups_task")
+def reconcile_pending_groups_task():
+    """P5: promote groups stuck in 'pending' that have an owner + recent activity
+    (bot present, messages flowing) to 'active' automatically. Runs hourly."""
+    try:
+        from .app import create_app
+        app = create_app()
+        with app.app_context():
+            from .models import db
+            from .group_status import reconcile_pending_groups
+            promoted = reconcile_pending_groups(db)
+            if promoted:
+                logger.info("[celery:reconcile_pending_groups] promoted=%d", promoted)
+    except Exception as exc:
+        logger.error("reconcile_pending_groups error: %s", exc)
+
+
+@celery.task(name="backend.scheduler.ping_all_bots")
+def ping_all_bots():
+    """P1 Bot Health Center: getMe-ping every active bot across both tables,
+    update health state, escalate grades, and alert owners on worsening.
+    Runs every 6 hours."""
+    try:
+        from .app import create_app
+        app = create_app()
+        with app.app_context():
+            from .models import db
+            from .bot_health_monitor import run_health_checks
+            summary = run_health_checks(db, send_dm=_send_telegram_dm)
+            logger.info("[celery:ping_all_bots] %s", summary)
+    except Exception as exc:
+        logger.error("ping_all_bots error: %s", exc)
 
 
 @celery.task(name="backend.scheduler.cleanup_message_buffer")

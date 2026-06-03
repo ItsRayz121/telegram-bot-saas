@@ -120,6 +120,10 @@ class User(db.Model):
     trial_used           = db.Column(db.Boolean, default=False)
     # Onboarding checklist (2-B-01)
     onboarding_completed_steps = db.Column(db.JSON, nullable=True)  # list of completed step keys
+    # Product tour: server-side persistence so it never re-appears across
+    # refreshes / browsers / Telegram webview sessions (localStorage is wiped in
+    # the Telegram in-app webview). Reset via Settings → Retake Onboarding Tour.
+    onboarding_tour_completed = db.Column(db.Boolean, default=False, nullable=False)
     # Payment abuse tracking
     chargeback_count = db.Column(db.Integer, default=0, nullable=False)
 
@@ -174,6 +178,7 @@ class User(db.Model):
             "trial_ends_at": self.trial_ends_at.isoformat() if self.trial_ends_at else None,
             "trial_used": bool(self.trial_used),
             "onboarding_completed_steps": self.onboarding_completed_steps or [],
+            "onboarding_tour_completed": bool(self.onboarding_tour_completed),
         }
 
 
@@ -1761,6 +1766,49 @@ class BotHealthEvent(db.Model):
             "category": self.category,
             "detail": self.detail,
             "created_at": self.created_at.isoformat(),
+        }
+
+
+class BotHealthState(db.Model):
+    """Per-bot liveness + escalation state for the Bot Health Center (P1).
+
+    One row per monitored bot across BOTH tables (scope = 'legacy' | 'custom').
+    Updated by the scheduled getMe ping job. Distinct from BotHealthEvent, which
+    is an append-only error log; this is the current rolled-up state.
+    """
+    __tablename__ = "bot_health_state"
+    __table_args__ = (
+        db.UniqueConstraint("scope", "ref", name="uq_bot_health_state_scope_ref"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    scope = db.Column(db.String(20), nullable=False, index=True)   # legacy | custom
+    ref = db.Column(db.String(64), nullable=False, index=True)     # bot id (as string)
+    bot_username = db.Column(db.String(255), nullable=True)
+    owner_user_id = db.Column(db.Integer, nullable=True, index=True)
+    # healthy | warning | critical | inactive | archived
+    health_grade = db.Column(db.String(20), nullable=False, default="healthy", index=True)
+    consecutive_failures = db.Column(db.Integer, nullable=False, default=0)
+    last_ping_at = db.Column(db.DateTime, nullable=True)
+    last_successful_ping = db.Column(db.DateTime, nullable=True)
+    last_failed_ping = db.Column(db.DateTime, nullable=True)
+    last_error = db.Column(db.Text, nullable=True)
+    last_alert_grade = db.Column(db.String(20), nullable=True)     # last grade we alerted the owner about
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "scope": self.scope,
+            "ref": self.ref,
+            "bot_username": self.bot_username,
+            "owner_user_id": self.owner_user_id,
+            "health_grade": self.health_grade,
+            "consecutive_failures": self.consecutive_failures,
+            "last_ping_at": self.last_ping_at.isoformat() if self.last_ping_at else None,
+            "last_successful_ping": self.last_successful_ping.isoformat() if self.last_successful_ping else None,
+            "last_failed_ping": self.last_failed_ping.isoformat() if self.last_failed_ping else None,
+            "last_error": self.last_error,
         }
 
 
