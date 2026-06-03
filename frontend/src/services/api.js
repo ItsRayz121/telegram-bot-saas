@@ -19,10 +19,23 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-// 1-D-02: attach CSRF token from cookie to every state-changing request
+// 1-D-02: attach CSRF token from cookie to every state-changing request.
+// When the CSRF cookie is absent the browser isn't sending our cookies at all
+// (e.g. the Telegram in-app WebView, which partitions/blocks cross-site cookies
+// to api.telegizer.com under SameSite=Strict). In that case fall back to Bearer
+// auth with the stored JWT so requests still authenticate — the backend accepts
+// the token from the Authorization header as well as from cookies. This is what
+// lets the product-tour flag (and everything else) read/write inside Telegram.
 api.interceptors.request.use((config) => {
   const csrfToken = document.cookie.match(/csrf_token=([^;]+)/)?.[1];
-  if (csrfToken) config.headers['X-CSRF-Token'] = csrfToken;
+  if (csrfToken) {
+    config.headers['X-CSRF-Token'] = csrfToken;
+  } else {
+    try {
+      const token = localStorage.getItem('token');
+      if (token) config.headers['Authorization'] = `Bearer ${token}`;
+    } catch {}
+  }
   return config;
 });
 
@@ -53,8 +66,15 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    // On 401, try silent token refresh using the refresh cookie (set automatically by browser)
-    const isAuthEndpoint = original.url?.includes('/api/auth/');
+    // On 401, try silent token refresh using the refresh cookie (set automatically by browser).
+    // Protected resources that merely live under /api/auth/ (the current user, the
+    // onboarding/product-tour state) must refresh-and-retry like any other endpoint —
+    // they are NOT credential endpoints. Treating them as such meant an expired access
+    // token while dismissing the product tour logged the user out AND silently dropped
+    // the POST that persists onboarding_tour_completed, so the tour kept reappearing.
+    const PROTECTED_AUTH_RESOURCES = ['/api/auth/me', '/api/auth/onboarding'];
+    const isProtectedAuthResource = PROTECTED_AUTH_RESOURCES.some((p) => original.url?.includes(p));
+    const isAuthEndpoint = original.url?.includes('/api/auth/') && !isProtectedAuthResource;
     if (error.response?.status === 401 && !original._retry && !isAuthEndpoint) {
       if (_isRefreshing) {
         return new Promise((resolve, reject) => {
