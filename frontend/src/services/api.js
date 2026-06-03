@@ -222,6 +222,16 @@ export const settings = {
       ? api.patch(`/api/telegram-groups/${groupId}/escalations/${eventId}`, data)
       : api.patch(`/api/bots/${botId}/groups/${groupId}/escalations/${eventId}`, data),
 
+  // AI Activity: AI-generated action log + metrics (reporting layer)
+  getAIActivity: (botId, groupId, params) =>
+    botId === 'official'
+      ? api.get(`/api/telegram-groups/${groupId}/ai-activity`, { params })
+      : api.get(`/api/bots/${botId}/groups/${groupId}/ai-activity`, { params }),
+  getAIStatus: (botId, groupId) =>
+    botId === 'official'
+      ? api.get(`/api/telegram-groups/${groupId}/ai-status`)
+      : api.get(`/api/bots/${botId}/groups/${groupId}/ai-status`),
+
   // Official groups: real scheduled-messages endpoints
   getScheduledMessages: (botId, groupId) =>
     botId === 'official'

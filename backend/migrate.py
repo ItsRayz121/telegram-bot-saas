@@ -178,6 +178,30 @@ def init_db():
             "group_daily_signals.updated_at",
         )
 
+        # ── Bot Health Center: error classification columns (Part 6) ──────────
+        # bot_health_events / ai_activity tables are created by db.create_all();
+        # these ALTERs add the new columns when the table already existed.
+        _run_alter(
+            db.engine,
+            "ALTER TABLE bot_health_events ADD COLUMN IF NOT EXISTS severity VARCHAR(10)",
+            "bot_health_events.severity",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE bot_health_events ADD COLUMN IF NOT EXISTS error_class VARCHAR(40)",
+            "bot_health_events.error_class",
+        )
+        _run_alter(
+            db.engine,
+            "CREATE INDEX IF NOT EXISTS ix_bot_health_events_severity ON bot_health_events (severity)",
+            "bot_health_events.severity index",
+        )
+        _run_alter(
+            db.engine,
+            "CREATE INDEX IF NOT EXISTS ix_ai_activity_group_created ON ai_activity (scope, group_ref, created_at)",
+            "ai_activity composite index",
+        )
+
         # ── UserAssistantProfile table (new — db.create_all handles creation) ─
         # ── Index for fast per-user lookup ────────────────────────────────────
         _run_alter(

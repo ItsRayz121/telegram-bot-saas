@@ -340,6 +340,12 @@ export default function GroupSettings() {
   const [digestSaving, setDigestSaving] = useState(false);
   const [digestSending, setDigestSending] = useState('');
 
+  // AI Activity tab
+  const [aiActivity, setAiActivity] = useState({ metrics: {}, by_category: {}, events: [] });
+  const [aiActivityLoading, setAiActivityLoading] = useState(false);
+  const [aiActivityCategory, setAiActivityCategory] = useState('');
+  const [aiStatus, setAiStatus] = useState(null);
+
   // Admin list for reports / digest recipient selection
   const [groupAdmins, setGroupAdmins] = useState([]);
   const [adminsLoading, setAdminsLoading] = useState(false);
@@ -522,6 +528,22 @@ export default function GroupSettings() {
     }
   }, [botId, groupId]);
 
+  const fetchAIActivity = useCallback(async () => {
+    setAiActivityLoading(true);
+    try {
+      const [act, st] = await Promise.all([
+        settings.getAIActivity(botId, groupId, { page: 1, category: aiActivityCategory || undefined }),
+        settings.getAIStatus(botId, groupId).catch(() => ({ data: null })),
+      ]);
+      setAiActivity(act.data || { metrics: {}, by_category: {}, events: [] });
+      setAiStatus(st.data || null);
+    } catch {
+      setAiActivity({ metrics: {}, by_category: {}, events: [] });
+    } finally {
+      setAiActivityLoading(false);
+    }
+  }, [botId, groupId, aiActivityCategory]);
+
   const fetchAdmins = useCallback(async () => {
     setAdminsLoading(true);
     try {
@@ -614,6 +636,7 @@ export default function GroupSettings() {
   const auditLogSubTabIdx     = getSubTabIndex(CATEGORIES, 'analytics', 'Audit Log');
   const warningsSubTabIdx     = getSubTabIndex(CATEGORIES, 'analytics', 'Warnings');
   const digestSubTabIdx       = getSubTabIndex(CATEGORIES, 'analytics', 'Digest');
+  const aiActivitySubTabIdx   = getSubTabIndex(CATEGORIES, 'analytics', 'AI Activity');
   useEffect(() => { fetchSettings(); }, [fetchSettings]);
   useEffect(() => { if (cat === 'analytics' && subTab === 0) fetchMembers(membersPage); }, [cat, subTab, membersPage, fetchMembers]);
   useEffect(() => { if (cat === 'analytics' && subTab === leaderboardSubTabIdx) fetchLeaderboard(); }, [cat, subTab, leaderboardSubTabIdx, fetchLeaderboard]);
@@ -622,6 +645,7 @@ export default function GroupSettings() {
   useEffect(() => { if (cat === 'moderation' && subTab === 2) fetchReports(); }, [cat, subTab, fetchReports]);
   useEffect(() => { if (cat === 'analytics' && subTab === warningsSubTabIdx) fetchWarnings(); }, [cat, subTab, warningsSubTabIdx, fetchWarnings]);
   useEffect(() => { if (cat === 'analytics' && subTab === digestSubTabIdx) fetchDigest(); }, [cat, subTab, digestSubTabIdx, fetchDigest]);
+  useEffect(() => { if (cat === 'analytics' && subTab === aiActivitySubTabIdx) fetchAIActivity(); }, [cat, subTab, aiActivitySubTabIdx, fetchAIActivity]);
   useEffect(() => {
     if ((cat === 'moderation' && subTab === 2) || (cat === 'analytics' && subTab === digestSubTabIdx) || (cat === 'ai' && subTab === 2)) {
       fetchAdmins();
@@ -3536,6 +3560,131 @@ export default function GroupSettings() {
                       Admins who have not started @telegizer_bot will be silently skipped.
                     </Typography>
                   </Alert>
+                </CardContent>
+              </Card>
+            </>
+          )
+        )}
+
+        {/* ── AI Activity (reporting layer) ── */}
+        {cat === 'analytics' && subTab === aiActivitySubTabIdx && (
+          aiActivityLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}><CircularProgress /></Box>
+          ) : (
+            <>
+              {/* AI Status panel */}
+              {aiStatus && (
+                <Card sx={{ mb: 2 }}>
+                  <CardContent>
+                    <Typography variant="subtitle1" fontWeight={600} mb={1.5}>🤖 AI Status</Typography>
+                    <Grid container spacing={1.5}>
+                      {[
+                        { label: 'Smart Moderation', value: aiStatus.smart_moderation, good: 'enabled' },
+                        { label: 'AI Integrations', value: aiStatus.ai_integrations, good: 'connected' },
+                        { label: 'Knowledge Base', value: aiStatus.knowledge_base, good: 'configured' },
+                        { label: 'OpenAI Provider', value: aiStatus.openai_provider, good: 'connected' },
+                      ].map(({ label, value, good }) => (
+                        <Grid item xs={6} sm={3} key={label}>
+                          <Typography variant="caption" color="text.secondary">{label}</Typography>
+                          <Box mt={0.5}>
+                            <Chip
+                              size="small"
+                              label={(value || 'unknown').replace(/_/g, ' ')}
+                              color={value === good ? 'success' : 'default'}
+                              variant={value === good ? 'filled' : 'outlined'}
+                              sx={{ textTransform: 'capitalize', fontWeight: 600 }}
+                            />
+                          </Box>
+                        </Grid>
+                      ))}
+                    </Grid>
+                    <Divider sx={{ my: 1.5 }} />
+                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={3}>
+                      <Typography variant="caption" color="text.secondary">
+                        Last AI action:{' '}
+                        <strong>{aiStatus.last_ai_action ? new Date(aiStatus.last_ai_action).toLocaleString() : '—'}</strong>
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Last successful AI response:{' '}
+                        <strong>{aiStatus.last_successful_response ? new Date(aiStatus.last_successful_response).toLocaleString() : '—'}</strong>
+                      </Typography>
+                    </Stack>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Metrics */}
+              <Grid container spacing={1.5} sx={{ mb: 2 }}>
+                {[
+                  { key: 'today', label: 'AI Actions Today' },
+                  { key: 'week', label: 'This Week' },
+                  { key: 'month', label: 'This Month' },
+                  { key: 'total', label: 'Total AI Actions' },
+                ].map(({ key, label }) => (
+                  <Grid item xs={6} sm={3} key={key}>
+                    <Card variant="outlined">
+                      <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+                        <Typography variant="h5" fontWeight={700}>{(aiActivity.metrics?.[key] ?? 0).toLocaleString()}</Typography>
+                        <Typography variant="caption" color="text.secondary">{label}</Typography>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                ))}
+              </Grid>
+
+              {/* Category filter */}
+              <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: 'wrap', gap: 1 }}>
+                {['', 'moderation', 'knowledge', 'engagement', 'automation', 'analytics'].map((c) => (
+                  <Chip
+                    key={c || 'all'}
+                    label={c
+                      ? `${c.charAt(0).toUpperCase()}${c.slice(1)} (${aiActivity.by_category?.[c] ?? 0})`
+                      : 'All'}
+                    size="small"
+                    color={aiActivityCategory === c ? 'primary' : 'default'}
+                    variant={aiActivityCategory === c ? 'filled' : 'outlined'}
+                    onClick={() => setAiActivityCategory(c)}
+                    sx={{ textTransform: 'capitalize' }}
+                  />
+                ))}
+              </Stack>
+
+              {/* Timeline */}
+              <Card>
+                <CardContent>
+                  {(!aiActivity.events || aiActivity.events.length === 0) ? (
+                    <Typography variant="body2" color="text.secondary" sx={{ py: 3, textAlign: 'center' }}>
+                      No AI activity recorded yet. As the bot moderates, answers questions, and runs automations,
+                      those actions will appear here.
+                    </Typography>
+                  ) : (
+                    <Table size="small">
+                      <TableBody>
+                        {aiActivity.events.map((e) => (
+                          <TableRow key={e.id}>
+                            <TableCell sx={{ whiteSpace: 'nowrap', verticalAlign: 'top', width: 150 }}>
+                              <Typography variant="caption" color="text.secondary">
+                                {e.created_at ? new Date(e.created_at).toLocaleString() : '—'}
+                              </Typography>
+                            </TableCell>
+                            <TableCell sx={{ verticalAlign: 'top', width: 110 }}>
+                              <Chip label={e.category} size="small" variant="outlined" sx={{ textTransform: 'capitalize' }} />
+                            </TableCell>
+                            <TableCell>
+                              <Typography variant="body2" fontWeight={600}>
+                                {e.action}
+                                {e.status && e.status !== 'ok' && (
+                                  <Chip label={e.status} size="small" color={e.status === 'failed' ? 'error' : 'default'} sx={{ ml: 1, height: 16, fontSize: '0.6rem' }} />
+                                )}
+                              </Typography>
+                              {e.target && <Typography variant="caption" color="text.secondary">{e.target}</Typography>}
+                              {e.detail && <Typography variant="caption" color="text.secondary" display="block">{e.detail}</Typography>}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
                 </CardContent>
               </Card>
             </>

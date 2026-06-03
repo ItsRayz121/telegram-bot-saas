@@ -78,8 +78,25 @@ def _iter_monitored_bots():
         yield ("custom", str(cb.id), cb.bot_username, cb.owner_user_id, token)
 
 
-def _alert_owner(owner_user_id, bot_username, grade, detail, send_dm=None):
-    """Email + Telegram-DM the owner about a worsening bot. Best-effort."""
+_RECOMMENDED_ACTION = {
+    "warning": "We could not reach the bot once. If it persists, check that the "
+               "bot is running and its token is valid.",
+    "critical": "The bot has failed several checks. Verify the bot token in your "
+                "dashboard and that the bot process/host is online.",
+    "inactive": "No successful check in over 7 days. Re-deploy the bot or update "
+                "its token to bring it back online.",
+    "archived": "No successful check in over 30 days. This bot is archived — "
+                "re-add a valid token to reactivate it.",
+}
+
+
+def _alert_owner(owner_user_id, bot_username, grade, detail, send_dm=None,
+                 last_successful_ping=None):
+    """Email + Telegram-DM the owner about a worsening bot. Best-effort.
+
+    Includes bot name, error reason, last successful ping, and a grade-specific
+    recommended action (Bot Health Notifications, Part 9).
+    """
     from .models import User
     if not owner_user_id:
         return
@@ -88,10 +105,13 @@ def _alert_owner(owner_user_id, bot_username, grade, detail, send_dm=None):
         return
     handle = ("@" + bot_username) if bot_username else "your bot"
     emoji = {"warning": "⚠️", "critical": "🚨", "inactive": "💤", "archived": "🗄"}.get(grade, "⚠️")
+    last_ok = last_successful_ping.strftime("%Y-%m-%d %H:%M UTC") if last_successful_ping else "never"
+    action = _RECOMMENDED_ACTION.get(grade, "Please check the bot token and that the bot is still running.")
     text = (
         f"{emoji} Telegizer Alert — {handle} is **{grade}**.\n\n"
-        f"Our health check could not reach it:\n{detail or 'unreachable'}\n\n"
-        "Please check the bot token and that the bot is still running.\n"
+        f"Error reason: {detail or 'unreachable'}\n"
+        f"Last successful ping: {last_ok}\n\n"
+        f"Recommended action: {action}\n\n"
         "Dashboard: https://telegizer.com/dashboard"
     )
     # Telegram DM
@@ -106,8 +126,9 @@ def _alert_owner(owner_user_id, bot_username, grade, detail, send_dm=None):
             from .notifications import send_email
             html = (
                 f"<p>{emoji} <b>{handle}</b> is <b>{grade}</b>.</p>"
-                f"<p>Our health check could not reach it:</p><pre>{(detail or 'unreachable')[:400]}</pre>"
-                "<p>Please check the bot token and that the bot is still running.</p>"
+                f"<p><b>Error reason:</b></p><pre>{(detail or 'unreachable')[:400]}</pre>"
+                f"<p><b>Last successful ping:</b> {last_ok}</p>"
+                f"<p><b>Recommended action:</b> {action}</p>"
                 '<p><a href="https://telegizer.com/dashboard">Open dashboard</a></p>'
             )
             send_email(owner.email, f"{emoji} Bot health alert: {handle} is {grade}", html)
@@ -151,10 +172,12 @@ def run_health_checks(db, send_dm=None, now=None) -> dict:
             state.last_error = detail
             summary["failed"] += 1
             try:
-                BotHealthEvent.query  # noqa: ensure model loaded
+                from .error_classification import classify_error
+                err_class, severity, _ = classify_error(detail)
                 db.session.add(BotHealthEvent(
                     scope=scope, ref=ref, category="ping",
-                    detail=detail[:500], created_at=now,
+                    detail=detail[:500], severity=severity, error_class=err_class,
+                    created_at=now,
                 ))
             except Exception:
                 pass
@@ -166,7 +189,8 @@ def run_health_checks(db, send_dm=None, now=None) -> dict:
         # Alert the owner only when the grade gets *worse* than what we last told
         # them about — this naturally rate-limits (no repeated alerts per cycle).
         if new_grade != "healthy" and is_worse(new_grade, state.last_alert_grade):
-            _alert_owner(owner_id, username, new_grade, state.last_error, send_dm=send_dm)
+            _alert_owner(owner_id, username, new_grade, state.last_error,
+                         send_dm=send_dm, last_successful_ping=state.last_successful_ping)
             state.last_alert_grade = new_grade
             summary["alerts"] += 1
         elif new_grade == "healthy":

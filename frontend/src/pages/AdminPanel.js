@@ -2246,14 +2246,31 @@ function BotHealthTab({ onAdminError }) {
           {errorsLoading ? <Box display="flex" justifyContent="center" py={3}><CircularProgress /></Box> : (
             errors.length === 0 ? <Typography color="text.secondary" py={2}>No recorded errors.</Typography> : (
               <Stack spacing={1.5}>
-                {errors.map((e) => (
-                  <Box key={e.id} sx={{ borderLeft: '3px solid', borderColor: 'error.main', pl: 1.5 }}>
-                    <Typography variant="caption" color="text.secondary">
-                      {fmtDateTime(e.created_at)} · {e.category}{e.ref ? ` · ${e.ref}` : ''}
-                    </Typography>
+                {errors.map((e) => {
+                  const sevColor = { info: 'info', warning: 'warning', critical: 'error' }[e.severity] || 'error';
+                  const sevLabel = { info: 'Info', warning: 'Warning', critical: 'Critical' }[e.severity] || 'Error';
+                  return (
+                  <Box key={e.id} sx={{ borderLeft: '3px solid', borderColor: `${sevColor}.main`, pl: 1.5 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                      <Chip size="small" color={sevColor} label={sevLabel} sx={{ height: 18, fontSize: '0.65rem', fontWeight: 700 }} />
+                      {e.error_class && (
+                        <Typography variant="caption" sx={{ fontWeight: 600, textTransform: 'capitalize' }}>
+                          {e.error_class.replace(/_/g, ' ')}
+                        </Typography>
+                      )}
+                      <Typography variant="caption" color="text.secondary">
+                        {fmtDateTime(e.created_at)} · {e.category}{e.ref ? ` · ${e.ref}` : ''}
+                      </Typography>
+                    </Box>
                     <Typography variant="body2" sx={{ fontFamily: 'monospace', wordBreak: 'break-word' }}>{e.detail || '(no detail)'}</Typography>
+                    {e.severity === 'info' && (
+                      <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                        Deployment/restart event — not counted as a failure.
+                      </Typography>
+                    )}
                   </Box>
-                ))}
+                  );
+                })}
               </Stack>
             )
           )}

@@ -44,6 +44,21 @@ class WelcomeSystem:
             )
             if ai_text:
                 template = ai_text
+                try:
+                    from ..ai_activity import log_ai_activity
+                    if getattr(group, "bot_type", "custom") == "official":
+                        scope, ref = "official", str(getattr(group, "telegram_chat_id", "") or "")
+                    else:
+                        scope, ref = "custom", str(getattr(group, "id", "") or "")
+                    with self.app.app_context():
+                        log_ai_activity(
+                            scope, ref, "engagement", "Welcome message generated",
+                            detail=ai_text[:300],
+                            target=f"@{new_user.username}" if new_user.username else (new_user.first_name or None),
+                            source="ai_welcome",
+                        )
+                except Exception:
+                    pass
 
         with self.app.app_context():
             if getattr(group, "bot_type", "custom") == "official":

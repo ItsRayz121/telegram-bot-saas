@@ -1017,7 +1017,10 @@ def admin_diagnostics():
     errors_by_scope = {
         scope: cnt for (scope, cnt) in (
             db.session.query(BotHealthEvent.scope, db.func.count(BotHealthEvent.id))
-            .filter(BotHealthEvent.created_at >= since_24h)
+            .filter(
+                BotHealthEvent.created_at >= since_24h,
+                db.or_(BotHealthEvent.severity != "info", BotHealthEvent.severity.is_(None)),
+            )
             .group_by(BotHealthEvent.scope).all()
         )
     }
@@ -1053,12 +1056,16 @@ def admin_bot_health():
     per_page = min(request.args.get("per_page", 25, type=int), 100)
     since = datetime.utcnow() - timedelta(hours=24)
 
+    # Real failures only: deployment/restart noise (severity='info') is excluded
+    # from outage counts. Legacy rows (severity NULL) still count. (Part 6/7)
+    _real_failure = db.or_(BotHealthEvent.severity != "info", BotHealthEvent.severity.is_(None))
+
     # One grouped query → {ref: count} for all custom-bot errors in the window.
     counts_by_ref = {}
     try:
         rows = (
             db.session.query(BotHealthEvent.ref, db.func.count(BotHealthEvent.id))
-            .filter(BotHealthEvent.created_at >= since, BotHealthEvent.scope == "custom")
+            .filter(BotHealthEvent.created_at >= since, BotHealthEvent.scope == "custom", _real_failure)
             .group_by(BotHealthEvent.ref)
             .all()
         )
@@ -1087,6 +1094,7 @@ def admin_bot_health():
         official["error_count_24h"] = BotHealthEvent.query.filter(
             BotHealthEvent.scope.in_(["official", "ai"]),
             BotHealthEvent.created_at >= since,
+            _real_failure,
         ).count()
         last = (
             BotHealthEvent.query.filter(BotHealthEvent.scope.in_(["official", "ai"]))
@@ -1131,7 +1139,7 @@ def admin_bot_health():
     total_errors_24h = 0
     try:
         total_errors_24h = BotHealthEvent.query.filter(
-            BotHealthEvent.created_at >= since
+            BotHealthEvent.created_at >= since, _real_failure
         ).count()
     except Exception:
         pass
