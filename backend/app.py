@@ -93,8 +93,21 @@ import atexit as _atexit
 import signal as _signal
 
 
+_shutdown_done = False
+
+
 def _graceful_bot_shutdown(*_):
-    """Stop all custom bot pollers/webhook listeners and unblock retry sleeps."""
+    """Stop all custom bot pollers/webhook listeners and unblock retry sleeps.
+
+    Idempotent: atexit + the SIGTERM handler can both fire, but the work runs
+    once. Stops polling first (so Telegram releases the long-poll session and
+    the daemon threads finish their `finally` cleanup) which prevents the
+    "cannot schedule new futures after interpreter shutdown" teardown race.
+    """
+    global _shutdown_done
+    if _shutdown_done:
+        return
+    _shutdown_done = True
     try:
         from .integrations.dispatcher import signal_shutdown
         signal_shutdown()
@@ -104,12 +117,47 @@ def _graceful_bot_shutdown(*_):
         bot_manager.stop_all(timeout_per_bot=8)
     except Exception as exc:
         logging.getLogger("shutdown").error("Graceful bot shutdown error: %s", exc)
+    # Official + Echo bots run their own daemon-thread loops — stop them too so
+    # they unwind cleanly instead of being abandoned on interpreter teardown.
+    try:
+        from .official_bot import stop_official_bot
+        stop_official_bot(timeout=6)
+    except Exception:
+        pass
+    try:
+        from .echo_bot import stop_echo_bot
+        stop_echo_bot(timeout=6)
+    except Exception:
+        pass
+
+
+def _sigterm_handler(signum, frame):
+    """SIGTERM: drain bots, then hand control back to the PREVIOUS handler.
+
+    Critical for gunicorn: installing our own handler at import time replaces
+    gunicorn's worker SIGTERM handler. If we don't chain back to it, the worker
+    never exits on SIGTERM, gunicorn SIGKILLs it after --graceful-timeout, and
+    the hard kill abandons the polling threads mid-await (the RuntimeError). By
+    invoking the saved handler we let gunicorn shut the worker down cleanly.
+    """
+    _graceful_bot_shutdown()
+    if callable(_prev_sigterm) and _prev_sigterm not in (_signal.SIG_DFL, _signal.SIG_IGN):
+        try:
+            _prev_sigterm(signum, frame)
+            return
+        except Exception:
+            pass
+    # No usable previous handler — exit cleanly so the process actually stops.
+    raise SystemExit(0)
 
 
 _atexit.register(_graceful_bot_shutdown)
-# Also handle SIGTERM directly (gunicorn sends this on graceful restart)
+# Also handle SIGTERM directly (gunicorn / Railway send this on graceful restart).
+# Save the previous handler so we can chain back to it (see _sigterm_handler).
+_prev_sigterm = _signal.SIG_DFL
 try:
-    _signal.signal(_signal.SIGTERM, _graceful_bot_shutdown)
+    _prev_sigterm = _signal.getsignal(_signal.SIGTERM)
+    _signal.signal(_signal.SIGTERM, _sigterm_handler)
 except (OSError, ValueError):
     pass  # SIGTERM cannot be set in some environments (Windows dev)
 

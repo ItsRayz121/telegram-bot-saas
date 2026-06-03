@@ -5535,6 +5535,29 @@ class OfficialBotRunner:
                 token[:12], Config.TELEGRAM_BOT_USERNAME,
             )
 
+    def stop(self, timeout: float = 8.0):
+        """Signal the loop to stop and wait briefly for the thread to exit.
+
+        Called on process shutdown (SIGTERM/atexit) so the event loop unwinds
+        cleanly before interpreter teardown — prevents the "cannot schedule new
+        futures after interpreter shutdown" race and releases Telegram promptly.
+        Best-effort; never raises.
+        """
+        self._stop_event.set()
+        try:
+            if self.loop and self.loop.is_running():
+                self.loop.call_soon_threadsafe(lambda: None)  # wake an idle loop
+        except Exception:
+            pass
+        t = self._thread
+        if t and t.is_alive():
+            try:
+                t.join(timeout=timeout)
+            except Exception:
+                pass
+        with self._lock:
+            self._running = False
+
     def _run_loop(self, flask_app):
         """Webhook bot loop with exponential-backoff auto-restart on crash."""
         self.loop = asyncio.new_event_loop()
@@ -5897,6 +5920,11 @@ _runner = OfficialBotRunner()
 
 def start_official_bot(flask_app):
     _runner.start(flask_app)
+
+
+def stop_official_bot(timeout: float = 8.0):
+    """Stop the official bot thread on process shutdown. Best-effort."""
+    _runner.stop(timeout=timeout)
 
 
 def get_official_bot_loop():

@@ -25,6 +25,21 @@ from .bot_features.knowledge_base import KnowledgeBaseSystem
 
 logger = logging.getLogger(__name__)
 
+# Set during process shutdown (SIGTERM / atexit) so polling threads stop cleanly
+# and shutdown-time crashes are NOT recorded as real failures. See Part 7/8:
+# the "cannot schedule new futures after interpreter shutdown" RuntimeError is a
+# teardown race, not an outage — once this is set we break out silently.
+_SHUTTING_DOWN = threading.Event()
+
+
+def signal_bots_shutting_down():
+    """Mark the process as shutting down. Idempotent; called by stop_all()."""
+    _SHUTTING_DOWN.set()
+
+
+def is_shutting_down() -> bool:
+    return _SHUTTING_DOWN.is_set()
+
 
 # ── Shared display-name helpers ────────────────────────────────────────────────
 
@@ -2699,6 +2714,17 @@ class BotInstance:
                 self.loop.run_until_complete(self._start_polling())
                 break  # clean / stop-event exit
             except Exception as e:
+                # Graceful shutdown in progress (Railway deploy / worker restart):
+                # the interpreter is tearing down, so any error here is teardown
+                # noise (e.g. "cannot schedule new futures after interpreter
+                # shutdown"). Do NOT record it as a failure or retry — just exit.
+                if _SHUTTING_DOWN.is_set() or self._stop_event.is_set():
+                    logger.info(
+                        "Bot %s: exiting during shutdown (ignored: %s)",
+                        self.bot_id, type(e).__name__,
+                    )
+                    break
+
                 try:
                     from telegram.error import Conflict, Unauthorized, InvalidToken
                     _invalid = (Unauthorized, InvalidToken)
@@ -2974,6 +3000,9 @@ class BotManager:
         """Gracefully stop every running bot. Called on process shutdown so
         Telegram releases the long-poll connection before the new container
         starts — prevents 409 Conflict errors on Railway rolling deploys."""
+        # Flip the global flag first so any poller that crashes mid-teardown
+        # exits silently instead of recording a bogus "polling crashed" failure.
+        signal_bots_shutting_down()
         with self._lock:
             bot_ids = list(self.active_bots.keys())
         logger.info("[BotManager] Stopping %d bot(s) for graceful shutdown…", len(bot_ids))

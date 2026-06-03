@@ -157,18 +157,21 @@ test('getSubTabIndex returns correct index for existing subtab', () => {
   expect(getSubTabIndex(cats, 'analytics', 'Digest')).toBe(4);
 });
 
-test('getSubTabIndex returns -1 for officialOnly subtab in custom-bot context', () => {
+test('getSubTabIndex returns -1 for a subtab that does not exist', () => {
   const cats = buildCategories(false);
-  expect(getSubTabIndex(cats, 'analytics', 'Leaderboard')).toBe(-1);
-  expect(getSubTabIndex(cats, 'analytics', 'Warnings')).toBe(-1);
+  expect(getSubTabIndex(cats, 'analytics', 'Nonexistent Subtab')).toBe(-1);
 });
 
 test('getSubTabIndex returns correct indices for custom bot analytics', () => {
   const cats = buildCategories(false);
-  // custom: ['Members', 'Audit Log', 'Digest']
+  // All analytics subtabs are shown for custom bots (none are officialOnly):
+  // ['Members', 'Leaderboard', 'Audit Log', 'Warnings', 'Digest', 'AI Activity']
   expect(getSubTabIndex(cats, 'analytics', 'Members')).toBe(0);
-  expect(getSubTabIndex(cats, 'analytics', 'Audit Log')).toBe(1);
-  expect(getSubTabIndex(cats, 'analytics', 'Digest')).toBe(2);
+  expect(getSubTabIndex(cats, 'analytics', 'Leaderboard')).toBe(1);
+  expect(getSubTabIndex(cats, 'analytics', 'Audit Log')).toBe(2);
+  expect(getSubTabIndex(cats, 'analytics', 'Warnings')).toBe(3);
+  expect(getSubTabIndex(cats, 'analytics', 'Digest')).toBe(4);
+  expect(getSubTabIndex(cats, 'analytics', 'AI Activity')).toBe(5);
 });
 
 test('getSubTabIndex returns -1 for unknown tab id', () => {

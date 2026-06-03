@@ -276,6 +276,17 @@ def get_group_ai_summary(telegram_group_id: str) -> str | None:
             except Exception as log_exc:
                 _log.warning("Failed to log digest for %s: %s", telegram_group_id, log_exc)
 
+            # AI Activity (reporting only — best-effort)
+            try:
+                from ..ai_activity import log_ai_activity
+                log_ai_activity(
+                    "official", telegram_group_id, "analytics",
+                    "Activity summary generated",
+                    detail=summary[:300], source="ai_digest",
+                )
+            except Exception:
+                pass
+
             # Record platform token usage (rough estimate: ~1 token per 4 chars)
             if key_info.get("source") == "platform":
                 try:

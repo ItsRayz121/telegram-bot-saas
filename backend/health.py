@@ -32,12 +32,16 @@ def record_bot_error(scope: str, ref, category: str, detail: str) -> None:
             return
 
         from .models import db, BotHealthEvent
+        from .error_classification import classify_error
 
+        error_class, severity, _label = classify_error(detail)
         ev = BotHealthEvent(
             scope=(scope or "")[:20],
             ref=(str(ref)[:64] if ref is not None else None),
             category=(category or "")[:20],
             detail=(str(detail)[:500] if detail else None),
+            severity=severity,
+            error_class=error_class,
             created_at=datetime.utcnow(),
         )
         db.session.add(ev)

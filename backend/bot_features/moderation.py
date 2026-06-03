@@ -1107,5 +1107,22 @@ class ModerationSystem:
                 bot, message, group, cfg.get("action", "delete"),
                 reason=msg, warn=cfg.get("warn_user", True),
             )
+            # AI Activity (reporting only — best-effort, never raises)
+            try:
+                from ..ai_activity import log_ai_activity, derive_scope_ref
+                action_label = {
+                    "promotional": "Promotional content removed",
+                    "irrelevant": "Off-topic content removed",
+                }.get(verdict, "Content removed")
+                with self.app.app_context():
+                    scope, ref = derive_scope_ref(group)
+                    log_ai_activity(
+                        scope, ref, "moderation", action_label,
+                        detail=reason or fallback,
+                        target=("@" + username) if username and not username.isdigit() else str(user_id),
+                        source="ai_automod",
+                    )
+            except Exception:
+                pass
             return True
         return False

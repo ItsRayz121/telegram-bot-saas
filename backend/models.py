@@ -1756,6 +1756,10 @@ class BotHealthEvent(db.Model):
     # handler | ai | command | webhook
     category = db.Column(db.String(20), nullable=False)
     detail = db.Column(db.Text, nullable=True)  # truncated error message (<= 500 chars)
+    # Classification (Part 6): severity ∈ info|warning|critical; error_class is a
+    # stable machine key (deployment_restart, invalid_token, network_error, …).
+    severity = db.Column(db.String(10), nullable=True, index=True)
+    error_class = db.Column(db.String(40), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
 
     def to_dict(self):
@@ -1765,6 +1769,8 @@ class BotHealthEvent(db.Model):
             "ref": self.ref,
             "category": self.category,
             "detail": self.detail,
+            "severity": self.severity,
+            "error_class": self.error_class,
             "created_at": self.created_at.isoformat(),
         }
 
@@ -1809,6 +1815,57 @@ class BotHealthState(db.Model):
             "last_successful_ping": self.last_successful_ping.isoformat() if self.last_successful_ping else None,
             "last_failed_ping": self.last_failed_ping.isoformat() if self.last_failed_ping else None,
             "last_error": self.last_error,
+        }
+
+
+class AIActivity(db.Model):
+    """Append-only log of AI-generated actions inside a group (AI Activity tab).
+
+    This is a *reporting layer* only — it records actions already performed by
+    the AI systems (moderation, knowledge, engagement, automation, analytics).
+    Writing here must never trigger a new AI call or raise into the caller; use
+    the best-effort `backend.ai_activity.log_ai_activity()` helper.
+
+    Groups are addressed flexibly so both bot worlds share one table:
+      • official-bot groups  → scope='official', group_ref=telegram_group_id (str)
+      • custom-bot groups    → scope='custom',   group_ref=str(Group.id)
+    """
+    __tablename__ = "ai_activity"
+
+    # The five spec categories.
+    CATEGORIES = ("moderation", "knowledge", "engagement", "automation", "analytics")
+
+    id = db.Column(db.Integer, primary_key=True)
+    scope = db.Column(db.String(20), nullable=False, index=True)        # official | custom
+    group_ref = db.Column(db.String(64), nullable=False, index=True)   # telegram_group_id or Group.id
+    category = db.Column(db.String(20), nullable=False, index=True)    # one of CATEGORIES
+    action = db.Column(db.String(120), nullable=False)                 # e.g. "Spam removed", "FAQ answer generated"
+    # Free-form context: reason, query, knowledge source, summary, outcome…
+    detail = db.Column(db.Text, nullable=True)
+    # Who/what the action was about (display name or @username)
+    target = db.Column(db.String(255), nullable=True)
+    # ok | failed | skipped — lets the tab show whether the action worked
+    status = db.Column(db.String(20), nullable=False, default="ok")
+    # Which AI engine produced it (e.g. "knowledge_base", "automod", "welcome")
+    source = db.Column(db.String(40), nullable=True)
+    meta = db.Column(db.JSON, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    __table_args__ = (
+        db.Index("ix_ai_activity_group_created", "scope", "group_ref", "created_at"),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "category": self.category,
+            "action": self.action,
+            "detail": self.detail,
+            "target": self.target,
+            "status": self.status,
+            "source": self.source,
+            "meta": self.meta,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
 

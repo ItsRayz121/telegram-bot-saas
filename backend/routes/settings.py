@@ -384,6 +384,67 @@ def get_audit_logs(bot_id, group_id):
         return jsonify({"error": str(e)}), 500
 
 
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/ai-activity", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def get_custom_ai_activity(bot_id, group_id):
+    """AI Activity metrics + timeline for a custom-bot group."""
+    try:
+        user = _get_current_user()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        bot, group, err = _get_bot_and_group(user, bot_id, group_id)
+        if err:
+            return err
+        from ..ai_activity import activity_summary
+        page = request.args.get("page", 1, type=int)
+        category = request.args.get("category") or None
+        return jsonify(activity_summary("custom", group.id, page=page, category=category))
+    except Exception as e:
+        logger.error(f"get_custom_ai_activity error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/ai-status", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def get_custom_ai_status(bot_id, group_id):
+    """AI Status panel for a custom-bot group."""
+    try:
+        user = _get_current_user()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        bot, group, err = _get_bot_and_group(user, bot_id, group_id)
+        if err:
+            return err
+        from ..ai_activity import ai_status
+        from ..models import KnowledgeDocument, WebhookIntegration, UserApiKey
+        from ..config import Config
+
+        s = group.settings or {}
+        smart = s.get("smart_mod", {}) or {}
+        moderation_enabled = bool(
+            smart.get("enabled") or s.get("ai_moderation") or s.get("smart_spam_detection")
+        )
+        integrations_connected = WebhookIntegration.query.filter_by(
+            group_id=group.id, is_active=True
+        ).first() is not None
+        kb_configured = KnowledgeDocument.query.filter_by(group_id=group.id).first() is not None
+        provider_connected = bool(Config.OPENAI_API_KEY) or UserApiKey.query.filter_by(
+            user_id=user.id, is_active=True
+        ).first() is not None
+        return jsonify(ai_status(
+            "custom", group.id,
+            moderation_enabled=moderation_enabled,
+            integrations_connected=integrations_connected,
+            kb_configured=kb_configured,
+            provider_connected=provider_connected,
+        ))
+    except Exception as e:
+        logger.error(f"get_custom_ai_status error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
 @settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/forum-topics", methods=["GET"])
 @jwt_required()
 @rate_limit(requests_per_minute=60)

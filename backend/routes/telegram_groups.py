@@ -506,6 +506,68 @@ def get_mod_log(group_id):
     }), 200
 
 
+# ── AI Activity (Analytics → AI Activity) ────────────────────────────────────────
+
+def _official_ai_status_flags(tg):
+    """Resolve the four AI Status booleans for an official-bot group."""
+    settings = tg.settings or {}
+    smart = settings.get("smart_mod", {}) or {}
+    moderation_enabled = bool(
+        smart.get("enabled") or settings.get("ai_moderation")
+        or settings.get("smart_spam_detection")
+    )
+    integrations_connected = OfficialWebhookIntegration.query.filter_by(
+        telegram_group_id=tg.telegram_group_id, is_active=True
+    ).first() is not None
+    kb_configured = KnowledgeDocument.query.filter_by(
+        telegram_group_id=tg.telegram_group_id
+    ).first() is not None
+    from ..config import Config
+    provider_connected = bool(Config.OPENAI_API_KEY) or UserApiKey.query.filter_by(
+        telegram_group_id=tg.telegram_group_id, is_active=True
+    ).first() is not None
+    return moderation_enabled, integrations_connected, kb_configured, provider_connected
+
+
+@tg_groups_bp.route("/<group_id>/ai-activity", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def get_ai_activity(group_id):
+    """AI Activity metrics + timeline for an official-bot group."""
+    user = _current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    tg = _owns_group(user.id, group_id)
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+
+    from ..ai_activity import activity_summary
+    page = request.args.get("page", 1, type=int)
+    category = request.args.get("category") or None
+    return jsonify(activity_summary("official", group_id, page=page, category=category)), 200
+
+
+@tg_groups_bp.route("/<group_id>/ai-status", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def get_ai_status(group_id):
+    """AI Status panel for an official-bot group."""
+    user = _current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    tg = _owns_group(user.id, group_id)
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+
+    from ..ai_activity import ai_status
+    mod, integ, kb, prov = _official_ai_status_flags(tg)
+    return jsonify(ai_status(
+        "official", group_id,
+        moderation_enabled=mod, integrations_connected=integ,
+        kb_configured=kb, provider_connected=prov,
+    )), 200
+
+
 # ── XP Leaderboard ─────────────────────────────────────────────────────────────
 
 @tg_groups_bp.route("/<group_id>/leaderboard", methods=["GET"])
