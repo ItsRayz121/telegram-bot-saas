@@ -117,6 +117,18 @@ def _graceful_bot_shutdown(*_):
         bot_manager.stop_all(timeout_per_bot=8)
     except Exception as exc:
         logging.getLogger("shutdown").error("Graceful bot shutdown error: %s", exc)
+    # Official + Echo bots run their own daemon-thread loops — stop them too so
+    # they unwind cleanly instead of being abandoned on interpreter teardown.
+    try:
+        from .official_bot import stop_official_bot
+        stop_official_bot(timeout=6)
+    except Exception:
+        pass
+    try:
+        from .echo_bot import stop_echo_bot
+        stop_echo_bot(timeout=6)
+    except Exception:
+        pass
 
 
 def _sigterm_handler(signum, frame):
