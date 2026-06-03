@@ -256,6 +256,35 @@ These verify today's changes didn't break anything:
 
 ---
 
+## 14. AI ACTIVITY LOGGING (Analytics → AI Activity)
+
+> Verifies the AI Activity Center records every AI/group action exactly once and at zero extra AI cost.
+> Open the group's **Analytics → AI Activity** tab to observe metrics, category chips, and the timeline.
+
+### Automation chip
+- [ ] **Official scheduled message** — schedule one for an official group; when it fires, **exactly one** `automation` row appears: "Scheduled message sent: <title>"
+- [ ] **Official scheduled poll** — fires → one `automation` row: "Scheduled poll sent"
+- [ ] **Custom scheduled message** — fires → one `automation` row (custom group)
+- [ ] **Custom scheduled poll** — fires → one `automation` row (custom group)
+- [ ] **Event workflow** — create a `message_received` workflow; trigger it → one `automation` row: "Workflow ran: <name>"
+- [ ] **Scheduled (cron) workflow** — create a `scheduled` workflow; after its interval → one `automation` row: "Scheduled workflow ran: <name>"
+- [ ] **Raid reminder** — start a raid with reminders enabled; at the 6h and 1h marks the bot posts a reminder, and **exactly one** `automation` row per dispatched reminder appears: "Raid reminder sent (Xh left)" (`source=raid_reminder`, custom scope). Confirm: 2 reminders dispatched ⇒ exactly 2 `ai_activity` rows, no duplicates, none missing.
+
+### Moderation chip
+- [ ] **Official AI moderation** — in an official group with Smart AI Moderation on, post promotional/off-topic text; on removal, **one** `moderation` row appears ("Promotional content removed" / "Off-topic content removed", `source=ai_automod`). Confirm it is **not** double-logged.
+- [ ] **Custom AI moderation** (regression) — same in a custom-bot group still logs exactly one row.
+
+### Knowledge / Engagement chips (Image AI)
+- [ ] **Image answered** — in a group with Image AI on, post a captioned screenshot the bot can answer → one `knowledge` row: "Image question answered"
+- [ ] **Image escalated** — post an image that escalates to support → one `engagement` row: "Image escalated to support". Confirm only one of answered/escalated logs per image (never both).
+
+### Cross-cutting
+- [ ] **No duplicates** — each action above produces exactly one `ai_activity` row (compare chip counts before/after a single action).
+- [ ] **Zero AI cost** — performing the above triggers no *additional* AI API spend beyond the action itself (logging writes a DB row only).
+- [ ] **DM/user-scoped not logged** — workspace reminders, meeting pre-alerts, and daily briefings do **not** create group `ai_activity` rows (they have no group scope — expected).
+
+---
+
 ## SIGN-OFF
 
 | Area | Tester | Date | Result |
@@ -266,6 +295,7 @@ These verify today's changes didn't break anything:
 | Assistant Hub | | | |
 | Custom Bots | | | |
 | Billing | | | |
+| AI Activity logging | | | |
 | Separation checks | | | |
 
 **Overall result:** ⬜ PASS — ready to ship &nbsp;&nbsp; ⬜ FAIL — blocking issues found
