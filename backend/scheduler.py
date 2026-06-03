@@ -415,6 +415,15 @@ def check_raid_reminders():
                 if loop and loop.is_running():
                     asyncio.run_coroutine_threadsafe(_remind(), loop)
 
+                # AI Activity (Automation chip) — best-effort, never raises.
+                from .ai_activity import log_ai_activity
+                log_ai_activity(
+                    "custom", str(raid.group_id), "automation",
+                    f"Raid reminder sent ({time_str} left)",
+                    detail=raid.tweet_url,
+                    source="raid_reminder",
+                )
+
             expired = Raid.query.filter(
                 Raid.is_active == True,
                 Raid.ends_at <= now,
