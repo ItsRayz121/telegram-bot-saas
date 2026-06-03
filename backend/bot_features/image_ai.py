@@ -21,6 +21,36 @@ import re
 
 logger = logging.getLogger(__name__)
 
+
+def _log_image_activity(app, group_id, telegram_group_id, category, action, message, *, detail=None):
+    """Best-effort AI Activity log for image-AI actions. Never raises.
+
+    Wraps its own app context so it is safe from either caller (official_bot
+    already holds a context; bot_manager passes its app) — nested contexts are
+    fine in Flask.
+    """
+    try:
+        from ..ai_activity import log_ai_activity, derive_scope_ref
+        sender = getattr(message, "from_user", None)
+        uname = getattr(sender, "username", None)
+        uid = getattr(sender, "id", None)
+        target = ("@" + uname) if uname else (str(uid) if uid else None)
+        ctx = app.app_context() if app else None
+        if ctx:
+            ctx.push()
+        try:
+            scope, ref = derive_scope_ref(
+                telegram_group_id=telegram_group_id, group_id=group_id
+            )
+            log_ai_activity(scope, ref, category, action, detail=detail,
+                            target=target, source="image_ai")
+        finally:
+            if ctx:
+                ctx.pop()
+    except Exception:
+        pass
+
+
 # ── Cheap caption keyword classifier ─────────────────────────────────────────
 # These words in a caption strongly suggest the user needs help with the image.
 
@@ -316,10 +346,14 @@ async def maybe_handle_image(
     if can_answer and answer and confidence >= threshold:
         try:
             await message.reply_text(answer)
-            return True
         except Exception as exc:
             logger.error(f"image_ai: reply failed: {exc}")
             return False
+        _log_image_activity(
+            app, group_id, telegram_group_id, "knowledge",
+            "Image question answered", message, detail=(caption or "")[:200],
+        )
+        return True
 
     # Low confidence — prefer global escalation, fall back to legacy image_ai escalation
     group_settings = {}
@@ -378,6 +412,11 @@ async def maybe_handle_image(
             )
         except Exception:
             pass
+        _log_image_activity(
+            app, group_id, telegram_group_id, "engagement",
+            "Image escalated to support", message,
+            detail=(caption or result.get("summary") or "")[:200],
+        )
         return True
 
     return False

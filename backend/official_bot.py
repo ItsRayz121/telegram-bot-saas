@@ -3711,6 +3711,20 @@ async def _official_ai_moderation(bot, message, text, group_id, sm_cfg, flask_ap
     if verdict in ("promotional", "irrelevant"):
         await _automod_execute(bot, message, group_id, flask_app,
                                "smart_ai", sm_cfg.get("action", "delete"))
+        try:
+            with flask_app.app_context():
+                from .ai_activity import log_ai_activity
+                uname = message.from_user.username if message.from_user else None
+                log_ai_activity(
+                    "official", str(group_id), "moderation",
+                    "Promotional content removed" if verdict == "promotional"
+                    else "Off-topic content removed",
+                    detail=(text or "")[:200],
+                    target=("@" + uname) if uname else (str(user_id) if user_id else None),
+                    source="ai_automod",
+                )
+        except Exception:
+            pass
         return True
     return False
 

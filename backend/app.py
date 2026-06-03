@@ -2115,6 +2115,16 @@ def _run_scheduled_automations(app):
                             error_msg=error_msg,
                         ))
                         db.session.commit()
+
+                        if wf_fresh.source_group_id:
+                            from .ai_activity import log_ai_activity
+                            log_ai_activity(
+                                "official", str(wf_fresh.source_group_id), "automation",
+                                f"Scheduled workflow ran: {wf_fresh.name or ('#' + str(wf_id))}",
+                                detail=f"{len(wf_fresh.actions or [])} action(s)",
+                                status="ok" if status == "success" else "failed",
+                                source="workflow",
+                            )
                 except Exception as exc:
                     _scheduler_log.debug("Scheduled automation wf=%s error: %s", wf_id, exc)
 
@@ -2416,6 +2426,14 @@ def _run_official_scheduled_messages():
 
         asyncio.run_coroutine_threadsafe(_send(), loop)
 
+        from .ai_activity import log_ai_activity
+        log_ai_activity(
+            "official", str(msg.telegram_group_id), "automation",
+            f"Scheduled message sent: {msg.title or 'untitled'}",
+            detail=(msg.message_text or "")[:200],
+            source="scheduled_message", commit=False,
+        )
+
         if msg.repeat_interval:
             msg.send_at = now + timedelta(minutes=msg.repeat_interval)
             if msg.stop_date and msg.send_at > msg.stop_date:
@@ -2481,6 +2499,14 @@ def _run_official_scheduled_polls():
 
         asyncio.run_coroutine_threadsafe(_send(), loop)
         poll.is_sent = True
+
+        from .ai_activity import log_ai_activity
+        log_ai_activity(
+            "official", str(poll.telegram_group_id), "automation",
+            "Scheduled poll sent",
+            detail=(poll.question or "")[:200],
+            source="scheduled_poll", commit=False,
+        )
 
     db.session.commit()
     _scheduler_log.info("[SCHEDULER] Finished processing %d official polls", len(pending))
@@ -2589,6 +2615,14 @@ def _run_scheduled_messages():
         if loop and loop.is_running():
             asyncio.run_coroutine_threadsafe(_send(), loop)
 
+        from .ai_activity import log_ai_activity
+        log_ai_activity(
+            "custom", str(group.id), "automation",
+            f"Scheduled message sent: {msg.title or 'untitled'}",
+            detail=(msg.message_text or "")[:200],
+            source="scheduled_message", commit=False,
+        )
+
         if msg.repeat_interval:
             msg.send_at = now + timedelta(minutes=msg.repeat_interval)
             if msg.stop_date and msg.send_at > msg.stop_date:
@@ -2679,6 +2713,14 @@ def _run_scheduled_polls():
             asyncio.run_coroutine_threadsafe(_send(), loop)
 
         poll.is_sent = True
+
+        from .ai_activity import log_ai_activity
+        log_ai_activity(
+            "custom", str(group.id), "automation",
+            "Scheduled poll sent",
+            detail=(poll.question or "")[:200],
+            source="scheduled_poll", commit=False,
+        )
 
     if pending:
         db.session.commit()

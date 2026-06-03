@@ -180,5 +180,15 @@ async def fire_trigger(flask_app, bot, trigger_type: str, group_id: str,
                 ))
                 db.session.commit()
 
+                # AI Activity (Automation chip) — best-effort, never breaks the run.
+                from ..ai_activity import log_ai_activity
+                log_ai_activity(
+                    "official", str(group_id), "automation",
+                    f"Workflow ran: {wf.name or ('#' + str(wf.id))}",
+                    detail=f"trigger={trigger_type}; {len(wf.actions or [])} action(s)",
+                    status="ok" if status == "success" else "failed",
+                    source="workflow",
+                )
+
     except Exception as exc:
         _log.debug("fire_trigger(%s) failed for group %s: %s", trigger_type, group_id, exc)
