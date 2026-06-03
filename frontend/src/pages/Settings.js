@@ -1233,7 +1233,7 @@ export default function Settings() {
           <Button
             variant="outlined"
             startIcon={<Tour />}
-            onClick={() => { resetTour(); window.location.reload(); }}
+            onClick={async () => { await resetTour(); window.location.reload(); }}
           >
             Retake Onboarding Tour
           </Button>

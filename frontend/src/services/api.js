@@ -110,6 +110,8 @@ export const auth = {
   verifyTotpLogin: (data) => api.post('/api/auth/verify-totp-login', data),
   // Onboarding step tracking (2-B-01)
   markOnboardingStep: (step) => api.patch('/api/auth/onboarding', { step }),
+  // Product tour: server-side persistence (P3). completed=false resets it.
+  setTourState: (completed) => api.post('/api/auth/me/tour', { completed }),
 };
 
 export const totp = {
@@ -526,6 +528,13 @@ export const admin = {
   getBotHealth: (params) => api.get('/api/admin/bot-health', { params }),
   pingBot: (body) => api.post('/api/admin/bot-health/ping', body),
   getBotErrors: (params) => api.get('/api/admin/bot-health/errors', { params }),
+  // Bot Health Center (P1) — escalation grades + on-demand sweep
+  getBotHealthCenter: () => api.get('/api/admin/bot-health-center'),
+  runBotHealthCheck: () => api.post('/api/admin/bot-health-center/run'),
+  // Diagnostics (read-only audit snapshot)
+  getDiagnostics: () => api.get('/api/admin/diagnostics'),
+  // P5: manually run the pending→active promotion check on one group
+  reconcileGroup: (groupId) => api.post(`/api/admin/telegram-groups/${groupId}/reconcile`),
   // Directory
   getDirectory: (params) => api.get('/api/admin/directory', { params }),
   moderateDirectory: (id, data) => api.post(`/api/admin/directory/${id}/moderate`, data),

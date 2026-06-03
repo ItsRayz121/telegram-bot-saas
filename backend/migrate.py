@@ -31,6 +31,11 @@ def init_db():
         )
         _run_alter(
             db.engine,
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_tour_completed BOOLEAN NOT NULL DEFAULT FALSE",
+            "users.onboarding_tour_completed",
+        )
+        _run_alter(
+            db.engine,
             "ALTER TABLE payment_history ADD COLUMN IF NOT EXISTS billing_period VARCHAR(10) DEFAULT 'monthly'",
             "payment_history.billing_period",
         )

@@ -1,10 +1,21 @@
-import React, { useState, useCallback } from 'react';
-import { Joyride, ACTIONS, STATUS } from 'react-joyride';
+import React, { useState, useCallback, useEffect } from 'react';
+import { Joyride, ACTIONS, STATUS, EVENTS } from 'react-joyride';
+import { auth } from '../services/api';
 
 export const TOUR_KEY = 'onboarding_tour_v1';
 
+// Reset the tour everywhere: server flag (authoritative) + local cache.
+// Returns the server promise so callers can await before reloading.
 export function resetTour() {
-  localStorage.removeItem(TOUR_KEY);
+  try { localStorage.removeItem(TOUR_KEY); } catch {}
+  return auth.setTourState(false).catch(() => {});
+}
+
+// Persist "tour done" to BOTH the server (survives refresh / new browser /
+// Telegram webview, where localStorage is wiped) and localStorage (fast path).
+function markTourDone() {
+  try { localStorage.setItem(TOUR_KEY, '1'); } catch {}
+  auth.setTourState(true).catch(() => {});
 }
 
 const STEPS = [
@@ -53,21 +64,48 @@ const STEPS = [
 ];
 
 export default function OnboardingTour() {
-  const [run] = useState(() => {
-    try {
-      if (localStorage.getItem(TOUR_KEY)) return false;
-      return !!localStorage.getItem('token');
-    } catch {
-      return false;
-    }
-  });
+  const [run, setRun] = useState(false);
 
-  const handleCallback = useCallback(({ action, status }) => {
+  useEffect(() => {
+    let cancelled = false;
+    // Only logged-in users see the tour at all.
+    let hasToken = false;
+    try { hasToken = !!localStorage.getItem('token'); } catch {}
+    if (!hasToken) return;
+
+    // Fast path: local cache says already done → never run, no network.
+    try { if (localStorage.getItem(TOUR_KEY)) return; } catch {}
+
+    // Authoritative check: the server flag. This is what makes the tour stay
+    // dismissed across refreshes / browsers / Telegram webview sessions.
+    auth.getMe()
+      .then((res) => {
+        if (cancelled) return;
+        if (res?.data?.user?.onboarding_tour_completed) {
+          try { localStorage.setItem(TOUR_KEY, '1'); } catch {}
+          return;
+        }
+        setRun(true);
+      })
+      .catch(() => {
+        // If the profile call fails, fall back to localStorage-only behavior
+        // (don't risk showing the tour repeatedly on a flaky network).
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleCallback = useCallback(({ action, status, type }) => {
+    // Persist on every terminal condition — including a target that can't be
+    // found, which previously ended the tour WITHOUT firing finished/skipped,
+    // causing it to re-appear on the next refresh.
     if (
       [STATUS.FINISHED, STATUS.SKIPPED].includes(status) ||
-      action === ACTIONS.CLOSE
+      action === ACTIONS.CLOSE ||
+      type === EVENTS.TOUR_END ||
+      type === EVENTS.TARGET_NOT_FOUND
     ) {
-      try { localStorage.setItem(TOUR_KEY, '1'); } catch {}
+      markTourDone();
+      setRun(false);
     }
   }, []);
 

@@ -882,6 +882,33 @@ def update_me():
     return jsonify({"user": user_data}), 200
 
 
+@auth_bp.route("/me/tour", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def set_tour_state():
+    """Mark the product tour completed/dismissed, or reset it.
+
+    Server-side persistence so the tour never re-appears across refreshes,
+    browsers, or Telegram webview sessions (where localStorage is unreliable).
+    Body: {"completed": true|false}. Reset (false) is used by Settings →
+    Retake Onboarding Tour.
+    """
+    user_id = get_jwt_identity()
+    user = User.query.get(int(user_id))
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    user.onboarding_tour_completed = bool(data.get("completed", True))
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        return jsonify({"error": "Failed to save tour state"}), 500
+
+    return jsonify({"onboarding_tour_completed": user.onboarding_tour_completed}), 200
+
+
 @auth_bp.route("/forgot-password", methods=["POST"])
 @rate_limit(requests_per_minute=5)
 def forgot_password():
