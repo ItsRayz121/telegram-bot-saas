@@ -224,6 +224,39 @@ def get_custom_bot(bot_id):
     return jsonify({"bot": data})
 
 
+# ── Owner-facing live ping (P1.1) ─────────────────────────────────────────────
+
+@custom_bots_bp.route("/<int:bot_id>/ping", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=20)
+def ping_custom_bot(bot_id):
+    """Let an owner test their own bot live against Telegram (getMe) right now."""
+    user = _current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    bot = CustomBot.query.filter_by(id=bot_id, owner_user_id=user.id).first()
+    if not bot:
+        return jsonify({"error": "Bot not found"}), 404
+
+    try:
+        token = bot.get_token()
+    except Exception:
+        return jsonify({"ok": False, "error": "Could not read the stored bot token."}), 200
+
+    try:
+        import requests as _req
+        resp = _req.get(f"https://api.telegram.org/bot{token}/getMe", timeout=10)
+        body = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+        if resp.status_code == 200 and body.get("ok"):
+            username = (body.get("result") or {}).get("username") or bot.bot_username
+            return jsonify({"ok": True, "username": username, "message": f"@{username} is reachable."})
+        desc = body.get("description") or f"HTTP {resp.status_code}"
+        return jsonify({"ok": False, "error": f"Telegram says: {desc}"}), 200
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"Unreachable: {exc}"[:200]}), 200
+
+
 # ── Disconnect / delete a custom bot ──────────────────────────────────────────
 
 @custom_bots_bp.route("/<int:bot_id>", methods=["DELETE"])

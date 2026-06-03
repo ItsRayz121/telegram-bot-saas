@@ -65,6 +65,20 @@ export default function MyBots() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [upsellOpen, setUpsellOpen] = useState(false);
   const [upsellMessage, setUpsellMessage] = useState('');
+  const [pinging, setPinging] = useState({});   // bot id -> bool
+
+  const handlePing = async (bot) => {
+    setPinging((m) => ({ ...m, [bot.id]: true }));
+    try {
+      const res = await customBots.ping(bot.id);
+      if (res.data.ok) toast.success(`✅ ${res.data.message || `@${res.data.username} is reachable.`}`);
+      else toast.error(`❌ ${res.data.error || 'Bot is unreachable.'}`);
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Ping failed.');
+    } finally {
+      setPinging((m) => ({ ...m, [bot.id]: false }));
+    }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -409,6 +423,18 @@ export default function MyBots() {
                           sx={{ flex: 1 }}
                         >
                           Groups
+                        </Button>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          startIcon={pinging[bot.id]
+                            ? <CircularProgress size={14} />
+                            : <Refresh />}
+                          disabled={!!pinging[bot.id]}
+                          onClick={() => handlePing(bot)}
+                          sx={{ flex: 1 }}
+                        >
+                          {pinging[bot.id] ? 'Pinging…' : 'Ping'}
                         </Button>
                         <Button
                           size="small"

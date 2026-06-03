@@ -5,7 +5,7 @@ import {
   TableContainer, TableHead, TableRow, Paper, Chip, Button, Dialog,
   DialogTitle, DialogContent, DialogActions, MenuItem, Select,
   FormControl, InputLabel, Pagination, InputAdornment, Tabs, Tab,
-  Alert, Tooltip, LinearProgress, Stack,
+  Alert, Tooltip, LinearProgress, Stack, Divider,
 } from '@mui/material';
 import {
   ArrowBack, Search, Block, CheckCircle, Delete, Groups, SmartToy,
@@ -2304,6 +2304,18 @@ function DiagnosticsTab({ onAdminError }) {
     }
   }, [load]);
 
+  const [aiTest, setAiTest] = useState(null);
+  const [aiTesting, setAiTesting] = useState(false);
+  const runAiTest = async () => {
+    setAiTesting(true);
+    try {
+      const res = await admin.runAiSelftest();
+      setAiTest(res.data.results || []);
+    } catch (err) {
+      toast.error(parseApiError(err).message);
+    } finally { setAiTesting(false); }
+  };
+
   useEffect(() => { load(); }, [load]);
 
   if (loading && !data) {
@@ -2390,6 +2402,30 @@ function DiagnosticsTab({ onAdminError }) {
             <KV label="Owners with workspace AI key" value={ai.custom_bots.owners_with_workspace_ai_key} />
             <KV label="Platform AI key configured" value={ai.custom_bots.platform_ai_key_configured ? 'yes' : 'no'}
               color={ai.custom_bots.platform_ai_key_configured ? '#22c55e' : '#ef4444'} />
+
+            <Divider sx={{ my: 1.5 }} />
+            <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
+              <Typography variant="body2" fontWeight={600}>End-to-end AI self-test</Typography>
+              <Button size="small" variant="outlined" disabled={aiTesting} onClick={runAiTest}>
+                {aiTesting ? 'Testing…' : 'Run AI self-test'}
+              </Button>
+            </Stack>
+            {aiTest && aiTest.map((r) => (
+              <Stack key={r.feature} direction="row" alignItems="flex-start" spacing={1} sx={{ py: 0.5 }}>
+                <Chip size="small"
+                  color={r.status === 'working' ? 'success' : r.status === 'broken' ? 'error' : 'default'}
+                  label={r.status === 'working' ? 'Working' : r.status === 'broken' ? 'Broken' : 'Not connected'} />
+                <Box>
+                  <Typography variant="caption" fontWeight={600} sx={{ display: 'block' }}>{r.feature}</Typography>
+                  <Typography variant="caption" color="text.secondary">{r.detail}</Typography>
+                </Box>
+              </Stack>
+            ))}
+            {!aiTest && (
+              <Typography variant="caption" color="text.secondary">
+                Makes real calls through each AI path with the platform key and reports Working / Broken / Not connected.
+              </Typography>
+            )}
           </CardContent></Card>
         </Grid>
 

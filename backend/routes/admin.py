@@ -1262,6 +1262,87 @@ def admin_bot_health_center_run():
     return jsonify({"message": "Health check complete", "summary": summary})
 
 
+# ── AI self-test (P2) — real end-to-end calls ──────────────────────────────────
+
+@admin_bp.route("/ai-selftest", methods=["POST"])
+@admin_required
+@rate_limit(requests_per_minute=4)
+def admin_ai_selftest():
+    """Actually exercise each AI path with the configured platform key and report
+    Working / Broken / Not Connected. This turns the static availability audit
+    into a real end-to-end test runnable in any environment that has a key."""
+    platform_key = getattr(Config, "PLATFORM_OPENROUTER_API_KEY", None)
+    features = [
+        "Chat / Echo AI (replies, digests, summaries)",
+        "AI moderation (relevance / anti-promo)",
+        "Embeddings (Notes / Knowledge AI search)",
+    ]
+    if not platform_key:
+        return jsonify({
+            "tested_with": "none",
+            "results": [{
+                "feature": f, "status": "not_connected",
+                "detail": "No platform AI key (PLATFORM_OPENROUTER_API_KEY) set. Users with their own workspace key are unaffected.",
+            } for f in features],
+        })
+
+    key_info = {
+        "provider": "openrouter", "api_key": platform_key,
+        "model": "openai/gpt-4o-mini", "base_url": "https://openrouter.ai/api/v1",
+    }
+    results = []
+
+    # 1. Chat / Echo AI — real completion through the digest helper.
+    try:
+        from ..assistant.digest_ai import generate_ai_summary
+        out = generate_ai_summary(
+            [{"sender": "Alice", "text": "We shipped the new pricing page today."},
+             {"sender": "Bob", "text": "Conversions are up 12%."}],
+            "openrouter", platform_key, "openai/gpt-4o-mini", "https://openrouter.ai/api/v1",
+        )
+        results.append({"feature": features[0],
+                        "status": "working" if out else "broken",
+                        "detail": (out[:200] if out else "Call returned no text.")})
+    except Exception as exc:
+        results.append({"feature": features[0], "status": "broken", "detail": str(exc)[:200]})
+
+    # 2. AI moderation — real verdict on a clearly promotional sample.
+    try:
+        from ..bot_features.moderation import ModerationSystem
+        verdict, _reason = ModerationSystem._call_ai_moderation(
+            "🚀 JOIN MY PUMP GROUP! 100x guaranteed — DM me for the link now!!!",
+            "A support group for new parents", "Parenting Chat", key_info,
+        )
+        if verdict and verdict != "ok":
+            detail = f"verdict={verdict} — flagged promotional spam correctly"
+            status = "working"
+        elif verdict == "ok":
+            detail = "verdict=ok — call succeeded (model was lenient on the sample)"
+            status = "working"
+        else:
+            detail, status = "No verdict returned.", "broken"
+        results.append({"feature": features[1], "status": status, "detail": detail})
+    except Exception as exc:
+        results.append({"feature": features[1], "status": "broken", "detail": str(exc)[:200]})
+
+    # 3. Embeddings — needs an OpenAI-compatible embeddings key.
+    try:
+        from ..assistant.embedding_service import generate_embedding, _get_platform_openai_key
+        emb_key = _get_platform_openai_key()
+        if not emb_key:
+            results.append({"feature": features[2], "status": "not_connected",
+                            "detail": "No OpenAI-compatible embeddings key configured."})
+        else:
+            vec = generate_embedding("telegizer bot health check", emb_key)
+            results.append({"feature": features[2],
+                            "status": "working" if vec else "broken",
+                            "detail": (f"vector dim={len(vec)}" if vec else "Embedding call returned nothing.")})
+    except Exception as exc:
+        results.append({"feature": features[2], "status": "broken", "detail": str(exc)[:200]})
+
+    return jsonify({"tested_with": "platform_key", "results": results})
+
+
 @admin_bp.route("/custom-bots/<int:bot_id>/disable", methods=["POST"])
 @admin_required
 @rate_limit(requests_per_minute=10)

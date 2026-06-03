@@ -535,6 +535,8 @@ export const admin = {
   getDiagnostics: () => api.get('/api/admin/diagnostics'),
   // P5: manually run the pending→active promotion check on one group
   reconcileGroup: (groupId) => api.post(`/api/admin/telegram-groups/${groupId}/reconcile`),
+  // P2: real end-to-end AI self-test (makes live calls through each AI path)
+  runAiSelftest: () => api.post('/api/admin/ai-selftest'),
   // Directory
   getDirectory: (params) => api.get('/api/admin/directory', { params }),
   moderateDirectory: (id, data) => api.post(`/api/admin/directory/${id}/moderate`, data),
@@ -637,6 +639,7 @@ export const customBots = {
   add: (data) => api.post('/api/custom-bots', data),
   get: (id) => api.get(`/api/custom-bots/${id}`),
   delete: (id) => api.delete(`/api/custom-bots/${id}`),
+  ping: (id) => api.post(`/api/custom-bots/${id}/ping`),
 };
 
 export const telegramAccount = {
