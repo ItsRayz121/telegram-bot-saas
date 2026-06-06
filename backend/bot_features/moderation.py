@@ -153,7 +153,11 @@ class ModerationSystem:
             mod_settings = group.settings.get("moderation", {})
             max_warnings = mod_settings.get("max_warnings", 3)
             warning_action = mod_settings.get("warning_action", "ban")
-            auto_delete_warn = mod_settings.get("auto_delete_warn_seconds", 0)
+            # #10 — honor the auto-delete toggle; default to 30s when unset (old groups).
+            auto_delete_warn = (
+                0 if mod_settings.get("auto_delete_warnings", True) is False
+                else int(mod_settings.get("auto_delete_warn_seconds", 30) or 0)
+            )
 
             warn_msg = await bot.send_message(
                 chat_id=chat_id,
@@ -823,10 +827,14 @@ class ModerationSystem:
             return
 
         mod_settings = group.settings.get("moderation", {})
-        global_delete_warn = mod_settings.get("auto_delete_warn_seconds", 0)
-        # Per-rule setting takes precedence when explicitly set; None means use global.
-        auto_delete_warn = warn_delete_seconds if warn_delete_seconds is not None else global_delete_warn
-        auto_delete_action = mod_settings.get("auto_delete_action_seconds", 0)
+        # #10 — honor the auto-delete toggle; default to 30s when unset (old groups).
+        if mod_settings.get("auto_delete_warnings", True) is False:
+            auto_delete_warn = 0
+        else:
+            global_delete_warn = int(mod_settings.get("auto_delete_warn_seconds", 30) or 0)
+            # Per-rule setting takes precedence when explicitly set; None means use global.
+            auto_delete_warn = warn_delete_seconds if warn_delete_seconds is not None else global_delete_warn
+        auto_delete_action = int(mod_settings.get("auto_delete_action_seconds", 30) or 0)
 
         with self.app.app_context():
             from ..database import DatabaseManager

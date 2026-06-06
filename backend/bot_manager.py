@@ -284,7 +284,12 @@ class BotInstance:
 
     def _build_main_menu_keyboard(self, frontend, bot_username, is_linked, pending_count=0):
         """Build the standard main menu InlineKeyboardMarkup."""
-        keyboard = []
+        # Primary CTA on top — opens the dashboard with the user's session. The
+        # persistent Menu Button (set via ensure_menu_button) launches the Mini App
+        # with Telegram auth; this inline button is the reliable browser fallback.
+        keyboard = [
+            [InlineKeyboardButton("🚀 Open Telegizer App", url=f"{frontend}/dashboard")],
+        ]
         if is_linked:
             keyboard.append([InlineKeyboardButton("✅ Account Connected", callback_data="menu:account_info")])
         else:
@@ -308,9 +313,6 @@ class BotInstance:
             [
                 InlineKeyboardButton("💬 Support", callback_data="menu:support"),
                 InlineKeyboardButton("⚙️ Quick Settings", callback_data="qs:groups"),
-            ],
-            [
-                InlineKeyboardButton("🌐 Open Telegizer App", url=frontend),
             ],
         ]
         return InlineKeyboardMarkup(keyboard)
@@ -367,6 +369,26 @@ class BotInstance:
 
         keyboard = self._build_main_menu_keyboard(frontend, bot_username, is_linked, pending_count)
         await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+    # ── /help ──────────────────────────────────────────────────────────────────
+
+    async def handle_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Show the same control center / feature overview as /start."""
+        await self.handle_start(update, context)
+
+    # ── /support ───────────────────────────────────────────────────────────────
+
+    async def handle_support(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        frontend = self._frontend()
+        official_un = self._official_bot_username()
+        await update.message.reply_text(
+            "💬 <b>Need help?</b>\n\n"
+            f"• Open your dashboard: {frontend}/dashboard\n"
+            f"• Message the Telegizer team: @{official_un}\n"
+            f"• Help center: {frontend}/support",
+            parse_mode="HTML",
+            disable_web_page_preview=True,
+        )
 
     # ── /status ────────────────────────────────────────────────────────────────
 
@@ -1110,6 +1132,51 @@ class BotInstance:
 
         await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
+    async def _deny_admin_command(self, update, context):
+        """#7 — a non-admin used an admin-only command. Delete their message (if the
+        group setting is on) and log it silently — never spam the group with a reply.
+
+        No DM is sent: a custom bot cannot reliably confirm the user has started it,
+        and the rule is to never DM users who haven't started the bot.
+        """
+        msg = update.message
+        user = update.effective_user
+        chat_id = update.effective_chat.id
+        command = ""
+        if msg and msg.text:
+            command = msg.text.split()[0].lstrip("/").split("@")[0]
+
+        delete_unauth = True
+        try:
+            with self.app_context.app_context():
+                from .models import Group
+                from .database import DatabaseManager
+                grp = Group.query.filter_by(
+                    bot_id=self.bot_id, telegram_group_id=str(chat_id)
+                ).first()
+                if grp:
+                    delete_unauth = (grp.settings or {}).get("automod", {}).get(
+                        "delete_unauthorized_commands", True
+                    )
+                    try:
+                        DatabaseManager.log_action(
+                            group_id=grp.id,
+                            action_type="unauthorized_command",
+                            target_user_id=str(user.id) if user else None,
+                            target_username=(user.username if user else None),
+                            reason=f"/{command} (non-admin)",
+                        )
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+        if delete_unauth and msg:
+            try:
+                await msg.delete()
+            except Exception:
+                pass
+
     async def _require_admin_target(self, update, context):
         chat_id = update.effective_chat.id
         caller = update.effective_user
@@ -1117,7 +1184,7 @@ class BotInstance:
         try:
             caller_member = await context.bot.get_chat_member(chat_id, caller.id)
             if caller_member.status not in ("creator", "administrator"):
-                await update.message.reply_text("❌ You must be an admin to use this command.")
+                await self._deny_admin_command(update, context)
                 return None, None
         except Exception:
             return None, None
@@ -2771,6 +2838,8 @@ class BotInstance:
 
         app = self.application
         app.add_handler(CommandHandler("start", self.handle_start))
+        app.add_handler(CommandHandler("help", self.handle_help))
+        app.add_handler(CommandHandler("support", self.handle_support))
         app.add_handler(CommandHandler("status", self.handle_status))
         app.add_handler(CommandHandler("linkgroup", self.handle_linkgroup))
         # /settings removed — Quick Settings is now accessible via the /start DM menu
@@ -2825,22 +2894,19 @@ class BotInstance:
         await app.initialize()
         await app.start()
 
-        # 1-E-02: Register bot identity (commands + branding)
+        # 1-E-02: Register bot identity. Use the SHARED scoped command set so custom
+        # bots show the same role-aware command menus as the official Telegizer bot.
+        #
+        # NOTE: we deliberately do NOT set a Web App menu button here. The Mini App
+        # validates Telegram initData against the OFFICIAL bot token only, so a Mini App
+        # launched from a custom bot would fail auth (hmac_mismatch). Custom bots open
+        # the dashboard via a normal URL button instead (web session auth), which works
+        # for every bot. Seamless per-custom-bot Mini App auth is a separate feature.
         try:
-            await app.bot.set_my_commands([
-                BotCommand("start",       "Open dashboard"),
-                BotCommand("help",        "Show available commands"),
-                BotCommand("rules",       "Show group rules"),
-                BotCommand("stats",       "Show group statistics"),
-                BotCommand("leaderboard", "Show XP leaderboard"),
-                BotCommand("rank",        "Check your XP and level"),
-                BotCommand("report",      "Report a message (use as reply)"),
-                BotCommand("warn",        "Warn a user (admins only)"),
-                BotCommand("ban",         "Ban a user (admins only)"),
-                BotCommand("mute",        "Mute a user (admins only)"),
-            ])
+            from .bot_features.bot_ui import apply_scoped_commands
+            await apply_scoped_commands(app.bot)
         except Exception as _e:
-            logger.warning(f"Bot {self.bot_id}: set_my_commands failed: {_e}")
+            logger.warning(f"Bot {self.bot_id}: command registration failed: {_e}")
 
         try:
             with self.app_context.app_context():

@@ -39,13 +39,31 @@ def apply_group_defaults(tg) -> bool:
     return True
 
 
+def _deep_fill(current: dict, defaults: dict) -> bool:
+    """Recursively add any default key missing from `current`, including nested dicts.
+
+    Existing values are NEVER overwritten — only absent keys are added. Returns True if
+    anything changed. This is what lets pre-existing groups inherit new default settings
+    (e.g. auto_delete_warnings, delete_unauthorized_commands) added in later releases.
+    """
+    changed = False
+    for key, value in defaults.items():
+        if key not in current:
+            current[key] = copy.deepcopy(value)
+            changed = True
+        elif isinstance(value, dict) and isinstance(current.get(key), dict):
+            if _deep_fill(current[key], value):
+                changed = True
+    return changed
+
+
 def fill_missing_defaults(tg) -> bool:
     """
-    Ensure every top-level section in _DEFAULTS exists on tg.settings.
+    Ensure every section AND nested key in _DEFAULTS exists on tg.settings.
 
     - If settings is empty/None: writes the full defaults (same as apply_group_defaults).
-    - If settings already exist: adds only the top-level keys that are absent.
-      Existing values are NEVER overwritten.
+    - If settings already exist: recursively adds only the keys that are absent
+      (top-level sections and nested keys). Existing values are NEVER overwritten.
 
     Returns True if any change was made, False if nothing was missing.
     """
@@ -54,12 +72,8 @@ def fill_missing_defaults(tg) -> bool:
         return True
 
     defaults = get_group_default_settings()
-    changed = False
-    current = dict(tg.settings)
-    for key, value in defaults.items():
-        if key not in current:
-            current[key] = value
-            changed = True
+    current = copy.deepcopy(dict(tg.settings))
+    changed = _deep_fill(current, defaults)
     if changed:
         tg.settings = current
     return changed
