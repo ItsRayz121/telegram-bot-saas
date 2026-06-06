@@ -72,18 +72,31 @@ function DiagnosticScreen({ title, message, authError }) {
   );
 }
 
+// Resolve the post-auth destination from Telegram's start_param (set via ?startapp=…).
+// Custom bots deep-link here through the official bot to get Telegram auth, then we route
+// the user to the right page. Supported: "grp_<botId>_<groupId>" → that group's settings.
+function resolveStartDestination() {
+  try {
+    const tg = window.Telegram && window.Telegram.WebApp;
+    const sp = (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) || '';
+    const m = /^grp_(\d+)_(\d+)$/.exec(sp);
+    if (m) return `/bot/${m[1]}/group/${m[2]}`;
+  } catch { /* fall through to default */ }
+  return '/dashboard';
+}
+
 export default function MiniApp() {
   const { status, authError } = useTelegram();
   const navigate = useNavigate();
 
   useEffect(() => {
     if (status === 'ok') {
-      navigate('/dashboard', { replace: true });
+      navigate(resolveStartDestination(), { replace: true });
     }
     if (status === 'no_init_data') {
       // initData missing but WebApp object exists — if a prior session exists, use it.
       const token = localStorage.getItem('token');
-      if (token) navigate('/dashboard', { replace: true });
+      if (token) navigate(resolveStartDestination(), { replace: true });
     }
   }, [status, navigate]);
 

@@ -265,6 +265,20 @@ class BotInstance:
         raw = self.app_context.config.get("TELEGRAM_BOT_USERNAME", "telegizer_bot")
         return raw.strip().lstrip("@").split("/")[-1]
 
+    def _app_deeplink(self, start_param="dashboard"):
+        """Telegram-authenticated entry point for a CUSTOM bot.
+
+        Custom bots cannot launch the Mini App directly (it validates initData against
+        the official bot token only). So we route through the OFFICIAL bot's Main Mini
+        App via a t.me deep link: it authenticates the user with Telegram, then the Mini
+        App reads `start_param` to land on the right page. This gives every bot —
+        official or custom — a real Telegram-authenticated session.
+
+        start_param must be [A-Za-z0-9_-], max 64 chars. Use "grp_<botId>_<groupId>" to
+        open a specific group, or "dashboard" for the home view.
+        """
+        return f"https://t.me/{self._official_bot_username()}?startapp={start_param}"
+
     def _find_website_user(self, tg_user_id):
         """Safe wrapper: return User linked to Telegram ID or None."""
         try:
@@ -284,11 +298,11 @@ class BotInstance:
 
     def _build_main_menu_keyboard(self, frontend, bot_username, is_linked, pending_count=0):
         """Build the standard main menu InlineKeyboardMarkup."""
-        # Primary CTA on top — opens the dashboard with the user's session. The
-        # persistent Menu Button (set via ensure_menu_button) launches the Mini App
-        # with Telegram auth; this inline button is the reliable browser fallback.
+        # Primary CTA on top — opens the official Telegizer Mini App via deep link so the
+        # user is authenticated with Telegram (custom bots can't authenticate the Mini App
+        # themselves). See _app_deeplink for why.
         keyboard = [
-            [InlineKeyboardButton("🚀 Open Telegizer App", url=f"{frontend}/dashboard")],
+            [InlineKeyboardButton("🚀 Open Telegizer App", url=self._app_deeplink("dashboard"))],
         ]
         if is_linked:
             keyboard.append([InlineKeyboardButton("✅ Account Connected", callback_data="menu:account_info")])
@@ -415,7 +429,7 @@ class BotInstance:
                 lines.append(f"• <b>{g['name']}</b>")
                 buttons.append([InlineKeyboardButton(
                     f"⚙️ {g['name']}",
-                    url=f"{frontend}/bot/{self.bot_id}/group/{g['id']}",
+                    url=self._app_deeplink(f"grp_{self.bot_id}_{g['id']}"),
                 )])
 
             await update.message.reply_text(
@@ -437,7 +451,7 @@ class BotInstance:
 
             if linked:
                 kb = InlineKeyboardMarkup([[
-                    InlineKeyboardButton("⚙️ Open Dashboard", url=f"{frontend}/bot/{self.bot_id}/group/{grp.id}"),
+                    InlineKeyboardButton("⚙️ Open Dashboard", url=self._app_deeplink(f"grp_{self.bot_id}_{grp.id}")),
                 ]])
                 await update.message.reply_text(
                     f"✅ <b>{chat.title}</b> is linked to Telegizer.\nUse the button to manage it.",
