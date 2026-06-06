@@ -3448,13 +3448,28 @@ async def _automod_execute(bot, message, group_id: str, flask_app, rule: str, ac
     except Exception:
         pass
 
+    # #10 — auto-delete behavior comes from the group's moderation settings.
+    auto_delete = True
+    try:
+        if flask_app:
+            with flask_app.app_context():
+                from .models import TelegramGroup
+                _tg = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
+                if _tg:
+                    _mod = (_tg.settings or {}).get("moderation", {})
+                    auto_delete = _mod.get("auto_delete_warnings", True)
+                    notify_seconds = int(_mod.get("auto_delete_warn_seconds", notify_seconds) or notify_seconds)
+    except Exception:
+        pass
+
     async def _timed_notify(text):
         try:
             nm = await bot.send_message(chat_id=chat_id, text=text)
-            asyncio.get_running_loop().call_later(
-                notify_seconds,
-                lambda: asyncio.ensure_future(_safe_delete(bot, chat_id, nm.message_id)),
-            )
+            if auto_delete and notify_seconds > 0:
+                asyncio.get_running_loop().call_later(
+                    notify_seconds,
+                    lambda: asyncio.ensure_future(_safe_delete(bot, chat_id, nm.message_id)),
+                )
         except Exception:
             pass
 
@@ -4050,11 +4065,62 @@ def _parse_reason(args: list) -> str:
     return " ".join(reason_parts) if reason_parts else "No reason given"
 
 
+async def _deny_admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, command: str):
+    """#7 — handle a non-admin using an admin-only command WITHOUT spamming the group.
+
+    - delete the offending command message (if the group setting is on and the bot can delete)
+    - log the attempt silently to the audit/event log
+    - DM the user a short notice ONLY if they have already started the bot (never DM otherwise)
+    """
+    flask_app = context.bot_data.get("flask_app")
+    group_id = str(update.effective_chat.id)
+    user = update.effective_user
+    msg = update.message
+
+    delete_unauth = True
+    started = False
+    if flask_app and user:
+        try:
+            with flask_app.app_context():
+                from .models import TelegramGroup, TelegramBotStarted
+                tg = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
+                if tg:
+                    delete_unauth = (tg.settings or {}).get("automod", {}).get(
+                        "delete_unauthorized_commands", True
+                    )
+                started = TelegramBotStarted.query.filter_by(
+                    telegram_user_id=str(user.id)
+                ).first() is not None
+        except Exception:
+            pass
+
+    if delete_unauth and msg:
+        try:
+            await msg.delete()
+        except Exception:
+            pass
+
+    _log_event(
+        flask_app, group_id, "unauthorized_command",
+        f"/{command} by {user.id if user else '?'}",
+        {"command": command, "user_id": str(user.id) if user else "",
+         "username": (user.username or "") if user else ""},
+    )
+
+    if started and user:
+        try:
+            await context.bot.send_message(
+                user.id, f"⛔ /{command} is an admins-only command in that group."
+            )
+        except Exception:
+            pass
+
+
 async def cmd_warn(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_group_chat(update):
         return
     if not await _require_admin(update, context):
-        await update.message.reply_text("⛔ Admins only.")
+        await _deny_admin_command(update, context, "warn")
         return
 
     flask_app = context.bot_data.get("flask_app")
@@ -4127,7 +4193,7 @@ async def cmd_ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_group_chat(update):
         return
     if not await _require_admin(update, context):
-        await update.message.reply_text("⛔ Admins only.")
+        await _deny_admin_command(update, context, "ban")
         return
 
     flask_app = context.bot_data.get("flask_app")
@@ -4160,7 +4226,7 @@ async def cmd_kick(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_group_chat(update):
         return
     if not await _require_admin(update, context):
-        await update.message.reply_text("⛔ Admins only.")
+        await _deny_admin_command(update, context, "kick")
         return
 
     flask_app = context.bot_data.get("flask_app")
@@ -4194,7 +4260,7 @@ async def cmd_mute(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_group_chat(update):
         return
     if not await _require_admin(update, context):
-        await update.message.reply_text("⛔ Admins only.")
+        await _deny_admin_command(update, context, "mute")
         return
 
     flask_app = context.bot_data.get("flask_app")
@@ -4250,7 +4316,7 @@ async def cmd_unmute(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_group_chat(update):
         return
     if not await _require_admin(update, context):
-        await update.message.reply_text("⛔ Admins only.")
+        await _deny_admin_command(update, context, "unmute")
         return
 
     flask_app = context.bot_data.get("flask_app")
@@ -4297,7 +4363,7 @@ async def cmd_tempban(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_group_chat(update):
         return
     if not await _require_admin(update, context):
-        await update.message.reply_text("⛔ Admins only.")
+        await _deny_admin_command(update, context, "tempban")
         return
 
     flask_app = context.bot_data.get("flask_app")
@@ -4336,7 +4402,7 @@ async def cmd_purge(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_group_chat(update):
         return
     if not await _require_admin(update, context):
-        await update.message.reply_text("⛔ Admins only.")
+        await _deny_admin_command(update, context, "purge")
         return
 
     flask_app = context.bot_data.get("flask_app")
@@ -4582,7 +4648,7 @@ async def cmd_tempmute(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_group_chat(update):
         return
     if not await _require_admin(update, context):
-        await update.message.reply_text("⛔ Admins only.")
+        await _deny_admin_command(update, context, "tempmute")
         return
     flask_app = context.bot_data.get("flask_app")
     group_id = str(update.effective_chat.id)
@@ -4745,7 +4811,7 @@ async def cmd_whois(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_group_chat(update):
         return
     if not await _require_admin(update, context):
-        await update.message.reply_text("⛔ Admins only.")
+        await _deny_admin_command(update, context, "whois")
         return
     flask_app = context.bot_data.get("flask_app")
     group_id = str(update.effective_chat.id)
@@ -4914,7 +4980,7 @@ async def cmd_removewarning(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_group_chat(update):
         return
     if not await _require_admin(update, context):
-        await update.message.reply_text("⛔ Admins only.")
+        await _deny_admin_command(update, context, "removewarning")
         return
     flask_app = context.bot_data.get("flask_app")
     group_id = str(update.effective_chat.id)
@@ -5004,7 +5070,7 @@ async def cmd_auditlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_group_chat(update):
         return
     if not await _require_admin(update, context):
-        await update.message.reply_text("⛔ Admins only.")
+        await _deny_admin_command(update, context, "auditlog")
         return
     flask_app = context.bot_data.get("flask_app")
     group_id = str(update.effective_chat.id)
@@ -5286,7 +5352,7 @@ async def cmd_invitelink(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_group_chat(update):
         return
     if not await _require_admin(update, context):
-        await update.message.reply_text("⛔ Admins only.")
+        await _deny_admin_command(update, context, "invitelink")
         return
 
     flask_app = context.bot_data.get("flask_app")

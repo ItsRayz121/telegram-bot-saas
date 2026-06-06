@@ -155,6 +155,9 @@ _DEFAULTS: dict = {
     # DISABLED: external_links, telegram_links, all media/contact rules
     "automod": {
         "enabled": True,
+        # When a non-admin uses an admin-only command (/warn /ban /mute /kick),
+        # delete their command message instead of replying in the group. #7
+        "delete_unauthorized_commands": True,
 
         "spam": {
             "enabled": True,
@@ -244,6 +247,7 @@ _DEFAULTS: dict = {
             {"at_warning": 4, "time_window_hours": None, "action": "mute",    "duration_minutes": 1440},
             {"at_warning": 5, "time_window_hours": None, "action": "tempban", "duration_hours": 720},
         ],
+        "auto_delete_warnings": True,     # #10 — auto-remove warning/action notices from chat
         "auto_delete_warn_seconds": 30,   # raised from 10 — visible for 30 s
         "auto_delete_action_seconds": 30, # raised from 10
     },

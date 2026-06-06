@@ -1371,6 +1371,18 @@ export default function GroupSettings() {
                 <Typography variant="body2" color="text.secondary" mb={2}>
                   Control who can use moderation commands. Default is admins only.
                 </Typography>
+                <FormControlLabel
+                  sx={{ mb: 1 }}
+                  control={<Switch
+                    checked={am.delete_unauthorized_commands !== false}
+                    onChange={(e) => updateSetting('automod.delete_unauthorized_commands', e.target.checked)} />}
+                  label="Delete unauthorized command messages"
+                />
+                <Typography variant="caption" color="text.secondary" display="block" mb={2}>
+                  When a non-admin uses an admin-only command, delete their message instead of replying in the
+                  group. The attempt is still recorded in the audit log; the user is never DM'd unless they
+                  have already started the bot.
+                </Typography>
                 <Box sx={{ maxWidth: 460 }}>
                 {['/warn', '/ban', '/mute', '/kick'].map((cmd) => {
                   const key = cmd.slice(1);
@@ -1436,6 +1448,41 @@ export default function GroupSettings() {
                     )}
                   </Grid>
                 </Grid>
+              </CardContent>
+            </Card>
+
+            {/* #10 — auto-delete warning/action notices from the group chat */}
+            <Card sx={{ mb: 2 }}>
+              <CardContent>
+                <Typography variant="subtitle1" fontWeight={600} mb={0.5}>Warning Messages</Typography>
+                <Typography variant="body2" color="text.secondary" mb={2}>
+                  Keep the chat clean by auto-removing the bot's warning notices. The warning is always kept
+                  in the audit log even when the chat message is deleted.
+                </Typography>
+                <FormControlLabel
+                  control={<Switch
+                    checked={mod.auto_delete_warnings !== false}
+                    onChange={(e) => updateSetting('moderation.auto_delete_warnings', e.target.checked)} />}
+                  label="Auto-delete warning messages"
+                />
+                {mod.auto_delete_warnings !== false && (
+                  <Box sx={{ mt: 2, maxWidth: 240 }}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Delete after</InputLabel>
+                      <Select
+                        value={mod.auto_delete_warn_seconds || 30}
+                        label="Delete after"
+                        onChange={(e) => updateSetting('moderation.auto_delete_warn_seconds', parseInt(e.target.value))}
+                      >
+                        <MenuItem value={5}>5 seconds</MenuItem>
+                        <MenuItem value={10}>10 seconds</MenuItem>
+                        <MenuItem value={30}>30 seconds</MenuItem>
+                        <MenuItem value={60}>1 minute</MenuItem>
+                        <MenuItem value={300}>5 minutes</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Box>
+                )}
               </CardContent>
             </Card>
 
