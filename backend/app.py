@@ -556,6 +556,7 @@ def create_app():
         _run_onboarding_emails_migration()
         _run_assistant_v2_migrations()
         _run_xp_period_migrations()
+        _run_user_columns_migration()
 
         # Encryption self-check — must run after all migrations so tokens exist
         from .utils.encryption import startup_encryption_selfcheck
@@ -1238,6 +1239,35 @@ def _run_xp_period_migrations():
         _mig_log.info("xp_period migrations complete")
     except Exception as exc:
         _mig_log.warning("xp_period migrations failed: %s", exc)
+
+
+def _run_user_columns_migration():
+    """Self-healing user-table columns that previously only lived in migrate.py.
+
+    Most important: onboarding_tour_completed. When this column was missing on a
+    deploy that never ran migrate.py, the product-tour 'completed' write 500'd
+    silently, so the flag never persisted and the tour kept re-appearing whenever
+    localStorage was cleared (notably inside the Telegram webview). Applying it at
+    startup makes persistence reliable everywhere.
+    """
+    _mig_log = logging.getLogger("migrations")
+    stmts = [
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_tour_completed BOOLEAN NOT NULL DEFAULT FALSE",
+    ]
+    try:
+        with db.engine.connect() as conn:
+            for sql in stmts:
+                try:
+                    conn.execute(text(sql))
+                    conn.commit()
+                except Exception:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+        _mig_log.info("user_columns migrations complete")
+    except Exception as exc:
+        _mig_log.warning("user_columns migrations failed: %s", exc)
 
 
 def _backfill_group_defaults():
