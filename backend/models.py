@@ -466,6 +466,30 @@ class Member(db.Model):
         }
 
 
+class XpEvent(db.Model):
+    """Timestamped XP ledger — the source of truth for period (today/7d/30d) XP.
+
+    The xp_1d/xp_7d/xp_30d columns on Member/OfficialMember are derived snapshots,
+    recomputed from this ledger over true rolling windows by a scheduled job
+    (see scheduler.recompute_xp_periods). Each row is a single +/- XP change.
+    `member_id` is the PK of Member (scope='custom') or OfficialMember (scope='official');
+    `scope` disambiguates the two id spaces.
+    """
+    __tablename__ = "xp_events"
+
+    id = db.Column(db.Integer, primary_key=True)
+    scope = db.Column(db.String(16), nullable=False)          # 'custom' | 'official'
+    member_id = db.Column(db.Integer, nullable=False)
+    amount = db.Column(db.Integer, nullable=False)             # may be negative (penalties)
+    reason = db.Column(db.String(64), nullable=True)           # 'message' | 'reaction' | 'penalty' | ...
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        db.Index("ix_xp_events_scope_member_created", "scope", "member_id", "created_at"),
+        db.Index("ix_xp_events_scope_created", "scope", "created_at"),
+    )
+
+
 class AuditLog(db.Model):
     __tablename__ = "audit_logs"
 

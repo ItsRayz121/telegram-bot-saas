@@ -1,5 +1,5 @@
 from datetime import datetime
-from .models import db, Group, Member, AuditLog, Bot, User
+from .models import db, Group, Member, AuditLog, Bot, User, XpEvent
 from .group_defaults import get_group_default_settings
 from .config import Config
 
@@ -103,6 +103,23 @@ class DatabaseManager:
         return member
 
     @staticmethod
+    def record_xp_event(scope, member_id, amount, reason=None):
+        """Append a row to the XP ledger (source of truth for period XP).
+
+        Does not commit — the caller's commit flushes it alongside the member
+        update so the two never diverge. Failures are swallowed: the ledger is a
+        reporting aid and must never break an XP award.
+        """
+        try:
+            if not member_id or not amount:
+                return
+            db.session.add(XpEvent(
+                scope=scope, member_id=member_id, amount=int(amount), reason=reason,
+            ))
+        except Exception:
+            pass
+
+    @staticmethod
     def add_xp(group_id, telegram_user_id, xp_amount, username=None, first_name=None):
         member = DatabaseManager.get_or_create_member(
             group_id, telegram_user_id, username, first_name
@@ -114,6 +131,7 @@ class DatabaseManager:
         member.xp_7d  = (member.xp_7d  or 0) + xp_amount
         member.xp_30d = (member.xp_30d or 0) + xp_amount
         member.last_xp_at = datetime.utcnow()
+        DatabaseManager.record_xp_event("custom", member.id, xp_amount, "award")
 
         new_level = DatabaseManager._calculate_level(member.xp)
         member.level = new_level
@@ -177,6 +195,7 @@ class DatabaseManager:
             member.xp_7d  = max(0, (member.xp_7d  or 0) + penalty_xp)
             member.xp_30d = max(0, (member.xp_30d or 0) + penalty_xp)
             member.level = DatabaseManager._calculate_level(member.xp)
+            DatabaseManager.record_xp_event("custom", member.id, penalty_xp, "penalty")
             db.session.commit()
 
     @staticmethod

@@ -147,21 +147,14 @@ def make_celery(app=None):
                 "task": "backend.scheduler.hub_send_daily_digests",
                 "schedule": 600.0,    # every 10 minutes (checks if digest time reached per user)
             },
-            # ── XP period snapshot resets ─────────────────────────────────────
-            "reset-xp-daily": {
-                "task": "backend.scheduler.reset_xp_period",
-                "schedule": crontab(hour=0, minute=0),
-                "args": ["1d"],
-            },
-            "reset-xp-weekly": {
-                "task": "backend.scheduler.reset_xp_period",
-                "schedule": crontab(hour=0, minute=0, day_of_week=1),
-                "args": ["7d"],
-            },
-            "reset-xp-monthly": {
-                "task": "backend.scheduler.reset_xp_period",
-                "schedule": crontab(hour=0, minute=0, day_of_month=1),
-                "args": ["30d"],
+            # ── XP period snapshots (true rolling windows from the XP ledger) ──
+            # Recompute xp_1d/7d/30d as rolling sums over the last 1/7/30 days from
+            # xp_events. Replaces the old calendar-boundary resets, which made "7 Days"
+            # mean "since Monday" and "30 Days" mean "since the 1st" (so early in a
+            # month all three windows looked identical). Runs every 30 minutes.
+            "recompute-xp-periods": {
+                "task": "backend.scheduler.recompute_xp_periods",
+                "schedule": 1800.0,
             },
         },
     )
@@ -1613,7 +1606,11 @@ def hard_delete_user(user_id: int):
 
 @celery.task(name="backend.scheduler.reset_xp_period")
 def reset_xp_period(period):
-    """Reset period XP snapshot columns (xp_1d/xp_7d/xp_30d) for all members."""
+    """Reset period XP snapshot columns (xp_1d/xp_7d/xp_30d) for all members.
+
+    Legacy calendar-boundary reset. Superseded by recompute_xp_periods (true rolling
+    windows from the XP ledger); kept only for manual/backward use.
+    """
     col_map = {"1d": "xp_1d", "7d": "xp_7d", "30d": "xp_30d"}
     col = col_map.get(period)
     if not col:
@@ -1627,3 +1624,50 @@ def reset_xp_period(period):
         logger.info("reset_xp_period: reset %s for all members", col)
     except Exception as exc:
         logger.error("reset_xp_period failed for %s: %s", period, exc)
+
+
+@celery.task(name="backend.scheduler.recompute_xp_periods")
+def recompute_xp_periods():
+    """Recompute xp_1d/xp_7d/xp_30d as TRUE rolling-window sums from the XP ledger.
+
+    For each window we set the column to SUM(amount) over xp_events in the last
+    1/7/30 days (clamped at 0), so Today / 7 Days / 30 Days reflect genuinely
+    different periods. Members with no recent events are reset to 0.
+
+    Note: historical XP earned before the ledger existed has no events, so period
+    columns start at 0 and fill in as new activity accrues. Lifetime `xp` is
+    unaffected.
+    """
+    from datetime import timedelta
+    from .models import db
+    from sqlalchemy import text as _text
+    now = datetime.utcnow()
+    windows = {"xp_1d": 1, "xp_7d": 7, "xp_30d": 30}
+    # (table, scope) — member_id in xp_events points at the PK of each table.
+    targets = [("members", "custom"), ("official_members", "official")]
+    try:
+        for table, scope in targets:
+            for col, days in windows.items():
+                cutoff = now - timedelta(days=days)
+                # Zero everyone first so aged-out XP decays out of the window…
+                db.session.execute(_text(f"UPDATE {table} SET {col} = 0"))
+                # …then set the rolling sum for members with events in-window.
+                db.session.execute(_text(f"""
+                    UPDATE {table} AS t
+                    SET {col} = GREATEST(s.psum, 0)
+                    FROM (
+                        SELECT member_id, SUM(amount) AS psum
+                        FROM xp_events
+                        WHERE scope = :scope AND created_at >= :cutoff
+                        GROUP BY member_id
+                    ) AS s
+                    WHERE t.id = s.member_id
+                """), {"scope": scope, "cutoff": cutoff})
+        db.session.commit()
+        logger.info("recompute_xp_periods: rolling windows refreshed")
+    except Exception as exc:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        logger.error("recompute_xp_periods failed: %s", exc)

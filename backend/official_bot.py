@@ -3731,6 +3731,24 @@ async def _official_ai_moderation(bot, message, text, group_id, sm_cfg, flask_ap
 
 # ─── Shared helpers for moderation ───────────────────────────────────────────
 
+def _log_xp_event(db, member, amount, reason):
+    """Append an official-scope row to the XP ledger (source of truth for period XP).
+
+    Flushes first so a brand-new member has an id. Never raises — the ledger is a
+    reporting aid and must not break an XP award. Caller commits.
+    """
+    try:
+        from .models import XpEvent
+        if getattr(member, "id", None) is None:
+            db.session.flush()
+        if member.id and amount:
+            db.session.add(XpEvent(
+                scope="official", member_id=member.id, amount=int(amount), reason=reason,
+            ))
+    except Exception:
+        pass
+
+
 async def _apply_xp_penalty(flask_app, group_id: str, user_id: int, action: str):
     """Deduct XP per the group's levels.xp_penalty_<action> setting."""
     penalty_key = f"xp_penalty_{action}"
@@ -3752,6 +3770,7 @@ async def _apply_xp_penalty(flask_app, group_id: str, user_id: int, action: str)
                 m.xp_1d  = max(0, (m.xp_1d  or 0) + penalty)
                 m.xp_7d  = max(0, (m.xp_7d  or 0) + penalty)
                 m.xp_30d = max(0, (m.xp_30d or 0) + penalty)
+                _log_xp_event(db, m, penalty, "penalty")
                 db.session.commit()
     except Exception as exc:
         _log.debug("[OfficialBot] XP penalty (%s) failed: %s", action, exc)
@@ -4407,6 +4426,7 @@ async def _award_xp(flask_app, group_id: str, user, xp_gain: int = None):
             m.last_message_at = now
             m.last_xp_at = now
             m.level = _level_from_xp(m.xp)
+            _log_xp_event(db, m, xp_gain, "message")
             db.session.commit()
 
             # Level-up notification
@@ -5433,6 +5453,7 @@ async def on_reaction(update: Update, context: ContextTypes.DEFAULT_TYPE):
             m.xp_7d  = (m.xp_7d  or 0) + xp_amount
             m.xp_30d = (m.xp_30d or 0) + xp_amount
             m.level = _level_from_xp(m.xp)
+            _log_xp_event(db, m, xp_amount, "reaction")
             db.session.commit()
     except Exception as exc:
         _log.debug("[OfficialBot] Reaction XP failed: %s", exc)
