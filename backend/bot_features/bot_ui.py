@@ -57,23 +57,66 @@ def _group_admin_commands():
     ]
 
 
-async def apply_scoped_commands(bot):
-    """Register role/scoped command menus for a bot. Best-effort; never raises.
+# ── Official bot command sets ────────────────────────────────────────────────
+# The official bot has a slightly different handler set (e.g. /xp instead of /rank,
+# /warnings check) so it gets its own lists — same role-scoping pattern.
 
-    - DMs: setup/account commands
-    - Group members: XP/info commands
-    - Group admins: the above plus moderation commands
-    """
+def _official_private_commands():
+    return [
+        BotCommand("start",     "Open the companion hub"),
+        BotCommand("help",      "Setup guide"),
+        BotCommand("linkgroup", "Link this group (run inside the group)"),
+        BotCommand("status",    "Check bot status (run inside the group)"),
+    ]
+
+
+def _official_group_member_commands():
+    return [
+        BotCommand("xp",          "Check your XP and level"),
+        BotCommand("leaderboard", "Top members by XP"),
+        BotCommand("warnings",    "Check a user's warnings"),
+    ]
+
+
+def _official_group_admin_commands():
+    return _official_group_member_commands() + [
+        BotCommand("warn",    "Warn a user"),
+        BotCommand("ban",     "Ban a user"),
+        BotCommand("kick",    "Kick a user"),
+        BotCommand("mute",    "Mute a user"),
+        BotCommand("unmute",  "Unmute a user"),
+        BotCommand("tempban", "Temp-ban a user"),
+        BotCommand("purge",   "Delete the last N messages"),
+        BotCommand("status",  "Check bot status"),
+    ]
+
+
+async def _apply_scoped(bot, private, member, admin):
+    """Set role/scoped command menus. Best-effort; never raises."""
     try:
-        await bot.set_my_commands(_private_commands(), scope=BotCommandScopeAllPrivateChats())
-        await bot.set_my_commands(_group_member_commands(), scope=BotCommandScopeAllGroupChats())
-        await bot.set_my_commands(_group_admin_commands(), scope=BotCommandScopeAllChatAdministrators())
-        # Fallback for any context not covered above.
-        await bot.set_my_commands(_private_commands(), scope=BotCommandScopeDefault())
+        await bot.set_my_commands(private, scope=BotCommandScopeAllPrivateChats())
+        await bot.set_my_commands(member, scope=BotCommandScopeAllGroupChats())
+        await bot.set_my_commands(admin, scope=BotCommandScopeAllChatAdministrators())
+        await bot.set_my_commands(private, scope=BotCommandScopeDefault())
         return True
     except Exception as exc:
-        _log.warning("apply_scoped_commands failed: %s", exc)
+        _log.warning("apply_scoped commands failed: %s", exc)
         return False
+
+
+async def apply_scoped_commands(bot):
+    """Custom/community bots — role-scoped command menus (members vs admins)."""
+    return await _apply_scoped(
+        bot, _private_commands(), _group_member_commands(), _group_admin_commands()
+    )
+
+
+async def apply_official_scoped_commands(bot):
+    """Official Telegizer bot — role-scoped command menus (members vs admins)."""
+    return await _apply_scoped(
+        bot, _official_private_commands(),
+        _official_group_member_commands(), _official_group_admin_commands(),
+    )
 
 
 async def ensure_menu_button(bot, frontend):

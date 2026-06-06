@@ -81,6 +81,17 @@ function resolveStartDestination() {
     const sp = (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) || '';
     const m = /^grp_(\d+)_(\d+)$/.exec(sp);
     if (m) return `/bot/${m[1]}/group/${m[2]}`;
+    // Short codes used by bot deep links (startapp only allows [A-Za-z0-9_-]).
+    const MAP = {
+      dashboard: '/dashboard',
+      settings: '/settings',
+      mygroups: '/my-groups',
+      workspace: '/workspace',
+      automations: '/workspace/automations',
+      billing: '/billing',
+      echo: '/ark',
+    };
+    if (MAP[sp]) return MAP[sp];
   } catch { /* fall through to default */ }
   return '/dashboard';
 }

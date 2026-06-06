@@ -5811,22 +5811,10 @@ class OfficialBotRunner:
         await a.initialize()
         await a.start()
         try:
-            await a.bot.set_my_commands([
-                BotCommand("start",    "Open companion hub"),
-                BotCommand("help",     "Setup guide"),
-                BotCommand("linkgroup","Link this group (use in group)"),
-                BotCommand("status",   "Check bot status (use in group)"),
-                BotCommand("warn",     "Warn a user (admins only)"),
-                BotCommand("ban",      "Ban a user (admins only)"),
-                BotCommand("kick",     "Kick a user (admins only)"),
-                BotCommand("mute",     "Mute a user (admins only)"),
-                BotCommand("unmute",   "Unmute a user (admins only)"),
-                BotCommand("tempban",  "Temp-ban a user (admins only)"),
-                BotCommand("purge",    "Delete last N messages (admins only)"),
-                BotCommand("warnings",    "Check a user's warnings"),
-                BotCommand("xp",         "Check your XP and level"),
-                BotCommand("leaderboard","Top members by XP"),
-            ])
+            # Role-scoped commands: members see XP/info, admins additionally see
+            # moderation commands. Shared scoping pattern with custom bots.
+            from .bot_features.bot_ui import apply_official_scoped_commands
+            await apply_official_scoped_commands(a.bot)
         except Exception as exc:
             _log.warning("[OfficialBot] set_my_commands: %s", exc)
         # 1-E-02: Set bot description/branding

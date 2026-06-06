@@ -307,7 +307,7 @@ class BotInstance:
         if is_linked:
             keyboard.append([InlineKeyboardButton("✅ Account Connected", callback_data="menu:account_info")])
         else:
-            keyboard.append([InlineKeyboardButton("🔗 Connect Account", url=f"{frontend}/settings")])
+            keyboard.append([InlineKeyboardButton("🔗 Connect Account", url=self._app_deeplink("settings"))])
 
         if pending_count:
             keyboard.append([InlineKeyboardButton(
@@ -322,7 +322,7 @@ class BotInstance:
             ],
             [
                 InlineKeyboardButton("🧠 AI Assistant", callback_data="menu:ai_assistant"),
-                InlineKeyboardButton("⚡ Automations", url=f"{frontend}/workspace/automations"),
+                InlineKeyboardButton("⚡ Automations", url=self._app_deeplink("automations")),
             ],
             [
                 InlineKeyboardButton("💬 Support", callback_data="menu:support"),
@@ -591,7 +591,7 @@ class BotInstance:
                 "Open your dashboard to confirm the connection and configure it.",
                 parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🤖 Echo", url=f"{frontend}/ark")],
+                    [InlineKeyboardButton("🤖 Echo", url=self._app_deeplink("echo"))],
                 ]),
             )
             return
@@ -621,7 +621,7 @@ class BotInstance:
                     text=f"✅ <b>Group linked!</b>\n\n<b>{group_title}</b> is now in your dashboard.",
                     parse_mode="HTML",
                     reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("📋 My Groups", url=f"{frontend}/my-groups")],
+                        [InlineKeyboardButton("📋 My Groups", url=self._app_deeplink("mygroups"))],
                     ]),
                 )
             except Exception:
@@ -644,7 +644,7 @@ class BotInstance:
             await context.bot.send_message(
                 chat_id=user.id, text=private_text, parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🖥️ Open My Groups", url=f"{frontend}/my-groups")],
+                    [InlineKeyboardButton("🖥️ Open My Groups", url=self._app_deeplink("mygroups"))],
                 ]),
             )
         except Exception:
@@ -710,8 +710,8 @@ class BotInstance:
             await query.edit_message_text(
                 text, parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🖥️ Open Dashboard", url=frontend)],
-                    [InlineKeyboardButton("⚙️ Settings", url=f"{frontend}/settings")],
+                    [InlineKeyboardButton("🖥️ Open Dashboard", url=self._app_deeplink("dashboard"))],
+                    [InlineKeyboardButton("⚙️ Settings", url=self._app_deeplink("settings"))],
                     [InlineKeyboardButton("« Back", callback_data="menu:main")],
                 ]),
             )
@@ -736,7 +736,7 @@ class BotInstance:
                     "📋 <b>My Groups</b>\n\nConnect your Telegizer account to see your groups here.",
                     parse_mode="HTML",
                     reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("🔗 Connect Account", url=f"{frontend}/settings")],
+                        [InlineKeyboardButton("🔗 Connect Account", url=self._app_deeplink("settings"))],
                         [InlineKeyboardButton("« Back", callback_data="menu:main")],
                     ]),
                 )
@@ -746,7 +746,7 @@ class BotInstance:
                 text = "📋 <b>My Groups</b>\n\nNo linked groups yet.\nAdd me to a group and run /linkgroup."
                 kb = [
                     [InlineKeyboardButton("➕ Add Group", callback_data="menu:add_group")],
-                    [InlineKeyboardButton("🖥️ Open Dashboard", url=f"{frontend}/my-groups")],
+                    [InlineKeyboardButton("🖥️ Open Dashboard", url=self._app_deeplink("mygroups"))],
                     [InlineKeyboardButton("« Back", callback_data="menu:main")],
                 ]
             else:
@@ -756,7 +756,7 @@ class BotInstance:
                     lines.append(f"{icons.get(g['status'], '⚪')} {g['title']}")
                 text = "\n".join(lines)
                 kb = [
-                    [InlineKeyboardButton("🖥️ Manage on Dashboard", url=f"{frontend}/my-groups")],
+                    [InlineKeyboardButton("🖥️ Manage on Dashboard", url=self._app_deeplink("mygroups"))],
                     [InlineKeyboardButton("➕ Add Another Group", callback_data="menu:add_group")],
                     [InlineKeyboardButton("« Back", callback_data="menu:main")],
                 ]
@@ -776,7 +776,7 @@ class BotInstance:
                 parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("➕ Add Bot to Group", url=add_url)],
-                    [InlineKeyboardButton("🖥️ Dashboard → My Groups", url=f"{frontend}/my-groups")],
+                    [InlineKeyboardButton("🖥️ Dashboard → My Groups", url=self._app_deeplink("mygroups"))],
                     [InlineKeyboardButton("« Back", callback_data="menu:main")],
                 ]),
             )
@@ -799,7 +799,7 @@ class BotInstance:
                 "<i>Just send me a message below to get started!</i>",
                 parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🖥️ Open AI Workspace", url=f"{frontend}/workspace")],
+                    [InlineKeyboardButton("🖥️ Open AI Workspace", url=self._app_deeplink("workspace"))],
                     [InlineKeyboardButton("« Back", callback_data="menu:main")],
                 ]),
             )
@@ -846,7 +846,7 @@ class BotInstance:
                 text = "\n".join(lines)
                 kb = (
                     [[InlineKeyboardButton(f"📋 {p['title']}", callback_data=f"show_code:{p['code']}")] for p in pending[:5]]
-                    + [[InlineKeyboardButton("🖥️ Open Dashboard", url=f"{frontend}/my-groups")],
+                    + [[InlineKeyboardButton("🖥️ Open Dashboard", url=self._app_deeplink("mygroups"))],
                        [InlineKeyboardButton("« Back", callback_data="menu:main")]]
                 )
             await query.edit_message_text(text, parse_mode="HTML",
@@ -887,7 +887,7 @@ class BotInstance:
                 "<i>Single use · expires in 15 min</i>",
                 parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🖥️ Open My Groups", url=f"{frontend}/my-groups")],
+                    [InlineKeyboardButton("🖥️ Open My Groups", url=self._app_deeplink("mygroups"))],
                     [InlineKeyboardButton("« Back", callback_data="menu:pending_groups")],
                 ]),
             )
@@ -931,7 +931,7 @@ class BotInstance:
                 f"{label}  {state}",
                 callback_data=f"qs:toggle:{group_id}:{feat_key}",
             )])
-        rows.append([InlineKeyboardButton("🌐 Full Settings on Web", url=f"{frontend}/bot/{self.bot_id}/group/{group_id}")])
+        rows.append([InlineKeyboardButton("🌐 Full Settings on Web", url=self._app_deeplink(f"grp_{self.bot_id}_{group_id}"))])
         rows.append([InlineKeyboardButton("« Back", callback_data="menu:main")])
         return InlineKeyboardMarkup(rows)
 
