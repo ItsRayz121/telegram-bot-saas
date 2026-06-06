@@ -294,6 +294,8 @@ export default function GroupSettings() {
     () => localStorage.getItem(firstVisitKey) !== 'seen'
   );
   const [settingsData, setSettingsData] = useState(null);
+  // Snapshot of last-saved settings (JSON string) — used to enable Save only when dirty (#12)
+  const [origSettings, setOrigSettings] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -372,6 +374,7 @@ export default function GroupSettings() {
       if (!isMounted.current) return;
       setGroupData(res.data.group);
       setSettingsData(res.data.settings);
+      setOrigSettings(JSON.stringify(res.data.settings || {}));
     } catch {
       if (!isMounted.current) return;
       toast.error('Failed to load settings');
@@ -660,6 +663,7 @@ export default function GroupSettings() {
     setSaving(true);
     try {
       await settings.updateGroupSettings(botId, groupId, settingsData);
+      setOrigSettings(JSON.stringify(settingsData || {}));
       toast.success('Settings saved!');
       track('first_moderation_rule_set', { bot_id: botId, group_id: groupId });
     } catch (err) {
@@ -781,6 +785,36 @@ export default function GroupSettings() {
 
   const currentCat = CATEGORIES.find((c) => c.id === cat);
 
+  // #12 — Save is enabled only when the user has actually changed something.
+  const isDirty = settingsData != null && origSettings != null
+    && JSON.stringify(settingsData) !== origSettings;
+
+  // #13 — format timestamps in the group's configured timezone (not the browser's),
+  // so every screen on this page reads consistently.
+  const groupTz = settingsData?.timezone || 'UTC';
+  const fmtTs = (ts, opts = { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) => {
+    if (!ts) return '—';
+    try {
+      return new Date(ts).toLocaleString([], { ...opts, timeZone: groupTz });
+    } catch {
+      return new Date(ts).toLocaleString();
+    }
+  };
+
+  // #5 — AI Status cards link to the exact tab where each thing is configured.
+  const aiStatusTargets = {
+    'Smart Moderation': { cat: 'moderation', sub: getSubTabIndex(CATEGORIES, 'moderation', 'AutoMod') },
+    'AI Integrations':  { cat: 'ai',         sub: getSubTabIndex(CATEGORIES, 'ai', 'Webhooks') },
+    'Knowledge Base':   { cat: 'ai',         sub: getSubTabIndex(CATEGORIES, 'ai', 'Knowledge Base') },
+    'OpenAI Provider':  { cat: 'ai',         sub: getSubTabIndex(CATEGORIES, 'ai', 'Knowledge Base') },
+  };
+  const goToTarget = (t) => {
+    if (!t) return;
+    setCat(t.cat);
+    setSubTab(t.sub >= 0 ? t.sub : 0);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
 
@@ -837,9 +871,9 @@ export default function GroupSettings() {
             variant="contained"
             startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <Save />}
             onClick={handleSave}
-            disabled={saving || cat === 'analytics'}
+            disabled={saving || cat === 'analytics' || !isDirty}
           >
-            Save
+            {saving ? 'Saving…' : isDirty ? 'Save' : 'Saved'}
           </Button>
         </Toolbar>
 
@@ -1337,11 +1371,12 @@ export default function GroupSettings() {
                 <Typography variant="body2" color="text.secondary" mb={2}>
                   Control who can use moderation commands. Default is admins only.
                 </Typography>
+                <Box sx={{ maxWidth: 460 }}>
                 {['/warn', '/ban', '/mute', '/kick'].map((cmd) => {
                   const key = cmd.slice(1);
                   const val = (am.cmd_perms || {})[key] || 'admins_only';
                   return (
-                    <Box key={cmd} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 0.75, borderBottom: '1px solid', borderColor: 'divider' }}>
+                    <Box key={cmd} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, py: 0.75, borderBottom: '1px solid', borderColor: 'divider' }}>
                       <Typography fontWeight={600} sx={{ fontFamily: 'monospace', fontSize: '0.9rem', minWidth: 70 }}>{cmd}</Typography>
                       <FormControl size="small" sx={{ minWidth: 160 }}>
                         <Select
@@ -1355,6 +1390,7 @@ export default function GroupSettings() {
                     </Box>
                   );
                 })}
+                </Box>
               </CardContent>
             </Card>
           </>
@@ -1370,6 +1406,7 @@ export default function GroupSettings() {
                   <Grid item xs={12} sm={4}>
                     <TextField fullWidth type="number" label="Max Warnings"
                       value={mod.max_warnings || 3}
+                      helperText="Action below triggers once a user reaches this many warnings."
                       onChange={(e) => updateSetting('moderation.max_warnings', parseInt(e.target.value))} />
                   </Grid>
                   <Grid item xs={12} sm={4}>
@@ -1384,9 +1421,19 @@ export default function GroupSettings() {
                     </FormControl>
                   </Grid>
                   <Grid item xs={12} sm={4}>
-                    <TextField fullWidth type="number" label="Mute Duration (minutes)"
-                      value={mod.mute_duration_minutes || 60}
-                      onChange={(e) => updateSetting('moderation.mute_duration_minutes', parseInt(e.target.value))} />
+                    {/* #2 — duration only applies to Mute. Ban is permanent; Kick has no duration. */}
+                    {(mod.warning_action || 'ban') === 'mute' ? (
+                      <TextField fullWidth type="number" label="Mute Duration (minutes)"
+                        value={mod.mute_duration_minutes || 60}
+                        onChange={(e) => updateSetting('moderation.mute_duration_minutes', parseInt(e.target.value))} />
+                    ) : (
+                      <TextField fullWidth disabled
+                        label={(mod.warning_action || 'ban') === 'ban' ? 'Ban' : 'Kick'}
+                        value={(mod.warning_action || 'ban') === 'ban'
+                          ? 'Permanent — no duration'
+                          : 'No duration — user can rejoin'}
+                        helperText="Use the Escalation Chain below for a temporary ban with a set duration." />
+                    )}
                   </Grid>
                 </Grid>
               </CardContent>
@@ -1448,14 +1495,16 @@ export default function GroupSettings() {
                           updateSetting('moderation.escalation_steps', steps);
                         }} />
                     )}
-                    <TextField size="small" type="number" label="Time Window (hrs)" placeholder="Any" sx={{ width: 130 }}
-                      value={step.time_window_hours ?? ''}
-                      onChange={(e) => {
-                        const steps = [...(mod.escalation_steps || [])];
-                        const val = e.target.value === '' ? null : parseInt(e.target.value);
-                        steps[idx] = { ...steps[idx], time_window_hours: val };
-                        updateSetting('moderation.escalation_steps', steps);
-                      }} />
+                    <Tooltip title="Only count warnings from the last N hours toward this step. Leave blank to count all of the user's warnings.">
+                      <TextField size="small" type="number" label="Count within (hrs)" placeholder="All time" sx={{ width: 150 }}
+                        value={step.time_window_hours ?? ''}
+                        onChange={(e) => {
+                          const steps = [...(mod.escalation_steps || [])];
+                          const val = e.target.value === '' ? null : parseInt(e.target.value);
+                          steps[idx] = { ...steps[idx], time_window_hours: val };
+                          updateSetting('moderation.escalation_steps', steps);
+                        }} />
+                    </Tooltip>
                     <IconButton size="small" color="error" onClick={() => {
                       const steps = (mod.escalation_steps || []).filter((_, i) => i !== idx);
                       updateSetting('moderation.escalation_steps', steps);
@@ -2984,7 +3033,7 @@ export default function GroupSettings() {
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
                         <Chip label={log.action_type} color={ACTION_COLORS[log.action_type] || 'default'} size="small" sx={{ height: 20, fontSize: '0.68rem' }} />
                         <Typography variant="caption" color="text.secondary">
-                          {log.timestamp ? new Date(log.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                          {fmtTs(log.timestamp)}
                         </Typography>
                       </Box>
                       <Typography variant="caption" display="block">
@@ -3070,7 +3119,7 @@ export default function GroupSettings() {
                           </TableCell>
                           <TableCell sx={cellSx}>
                             <Typography variant="caption" color="text.secondary" noWrap>
-                              {log.timestamp ? new Date(log.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                              {fmtTs(log.timestamp)}
                             </Typography>
                           </TableCell>
                         </TableRow>
@@ -3182,7 +3231,7 @@ export default function GroupSettings() {
                         {warnMsgPreview && <Typography variant="caption" color="text.disabled" display="block" noWrap>{warnMsgPreview}</Typography>}
                         <Typography variant="caption" color="text.disabled" display="block" mt={0.25}>
                           By {warning.moderator_username ? `@${warning.moderator_username}` : warning.moderator_user_id}
-                          {' · '}{warning.created_at ? new Date(warning.created_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                          {' · '}{fmtTs(warning.created_at)}
                         </Typography>
                         {isExpanded && (
                           <Box sx={{ mt: 1, pt: 1, borderTop: '1px solid', borderColor: 'divider' }}>
@@ -3255,7 +3304,7 @@ export default function GroupSettings() {
                               </TableCell>
                               <TableCell sx={cellSx}>
                                 <Typography variant="caption" color="text.secondary" noWrap>
-                                  {warning.created_at ? new Date(warning.created_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                                  {fmtTs(warning.created_at)}
                                 </Typography>
                               </TableCell>
                               <TableCell sx={cellSx} align="center">
@@ -3284,7 +3333,7 @@ export default function GroupSettings() {
                                     )}
                                     <Typography variant="caption" color="text.disabled">
                                       Issued by: {warning.moderator_username ? `@${warning.moderator_username}` : warning.moderator_user_id}
-                                      {' · '}{warning.created_at ? new Date(warning.created_at).toLocaleString() : '—'}
+                                      {' · '}{fmtTs(warning.created_at)}
                                     </Typography>
                                   </Stack>
                                 </TableCell>
@@ -3353,7 +3402,7 @@ export default function GroupSettings() {
                           </Box>
                           {digestConfig[`last_${key}`] && (
                             <Typography variant="caption" color="text.disabled" display="block" mt={0.5}>
-                              Last sent: {new Date(digestConfig[`last_${key}`]).toLocaleString()}
+                              Last sent: {fmtTs(digestConfig[`last_${key}`])}
                             </Typography>
                           )}
                         </Card>
@@ -3583,30 +3632,44 @@ export default function GroupSettings() {
                         { label: 'AI Integrations', value: aiStatus.ai_integrations, good: 'connected' },
                         { label: 'Knowledge Base', value: aiStatus.knowledge_base, good: 'configured' },
                         { label: 'OpenAI Provider', value: aiStatus.openai_provider, good: 'connected' },
-                      ].map(({ label, value, good }) => (
+                      ].map(({ label, value, good }) => {
+                        const target = aiStatusTargets[label];
+                        return (
                         <Grid item xs={6} sm={3} key={label}>
-                          <Typography variant="caption" color="text.secondary">{label}</Typography>
-                          <Box mt={0.5}>
-                            <Chip
-                              size="small"
-                              label={(value || 'unknown').replace(/_/g, ' ')}
-                              color={value === good ? 'success' : 'default'}
-                              variant={value === good ? 'filled' : 'outlined'}
-                              sx={{ textTransform: 'capitalize', fontWeight: 600 }}
-                            />
-                          </Box>
+                          <Tooltip title={target ? `Configure → ${currentCat && CATEGORIES.find(c => c.id === target.cat)?.label}` : ''}>
+                            <Box
+                              onClick={() => goToTarget(target)}
+                              sx={{
+                                cursor: 'pointer', borderRadius: 1.5, p: 1, m: -1,
+                                transition: 'background 0.15s ease',
+                                '&:hover': { bgcolor: 'rgba(255,255,255,0.06)' },
+                              }}
+                            >
+                              <Typography variant="caption" color="text.secondary">{label} ›</Typography>
+                              <Box mt={0.5}>
+                                <Chip
+                                  size="small"
+                                  label={(value || 'unknown').replace(/_/g, ' ')}
+                                  color={value === good ? 'success' : 'default'}
+                                  variant={value === good ? 'filled' : 'outlined'}
+                                  sx={{ textTransform: 'capitalize', fontWeight: 600, cursor: 'pointer' }}
+                                />
+                              </Box>
+                            </Box>
+                          </Tooltip>
                         </Grid>
-                      ))}
+                        );
+                      })}
                     </Grid>
                     <Divider sx={{ my: 1.5 }} />
                     <Stack direction={{ xs: 'column', sm: 'row' }} spacing={3}>
                       <Typography variant="caption" color="text.secondary">
                         Last AI action:{' '}
-                        <strong>{aiStatus.last_ai_action ? new Date(aiStatus.last_ai_action).toLocaleString() : '—'}</strong>
+                        <strong>{fmtTs(aiStatus.last_ai_action)}</strong>
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
                         Last successful AI response:{' '}
-                        <strong>{aiStatus.last_successful_response ? new Date(aiStatus.last_successful_response).toLocaleString() : '—'}</strong>
+                        <strong>{fmtTs(aiStatus.last_successful_response)}</strong>
                       </Typography>
                     </Stack>
                   </CardContent>
@@ -3664,7 +3727,7 @@ export default function GroupSettings() {
                           <TableRow key={e.id}>
                             <TableCell sx={{ whiteSpace: 'nowrap', verticalAlign: 'top', width: 150 }}>
                               <Typography variant="caption" color="text.secondary">
-                                {e.created_at ? new Date(e.created_at).toLocaleString() : '—'}
+                                {fmtTs(e.created_at)}
                               </Typography>
                             </TableCell>
                             <TableCell sx={{ verticalAlign: 'top', width: 110 }}>
@@ -3734,9 +3797,9 @@ export default function GroupSettings() {
           variant="contained"
           startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <Save />}
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || !isDirty}
         >
-          Save Settings
+          {saving ? 'Saving…' : isDirty ? 'Save Settings' : 'All changes saved'}
         </Button>
       </StickyFooter>
     </Box>
