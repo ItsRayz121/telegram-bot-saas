@@ -103,7 +103,7 @@ function MessageBubble({ msg, onSuggestion, isLast, onExpand }) {
         {/* Copy button for bot messages */}
         {!isUser && (
           <Tooltip title={copied ? 'Copied!' : 'Copy'} placement="left">
-            <IconButton size="small" onClick={handleCopy} sx={{ opacity: 0.4, '&:hover': { opacity: 1 }, mb: 0.5 }}>
+            <IconButton size="small" onClick={handleCopy} sx={{ opacity: 0.4, '&:hover': { opacity: 1 }, '@media (hover: none)': { opacity: 0.85 }, mb: 0.5 }}>
               <ContentCopy sx={{ fontSize: 13 }} />
             </IconButton>
           </Tooltip>
@@ -144,7 +144,7 @@ function MessageBubble({ msg, onSuggestion, isLast, onExpand }) {
               variant="outlined"
               color="primary"
               onClick={() => onSuggestion(s)}
-              sx={{ fontSize: '0.7rem', cursor: 'pointer', height: 24 }}
+              sx={{ fontSize: '0.72rem', cursor: 'pointer', height: 30 }}
             />
           ))}
         </Box>
@@ -160,7 +160,7 @@ function MessageBubble({ msg, onSuggestion, isLast, onExpand }) {
             variant="filled"
             color="secondary"
             onClick={onExpand}
-            sx={{ fontSize: '0.68rem', cursor: 'pointer', height: 22 }}
+            sx={{ fontSize: '0.7rem', cursor: 'pointer', height: 28 }}
           />
         </Box>
       )}
@@ -370,7 +370,7 @@ function AssistantContent({ onClose }) {
             variant="outlined"
             onClick={() => send(q.value)}
             disabled={sending}
-            sx={{ fontSize: '0.68rem', cursor: 'pointer' }}
+            sx={{ fontSize: '0.72rem', cursor: 'pointer', height: 30 }}
           />
         ))}
       </Box>
@@ -489,7 +489,9 @@ export function MobileAssistantFab() {
         onClick={() => setOpen(true)}
         sx={{
           position: 'fixed',
-          bottom: 'calc(72px + env(safe-area-inset-bottom, 0px))',
+          // Sit clear of the bottom nav using the shared clearance token so the
+          // FAB never overlaps the last actionable card or the nav bar itself.
+          bottom: 'calc(var(--bottom-nav-clearance) + 10px)',
           right: 16,
           zIndex: 1300,
           boxShadow: 4,

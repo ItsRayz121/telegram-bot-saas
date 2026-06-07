@@ -137,9 +137,11 @@ export default function TopNav({ title, subtitle, actions, breadcrumb, hasSideba
     <AppBar position="sticky" elevation={0}>
       <Toolbar sx={{ gap: 1, flexWrap: 'wrap', minHeight: { xs: 52, sm: 60 } }}>
 
-        {/* Logo */}
+        {/* Logo — hidden on mobile (AppLayout's mobile bar already shows it),
+            so this row reads as a focused page action/context bar, not a
+            second redundant header. */}
         <Box
-          sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer', mr: 1 }}
+          sx={{ display: { xs: 'none', md: 'flex' }, alignItems: 'center', cursor: 'pointer', mr: 1 }}
           onClick={() => navigate('/dashboard')}
         >
           <TelegizerLogo size="sm" variant="icon" />
@@ -217,6 +219,7 @@ export default function TopNav({ title, subtitle, actions, breadcrumb, hasSideba
               onClick={() => navigate('/admin')}
               sx={{
                 ml: 0.5, color: pathname === '/admin' ? '#ef4444' : 'text.secondary',
+                display: { xs: 'none', md: 'inline-flex' },
                 transition: 'color 0.15s, background 0.15s',
                 '&:hover': { color: '#ef4444', bgcolor: 'rgba(239,68,68,0.1)' },
               }}
@@ -233,6 +236,7 @@ export default function TopNav({ title, subtitle, actions, breadcrumb, hasSideba
             onClick={() => navigate('/settings')}
             sx={{
               ml: 0.5, color: pathname === '/settings' ? PALETTE.blue : 'text.secondary',
+              display: { xs: 'none', md: 'inline-flex' },
               transition: 'color 0.15s, background 0.15s',
               '&:hover': { color: PALETTE.blue, bgcolor: `${PALETTE.blue}14` },
             }}

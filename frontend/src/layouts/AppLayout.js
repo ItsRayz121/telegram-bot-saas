@@ -156,8 +156,18 @@ export default function AppLayout({ children }) {
                   icon={item.icon}
                   sx={{
                     minWidth: 0,
-                    fontSize: '0.72rem',
-                    '& .MuiBottomNavigationAction-label': { fontSize: '0.72rem' },
+                    px: 0.5,
+                    '& .MuiBottomNavigationAction-label': {
+                      fontSize: '0.68rem',
+                      lineHeight: 1.1,
+                      maxWidth: '100%',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      // Keep the label visible even when not selected (5 items on
+                      // a narrow screen) instead of MUI hiding unselected labels.
+                      '&.Mui-selected': { fontSize: '0.7rem' },
+                    },
                   }}
                 />
               ))}
