@@ -91,8 +91,10 @@ function resolveStartDestination() {
       dashboard: '/dashboard',
       settings: '/settings',
       mygroups: '/my-groups',
-      mybots: '/my-bots',
-      connectbot: '/my-bots?connect=1',
+      // Target /custom-bots directly: /my-bots is a <Navigate> that drops the query
+      // string, which would lose ?connect=1 before MyBots can read it.
+      mybots: '/custom-bots',
+      connectbot: '/custom-bots?connect=1',
       referral: '/referrals',
       workspace: '/workspace',
       automations: '/workspace/automations',
