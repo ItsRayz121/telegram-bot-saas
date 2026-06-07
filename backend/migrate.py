@@ -714,6 +714,17 @@ def init_db():
             "ON engagement_submissions (file_hash)",
             "engagement_submissions.file_hash index",
         )
+        # Phase 6: anti-fraud flag columns
+        _run_alter(
+            db.engine,
+            "ALTER TABLE engagement_submissions ADD COLUMN IF NOT EXISTS flagged BOOLEAN NOT NULL DEFAULT FALSE",
+            "engagement_submissions.flagged",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE engagement_submissions ADD COLUMN IF NOT EXISTS flag_reason VARCHAR(255)",
+            "engagement_submissions.flag_reason",
+        )
 
         # ── Backfill: create UserTelegramAccount rows for legacy User.telegram_user_id ──
         # Must run AFTER all users-table ALTER statements (including auth_provider)

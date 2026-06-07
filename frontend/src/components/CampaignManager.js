@@ -539,7 +539,14 @@ function CampaignManageDialog({ botId, groupId, campaignId, onClose, onChanged }
                     {subs.map((s) => (
                       <TableRow key={s.id} hover>
                         <TableCell>
-                          <Typography variant="body2">{s.telegram_username ? `@${s.telegram_username}` : s.telegram_user_id}</Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <Typography variant="body2">{s.telegram_username ? `@${s.telegram_username}` : s.telegram_user_id}</Typography>
+                            {s.flagged && (
+                              <Tooltip title={s.flag_reason || 'Flagged for review'}>
+                                <Chip size="small" color="warning" label="⚠ dup" />
+                              </Tooltip>
+                            )}
+                          </Box>
                         </TableCell>
                         <TableCell>{renderPayload(s)}</TableCell>
                         <TableCell>

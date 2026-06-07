@@ -364,6 +364,53 @@ def review_submission(campaign, submission_id, action, *, reviewed_by=None, reas
     return sub
 
 
+def _sibling_campaign_ids(campaign):
+    """All campaign ids in the same group (same lineage) — the dedup scope."""
+    q = EngagementCampaign.query.with_entities(EngagementCampaign.id)
+    if campaign.group_id:
+        q = q.filter(EngagementCampaign.group_id == campaign.group_id)
+    else:
+        q = q.filter(EngagementCampaign.telegram_group_id == campaign.telegram_group_id)
+    return [row[0] for row in q.all()]
+
+
+# Proof field types whose values must be unique across participants.
+_DEDUP_FIELD_TYPES = {"uid", "wallet", "tx_hash", "username", "url"}
+
+
+def detect_duplicate(campaign, answers, file_hash):
+    """Return (is_dup, reason) if a normalized proof value or screenshot hash has
+    already been used by another participant in this group. Anti-farming guard."""
+    answers = answers or {}
+    # Build the set of (key → normalized value) we care about.
+    dedup_keys = {
+        f.key for f in campaign.custom_fields.all() if f.field_type in _DEDUP_FIELD_TYPES
+    }
+    values = {
+        (answers.get(k) or "").strip().lower()
+        for k in dedup_keys
+        if (answers.get(k) or "").strip()
+    }
+    if not values and not file_hash:
+        return False, None
+
+    sib_ids = _sibling_campaign_ids(campaign)
+    if not sib_ids:
+        return False, None
+
+    existing = EngagementSubmission.query.filter(
+        EngagementSubmission.campaign_id.in_(sib_ids)
+    ).all()
+    for s in existing:
+        if file_hash and s.file_hash and s.file_hash == file_hash:
+            return True, "Duplicate screenshot already submitted"
+        payload = s.payload or {}
+        s_values = {str(v).strip().lower() for v in payload.values() if str(v).strip()}
+        if values & s_values:
+            return True, "Duplicate proof value already submitted"
+    return False, None
+
+
 def award_submission(campaign, submission):
     """Idempotently grant the campaign's reward_xp to the submitter. Best-effort:
     never raises, guarded by submission.rewarded so it can't double-award.

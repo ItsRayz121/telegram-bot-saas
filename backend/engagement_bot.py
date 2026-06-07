@@ -18,8 +18,33 @@ serving many groups never mixes submissions (see ENGAGEMENT_CAMPAIGNS_PLAN.md).
 import hashlib
 import html
 import logging
+import time
 
 logger = logging.getLogger(__name__)
+
+# Per-user anti-spam cooldown between participation taps (seconds, in-process).
+_PARTICIPATE_COOLDOWN = 3.0
+_last_participate = {}
+
+
+def _log_suspicious(campaign_id, telegram_user_id, reason):
+    """Record a duplicate/fraud signal for admin review. Best-effort."""
+    try:
+        from .models import db, SuspiciousActivity
+        db.session.add(SuspiciousActivity(
+            user_id=None,
+            event_type="engagement_duplicate",
+            reason=(reason or "duplicate")[:255],
+            event_metadata={"campaign_id": campaign_id, "telegram_user_id": str(telegram_user_id)},
+        ))
+        db.session.commit()
+    except Exception:
+        logger.debug("suspicious log failed", exc_info=True)
+        try:
+            from .models import db
+            db.session.rollback()
+        except Exception:
+            pass
 
 
 # ── DB helpers (run inside flask_app.app_context) ─────────────────────────────
@@ -124,9 +149,24 @@ async def on_start(update, context, payload, *, flask_app, lineage, bot_id=None)
             await msg.reply_text("This campaign is closed. The submission window has ended.")
             return True
 
+        # Anti-spam cooldown between rapid taps.
+        _ck = (lineage, user.id)
+        _now = time.monotonic()
+        if _now - _last_participate.get(_ck, 0) < _PARTICIPATE_COOLDOWN:
+            await msg.reply_text("Please wait a moment before trying again.")
+            return True
+        _last_participate[_ck] = _now
+
         if campaign.one_per_user and _existing_submission(campaign_id, user.id):
             await msg.reply_text("You have already submitted for this task.")
             return True
+
+        # Optional membership gate (anti-farming): must be a real member first.
+        if (campaign.settings or {}).get("require_membership") and campaign.verification_mode != "auto":
+            from .engagement_verify import verify_telegram_join
+            if not await verify_telegram_join(context.bot, _verify_chat_ref(campaign, lineage), user.id):
+                await msg.reply_text("Please join the group/channel first, then tap the button again.")
+                return True
 
         fields = _ordered_fields(campaign)
         title = html.escape(campaign.title)
@@ -323,6 +363,12 @@ async def _finalize(message, context, flask_app, campaign_id, answers, file_id, 
             status = "verified"
         else:
             status = "pending"
+
+        # ── Anti-fraud: duplicate proof / screenshot detection (Phase 6) ──────
+        flagged, flag_reason = eng.detect_duplicate(campaign, answers, file_hash)
+        if flagged:
+            status = "pending"  # never auto-verify/reward a duplicate; force review
+
         sub = EngagementSubmission(
             campaign_id=campaign_id,
             telegram_user_id=tg_user_id,
@@ -333,10 +379,14 @@ async def _finalize(message, context, flask_app, campaign_id, answers, file_id, 
             payload=answers or {},
             file_id=file_id,
             file_hash=file_hash,
+            flagged=flagged,
+            flag_reason=flag_reason,
         )
         db.session.add(sub)
         db.session.commit()
 
+        if flagged:
+            _log_suspicious(campaign_id, tg_user_id, flag_reason)
         if status == "verified":
             eng.award_submission(campaign, sub)
 
