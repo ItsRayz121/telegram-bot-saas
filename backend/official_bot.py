@@ -328,6 +328,18 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as _exc:
             _log.debug("TelegramBotStarted.record failed: %s", _exc)
 
+    # ── Handle ?start=eng_<id> / engmy_<id> engagement deep-link ──────────────
+    # Handled inline (single /start handler) so the normal menu below is never
+    # shadowed by a competing handler.
+    if flask_app and args and (args[0].startswith("eng_") or args[0].startswith("engmy_")):
+        try:
+            from .engagement_bot import on_start as _eng_on_start
+            if await _eng_on_start(update, context, args[0], flask_app=flask_app, lineage="official"):
+                return
+        except Exception:
+            _log.exception("[OfficialBot] engagement deep-link failed")
+        return
+
     # ── Handle ?start=connect_<code> deep-link ────────────────────────────────
     if args and args[0].startswith("connect_"):
         code = args[0][len("connect_"):]
@@ -5701,16 +5713,12 @@ class OfficialBotRunner:
         a = self.application
 
         # ── Engagement Campaigns (Phase 4) — additive, isolated in group -1 ──────
-        # Runs before the normal handlers; only acts on `eng_*` payloads / an
-        # active flow, raising ApplicationHandlerStop when it consumes the update
-        # so existing handlers are never disturbed.
+        # The /start deep-link is handled INSIDE cmd_start (single handler) so the
+        # menu is never shadowed. Only the proof-collection DM router and the
+        # campaign callbacks live here, and they no-op (pass through) unless a
+        # campaign flow is active / the callback is an eng_ one.
         from telegram.ext import ApplicationHandlerStop as _EngStop
         from . import engagement_bot as _engbot
-
-        async def _eng_start(update, context):
-            args = context.args or []
-            if args and await _engbot.on_start(update, context, args[0], flask_app=flask_app, lineage="official"):
-                raise _EngStop
 
         async def _eng_priv(update, context):
             if await _engbot.on_private(update, context, flask_app=flask_app, lineage="official"):
@@ -5720,7 +5728,6 @@ class OfficialBotRunner:
             if await _engbot.on_callback(update, context, flask_app=flask_app, lineage="official"):
                 raise _EngStop
 
-        a.add_handler(CommandHandler("start", _eng_start), group=-1)
         a.add_handler(
             MessageHandler(
                 filters.ChatType.PRIVATE & (filters.TEXT | filters.PHOTO) & ~filters.COMMAND,
