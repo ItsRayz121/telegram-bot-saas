@@ -18,6 +18,7 @@ serving many groups never mixes submissions (see ENGAGEMENT_CAMPAIGNS_PLAN.md).
 import hashlib
 import html
 import logging
+import os
 import time
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,36 @@ logger = logging.getLogger(__name__)
 # Per-user anti-spam cooldown between participation taps (seconds, in-process).
 _PARTICIPATE_COOLDOWN = 3.0
 _last_participate = {}
+
+# ── Growth promo (Phase 8) — official bot ONLY, subtle, frequency-capped ───────
+# Custom bots are white-label and NEVER show Telegizer branding. The footer only
+# appears in the participant's private DM (never the group post), at most once per
+# _PROMO_INTERVAL per user, with a referral link attributed to the campaign owner.
+_PROMO_ENABLED = os.environ.get("ENGAGEMENT_PROMO", "true").lower() in ("1", "true", "yes")
+_PROMO_INTERVAL = float(os.environ.get("ENGAGEMENT_PROMO_INTERVAL_DAYS", "3")) * 86400.0
+_last_promo = {}
+
+
+def _promo_footer(campaign, lineage, user_id):
+    """Return a one-line HTML promo footer, or '' when it shouldn't show."""
+    if lineage != "official" or not _PROMO_ENABLED:
+        return ""
+    if (campaign.settings or {}).get("hide_branding"):
+        return ""
+    now = time.monotonic()
+    if now - _last_promo.get(user_id, 0) < _PROMO_INTERVAL:
+        return ""
+    try:
+        from .models import User
+        from .config import Config
+        bot_un = (Config.TELEGRAM_BOT_USERNAME or "telegizer_bot").lstrip("@")
+        owner = User.query.get(campaign.owner_user_id) if campaign.owner_user_id else None
+        code = getattr(owner, "referral_code", None)
+        link = f"https://t.me/{bot_un}?start=ref_{code}" if code else f"https://t.me/{bot_un}"
+    except Exception:
+        return ""
+    _last_promo[user_id] = now
+    return f"\n\n✨ <i>Run tasks &amp; manage your own group with Telegizer</i> → {link}"
 
 
 def _log_suspicious(campaign_id, telegram_user_id, reason):
@@ -403,8 +434,11 @@ async def _finalize(message, context, flask_app, campaign_id, answers, file_id, 
         await message.reply_text(err)
         return
     campaign, sub = result
+    footer = _promo_footer(campaign, lineage, str(user.id))
     if sub.status == "verified":
         bonus = f" (+{campaign.reward_xp} XP)" if campaign.reward_xp else ""
-        await message.reply_text(f"✅ Verified!{bonus} Thanks for taking part.")
+        await message.reply_text(f"✅ Verified!{bonus} Thanks for taking part.{footer}",
+                                 parse_mode="HTML", disable_web_page_preview=True)
     else:
-        await message.reply_text("Submitted successfully ✅\nPending admin review.")
+        await message.reply_text(f"Submitted successfully ✅\nPending admin review.{footer}",
+                                 parse_mode="HTML", disable_web_page_preview=True)
