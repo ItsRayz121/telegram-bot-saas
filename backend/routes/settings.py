@@ -1,10 +1,11 @@
 import logging
 from datetime import datetime
 import requests as _http
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, Response
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..models import db, User, Bot, Group, Member, AuditLog, ScheduledMessage, Raid, AutoResponse, ReportedMessage, TelegramBotStarted, UserTelegramAccount, EscalationEvent
 from ..middleware.rate_limit import rate_limit
+from .. import engagement as eng
 
 _PAID_TIERS = {"pro", "enterprise"}
 
@@ -769,6 +770,155 @@ def create_raid(bot_id, group_id):
         except Exception:
             pass
         return jsonify({"error": str(e)}), 500
+
+
+# ── Engagement Campaigns (custom-bot lineage) ────────────────────────────────
+# Thin wrappers — all logic lives in backend/engagement.py so the official-bot
+# lineage (routes/telegram_groups.py) shares identical behavior.
+
+def _eng_err(e: "eng.EngagementError"):
+    body, status = e.to_response()
+    return jsonify(body), status
+
+
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/campaigns", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def list_engagement_campaigns(bot_id, group_id):
+    user = _get_current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    _, group, err = _get_bot_and_group(user, bot_id, group_id)
+    if err:
+        return err
+    campaigns = eng.list_campaigns("custom", group_id=group.id, status=request.args.get("status"))
+    return jsonify({"campaigns": campaigns})
+
+
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/campaigns", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=15)
+def create_engagement_campaign(bot_id, group_id):
+    user = _get_current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    _, group, err = _get_bot_and_group(user, bot_id, group_id)
+    if err:
+        return err
+    try:
+        campaign = eng.create_campaign(
+            user, request.get_json() or {},
+            scope="custom", owner_user_id=user.id, group_id=group.id,
+        )
+        return jsonify({"campaign": campaign.to_dict(include_analytics=True)}), 201
+    except eng.EngagementError as e:
+        db.session.rollback()
+        return _eng_err(e)
+    except Exception as e:
+        logger.error(f"create_engagement_campaign error: {e}", exc_info=True)
+        db.session.rollback()
+        return jsonify({"error": "Failed to create campaign"}), 500
+
+
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/campaigns/<int:campaign_id>", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def get_engagement_campaign(bot_id, group_id, campaign_id):
+    user = _get_current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    _, group, err = _get_bot_and_group(user, bot_id, group_id)
+    if err:
+        return err
+    try:
+        c = eng.get_campaign(campaign_id, "custom", group_id=group.id)
+        return jsonify({"campaign": c.to_dict(include_analytics=True)})
+    except eng.EngagementError as e:
+        return _eng_err(e)
+
+
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/campaigns/<int:campaign_id>", methods=["PATCH"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def update_engagement_campaign(bot_id, group_id, campaign_id):
+    user = _get_current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    _, group, err = _get_bot_and_group(user, bot_id, group_id)
+    if err:
+        return err
+    try:
+        c = eng.get_campaign(campaign_id, "custom", group_id=group.id)
+        c = eng.update_campaign(c, request.get_json() or {})
+        return jsonify({"campaign": c.to_dict(include_analytics=True)})
+    except eng.EngagementError as e:
+        db.session.rollback()
+        return _eng_err(e)
+    except Exception as e:
+        logger.error(f"update_engagement_campaign error: {e}", exc_info=True)
+        db.session.rollback()
+        return jsonify({"error": "Failed to update campaign"}), 500
+
+
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/campaigns/<int:campaign_id>/submissions", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def list_engagement_submissions(bot_id, group_id, campaign_id):
+    user = _get_current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    _, group, err = _get_bot_and_group(user, bot_id, group_id)
+    if err:
+        return err
+    try:
+        c = eng.get_campaign(campaign_id, "custom", group_id=group.id)
+        return jsonify({"submissions": eng.list_submissions(c, status=request.args.get("status"))})
+    except eng.EngagementError as e:
+        return _eng_err(e)
+
+
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/campaigns/<int:campaign_id>/submissions/<int:submission_id>/review", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def review_engagement_submission(bot_id, group_id, campaign_id, submission_id):
+    user = _get_current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    _, group, err = _get_bot_and_group(user, bot_id, group_id)
+    if err:
+        return err
+    data = request.get_json() or {}
+    try:
+        c = eng.get_campaign(campaign_id, "custom", group_id=group.id)
+        sub = eng.review_submission(
+            c, submission_id, data.get("action"),
+            reviewed_by=user.id, reason=data.get("reason"),
+        )
+        return jsonify({"submission": sub.to_dict()})
+    except eng.EngagementError as e:
+        db.session.rollback()
+        return _eng_err(e)
+
+
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/campaigns/<int:campaign_id>/submissions/export", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=10)
+def export_engagement_submissions(bot_id, group_id, campaign_id):
+    user = _get_current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    _, group, err = _get_bot_and_group(user, bot_id, group_id)
+    if err:
+        return err
+    try:
+        c = eng.get_campaign(campaign_id, "custom", group_id=group.id)
+        csv_text = eng.submissions_csv(c)
+        return Response(
+            csv_text, mimetype="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=campaign_{c.id}_submissions.csv"},
+        )
+    except eng.EngagementError as e:
+        return _eng_err(e)
 
 
 # ── Auto-Responses ──────────────────────────────────────────────────────────

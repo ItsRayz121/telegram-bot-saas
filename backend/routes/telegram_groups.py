@@ -20,10 +20,11 @@ Endpoints:
 
 import secrets as _secrets
 from datetime import datetime, timedelta
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, Response
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..models import db, User, TelegramGroup, TelegramGroupLinkCode, BotEvent, OfficialWarning, OfficialMember, Bot, CustomBot, OfficialScheduledMessage, OfficialPoll, KnowledgeDocument, AutoResponse, InviteLink, InviteLinkJoin, UserApiKey, OfficialRaid, OfficialWebhookIntegration, OfficialReportedMessage
 from ..middleware.rate_limit import rate_limit
+from .. import engagement as eng
 from ..config import Config
 from ..group_defaults import apply_group_defaults, fill_missing_defaults
 
@@ -1568,6 +1569,132 @@ def create_official_raid(group_id):
             pass
 
     return jsonify({"raid": raid.to_dict()}), 201
+
+
+# ── Engagement Campaigns (official-bot lineage) ──────────────────────────────
+# Thin wrappers over backend/engagement.py — identical behavior to the custom-bot
+# routes in routes/settings.py, keyed by telegram_group_id instead of group_id.
+
+def _eng_err(e: "eng.EngagementError"):
+    body, status = e.to_response()
+    return jsonify(body), status
+
+
+@tg_groups_bp.route("/<group_id>/campaigns", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def list_official_campaigns(group_id):
+    user = _current_user()
+    if not _owns_group(user.id, group_id):
+        return jsonify({"error": "Group not found"}), 404
+    campaigns = eng.list_campaigns("official", telegram_group_id=group_id, status=request.args.get("status"))
+    return jsonify({"campaigns": campaigns}), 200
+
+
+@tg_groups_bp.route("/<group_id>/campaigns", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=15)
+def create_official_campaign(group_id):
+    user = _current_user()
+    if not _owns_group(user.id, group_id):
+        return jsonify({"error": "Group not found"}), 404
+    try:
+        campaign = eng.create_campaign(
+            user, request.get_json() or {},
+            scope="official", owner_user_id=user.id, telegram_group_id=group_id,
+        )
+        return jsonify({"campaign": campaign.to_dict(include_analytics=True)}), 201
+    except eng.EngagementError as e:
+        db.session.rollback()
+        return _eng_err(e)
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "Failed to create campaign"}), 500
+
+
+@tg_groups_bp.route("/<group_id>/campaigns/<int:campaign_id>", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def get_official_campaign(group_id, campaign_id):
+    user = _current_user()
+    if not _owns_group(user.id, group_id):
+        return jsonify({"error": "Group not found"}), 404
+    try:
+        c = eng.get_campaign(campaign_id, "official", telegram_group_id=group_id)
+        return jsonify({"campaign": c.to_dict(include_analytics=True)}), 200
+    except eng.EngagementError as e:
+        return _eng_err(e)
+
+
+@tg_groups_bp.route("/<group_id>/campaigns/<int:campaign_id>", methods=["PATCH"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def update_official_campaign(group_id, campaign_id):
+    user = _current_user()
+    if not _owns_group(user.id, group_id):
+        return jsonify({"error": "Group not found"}), 404
+    try:
+        c = eng.get_campaign(campaign_id, "official", telegram_group_id=group_id)
+        c = eng.update_campaign(c, request.get_json() or {})
+        return jsonify({"campaign": c.to_dict(include_analytics=True)}), 200
+    except eng.EngagementError as e:
+        db.session.rollback()
+        return _eng_err(e)
+    except Exception:
+        db.session.rollback()
+        return jsonify({"error": "Failed to update campaign"}), 500
+
+
+@tg_groups_bp.route("/<group_id>/campaigns/<int:campaign_id>/submissions", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def list_official_submissions(group_id, campaign_id):
+    user = _current_user()
+    if not _owns_group(user.id, group_id):
+        return jsonify({"error": "Group not found"}), 404
+    try:
+        c = eng.get_campaign(campaign_id, "official", telegram_group_id=group_id)
+        return jsonify({"submissions": eng.list_submissions(c, status=request.args.get("status"))}), 200
+    except eng.EngagementError as e:
+        return _eng_err(e)
+
+
+@tg_groups_bp.route("/<group_id>/campaigns/<int:campaign_id>/submissions/<int:submission_id>/review", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def review_official_submission(group_id, campaign_id, submission_id):
+    user = _current_user()
+    if not _owns_group(user.id, group_id):
+        return jsonify({"error": "Group not found"}), 404
+    data = request.get_json() or {}
+    try:
+        c = eng.get_campaign(campaign_id, "official", telegram_group_id=group_id)
+        sub = eng.review_submission(
+            c, submission_id, data.get("action"),
+            reviewed_by=user.id, reason=data.get("reason"),
+        )
+        return jsonify({"submission": sub.to_dict()}), 200
+    except eng.EngagementError as e:
+        db.session.rollback()
+        return _eng_err(e)
+
+
+@tg_groups_bp.route("/<group_id>/campaigns/<int:campaign_id>/submissions/export", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=10)
+def export_official_submissions(group_id, campaign_id):
+    user = _current_user()
+    if not _owns_group(user.id, group_id):
+        return jsonify({"error": "Group not found"}), 404
+    try:
+        c = eng.get_campaign(campaign_id, "official", telegram_group_id=group_id)
+        csv_text = eng.submissions_csv(c)
+        return Response(
+            csv_text, mimetype="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=campaign_{c.id}_submissions.csv"},
+        )
+    except eng.EngagementError as e:
+        return _eng_err(e)
 
 
 # ── Webhooks ───────────────────────────────────────────────────────────────────
