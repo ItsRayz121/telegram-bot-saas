@@ -78,7 +78,12 @@ function DiagnosticScreen({ title, message, authError }) {
 function resolveStartDestination() {
   try {
     const tg = window.Telegram && window.Telegram.WebApp;
-    const sp = (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) || '';
+    // Telegram start_param (custom-bot ?startapp deep links) OR a ?start= query
+    // param (official bot in-Telegram web_app buttons point at /mini-app?start=…).
+    let sp = (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) || '';
+    if (!sp) {
+      try { sp = new URLSearchParams(window.location.search).get('start') || ''; } catch {}
+    }
     const m = /^grp_(\d+)_(\d+)$/.exec(sp);
     if (m) return `/bot/${m[1]}/group/${m[2]}`;
     // Short codes used by bot deep links (startapp only allows [A-Za-z0-9_-]).
@@ -86,6 +91,9 @@ function resolveStartDestination() {
       dashboard: '/dashboard',
       settings: '/settings',
       mygroups: '/my-groups',
+      mybots: '/my-bots',
+      connectbot: '/my-bots?connect=1',
+      referral: '/referrals',
       workspace: '/workspace',
       automations: '/workspace/automations',
       billing: '/billing',

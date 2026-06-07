@@ -10,7 +10,6 @@ import Sidebar, { SIDEBAR_WIDTH, SIDEBAR_COLLAPSED_WIDTH } from '../components/S
 import { DesktopAssistantSidebar, MobileAssistantFab } from '../components/AssistantSidebar';
 import TelegizerLogo from '../components/TelegizerLogo';
 import { useNavigate, useLocation } from 'react-router-dom';
-import OnboardingTour from '../components/OnboardingTour';
 
 export default function AppLayout({ children }) {
   const assistantName = useAssistantName();
@@ -49,7 +48,6 @@ export default function AppLayout({ children }) {
 
   return (
     <>
-      <OnboardingTour />
     <Box
       sx={{
         display: 'flex', height: '100vh', overflow: 'hidden',

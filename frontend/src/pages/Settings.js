@@ -9,14 +9,13 @@ import {
   ArrowBack, SmartToy, Person, Lock, DeleteForever, Schedule,
   Security, CheckCircle, ContentCopy, Telegram, LinkOff, OpenInNew,
   Add, Star, StarBorder, Delete, CalendarMonth, MailOutline,
-  CardGiftcard, People, Tour, Group, PersonAdd, Cancel,
+  CardGiftcard, People, Group, PersonAdd, Cancel,
 } from '@mui/icons-material';
 import { List, ListItem, ListItemText, ListItemSecondaryAction, Tooltip, Select, MenuItem, FormControl, InputLabel, LinearProgress } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { auth, totp as totpApi, billing, userSettings, telegramAccount, googleCalendar as calApi, referrals as referralsApi, team as teamApi } from '../services/api';
 import { track } from '../services/analytics';
-import { resetTour } from '../components/OnboardingTour';
 import TimezoneSelect from '../components/TimezoneSelect';
 
 function safeParseUser() {
@@ -1223,20 +1222,6 @@ export default function Settings() {
         {/* Google Calendar */}
         <Section title="Google Calendar" icon={<CalendarMonth color="primary" />}>
           <GoogleCalendarSection />
-        </Section>
-
-        {/* Onboarding Tour */}
-        <Section title="Product Tour" icon={<Tour color="primary" />}>
-          <Typography variant="body2" color="text.secondary" mb={2}>
-            Replay the guided walkthrough to revisit the key features of Telegizer.
-          </Typography>
-          <Button
-            variant="outlined"
-            startIcon={<Tour />}
-            onClick={async () => { await resetTour(); window.location.reload(); }}
-          >
-            Retake Onboarding Tour
-          </Button>
         </Section>
 
         {/* Team Members */}

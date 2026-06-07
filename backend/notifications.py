@@ -205,6 +205,29 @@ def send_verification_email(to_email, full_name, verification_token):
     )
 
 
+def send_verification_code_email(to_email, full_name, code):
+    """Send a 6-digit verification code (used by the in-bot email verification flow)."""
+    content = f"""
+    <p>Hi <strong>{full_name}</strong>,</p>
+    <p>Here is your Telegizer verification code. Enter it back in the Telegram bot to
+    finish linking your email — it expires in <strong>10 minutes</strong>.</p>
+    <p style="text-align:center;margin:28px 0;">
+      <span style="font-size:34px;font-weight:700;letter-spacing:10px;
+                   color:#3d8ef8;font-family:monospace;">{code}</span>
+    </p>
+    <p>If you didn't request this, you can safely ignore this email.</p>
+    <div class="tip">
+      💡 <strong>Tip:</strong> Never share this code with anyone.
+    </div>
+    """
+    return send_email(
+        to_email,
+        "Your Telegizer verification code",
+        _base_template(content, "Verification Code"),
+        f"Your Telegizer verification code is {code} (expires in 10 minutes).",
+    )
+
+
 def send_password_reset_email(to_email, full_name, reset_token):
     reset_url = f"{current_app.config['FRONTEND_URL']}/reset-password?token={reset_token}"
     content = f"""

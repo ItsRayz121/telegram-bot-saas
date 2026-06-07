@@ -67,6 +67,20 @@ export default function MyBots() {
   const [upsellMessage, setUpsellMessage] = useState('');
   const [pinging, setPinging] = useState({});   // bot id -> bool
 
+  // Deep-link: bot inbox "Connect Custom Bot" lands here as /my-bots?connect=1 —
+  // auto-open the connect dialog, then strip the param so a refresh doesn't reopen it.
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('connect') === '1') {
+        setAddOpen(true);
+        params.delete('connect');
+        const qs = params.toString();
+        window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''));
+      }
+    } catch { /* no-op */ }
+  }, []);
+
   const handlePing = async (bot) => {
     setPinging((m) => ({ ...m, [bot.id]: true }));
     try {

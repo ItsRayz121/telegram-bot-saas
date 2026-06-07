@@ -296,40 +296,24 @@ class BotInstance:
             logger.debug("_find_website_user tg=%s: %s", tg_user_id, e)
         return None
 
-    def _build_main_menu_keyboard(self, frontend, bot_username, is_linked, pending_count=0):
-        """Build the standard main menu InlineKeyboardMarkup."""
-        # Primary CTA on top — opens the official Telegizer Mini App via deep link so the
-        # user is authenticated with Telegram (custom bots can't authenticate the Mini App
-        # themselves). See _app_deeplink for why.
-        keyboard = [
-            [InlineKeyboardButton("🚀 Open Telegizer App", url=self._app_deeplink("dashboard"))],
-        ]
-        if is_linked:
-            keyboard.append([InlineKeyboardButton("✅ Account Connected", callback_data="menu:account_info")])
-        else:
-            keyboard.append([InlineKeyboardButton("🔗 Connect Account", url=self._app_deeplink("settings"))])
+    def _build_main_menu_keyboard(self, frontend, bot_username, is_linked,
+                                  pending_count=0, email_verified=False):
+        """Build the standard main menu via the shared lineage builder.
 
-        if pending_count:
-            keyboard.append([InlineKeyboardButton(
-                f"⚠️ {pending_count} Group(s) Awaiting Setup",
-                callback_data="menu:pending_groups",
-            )])
-
-        keyboard += [
-            [
-                InlineKeyboardButton("➕ Add Group", callback_data="menu:add_group"),
-                InlineKeyboardButton("📋 My Groups", callback_data="menu:my_groups"),
-            ],
-            [
-                InlineKeyboardButton("🧠 AI Assistant", callback_data="menu:ai_assistant"),
-                InlineKeyboardButton("⚡ Automations", url=self._app_deeplink("automations")),
-            ],
-            [
-                InlineKeyboardButton("💬 Support", callback_data="menu:support"),
-                InlineKeyboardButton("⚙️ Quick Settings", callback_data="qs:groups"),
-            ],
-        ]
-        return InlineKeyboardMarkup(keyboard)
+        Custom (Lineage A) bot — section buttons route through the official bot's
+        Mini App deep link so the user gets a real Telegram-authenticated session.
+        """
+        from .bot_features.bot_ui import build_main_menu
+        echo_un = self.app_context.config.get("ECHO_BOT_USERNAME")
+        return build_main_menu(
+            frontend=frontend,
+            official_username=self._official_bot_username(),
+            echo_username=echo_un,
+            is_official=False,
+            is_linked=is_linked,
+            email_verified=email_verified,
+            pending_count=pending_count,
+        )
 
     # ── /start ─────────────────────────────────────────────────────────────────
 
@@ -358,6 +342,7 @@ class BotInstance:
             owner_name = bot_rec.owner.full_name if bot_rec and bot_rec.owner else None
             website_user = self._find_website_user(user.id)
             is_linked = website_user is not None
+            email_verified = bool(website_user and getattr(website_user, "email_verified", False))
 
             if website_user:
                 pending_count = TelegramGroupLinkCode.query.filter_by(
@@ -381,7 +366,9 @@ class BotInstance:
             "<i>Add me to a group as admin, then run /linkgroup there.</i>"
         )
 
-        keyboard = self._build_main_menu_keyboard(frontend, bot_username, is_linked, pending_count)
+        keyboard = self._build_main_menu_keyboard(
+            frontend, bot_username, is_linked, pending_count, email_verified
+        )
         await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
 
     # ── /help ──────────────────────────────────────────────────────────────────
@@ -677,17 +664,21 @@ class BotInstance:
         if data == "menu:main":
             is_linked = False
             pending_count = 0
+            email_verified = False
             with self.app_context.app_context():
                 from datetime import datetime as _dt
                 from .models import TelegramGroupLinkCode
                 website_user = self._find_website_user(user.id)
                 is_linked = website_user is not None
+                email_verified = bool(website_user and getattr(website_user, "email_verified", False))
                 if website_user:
                     pending_count = TelegramGroupLinkCode.query.filter_by(
                         created_by_telegram_user_id=str(user.id), used_at=None,
                     ).filter(TelegramGroupLinkCode.expires_at > _dt.utcnow()).count()
 
-            keyboard = self._build_main_menu_keyboard(frontend, own_username, is_linked, pending_count)
+            keyboard = self._build_main_menu_keyboard(
+                frontend, own_username, is_linked, pending_count, email_verified
+            )
             await query.edit_message_text(
                 "👋 <b>Telegizer Hub</b>\n\nChoose an option below:",
                 parse_mode="HTML", reply_markup=keyboard,
@@ -2161,6 +2152,12 @@ class BotInstance:
         if update.effective_chat.type != "private":
             return
 
+        # ── Email verification flow (email → password → code) takes priority ──
+        from .bot_features import email_verify
+        if email_verify.is_active(context):
+            if await email_verify.handle_text(update, context, self.app_context, self._find_website_user):
+                return
+
         # Check if this is a reply to an escalation header
         replied_msg = update.message.reply_to_message
         if replied_msg and update.message.text:
@@ -2612,6 +2609,27 @@ class BotInstance:
             return
 
         await query.answer()
+
+        # Any menu navigation other than (re)entering verification aborts an in-progress
+        # email flow, so a later unrelated message isn't mistaken for an email/code.
+        if data != "menu:email_verify":
+            from .bot_features import email_verify as _ev
+            _ev.cancel(context)
+
+        # Email verification (optional email+password setup) — needs update/context.
+        if data == "menu:email_verify":
+            from .bot_features import email_verify
+            await email_verify.start(update, context, self.app_context, self._find_website_user)
+            return
+
+        # Referral screen.
+        if data == "menu:referral":
+            from .bot_features import referral_ui
+            await referral_ui.render(
+                query, context, self.app_context, self._find_website_user,
+                self._frontend(), self._official_bot_username(),
+            )
+            return
 
         if parts[0] == "verify":
             method = parts[1]

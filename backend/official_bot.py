@@ -356,6 +356,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ── Regular /start: companion hub ────────────────────────────────────────
     pending_groups = []
     is_linked = False
+    email_verified = False
     tg_username_on_account = None
 
     if flask_app:
@@ -366,6 +367,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 is_linked = website_user is not None
                 if website_user:
                     tg_username_on_account = website_user.email
+                    email_verified = bool(getattr(website_user, "email_verified", False))
 
                 codes = TelegramConnectCode.query if False else None  # unused path below
                 from .models import TelegramGroupLinkCode
@@ -404,48 +406,21 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Just tap a button below or type a command."
     )
 
-    keyboard = [
-        # Row 0 — primary CTA: open Mini App (Telegram-first auth, zero friction)
-        [
-            InlineKeyboardButton("🚀 Open Telegizer App", web_app=WebAppInfo(url=f"{frontend}/mini-app")),
-        ],
-    ]
-
-    if pending_groups:
-        keyboard.append([
-            InlineKeyboardButton(
-                f"⚠️ {len(pending_groups)} Group(s) Awaiting Setup",
-                callback_data="menu:pending_groups",
-            )
-        ])
-
-    keyboard += [
-        # Row 1 — core group actions
-        [
-            InlineKeyboardButton("➕ Add Group", callback_data="menu:add_group"),
-            InlineKeyboardButton("📋 My Groups", callback_data="menu:my_groups"),
-        ],
-        # Row 2 — bot management
-        [
-            InlineKeyboardButton("🤖 My Bots", callback_data="menu:my_bots"),
-            InlineKeyboardButton("🔌 Connect Own Bot", callback_data="menu:connect_bot"),
-        ],
-        # Row 3 — power features
-        [
-            InlineKeyboardButton("🧠 AI Assistant", callback_data="menu:ai_assistant"),
-            InlineKeyboardButton("⚡ Automations", url=f"{frontend}/workspace/automations"),
-        ],
-        # Row 4 — utility
-        [
-            InlineKeyboardButton("💬 Support", callback_data="menu:support"),
-            InlineKeyboardButton("⚙️ Quick Settings", callback_data="qs:groups"),
-        ],
-    ]
+    from .bot_features.bot_ui import build_main_menu
+    keyboard = build_main_menu(
+        frontend=frontend,
+        official_username=bot_un,
+        echo_username=Config.ECHO_BOT_USERNAME,
+        is_official=True,
+        is_linked=is_linked,
+        email_verified=email_verified,
+        pending_count=len(pending_groups),
+    )
 
     await update.message.reply_text(
         text,
         parse_mode=ParseMode.MARKDOWN,
-        reply_markup=InlineKeyboardMarkup(keyboard),
+        reply_markup=keyboard,
     )
 
 
@@ -1095,6 +1070,12 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
     frontend = _frontend()
 
+    # ── Email verification flow (email → password → code) takes priority ──────
+    from .bot_features import email_verify
+    if email_verify.is_active(context):
+        if await email_verify.handle_text(update, context, flask_app, _user_by_tg_id):
+            return
+
     # ── Note capture shortcut ─────────────────────────────────────────────────
     _raw = (message.text or "").strip()
     _low = _raw.lower()
@@ -1471,6 +1452,24 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
     await query.answer()
+
+    # Any menu navigation other than (re)entering verification aborts an in-progress
+    # email flow, so a later unrelated message isn't mistaken for an email/code.
+    if data != "menu:email_verify":
+        from .bot_features import email_verify as _ev
+        _ev.cancel(context)
+
+    # ── Email verification (optional email+password setup) ────────────────────
+    if data == "menu:email_verify":
+        from .bot_features import email_verify
+        await email_verify.start(update, context, flask_app, _user_by_tg_id)
+        return
+
+    # ── Referral screen ───────────────────────────────────────────────────────
+    if data == "menu:referral":
+        from .bot_features import referral_ui
+        await referral_ui.render(query, context, flask_app, _user_by_tg_id, frontend, _bot_username())
+        return
 
     # ── AI Assistant quick-action buttons ─────────────────────────────────────
     if data.startswith("ai:"):
@@ -2241,12 +2240,14 @@ async def _handle_qs_callback(query, user, data: str, flask_app, frontend: str):
 async def _render_main_menu(query, user, flask_app, frontend):
     pending_count = 0
     is_linked = False
+    email_verified = False
     if flask_app:
         try:
             with flask_app.app_context():
                 from .models import TelegramGroupLinkCode, TelegramGroup, User
                 wu = _user_by_tg_id(user.id)
                 is_linked = wu is not None
+                email_verified = bool(wu and getattr(wu, "email_verified", False))
                 codes = TelegramGroupLinkCode.query.filter_by(
                     created_by_telegram_user_id=str(user.id),
                     used_at=None,
@@ -2262,42 +2263,20 @@ async def _render_main_menu(query, user, flask_app, frontend):
         except Exception:
             pass
 
-    keyboard = []
-    if is_linked:
-        keyboard.append([InlineKeyboardButton("✅ Account Connected", callback_data="menu:account_info")])
-    else:
-        keyboard.append([InlineKeyboardButton("🔗 Connect Website Account", url=f"{frontend}/settings")])
-
-    if pending_count:
-        keyboard.append([
-            InlineKeyboardButton(
-                f"⚠️ {pending_count} Group(s) Awaiting Setup",
-                callback_data="menu:pending_groups",
-            )
-        ])
-
-    keyboard += [
-        [
-            InlineKeyboardButton("➕ Add Group", callback_data="menu:add_group"),
-            InlineKeyboardButton("📋 My Groups", callback_data="menu:my_groups"),
-        ],
-        [
-            InlineKeyboardButton("🤖 My Bots", callback_data="menu:my_bots"),
-            InlineKeyboardButton("🔌 Connect Own Bot", callback_data="menu:connect_bot"),
-        ],
-        [
-            InlineKeyboardButton("🧠 AI Assistant", callback_data="menu:ai_assistant"),
-            InlineKeyboardButton("⚡ Automations", url=f"{frontend}/workspace/automations"),
-        ],
-        [
-            InlineKeyboardButton("💬 Support", callback_data="menu:support"),
-            InlineKeyboardButton("⚙️ Quick Settings", callback_data="qs:groups"),
-        ],
-    ]
+    from .bot_features.bot_ui import build_main_menu
+    keyboard = build_main_menu(
+        frontend=frontend,
+        official_username=_bot_username(),
+        echo_username=Config.ECHO_BOT_USERNAME,
+        is_official=True,
+        is_linked=is_linked,
+        email_verified=email_verified,
+        pending_count=pending_count,
+    )
     await query.edit_message_text(
         "*Telegizer — Telegram Growth & Management Hub*\n\nWhat would you like to do?",
         parse_mode=ParseMode.MARKDOWN,
-        reply_markup=InlineKeyboardMarkup(keyboard),
+        reply_markup=keyboard,
     )
 
 

@@ -12,6 +12,8 @@ from telegram import (
     BotCommandScopeAllGroupChats,
     BotCommandScopeAllChatAdministrators,
     BotCommandScopeDefault,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
     MenuButtonWebApp,
     WebAppInfo,
 )
@@ -135,3 +137,101 @@ async def ensure_menu_button(bot, frontend):
     except Exception as exc:
         _log.warning("ensure_menu_button failed: %s", exc)
         return False
+
+
+# ── Shared main-menu keyboard (official + custom bots) ────────────────────────
+# Single source of truth for the DM "control center" menu so every bot — the
+# official Telegizer bot and all derived custom group-management bots — stays in
+# lockstep. Per the bot-lineage rule, NEW menu entries go here, not into one bot.
+#
+# Section buttons jump straight to the right Mini App page:
+#   • official bot  → web_app=WebAppInfo(.../mini-app?start=<code>)  (in-Telegram,
+#     authenticated directly against the official bot token).
+#   • custom bot    → url=https://t.me/<official>?startapp=<code>    (custom bots
+#     can't auth the Mini App themselves, so they route through the official bot).
+# The Mini App reads the `start` query param / Telegram start_param and navigates
+# (see frontend resolveStartDestination).
+
+def _clean_username(raw, fallback):
+    if not raw:
+        return fallback
+    return str(raw).strip().lstrip("@").split("/")[-1] or fallback
+
+
+def build_main_menu(
+    *,
+    frontend,
+    official_username,
+    echo_username=None,
+    is_official=False,
+    is_linked=False,
+    email_verified=False,
+    pending_count=0,
+):
+    """Return the standard control-center InlineKeyboardMarkup for a DM /start menu.
+
+    Shared by the official bot and every custom bot so the inbox menu never drifts.
+    """
+    frontend = (frontend or "https://telegizer.com").rstrip("/")
+    official_username = _clean_username(official_username, "telegizer_bot")
+    echo_username = _clean_username(echo_username, None)
+
+    def section(label, code):
+        """A button that opens a specific Mini App section."""
+        if is_official:
+            return InlineKeyboardButton(
+                label, web_app=WebAppInfo(url=f"{frontend}/mini-app?start={code}")
+            )
+        return InlineKeyboardButton(
+            label, url=f"https://t.me/{official_username}?startapp={code}"
+        )
+
+    # Row 0 — primary CTA: open the app home.
+    if is_official:
+        open_app = InlineKeyboardButton(
+            "🚀 Open Telegizer App", web_app=WebAppInfo(url=f"{frontend}/mini-app")
+        )
+    else:
+        open_app = InlineKeyboardButton(
+            "🚀 Open Telegizer App", url=f"https://t.me/{official_username}?startapp=dashboard"
+        )
+    keyboard = [[open_app]]
+
+    if pending_count:
+        keyboard.append([InlineKeyboardButton(
+            f"⚠️ {pending_count} Group(s) Awaiting Setup",
+            callback_data="menu:pending_groups",
+        )])
+
+    # Core group actions
+    keyboard.append([
+        InlineKeyboardButton("➕ Add Group", callback_data="menu:add_group"),
+        section("📋 My Groups", "mygroups"),
+    ])
+    # Bot management
+    keyboard.append([
+        section("🤖 My Bots", "mybots"),
+        section("🔌 Connect Custom Bot", "connectbot"),
+    ])
+    # Echo (Lineage B) cross-navigation — links only, no assistant logic.
+    echo_row = []
+    if echo_username:
+        echo_row.append(InlineKeyboardButton(
+            "🧠 Telegizer Echo Bot", url=f"https://t.me/{echo_username}"
+        ))
+    echo_row.append(section("🧠 Telegizer Echo App", "echo"))
+    keyboard.append(echo_row)
+    # Referral (in-bot screen)
+    keyboard.append([InlineKeyboardButton("🎁 Referral Link", callback_data="menu:referral")])
+    # Email verification (replaces "Account Connected") — optional, additive.
+    if email_verified:
+        keyboard.append([InlineKeyboardButton("✅ Email Verified", callback_data="menu:email_verify")])
+    else:
+        keyboard.append([InlineKeyboardButton("📧 Email Verification", callback_data="menu:email_verify")])
+    # Utility
+    keyboard.append([
+        InlineKeyboardButton("💬 Support", callback_data="menu:support"),
+        InlineKeyboardButton("⚙️ Quick Settings", callback_data="qs:groups"),
+    ])
+
+    return InlineKeyboardMarkup(keyboard)
