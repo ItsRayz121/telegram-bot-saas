@@ -459,10 +459,12 @@ export const engagement = {
   create: (botId, groupId, data) => api.post(campaignBase(botId, groupId), data),
   update: (botId, groupId, id, data) => api.patch(`${campaignBase(botId, groupId)}/${id}`, data),
   post: (botId, groupId, id) => api.post(`${campaignBase(botId, groupId)}/${id}/post`),
+  // NOTE: GroupCRM passes botId as undefined (not 'official') for official groups,
+  // so mirror the crm api convention: falsy/'official' → official path.
   memberSubmissions: (botId, groupId, tgUserId) =>
-    botId === 'official'
-      ? api.get(`/api/telegram-groups/${groupId}/member-submissions/${tgUserId}`)
-      : api.get(`/api/bots/${botId}/groups/${groupId}/member-submissions/${tgUserId}`),
+    botId && botId !== 'official'
+      ? api.get(`/api/bots/${botId}/groups/${groupId}/member-submissions/${tgUserId}`)
+      : api.get(`/api/telegram-groups/${groupId}/member-submissions/${tgUserId}`),
   listSubmissions: (botId, groupId, id, params) =>
     api.get(`${campaignBase(botId, groupId)}/${id}/submissions`, { params }),
   reviewSubmission: (botId, groupId, id, subId, data) =>

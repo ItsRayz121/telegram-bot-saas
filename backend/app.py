@@ -2315,7 +2315,7 @@ def _scheduler_loop(app):
             # Scheduled automations: check every 60s
             _run_task_with_timeout(_run_scheduled_automations, app, timeout=30, label="_run_scheduled_automations")
             # Engagement campaign group-post retry: every 60s
-            _run_task_with_timeout(_run_campaign_post_retry, timeout=45, label="_run_campaign_post_retry", flask_app=app)
+            _run_task_with_timeout(_run_campaign_post_retry, timeout=90, label="_run_campaign_post_retry", flask_app=app)
             # Message buffer cleanup: every 6 hours
             if now_ts - _last_buffer_cleanup[0] > 21600:
                 _last_buffer_cleanup[0] = now_ts
@@ -2338,10 +2338,12 @@ def _run_campaign_post_retry():
     from . import engagement_telegram as et
     now = datetime.utcnow()
     try:
+        # Small batch per tick so the loop always finishes within the task
+        # timeout (a kill mid-send could otherwise leave a row stuck in 'posting').
         candidates = EngagementCampaign.query.filter(
             EngagementCampaign.status == "active",
             EngagementCampaign.post_status.in_(["none", "failed"]),
-        ).limit(25).all()
+        ).order_by(EngagementCampaign.created_at.asc()).limit(8).all()
     except Exception as exc:
         _scheduler_log.debug("campaign post-retry query failed: %s", exc)
         return
