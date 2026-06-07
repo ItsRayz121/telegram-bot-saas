@@ -2877,6 +2877,37 @@ class BotInstance:
         del _token
 
         app = self.application
+
+        # ── Engagement Campaigns (Phase 4) — additive, isolated in group -1 ──────
+        # Mirrors the official bot. Only acts on `eng_*` payloads / an active flow.
+        from telegram.ext import ApplicationHandlerStop as _EngStop
+        from . import engagement_bot as _engbot
+        _eng_app = self.app_context
+        _eng_bot_id = self.bot_id
+
+        async def _eng_start(update, context):
+            args = context.args or []
+            if args and await _engbot.on_start(update, context, args[0], flask_app=_eng_app, lineage="custom", bot_id=_eng_bot_id):
+                raise _EngStop
+
+        async def _eng_priv(update, context):
+            if await _engbot.on_private(update, context, flask_app=_eng_app, lineage="custom", bot_id=_eng_bot_id):
+                raise _EngStop
+
+        async def _eng_cb(update, context):
+            if await _engbot.on_callback(update, context, flask_app=_eng_app, lineage="custom", bot_id=_eng_bot_id):
+                raise _EngStop
+
+        app.add_handler(CommandHandler("start", _eng_start), group=-1)
+        app.add_handler(
+            MessageHandler(
+                filters.ChatType.PRIVATE & (filters.TEXT | filters.PHOTO) & ~filters.COMMAND,
+                _eng_priv,
+            ),
+            group=-1,
+        )
+        app.add_handler(CallbackQueryHandler(_eng_cb, pattern=r"^eng_"), group=-1)
+
         app.add_handler(CommandHandler("start", self.handle_start))
         app.add_handler(CommandHandler("help", self.handle_help))
         app.add_handler(CommandHandler("support", self.handle_support))

@@ -5699,6 +5699,37 @@ class OfficialBotRunner:
         flask_app.official_bot_instance = self
 
         a = self.application
+
+        # ── Engagement Campaigns (Phase 4) — additive, isolated in group -1 ──────
+        # Runs before the normal handlers; only acts on `eng_*` payloads / an
+        # active flow, raising ApplicationHandlerStop when it consumes the update
+        # so existing handlers are never disturbed.
+        from telegram.ext import ApplicationHandlerStop as _EngStop
+        from . import engagement_bot as _engbot
+
+        async def _eng_start(update, context):
+            args = context.args or []
+            if args and await _engbot.on_start(update, context, args[0], flask_app=flask_app, lineage="official"):
+                raise _EngStop
+
+        async def _eng_priv(update, context):
+            if await _engbot.on_private(update, context, flask_app=flask_app, lineage="official"):
+                raise _EngStop
+
+        async def _eng_cb(update, context):
+            if await _engbot.on_callback(update, context, flask_app=flask_app, lineage="official"):
+                raise _EngStop
+
+        a.add_handler(CommandHandler("start", _eng_start), group=-1)
+        a.add_handler(
+            MessageHandler(
+                filters.ChatType.PRIVATE & (filters.TEXT | filters.PHOTO) & ~filters.COMMAND,
+                _eng_priv,
+            ),
+            group=-1,
+        )
+        a.add_handler(CallbackQueryHandler(_eng_cb, pattern=r"^eng_"), group=-1)
+
         a.add_handler(CommandHandler("start", cmd_start))
         a.add_handler(CommandHandler("help", cmd_help))
         a.add_handler(CommandHandler("linkgroup", cmd_linkgroup))

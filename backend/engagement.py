@@ -359,7 +359,48 @@ def review_submission(campaign, submission_id, action, *, reviewed_by=None, reas
     sub.review_reason = (reason or None)
     sub.reviewed_at = datetime.utcnow()
     db.session.commit()
+    if action == "approve":
+        award_submission(campaign, sub)
     return sub
+
+
+def award_submission(campaign, submission):
+    """Idempotently grant the campaign's reward_xp to the submitter. Best-effort:
+    never raises, guarded by submission.rewarded so it can't double-award.
+    Lineage-aware (custom → Member ledger, official → OfficialMember ledger)."""
+    if submission.rewarded or not campaign.reward_xp:
+        return
+    try:
+        if campaign.group_id:  # custom lineage
+            from .database import DatabaseManager
+            DatabaseManager.add_xp(
+                campaign.group_id, submission.telegram_user_id,
+                campaign.reward_xp, submission.telegram_username,
+            )
+        else:  # official lineage
+            from .models import OfficialMember, XpEvent
+            m = OfficialMember.query.filter_by(
+                telegram_group_id=campaign.telegram_group_id,
+                telegram_user_id=str(submission.telegram_user_id),
+            ).first()
+            if m:
+                m.xp = (m.xp or 0) + campaign.reward_xp
+                m.xp_1d = (m.xp_1d or 0) + campaign.reward_xp
+                m.xp_7d = (m.xp_7d or 0) + campaign.reward_xp
+                m.xp_30d = (m.xp_30d or 0) + campaign.reward_xp
+                db.session.flush()
+                db.session.add(XpEvent(
+                    scope="official", member_id=m.id,
+                    amount=campaign.reward_xp, reason=f"campaign:{campaign.id}",
+                ))
+        submission.rewarded = True
+        db.session.commit()
+    except Exception:
+        logger.exception("award_submission failed for submission %s", getattr(submission, "id", "?"))
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
 
 
 def submissions_csv(campaign):
