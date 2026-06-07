@@ -466,6 +466,13 @@ export const engagement = {
     api.get(`${campaignBase(botId, groupId)}/${id}/submissions/export`, { responseType: 'blob' }),
 };
 
+// Participant-facing campaign API (Mini App task pages — Phase 9).
+export const engagementTasks = {
+  get: (id) => api.get(`/api/engagement/campaigns/${id}`),
+  submit: (id, answers) => api.post(`/api/engagement/campaigns/${id}/submit`, { answers }),
+  myTasks: () => api.get('/api/engagement/my-tasks'),
+};
+
 // Official groups: real AI-key endpoints via /api/telegram-groups
 export const apiKeys = {
   get: (botId, groupId) =>

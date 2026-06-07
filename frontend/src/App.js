@@ -57,6 +57,8 @@ import AutomationHub from './pages/AutomationHub';
 import Integrations from './pages/Integrations';
 import MiniApp from './pages/MiniApp';
 import MiniAppLayout from './layouts/MiniAppLayout';
+import CampaignTask from './pages/CampaignTask';
+import MyTasks from './pages/MyTasks';
 import Directory from './pages/Directory';
 import DirectorySubmit from './pages/DirectorySubmit';
 import GroupCRM from './pages/GroupCRM';
@@ -275,6 +277,10 @@ export default function App() {
             {/* ── Telegram Mini App ─────────────────────────────────────────── */}
             <Route path="/mini-app" element={<MiniAppLayout><MiniApp /></MiniAppLayout>} />
             <Route path="/mini-app/*" element={<MiniAppLayout><MiniApp /></MiniAppLayout>} />
+
+            {/* ── Engagement participant pages (Mini App tasks) ─────────────── */}
+            <Route path="/tasks"     element={<AppRoute><MyTasks /></AppRoute>} />
+            <Route path="/task/:id"  element={<AppRoute><CampaignTask /></AppRoute>} />
 
             {/* ── Directory ─────────────────────────────────────────────────── */}
             <Route path="/directory"              element={<Directory />} />

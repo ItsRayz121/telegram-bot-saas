@@ -44,6 +44,7 @@ from .routes.knowledge import knowledge_bp
 from .routes.polls import polls_bp
 from .routes.webhooks import webhooks_bp
 from .routes.invites import invites_bp
+from .routes.engagement_public import engagement_public_bp
 from .routes.api_keys import api_keys_bp
 from .routes.referrals import referrals_bp
 from .routes.digest import digest_bp, run_digest_scheduler
@@ -267,6 +268,7 @@ def create_app():
     app.register_blueprint(polls_bp)
     app.register_blueprint(webhooks_bp)
     app.register_blueprint(invites_bp)
+    app.register_blueprint(engagement_public_bp)
     app.register_blueprint(api_keys_bp)
     app.register_blueprint(referrals_bp)
     app.register_blueprint(digest_bp)

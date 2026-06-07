@@ -58,26 +58,6 @@ def _promo_footer(campaign, lineage, user_id):
     return f"\n\n✨ <i>Run tasks &amp; manage your own group with Telegizer</i> → {link}"
 
 
-def _log_suspicious(campaign_id, telegram_user_id, reason):
-    """Record a duplicate/fraud signal for admin review. Best-effort."""
-    try:
-        from .models import db, SuspiciousActivity
-        db.session.add(SuspiciousActivity(
-            user_id=None,
-            event_type="engagement_duplicate",
-            reason=(reason or "duplicate")[:255],
-            event_metadata={"campaign_id": campaign_id, "telegram_user_id": str(telegram_user_id)},
-        ))
-        db.session.commit()
-    except Exception:
-        logger.debug("suspicious log failed", exc_info=True)
-        try:
-            from .models import db
-            db.session.rollback()
-        except Exception:
-            pass
-
-
 # ── DB helpers (run inside flask_app.app_context) ─────────────────────────────
 
 def _load_campaign(campaign_id, lineage, bot_id):
@@ -351,76 +331,26 @@ async def on_callback(update, context, *, flask_app, lineage, bot_id=None):
 
 async def _finalize(message, context, flask_app, campaign_id, answers, file_id, file_hash,
                     *, user, lineage, bot_id=None, forced_status=None):
-    """Create the EngagementSubmission and reply with status. Assumes an app
-    context is active OR creates one."""
-    from .models import db, EngagementCampaign, EngagementSubmission, OfficialMember
+    """Create the EngagementSubmission (via the shared service) and reply with
+    status. Assumes an app context is active OR creates one."""
+    from .models import EngagementCampaign
     from . import engagement as eng
-    from .engagement_verify import validate_link_payload
-
-    tg_user_id = str(user.id)
-    tg_username = user.username
 
     def _do():
         campaign = EngagementCampaign.query.get(campaign_id)
         if not campaign:
             return None, "This campaign is no longer available."
-        if not campaign.is_open:
-            return None, "This campaign is closed. The submission window has ended."
-        if campaign.one_per_user:
-            dupe = EngagementSubmission.query.filter_by(
-                campaign_id=campaign_id, telegram_user_id=tg_user_id
-            ).first()
-            if dupe:
-                return None, "You have already submitted for this task."
-
-        member_id = None
-        scope = "official" if lineage == "official" else "custom"
-        if lineage == "official":
-            m = OfficialMember.query.filter_by(
-                telegram_group_id=campaign.telegram_group_id,
-                telegram_user_id=tg_user_id,
-            ).first()
-            member_id = m.id if m else None
-
-        # Decide status by verification mode.
-        if forced_status:
-            status = forced_status
-        elif campaign.verification_mode == "honor":
-            status = "verified"
-        elif campaign.verification_mode == "link":
-            ok, reason = validate_link_payload(campaign, answers)
-            if not ok:
-                return None, reason
-            status = "verified"
-        else:
-            status = "pending"
-
-        # ── Anti-fraud: duplicate proof / screenshot detection (Phase 6) ──────
-        flagged, flag_reason = eng.detect_duplicate(campaign, answers, file_hash)
-        if flagged:
-            status = "pending"  # never auto-verify/reward a duplicate; force review
-
-        sub = EngagementSubmission(
-            campaign_id=campaign_id,
-            telegram_user_id=tg_user_id,
-            telegram_username=tg_username,
-            member_id=member_id,
-            scope=scope,
-            status=status,
-            payload=answers or {},
+        sub, error = eng.create_submission(
+            campaign,
+            telegram_user_id=user.id,
+            telegram_username=user.username,
+            answers=answers,
             file_id=file_id,
             file_hash=file_hash,
-            flagged=flagged,
-            flag_reason=flag_reason,
+            forced_status=forced_status,
         )
-        db.session.add(sub)
-        db.session.commit()
-
-        if flagged:
-            _log_suspicious(campaign_id, tg_user_id, flag_reason)
-        if status == "verified":
-            eng.award_submission(campaign, sub)
-
+        if error:
+            return None, error
         return (campaign, sub), None
 
     # Run within an app context (caller may already be in one).

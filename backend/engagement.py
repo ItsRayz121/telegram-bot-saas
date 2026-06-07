@@ -411,6 +411,99 @@ def detect_duplicate(campaign, answers, file_hash):
     return False, None
 
 
+def log_suspicious(campaign_id, telegram_user_id, reason):
+    """Record a duplicate/fraud signal for admin review. Best-effort."""
+    try:
+        from .models import SuspiciousActivity
+        db.session.add(SuspiciousActivity(
+            user_id=None,
+            event_type="engagement_duplicate",
+            reason=(reason or "duplicate")[:255],
+            event_metadata={"campaign_id": campaign_id, "telegram_user_id": str(telegram_user_id)},
+        ))
+        db.session.commit()
+    except Exception:
+        logger.debug("log_suspicious failed", exc_info=True)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+
+
+def create_submission(campaign, *, telegram_user_id, telegram_username=None,
+                      answers=None, file_id=None, file_hash=None, forced_status=None):
+    """Shared submission pipeline used by BOTH the bot DM flow and the Mini App
+    API. Validates window + one-per-user, decides status by verification mode,
+    runs dedup, creates the row, logs fraud signals, and awards XP on verify.
+
+    Returns (submission, error_message). error_message is a user-facing string
+    when the submission was rejected (closed / duplicate / invalid link)."""
+    from .models import EngagementSubmission, OfficialMember
+    from .engagement_verify import validate_link_payload
+
+    tg_user_id = str(telegram_user_id)
+    answers = answers or {}
+
+    if not campaign.is_open:
+        return None, "This campaign is closed. The submission window has ended."
+
+    if campaign.one_per_user:
+        dupe = EngagementSubmission.query.filter_by(
+            campaign_id=campaign.id, telegram_user_id=tg_user_id
+        ).first()
+        if dupe:
+            return None, "You have already submitted for this task."
+
+    scope = "official" if campaign.telegram_group_id else "custom"
+    member_id = None
+    if scope == "official":
+        m = OfficialMember.query.filter_by(
+            telegram_group_id=campaign.telegram_group_id, telegram_user_id=tg_user_id,
+        ).first()
+        member_id = m.id if m else None
+
+    # Status by verification mode.
+    if forced_status:
+        status = forced_status
+    elif campaign.verification_mode == "honor":
+        status = "verified"
+    elif campaign.verification_mode == "link":
+        ok, reason = validate_link_payload(campaign, answers)
+        if not ok:
+            return None, reason
+        status = "verified"
+    else:
+        status = "pending"
+
+    # Anti-fraud: duplicate proof / screenshot.
+    flagged, flag_reason = detect_duplicate(campaign, answers, file_hash)
+    if flagged:
+        status = "pending"  # never auto-verify/reward a duplicate
+
+    sub = EngagementSubmission(
+        campaign_id=campaign.id,
+        telegram_user_id=tg_user_id,
+        telegram_username=telegram_username,
+        member_id=member_id,
+        scope=scope,
+        status=status,
+        payload=answers,
+        file_id=file_id,
+        file_hash=file_hash,
+        flagged=flagged,
+        flag_reason=flag_reason,
+    )
+    db.session.add(sub)
+    db.session.commit()
+
+    if flagged:
+        log_suspicious(campaign.id, tg_user_id, flag_reason)
+    if status == "verified":
+        award_submission(campaign, sub)
+
+    return sub, None
+
+
 def award_submission(campaign, submission):
     """Idempotently grant the campaign's reward_xp to the submitter. Best-effort:
     never raises, guarded by submission.rewarded so it can't double-award.

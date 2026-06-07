@@ -103,6 +103,15 @@ def build_campaign_message(campaign, bot_username):
         InlineKeyboardButton("📋 My Submission", url=deep_my),
     ])
 
+    # Opt-in: a richer Mini App task page (always via the OFFICIAL bot, since the
+    # Mini App validates initData against the official token only).
+    if (campaign.settings or {}).get("enable_miniapp"):
+        from .config import Config
+        official = (Config.TELEGRAM_BOT_USERNAME or "telegizer_bot").lstrip("@")
+        rows.append([
+            InlineKeyboardButton("🚀 Open in App", url=f"https://t.me/{official}?startapp=engtask_{campaign.id}")
+        ])
+
     return text, InlineKeyboardMarkup(rows)
 
 

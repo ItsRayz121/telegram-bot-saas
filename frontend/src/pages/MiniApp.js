@@ -86,6 +86,9 @@ function resolveStartDestination() {
     }
     const m = /^grp_(\d+)_(\d+)$/.exec(sp);
     if (m) return `/bot/${m[1]}/group/${m[2]}`;
+    // Engagement campaign task: ?startapp=engtask_<id> → participant task page.
+    const t = /^engtask_(\d+)$/.exec(sp);
+    if (t) return `/task/${t[1]}`;
     // Short codes used by bot deep links (startapp only allows [A-Za-z0-9_-]).
     const MAP = {
       dashboard: '/dashboard',
@@ -96,6 +99,7 @@ function resolveStartDestination() {
       mybots: '/custom-bots',
       connectbot: '/custom-bots?connect=1',
       referral: '/referrals',
+      tasks: '/tasks',
       workspace: '/workspace',
       automations: '/workspace/automations',
       billing: '/billing',
