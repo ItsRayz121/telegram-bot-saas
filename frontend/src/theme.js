@@ -117,7 +117,9 @@ const telegizer = createTheme({
     },
     subtitle2: { fontWeight: 500, fontSize: '0.82rem' },
     body1: { fontSize: '0.9rem', lineHeight: 1.65 },
-    body2: { fontSize: '0.8rem', lineHeight: 1.6 },
+    // Floor body text at a comfortable size for the Telegram WebView (iOS text
+    // boosting is disabled app-wide), nudging up slightly on roomier screens.
+    body2: { fontSize: '0.82rem', lineHeight: 1.6, '@media (min-width:600px)': { fontSize: '0.85rem' } },
     caption: { fontSize: '0.72rem', letterSpacing: '0.02em' },
     overline: { fontSize: '0.65rem', letterSpacing: '0.1em', fontWeight: 700 },
   },

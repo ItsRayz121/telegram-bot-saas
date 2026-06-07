@@ -82,7 +82,7 @@ export default function AppLayout({ children }) {
           open={drawerOpen}
           onClose={() => setDrawerOpen(false)}
           ModalProps={{ keepMounted: true }}
-          PaperProps={{ sx: { width: SIDEBAR_WIDTH, bgcolor: 'background.paper' } }}
+          PaperProps={{ sx: { width: `min(${SIDEBAR_WIDTH}px, 86vw)`, maxWidth: '86vw', bgcolor: 'background.paper' } }}
         >
           <Sidebar onClose={() => setDrawerOpen(false)} />
         </Drawer>
@@ -117,7 +117,7 @@ export default function AppLayout({ children }) {
         <Box
           sx={{
             flex: 1, overflow: 'auto',
-            pb: isMobile ? 'calc(56px + env(safe-area-inset-bottom))' : 0,
+            pb: isMobile ? 'var(--bottom-nav-clearance)' : 0,
           }}
           className="page-enter"
         >

@@ -22,6 +22,11 @@ html {
   --bg0:         #07101f;
   --bg1:         #0b1626;
   --bg2:         #0f1e35;
+  /* Mobile layout rhythm — single source of truth for bottom-nav clearance.
+     56px nav + 8px breathing gap + iOS safe-area inset. Used by AppLayout content
+     padding, page-level pb, and the assistant FAB so nothing hides behind the nav. */
+  --bottom-nav-h:          56px;
+  --bottom-nav-clearance:  calc(64px + env(safe-area-inset-bottom, 0px));
 }
 
 /* ── Base ────────────────────────────────────────────────────────────────────── */
@@ -40,7 +45,10 @@ body::before {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  z-index: 9999;
+  /* Sits above the page background grain but BELOW interactive layers
+     (AppBar ~1100, Drawer/Modal ~1200-1300, toasts 9999) so it never veils
+     dialogs, menus, or toasts. */
+  z-index: 1;
   opacity: 0.022;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n' x='0' y='0'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
   background-repeat: repeat;

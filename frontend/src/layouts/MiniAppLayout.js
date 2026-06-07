@@ -4,6 +4,7 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { TelegramProvider, useTelegram } from '../contexts/TelegramContext';
+import { PALETTE } from '../theme';
 
 // Auto-wire Telegram BackButton: show when navigated past the mini-app root
 function BackButtonManager() {
@@ -36,21 +37,23 @@ function ThemedContent({ children }) {
   const { tgTheme } = useTelegram();
 
   const theme = useMemo(() => {
-    // Use Telegram's colors when available, fall back to app defaults
-    const primary = tgTheme?.buttonColor || '#2563EB';
-    const bg = tgTheme?.bgColor || '#0f172a';
-    const paper = tgTheme?.secondaryBgColor || '#1e293b';
-    const text = tgTheme?.textColor || '#f1f5f9';
-    const hint = tgTheme?.hintColor || '#94a3b8';
+    // Use Telegram's colors when available, fall back to the premium Telegizer
+    // palette so the entry/loading screen matches the dashboard the user is
+    // about to land in (first impression inside Telegram).
+    const primary = tgTheme?.buttonColor || PALETTE.blue;
+    const bg = tgTheme?.bgColor || PALETTE.bg0;
+    const paper = tgTheme?.secondaryBgColor || PALETTE.bg1;
+    const text = tgTheme?.textColor || PALETTE.text1;
+    const hint = tgTheme?.hintColor || PALETTE.text2;
 
     return createTheme({
       palette: {
         mode: 'dark',
         primary: { main: primary },
-        secondary: { main: '#7C3AED' },
+        secondary: { main: PALETTE.purple },
         background: { default: bg, paper },
         text: { primary: text, secondary: hint },
-        divider: 'rgba(255,255,255,0.08)',
+        divider: PALETTE.border1,
       },
       typography: {
         fontFamily: "'Inter', -apple-system, sans-serif",
