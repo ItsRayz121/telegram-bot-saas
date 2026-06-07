@@ -2767,79 +2767,14 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as _ae:
             _log.debug("Automation fire_trigger failed: %s", _ae)
 
-    # Message forwarding rules — copy matching messages to destination chats
-    if text and flask_app:
+    # Message forwarding rules — delegated to the shared, bot-agnostic runtime
+    # (many→many, forum topics, anti-ban governor). Same engine the custom bots use.
+    if flask_app:
         try:
-            with flask_app.app_context():
-                from .models import ForwardRule, ForwardLog, db as _db_fwd
-                fwd_rules = ForwardRule.query.filter_by(
-                    source_group_id=group_id, is_active=True
-                ).all()
-                for rule in fwd_rules:
-                    # Keyword filter (empty = forward everything)
-                    if rule.keyword_filter:
-                        keywords = [k.strip().lower() for k in rule.keyword_filter.split(",") if k.strip()]
-                        txt_lower = text.lower()
-                        if rule.match_type == "starts_with":
-                            matched = any(txt_lower.startswith(k) for k in keywords)
-                        else:
-                            matched = any(k in txt_lower for k in keywords)
-                        if not matched:
-                            continue
-
-                    source_text_snippet = text[:500]
-
-                    if rule.require_approval:
-                        _db_fwd.session.add(ForwardLog(
-                            rule_id=rule.id,
-                            source_chat_id=group_id,
-                            source_message_id=message.message_id,
-                            source_text=source_text_snippet,
-                            destination_id=rule.destination_id,
-                            status="pending_approval",
-                        ))
-                        _db_fwd.session.commit()
-                    else:
-                        try:
-                            if rule.prefix_text or rule.suffix_text:
-                                parts = []
-                                if rule.prefix_text:
-                                    parts.append(rule.prefix_text)
-                                parts.append(text)
-                                if rule.suffix_text:
-                                    parts.append(rule.suffix_text)
-                                await context.bot.send_message(
-                                    chat_id=rule.destination_id,
-                                    text="\n".join(parts),
-                                )
-                            else:
-                                await context.bot.copy_message(
-                                    chat_id=rule.destination_id,
-                                    from_chat_id=group_id,
-                                    message_id=message.message_id,
-                                )
-                            rule.forward_count = (rule.forward_count or 0) + 1
-                            _db_fwd.session.add(ForwardLog(
-                                rule_id=rule.id,
-                                source_chat_id=group_id,
-                                source_message_id=message.message_id,
-                                source_text=source_text_snippet,
-                                destination_id=rule.destination_id,
-                                status="forwarded",
-                            ))
-                            _db_fwd.session.commit()
-                        except Exception as fwd_exc:
-                            _db_fwd.session.add(ForwardLog(
-                                rule_id=rule.id,
-                                source_chat_id=group_id,
-                                source_message_id=message.message_id,
-                                source_text=source_text_snippet,
-                                destination_id=rule.destination_id,
-                                status="failed",
-                                error_msg=str(fwd_exc)[:500],
-                            ))
-                            _db_fwd.session.commit()
-                            _log.debug("Forward failed for rule %s: %s", rule.id, fwd_exc)
+            from .automation.forwarding_runtime import run_forwarding
+            await run_forwarding(
+                flask_app, context.bot, group_id, message, bot_type="official",
+            )
         except Exception as exc:
             _log.debug("Forward rule check failed: %s", exc)
 

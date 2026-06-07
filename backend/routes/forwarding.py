@@ -218,38 +218,33 @@ def approve_pending(log_id):
     if log_entry.status != "pending_approval":
         return jsonify({"error": "Not pending"}), 400
 
-    # Attempt to send via the running bot event loop
+    # Attempt to send via the OWNING bot's event loop (official or custom),
+    # resolved from the source chat — then deliver through the shared runtime
+    # so the anti-ban governor + topic targeting apply here too.
     try:
-        from ..official_bot import get_official_bot_loop
+        from ..automation.bot_resolver import resolve_bot_loop_for_chat
+        from ..automation.forwarding_runtime import deliver_pending_log
 
-        bot, loop = get_official_bot_loop()
+        bot, loop = resolve_bot_loop_for_chat(log_entry.source_chat_id)
         if bot and loop and loop.is_running():
-            async def _do_forward():
-                if rule.prefix_text or rule.suffix_text:
-                    parts = []
-                    if rule.prefix_text:
-                        parts.append(rule.prefix_text)
-                    if log_entry.source_text:
-                        parts.append(log_entry.source_text)
-                    if rule.suffix_text:
-                        parts.append(rule.suffix_text)
-                    await bot.send_message(chat_id=rule.destination_id, text="\n".join(parts))
-                else:
-                    await bot.copy_message(
-                        chat_id=rule.destination_id,
-                        from_chat_id=log_entry.source_chat_id,
-                        message_id=log_entry.source_message_id,
-                    )
-
             import asyncio
-            future = asyncio.run_coroutine_threadsafe(_do_forward(), loop)
+            future = asyncio.run_coroutine_threadsafe(
+                deliver_pending_log(bot, rule, log_entry), loop
+            )
             try:
-                future.result(timeout=10)
+                ok, err = future.result(timeout=15)
             except Exception as exc:
+                ok, err = False, str(exc)[:500]
+            if not ok:
                 log_entry.status = "failed"
-                log_entry.error_msg = str(exc)[:500]
+                log_entry.error_msg = err
                 db.session.commit()
-                return jsonify({"error": "Forward failed", "detail": str(exc)}), 502
+                return jsonify({"error": "Forward failed", "detail": err}), 502
+        else:
+            log_entry.status = "failed"
+            log_entry.error_msg = "Bot not running for source chat"
+            db.session.commit()
+            return jsonify({"error": "Bot unavailable — could not forward message"}), 502
 
         log_entry.status = "approved"
         rule.forward_count = (rule.forward_count or 0) + 1

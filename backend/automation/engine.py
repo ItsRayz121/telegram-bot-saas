@@ -142,10 +142,13 @@ async def _execute_action(bot, action: dict, workflow, trigger_data: dict, flask
 # ── Main entry point ──────────────────────────────────────────────────────────
 
 async def fire_trigger(flask_app, bot, trigger_type: str, group_id: str,
-                       trigger_data: dict | None = None):
+                       trigger_data: dict | None = None, bot_type: str = "official"):
     """
     Evaluate and execute all active workflows that match the trigger
-    for the given group. Called from bot event handlers.
+    for the given group. Called from bot event handlers (both lineages).
+
+    `bot_type` ("official" | "custom") is recorded in AI Activity so the
+    dashboard attributes the run to the correct bot.
     """
     trigger_data = trigger_data or {}
     try:
@@ -199,7 +202,7 @@ async def fire_trigger(flask_app, bot, trigger_type: str, group_id: str,
                 # AI Activity (Automation chip) — best-effort, never breaks the run.
                 from ..ai_activity import log_ai_activity
                 log_ai_activity(
-                    "official", str(group_id), "automation",
+                    bot_type, str(group_id), "automation",
                     f"Workflow ran: {wf.name or ('#' + str(wf.id))}",
                     detail=f"trigger={trigger_type}; {len(wf.actions or [])} action(s)",
                     status="ok" if status == "success" else "failed",

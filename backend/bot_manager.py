@@ -2290,6 +2290,39 @@ class BotInstance:
                 context.bot, chat_id, user.id, user.username, user.first_name, group
             )
 
+        # Cross-bot forwarding + automation workflows — shared, bot-agnostic
+        # runtime so custom bots have the SAME behavior as the official bot
+        # (many→many, forum topics, anti-ban governor). Runs before the admin
+        # early-return so admin messages forward too, matching the official bot.
+        try:
+            from .automation.forwarding_runtime import run_forwarding
+            await run_forwarding(
+                self.app_context, context.bot, str(chat_id), update.message,
+                bot_type="custom",
+            )
+        except Exception as _fwd_exc:
+            logger.debug(f"run_forwarding (custom) failed: {_fwd_exc}")
+
+        _auto_text = update.message.text or update.message.caption or ""
+        if _auto_text:
+            try:
+                from .automation.engine import fire_trigger as _fire_trigger
+                await _fire_trigger(
+                    flask_app=self.app_context,
+                    bot=context.bot,
+                    trigger_type="message_received",
+                    group_id=str(chat_id),
+                    trigger_data={
+                        "text": _auto_text,
+                        "user_id": str(user.id),
+                        "chat_id": str(chat_id),
+                        "message_id": update.message.message_id,
+                    },
+                    bot_type="custom",
+                )
+            except Exception as _ae:
+                logger.debug(f"fire_trigger (custom) failed: {_ae}")
+
         # Resolve sender admin status once — all reply features skip admins entirely
         sender_is_admin = False
         try:
