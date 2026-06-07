@@ -662,6 +662,59 @@ def init_db():
             "telegram_bot_started.pending_referral_code (Telegram referral attribution)",
         )
 
+        # ── Engagement Campaigns engine (db.create_all handles table creation) ───
+        # New tables: engagement_campaigns / engagement_custom_fields /
+        # engagement_submissions. Indexes are created with the tables on a fresh
+        # DB; these run idempotently in case a table already existed.
+        _run_alter(
+            db.engine,
+            "CREATE INDEX IF NOT EXISTS ix_engagement_campaigns_group_id "
+            "ON engagement_campaigns (group_id)",
+            "engagement_campaigns.group_id index",
+        )
+        _run_alter(
+            db.engine,
+            "CREATE INDEX IF NOT EXISTS ix_engagement_campaigns_telegram_group_id "
+            "ON engagement_campaigns (telegram_group_id)",
+            "engagement_campaigns.telegram_group_id index",
+        )
+        _run_alter(
+            db.engine,
+            "CREATE INDEX IF NOT EXISTS ix_engagement_campaigns_owner_user_id "
+            "ON engagement_campaigns (owner_user_id)",
+            "engagement_campaigns.owner_user_id index",
+        )
+        _run_alter(
+            db.engine,
+            "CREATE INDEX IF NOT EXISTS ix_engagement_campaigns_status "
+            "ON engagement_campaigns (status)",
+            "engagement_campaigns.status index",
+        )
+        _run_alter(
+            db.engine,
+            "CREATE INDEX IF NOT EXISTS ix_engagement_custom_fields_campaign_id "
+            "ON engagement_custom_fields (campaign_id)",
+            "engagement_custom_fields.campaign_id index",
+        )
+        _run_alter(
+            db.engine,
+            "CREATE INDEX IF NOT EXISTS ix_engagement_submissions_campaign_user "
+            "ON engagement_submissions (campaign_id, telegram_user_id)",
+            "engagement_submissions (campaign_id, telegram_user_id) index",
+        )
+        _run_alter(
+            db.engine,
+            "CREATE INDEX IF NOT EXISTS ix_engagement_submissions_campaign_status "
+            "ON engagement_submissions (campaign_id, status)",
+            "engagement_submissions (campaign_id, status) index",
+        )
+        _run_alter(
+            db.engine,
+            "CREATE INDEX IF NOT EXISTS ix_engagement_submissions_file_hash "
+            "ON engagement_submissions (file_hash)",
+            "engagement_submissions.file_hash index",
+        )
+
         # ── Backfill: create UserTelegramAccount rows for legacy User.telegram_user_id ──
         # Must run AFTER all users-table ALTER statements (including auth_provider)
         # so SQLAlchemy's User model doesn't query columns that don't exist yet.

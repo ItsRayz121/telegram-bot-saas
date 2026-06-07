@@ -3179,3 +3179,205 @@ class TeamInvite(db.Model):
             "accepted_at": self.accepted_at.isoformat() if self.accepted_at else None,
             "created_at": self.created_at.isoformat(),
         }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Engagement Campaigns  (Engagement section → Campaigns subtab)
+# ──────────────────────────────────────────────────────────────────────────────
+# A single engine with campaign *types* — proof_collection / content_submission /
+# social_task / giveaway. Lives ALONGSIDE the existing Raid feature (not a
+# replacement). Dual-FK pattern (group_id for custom-bot lineage,
+# telegram_group_id for the official-bot lineage) mirrors AutoResponse /
+# KnowledgeDocument so both bot lineages share one engine. Rewards are written to
+# the existing XpEvent ledger (reason="campaign:<id>"); audit reuses AuditLog.
+# See ENGAGEMENT_CAMPAIGNS_PLAN.md for the full design.
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Campaign type values
+CAMPAIGN_TYPES = ("proof_collection", "content_submission", "social_task", "giveaway")
+# Verification mode values
+CAMPAIGN_VERIFICATION_MODES = ("auto", "manual", "honor", "screenshot", "link")
+# Lifecycle status values
+CAMPAIGN_STATUSES = ("draft", "active", "paused", "closed", "archived")
+# Custom-field types
+CAMPAIGN_FIELD_TYPES = ("text", "url", "uid", "wallet", "screenshot", "tx_hash", "username")
+
+
+class EngagementCampaign(db.Model):
+    """An engagement campaign created by a group owner/admin from the dashboard or
+    Mini App. Belongs to exactly one group (the campaign id is the anchor that
+    disambiguates multi-group usage on the shared official bot)."""
+    __tablename__ = "engagement_campaigns"
+
+    id = db.Column(db.Integer, primary_key=True)
+    # Lineage anchors — exactly one is populated per row.
+    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=True, index=True)            # custom-bot lineage
+    telegram_group_id = db.Column(db.String(255), nullable=True, index=True)                            # official-bot lineage
+    owner_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
+
+    type = db.Column(db.String(32), nullable=False, default="proof_collection")  # CAMPAIGN_TYPES
+    platform = db.Column(db.String(32), nullable=True)  # x|youtube|telegram|instagram|facebook|other
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    task_url = db.Column(db.String(2000), nullable=True)
+    verification_mode = db.Column(db.String(20), nullable=False, default="manual")  # CAMPAIGN_VERIFICATION_MODES
+
+    reward_xp = db.Column(db.Integer, nullable=False, default=0)
+    reward_label = db.Column(db.String(200), nullable=True)
+
+    status = db.Column(db.String(20), nullable=False, default="draft", index=True)  # CAMPAIGN_STATUSES
+    starts_at = db.Column(db.DateTime, nullable=True)
+    ends_at = db.Column(db.DateTime, nullable=True)
+
+    max_participants = db.Column(db.Integer, nullable=True)
+    one_per_user = db.Column(db.Boolean, nullable=False, default=True)
+
+    pin_message = db.Column(db.Boolean, nullable=False, default=True)
+    # The group announcement message (so the scheduler can flip its status label).
+    telegram_message_id = db.Column(db.BigInteger, nullable=True)
+    message_thread_id = db.Column(db.Integer, nullable=True)  # forum topic, if published into one
+
+    # Flexible bag: verification target (e.g. channel @username for TG-join),
+    # winner selections, branding overrides, etc.
+    settings = db.Column(db.JSON, nullable=False, default=dict)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    custom_fields = db.relationship(
+        "EngagementCustomField", backref="campaign",
+        cascade="all, delete-orphan", lazy="dynamic", order_by="EngagementCustomField.order",
+    )
+    submissions = db.relationship(
+        "EngagementSubmission", backref="campaign",
+        cascade="all, delete-orphan", lazy="dynamic",
+    )
+
+    @property
+    def is_open(self):
+        """True if the campaign currently accepts submissions."""
+        if self.status != "active":
+            return False
+        now = datetime.utcnow()
+        if self.starts_at and now < self.starts_at:
+            return False
+        if self.ends_at and now >= self.ends_at:
+            return False
+        return True
+
+    def to_dict(self, include_fields=True, include_analytics=False):
+        d = {
+            "id": self.id,
+            "group_id": self.group_id,
+            "telegram_group_id": self.telegram_group_id,
+            "owner_user_id": self.owner_user_id,
+            "type": self.type,
+            "platform": self.platform,
+            "title": self.title,
+            "description": self.description,
+            "task_url": self.task_url,
+            "verification_mode": self.verification_mode,
+            "reward_xp": self.reward_xp,
+            "reward_label": self.reward_label,
+            "status": self.status,
+            "is_open": self.is_open,
+            "starts_at": self.starts_at.isoformat() if self.starts_at else None,
+            "ends_at": self.ends_at.isoformat() if self.ends_at else None,
+            "max_participants": self.max_participants,
+            "one_per_user": self.one_per_user,
+            "pin_message": self.pin_message,
+            "telegram_message_id": self.telegram_message_id,
+            "message_thread_id": self.message_thread_id,
+            "settings": self.settings or {},
+            "created_at": self.created_at.isoformat(),
+        }
+        if include_fields:
+            d["custom_fields"] = [f.to_dict() for f in self.custom_fields.all()]
+        if include_analytics:
+            subs = self.submissions
+            d["submissions_total"] = subs.count()
+            d["submissions_pending"] = subs.filter_by(status="pending").count()
+            d["submissions_verified"] = subs.filter_by(status="verified").count()
+            d["submissions_rejected"] = subs.filter_by(status="rejected").count()
+        return d
+
+
+class EngagementCustomField(db.Model):
+    """A typed proof field on a campaign (e.g. exchange UID, wallet, screenshot)."""
+    __tablename__ = "engagement_custom_fields"
+
+    id = db.Column(db.Integer, primary_key=True)
+    campaign_id = db.Column(
+        db.Integer, db.ForeignKey("engagement_campaigns.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    key = db.Column(db.String(64), nullable=False)        # machine key, unique within a campaign
+    label = db.Column(db.String(200), nullable=False)     # human prompt shown to the user
+    field_type = db.Column(db.String(20), nullable=False, default="text")  # CAMPAIGN_FIELD_TYPES
+    required = db.Column(db.Boolean, nullable=False, default=True)
+    order = db.Column(db.Integer, nullable=False, default=0)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "campaign_id": self.campaign_id,
+            "key": self.key,
+            "label": self.label,
+            "field_type": self.field_type,
+            "required": self.required,
+            "order": self.order,
+        }
+
+
+class EngagementSubmission(db.Model):
+    """A user's submission/proof for a campaign. One-per-user is enforced in
+    application logic (not a hard DB unique constraint) so that campaigns with
+    one_per_user=False can accept multiple submissions; the composite index keeps
+    the dedup lookup fast."""
+    __tablename__ = "engagement_submissions"
+
+    id = db.Column(db.Integer, primary_key=True)
+    campaign_id = db.Column(
+        db.Integer, db.ForeignKey("engagement_campaigns.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    telegram_user_id = db.Column(db.String(64), nullable=False, index=True)
+    telegram_username = db.Column(db.String(255), nullable=True)
+    # PK of Member (scope='custom') or OfficialMember (scope='official'); for reward attribution.
+    member_id = db.Column(db.Integer, nullable=True)
+    scope = db.Column(db.String(16), nullable=False, default="custom")  # custom | official
+
+    status = db.Column(db.String(16), nullable=False, default="pending")  # pending|verified|rejected
+    payload = db.Column(db.JSON, nullable=False, default=dict)            # {field_key: value}
+    file_id = db.Column(db.String(255), nullable=True)                    # Telegram file_id (screenshot)
+    file_hash = db.Column(db.String(64), nullable=True, index=True)       # for screenshot dedup
+
+    reviewed_by = db.Column(db.String(64), nullable=True)
+    review_reason = db.Column(db.Text, nullable=True)
+    rewarded = db.Column(db.Boolean, nullable=False, default=False)       # idempotency guard for XP
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+    reviewed_at = db.Column(db.DateTime, nullable=True)
+
+    __table_args__ = (
+        db.Index("ix_engagement_submissions_campaign_user", "campaign_id", "telegram_user_id"),
+        db.Index("ix_engagement_submissions_campaign_status", "campaign_id", "status"),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "campaign_id": self.campaign_id,
+            "telegram_user_id": self.telegram_user_id,
+            "telegram_username": self.telegram_username,
+            "member_id": self.member_id,
+            "scope": self.scope,
+            "status": self.status,
+            "payload": self.payload or {},
+            "file_id": self.file_id,
+            "file_hash": self.file_hash,
+            "reviewed_by": self.reviewed_by,
+            "review_reason": self.review_reason,
+            "rewarded": self.rewarded,
+            "created_at": self.created_at.isoformat(),
+            "reviewed_at": self.reviewed_at.isoformat() if self.reviewed_at else None,
+        }
