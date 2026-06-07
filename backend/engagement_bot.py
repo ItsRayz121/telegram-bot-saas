@@ -131,10 +131,26 @@ async def on_start(update, context, payload, *, flask_app, lineage, bot_id=None)
         fields = _ordered_fields(campaign)
         title = html.escape(campaign.title)
 
+        # ── Auto-verify: Telegram channel/group join ─────────────────────────
+        force_verified = False
+        if campaign.verification_mode == "auto":
+            from .engagement_verify import verify_telegram_join
+            chat_ref = _verify_chat_ref(campaign, lineage)
+            ok = await verify_telegram_join(context.bot, chat_ref, user.id)
+            if not ok:
+                target = chat_ref if isinstance(chat_ref, str) and chat_ref.startswith("@") else "the required channel/group"
+                await msg.reply_text(
+                    f"You don’t appear to be a member yet. Please join {html.escape(str(target))}, "
+                    "then tap the button again."
+                )
+                return True
+            force_verified = True
+
         if not fields:
-            # No proof fields → finalize straight away (honor → verified, else pending).
+            # No proof fields → finalize straight away.
             await _finalize(msg, context, flask_app, campaign_id, {}, None, None,
-                            user=user, lineage=lineage, bot_id=bot_id)
+                            user=user, lineage=lineage, bot_id=bot_id,
+                            forced_status="verified" if force_verified else None)
             return True
 
         # Start field-by-field collection.
@@ -142,11 +158,33 @@ async def on_start(update, context, payload, *, flask_app, lineage, bot_id=None)
             "cid": campaign_id, "fields": fields, "idx": 0,
             "answers": {}, "file_id": None, "file_hash": None,
             "lineage": lineage, "bot_id": bot_id,
+            "force_verified": force_verified,
         }
         intro = f"🚀 <b>{title}</b>\nLet’s collect your submission. {len(fields)} step(s)."
         await msg.reply_text(intro, parse_mode="HTML")
         await _ask_field(msg, fields[0])
     return True
+
+
+def _verify_chat_ref(campaign, lineage):
+    """Resolve the chat to check membership in for an auto-verify campaign:
+    an explicit settings['verify_chat'], else the campaign's own group/channel."""
+    explicit = (campaign.settings or {}).get("verify_chat")
+    if explicit:
+        return explicit
+    if lineage == "official":
+        try:
+            return int(campaign.telegram_group_id)
+        except (TypeError, ValueError):
+            return campaign.telegram_group_id
+    from .models import Group
+    grp = Group.query.get(campaign.group_id)
+    if not grp:
+        return None
+    try:
+        return int(grp.telegram_group_id)
+    except (TypeError, ValueError):
+        return grp.telegram_group_id
 
 
 # ── Private message: collect the current field ────────────────────────────────
@@ -210,10 +248,12 @@ async def on_private(update, context, *, flask_app, lineage, bot_id=None):
     answers = state["answers"]
     f_id = state.get("file_id")
     f_hash = state.get("file_hash")
+    forced = "verified" if state.get("force_verified") else None
     context.user_data.pop("eng", None)
     with flask_app.app_context():
         await _finalize(msg, context, flask_app, state["cid"], answers, f_id, f_hash,
-                        user=update.effective_user, lineage=lineage, bot_id=bot_id)
+                        user=update.effective_user, lineage=lineage, bot_id=bot_id,
+                        forced_status=forced)
     return True
 
 
@@ -239,11 +279,12 @@ async def on_callback(update, context, *, flask_app, lineage, bot_id=None):
 # ── Finalize: create the submission + reply ───────────────────────────────────
 
 async def _finalize(message, context, flask_app, campaign_id, answers, file_id, file_hash,
-                    *, user, lineage, bot_id=None):
+                    *, user, lineage, bot_id=None, forced_status=None):
     """Create the EngagementSubmission and reply with status. Assumes an app
     context is active OR creates one."""
     from .models import db, EngagementCampaign, EngagementSubmission, OfficialMember
     from . import engagement as eng
+    from .engagement_verify import validate_link_payload
 
     tg_user_id = str(user.id)
     tg_username = user.username
@@ -270,7 +311,18 @@ async def _finalize(message, context, flask_app, campaign_id, answers, file_id, 
             ).first()
             member_id = m.id if m else None
 
-        status = "verified" if campaign.verification_mode == "honor" else "pending"
+        # Decide status by verification mode.
+        if forced_status:
+            status = forced_status
+        elif campaign.verification_mode == "honor":
+            status = "verified"
+        elif campaign.verification_mode == "link":
+            ok, reason = validate_link_payload(campaign, answers)
+            if not ok:
+                return None, reason
+            status = "verified"
+        else:
+            status = "pending"
         sub = EngagementSubmission(
             campaign_id=campaign_id,
             telegram_user_id=tg_user_id,
