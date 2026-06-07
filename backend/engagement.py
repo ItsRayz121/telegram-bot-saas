@@ -233,6 +233,7 @@ def create_campaign(user, data, *, scope, owner_user_id, group_id=None, telegram
     _replace_custom_fields(campaign, fields_in)
 
     db.session.commit()
+    _maybe_publish(campaign)
     return campaign
 
 
@@ -310,7 +311,24 @@ def update_campaign(campaign, data):
         _replace_custom_fields(campaign, data["custom_fields"])
 
     db.session.commit()
+    if action == "publish":
+        _maybe_publish(campaign)
     return campaign
+
+
+def _maybe_publish(campaign):
+    """Post the campaign to Telegram on first activation (best-effort).
+
+    Guarded by telegram_message_id so a pause→reopen never double-posts.
+    Publishing failures never break the API (the dashboard still works; the
+    admin can re-trigger by toggling status)."""
+    if campaign.status != "active" or campaign.telegram_message_id:
+        return
+    try:
+        from .engagement_telegram import publish_campaign
+        publish_campaign(campaign)
+    except Exception:
+        logger.exception("campaign publish hook failed for %s", getattr(campaign, "id", "?"))
 
 
 # ── Submissions ───────────────────────────────────────────────────────────────
