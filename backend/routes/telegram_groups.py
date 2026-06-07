@@ -1645,6 +1645,27 @@ def update_official_campaign(group_id, campaign_id):
         return jsonify({"error": "Failed to update campaign"}), 500
 
 
+@tg_groups_bp.route("/<group_id>/campaigns/<int:campaign_id>/post", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=15)
+def post_official_campaign(group_id, campaign_id):
+    """Manually (re)post the campaign announcement to the group — used by the
+    dashboard 'Post to group' / retry action when a previous post failed."""
+    user = _current_user()
+    if not _owns_group(user.id, group_id):
+        return jsonify({"error": "Group not found"}), 404
+    try:
+        c = eng.get_campaign(campaign_id, "official", telegram_group_id=group_id)
+        c = eng.repost_campaign(c)
+        return jsonify({"campaign": c.to_dict(include_analytics=True)}), 200
+    except eng.EngagementError as e:
+        db.session.rollback()
+        return _eng_err(e)
+    except Exception:
+        db.session.rollback()
+        return jsonify({"error": "Failed to post campaign"}), 500
+
+
 @tg_groups_bp.route("/<group_id>/campaigns/<int:campaign_id>/submissions", methods=["GET"])
 @jwt_required()
 @rate_limit(requests_per_minute=60)
@@ -1677,6 +1698,18 @@ def review_official_submission(group_id, campaign_id, submission_id):
     except eng.EngagementError as e:
         db.session.rollback()
         return _eng_err(e)
+
+
+@tg_groups_bp.route("/<group_id>/member-submissions/<tg_user_id>", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def member_submission_history_official(group_id, tg_user_id):
+    """All campaign submissions by one member in this group (submission history)."""
+    user = _current_user()
+    if not _owns_group(user.id, group_id):
+        return jsonify({"error": "Group not found"}), 404
+    subs = eng.list_user_submissions("official", tg_user_id, telegram_group_id=group_id)
+    return jsonify({"submissions": subs}), 200
 
 
 @tg_groups_bp.route("/<group_id>/campaigns/<int:campaign_id>/submissions/export", methods=["GET"])

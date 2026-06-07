@@ -547,6 +547,7 @@ def create_app():
         _run_phase4_migrations()
         _run_phase5_migrations()
         _run_phase6_migrations()
+        _run_engagement_extras_migration()
         _run_smart_links_migration()
         _run_workspace_migrations()
         _run_marketplace_migrations()
@@ -948,6 +949,34 @@ def _run_phase6_migrations():
                         pass
     except Exception as exc:
         _mig_log.warning("phase6 migrations failed: %s", exc)
+
+
+def _run_engagement_extras_migration():
+    """Engagement campaigns: group-post delivery tracking, proof examples, and
+    post-review DM notify result. Additive + idempotent (Railway-safe)."""
+    _mig_log = logging.getLogger("migrations")
+    stmts = [
+        "ALTER TABLE engagement_campaigns ADD COLUMN IF NOT EXISTS post_status VARCHAR(16) NOT NULL DEFAULT 'none'",
+        "ALTER TABLE engagement_campaigns ADD COLUMN IF NOT EXISTS post_error TEXT",
+        "ALTER TABLE engagement_campaigns ADD COLUMN IF NOT EXISTS posted_at TIMESTAMP",
+        "ALTER TABLE engagement_custom_fields ADD COLUMN IF NOT EXISTS example VARCHAR(255)",
+        "ALTER TABLE engagement_submissions ADD COLUMN IF NOT EXISTS notify_status VARCHAR(16) NOT NULL DEFAULT 'none'",
+        "ALTER TABLE engagement_submissions ADD COLUMN IF NOT EXISTS notify_error VARCHAR(255)",
+    ]
+    try:
+        with db.engine.connect() as conn:
+            for sql in stmts:
+                try:
+                    conn.execute(text(sql))
+                    conn.commit()
+                except Exception as exc:
+                    _mig_log.warning("engagement-extras migration stmt failed: %s", exc)
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+    except Exception as exc:
+        _mig_log.warning("engagement-extras migrations failed: %s", exc)
 
 
 def _run_smart_links_migration():
@@ -2285,6 +2314,8 @@ def _scheduler_loop(app):
             _run_task_with_timeout(_deliver_meeting_reminders, app, timeout=30, label="_deliver_meeting_reminders")
             # Scheduled automations: check every 60s
             _run_task_with_timeout(_run_scheduled_automations, app, timeout=30, label="_run_scheduled_automations")
+            # Engagement campaign group-post retry: every 60s
+            _run_task_with_timeout(_run_campaign_post_retry, timeout=45, label="_run_campaign_post_retry", flask_app=app)
             # Message buffer cleanup: every 6 hours
             if now_ts - _last_buffer_cleanup[0] > 21600:
                 _last_buffer_cleanup[0] = now_ts
@@ -2292,6 +2323,55 @@ def _scheduler_loop(app):
         except Exception as exc:
             _scheduler_log.error(f"Scheduler loop error: {exc}")
         time.sleep(60)
+
+
+def _run_campaign_post_retry():
+    """Auto-(re)post active Engagement Campaigns that haven't reached the group yet.
+
+    The campaign-create request posts immediately, but if the bot loop wasn't
+    ready in that web worker (or Telegram hiccuped) the post is recorded as
+    'failed'/'none'. This runs in the web process — where the official/custom bot
+    loops actually live — and retries delivery. An atomic status claim prevents
+    the two Gunicorn workers from double-posting the same campaign.
+    """
+    from .models import EngagementCampaign
+    from . import engagement_telegram as et
+    now = datetime.utcnow()
+    try:
+        candidates = EngagementCampaign.query.filter(
+            EngagementCampaign.status == "active",
+            EngagementCampaign.post_status.in_(["none", "failed"]),
+        ).limit(25).all()
+    except Exception as exc:
+        _scheduler_log.debug("campaign post-retry query failed: %s", exc)
+        return
+    for c in candidates:
+        if c.ends_at and c.ends_at <= now:
+            continue  # already expired — lifecycle job will close it
+        try:
+            # Atomic claim: only the worker that flips none/failed → posting sends.
+            claimed = db.session.execute(
+                text(
+                    "UPDATE engagement_campaigns SET post_status='posting' "
+                    "WHERE id=:id AND post_status IN ('none','failed')"
+                ),
+                {"id": c.id},
+            ).rowcount
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            continue
+        if not claimed:
+            continue
+        try:
+            db.session.refresh(c)
+            et.publish_campaign(c)  # records 'posted' or 'failed'
+        except Exception:
+            _scheduler_log.exception("campaign post-retry failed for %s", c.id)
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
 
 
 def _cleanup_pending_verifications():

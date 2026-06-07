@@ -860,6 +860,30 @@ def update_engagement_campaign(bot_id, group_id, campaign_id):
         return jsonify({"error": "Failed to update campaign"}), 500
 
 
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/campaigns/<int:campaign_id>/post", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=15)
+def post_engagement_campaign(bot_id, group_id, campaign_id):
+    """Manually (re)post the campaign announcement to the group (retry action)."""
+    user = _get_current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    _, group, err = _get_bot_and_group(user, bot_id, group_id)
+    if err:
+        return err
+    try:
+        c = eng.get_campaign(campaign_id, "custom", group_id=group.id)
+        c = eng.repost_campaign(c)
+        return jsonify({"campaign": c.to_dict(include_analytics=True)})
+    except eng.EngagementError as e:
+        db.session.rollback()
+        return _eng_err(e)
+    except Exception as e:
+        logger.error(f"post_engagement_campaign error: {e}", exc_info=True)
+        db.session.rollback()
+        return jsonify({"error": "Failed to post campaign"}), 500
+
+
 @settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/campaigns/<int:campaign_id>/submissions", methods=["GET"])
 @jwt_required()
 @rate_limit(requests_per_minute=60)
@@ -898,6 +922,21 @@ def review_engagement_submission(bot_id, group_id, campaign_id, submission_id):
     except eng.EngagementError as e:
         db.session.rollback()
         return _eng_err(e)
+
+
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/member-submissions/<tg_user_id>", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def member_submission_history_custom(bot_id, group_id, tg_user_id):
+    """All campaign submissions by one member in this group (submission history)."""
+    user = _get_current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    _, group, err = _get_bot_and_group(user, bot_id, group_id)
+    if err:
+        return err
+    subs = eng.list_user_submissions("custom", tg_user_id, group_id=group.id)
+    return jsonify({"submissions": subs})
 
 
 @settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/campaigns/<int:campaign_id>/submissions/export", methods=["GET"])

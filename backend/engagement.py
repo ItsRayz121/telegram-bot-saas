@@ -256,6 +256,7 @@ def _replace_custom_fields(campaign, fields_in):
         if key in seen_keys:
             key = f"{key}_{idx}"
         seen_keys.add(key)
+        example = (raw.get("example") or "").strip()
         db.session.add(EngagementCustomField(
             campaign_id=campaign.id,
             key=key,
@@ -263,6 +264,7 @@ def _replace_custom_fields(campaign, fields_in):
             field_type=ftype,
             required=bool(raw.get("required", True)),
             order=_coerce_int(raw.get("order"), "order") or idx,
+            example=(example[:255] or None),
         ))
 
 
@@ -319,16 +321,30 @@ def update_campaign(campaign, data):
 def _maybe_publish(campaign):
     """Post the campaign to Telegram on first activation (best-effort).
 
-    Guarded by telegram_message_id so a pause→reopen never double-posts.
-    Publishing failures never break the API (the dashboard still works; the
-    admin can re-trigger by toggling status)."""
-    if campaign.status != "active" or campaign.telegram_message_id:
+    Posts when the campaign is active and has not yet been delivered
+    (post_status != 'posted'); this also auto-retries a previously failed post
+    on the next publish/reopen. A successful post sets post_status='posted' so a
+    pause→reopen never double-posts. Publishing failures never break the API."""
+    if campaign.status != "active":
+        return
+    if campaign.post_status == "posted" and campaign.telegram_message_id:
         return
     try:
         from .engagement_telegram import publish_campaign
         publish_campaign(campaign)
     except Exception:
         logger.exception("campaign publish hook failed for %s", getattr(campaign, "id", "?"))
+
+
+def repost_campaign(campaign):
+    """Manual 'Post to group' / retry from the dashboard. Re-sends the group
+    announcement (even if a previous attempt failed) and returns the campaign.
+    Only meaningful for an active campaign."""
+    if campaign.status != "active":
+        raise EngagementError("Only an active campaign can be posted to the group.", 400)
+    from .engagement_telegram import publish_campaign
+    publish_campaign(campaign)
+    return campaign
 
 
 # ── Submissions ───────────────────────────────────────────────────────────────
@@ -341,9 +357,42 @@ def list_submissions(campaign, *, status=None, limit=1000):
     return [s.to_dict() for s in rows]
 
 
+def list_user_submissions(scope, telegram_user_id, *, group_id=None, telegram_group_id=None, limit=200):
+    """All campaign submissions by one participant within a group (both lineages),
+    enriched with the campaign title/type — powers the per-user submission history
+    in the member profile. Returns a list of dicts."""
+    tg = str(telegram_user_id)
+    camp_ids = [
+        c.id for c in _base_query(scope, group_id, telegram_group_id)
+        .with_entities(EngagementCampaign.id).all()
+    ]
+    if not camp_ids:
+        return []
+    rows = (
+        EngagementSubmission.query
+        .filter(EngagementSubmission.campaign_id.in_(camp_ids))
+        .filter(EngagementSubmission.telegram_user_id == tg)
+        .order_by(EngagementSubmission.created_at.desc())
+        .limit(limit).all()
+    )
+    by_id = {c.id: c for c in EngagementCampaign.query.filter(EngagementCampaign.id.in_(camp_ids)).all()}
+    out = []
+    for s in rows:
+        d = s.to_dict()
+        c = by_id.get(s.campaign_id)
+        d["campaign_title"] = c.title if c else None
+        d["campaign_type"] = c.type if c else None
+        d["reward_xp"] = c.reward_xp if c else 0
+        out.append(d)
+    return out
+
+
 def review_submission(campaign, submission_id, action, *, reviewed_by=None, reason=None):
-    """Approve or reject a submission. XP reward on approval is wired in Phase 4
-    (kept idempotent via EngagementSubmission.rewarded)."""
+    """Approve or reject a submission. On approve we credit XP idempotently
+    (guarded by EngagementSubmission.rewarded) and the verified row is what the
+    winner picker / giveaway pool draws from. On reject we credit nothing and
+    store the reason. Either way we DM the participant the outcome (best-effort,
+    recorded on the submission)."""
     sub = EngagementSubmission.query.filter_by(
         id=submission_id, campaign_id=campaign.id
     ).first()
@@ -360,8 +409,22 @@ def review_submission(campaign, submission_id, action, *, reviewed_by=None, reas
     sub.reviewed_at = datetime.utcnow()
     db.session.commit()
     if action == "approve":
-        award_submission(campaign, sub)
+        award_submission(campaign, sub)  # credits XP, then commits
+    _notify_review(campaign, sub, approved=(action == "approve"), reason=reason)
     return sub
+
+
+def _notify_review(campaign, submission, *, approved, reason=None):
+    """DM the participant the review outcome. Best-effort; never raises."""
+    try:
+        from .engagement_telegram import notify_submission_review
+        allow_resubmit = bool((campaign.settings or {}).get("allow_resubmit"))
+        notify_submission_review(
+            campaign, submission, approved=approved,
+            reason=reason, allow_resubmit=allow_resubmit,
+        )
+    except Exception:
+        logger.debug("review notification failed", exc_info=True)
 
 
 def _sibling_campaign_ids(campaign):
@@ -439,7 +502,7 @@ def create_submission(campaign, *, telegram_user_id, telegram_username=None,
     Returns (submission, error_message). error_message is a user-facing string
     when the submission was rejected (closed / duplicate / invalid link)."""
     from .models import EngagementSubmission, OfficialMember
-    from .engagement_verify import validate_link_payload
+    from .engagement_verify import validate_link_payload, validate_field_value
 
     tg_user_id = str(telegram_user_id)
     answers = answers or {}
@@ -447,12 +510,29 @@ def create_submission(campaign, *, telegram_user_id, telegram_username=None,
     if not campaign.is_open:
         return None, "This campaign is closed. The submission window has ended."
 
+    allow_resubmit = bool((campaign.settings or {}).get("allow_resubmit"))
     if campaign.one_per_user:
         dupe = EngagementSubmission.query.filter_by(
             campaign_id=campaign.id, telegram_user_id=tg_user_id
-        ).first()
-        if dupe:
+        ).order_by(EngagementSubmission.created_at.desc()).first()
+        # A prior rejected attempt may be resubmitted only if the campaign allows it.
+        if dupe and not (dupe.status == "rejected" and allow_resubmit):
             return None, "You have already submitted for this task."
+
+    # Per-field validation (also covers the Mini App path, which doesn't validate
+    # field-by-field like the bot DM flow does). Screenshots validated elsewhere.
+    for f in campaign.custom_fields.all():
+        if f.field_type == "screenshot":
+            continue
+        raw = answers.get(f.key)
+        if raw in (None, ""):
+            if f.required:
+                return None, f"Please provide: {f.label}"
+            continue
+        ok, normalized, err = validate_field_value(f.field_type, raw, platform=campaign.platform)
+        if not ok:
+            return None, err
+        answers[f.key] = normalized
 
     scope = "official" if campaign.telegram_group_id else "custom"
     member_id = None

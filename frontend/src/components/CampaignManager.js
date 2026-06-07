@@ -9,7 +9,7 @@ import {
 } from '@mui/material';
 import {
   Add, Delete, MoreVert, Download, EmojiEvents, Campaign as CampaignIcon,
-  CheckCircle, Cancel, Visibility,
+  CheckCircle, Cancel, Visibility, Send, Replay,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { engagement } from '../services/api';
@@ -72,7 +72,19 @@ const EMPTY_FORM = {
   one_per_user: true,
   pin_message: true,
   publishNow: false,
+  allow_resubmit: false,
   custom_fields: [],
+};
+
+// Default example/format hint by proof type — pre-fills the helper shown to users.
+const EXAMPLE_PLACEHOLDER = {
+  text: 'e.g. your answer',
+  url: 'https://x.com/yourpost/status/123',
+  uid: '123456789 or ABC123',
+  wallet: '0x… or your chain address',
+  screenshot: '',
+  tx_hash: '0x… transaction hash',
+  username: '@username',
 };
 
 const WIZARD_STEPS = ['Type & Platform', 'Task & Proof', 'Schedule & Reward'];
@@ -161,6 +173,7 @@ export default function CampaignManager({ botId, groupId }) {
                 <TableCell>Title</TableCell>
                 <TableCell>Type</TableCell>
                 <TableCell>Status</TableCell>
+                <TableCell>Group post</TableCell>
                 <TableCell align="right">Verified</TableCell>
                 <TableCell align="right">Pending</TableCell>
                 <TableCell align="right">Total</TableCell>
@@ -200,6 +213,50 @@ export default function CampaignManager({ botId, groupId }) {
 
 // ── Row + lifecycle menu ──────────────────────────────────────────────────────
 
+function PostStatusCell({ c, botId, groupId, onChanged }) {
+  const [posting, setPosting] = useState(false);
+  const map = {
+    posted: { label: 'Posted', color: 'success' },
+    failed: { label: 'Failed', color: 'error' },
+    posting: { label: 'Posting…', color: 'warning' },
+    none: { label: 'Not posted', color: 'default' },
+  };
+  const meta = map[c.post_status] || map.none;
+  const canRetry = c.status === 'active' && c.post_status !== 'posted' && c.post_status !== 'posting';
+
+  const doPost = async () => {
+    setPosting(true);
+    try {
+      const res = await engagement.post(botId, groupId, c.id);
+      const ps = res.data.campaign?.post_status;
+      if (ps === 'posted') toast.success('Posted to group');
+      else toast.error(res.data.campaign?.post_error || 'Post failed — will retry');
+      onChanged();
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Failed to post');
+    } finally {
+      setPosting(false);
+    }
+  };
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, whiteSpace: 'nowrap' }}>
+      <Tooltip title={c.post_error || (c.posted_at ? `Posted ${new Date(c.posted_at).toLocaleString()}` : '')}>
+        <Chip size="small" label={meta.label} color={meta.color} variant={meta.color === 'default' ? 'outlined' : 'filled'} />
+      </Tooltip>
+      {canRetry && (
+        <Tooltip title="Post to group / retry">
+          <span>
+            <IconButton size="small" onClick={doPost} disabled={posting}>
+              {posting ? <CircularProgress size={14} /> : (c.post_status === 'failed' ? <Replay fontSize="small" /> : <Send fontSize="small" />)}
+            </IconButton>
+          </span>
+        </Tooltip>
+      )}
+    </Box>
+  );
+}
+
 function CampaignRow({ c, botId, groupId, onChanged, onManage }) {
   const [anchor, setAnchor] = useState(null);
 
@@ -230,6 +287,7 @@ function CampaignRow({ c, botId, groupId, onChanged, onManage }) {
       </TableCell>
       <TableCell><Typography variant="caption">{(TYPES.find(t => t.value === c.type) || {}).label || c.type}</Typography></TableCell>
       <TableCell><Chip size="small" label={c.status} color={STATUS_COLOR[c.status] || 'default'} /></TableCell>
+      <TableCell><PostStatusCell c={c} botId={botId} groupId={groupId} onChanged={onChanged} /></TableCell>
       <TableCell align="right">{c.submissions_verified ?? 0}</TableCell>
       <TableCell align="right">{c.submissions_pending ?? 0}</TableCell>
       <TableCell align="right">{c.submissions_total ?? 0}</TableCell>
@@ -260,7 +318,7 @@ function CampaignWizard({ botId, groupId, onClose, onCreated }) {
 
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
 
-  const addField = () => set('custom_fields', [...form.custom_fields, { label: '', field_type: 'text', required: true }]);
+  const addField = () => set('custom_fields', [...form.custom_fields, { label: '', field_type: 'text', required: true, example: '' }]);
   const updField = (i, k, v) => set('custom_fields', form.custom_fields.map((f, idx) => idx === i ? { ...f, [k]: v } : f));
   const delField = (i) => set('custom_fields', form.custom_fields.filter((_, idx) => idx !== i));
 
@@ -287,7 +345,15 @@ function CampaignWizard({ botId, groupId, onClose, onCreated }) {
         one_per_user: form.one_per_user,
         pin_message: form.pin_message,
         status: form.publishNow ? 'active' : 'draft',
-        custom_fields: form.custom_fields.filter((f) => f.label.trim()),
+        settings: { allow_resubmit: !!form.allow_resubmit },
+        custom_fields: form.custom_fields
+          .filter((f) => f.label.trim())
+          .map((f) => ({
+            label: f.label.trim(),
+            field_type: f.field_type,
+            required: f.required,
+            example: (f.example || '').trim() || null,
+          })),
       };
       if (form.duration_hours) payload.duration_hours = form.duration_hours;
       await engagement.create(botId, groupId, payload);
@@ -343,19 +409,32 @@ function CampaignWizard({ botId, groupId, onClose, onCreated }) {
             </FormControl>
 
             <Divider textAlign="left"><Typography variant="caption">Proof fields</Typography></Divider>
+            <Typography variant="caption" color="text.secondary">
+              Ask participants for proof (UID, link, wallet, screenshot…). The bot collects each
+              field privately and validates the format before accepting it.
+            </Typography>
             {form.custom_fields.map((f, i) => (
-              <Box key={i} sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                <TextField size="small" label="Prompt" value={f.label}
-                  onChange={(e) => updField(i, 'label', e.target.value)} sx={{ flex: 1 }} />
-                <FormControl size="small" sx={{ minWidth: 120 }}>
-                  <Select value={f.field_type} onChange={(e) => updField(i, 'field_type', e.target.value)}>
-                    {FIELD_TYPES.map((t) => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)}
-                  </Select>
-                </FormControl>
-                <Tooltip title={f.required ? 'Required' : 'Optional'}>
-                  <Switch size="small" checked={f.required} onChange={(e) => updField(i, 'required', e.target.checked)} />
-                </Tooltip>
-                <IconButton size="small" color="error" onClick={() => delField(i)}><Delete fontSize="small" /></IconButton>
+              <Box key={i} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                  <TextField size="small" label="Prompt" placeholder="Submit your Bitget UID" value={f.label}
+                    onChange={(e) => updField(i, 'label', e.target.value)} sx={{ flex: 1 }} />
+                  <FormControl size="small" sx={{ minWidth: 130 }}>
+                    <Select value={f.field_type} onChange={(e) => updField(i, 'field_type', e.target.value)}>
+                      {FIELD_TYPES.map((t) => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)}
+                    </Select>
+                  </FormControl>
+                  <Tooltip title={f.required ? 'Required' : 'Optional'}>
+                    <Switch size="small" checked={f.required} onChange={(e) => updField(i, 'required', e.target.checked)} />
+                  </Tooltip>
+                  <IconButton size="small" color="error" onClick={() => delField(i)}><Delete fontSize="small" /></IconButton>
+                </Box>
+                {f.field_type !== 'screenshot' && (
+                  <TextField size="small" fullWidth sx={{ mt: 1 }}
+                    label="Example / format (optional, shown to users)"
+                    placeholder={EXAMPLE_PLACEHOLDER[f.field_type] || ''}
+                    value={f.example || ''}
+                    onChange={(e) => updField(i, 'example', e.target.value)} />
+                )}
               </Box>
             ))}
             <Button size="small" startIcon={<Add />} onClick={addField} sx={{ alignSelf: 'flex-start' }}>
@@ -386,6 +465,8 @@ function CampaignWizard({ botId, groupId, onClose, onCreated }) {
               value={form.max_participants} onChange={(e) => set('max_participants', e.target.value)} inputProps={{ min: 1 }} />
             <FormControlLabel control={<Switch checked={form.one_per_user} onChange={(e) => set('one_per_user', e.target.checked)} />}
               label="One submission per user" />
+            <FormControlLabel control={<Switch checked={form.allow_resubmit} onChange={(e) => set('allow_resubmit', e.target.checked)} />}
+              label="Allow resubmission after rejection" />
             <FormControlLabel control={<Switch checked={form.pin_message} onChange={(e) => set('pin_message', e.target.checked)} />}
               label="Pin the group announcement" />
             <FormControlLabel control={<Switch checked={form.publishNow} onChange={(e) => set('publishNow', e.target.checked)} />}
@@ -413,6 +494,8 @@ function CampaignManageDialog({ botId, groupId, campaignId, onClose, onChanged }
   const [subs, setSubs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [winners, setWinners] = useState([]);
+  const [rejectFor, setRejectFor] = useState(null);  // submission pending a reject reason
+  const [rejectReason, setRejectReason] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -433,16 +516,21 @@ function CampaignManageDialog({ botId, groupId, campaignId, onClose, onChanged }
 
   useEffect(() => { load(); }, [load]);
 
-  const review = async (subId, action) => {
+  const review = async (subId, action, reason) => {
     try {
-      await engagement.reviewSubmission(botId, groupId, campaignId, subId, { action });
+      await engagement.reviewSubmission(botId, groupId, campaignId, subId, { action, reason });
       toast.success(action === 'approve' ? 'Approved' : 'Rejected');
+      setRejectFor(null);
+      setRejectReason('');
       load();
       onChanged?.();
     } catch (e) {
       toast.error(e.response?.data?.error || 'Failed');
     }
   };
+
+  const fieldMap = (campaign?.custom_fields || []).reduce((m, f) => { m[f.key] = f; return m; }, {});
+  const FIELD_TYPE_LABEL = FIELD_TYPES.reduce((m, t) => { m[t.value] = t.label; return m; }, {});
 
   const exportCsv = async () => {
     try {
@@ -475,14 +563,21 @@ function CampaignManageDialog({ botId, groupId, campaignId, onClose, onChanged }
   };
 
   const renderPayload = (s) => {
-    const entries = Object.entries(s.payload || {});
+    const entries = Object.entries(s.payload || {}).filter(([, v]) => v !== '' && v != null && v !== '[screenshot]');
     if (entries.length === 0 && !s.file_id) return <Typography variant="caption" color="text.disabled">—</Typography>;
     return (
       <Box>
-        {entries.map(([k, v]) => (
-          <Typography key={k} variant="caption" display="block"><strong>{k}:</strong> {String(v)}</Typography>
-        ))}
-        {s.file_id && <Typography variant="caption" color="text.secondary">📎 file attached</Typography>}
+        {entries.map(([k, v]) => {
+          const f = fieldMap[k];
+          const typeLabel = f ? (FIELD_TYPE_LABEL[f.field_type] || f.field_type) : null;
+          const label = f ? f.label : k;
+          return (
+            <Typography key={k} variant="caption" display="block">
+              <strong>{label}{typeLabel ? ` (${typeLabel})` : ''}:</strong> {String(v)}
+            </Typography>
+          );
+        })}
+        {s.file_id && <Typography variant="caption" color="text.secondary">📎 screenshot attached</Typography>}
       </Box>
     );
   };
@@ -518,6 +613,33 @@ function CampaignManageDialog({ botId, groupId, campaignId, onClose, onChanged }
               </Alert>
             )}
 
+            {campaign.status === 'active' && campaign.post_status !== 'posted' && (
+              <Alert
+                severity={campaign.post_status === 'failed' ? 'error' : 'warning'}
+                sx={{ mb: 2 }}
+                action={
+                  <Button color="inherit" size="small" startIcon={<Send />} onClick={async () => {
+                    try {
+                      const res = await engagement.post(botId, groupId, campaignId);
+                      const ps = res.data.campaign?.post_status;
+                      if (ps === 'posted') toast.success('Posted to group'); else toast.error('Post failed — will retry');
+                      load(); onChanged?.();
+                    } catch (e) { toast.error(e.response?.data?.error || 'Failed to post'); }
+                  }}>Post to group</Button>
+                }
+              >
+                {campaign.post_status === 'failed'
+                  ? `Group post failed: ${campaign.post_error || 'unknown error'}`
+                  : 'This campaign has not been posted to the group yet.'}
+              </Alert>
+            )}
+            {campaign.post_status === 'posted' && campaign.posted_at && (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                Posted to group {new Date(campaign.posted_at).toLocaleString()}
+                {campaign.telegram_message_id ? ` · msg #${campaign.telegram_message_id}` : ''}
+              </Typography>
+            )}
+
             <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>
               Submissions ({subs.length})
             </Typography>
@@ -540,29 +662,47 @@ function CampaignManageDialog({ botId, groupId, campaignId, onClose, onChanged }
                       <TableRow key={s.id} hover>
                         <TableCell>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                            <Typography variant="body2">{s.telegram_username ? `@${s.telegram_username}` : s.telegram_user_id}</Typography>
+                            <Typography variant="body2">{s.telegram_username ? `@${s.telegram_username}` : `User ${s.telegram_user_id}`}</Typography>
                             {s.flagged && (
                               <Tooltip title={s.flag_reason || 'Flagged for review'}>
                                 <Chip size="small" color="warning" label="⚠ dup" />
                               </Tooltip>
                             )}
                           </Box>
+                          <Typography variant="caption" color="text.secondary">ID: {s.telegram_user_id}</Typography>
                         </TableCell>
                         <TableCell>{renderPayload(s)}</TableCell>
                         <TableCell>
                           <Chip size="small" label={s.status}
                             color={s.status === 'verified' ? 'success' : s.status === 'rejected' ? 'error' : 'warning'} />
-                        </TableCell>
-                        <TableCell><Typography variant="caption">{new Date(s.created_at).toLocaleDateString()}</Typography></TableCell>
-                        <TableCell align="right">
-                          {s.status === 'pending' ? (
-                            <>
-                              <Tooltip title="Approve"><IconButton size="small" color="success" onClick={() => review(s.id, 'approve')}><CheckCircle fontSize="small" /></IconButton></Tooltip>
-                              <Tooltip title="Reject"><IconButton size="small" color="error" onClick={() => review(s.id, 'reject')}><Cancel fontSize="small" /></IconButton></Tooltip>
-                            </>
-                          ) : (
-                            <Typography variant="caption" color="text.disabled">{s.reviewed_at ? 'reviewed' : '—'}</Typography>
+                          {s.rewarded && <Typography variant="caption" display="block" color="success.main">+{campaign.reward_xp} XP</Typography>}
+                          {s.reviewed_at && (
+                            <Typography variant="caption" display="block" color="text.secondary">
+                              by {s.reviewed_by || '—'}
+                            </Typography>
                           )}
+                          {s.status === 'rejected' && s.review_reason && (
+                            <Typography variant="caption" display="block" color="error.main">{s.review_reason}</Typography>
+                          )}
+                          {s.notify_status === 'sent' && <Typography variant="caption" display="block" color="text.secondary">🔔 user notified</Typography>}
+                          {s.notify_status === 'failed' && (
+                            <Tooltip title={s.notify_error || 'User blocked/never started the bot'}>
+                              <Typography variant="caption" display="block" color="warning.main">🔕 notify failed</Typography>
+                            </Tooltip>
+                          )}
+                        </TableCell>
+                        <TableCell><Typography variant="caption" sx={{ whiteSpace: 'nowrap' }}>{new Date(s.created_at).toLocaleString()}</Typography></TableCell>
+                        <TableCell align="right">
+                          <Tooltip title={s.status === 'verified' ? 'Approved' : 'Approve'}>
+                            <span>
+                              <IconButton size="small" color="success" disabled={s.status === 'verified'} onClick={() => review(s.id, 'approve')}><CheckCircle fontSize="small" /></IconButton>
+                            </span>
+                          </Tooltip>
+                          <Tooltip title={s.status === 'rejected' ? 'Rejected' : 'Reject'}>
+                            <span>
+                              <IconButton size="small" color="error" disabled={s.status === 'rejected'} onClick={() => { setRejectFor(s); setRejectReason(s.review_reason || ''); }}><Cancel fontSize="small" /></IconButton>
+                            </span>
+                          </Tooltip>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -576,6 +716,24 @@ function CampaignManageDialog({ botId, groupId, campaignId, onClose, onChanged }
       <DialogActions>
         <Button onClick={onClose}>Close</Button>
       </DialogActions>
+
+      <Dialog open={!!rejectFor} onClose={() => setRejectFor(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Reject submission</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            The participant is notified with this reason (if they’ve started the bot). No XP is credited.
+          </Typography>
+          <TextField
+            autoFocus fullWidth multiline minRows={2} label="Reason (optional)"
+            value={rejectReason} onChange={(e) => setRejectReason(e.target.value)}
+            placeholder="e.g. UID does not match — please resend"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRejectFor(null)}>Cancel</Button>
+          <Button color="error" variant="contained" onClick={() => review(rejectFor.id, 'reject', rejectReason)}>Reject</Button>
+        </DialogActions>
+      </Dialog>
     </Dialog>
   );
 }

@@ -458,6 +458,11 @@ export const engagement = {
   get: (botId, groupId, id) => api.get(`${campaignBase(botId, groupId)}/${id}`),
   create: (botId, groupId, data) => api.post(campaignBase(botId, groupId), data),
   update: (botId, groupId, id, data) => api.patch(`${campaignBase(botId, groupId)}/${id}`, data),
+  post: (botId, groupId, id) => api.post(`${campaignBase(botId, groupId)}/${id}/post`),
+  memberSubmissions: (botId, groupId, tgUserId) =>
+    botId === 'official'
+      ? api.get(`/api/telegram-groups/${groupId}/member-submissions/${tgUserId}`)
+      : api.get(`/api/bots/${botId}/groups/${groupId}/member-submissions/${tgUserId}`),
   listSubmissions: (botId, groupId, id, params) =>
     api.get(`${campaignBase(botId, groupId)}/${id}/submissions`, { params }),
   reviewSubmission: (botId, groupId, id, subId, data) =>

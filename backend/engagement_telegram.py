@@ -147,15 +147,44 @@ def _resolve_target(campaign):
     return instance.application.bot, instance.loop, chat_id, username
 
 
+def _record_post_result(campaign, *, ok, error=None, message_id=None):
+    """Persist the group-post outcome so the dashboard can show Posted / Failed
+    and offer a retry. Best-effort; never raises."""
+    from .models import db
+    from datetime import datetime as _dt
+    try:
+        if ok:
+            campaign.post_status = "posted"
+            campaign.post_error = None
+            campaign.posted_at = _dt.utcnow()
+            if message_id is not None:
+                campaign.telegram_message_id = message_id
+        else:
+            campaign.post_status = "failed"
+            campaign.post_error = (str(error) or "Unknown error")[:1000]
+        db.session.commit()
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+
+
 def publish_campaign(campaign):
     """Post the campaign to its Telegram group and store telegram_message_id.
-    Returns True on success. Never raises (best-effort)."""
+    Returns True on success. Never raises (best-effort). Records post_status so
+    the admin can see Posted / Failed and retry from the dashboard."""
     from .models import db
 
     try:
         bot, loop, chat_id, username = _resolve_target(campaign)
         if not bot or not loop:
             logger.info("publish_campaign: bot offline for campaign %s", campaign.id)
+            _record_post_result(
+                campaign, ok=False,
+                error="Bot is offline — the group post will be retried automatically, "
+                      "or use “Post to group” to retry now.",
+            )
             return False
 
         text, keyboard = build_campaign_message(campaign, username)
@@ -173,8 +202,7 @@ def publish_campaign(campaign):
             bot.send_message(**kwargs), loop
         ).result(timeout=15)
 
-        campaign.telegram_message_id = sent.message_id
-        db.session.commit()
+        _record_post_result(campaign, ok=True, message_id=sent.message_id)
 
         if campaign.pin_message:
             try:
@@ -189,12 +217,13 @@ def publish_campaign(campaign):
                 logger.warning("publish_campaign pin failed for %s: %s", campaign.id, e)
 
         return True
-    except Exception:
+    except Exception as exc:
         logger.exception("publish_campaign failed for campaign %s", getattr(campaign, "id", "?"))
         try:
             db.session.rollback()
         except Exception:
             pass
+        _record_post_result(campaign, ok=False, error=exc)
         return False
 
 
@@ -230,6 +259,72 @@ def close_campaign_post(campaign):
         return True
     except Exception:
         logger.exception("close_campaign_post failed for %s", getattr(campaign, "id", "?"))
+        return False
+
+
+def notify_submission_review(campaign, submission, *, approved, reason=None, allow_resubmit=False):
+    """DM the participant the outcome of an admin review. Records the result on
+    the submission (notify_status / notify_error). Best-effort: never raises.
+
+    The user must have started the relevant bot in private for the DM to land;
+    if they blocked it or never started it, we store the failure so the admin can
+    see it in the panel."""
+    from .models import db
+
+    def _persist(status, error=None):
+        try:
+            submission.notify_status = status
+            submission.notify_error = (str(error)[:255] if error else None)
+            db.session.commit()
+        except Exception:
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
+
+    try:
+        bot, loop, _chat_id, _username = _resolve_target(campaign)
+        if not bot or not loop:
+            _persist("failed", "Bot offline")
+            return False
+
+        if approved:
+            credited = campaign.reward_xp and getattr(submission, "rewarded", False)
+            xp_line = f"\n+{campaign.reward_xp} XP has been credited to your account." if credited else ""
+            giveaway_line = ""
+            if (campaign.reward_label or campaign.type == "giveaway"):
+                giveaway_line = "\nYour entry has been submitted for the giveaway."
+            text = (
+                f"✅ Your task <b>{html.escape(campaign.title or 'submission')}</b> has been approved."
+                f"{xp_line}{giveaway_line}"
+            )
+        else:
+            reason_line = f"\nReason: {html.escape(str(reason))}" if reason else ""
+            retry_line = "\nPlease submit the correct proof to try again." if allow_resubmit else ""
+            text = (
+                f"❌ Your submission for <b>{html.escape(campaign.title or 'this task')}</b> was rejected."
+                f"{reason_line}{retry_line}"
+            )
+
+        try:
+            user_chat_id = int(submission.telegram_user_id)
+        except (TypeError, ValueError):
+            user_chat_id = submission.telegram_user_id
+
+        asyncio.run_coroutine_threadsafe(
+            bot.send_message(
+                chat_id=user_chat_id, text=text,
+                parse_mode="HTML", disable_web_page_preview=True,
+            ),
+            loop,
+        ).result(timeout=10)
+        _persist("sent")
+        return True
+    except Exception as exc:
+        # Most common: "bot can't initiate conversation with a user" / "blocked".
+        logger.info("notify_submission_review DM failed for sub %s: %s",
+                    getattr(submission, "id", "?"), exc)
+        _persist("failed", exc)
         return False
 
 

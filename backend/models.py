@@ -3237,6 +3237,14 @@ class EngagementCampaign(db.Model):
     telegram_message_id = db.Column(db.BigInteger, nullable=True)
     message_thread_id = db.Column(db.Integer, nullable=True)  # forum topic, if published into one
 
+    # Group-post delivery tracking (so the admin can see Posted / Failed and retry).
+    #   none   → never attempted (e.g. still a draft)
+    #   posted → successfully sent to the group
+    #   failed → last attempt errored (see post_error)
+    post_status = db.Column(db.String(16), nullable=False, default="none")
+    post_error = db.Column(db.Text, nullable=True)
+    posted_at = db.Column(db.DateTime, nullable=True)
+
     # Flexible bag: verification target (e.g. channel @username for TG-join),
     # winner selections, branding overrides, etc.
     settings = db.Column(db.JSON, nullable=False, default=dict)
@@ -3287,6 +3295,9 @@ class EngagementCampaign(db.Model):
             "pin_message": self.pin_message,
             "telegram_message_id": self.telegram_message_id,
             "message_thread_id": self.message_thread_id,
+            "post_status": self.post_status or "none",
+            "post_error": self.post_error,
+            "posted_at": self.posted_at.isoformat() if self.posted_at else None,
             "settings": self.settings or {},
             "created_at": self.created_at.isoformat(),
         }
@@ -3315,6 +3326,10 @@ class EngagementCustomField(db.Model):
     field_type = db.Column(db.String(20), nullable=False, default="text")  # CAMPAIGN_FIELD_TYPES
     required = db.Column(db.Boolean, nullable=False, default=True)
     order = db.Column(db.Integer, nullable=False, default=0)
+    # Optional example / format hint shown to the user when asking for this proof
+    # (e.g. "Example: 123456789 or ABC123"). Structure already supports making
+    # this required-with-pattern later.
+    example = db.Column(db.String(255), nullable=True)
 
     def to_dict(self):
         return {
@@ -3325,6 +3340,7 @@ class EngagementCustomField(db.Model):
             "field_type": self.field_type,
             "required": self.required,
             "order": self.order,
+            "example": self.example,
         }
 
 
@@ -3359,6 +3375,11 @@ class EngagementSubmission(db.Model):
     flagged = db.Column(db.Boolean, nullable=False, default=False)
     flag_reason = db.Column(db.String(255), nullable=True)
 
+    # Result of the post-review DM we try to send the participant.
+    #   none → not attempted, sent → delivered, failed → user blocked / never started.
+    notify_status = db.Column(db.String(16), nullable=False, default="none")
+    notify_error = db.Column(db.String(255), nullable=True)
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
     reviewed_at = db.Column(db.DateTime, nullable=True)
 
@@ -3384,6 +3405,8 @@ class EngagementSubmission(db.Model):
             "rewarded": self.rewarded,
             "flagged": self.flagged,
             "flag_reason": self.flag_reason,
+            "notify_status": self.notify_status or "none",
+            "notify_error": self.notify_error,
             "created_at": self.created_at.isoformat(),
             "reviewed_at": self.reviewed_at.isoformat() if self.reviewed_at else None,
         }

@@ -48,6 +48,72 @@ async def verify_telegram_join(bot, chat_ref, user_id):
         return False
 
 
+# Human labels for platforms, used in field-level error messages.
+_PLATFORM_LABEL = {
+    "x": "Twitter/X", "youtube": "YouTube", "telegram": "Telegram",
+    "instagram": "Instagram", "facebook": "Facebook",
+}
+
+_URL_RE = re.compile(r"^https?://", re.I)
+_UID_RE = re.compile(r"^[A-Za-z0-9._-]{3,64}$")
+_USERNAME_RE = re.compile(r"^@?[A-Za-z0-9._]{2,64}$")
+_WALLET_RE = re.compile(r"^(0x[a-fA-F0-9]{40}|[A-Za-z0-9]{26,64})$")
+_TXHASH_RE = re.compile(r"^(0x)?[A-Fa-f0-9]{40,128}$")
+
+
+def _looks_like_url(value):
+    return bool(_URL_RE.match((value or "").strip()))
+
+
+def validate_field_value(field_type, value, *, platform=None):
+    """Validate a single proof value by its declared type. Returns
+    (ok, normalized_value, error_message). Used by BOTH the bot DM flow and the
+    Mini App API so submissions are validated identically everywhere.
+
+    Screenshots are validated separately (a photo upload), not here.
+    """
+    v = (value or "").strip()
+    if not v:
+        return False, v, "Please provide a value."
+
+    if field_type == "url":
+        ok, reason = validate_link(v, platform)
+        if not ok:
+            return False, v, reason
+        return True, v, None
+
+    if field_type == "uid":
+        if _looks_like_url(v):
+            return False, v, "Please submit your exchange UID, not a link."
+        if not _UID_RE.match(v):
+            return False, v, "That doesn’t look like a valid UID. Send the numbers/letters only (e.g. 123456789)."
+        return True, v, None
+
+    if field_type == "wallet":
+        if _looks_like_url(v) or " " in v:
+            return False, v, "Please submit a valid wallet address (no links or spaces)."
+        if not _WALLET_RE.match(v):
+            return False, v, "That doesn’t look like a valid wallet address. Double-check and resend."
+        return True, v, None
+
+    if field_type == "tx_hash":
+        if _looks_like_url(v) or " " in v:
+            return False, v, "Please submit a valid transaction hash."
+        if not _TXHASH_RE.match(v):
+            return False, v, "That doesn’t look like a valid transaction hash."
+        return True, v, None
+
+    if field_type == "username":
+        if _looks_like_url(v) or " " in v:
+            return False, v, "Please submit a username / handle, not a link."
+        if not _USERNAME_RE.match(v):
+            return False, v, "That doesn’t look like a valid username/handle."
+        return True, v.lstrip("@"), None  # normalize: strip leading @
+
+    # text and any unknown type → accept as-is.
+    return True, v, None
+
+
 def validate_link(url, platform=None):
     """Shape + platform-host validation. Returns (ok, reason)."""
     if not url or not re.match(r"^https?://", url.strip(), re.I):
@@ -55,7 +121,8 @@ def validate_link(url, platform=None):
     if platform and platform in _PLATFORM_HOSTS:
         host_ok = any(h in url.lower() for h in _PLATFORM_HOSTS[platform])
         if not host_ok:
-            return False, f"That doesn’t look like a {platform} link."
+            label = _PLATFORM_LABEL.get(platform, platform)
+            return False, f"Please submit a valid {label} URL."
     return True, None
 
 

@@ -725,6 +725,37 @@ def init_db():
             "ALTER TABLE engagement_submissions ADD COLUMN IF NOT EXISTS flag_reason VARCHAR(255)",
             "engagement_submissions.flag_reason",
         )
+        # Group-post delivery tracking + proof examples + review-notify result.
+        _run_alter(
+            db.engine,
+            "ALTER TABLE engagement_campaigns ADD COLUMN IF NOT EXISTS post_status VARCHAR(16) NOT NULL DEFAULT 'none'",
+            "engagement_campaigns.post_status",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE engagement_campaigns ADD COLUMN IF NOT EXISTS post_error TEXT",
+            "engagement_campaigns.post_error",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE engagement_campaigns ADD COLUMN IF NOT EXISTS posted_at TIMESTAMP",
+            "engagement_campaigns.posted_at",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE engagement_custom_fields ADD COLUMN IF NOT EXISTS example VARCHAR(255)",
+            "engagement_custom_fields.example",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE engagement_submissions ADD COLUMN IF NOT EXISTS notify_status VARCHAR(16) NOT NULL DEFAULT 'none'",
+            "engagement_submissions.notify_status",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE engagement_submissions ADD COLUMN IF NOT EXISTS notify_error VARCHAR(255)",
+            "engagement_submissions.notify_error",
+        )
 
         # ── Backfill: create UserTelegramAccount rows for legacy User.telegram_user_id ──
         # Must run AFTER all users-table ALTER statements (including auth_provider)

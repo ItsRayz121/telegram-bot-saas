@@ -1032,7 +1032,7 @@ async def on_assistant_pick(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if Config.ECHO_BOT_TOKEN:
-        _echo_un = Config.ECHO_BOT_USERNAME or "Telegizer Echo"
+        _echo_un = (Config.ECHO_BOT_USERNAME or "TelegizerEcho_bot").lstrip("@")
         try:
             await query.edit_message_reply_markup(reply_markup=None)
             await context.bot.send_message(
@@ -1185,7 +1185,7 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Users in "menu" mode get a nudge to open the menu instead of spamming AI.
     if _get_dm_mode(user.id) != "assistant":
         if Config.ECHO_BOT_TOKEN:
-            _echo_un = Config.ECHO_BOT_USERNAME or "Telegizer Echo"
+            _echo_un = (Config.ECHO_BOT_USERNAME or "TelegizerEcho_bot").lstrip("@")
             await message.reply_text(
                 f"I handle community management.\n\n"
                 f"For AI assistance, message @{_echo_un}.",
@@ -1220,7 +1220,7 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # When Echo is configured Telegizer is community-management only.
             # Redirect any free-text AI conversation to Echo.
             if Config.ECHO_BOT_TOKEN:
-                _echo_un = Config.ECHO_BOT_USERNAME or "Telegizer Echo"
+                _echo_un = (Config.ECHO_BOT_USERNAME or "TelegizerEcho_bot").lstrip("@")
                 try:
                     await message.reply_text(
                         f"I handle community management for your groups.\n\n"
@@ -1493,7 +1493,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ── AI Assistant quick-action buttons ─────────────────────────────────────
     if data.startswith("ai:"):
         if Config.ECHO_BOT_TOKEN:
-            _echo_un = Config.ECHO_BOT_USERNAME or "Telegizer Echo"
+            _echo_un = (Config.ECHO_BOT_USERNAME or "TelegizerEcho_bot").lstrip("@")
             await query.edit_message_text(
                 f"AI features are handled by @{_echo_un}.",
                 reply_markup=InlineKeyboardMarkup([[
@@ -2032,7 +2032,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data == "menu:ai_assistant":
         if Config.ECHO_BOT_TOKEN:
-            _echo_un = Config.ECHO_BOT_USERNAME or "Telegizer Echo"
+            _echo_un = (Config.ECHO_BOT_USERNAME or "TelegizerEcho_bot").lstrip("@")
             await query.edit_message_text(
                 f"🧠 *AI Assistant*\n\n"
                 f"AI features are handled by @{_echo_un}.\n\n"

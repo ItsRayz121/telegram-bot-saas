@@ -55,7 +55,8 @@ def _promo_footer(campaign, lineage, user_id):
     except Exception:
         return ""
     _last_promo[user_id] = now
-    return f"\n\n✨ <i>Run tasks &amp; manage your own group with Telegizer</i> → {link}"
+    # Small, professional one-line footer — an embedded hyperlink, never a raw URL.
+    return f'\n\n<a href="{html.escape(link, quote=True)}">Manage your Telegram groups with Telegizer.</a>'
 
 
 # ── DB helpers (run inside flask_app.app_context) ─────────────────────────────
@@ -89,6 +90,47 @@ def _ordered_fields(campaign):
     return [f.to_dict() for f in campaign.custom_fields.all()]
 
 
+_FIELD_TYPE_LABEL = {
+    "text": "Text", "url": "URL / Link", "uid": "Exchange UID",
+    "wallet": "Wallet address", "screenshot": "Screenshot",
+    "tx_hash": "Transaction hash", "username": "Username / handle",
+}
+
+_STATUS_LINE = {
+    "pending": "🟡 Pending review",
+    "verified": "✅ Verified",
+    "rejected": "❌ Rejected",
+}
+
+
+def _render_my_submission(campaign, sub):
+    """A full, readable summary of the participant's own submission."""
+    fields = {f.key: f for f in campaign.custom_fields.all()}
+    lines = [
+        "📋 <b>Your Submission</b>",
+        f"Campaign: {html.escape(campaign.title or '')}",
+    ]
+    payload = sub.payload or {}
+    for key, value in payload.items():
+        if value in (None, "", "[screenshot]"):
+            continue
+        f = fields.get(key)
+        type_label = _FIELD_TYPE_LABEL.get(getattr(f, "field_type", None), None)
+        label = html.escape(getattr(f, "label", None) or key)
+        prefix = f"{label}"
+        if type_label:
+            prefix += f" ({type_label})"
+        lines.append(f"{prefix}: {html.escape(str(value))}")
+    if sub.file_id:
+        lines.append("Screenshot: 📎 uploaded")
+    lines.append(f"Status: {_STATUS_LINE.get(sub.status, sub.status)}")
+    if sub.created_at:
+        lines.append(f"Submitted: {sub.created_at.strftime('%Y-%m-%d %H:%M')} UTC")
+    if sub.status == "rejected" and sub.review_reason:
+        lines.append(f"Reason: {html.escape(sub.review_reason)}")
+    return "\n".join(lines)
+
+
 # ── Message helpers ───────────────────────────────────────────────────────────
 
 def _cancel_keyboard():
@@ -96,19 +138,28 @@ def _cancel_keyboard():
     return InlineKeyboardMarkup([[InlineKeyboardButton("✖ Cancel", callback_data="eng_cancel")]])
 
 
-async def _ask_field(message, field):
+async def _ask_field(message, field, *, error=None):
     label = html.escape(field["label"])
     hint = {
-        "screenshot": "📷 Send a screenshot (photo).",
-        "url": "🔗 Send the link.",
-        "wallet": "Send your wallet address.",
-        "uid": "Send your UID.",
-        "tx_hash": "Send the transaction hash.",
-        "username": "Send your username / handle.",
-    }.get(field["field_type"], "Type your answer.")
-    suffix = "" if field.get("required", True) else "  (optional — send “-” to skip)"
+        "screenshot": "📷 Please upload a screenshot (photo).",
+        "url": "🔗 Please submit the link.",
+        "wallet": "Please submit your wallet address.",
+        "uid": "Please submit your UID.",
+        "tx_hash": "Please submit the transaction hash.",
+        "username": "Please submit your username / handle.",
+    }.get(field["field_type"], "Please type your answer.")
+    lines = []
+    if error:
+        lines.append(f"⚠️ {html.escape(error)}")
+    lines.append(f"<b>{label}</b>")
+    lines.append(hint)
+    example = (field.get("example") or "").strip()
+    if example:
+        lines.append(f"<i>Example: {html.escape(example)}</i>")
+    if not field.get("required", True):
+        lines.append("(optional — send “-” to skip)")
     await message.reply_text(
-        f"<b>{label}</b>\n{hint}{suffix}",
+        "\n".join(lines),
         parse_mode="HTML",
         reply_markup=_cancel_keyboard(),
     )
@@ -143,15 +194,9 @@ async def on_start(update, context, payload, *, flask_app, lineage, bot_id=None)
             if not sub:
                 await msg.reply_text("You haven’t submitted to this campaign yet.")
             else:
-                status_line = {
-                    "pending": "🟡 Pending admin review",
-                    "verified": "✅ Verified",
-                    "rejected": "❌ Rejected",
-                }.get(sub.status, sub.status)
-                extra = f"\nReason: {html.escape(sub.review_reason)}" if sub.review_reason else ""
                 await msg.reply_text(
-                    f"<b>{html.escape(campaign.title)}</b>\nStatus: {status_line}{extra}",
-                    parse_mode="HTML",
+                    _render_my_submission(campaign, sub),
+                    parse_mode="HTML", disable_web_page_preview=True,
                 )
             return True
 
@@ -168,9 +213,15 @@ async def on_start(update, context, payload, *, flask_app, lineage, bot_id=None)
             return True
         _last_participate[_ck] = _now
 
-        if campaign.one_per_user and _existing_submission(campaign_id, user.id):
-            await msg.reply_text("You have already submitted for this task.")
-            return True
+        if campaign.one_per_user:
+            existing = _existing_submission(campaign_id, user.id)
+            allow_resubmit = bool((campaign.settings or {}).get("allow_resubmit"))
+            if existing and not (existing.status == "rejected" and allow_resubmit):
+                await msg.reply_text(
+                    _render_my_submission(campaign, existing),
+                    parse_mode="HTML", disable_web_page_preview=True,
+                )
+                return True
 
         # Optional membership gate (anti-farming): must be a real member first.
         if (campaign.settings or {}).get("require_membership") and campaign.verification_mode != "auto":
@@ -210,6 +261,7 @@ async def on_start(update, context, payload, *, flask_app, lineage, bot_id=None)
             "answers": {}, "file_id": None, "file_hash": None,
             "lineage": lineage, "bot_id": bot_id,
             "force_verified": force_verified,
+            "platform": campaign.platform,
         }
         intro = f"🚀 <b>{title}</b>\nLet’s collect your submission. {len(fields)} step(s)."
         await msg.reply_text(intro, parse_mode="HTML")
@@ -274,15 +326,20 @@ async def on_private(update, context, *, flask_app, lineage, bot_id=None):
                 return True
     else:
         text = (msg.text or "").strip()
-        if not text and not required:
-            value = ""
-        elif text == "-" and not required:
+        if (not text or text == "-") and not required:
             value = ""
         elif not text:
             await _ask_field(msg, field)
             return True
         else:
-            value = text
+            # Validate by field type (reject UID-as-link, wrong-platform URL, …).
+            from .engagement_verify import validate_field_value
+            platform = state.get("platform")
+            ok, normalized, err = validate_field_value(ftype, text, platform=platform)
+            if not ok:
+                await _ask_field(msg, field, error=err)
+                return True
+            value = normalized
 
     state["answers"][field["key"]] = value
     if file_id:
@@ -366,9 +423,10 @@ async def _finalize(message, context, flask_app, campaign_id, answers, file_id, 
     campaign, sub = result
     footer = _promo_footer(campaign, lineage, str(user.id))
     if sub.status == "verified":
-        bonus = f" (+{campaign.reward_xp} XP)" if campaign.reward_xp else ""
+        bonus = f" +{campaign.reward_xp} XP added." if campaign.reward_xp else ""
         await message.reply_text(f"✅ Verified!{bonus} Thanks for taking part.{footer}",
                                  parse_mode="HTML", disable_web_page_preview=True)
     else:
-        await message.reply_text(f"Submitted successfully ✅\nPending admin review.{footer}",
-                                 parse_mode="HTML", disable_web_page_preview=True)
+        await message.reply_text(
+            f"✅ Submission received. Your proof is now under review.{footer}",
+            parse_mode="HTML", disable_web_page_preview=True)

@@ -14,7 +14,7 @@ import {
 } from '@mui/icons-material';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { crm as crmApi } from '../services/api';
+import { crm as crmApi, engagement as engagementApi } from '../services/api';
 import api from '../services/api';
 
 const TAG_COLORS = {
@@ -63,6 +63,7 @@ function MemberDrawer({ member, groupId, botId, open, onClose, onUpdated }) {
   const [tags, setTags] = useState(member?.crm_tags || []);
   const [notes, setNotes] = useState(member?.crm_notes || '');
   const [saving, setSaving] = useState(false);
+  const [campaignSubs, setCampaignSubs] = useState(null);  // null = loading, [] = none
 
   useEffect(() => {
     if (member) {
@@ -70,6 +71,17 @@ function MemberDrawer({ member, groupId, botId, open, onClose, onUpdated }) {
       setNotes(member.crm_notes || '');
     }
   }, [member]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (member?.telegram_user_id) {
+      setCampaignSubs(null);
+      engagementApi.memberSubmissions(botId, groupId, member.telegram_user_id)
+        .then((res) => { if (!cancelled) setCampaignSubs(res.data.submissions || []); })
+        .catch(() => { if (!cancelled) setCampaignSubs([]); });
+    }
+    return () => { cancelled = true; };
+  }, [member, botId, groupId]);
 
   if (!member) return null;
 
@@ -199,6 +211,44 @@ function MemberDrawer({ member, groupId, botId, open, onClose, onUpdated }) {
       >
         Save Changes
       </Button>
+
+      {/* Campaign submission history */}
+      <Divider sx={{ my: 2.5 }} />
+      <Typography variant="subtitle2" fontWeight={700} mb={1.5}>
+        <EmojiEvents sx={{ fontSize: 14, mr: 0.5, verticalAlign: 'middle' }} />
+        Campaign Submissions
+      </Typography>
+      {campaignSubs === null ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}><CircularProgress size={20} /></Box>
+      ) : campaignSubs.length === 0 ? (
+        <Typography variant="caption" color="text.secondary">No campaign submissions yet.</Typography>
+      ) : (
+        <Stack spacing={1.5}>
+          {campaignSubs.map((s) => {
+            const proof = Object.entries(s.payload || {}).filter(([, v]) => v !== '' && v != null && v !== '[screenshot]');
+            const statusColor = s.status === 'verified' ? 'success' : s.status === 'rejected' ? 'error' : 'warning';
+            return (
+              <Box key={s.id} sx={{ bgcolor: 'rgba(255,255,255,0.04)', borderRadius: 1.5, p: 1.5 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1 }}>
+                  <Typography variant="body2" fontWeight={600}>{s.campaign_title || `Campaign #${s.campaign_id}`}</Typography>
+                  <Chip size="small" label={s.status} color={statusColor} />
+                </Box>
+                {proof.map(([k, v]) => (
+                  <Typography key={k} variant="caption" display="block" color="text.secondary">{k}: {String(v)}</Typography>
+                ))}
+                {s.file_id && <Typography variant="caption" display="block" color="text.secondary">📎 screenshot attached</Typography>}
+                <Typography variant="caption" display="block" color="text.disabled">
+                  {new Date(s.created_at).toLocaleString()}
+                  {s.rewarded ? ` · +${s.reward_xp} XP` : ''}
+                </Typography>
+                {s.status === 'rejected' && s.review_reason && (
+                  <Typography variant="caption" display="block" color="error.main">Reason: {s.review_reason}</Typography>
+                )}
+              </Box>
+            );
+          })}
+        </Stack>
+      )}
     </Drawer>
   );
 }
