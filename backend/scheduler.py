@@ -35,6 +35,10 @@ def make_celery(app=None):
                 "task": "backend.scheduler.check_raid_reminders",
                 "schedule": 300.0,
             },
+            "check-campaign-lifecycle": {
+                "task": "backend.scheduler.check_campaign_lifecycle",
+                "schedule": 300.0,
+            },
             "send-scheduled-polls": {
                 "task": "backend.scheduler.send_scheduled_polls",
                 "schedule": 60.0,
@@ -430,6 +434,60 @@ def check_raid_reminders():
 
     except Exception as e:
         logger.error(f"check_raid_reminders error: {e}")
+
+
+@celery.task(name="backend.scheduler.check_campaign_lifecycle")
+def check_campaign_lifecycle():
+    """Auto-close expired Engagement Campaigns and send 'ending soon' nudges.
+
+    The DB status flip is what actually enforces the closed window (the bot's
+    is_open check rejects new submissions); the Telegram post edit/summary is
+    best-effort and runs only where the bot loop is available.
+    """
+    try:
+        from .app import create_app
+        app = create_app()
+        with app.app_context():
+            from .models import db, EngagementCampaign
+            from . import engagement_telegram as et
+
+            now = datetime.utcnow()
+
+            # ── Auto-close expired campaigns ─────────────────────────────────
+            expired = EngagementCampaign.query.filter(
+                EngagementCampaign.status == "active",
+                EngagementCampaign.ends_at.isnot(None),
+                EngagementCampaign.ends_at <= now,
+            ).all()
+            for c in expired:
+                c.status = "closed"
+                db.session.commit()
+                try:
+                    et.close_campaign_post(c)
+                except Exception:
+                    logger.exception("close_campaign_post error for %s", c.id)
+
+            # ── 'Ending soon' reminder (once, when <1h remains) ──────────────
+            from datetime import timedelta
+            soon = EngagementCampaign.query.filter(
+                EngagementCampaign.status == "active",
+                EngagementCampaign.ends_at.isnot(None),
+                EngagementCampaign.ends_at > now,
+                EngagementCampaign.ends_at <= now + timedelta(hours=1),
+            ).all()
+            for c in soon:
+                if (c.settings or {}).get("_ending_reminded"):
+                    continue
+                try:
+                    et.send_campaign_reminder(c)
+                except Exception:
+                    logger.exception("send_campaign_reminder error for %s", c.id)
+                # Mark reminded (reassign dict so SQLAlchemy detects the change).
+                c.settings = {**(c.settings or {}), "_ending_reminded": True}
+                db.session.commit()
+
+    except Exception as e:
+        logger.error(f"check_campaign_lifecycle error: {e}")
 
 
 @celery.task(name="backend.scheduler.send_onboarding_emails")

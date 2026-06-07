@@ -187,3 +187,56 @@ def publish_campaign(campaign):
         except Exception:
             pass
         return False
+
+
+def close_campaign_post(campaign):
+    """On close: strip the participate buttons, unpin, and post a short results
+    summary. All best-effort (bot may be offline in this process)."""
+    try:
+        bot, loop, chat_id, _ = _resolve_target(campaign)
+        if not bot or not loop:
+            return False
+        if campaign.telegram_message_id:
+            for coro in (
+                bot.edit_message_reply_markup(chat_id=chat_id, message_id=campaign.telegram_message_id, reply_markup=None),
+                bot.unpin_chat_message(chat_id=chat_id, message_id=campaign.telegram_message_id),
+            ):
+                try:
+                    asyncio.run_coroutine_threadsafe(coro, loop).result(timeout=10)
+                except Exception:
+                    pass
+        verified = campaign.submissions.filter_by(status="verified").count()
+        total = campaign.submissions.count()
+        text = (
+            f"🏁 <b>{html.escape(campaign.title or 'Campaign')}</b> has closed.\n"
+            f"Submissions: {total}  •  Verified: {verified}"
+        )
+        kwargs = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
+        if campaign.message_thread_id:
+            kwargs["message_thread_id"] = campaign.message_thread_id
+        try:
+            asyncio.run_coroutine_threadsafe(bot.send_message(**kwargs), loop).result(timeout=10)
+        except Exception:
+            pass
+        return True
+    except Exception:
+        logger.exception("close_campaign_post failed for %s", getattr(campaign, "id", "?"))
+        return False
+
+
+def send_campaign_reminder(campaign):
+    """Post a short 'ending soon' nudge into the group. Best-effort."""
+    try:
+        bot, loop, chat_id, _ = _resolve_target(campaign)
+        if not bot or not loop:
+            return False
+        deadline = _deadline_text(campaign) or "soon"
+        text = f"⏳ <b>{html.escape(campaign.title or 'Campaign')}</b> ends {deadline} — last chance to take part!"
+        kwargs = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
+        if campaign.message_thread_id:
+            kwargs["message_thread_id"] = campaign.message_thread_id
+        asyncio.run_coroutine_threadsafe(bot.send_message(**kwargs), loop).result(timeout=10)
+        return True
+    except Exception:
+        logger.exception("send_campaign_reminder failed for %s", getattr(campaign, "id", "?"))
+        return False
