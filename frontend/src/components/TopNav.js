@@ -125,7 +125,7 @@ function _isAdmin() {
   try { return JSON.parse(localStorage.getItem('user') || '{}').is_admin === true; } catch { return false; }
 }
 
-export default function TopNav({ title, subtitle, actions, breadcrumb, hasSidebar = false }) {
+export default function TopNav({ title, subtitle, actions, breadcrumb, hasSidebar = false, hideReferrals = false }) {
   const navigate  = useNavigate();
   const { pathname } = useLocation();
   const isAdmin = _isAdmin();
@@ -191,23 +191,25 @@ export default function TopNav({ title, subtitle, actions, breadcrumb, hasSideba
           </Box>
         )}
 
-        {/* Referrals */}
-        <Tooltip title="Invite Friends — Earn Free Pro" arrow>
-          <Button
-            size="small"
-            startIcon={<CardGiftcard sx={{ fontSize: '15px !important' }} />}
-            onClick={() => navigate('/referrals')}
-            variant={pathname === '/referrals' ? 'contained' : 'outlined'}
-            color="primary"
-            sx={{
-              px: 1.5, py: 0.4, fontSize: '0.78rem', borderRadius: 1.5,
-              minWidth: 0, display: { xs: 'none', sm: 'flex' },
-              transition: 'all 0.18s ease',
-            }}
-          >
-            Referrals
-          </Button>
-        </Tooltip>
+        {/* Referrals — suppressed in contexts that opt out (e.g. Groups) to reduce header clutter */}
+        {!hideReferrals && (
+          <Tooltip title="Invite Friends — Earn Free Pro" arrow>
+            <Button
+              size="small"
+              startIcon={<CardGiftcard sx={{ fontSize: '15px !important' }} />}
+              onClick={() => navigate('/referrals')}
+              variant={pathname === '/referrals' ? 'contained' : 'outlined'}
+              color="primary"
+              sx={{
+                px: 1.5, py: 0.4, fontSize: '0.78rem', borderRadius: 1.5,
+                minWidth: 0, display: { xs: 'none', sm: 'flex' },
+                transition: 'all 0.18s ease',
+              }}
+            >
+              Referrals
+            </Button>
+          </Tooltip>
+        )}
 
         <SupportPopover />
 

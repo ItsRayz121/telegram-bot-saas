@@ -30,6 +30,16 @@ export default function AppLayout({ children }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
+  // Echo's co-pilot is hidden inside the Groups context (group management),
+  // where an AI assistant panel reads as unrelated clutter. It remains global
+  // everywhere else. Covers: the official groups list + per-group settings/
+  // analytics (/groups, /groups/*) and custom-bot group management
+  // (/bot/:id/group/*) — but NOT the bot settings page itself (/bot/:id).
+  const isGroupsContext =
+    pathname === '/groups' ||
+    pathname.startsWith('/groups/') ||
+    /^\/bot\/[^/]+\/group\//.test(pathname);
+
   // Auto-collapse on small desktop screens (md-lg range)
   React.useEffect(() => {
     if (!isMobile && isSmallDesktop) setSidebarCollapsed(true);
@@ -125,7 +135,7 @@ export default function AppLayout({ children }) {
         </Box>
 
         {/* Mobile: floating assistant button */}
-        {isMobile && <MobileAssistantFab />}
+        {isMobile && !isGroupsContext && <MobileAssistantFab />}
 
         {/* ── Mobile bottom navigation bar ── */}
         {isMobile && (
@@ -177,7 +187,7 @@ export default function AppLayout({ children }) {
       </Box>
 
       {/* ── Desktop: persistent right assistant sidebar ── */}
-      {!isMobile && <DesktopAssistantSidebar />}
+      {!isMobile && !isGroupsContext && <DesktopAssistantSidebar />}
 
     </Box>
     </>

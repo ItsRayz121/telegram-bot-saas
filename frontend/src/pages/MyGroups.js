@@ -230,7 +230,7 @@ export default function MyGroups() {
 
   return (
     <Box>
-      <TopNav hasSidebar
+      <TopNav hasSidebar hideReferrals
         breadcrumb={
           botTypeFilter === 'official'
             ? [
@@ -255,26 +255,18 @@ export default function MyGroups() {
                 Back to Dashboard
               </Button>
             ) : (
-              <>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  startIcon={<OpenInNew />}
-                  href={addToGroupUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Add Bot
-                </Button>
-                <Button
-                  variant="contained"
-                  size="small"
-                  startIcon={<Add />}
-                  onClick={() => setLinkOpen(true)}
-                >
-                  Link Group
-                </Button>
-              </>
+              // Link Group lives in the page toolbar below (header decluttered);
+              // Add Bot stays here as the single primary header action.
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<OpenInNew />}
+                href={addToGroupUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Add Bot
+              </Button>
             )}
           </Box>
         }
@@ -300,7 +292,7 @@ export default function MyGroups() {
           </Alert>
         )}
 
-        {/* Compact toolbar row: refresh + collapsible guide */}
+        {/* Compact toolbar row: refresh + collapsible guide + Link Group */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
           <IconButton size="small" onClick={load} disabled={loading}>
             <Refresh fontSize="small" />
@@ -315,6 +307,17 @@ export default function MyGroups() {
           >
             How to link a group?
           </Button>
+          {botTypeFilter !== 'official' && (
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<Add fontSize="small" />}
+              onClick={() => setLinkOpen(true)}
+              sx={{ ml: 'auto' }}
+            >
+              Link Group
+            </Button>
+          )}
         </Box>
 
         {/* Collapsible guide */}

@@ -9,16 +9,16 @@ import {
 } from '@mui/material';
 import {
   Add, Delete, MoreVert, Download, EmojiEvents, Campaign as CampaignIcon,
-  CheckCircle, Cancel, Visibility, Send, Replay,
+  CheckCircle, Cancel, Visibility, Send, Replay, ArrowDropDown,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { engagement } from '../services/api';
 
 const TYPES = [
-  { value: 'proof_collection',  label: 'Proof Collection',   help: 'Collect UID, wallet, referral link, screenshot or custom fields.' },
-  { value: 'content_submission', label: 'Content Submission', help: 'Users submit a link (YouTube / X / Telegram / blog) for review.' },
-  { value: 'social_task',       label: 'Social Task',         help: 'Like / repost / follow / subscribe / join a channel.' },
-  { value: 'giveaway',          label: 'Giveaway',            help: 'Entry on completion of the task.' },
+  { value: 'social_task',       label: 'Social Task',         emoji: '📢', chip: 'Social',   help: 'Like / repost / follow / subscribe / join a channel.' },
+  { value: 'proof_collection',  label: 'Proof Collection',   emoji: '📋', chip: 'Proof',    help: 'Collect UID, wallet, referral link, screenshot or custom fields.' },
+  { value: 'content_submission', label: 'Content Submission', emoji: '📝', chip: 'Content',  help: 'Users submit a link (YouTube / X / Telegram / blog) for review.' },
+  { value: 'giveaway',          label: 'Giveaway',            emoji: '🎁', chip: 'Giveaway', help: 'Entry on completion of the task.' },
 ];
 const PLATFORMS = [
   { value: '', label: '—' },
@@ -87,12 +87,16 @@ const EXAMPLE_PLACEHOLDER = {
   username: '@username',
 };
 
-const WIZARD_STEPS = ['Type & Platform', 'Task & Proof', 'Schedule & Reward'];
+// Type is chosen up-front (via the Create ▾ menu), so the wizard no longer asks
+// for it — it opens straight on the task definition. Platform now lives in step 1.
+const WIZARD_STEPS = ['Task & Proof', 'Schedule & Reward'];
 
 export default function CampaignManager({ botId, groupId }) {
   const [campaigns, setCampaigns] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [createOpen, setCreateOpen] = useState(false);
+  const [createType, setCreateType] = useState(null);   // non-null => wizard open, pre-set to this type
+  const [createAnchor, setCreateAnchor] = useState(null); // Create ▾ menu anchor
+  const [typeFilter, setTypeFilter] = useState('all');    // list filter chip
   const [manageId, setManageId] = useState(null);
 
   const load = useCallback(async () => {
@@ -117,6 +121,19 @@ export default function CampaignManager({ botId, groupId }) {
     return acc;
   }, { total: 0, active: 0, submissions: 0, pending: 0 });
 
+  // Per-type counts for the filter chips (total + active).
+  const byType = TYPES.reduce((m, t) => {
+    const list = campaigns.filter((c) => c.type === t.value);
+    m[t.value] = { total: list.length, active: list.filter((c) => c.status === 'active').length };
+    return m;
+  }, {});
+
+  const visibleCampaigns = typeFilter === 'all'
+    ? campaigns
+    : campaigns.filter((c) => c.type === typeFilter);
+
+  const openCreate = (type) => { setCreateAnchor(null); setCreateType(type); };
+
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
@@ -126,10 +143,42 @@ export default function CampaignManager({ botId, groupId }) {
             Run social tasks, content submissions and proof collection. Members participate from Telegram.
           </Typography>
         </Box>
-        <Button variant="contained" startIcon={<Add />} onClick={() => setCreateOpen(true)}>
-          Create Campaign
+        <Button variant="contained" startIcon={<Add />} endIcon={<ArrowDropDown />}
+          onClick={(e) => setCreateAnchor(e.currentTarget)}>
+          Create
         </Button>
+        <Menu anchorEl={createAnchor} open={!!createAnchor} onClose={() => setCreateAnchor(null)}>
+          {TYPES.map((t) => (
+            <MenuItem key={t.value} onClick={() => openCreate(t.value)}>
+              <Box component="span" sx={{ mr: 1 }}>{t.emoji}</Box> {t.label}
+            </MenuItem>
+          ))}
+        </Menu>
       </Box>
+
+      {/* Type filter chips — one click to scope the list, no drill-down.
+          Hidden until at least one campaign exists (matches the stats grid). */}
+      {campaigns.length > 0 && (
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+          <Chip
+            label={`All (${totals.total})`}
+            color={typeFilter === 'all' ? 'primary' : 'default'}
+            variant={typeFilter === 'all' ? 'filled' : 'outlined'}
+            onClick={() => setTypeFilter('all')}
+            size="small"
+          />
+          {TYPES.map((t) => (
+            <Chip
+              key={t.value}
+              label={`${t.emoji} ${t.chip} (${byType[t.value]?.total || 0})`}
+              color={typeFilter === t.value ? 'primary' : 'default'}
+              variant={typeFilter === t.value ? 'filled' : 'outlined'}
+              onClick={() => setTypeFilter(t.value)}
+              size="small"
+            />
+          ))}
+        </Box>
+      )}
 
       <Alert severity="info" sx={{ mb: 2 }}>
         Free plan: 1 active campaign, manual/honor proof, Telegram-join auto-verify.
@@ -162,7 +211,23 @@ export default function CampaignManager({ botId, groupId }) {
         <Card>
           <CardContent sx={{ textAlign: 'center', py: 4 }}>
             <CampaignIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
-            <Typography color="text.secondary">No campaigns yet. Create one to engage your community.</Typography>
+            <Typography color="text.secondary" sx={{ mb: 2 }}>No campaigns yet. Create one to engage your community.</Typography>
+            <Button variant="contained" startIcon={<Add />} endIcon={<ArrowDropDown />}
+              onClick={(e) => setCreateAnchor(e.currentTarget)}>
+              Create
+            </Button>
+          </CardContent>
+        </Card>
+      ) : visibleCampaigns.length === 0 ? (
+        <Card>
+          <CardContent sx={{ textAlign: 'center', py: 4 }}>
+            <CampaignIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
+            <Typography color="text.secondary" sx={{ mb: 2 }}>
+              No {(TYPES.find((t) => t.value === typeFilter) || {}).label} campaigns yet.
+            </Typography>
+            <Button variant="contained" startIcon={<Add />} onClick={() => openCreate(typeFilter)}>
+              Create {(TYPES.find((t) => t.value === typeFilter) || {}).label}
+            </Button>
           </CardContent>
         </Card>
       ) : (
@@ -182,7 +247,7 @@ export default function CampaignManager({ botId, groupId }) {
               </TableRow>
             </TableHead>
             <TableBody>
-              {campaigns.map((c) => (
+              {visibleCampaigns.map((c) => (
                 <CampaignRow
                   key={c.id} c={c} botId={botId} groupId={groupId}
                   onChanged={load} onManage={() => setManageId(c.id)}
@@ -193,11 +258,11 @@ export default function CampaignManager({ botId, groupId }) {
         </TableContainer>
       )}
 
-      {createOpen && (
+      {createType && (
         <CampaignWizard
-          botId={botId} groupId={groupId}
-          onClose={() => setCreateOpen(false)}
-          onCreated={() => { setCreateOpen(false); load(); }}
+          botId={botId} groupId={groupId} initialType={createType}
+          onClose={() => setCreateType(null)}
+          onCreated={() => { setCreateType(null); load(); }}
         />
       )}
       {manageId != null && (
@@ -311,10 +376,12 @@ function CampaignRow({ c, botId, groupId, onChanged, onManage }) {
 
 // ── Create wizard ─────────────────────────────────────────────────────────────
 
-function CampaignWizard({ botId, groupId, onClose, onCreated }) {
+function CampaignWizard({ botId, groupId, initialType, onClose, onCreated }) {
   const [step, setStep] = useState(0);
-  const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [form, setForm] = useState({ ...EMPTY_FORM, type: initialType || EMPTY_FORM.type });
   const [saving, setSaving] = useState(false);
+
+  const typeMeta = TYPES.find((t) => t.value === form.type) || {};
 
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
 
@@ -323,13 +390,12 @@ function CampaignWizard({ botId, groupId, onClose, onCreated }) {
   const delField = (i) => set('custom_fields', form.custom_fields.filter((_, idx) => idx !== i));
 
   const canNext = () => {
-    if (step === 0) return !!form.type;
-    if (step === 1) return !!form.title.trim();
+    if (step === 0) return !!form.title.trim();
     return true;
   };
 
   const submit = async () => {
-    if (!form.title.trim()) { toast.error('Title is required'); setStep(1); return; }
+    if (!form.title.trim()) { toast.error('Title is required'); setStep(0); return; }
     setSaving(true);
     try {
       const payload = {
@@ -368,7 +434,10 @@ function CampaignWizard({ botId, groupId, onClose, onCreated }) {
 
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Create Campaign</DialogTitle>
+      <DialogTitle>
+        <Box component="span" sx={{ mr: 1 }}>{typeMeta.emoji}</Box>
+        Create {typeMeta.label || 'Campaign'}
+      </DialogTitle>
       <DialogContent>
         <Stepper activeStep={step} sx={{ mb: 3, mt: 1 }} alternativeLabel>
           {WIZARD_STEPS.map((s) => <Step key={s}><StepLabel>{s}</StepLabel></Step>)}
@@ -376,27 +445,16 @@ function CampaignWizard({ botId, groupId, onClose, onCreated }) {
 
         {step === 0 && (
           <Stack spacing={2}>
-            <FormControl fullWidth>
-              <InputLabel>Campaign Type</InputLabel>
-              <Select value={form.type} label="Campaign Type" onChange={(e) => set('type', e.target.value)}>
-                {TYPES.map((t) => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)}
-              </Select>
-            </FormControl>
-            <Typography variant="caption" color="text.secondary">
-              {(TYPES.find((t) => t.value === form.type) || {}).help}
-            </Typography>
+            {typeMeta.help && (
+              <Typography variant="caption" color="text.secondary">{typeMeta.help}</Typography>
+            )}
+            <TextField fullWidth label="Title" value={form.title} onChange={(e) => set('title', e.target.value)} />
             <FormControl fullWidth>
               <InputLabel>Platform</InputLabel>
               <Select value={form.platform} label="Platform" onChange={(e) => set('platform', e.target.value)}>
                 {PLATFORMS.map((p) => <MenuItem key={p.value} value={p.value}>{p.label}</MenuItem>)}
               </Select>
             </FormControl>
-          </Stack>
-        )}
-
-        {step === 1 && (
-          <Stack spacing={2}>
-            <TextField fullWidth label="Title" value={form.title} onChange={(e) => set('title', e.target.value)} />
             <TextField fullWidth multiline minRows={2} label="Instructions / Description"
               value={form.description} onChange={(e) => set('description', e.target.value)} />
             <TextField fullWidth label="Task Link (optional)" placeholder="https://x.com/..."
@@ -443,7 +501,7 @@ function CampaignWizard({ botId, groupId, onClose, onCreated }) {
           </Stack>
         )}
 
-        {step === 2 && (
+        {step === 1 && (
           <Stack spacing={2}>
             <FormControl fullWidth>
               <InputLabel>Deadline</InputLabel>
