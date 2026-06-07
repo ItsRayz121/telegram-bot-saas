@@ -175,6 +175,7 @@ function OwnKeyPanel({
         TabIndicatorProps={{ style: { height: 2 } }}
         variant="scrollable"
         scrollButtons="auto"
+        allowScrollButtonsMobile
       >
         {PROVIDERS.map((p, i) => (
           <Tab key={p.id} label={p.label} value={i} sx={{ fontSize: '0.8rem', minHeight: 36, py: 0 }} />

@@ -66,7 +66,7 @@ function RuleLogs({ ruleId, open }) {
       ) : logs.length === 0 ? (
         <Typography variant="caption" color="text.disabled">No forwarding activity yet.</Typography>
       ) : (
-        <TableContainer>
+        <TableContainer sx={{ overflowX: 'auto' }}>
           <Table size="small">
             <TableHead>
               <TableRow>

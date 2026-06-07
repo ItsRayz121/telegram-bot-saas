@@ -530,7 +530,7 @@ export default function ChannelDetail() {
             </Box>
           ) : (
             <>
-              <TableContainer component={Paper} elevation={0} sx={{ bgcolor: 'transparent' }}>
+              <TableContainer component={Paper} elevation={0} sx={{ bgcolor: 'transparent', overflowX: 'auto' }}>
                 <Table size="small">
                   <TableHead>
                     <TableRow>

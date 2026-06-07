@@ -1002,6 +1002,7 @@ export default function AssistantHub() {
         sx={{ mb: 3, borderBottom: '1px solid', borderColor: 'divider' }}
         variant="scrollable"
         scrollButtons="auto"
+        allowScrollButtonsMobile
       >
         <Tab label="Overview" icon={<Psychology fontSize="small" />} iconPosition="start" />
         <Tab label="Group Trends" icon={<TrendingUp fontSize="small" />} iconPosition="start" />

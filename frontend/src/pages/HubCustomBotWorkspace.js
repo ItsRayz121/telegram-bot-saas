@@ -100,7 +100,7 @@ export default function HubCustomBotWorkspace() {
           </Box>
         </Box>
         <Tabs value={activeTab} onChange={handleTabChange}
-          variant="scrollable" scrollButtons="auto"
+          variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile
           sx={{ minHeight: 38, '& .MuiTab-root': { minHeight: 38, fontSize: '0.8rem', py: 0, px: 1.5, textTransform: 'none' } }}>
           {TABS.map(t => <Tab key={t.value} label={t.label} value={t.value} />)}
         </Tabs>

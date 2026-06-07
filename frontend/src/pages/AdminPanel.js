@@ -2628,6 +2628,7 @@ export default function AdminPanel() {
             onChange={(_, v) => setActiveTab(v)}
             variant="scrollable"
             scrollButtons="auto"
+            allowScrollButtonsMobile
             sx={{ borderBottom: 1, borderColor: 'divider' }}
           >
             {TABS.map((t, i) => (

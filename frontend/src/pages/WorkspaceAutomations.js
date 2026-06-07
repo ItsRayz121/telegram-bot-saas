@@ -70,7 +70,7 @@ function ExecutionLog({ wfId, open }) {
       {loading ? <CircularProgress size={18} /> : execs.length === 0 ? (
         <Typography variant="caption" color="text.disabled">No executions yet.</Typography>
       ) : (
-        <TableContainer>
+        <TableContainer sx={{ overflowX: 'auto' }}>
           <Table size="small">
             <TableHead>
               <TableRow>
