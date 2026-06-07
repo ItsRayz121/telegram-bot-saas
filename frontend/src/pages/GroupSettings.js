@@ -836,8 +836,9 @@ export default function GroupSettings() {
           <IconButton edge="start" onClick={() => navigate(isOfficial ? '/groups' : `/bot/${botId}`)} sx={{ mr: 1 }}>
             <ArrowBack />
           </IconButton>
-          {/* Breadcrumb nav links */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mr: 1 }}>
+          {/* Breadcrumb nav links — hidden on mobile (back arrow handles the
+              "up" action there) to keep the header to a single compact row. */}
+          <Box sx={{ display: { xs: 'none', md: 'flex' }, alignItems: 'center', gap: 0.5, mr: 1 }}>
             <Button size="small" variant="text" onClick={() => navigate('/dashboard')} sx={{ fontSize: '0.75rem', px: 1, py: 0.25, minWidth: 0, color: 'text.secondary' }}>
               Dashboard
             </Button>
@@ -857,7 +858,7 @@ export default function GroupSettings() {
                 label={settingsData.timezone || 'UTC'}
                 size="small"
                 variant="outlined"
-                sx={{ mr: 1.5, fontSize: 11, color: 'inherit', borderColor: 'rgba(255,255,255,0.4)', cursor: 'default' }}
+                sx={{ mr: 1.5, fontSize: 11, color: 'inherit', borderColor: 'rgba(255,255,255,0.4)', cursor: 'default', display: { xs: 'none', sm: 'inline-flex' } }}
               />
             </Tooltip>
           )}
@@ -917,6 +918,7 @@ export default function GroupSettings() {
             onChange={(_, v) => setSubTab(v)}
             variant="scrollable"
             scrollButtons="auto"
+            allowScrollButtonsMobile
             sx={{ px: 2, minHeight: 38, '& .MuiTab-root': { minHeight: 38, py: 0 } }}
           >
             {currentCat.subTabs.map((label) => (
@@ -928,9 +930,9 @@ export default function GroupSettings() {
 
       <Box sx={{
         maxWidth: 900, mx: 'auto', p: { xs: 2, md: 3 },
-        // Clear the mobile bottom navigation bar (56px) + iPhone safe area so the
-        // last controls aren't hidden behind it now that the floating save bar is gone.
-        pb: { xs: 'calc(72px + env(safe-area-inset-bottom))', md: 3 },
+        // Clear the mobile bottom navigation bar + iPhone safe area so the last
+        // controls aren't hidden behind it (shared token, matches AppLayout).
+        pb: { xs: 'var(--bottom-nav-clearance)', md: 3 },
       }}>
 
         {/* ══════════════════════════════════════════════════════════
