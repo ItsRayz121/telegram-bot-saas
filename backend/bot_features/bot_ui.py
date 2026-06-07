@@ -21,6 +21,42 @@ from telegram import (
 _log = logging.getLogger("bot_ui")
 
 
+# ── Anonymous-admin detection (shared by official + custom bots) ──────────────
+# When a group admin has "Remain Anonymous" on, Telegram routes their messages
+# through @GroupAnonymousBot (user id 1087968824) and sets message.sender_chat to
+# the group itself. The bot CANNOT resolve which real admin sent it — so an admin
+# permission check via get_chat_member(chat, sender) fails and account linking /
+# DMing a code is impossible. Detect this case and ask them to post visibly.
+GROUP_ANONYMOUS_BOT_ID = 1087968824
+
+
+def is_anonymous_admin(update) -> bool:
+    """True when the message was sent by an anonymous admin of THIS group.
+
+    Canonical signal: message.sender_chat is the group itself (sender_chat.id ==
+    chat.id). Telegram only lets admins post anonymously, so this implies admin —
+    but the real user id is unknowable. Falls back to the @GroupAnonymousBot id.
+    """
+    chat = getattr(update, "effective_chat", None)
+    msg = getattr(update, "effective_message", None)
+    sender_chat = getattr(msg, "sender_chat", None) if msg is not None else None
+    if sender_chat is not None and chat is not None and sender_chat.id == chat.id:
+        return True
+    user = getattr(update, "effective_user", None)
+    return bool(user and user.id == GROUP_ANONYMOUS_BOT_ID)
+
+
+# HTML-formatted so both bots (official uses Markdown elsewhere, custom uses HTML)
+# can send it with parse_mode=HTML.
+ANON_ADMIN_LINKGROUP_HTML = (
+    "🕵️ <b>Anonymous admin detected.</b>\n\n"
+    "Please send /linkgroup as a <b>visible admin</b> so Telegizer can verify your "
+    "permissions.\n\n"
+    "Turn off <b>“Remain Anonymous”</b> in this group's admin settings, then try again.\n\n"
+    "<i>After linking, you can switch anonymous admin mode back on.</i>"
+)
+
+
 # ── Command sets, by Telegram scope ──────────────────────────────────────────
 # Telegram shows commands based on scope, so regular members and admins see
 # different menus automatically.

@@ -466,6 +466,14 @@ class BotInstance:
             )
             return
 
+        # Anonymous admins post via @GroupAnonymousBot, so their real identity (and
+        # admin rights) can't be verified and no code can be DMed — guide them to
+        # post visibly instead of showing the generic "only admins" error.
+        from .bot_features.bot_ui import is_anonymous_admin, ANON_ADMIN_LINKGROUP_HTML
+        if is_anonymous_admin(update):
+            await update.message.reply_text(ANON_ADMIN_LINKGROUP_HTML, parse_mode="HTML")
+            return
+
         try:
             cm = await context.bot.get_chat_member(chat.id, user.id)
             if cm.status not in ("creator", "administrator"):
