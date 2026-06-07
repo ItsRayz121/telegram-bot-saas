@@ -24,6 +24,7 @@ import KnowledgeBase from '../components/KnowledgeBase';
 import PollCreator from '../components/PollCreator';
 import WebhookManager from '../components/WebhookManager';
 import InviteLinks from '../components/InviteLinks';
+import CampaignManager from '../components/CampaignManager';
 import ForumTopicSelector from '../components/ForumTopicSelector';
 import TimezoneSelect from '../components/TimezoneSelect';
 import {
@@ -2503,6 +2504,11 @@ export default function GroupSettings() {
               onSave={handleSaveCmdRouting}
             />
           </>
+        )}
+
+        {/* COMMUNITY › Campaigns */}
+        {cat === 'community' && subTab === 2 && (
+          <CampaignManager botId={botId} groupId={groupId} />
         )}
 
         {/* ══════════════════════════════════════════════════════════

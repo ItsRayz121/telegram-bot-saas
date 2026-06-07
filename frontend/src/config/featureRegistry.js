@@ -47,6 +47,7 @@ export const FEATURE_TABS = [
     subTabs: [
       { label: 'Raids',        officialOnly: false },
       { label: 'Invite Links', officialOnly: false },
+      { label: 'Campaigns',    officialOnly: false },
     ],
   },
   {

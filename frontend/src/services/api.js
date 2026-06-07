@@ -445,6 +445,27 @@ export const invites = {
       : api.get(`/api/bots/${botId}/groups/${groupId}/invite-links/${linkId}/analytics`, { params }),
 };
 
+// Engagement Campaigns — lineage-switched like `invites`.
+// official → /api/telegram-groups/<groupId>/campaigns
+// custom   → /api/bots/<botId>/groups/<groupId>/campaigns
+const campaignBase = (botId, groupId) =>
+  botId === 'official'
+    ? `/api/telegram-groups/${groupId}/campaigns`
+    : `/api/bots/${botId}/groups/${groupId}/campaigns`;
+
+export const engagement = {
+  list: (botId, groupId, params) => api.get(campaignBase(botId, groupId), { params }),
+  get: (botId, groupId, id) => api.get(`${campaignBase(botId, groupId)}/${id}`),
+  create: (botId, groupId, data) => api.post(campaignBase(botId, groupId), data),
+  update: (botId, groupId, id, data) => api.patch(`${campaignBase(botId, groupId)}/${id}`, data),
+  listSubmissions: (botId, groupId, id, params) =>
+    api.get(`${campaignBase(botId, groupId)}/${id}/submissions`, { params }),
+  reviewSubmission: (botId, groupId, id, subId, data) =>
+    api.post(`${campaignBase(botId, groupId)}/${id}/submissions/${subId}/review`, data),
+  exportCsv: (botId, groupId, id) =>
+    api.get(`${campaignBase(botId, groupId)}/${id}/submissions/export`, { responseType: 'blob' }),
+};
+
 // Official groups: real AI-key endpoints via /api/telegram-groups
 export const apiKeys = {
   get: (botId, groupId) =>
