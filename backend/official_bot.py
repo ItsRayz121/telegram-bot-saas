@@ -5532,6 +5532,15 @@ async def on_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as exc:
         _log.warning("[OfficialBot] channel_post capture failed: %s", exc)
 
+    # Channel-as-source forwarding (Phase 2): a NEW channel post can be a
+    # forwarding source. Edits are view-count updates — never re-forward them.
+    if not is_edit:
+        try:
+            from .automation.forwarding_runtime import run_forwarding
+            await run_forwarding(flask_app, context.bot, channel_tg_id, msg, bot_type="official")
+        except Exception as exc:
+            _log.debug("[OfficialBot] channel forward failed: %s", exc)
+
 
 # ─── OfficialBotRunner ────────────────────────────────────────────────────────
 

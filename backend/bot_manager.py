@@ -2188,6 +2188,20 @@ class BotInstance:
             except Exception as exc:
                 logger.warning(f"handle_private_message: escalation reply error: {exc}")
 
+    async def handle_channel_post(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Channel-as-source forwarding (Phase 2) for custom bots — a new channel
+        post can be a forwarding source, mirroring the official bot."""
+        msg = update.channel_post
+        if not msg:
+            return
+        try:
+            from .automation.forwarding_runtime import run_forwarding
+            await run_forwarding(
+                self.app_context, context.bot, str(msg.chat.id), msg, bot_type="custom",
+            )
+        except Exception as exc:
+            logger.debug(f"channel_post forward (custom) failed: {exc}")
+
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not update.message or not update.effective_user:
             return
@@ -2993,6 +3007,7 @@ class BotInstance:
         )
         app.add_handler(MessageHandler(_GROUP_TYPES & ~filters.COMMAND, self.handle_message))
         app.add_handler(MessageHandler(filters.ChatType.PRIVATE & ~filters.COMMAND, self.handle_private_message))
+        app.add_handler(MessageHandler(filters.ChatType.CHANNEL & ~filters.COMMAND, self.handle_channel_post))
         app.add_handler(CallbackQueryHandler(self.handle_callback))
 
         await app.initialize()
