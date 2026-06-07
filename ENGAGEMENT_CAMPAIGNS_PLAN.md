@@ -1,6 +1,6 @@
 # Engagement Campaigns — Comprehensive Build Plan
 
-> Status: **MVP COMPLETE (Phases 0–8 shipped to main, 2026-06-07).** Phase 9 (Mini App) = optional V2, not built. Phase 10 verification done.
+> Status: **COMPLETE — ALL Phases 0–9 shipped to main, 2026-06-07.** Phase 10 verification done. Migrations auto-run on Railway deploy (Procfile `release: python -m backend.migrate`).
 > Created: 2026-06-07
 > Scope: Add a new "Engagement Campaigns" engine under the existing **Bot Settings → Group → Engagement** section, WITHOUT breaking existing Raids or Invite Links.
 
@@ -14,10 +14,12 @@
 - Phase 6 `4cbf723` — anti-fraud (dedup, flags, cooldown, membership gate, suspicious log)
 - Phase 7 `dfc1c0b` — lifecycle scheduler (auto-close + ending-soon + post close)
 - Phase 8 `4e0394a` — subtle official-only growth promo (capped, referral-attributed)
+- Phase 9 `e090cee` — Mini App participant pages + participant API (/task/:id, /tasks)
 
-## DEPLOY STEP (required before the feature is live)
-Run on Railway: `python -m backend.migrate` — creates the 3 tables + flag columns.
-Then the **Campaigns** tab appears under Bot Settings → Group → Engagement.
+## DEPLOY
+Migrations run automatically on Railway deploy (Procfile `release:` step). On the
+next deploy the 3 tables + flag columns are created and the **Campaigns** tab
+appears under Bot Settings → Group → Engagement. No manual step required.
 
 ## MANUAL TEST SCRIPT (Phase 10 — user to run)
 1. **Migrate**: run `python -m backend.migrate` on Railway; confirm "engagement_*" lines.
