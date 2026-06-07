@@ -2084,7 +2084,11 @@ class ForwardRule(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     owner_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
     rule_name = db.Column(db.String(200), nullable=False)
+    # Legacy single source/destination — kept readable for back-compat. The
+    # source(s)/destination(s) of record now live in the child tables below;
+    # these columns are backfilled and used as a fallback when no child rows exist.
     source_group_id = db.Column(db.String(255), nullable=False, index=True)
+    source_topic_id = db.Column(db.Integer, nullable=True)      # message_thread_id filter
     destination_id = db.Column(db.String(255), nullable=False)  # chat_id or @username
     keyword_filter = db.Column(db.String(1000), nullable=True)  # comma-separated; None = all
     match_type = db.Column(db.String(20), default="contains")   # contains / starts_with
@@ -2097,6 +2101,31 @@ class ForwardRule(db.Model):
 
     logs = db.relationship("ForwardLog", backref="rule", lazy="dynamic",
                            cascade="all, delete-orphan")
+    sources = db.relationship("ForwardSource", backref="rule", lazy="select",
+                              cascade="all, delete-orphan")
+    destinations = db.relationship("ForwardDestination", backref="rule", lazy="select",
+                                   cascade="all, delete-orphan")
+
+    def effective_sources(self):
+        """List of {chat_id, topic_id}. Falls back to the legacy single source
+        column when no ForwardSource rows exist (pre-migration rules)."""
+        rows = list(self.sources)
+        if rows:
+            return [{"chat_id": s.source_chat_id, "topic_id": s.source_topic_id} for s in rows]
+        return [{"chat_id": self.source_group_id, "topic_id": self.source_topic_id}]
+
+    def effective_destinations(self):
+        """List of {id, destination_id, topic_id, is_paused}. Falls back to the
+        legacy single destination column when no ForwardDestination rows exist."""
+        rows = list(self.destinations)
+        if rows:
+            return [
+                {"id": d.id, "destination_id": d.destination_id,
+                 "topic_id": d.topic_id, "is_paused": d.is_paused}
+                for d in rows
+            ]
+        return [{"id": None, "destination_id": self.destination_id,
+                 "topic_id": None, "is_paused": False}]
 
     def to_dict(self):
         return {
@@ -2104,6 +2133,7 @@ class ForwardRule(db.Model):
             "owner_user_id": self.owner_user_id,
             "rule_name": self.rule_name,
             "source_group_id": self.source_group_id,
+            "source_topic_id": self.source_topic_id,
             "destination_id": self.destination_id,
             "keyword_filter": self.keyword_filter,
             "match_type": self.match_type,
@@ -2113,6 +2143,11 @@ class ForwardRule(db.Model):
             "is_active": self.is_active,
             "forward_count": self.forward_count,
             "created_at": self.created_at.isoformat(),
+            "sources": self.effective_sources(),
+            "destinations": [
+                {**d, "forward_count": None} if d["id"] is None else d
+                for d in self.effective_destinations()
+            ],
         }
 
 
@@ -2127,6 +2162,7 @@ class ForwardLog(db.Model):
     source_message_id = db.Column(db.Integer, nullable=True)
     source_text = db.Column(db.String(500), nullable=True)
     destination_id = db.Column(db.String(255), nullable=False)
+    destination_topic_id = db.Column(db.Integer, nullable=True)  # forum thread, if any
     # forwarded / pending_approval / approved / rejected / failed
     status = db.Column(db.String(30), default="forwarded", nullable=False, index=True)
     error_msg = db.Column(db.String(500), nullable=True)
@@ -2140,9 +2176,67 @@ class ForwardLog(db.Model):
             "source_message_id": self.source_message_id,
             "source_text": self.source_text,
             "destination_id": self.destination_id,
+            "destination_topic_id": self.destination_topic_id,
             "status": self.status,
             "error_msg": self.error_msg,
             "created_at": self.created_at.isoformat(),
+        }
+
+
+class ForwardSource(db.Model):
+    """One source chat (+optional forum topic) for a forwarding rule.
+
+    Enables many→one / many→many fan-in within a single rule (O3). A rule with no
+    ForwardSource rows falls back to ForwardRule.source_group_id for back-compat.
+    """
+    __tablename__ = "forward_sources"
+
+    id = db.Column(db.Integer, primary_key=True)
+    rule_id = db.Column(db.Integer, db.ForeignKey("forward_rules.id", ondelete="CASCADE"),
+                        nullable=False, index=True)
+    source_chat_id = db.Column(db.String(255), nullable=False, index=True)
+    source_topic_id = db.Column(db.Integer, nullable=True)  # message_thread_id filter
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "rule_id": self.rule_id,
+            "source_chat_id": self.source_chat_id,
+            "source_topic_id": self.source_topic_id,
+        }
+
+
+class ForwardDestination(db.Model):
+    """One destination chat (+optional forum topic) for a forwarding rule.
+
+    Enables 1→many fan-out (D4). A rule with no ForwardDestination rows falls
+    back to ForwardRule.destination_id for back-compat. The anti-ban governor
+    (D7) flips `is_paused` when a destination becomes unhealthy.
+    """
+    __tablename__ = "forward_destinations"
+
+    id = db.Column(db.Integer, primary_key=True)
+    rule_id = db.Column(db.Integer, db.ForeignKey("forward_rules.id", ondelete="CASCADE"),
+                        nullable=False, index=True)
+    destination_id = db.Column(db.String(255), nullable=False)  # chat_id or @username
+    topic_id = db.Column(db.Integer, nullable=True)             # message_thread_id target
+    is_paused = db.Column(db.Boolean, default=False, nullable=False)
+    pause_reason = db.Column(db.String(255), nullable=True)
+    last_error = db.Column(db.String(500), nullable=True)
+    forward_count = db.Column(db.Integer, default=0, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "rule_id": self.rule_id,
+            "destination_id": self.destination_id,
+            "topic_id": self.topic_id,
+            "is_paused": self.is_paused,
+            "pause_reason": self.pause_reason,
+            "last_error": self.last_error,
+            "forward_count": self.forward_count,
         }
 
 

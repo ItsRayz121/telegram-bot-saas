@@ -46,6 +46,11 @@ async def _execute_action(bot, action: dict, workflow, trigger_data: dict, flask
     atype = action.get("type")
     params = action.get("params", {})
 
+    # Anti-ban governor (D7): every outbound send — DM, group post, forward —
+    # is throttled and flood-aware, exactly like the forwarding runtime.
+    from .anti_ban import get_governor
+    governor = get_governor(bot)
+
     if atype == "send_dm" or atype == "notify_admin_dm":
         msg = params.get("message") or "Automation triggered."
         try:
@@ -55,8 +60,13 @@ async def _execute_action(bot, action: dict, workflow, trigger_data: dict, flask
                     telegram_group_id=workflow.source_group_id
                 ).first()
                 owner = User.query.get(tg.owner_user_id) if tg else None
-                if owner and owner.telegram_user_id:
-                    await bot.send_message(chat_id=int(owner.telegram_user_id), text=msg)
+                owner_tg_id = owner.telegram_user_id if owner else None
+            # Send outside the app context, through the governor.
+            if owner_tg_id:
+                await governor.send(
+                    owner_tg_id,
+                    lambda: bot.send_message(chat_id=int(owner_tg_id), text=msg),
+                )
         except Exception as exc:
             _log.debug("send_dm action failed: %s", exc)
 
@@ -64,7 +74,10 @@ async def _execute_action(bot, action: dict, workflow, trigger_data: dict, flask
         msg = params.get("message") or "Automated message."
         if workflow.source_group_id:
             try:
-                await bot.send_message(chat_id=workflow.source_group_id, text=msg)
+                await governor.send(
+                    workflow.source_group_id,
+                    lambda: bot.send_message(chat_id=workflow.source_group_id, text=msg),
+                )
             except Exception as exc:
                 _log.debug("send_group_message action failed: %s", exc)
 
@@ -72,10 +85,13 @@ async def _execute_action(bot, action: dict, workflow, trigger_data: dict, flask
         dest = params.get("destination_id")
         if dest and trigger_data.get("message_id") and trigger_data.get("chat_id"):
             try:
-                await bot.copy_message(
-                    chat_id=dest,
-                    from_chat_id=trigger_data["chat_id"],
-                    message_id=int(trigger_data["message_id"]),
+                await governor.send(
+                    dest,
+                    lambda: bot.copy_message(
+                        chat_id=dest,
+                        from_chat_id=trigger_data["chat_id"],
+                        message_id=int(trigger_data["message_id"]),
+                    ),
                 )
             except Exception as exc:
                 _log.debug("forward_message action failed: %s", exc)

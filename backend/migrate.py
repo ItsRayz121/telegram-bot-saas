@@ -757,6 +757,44 @@ def init_db():
             "engagement_submissions.notify_error",
         )
 
+        # ── Automation Consolidation: forwarding many→many + topics (Phase 0) ──
+        # forward_sources / forward_destinations tables are created by
+        # db.create_all() above; here we add the new legacy columns and backfill
+        # one source/destination child row per existing rule.
+        _run_alter(
+            db.engine,
+            "ALTER TABLE forward_rules ADD COLUMN IF NOT EXISTS source_topic_id INTEGER",
+            "forward_rules.source_topic_id",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE forward_logs ADD COLUMN IF NOT EXISTS destination_topic_id INTEGER",
+            "forward_logs.destination_topic_id",
+        )
+        _run_alter(
+            db.engine,
+            """
+            INSERT INTO forward_sources (rule_id, source_chat_id, source_topic_id, created_at)
+            SELECT id, source_group_id, source_topic_id, created_at FROM forward_rules fr
+            WHERE NOT EXISTS (
+                SELECT 1 FROM forward_sources fs WHERE fs.rule_id = fr.id
+            )
+            """,
+            "forward_sources backfill",
+        )
+        _run_alter(
+            db.engine,
+            """
+            INSERT INTO forward_destinations
+                (rule_id, destination_id, topic_id, is_paused, forward_count, created_at)
+            SELECT id, destination_id, NULL, FALSE, forward_count, created_at FROM forward_rules fr
+            WHERE NOT EXISTS (
+                SELECT 1 FROM forward_destinations fd WHERE fd.rule_id = fr.id
+            )
+            """,
+            "forward_destinations backfill",
+        )
+
         # ── Backfill: create UserTelegramAccount rows for legacy User.telegram_user_id ──
         # Must run AFTER all users-table ALTER statements (including auth_provider)
         # so SQLAlchemy's User model doesn't query columns that don't exist yet.
