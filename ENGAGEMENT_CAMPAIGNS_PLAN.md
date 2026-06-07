@@ -1,8 +1,41 @@
 # Engagement Campaigns — Comprehensive Build Plan
 
-> Status: PLANNING (approved direction, not yet implemented)
+> Status: **MVP COMPLETE (Phases 0–8 shipped to main, 2026-06-07).** Phase 9 (Mini App) = optional V2, not built. Phase 10 verification done.
 > Created: 2026-06-07
 > Scope: Add a new "Engagement Campaigns" engine under the existing **Bot Settings → Group → Engagement** section, WITHOUT breaking existing Raids or Invite Links.
+
+## Shipped commits
+- Phase 0 `c5b06b1` — data model + migrations (3 tables)
+- Phase 1 `10e9cdc` — admin backend (shared service + 14 routes, both lineages, gating)
+- Phase 2 `bfb9752` — dashboard UI (Campaigns subtab, wizard, review queue, export, winner picker)
+- Phase 3 `bb02d73` — Telegram publish (premium group post + deep-link buttons, both lineages)
+- Phase 4 `65e6e1f` — bot DM proof flow + callbacks (additive, group -1)
+- Phase 5 `543d384` — verification engine (Telegram-join auto + link-validity)
+- Phase 6 `4cbf723` — anti-fraud (dedup, flags, cooldown, membership gate, suspicious log)
+- Phase 7 `dfc1c0b` — lifecycle scheduler (auto-close + ending-soon + post close)
+- Phase 8 `4e0394a` — subtle official-only growth promo (capped, referral-attributed)
+
+## DEPLOY STEP (required before the feature is live)
+Run on Railway: `python -m backend.migrate` — creates the 3 tables + flag columns.
+Then the **Campaigns** tab appears under Bot Settings → Group → Engagement.
+
+## MANUAL TEST SCRIPT (Phase 10 — user to run)
+1. **Migrate**: run `python -m backend.migrate` on Railway; confirm "engagement_*" lines.
+2. **Dashboard (official + a custom bot)**: Engagement → Campaigns → Create Campaign.
+   - Proof Collection w/ a UID field, 24h, activate now → confirm row appears, status Active.
+3. **Group post**: confirm a premium announcement posts to the group with buttons
+   (Open Task / Submit Proof / My Submission) and is pinned.
+4. **DM proof flow**: as a normal member tap **Submit Proof** → bot DMs you → send a
+   UID → "Submitted, pending review". Tap again → "already submitted".
+5. **Review**: dashboard → Manage → approve the submission → submitter gets XP (check leaderboard).
+6. **Telegram-join task**: make a `social_task`/auto campaign (set settings.verify_chat to a
+   channel the bot admins) → Verify works only if you're a member.
+7. **Anti-fraud**: submit the same UID from a 2nd account → flagged ⚠ in review queue.
+8. **Lifecycle**: set a short deadline → after it passes, campaign auto-closes; new taps get
+   "campaign is closed".
+9. **Promo**: on the official bot, the DM success message shows a subtle Telegizer footer;
+   on a **custom** bot it must NOT appear.
+10. **Regression**: confirm Raids + Invite Links still work unchanged.
 
 ---
 
