@@ -105,6 +105,10 @@ class Config:
         )
     OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 
+    # Engagement link-validity deep checks (optional). Absent → shape-only checks.
+    YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY", "")
+    X_BEARER_TOKEN = os.environ.get("X_BEARER_TOKEN", "")
+
     # Google Calendar OAuth2
     GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
     GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")

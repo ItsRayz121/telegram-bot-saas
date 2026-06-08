@@ -13,8 +13,25 @@ intentionally NOT auto-verified.
 
 import logging
 import re
+import time
 
 logger = logging.getLogger(__name__)
+
+# ── Deep link-validity ("does it exist") checks ────────────────────────────────
+# Optional, API-key-gated. When no key is configured the checks degrade to the
+# shape/host validation only (today's behaviour). Results are cached briefly so a
+# campaign verifying many links doesn't hammer the upstream API.
+_DEEP_CACHE = {}          # url → (expiry_ts, (ok, reason))
+_DEEP_CACHE_TTL = 600.0   # 10 minutes
+_DEEP_CACHE_MAX = 2000
+_DEEP_TIMEOUT = 5         # seconds
+
+_YOUTUBE_ID_RES = [
+    re.compile(r"(?:youtu\.be/)([A-Za-z0-9_-]{11})"),
+    re.compile(r"[?&]v=([A-Za-z0-9_-]{11})"),
+    re.compile(r"/(?:shorts|embed|live)/([A-Za-z0-9_-]{11})"),
+]
+_X_ID_RE = re.compile(r"/status(?:es)?/(\d{5,25})")
 
 # Member-like statuses returned by getChatMember.
 _MEMBER_STATUSES = {"creator", "administrator", "member", "owner"}
@@ -115,7 +132,8 @@ def validate_field_value(field_type, value, *, platform=None):
 
 
 def validate_link(url, platform=None):
-    """Shape + platform-host validation. Returns (ok, reason)."""
+    """Shape + platform-host validation, plus an optional deep existence check
+    (YouTube/X) when an API key is configured. Returns (ok, reason)."""
     if not url or not re.match(r"^https?://", url.strip(), re.I):
         return False, "Please send a valid link starting with http:// or https://"
     if platform and platform in _PLATFORM_HOSTS:
@@ -123,7 +141,101 @@ def validate_link(url, platform=None):
         if not host_ok:
             label = _PLATFORM_LABEL.get(platform, platform)
             return False, f"Please submit a valid {label} URL."
+    deep_ok, deep_reason = _deep_link_check(url.strip(), platform)
+    if not deep_ok:
+        return False, deep_reason
     return True, None
+
+
+def _deep_link_check(url, platform):
+    """Optional 'does it exist' check for YouTube/X. Returns (ok, reason).
+    Always (True, None) when no API key is set or the platform isn't supported —
+    so this never blocks unless we can prove the target is missing. Cached + never
+    raises."""
+    from .config import Config
+
+    # Infer platform from the host when not declared.
+    low = url.lower()
+    if not platform:
+        if "youtube.com" in low or "youtu.be" in low:
+            platform = "youtube"
+        elif "x.com" in low or "twitter.com" in low:
+            platform = "x"
+
+    if platform == "youtube" and Config.YOUTUBE_API_KEY:
+        return _cached_check(url, lambda: _deep_check_youtube(url, Config.YOUTUBE_API_KEY))
+    if platform == "x" and Config.X_BEARER_TOKEN:
+        return _cached_check(url, lambda: _deep_check_x(url, Config.X_BEARER_TOKEN))
+    return True, None
+
+
+def _cached_check(url, fn):
+    now = time.monotonic()
+    hit = _DEEP_CACHE.get(url)
+    if hit and hit[0] > now:
+        return hit[1]
+    result = fn()
+    # Only cache definitive results; size-cap the cache.
+    if len(_DEEP_CACHE) > _DEEP_CACHE_MAX:
+        _DEEP_CACHE.clear()
+    _DEEP_CACHE[url] = (now + _DEEP_CACHE_TTL, result)
+    return result
+
+
+def _deep_check_youtube(url, api_key):
+    """True iff the YouTube video resolves. Degrades to accept on any non-404
+    error (rate limit / outage / quota)."""
+    vid = None
+    for rx in _YOUTUBE_ID_RES:
+        m = rx.search(url)
+        if m:
+            vid = m.group(1)
+            break
+    if not vid:
+        return True, None  # can't extract id → don't block (shape already passed)
+    try:
+        import requests
+        resp = requests.get(
+            "https://www.googleapis.com/youtube/v3/videos",
+            params={"part": "id", "id": vid, "key": api_key},
+            timeout=_DEEP_TIMEOUT,
+        )
+        if resp.status_code == 200:
+            items = (resp.json() or {}).get("items") or []
+            if not items:
+                return False, "That YouTube video doesn’t exist or is private. Check the link."
+        return True, None
+    except Exception as e:
+        logger.info("youtube deep-check failed (accepting): %s", e)
+        return True, None
+
+
+def _deep_check_x(url, bearer):
+    """True iff the X/Twitter post resolves. Degrades to accept on anything other
+    than a definitive 404 (the v2 lookup is rate-limited / tier-gated)."""
+    m = _X_ID_RE.search(url)
+    if not m:
+        return True, None
+    tweet_id = m.group(1)
+    try:
+        import requests
+        resp = requests.get(
+            f"https://api.twitter.com/2/tweets/{tweet_id}",
+            headers={"Authorization": f"Bearer {bearer}"},
+            timeout=_DEEP_TIMEOUT,
+        )
+        if resp.status_code == 404:
+            return False, "That post doesn’t exist or was deleted. Check the link."
+        if resp.status_code == 200:
+            body = resp.json() or {}
+            # v2 returns {"errors":[{"title":"Not Found Error",...}]} for missing ids.
+            errs = body.get("errors") or []
+            if not body.get("data") and any("not found" in (e.get("title", "").lower()) for e in errs):
+                return False, "That post doesn’t exist or was deleted. Check the link."
+        return True, None
+    except Exception as e:
+        logger.info("x deep-check failed (accepting): %s", e)
+        return True, None
 
 
 def validate_link_payload(campaign, answers):
