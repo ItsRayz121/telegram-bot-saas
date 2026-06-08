@@ -4,7 +4,7 @@ import {
   Box, Card, CardContent, Typography, Button, TextField, Stack,
   Chip, Alert, CircularProgress, Divider,
 } from '@mui/material';
-import { OpenInNew, CheckCircle } from '@mui/icons-material';
+import { OpenInNew, CheckCircle, EmojiEvents } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { engagementTasks } from '../services/api';
 
@@ -13,6 +13,8 @@ const STATUS_CHIP = {
   verified: { label: '✅ Verified', color: 'success' },
   rejected: { label: '❌ Rejected', color: 'error' },
 };
+
+const RANK_MEDAL = { 1: '🥇', 2: '🥈', 3: '🥉' };
 
 export default function CampaignTask() {
   const { id } = useParams();
@@ -122,6 +124,75 @@ export default function CampaignTask() {
           )}
         </CardContent>
       </Card>
+
+      <CampaignLeaderboardCard campaignId={id} reloadKey={sub?.status} />
     </Box>
+  );
+}
+
+// ── Participant leaderboard (Pro campaigns only; silently hidden otherwise) ──────
+
+function CampaignLeaderboardCard({ campaignId, reloadKey }) {
+  const [data, setData] = useState(null);
+  const [show, setShow] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const res = await engagementTasks.leaderboard(campaignId, { limit: 10 });
+        if (active) { setData(res.data); setShow(true); }
+      } catch {
+        // 403 (not a Pro campaign) or any error → keep the board hidden.
+        if (active) setShow(false);
+      }
+    })();
+    return () => { active = false; };
+    // reloadKey re-fetches after the viewer's own submission status changes.
+  }, [campaignId, reloadKey]);
+
+  const entries = data?.entries || [];
+  if (!show || entries.length === 0) return null;
+  const me = data?.me;
+  const meInPage = me && entries.some((e) => e.telegram_user_id === me.telegram_user_id);
+
+  const row = (e, highlight) => (
+    <Box
+      key={e.telegram_user_id}
+      sx={{
+        display: 'flex', alignItems: 'center', gap: 1, py: 0.75, px: 1, borderRadius: 1,
+        bgcolor: highlight ? 'action.selected' : 'transparent',
+      }}
+    >
+      <Typography variant="body2" fontWeight={e.rank <= 3 ? 700 : 500} sx={{ minWidth: 28, textAlign: 'right' }}>
+        {RANK_MEDAL[e.rank] || e.rank}
+      </Typography>
+      <Typography variant="body2" sx={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {highlight ? 'You' : (e.telegram_username ? `@${e.telegram_username}` : `User ${e.telegram_user_id}`)}
+      </Typography>
+      {e.xp_earned ? <Chip size="small" label={`+${e.xp_earned} XP`} /> : null}
+    </Box>
+  );
+
+  return (
+    <Card sx={{ mt: 2 }}>
+      <CardContent>
+        <Typography variant="subtitle1" fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+          <EmojiEvents fontSize="small" color="warning" /> Leaderboard
+        </Typography>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+          {data.total_participants} participant(s) · top {entries.length}
+        </Typography>
+        <Stack spacing={0}>
+          {entries.map((e) => row(e, me && e.telegram_user_id === me.telegram_user_id))}
+        </Stack>
+        {me && !meInPage && (
+          <>
+            <Divider sx={{ my: 1 }} />
+            {row(me, true)}
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
