@@ -45,6 +45,13 @@ SUPPORTED_EVENTS = frozenset({
     "member.left",
     "group.issue.detected",
     "resource.attached",
+    # Engagement campaigns
+    "campaign.created",
+    "campaign.published",
+    "campaign.submission.created",
+    "campaign.submission.verified",
+    "campaign.submission.rejected",
+    "campaign.closed",
 })
 
 # Human-readable catalog for the frontend event picker
@@ -108,6 +115,42 @@ EVENT_CATALOG = [
         "label": "Resource Attached",
         "description": "A meeting link or shared resource is captured from a group.",
         "sample": {"group_id": "-100123456789", "resource_type": "zoom_link", "url": "https://zoom.us/j/12345"},
+    },
+    {
+        "event": "campaign.created",
+        "label": "Campaign Created",
+        "description": "An engagement campaign is created.",
+        "sample": {"campaign_id": 7, "title": "Bitget UID drop", "type": "proof_collection", "status": "draft"},
+    },
+    {
+        "event": "campaign.published",
+        "label": "Campaign Published",
+        "description": "A campaign is activated / published to the group.",
+        "sample": {"campaign_id": 7, "title": "Bitget UID drop", "type": "proof_collection", "status": "active"},
+    },
+    {
+        "event": "campaign.submission.created",
+        "label": "Campaign Submission",
+        "description": "A participant submits to a campaign (or one of its tasks).",
+        "sample": {"campaign_id": 7, "submission_id": 42, "task_id": None, "telegram_user_id": "99887766", "status": "pending"},
+    },
+    {
+        "event": "campaign.submission.verified",
+        "label": "Submission Verified",
+        "description": "A submission is verified (auto, honor, link, or admin approval).",
+        "sample": {"campaign_id": 7, "submission_id": 42, "task_id": None, "telegram_user_id": "99887766", "status": "verified"},
+    },
+    {
+        "event": "campaign.submission.rejected",
+        "label": "Submission Rejected",
+        "description": "An admin rejects a submission.",
+        "sample": {"campaign_id": 7, "submission_id": 42, "telegram_user_id": "99887766", "status": "rejected"},
+    },
+    {
+        "event": "campaign.closed",
+        "label": "Campaign Closed",
+        "description": "A campaign is closed (no longer accepting submissions).",
+        "sample": {"campaign_id": 7, "title": "Bitget UID drop", "status": "closed"},
     },
 ]
 

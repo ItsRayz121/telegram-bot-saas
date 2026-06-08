@@ -107,6 +107,42 @@ def _coerce_int(value, field_name, *, minimum=None, allow_none=True):
     return n
 
 
+# ── Outbound webhook events ─────────────────────────────────────────────────--
+
+def _fire_campaign_event(campaign, event, extra=None):
+    """Fire an outbound webhook event to the campaign OWNER's integrations
+    (backend/integrations/dispatcher.py). Best-effort; never raises."""
+    if not getattr(campaign, "owner_user_id", None):
+        return
+    try:
+        from flask import current_app
+        from .integrations.dispatcher import fire_event
+        payload = {
+            "campaign_id": campaign.id,
+            "title": campaign.title,
+            "type": campaign.type,
+            "status": campaign.status,
+            "group_id": campaign.group_id,
+            "telegram_group_id": campaign.telegram_group_id,
+        }
+        if extra:
+            payload.update(extra)
+        fire_event(campaign.owner_user_id, event, payload,
+                   flask_app=current_app._get_current_object())
+    except Exception:
+        logger.debug("campaign webhook event %s failed", event, exc_info=True)
+
+
+def _submission_event(campaign, submission, event):
+    _fire_campaign_event(campaign, event, {
+        "submission_id": submission.id,
+        "task_id": submission.task_id,
+        "telegram_user_id": submission.telegram_user_id,
+        "telegram_username": submission.telegram_username,
+        "status": submission.status,
+    })
+
+
 # ── Read ──────────────────────────────────────────────────────────────────────
 
 def list_campaigns(scope, *, group_id=None, telegram_group_id=None, status=None, limit=200):
@@ -246,6 +282,9 @@ def create_campaign(user, data, *, scope, owner_user_id, group_id=None, telegram
     _replace_tasks(campaign, tasks_in)
 
     db.session.commit()
+    _fire_campaign_event(campaign, "campaign.created")
+    if campaign.status == "active":
+        _fire_campaign_event(campaign, "campaign.published")
     _maybe_publish(campaign)
     return campaign
 
@@ -389,7 +428,10 @@ def update_campaign(campaign, data, *, user=None):
 
     db.session.commit()
     if action == "publish":
+        _fire_campaign_event(campaign, "campaign.published")
         _maybe_publish(campaign)
+    elif action == "close":
+        _fire_campaign_event(campaign, "campaign.closed")
     return campaign
 
 
@@ -486,6 +528,10 @@ def review_submission(campaign, submission_id, action, *, reviewed_by=None, reas
     if action == "approve":
         award_submission(campaign, sub)  # credits XP, then commits
     _notify_review(campaign, sub, approved=(action == "approve"), reason=reason)
+    _submission_event(
+        campaign, sub,
+        "campaign.submission.verified" if action == "approve" else "campaign.submission.rejected",
+    )
     return sub
 
 
@@ -679,6 +725,10 @@ def create_submission(campaign, *, telegram_user_id, telegram_username=None,
         log_suspicious(campaign.id, tg_user_id, flag_reason)
     if status == "verified":
         award_submission(campaign, sub)
+
+    _submission_event(campaign, sub, "campaign.submission.created")
+    if sub.status == "verified":
+        _submission_event(campaign, sub, "campaign.submission.verified")
 
     return sub, None
 
