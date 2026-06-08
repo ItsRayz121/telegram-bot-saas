@@ -82,6 +82,18 @@ const ACTION_COLORS = {
   unmute: 'success', unban: 'success', tempban: 'error', tempmute: 'warning', purge: 'info',
 };
 
+// Friendly labels for the Protection Activity log (bot policy + raid mode).
+const PROTECTION_EVENT_META = {
+  bot_restricted:      { icon: '🤖', label: 'Bot restricted on join' },
+  bot_banned:          { icon: '⛔', label: 'Unapproved bot banned' },
+  bot_approved:        { icon: '✅', label: 'Bot approved' },
+  bot_join_trusted:    { icon: '🟢', label: 'Trusted bot joined' },
+  bot_join_unhandled:  { icon: '⚠️', label: 'Bot joined — needs review' },
+  bot_join:            { icon: '🤖', label: 'Bot joined' },
+  raid_mode_activated: { icon: '🚨', label: 'Raid mode activated' },
+  raid_lockdown_join:  { icon: '🔒', label: 'Member locked down (raid)' },
+};
+
 const AUTOMOD_EXTENDED_RULES = [
   { key: 'contact_sharing', label: 'Block Contact Sharing' },
   { key: 'location_sharing', label: 'Block Location Sharing' },
@@ -332,6 +344,10 @@ export default function GroupSettings() {
 
   const [raidOpen, setRaidOpen] = useState(false);
 
+  // Protection Activity (bot policy + raid mode event log) — Moderation › AutoMod
+  const [protectionLog, setProtectionLog] = useState([]);
+  const [protectionLoading, setProtectionLoading] = useState(false);
+
   const [digestConfig, setDigestConfig] = useState({
     daily: false, weekly: false, monthly: false,
     recipients: { owner_dm: false, selected_admin_ids: [], send_to_group: true, group_topic_id: null },
@@ -467,6 +483,19 @@ export default function GroupSettings() {
       setAuditTotal(res.data.pages);
     } catch {
       toast.error('Failed to load audit logs');
+    }
+  }, [botId, groupId]);
+
+  const fetchProtectionLog = useCallback(async () => {
+    setProtectionLoading(true);
+    try {
+      const res = await settings.getProtectionLog(botId, groupId, { per_page: 30 });
+      setProtectionLog(res.data.events || []);
+    } catch {
+      // Non-fatal: the card just shows the empty state.
+      setProtectionLog([]);
+    } finally {
+      setProtectionLoading(false);
     }
   }, [botId, groupId]);
 
@@ -655,6 +684,7 @@ export default function GroupSettings() {
   useEffect(() => { if (cat === 'analytics' && subTab === auditLogSubTabIdx) fetchAuditLogs(auditPage); }, [cat, subTab, auditLogSubTabIdx, auditPage, fetchAuditLogs]);
   useEffect(() => { if (cat === 'automation' && subTab === autoReplySubTabIdx) fetchAutoResponses(); }, [cat, subTab, autoReplySubTabIdx, fetchAutoResponses]);
   useEffect(() => { if (cat === 'moderation' && subTab === 2) fetchReports(); }, [cat, subTab, fetchReports]);
+  useEffect(() => { if (cat === 'moderation' && subTab === 0) fetchProtectionLog(); }, [cat, subTab, fetchProtectionLog]);
   useEffect(() => { if (cat === 'analytics' && subTab === warningsSubTabIdx) fetchWarnings(); }, [cat, subTab, warningsSubTabIdx, fetchWarnings]);
   useEffect(() => { if (cat === 'analytics' && subTab === digestSubTabIdx) fetchDigest(); }, [cat, subTab, digestSubTabIdx, fetchDigest]);
   useEffect(() => { if (cat === 'analytics' && subTab === aiActivitySubTabIdx) fetchAIActivity(); }, [cat, subTab, aiActivitySubTabIdx, fetchAIActivity]);
@@ -1189,6 +1219,58 @@ export default function GroupSettings() {
                     onChange={(e) => updateSetting('raid_guard.notify', e.target.checked)} />}
                   label="Post an in-group alert when raid mode activates"
                 />
+              </CardContent>
+            </Card>
+
+            {/* Protection Activity — bot-policy + raid-mode event log (Phase 4) */}
+            <Card sx={{ mb: 2 }}>
+              <CardContent>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                  <Typography variant="h6" fontWeight={600}>📋 Protection Activity</Typography>
+                  <Box sx={{ flexGrow: 1 }} />
+                  <Button size="small" onClick={fetchProtectionLog} disabled={protectionLoading}>
+                    {protectionLoading ? 'Refreshing…' : 'Refresh'}
+                  </Button>
+                </Box>
+                <Typography variant="body2" color="text.secondary" mb={2}>
+                  What the bot did at <b>join time</b> — restricting/banning new bots and
+                  locking down raids. These never appear in the normal moderation log.
+                </Typography>
+                {protectionLog.length === 0 ? (
+                  <Typography variant="body2" color="text.disabled">
+                    {protectionLoading ? 'Loading…' : 'No protection events yet.'}
+                  </Typography>
+                ) : (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    {protectionLog.map((ev) => {
+                      const meta = ev.metadata || {};
+                      const info = PROTECTION_EVENT_META[ev.event_type] || { icon: '•', label: ev.event_type };
+                      const who = meta.target_username
+                        ? '@' + String(meta.target_username).replace(/^@/, '')
+                        : (meta.target_user_id ? `id ${meta.target_user_id}` : '');
+                      return (
+                        <Box key={ev.id} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1,
+                          py: 0.75, borderBottom: '1px solid', borderColor: 'divider' }}>
+                          <Typography component="span" sx={{ fontSize: 18, lineHeight: 1.4 }}>{info.icon}</Typography>
+                          <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                            <Typography variant="body2" fontWeight={600}>
+                              {info.label}{who ? ` — ${who}` : ''}
+                            </Typography>
+                            {(ev.message || meta.reason) && (
+                              <Typography variant="caption" color="text.secondary"
+                                sx={{ display: 'block', wordBreak: 'break-word' }}>
+                                {ev.message || meta.reason}
+                              </Typography>
+                            )}
+                          </Box>
+                          <Typography variant="caption" color="text.disabled" sx={{ whiteSpace: 'nowrap' }}>
+                            {fmtTs(ev.created_at)}
+                          </Typography>
+                        </Box>
+                      );
+                    })}
+                  </Box>
+                )}
               </CardContent>
             </Card>
 

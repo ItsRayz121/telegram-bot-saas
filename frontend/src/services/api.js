@@ -169,7 +169,40 @@ const _modTypeMap = (t) => ({
   mod_purge: 'purge', automod_action: 'purge',
 }[t] || t);
 
+// Bot-protection + raid-mode event types, surfaced in the Protection Activity card.
+const _PROTECTION_TYPES = [
+  'bot_restricted', 'bot_banned', 'bot_join_trusted', 'bot_join_unhandled',
+  'bot_join', 'bot_approved', 'raid_mode_activated', 'raid_lockdown_join',
+];
+
 export const settings = {
+  // Protection log: official reads BotEvent (/protection-log); custom reads its
+  // AuditLog (filtered client-side to the protection action types). Both
+  // normalise to the {events:[{event_type, message, metadata, created_at}]} shape.
+  getProtectionLog: (botId, groupId, params) =>
+    botId === 'official'
+      ? api.get(`/api/telegram-groups/${groupId}/protection-log`, { params })
+      : api.get(`/api/bots/${botId}/groups/${groupId}/audit-logs`, { params }).then(r => ({
+          data: {
+            events: (r.data.logs || [])
+              .filter(l => _PROTECTION_TYPES.includes(l.action_type))
+              .map(l => ({
+                id: l.id,
+                event_type: l.action_type,
+                message: l.reason || '',
+                metadata: {
+                  target_username: l.target_username || '',
+                  target_user_id: l.target_user_id || '',
+                  moderator_username: l.moderator_username || '',
+                },
+                created_at: l.timestamp,
+              })),
+            total: r.data.total,
+            pages: r.data.pages,
+            page: r.data.page,
+          },
+        })),
+
   getGroupSettings: (botId, groupId) =>
     botId === 'official'
       ? api.get(`/api/official-groups/${groupId}/settings`)

@@ -507,6 +507,50 @@ def get_mod_log(group_id):
     }), 200
 
 
+# ── Protection log (bot-spam protection: bot policy + raid mode) ─────────────────
+
+# Events written by bot_guard (Phase 1), the NSFW/button filter surfaces through
+# the mod-log, and raid_guard (Phase 3). Surfaced separately from /mod-log so
+# admins can see what the protection system did at JOIN time (which never appears
+# as a normal moderation action).
+PROTECTION_EVENT_TYPES = (
+    "bot_restricted", "bot_banned", "bot_join_trusted", "bot_join_unhandled",
+    "bot_join", "bot_approved", "raid_mode_activated", "raid_lockdown_join",
+)
+
+
+@tg_groups_bp.route("/<group_id>/protection-log", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def get_protection_log(group_id):
+    """Return bot-protection + raid-mode events for a group (join-time actions
+    that never show up as normal moderation)."""
+    user = _current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    tg = _owns_group(user.id, group_id)
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+
+    page = request.args.get("page", 1, type=int)
+    per_page = min(request.args.get("per_page", 50, type=int), 100)
+
+    paginated = BotEvent.query.filter(
+        BotEvent.telegram_group_id == group_id,
+        BotEvent.event_type.in_(PROTECTION_EVENT_TYPES),
+    ).order_by(BotEvent.created_at.desc()).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+
+    return jsonify({
+        "events": [e.to_dict() for e in paginated.items],
+        "total": paginated.total,
+        "page": page,
+        "pages": paginated.pages,
+    }), 200
+
+
 # ── AI Activity (Analytics → AI Activity) ────────────────────────────────────────
 
 def _official_ai_status_flags(tg):
