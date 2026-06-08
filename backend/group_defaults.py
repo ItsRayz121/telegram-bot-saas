@@ -186,6 +186,31 @@ _DEFAULTS: dict = {
             "action": "delete",
             "warn_user": True,
         },
+        # Adult/NSFW content + CSAM (shared content_filter module). ON by default
+        # — adult spam is the single most common attack and the word list is
+        # conservative + boundary-matched to avoid false bans. NSFW riding on an
+        # inline button (which ordinary clients can't attach) is almost never
+        # legit → harsher action. CSAM is always banned.
+        "nsfw_filter": {
+            "enabled": True,
+            "action": "delete",          # plain text/caption — humans may quote
+            "button_action": "ban",      # NSFW on an inline button → near-zero FP
+            "csam_action": "ban",        # zero tolerance
+            "extra_words": [],           # admin-supplied additions
+            "warn_user": True,
+        },
+        # Inline keyboards can only be attached by bots/userbots/inline mode,
+        # never by an ordinary member's client — so a non-admin message carrying
+        # one is a strong spam signal. OFF by default because some communities
+        # legitimately use inline-bot tools (polls, games); turn on for
+        # locked-down groups. A shortener/scam-TLD link behind a button escalates
+        # to suspicious_action.
+        "inline_button_scan": {
+            "enabled": False,
+            "action": "delete",
+            "suspicious_action": "ban",
+            "warn_user": False,
+        },
         "external_links": {
             "enabled": False,
             "whitelist": [],

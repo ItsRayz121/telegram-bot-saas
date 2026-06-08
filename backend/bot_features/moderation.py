@@ -380,8 +380,10 @@ class ModerationSystem:
         # Normalize homoglyphs before text checks
         normalized_text = normalize_homoglyphs(text) if settings.get("homoglyphs", {}).get("enabled") else text
 
-        # Text-based checks
+        # Text-based checks — NSFW/adult + inline-button scanning runs FIRST so
+        # obvious adult spam is killed before any softer rule or the AI layer.
         text_checks = [
+            self.check_nsfw_and_buttons,
             self.check_bad_words,
             self.check_spam,
             self.check_external_links,
@@ -437,6 +439,76 @@ class ModerationSystem:
                 return True
         except Exception as e:
             logger.error(f"AI relevance check error: {e}")
+
+        return False
+
+    async def check_nsfw_and_buttons(self, bot, message, text, group, settings):
+        """NSFW/adult content + inline-button spam, via the shared content_filter
+        module so both bot lineages behave identically (bot-lineage rule).
+
+        Two surfaces with very different false-positive risk:
+          • plain text/caption — a real person might quote/curse, so this is
+            conservative (delete + warn by default);
+          • inline button text/URLs — ordinary Telegram clients CANNOT attach
+            inline keyboards, so NSFW or scam links riding on them are almost
+            never legitimate → harsher action (ban by default).
+        CSAM is always treated as the hardest action regardless of where it
+        appears.
+        """
+        from . import content_filter as cf
+
+        nsfw_cfg = settings.get("nsfw_filter", {})
+        btn_cfg = settings.get("inline_button_scan", {})
+        nsfw_on = nsfw_cfg.get("enabled", False)
+        btn_on = btn_cfg.get("enabled", False)
+        if not nsfw_on and not btn_on:
+            return False
+
+        btn_texts, btn_urls = cf.extract_buttons(message)
+        entity_urls = cf.extract_entity_urls(message)
+
+        # ── NSFW / CSAM ──────────────────────────────────────────────────────
+        if nsfw_on:
+            extra = nsfw_cfg.get("extra_words", [])
+            term, is_csam = cf.nsfw_match(text, extra)
+            on_button = False
+            if not term:
+                for bt in btn_texts:
+                    t, c = cf.nsfw_match(bt, extra)
+                    if t:
+                        term, is_csam, on_button = t, c, True
+                        break
+            if term:
+                if is_csam:
+                    action = nsfw_cfg.get("csam_action", "ban")
+                    reason = "Prohibited content (CSAM)"
+                elif on_button:
+                    action = nsfw_cfg.get("button_action", "ban")
+                    reason = f"Adult/NSFW content on inline button: {term}"
+                else:
+                    action = nsfw_cfg.get("action", "delete")
+                    reason = f"Adult/NSFW content: {term}"
+                await self.execute_automod_action(
+                    bot, message, group, action,
+                    reason=reason, warn=nsfw_cfg.get("warn_user", True),
+                )
+                return True
+
+        # ── Inline-button spam ───────────────────────────────────────────────
+        if btn_on and cf.has_inline_buttons(message):
+            # A non-admin message carrying an inline keyboard came via an inline
+            # bot/userbot — a strong spam signal on its own. A shortener/scam-TLD
+            # link behind it escalates to the harsher action.
+            suspicious = any(cf.is_suspicious_link(u) for u in (btn_urls + entity_urls))
+            action = (btn_cfg.get("suspicious_action", "ban") if suspicious
+                      else btn_cfg.get("action", "delete"))
+            reason = ("Inline buttons with suspicious link" if suspicious
+                      else "Inline buttons are not allowed from members")
+            await self.execute_automod_action(
+                bot, message, group, action,
+                reason=reason, warn=btn_cfg.get("warn_user", False),
+            )
+            return True
 
         return False
 

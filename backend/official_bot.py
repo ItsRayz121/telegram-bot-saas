@@ -49,6 +49,7 @@ from .bot_features.moderation import (
     EMOJI_PATTERN as _EMOJI_RE,
     LANGUAGE_RANGES as _LANG_RANGES,
 )
+from .bot_features import content_filter as _cf
 from .bot_features.levels import level_from_xp as _level_from_xp, xp_for_level as _xp_for_level
 
 _log = logging.getLogger(__name__)
@@ -3704,6 +3705,45 @@ async def _automod_check(bot, message, am_cfg: dict, group_id: str, flask_app) -
     # Normalize homoglyphs so all subsequent text checks use the normalized form
     if am_cfg.get("homoglyphs", {}).get("enabled") and text:
         text = normalize_homoglyphs(text)
+
+    # ── 0. NSFW / adult content + inline-button spam ─────────────────────────
+    # Runs first so obvious adult spam dies before any softer rule. Shared
+    # content_filter module keeps this identical to the custom-bot lineage
+    # (bot-lineage rule). Plain text is conservative (humans may quote); NSFW or
+    # scam links riding on inline buttons — which ordinary clients can't attach —
+    # get the harsher action. CSAM is always the hardest action.
+    nsfw_cfg = am_cfg.get("nsfw_filter", {})
+    btn_cfg = am_cfg.get("inline_button_scan", {})
+    if nsfw_cfg.get("enabled") or btn_cfg.get("enabled"):
+        btn_texts, btn_urls = _cf.extract_buttons(message)
+        entity_urls = _cf.extract_entity_urls(message)
+        if nsfw_cfg.get("enabled"):
+            extra = nsfw_cfg.get("extra_words", [])
+            term, is_csam = _cf.nsfw_match(text, extra)
+            on_button = False
+            if not term:
+                for bt in btn_texts:
+                    t, c = _cf.nsfw_match(bt, extra)
+                    if t:
+                        term, is_csam, on_button = t, c, True
+                        break
+            if term:
+                if is_csam:
+                    act = nsfw_cfg.get("csam_action", "ban")
+                elif on_button:
+                    act = nsfw_cfg.get("button_action", "ban")
+                else:
+                    act = nsfw_cfg.get("action", "delete")
+                await _automod_execute(bot, message, group_id, flask_app,
+                                       "nsfw_filter", act)
+                return True
+        if btn_cfg.get("enabled") and _cf.has_inline_buttons(message):
+            suspicious = any(_cf.is_suspicious_link(u) for u in (btn_urls + entity_urls))
+            act = (btn_cfg.get("suspicious_action", "ban") if suspicious
+                   else btn_cfg.get("action", "delete"))
+            await _automod_execute(bot, message, group_id, flask_app,
+                                   "inline_button_scan", act)
+            return True
 
     # ── 1. Bad words ─────────────────────────────────────────────────────────
     bw_cfg = am_cfg.get("bad_words", {})

@@ -983,6 +983,8 @@ export default function GroupSettings() {
                   {[
                     ['Spam Detection', 'automod.spam.enabled', !!(am.spam || {}).enabled],
                     ['Bad Words Filter', 'automod.bad_words.enabled', !!(am.bad_words || {}).enabled],
+                    ['NSFW / Adult Filter', 'automod.nsfw_filter.enabled', !!(am.nsfw_filter || {}).enabled],
+                    ['Scan Inline Buttons', 'automod.inline_button_scan.enabled', !!(am.inline_button_scan || {}).enabled],
                     ['Block External Links', 'automod.external_links.enabled', !!(am.external_links || {}).enabled],
                     ['Block Telegram Links', 'automod.telegram_links.enabled', !!(am.telegram_links || {}).enabled],
                     ['Excessive Emojis', 'automod.excessive_emojis.enabled', !!(am.excessive_emojis || {}).enabled],
@@ -1001,6 +1003,10 @@ export default function GroupSettings() {
                 <TextField fullWidth multiline rows={2} label="Banned Words (comma separated)" sx={{ mt: 2 }}
                   value={(am.bad_words?.words || []).join(', ')}
                   onChange={(e) => updateSetting('automod.bad_words.words', e.target.value.split(',').map(w => w.trim()).filter(Boolean))} />
+                <TextField fullWidth multiline rows={2} label="Extra NSFW Words (comma separated)" sx={{ mt: 2 }}
+                  helperText="Added to the built-in adult/NSFW word list. Plain text is deleted + warned; NSFW on inline buttons is banned."
+                  value={(am.nsfw_filter?.extra_words || []).join(', ')}
+                  onChange={(e) => updateSetting('automod.nsfw_filter.extra_words', e.target.value.split(',').map(w => w.trim()).filter(Boolean))} />
               </CardContent>
             </Card>
 
