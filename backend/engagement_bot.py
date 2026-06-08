@@ -103,6 +103,35 @@ _STATUS_LINE = {
 }
 
 
+_MEDAL = {1: "🥇", 2: "🥈", 3: "🥉"}
+
+
+def _render_leaderboard(campaign, lb):
+    """A compact, DM-friendly leaderboard rendering for the bot."""
+    lines = [
+        f"🏆 <b>Leaderboard — {html.escape(campaign.title or '')}</b>",
+        f"{lb.get('total_participants', 0)} participant(s)",
+        "",
+    ]
+    entries = lb.get("entries") or []
+    if not entries:
+        lines.append("No verified participants yet — be the first!")
+    else:
+        for e in entries:
+            badge = _MEDAL.get(e["rank"], f"{e['rank']}.")
+            name = (f"@{e['telegram_username']}" if e.get("telegram_username")
+                    else f"User {e['telegram_user_id']}")
+            cnt = f" — {e['verified_count']} ✓" if e.get("verified_count", 0) != 1 else ""
+            xp = f" · +{e['xp_earned']} XP" if e.get("xp_earned") else ""
+            lines.append(f"{badge} {html.escape(name)}{cnt}{xp}")
+    me = lb.get("me")
+    if me and not any(e["telegram_user_id"] == me["telegram_user_id"] for e in entries):
+        xp = f" · +{me['xp_earned']} XP" if me.get("xp_earned") else ""
+        lines.append("")
+        lines.append(f"Your rank: #{me['rank']}{xp}")
+    return "\n".join(lines)
+
+
 def _render_my_submission(campaign, sub):
     """A full, readable summary of the participant's own submission."""
     fields = {f.key: f for f in campaign.custom_fields.all()}
@@ -169,7 +198,9 @@ async def _ask_field(message, field, *, error=None):
 
 async def on_start(update, context, payload, *, flask_app, lineage, bot_id=None):
     """Handle an `eng_*` deep-link. Returns True if it consumed the update."""
-    if not payload or not (payload.startswith("eng_") or payload.startswith("engmy_")):
+    if not payload or not (
+        payload.startswith("eng_") or payload.startswith("engmy_") or payload.startswith("englb_")
+    ):
         return False
     msg = update.effective_message
     user = update.effective_user
@@ -177,9 +208,10 @@ async def on_start(update, context, payload, *, flask_app, lineage, bot_id=None)
         return False
 
     is_my = payload.startswith("engmy_")
-    raw_id = payload[len("engmy_"):] if is_my else payload[len("eng_"):]
+    is_lb = payload.startswith("englb_")
+    prefix = "englb_" if is_lb else ("engmy_" if is_my else "eng_")
     try:
-        campaign_id = int(raw_id)
+        campaign_id = int(payload[len(prefix):])
     except (TypeError, ValueError):
         return False
 
@@ -187,6 +219,19 @@ async def on_start(update, context, payload, *, flask_app, lineage, bot_id=None)
         campaign = _load_campaign(campaign_id, lineage, bot_id)
         if not campaign:
             await msg.reply_text("This campaign is no longer available.")
+            return True
+
+        if is_lb:
+            from . import engagement as eng
+            try:
+                lb = eng.campaign_leaderboard(campaign, limit=10, highlight_user_id=user.id)
+            except eng.EngagementError:
+                await msg.reply_text("The leaderboard isn’t available for this campaign.")
+                return True
+            await msg.reply_text(
+                _render_leaderboard(campaign, lb),
+                parse_mode="HTML", disable_web_page_preview=True,
+            )
             return True
 
         if is_my:

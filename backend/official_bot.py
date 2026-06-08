@@ -329,10 +329,12 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as _exc:
             _log.debug("TelegramBotStarted.record failed: %s", _exc)
 
-    # ── Handle ?start=eng_<id> / engmy_<id> engagement deep-link ──────────────
+    # ── Handle ?start=eng_<id> / engmy_<id> / englb_<id> engagement deep-link ──
     # Handled inline (single /start handler) so the normal menu below is never
     # shadowed by a competing handler.
-    if flask_app and args and (args[0].startswith("eng_") or args[0].startswith("engmy_")):
+    if flask_app and args and (
+        args[0].startswith("eng_") or args[0].startswith("engmy_") or args[0].startswith("englb_")
+    ):
         try:
             from .engagement_bot import on_start as _eng_on_start
             if await _eng_on_start(update, context, args[0], flask_app=flask_app, lineage="official"):

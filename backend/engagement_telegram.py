@@ -103,6 +103,17 @@ def build_campaign_message(campaign, bot_username):
         InlineKeyboardButton("📋 My Submission", url=deep_my),
     ])
 
+    # Leaderboard (Pro owners only) — deep-link renders the board in the user's DM.
+    try:
+        from . import engagement as eng
+        if eng.leaderboard_enabled(campaign):
+            rows.append([InlineKeyboardButton(
+                "🏆 Leaderboard",
+                url=f"https://t.me/{bot_username}?start=englb_{campaign.id}",
+            )])
+    except Exception:
+        logger.debug("leaderboard button check failed", exc_info=True)
+
     # Opt-in: a richer Mini App task page (always via the OFFICIAL bot, since the
     # Mini App validates initData against the official token only).
     if (campaign.settings or {}).get("enable_miniapp"):
