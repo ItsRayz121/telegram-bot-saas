@@ -2903,6 +2903,223 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             _log.debug("hub_reply mention handler error: %s", _exc)
 
 
+# ─── Bot-join policy enforcement (Phase 1: bot-spam protection) ───────────────
+
+def _auto_trusted_bot_usernames(flask_app, group_id: str) -> set:
+    """Usernames that are always trusted: the Telegizer official bot + every
+    custom bot owned by this group's owner. Lowercased, no @."""
+    trusted = set()
+    try:
+        trusted.add(_bot_username().lower())
+    except Exception:
+        pass
+    if not flask_app:
+        return trusted
+    try:
+        with flask_app.app_context():
+            from .models import TelegramGroup, CustomBot
+            tg = TelegramGroup.query.filter_by(telegram_group_id=str(group_id)).first()
+            if tg and tg.owner_user_id:
+                for cb in CustomBot.query.filter_by(owner_user_id=tg.owner_user_id).all():
+                    if getattr(cb, "bot_username", None):
+                        trusted.add(cb.bot_username.strip().lstrip("@").lower())
+    except Exception as exc:
+        _log.debug("auto-trusted bot lookup failed for %s: %s", group_id, exc)
+    return trusted
+
+
+async def _handle_bot_join(context, chat, bot_user, added_by_name, group_id, settings, added_by_id=None):
+    """Apply the group's Bot Policy to a newly added bot member."""
+    from .bot_features import bot_guard
+    flask_app = context.bot_data.get("flask_app")
+    auto_trusted = _auto_trusted_bot_usernames(flask_app, group_id)
+
+    outcome = await bot_guard.enforce_bot_join(
+        bot=context.bot,
+        chat=chat,
+        bot_user=bot_user,
+        added_by_name=added_by_name,
+        settings=settings,
+        auto_trusted_usernames=auto_trusted,
+    )
+
+    policy = outcome["policy"]
+    label = ("@" + bot_user.username) if bot_user.username else (bot_user.first_name or str(bot_user.id))
+
+    if policy.get("log_events", True):
+        _log_event(
+            flask_app, group_id,
+            {"trusted": "bot_join_trusted", "restricted": "bot_restricted",
+             "banned": "bot_banned", "alert_only": "bot_join_unhandled"}.get(outcome["outcome"], "bot_join"),
+            f"Bot {label}: {outcome['reason']}",
+            {"bot_user_id": str(bot_user.id), "bot_username": bot_user.username,
+             "outcome": outcome["outcome"]},
+        )
+
+    if not outcome.get("show_alert"):
+        return
+
+    notify = policy.get("notify", "dm")
+    timeout_min = int(policy.get("approval_timeout_minutes", 60) or 0)
+    group_title = chat.title or ""
+    delivered_dm = False
+
+    # 1) Private DM to the admin who added the bot, falling back to the owner.
+    if notify in ("dm", "both"):
+        text, keyboard = bot_guard.build_dm_alert(
+            bot_user, group_title, added_by_name, outcome["outcome"], group_id,
+            timeout_minutes=(timeout_min if outcome["outcome"] == "restricted" else None),
+        )
+        delivered_dm = await _dm_bot_join_alert(
+            context.bot, flask_app, group_id, added_by_id, text, keyboard,
+        )
+
+    # 2) In-group notice — linkless (never exposes the bot's @username). Carries
+    #    buttons only when group is the chosen channel or DM couldn't be delivered.
+    post_group = notify in ("group", "both") or (notify == "dm" and not delivered_dm)
+    if post_group:
+        try:
+            if _can_send_to_group(str(chat.id)):
+                with_buttons = (notify in ("group", "both")) or not delivered_dm
+                text, keyboard = bot_guard.build_group_notice(
+                    bot_user, outcome["outcome"], group_id, with_buttons=with_buttons,
+                )
+                await context.bot.send_message(
+                    chat_id=chat.id, text=text,
+                    parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard,
+                )
+        except Exception as exc:
+            _log.debug("[OfficialBot] bot-join group notice failed: %s", exc)
+
+    # 3) Schedule the approval timeout (auto-action if no admin decides).
+    if outcome["outcome"] == "restricted" and timeout_min > 0:
+        on_timeout = policy.get("on_timeout", "ban")
+        loop = asyncio.get_running_loop()
+        loop.call_later(
+            timeout_min * 60,
+            lambda: asyncio.ensure_future(
+                _bot_approval_timeout(context.bot, flask_app, group_id, bot_user.id, on_timeout)
+            ),
+        )
+
+
+async def _dm_bot_join_alert(bot, flask_app, group_id, added_by_id, text, keyboard) -> bool:
+    """DM the bot-join alert to the best reachable admin. Tries the adder first,
+    then the group owner. Returns True if a DM was delivered."""
+    candidates = []
+    if added_by_id:
+        candidates.append(str(added_by_id))
+    if flask_app:
+        try:
+            with flask_app.app_context():
+                from .models import TelegramGroup, User
+                tg = TelegramGroup.query.filter_by(telegram_group_id=str(group_id)).first()
+                if tg and tg.owner_user_id:
+                    owner = User.query.get(tg.owner_user_id)
+                    if owner and owner.telegram_user_id:
+                        candidates.append(str(owner.telegram_user_id))
+        except Exception:
+            pass
+    seen = set()
+    for cid in candidates:
+        if not cid or cid in seen:
+            continue
+        seen.add(cid)
+        try:
+            await bot.send_message(
+                chat_id=int(cid), text=text,
+                parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard,
+            )
+            return True
+        except Exception as exc:
+            _log.debug("[OfficialBot] bot-join DM to %s failed: %s", cid, exc)
+    return False
+
+
+async def _bot_approval_timeout(bot, flask_app, group_id, bot_id, on_timeout):
+    """Fires after the approval window. No-op if an admin already decided."""
+    from .bot_features import bot_guard
+    try:
+        action = await bot_guard.apply_timeout_action(bot, group_id, bot_id, on_timeout)
+        if action == "ban":
+            _log_event(flask_app, group_id, "bot_banned",
+                       f"bot {bot_id} auto-banned (approval timeout)", {"bot_user_id": str(bot_id)})
+    except Exception as exc:
+        _log.debug("[OfficialBot] bot approval timeout failed: %s", exc)
+
+
+async def on_bot_guard_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin taps Approve / Ban / Keep on a bot-join alert (works in DM or group)."""
+    from .bot_features import bot_guard
+    query = update.callback_query
+    flask_app = context.bot_data.get("flask_app")
+    action, group_id, bot_id = bot_guard.parse_callback(query.data or "")
+    if not action:
+        await query.answer()
+        return
+
+    chat_id = int(group_id)
+    presser = update.effective_user
+
+    # Admin-gate against the GROUP the bot is in (not the chat the button is in,
+    # which may be a private DM). Only that group's admins/creator may decide.
+    try:
+        pm = await context.bot.get_chat_member(chat_id, presser.id)
+        if pm.status not in ("creator", "administrator"):
+            await query.answer("Only that group's admins can decide this.", show_alert=True)
+            return
+    except Exception:
+        await query.answer("Couldn't verify your admin status for that group.", show_alert=True)
+        return
+
+    bot_guard.clear_pending(group_id, bot_id)
+    bot_username = await bot_guard.resolve_bot_username(context.bot, chat_id, bot_id)
+    label = ("@" + bot_username) if bot_username else f"bot {bot_id}"
+    decided_by = presser.first_name if presser else "an admin"
+
+    if action == "approve":
+        await bot_guard.lift_restriction(context.bot, chat_id, bot_id)
+        if bot_username and flask_app:
+            try:
+                with flask_app.app_context():
+                    from .models import db, TelegramGroup
+                    tg = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
+                    if tg:
+                        s = dict(tg.settings or {})
+                        bp = dict(s.get("bot_policy", {}))
+                        lst = list(bp.get("trusted_bot_usernames", []) or [])
+                        uname = bot_username.strip().lstrip("@").lower()
+                        if uname not in [u.lower() for u in lst]:
+                            lst.append(uname)
+                            bp["trusted_bot_usernames"] = lst
+                            s["bot_policy"] = bp
+                            tg.settings = s
+                            db.session.commit()
+            except Exception as exc:
+                _log.debug("approve allowlist persist failed: %s", exc)
+        _log_event(flask_app, group_id, "bot_approved",
+                   f"{label} approved by {decided_by}", {"bot_user_id": str(bot_id)})
+        await query.answer("Bot approved.")
+        verdict = f"✅ {label} approved by {decided_by}. It can now post."
+    elif action == "ban":
+        await bot_guard.ban_bot(context.bot, chat_id, bot_id)
+        _log_event(flask_app, group_id, "bot_banned",
+                   f"{label} banned by {decided_by}", {"bot_user_id": str(bot_id)})
+        await query.answer("Bot banned.")
+        verdict = f"⛔ {label} banned by {decided_by}."
+    else:  # keep
+        _log_event(flask_app, group_id, "bot_kept_restricted",
+                   f"{label} kept restricted by {decided_by}", {"bot_user_id": str(bot_id)})
+        await query.answer("Kept restricted.")
+        verdict = f"🔇 {label} kept restricted by {decided_by}."
+
+    # Replace the alert with the final verdict.
+    try:
+        await query.edit_message_text(verdict)
+    except Exception as exc:
+        _log.debug("bot-guard verdict edit failed: %s", exc)
+
+
 # ─── New member join handler ──────────────────────────────────────────────────
 
 async def on_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2951,6 +3168,30 @@ async def on_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
 
     if not is_new_join:
+        return
+
+    # ── Bot members: never give them human verification/welcome. Apply Bot Policy.
+    # (Telegram won't deliver another bot's messages to us, so join-time control
+    #  is the only protection against bot-posted spam.)
+    if getattr(user, "is_bot", False):
+        added_by_name = None
+        added_by_id = None
+        if chat_member.from_user and chat_member.from_user.id != user.id:
+            added_by_name = chat_member.from_user.first_name
+            added_by_id = chat_member.from_user.id
+        bp_settings = {}
+        if flask_app:
+            try:
+                with flask_app.app_context():
+                    from .models import TelegramGroup
+                    tg = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
+                    bp_settings = (tg.settings if tg else {}) or {}
+            except Exception:
+                pass
+        try:
+            await _handle_bot_join(context, chat, user, added_by_name, group_id, bp_settings, added_by_id)
+        except Exception as exc:
+            _log.warning("[OfficialBot] bot-join handling failed for %s: %s", group_id, exc)
         return
 
     _log.info(
@@ -5715,6 +5956,7 @@ class OfficialBotRunner:
         a.add_handler(CommandHandler("remind",         cmd_remind))
         a.add_handler(CommandHandler("assist",         cmd_assist))
         a.add_handler(CallbackQueryHandler(on_assistant_pick, pattern=r"^assist_"))
+        a.add_handler(CallbackQueryHandler(on_bot_guard_action, pattern=r"^botguard:"))
         a.add_handler(CallbackQueryHandler(callback_handler))
         # Bot's own membership changes (added/removed from groups)
         a.add_handler(ChatMemberHandler(on_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))

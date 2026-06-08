@@ -119,6 +119,8 @@ def update_official_settings(group_id):
             "social_replies", "image_ai", "raids", "admin_alerts",
             # sections missing from original list — added to fix silent save failures
             "escalation", "reactions", "invites",
+            # bot-spam protection (Phase 1)
+            "bot_policy",
         }
         unknown = set(data.keys()) - _ALLOWED_SETTING_KEYS
         if unknown:

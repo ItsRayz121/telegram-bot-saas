@@ -245,6 +245,42 @@ _DEFAULTS: dict = {
         },
     },
 
+    # ── Bot policy (Phase 1: bot-spam protection) ─────────────────────────────
+    # Telegram NEVER delivers another bot's messages to us, so bot-posted spam
+    # can't be caught at the message layer — it must be controlled at JOIN time.
+    # When an unapproved bot is added we restrict it (mute) and ask admins to
+    # approve or ban via inline buttons posted in the group.
+    #
+    # policy:
+    #   "allow_all"               — never act on bot joins (legacy behaviour)
+    #   "restrict_until_approval" — DEFAULT: mute new bots, alert admins to decide
+    #   "block_unapproved"        — ban any non-trusted bot on join
+    #   "allowlist_only"          — only trusted bots may operate; ban the rest
+    "bot_policy": {
+        "enabled": True,
+        "policy": "restrict_until_approval",
+        # Lowercased usernames WITHOUT the leading @. The Telegizer official bot
+        # and the group's own linked custom bot are trusted automatically when
+        # auto_trust_own_bots is True, so they never need listing here.
+        "trusted_bot_usernames": [],
+        "auto_trust_own_bots": True,
+        # Where admins are notified when an unapproved bot is added:
+        #   "dm"    — DEFAULT: private DM to the admin who added it / the owner.
+        #             The bot is muted the instant it joins, so no spam reaches
+        #             the group even before anyone responds. The in-group fallback
+        #             notice (only if DM can't be delivered) NEVER shows the bot's
+        #             @username, so members can't tap a scam link.
+        #   "group" — post the alert in the group (linkless notice + buttons).
+        #   "both"  — DM and post a linkless group notice.
+        "notify": "dm",
+        "delete_alert_after_decision": True,    # remove the alert once an admin decides
+        "log_events": True,                     # write bot_join / bot_approved / bot_banned events
+        # Auto-decision if no admin acts in time. The bot stays muted the whole
+        # time, so this is cleanup, not exposure control.
+        "approval_timeout_minutes": 60,
+        "on_timeout": "ban",                    # "ban" | "keep_restricted"
+    },
+
     # ── Warning / moderation system ───────────────────────────────────────────
     "moderation": {
         "max_warnings": 3,

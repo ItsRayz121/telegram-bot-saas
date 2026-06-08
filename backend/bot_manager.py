@@ -2136,6 +2136,17 @@ class BotInstance:
 
         for new_user in update.message.new_chat_members:
             if new_user.is_bot:
+                # Telegram never delivers another bot's messages to us, so a bot
+                # member's spam can't be caught at the message layer — apply the
+                # group's Bot Policy at join time instead.
+                added_by = update.message.from_user
+                _is_adder = added_by and added_by.id != new_user.id
+                added_by_name = added_by.first_name if _is_adder else None
+                added_by_id = added_by.id if _is_adder else None
+                try:
+                    await self._handle_bot_join(context, chat, new_user, added_by_name, group, added_by_id)
+                except Exception as exc:
+                    logger.warning(f"bot-join handling failed (group {group.id}): {exc}")
                 continue
 
             with self.app_context.app_context():
@@ -2152,6 +2163,225 @@ class BotInstance:
                 )
             else:
                 await self.welcome.send_welcome(context.bot, chat_id, new_user, group)
+
+    async def _handle_bot_join(self, context, chat, bot_user, added_by_name, group, added_by_id=None):
+        """Apply this group's Bot Policy to a newly added bot member (custom-bot runtime)."""
+        from .bot_features import bot_guard
+        from .database import DatabaseManager
+
+        # Auto-trust: this bot itself + the Telegizer official bot.
+        auto_trusted = set()
+        try:
+            if getattr(context.bot, "username", None):
+                auto_trusted.add(context.bot.username.lower())
+        except Exception:
+            pass
+        try:
+            auto_trusted.add(self._official_bot_username().lower())
+        except Exception:
+            pass
+
+        outcome = await bot_guard.enforce_bot_join(
+            bot=context.bot,
+            chat=chat,
+            bot_user=bot_user,
+            added_by_name=added_by_name,
+            settings=group.settings or {},
+            auto_trusted_usernames=auto_trusted,
+        )
+
+        policy = outcome["policy"]
+        label = ("@" + bot_user.username) if bot_user.username else (bot_user.first_name or str(bot_user.id))
+
+        if policy.get("log_events", True):
+            try:
+                with self.app_context.app_context():
+                    DatabaseManager.log_action(
+                        group_id=group.id,
+                        action_type={"trusted": "bot_join_trusted", "restricted": "bot_restricted",
+                                     "banned": "bot_banned", "alert_only": "bot_join_unhandled"}.get(
+                                         outcome["outcome"], "bot_join"),
+                        target_user_id=str(bot_user.id),
+                        target_username=bot_user.username,
+                        moderator_id="bot_guard",
+                        moderator_username="BotGuard",
+                        reason=outcome["reason"],
+                    )
+            except Exception as exc:
+                logger.debug(f"bot-join log failed: {exc}")
+
+        if not outcome.get("show_alert"):
+            return
+
+        group_id = str(chat.id)
+        notify = policy.get("notify", "dm")
+        timeout_min = int(policy.get("approval_timeout_minutes", 60) or 0)
+        delivered_dm = False
+
+        # 1) Private DM to the admin who added the bot, falling back to the owner.
+        if notify in ("dm", "both"):
+            text, keyboard = bot_guard.build_dm_alert(
+                bot_user, chat.title or "", added_by_name, outcome["outcome"], group_id,
+                timeout_minutes=(timeout_min if outcome["outcome"] == "restricted" else None),
+            )
+            delivered_dm = await self._dm_bot_join_alert(
+                context.bot, group, added_by_id, text, keyboard,
+            )
+
+        # 2) Linkless in-group notice (never exposes the bot's @username).
+        post_group = notify in ("group", "both") or (notify == "dm" and not delivered_dm)
+        if post_group:
+            try:
+                with_buttons = (notify in ("group", "both")) or not delivered_dm
+                text, keyboard = bot_guard.build_group_notice(
+                    bot_user, outcome["outcome"], group_id, with_buttons=with_buttons,
+                )
+                await context.bot.send_message(
+                    chat_id=chat.id, text=text, parse_mode="Markdown", reply_markup=keyboard,
+                )
+            except Exception as exc:
+                logger.debug(f"bot-join group notice failed: {exc}")
+
+        # 3) Schedule approval timeout (auto-action if no admin decides).
+        if outcome["outcome"] == "restricted" and timeout_min > 0:
+            on_timeout = policy.get("on_timeout", "ban")
+            try:
+                import asyncio as _aio
+                _aio.get_running_loop().call_later(
+                    timeout_min * 60,
+                    lambda: _aio.ensure_future(
+                        self._bot_approval_timeout(context.bot, group, bot_user.id, on_timeout)
+                    ),
+                )
+            except Exception as exc:
+                logger.debug(f"bot-join timeout schedule failed: {exc}")
+
+    async def _dm_bot_join_alert(self, bot, group, added_by_id, text, keyboard) -> bool:
+        """DM the bot-join alert to the adder, falling back to the group owner.
+        Returns True if a DM was delivered."""
+        candidates = []
+        if added_by_id:
+            candidates.append(str(added_by_id))
+        try:
+            with self.app_context.app_context():
+                from .models import Bot, User
+                if group and getattr(group, "bot_id", None):
+                    bot_row = Bot.query.get(group.bot_id)
+                    if bot_row:
+                        owner = User.query.get(bot_row.user_id)
+                        if owner and owner.telegram_user_id:
+                            candidates.append(str(owner.telegram_user_id))
+        except Exception:
+            pass
+        seen = set()
+        for cid in candidates:
+            if not cid or cid in seen:
+                continue
+            seen.add(cid)
+            try:
+                await bot.send_message(
+                    chat_id=int(cid), text=text, parse_mode="Markdown", reply_markup=keyboard,
+                )
+                return True
+            except Exception as exc:
+                logger.debug(f"bot-join DM to {cid} failed: {exc}")
+        return False
+
+    async def _bot_approval_timeout(self, bot, group, bot_id, on_timeout):
+        """Fires after the approval window. No-op if an admin already decided."""
+        from .bot_features import bot_guard
+        from .database import DatabaseManager
+        try:
+            group_id = str(group.telegram_group_id) if getattr(group, "telegram_group_id", None) else None
+            chat_id = group.telegram_group_id if group_id else None
+            if chat_id is None:
+                return
+            action = await bot_guard.apply_timeout_action(bot, chat_id, bot_id, on_timeout)
+            if action == "ban" and group:
+                with self.app_context.app_context():
+                    DatabaseManager.log_action(
+                        group_id=group.id, action_type="bot_banned",
+                        target_user_id=str(bot_id), moderator_id="bot_guard",
+                        moderator_username="BotGuard", reason="Auto-banned (approval timeout)",
+                    )
+        except Exception as exc:
+            logger.debug(f"bot approval timeout failed: {exc}")
+
+    async def _handle_bot_guard_callback(self, update, context):
+        """Admin taps Approve / Ban / Keep on a bot-join alert (works in DM or group)."""
+        from .bot_features import bot_guard
+        from .database import DatabaseManager
+        query = update.callback_query
+        action, group_id, bot_id = bot_guard.parse_callback(query.data or "")
+        if not action:
+            await query.answer()
+            return
+
+        chat_id = int(group_id)
+        presser = update.effective_user
+
+        # Admin-gate against the GROUP the bot is in (the button may be in a DM).
+        try:
+            pm = await context.bot.get_chat_member(chat_id, presser.id)
+            if pm.status not in ("creator", "administrator"):
+                await query.answer("Only that group's admins can decide this.", show_alert=True)
+                return
+        except Exception:
+            await query.answer("Couldn't verify your admin status for that group.", show_alert=True)
+            return
+
+        bot_guard.clear_pending(group_id, bot_id)
+        group = self._get_group(chat_id)
+        bot_username = await bot_guard.resolve_bot_username(context.bot, chat_id, bot_id)
+        label = ("@" + bot_username) if bot_username else f"bot {bot_id}"
+        decided_by = presser.first_name if presser else "an admin"
+
+        if action == "approve":
+            await bot_guard.lift_restriction(context.bot, chat_id, bot_id)
+            if bot_username and group:
+                try:
+                    with self.app_context.app_context():
+                        from .models import Group, db
+                        g = Group.query.get(group.id)
+                        if g:
+                            s = dict(g.settings or {})
+                            bp = dict(s.get("bot_policy", {}))
+                            lst = list(bp.get("trusted_bot_usernames", []) or [])
+                            uname = bot_username.strip().lstrip("@").lower()
+                            if uname not in [u.lower() for u in lst]:
+                                lst.append(uname)
+                                bp["trusted_bot_usernames"] = lst
+                                s["bot_policy"] = bp
+                                g.settings = s
+                                from sqlalchemy.orm.attributes import flag_modified
+                                flag_modified(g, "settings")
+                                db.session.commit()
+                except Exception as exc:
+                    logger.debug(f"approve allowlist persist failed: {exc}")
+            action_type, verdict, toast = "bot_approved", f"✅ {label} approved by {decided_by}. It can now post.", "Bot approved."
+        elif action == "ban":
+            await bot_guard.ban_bot(context.bot, chat_id, bot_id)
+            action_type, verdict, toast = "bot_banned", f"⛔ {label} banned by {decided_by}.", "Bot banned."
+        else:
+            action_type, verdict, toast = "bot_kept_restricted", f"🔇 {label} kept restricted by {decided_by}.", "Kept restricted."
+
+        if group:
+            try:
+                with self.app_context.app_context():
+                    DatabaseManager.log_action(
+                        group_id=group.id, action_type=action_type,
+                        target_user_id=str(bot_id), target_username=bot_username,
+                        moderator_id=str(presser.id) if presser else "admin",
+                        moderator_username=decided_by, reason=f"Bot-guard decision: {action}",
+                    )
+            except Exception:
+                pass
+
+        await query.answer(toast)
+        try:
+            await query.edit_message_text(verdict)
+        except Exception:
+            pass
 
     async def handle_private_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle DMs to the bot — primarily for admin escalation replies."""
@@ -2658,6 +2888,18 @@ class BotInstance:
                 await handle_classify_callback(update, context, self.app_context)
             except Exception as _ce:
                 logger.warning("Hub classify callback error: %s", _ce)
+                try:
+                    await query.answer()
+                except Exception:
+                    pass
+            return
+
+        # Bot-guard approve/ban/keep — answered inside the handler (admin-gated).
+        if data.startswith("botguard:"):
+            try:
+                await self._handle_bot_guard_callback(update, context)
+            except Exception as _be:
+                logger.warning("Bot-guard callback error: %s", _be)
                 try:
                     await query.answer()
                 except Exception:

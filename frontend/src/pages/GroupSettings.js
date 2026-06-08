@@ -291,6 +291,7 @@ export default function GroupSettings() {
   const [subTab, setSubTab] = useState(0);
   const [groupData, setGroupData] = useState(null);
   const [settingsData, setSettingsData] = useState(null);
+  const [trustedBotInput, setTrustedBotInput] = useState('');
   // Snapshot of last-saved settings (JSON string) — used to enable Save only when dirty (#12)
   const [origSettings, setOrigSettings] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -686,6 +687,16 @@ export default function GroupSettings() {
     }
   };
 
+  const addTrustedBot = () => {
+    const uname = (trustedBotInput || '').trim().replace(/^@/, '').toLowerCase();
+    if (!uname) return;
+    const current = (settingsData?.bot_policy?.trusted_bot_usernames) || [];
+    if (!current.includes(uname)) {
+      updateSetting('bot_policy.trusted_bot_usernames', [...current, uname]);
+    }
+    setTrustedBotInput('');
+  };
+
   const updateSetting = (path, value) => {
     // Proactively block free users from enabling Pro-gated sections
     // (backend also enforces this on save, but intercepting early gives instant feedback)
@@ -787,6 +798,7 @@ export default function GroupSettings() {
   const w = settingsData.welcome || {};
   const l = settingsData.levels || {};
   const am = settingsData.automod || {};
+  const bp = settingsData.bot_policy || {};
   const mod = settingsData.moderation || {};
   const ac = settingsData.auto_clean || {};
   const rep = settingsData.reports || {};
@@ -989,6 +1001,111 @@ export default function GroupSettings() {
                 <TextField fullWidth multiline rows={2} label="Banned Words (comma separated)" sx={{ mt: 2 }}
                   value={(am.bad_words?.words || []).join(', ')}
                   onChange={(e) => updateSetting('automod.bad_words.words', e.target.value.split(',').map(w => w.trim()).filter(Boolean))} />
+              </CardContent>
+            </Card>
+
+            {/* Bot Protection — controls bots added to the group (Phase 1) */}
+            <Card sx={{ mb: 2 }}>
+              <CardContent>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                  <Typography variant="h6" fontWeight={600}>🛡️ Bot Protection</Typography>
+                </Box>
+                <Typography variant="body2" color="text.secondary" mb={2}>
+                  Telegram never delivers another bot's <i>messages</i> to us, so bot spam
+                  (adult content, link-farm buttons, scam bots) can only be stopped when the
+                  bot <b>joins</b>. New bots are muted instantly and held for your approval —
+                  no spam reaches the group while you decide.
+                </Typography>
+
+                <FormControlLabel
+                  control={<Switch checked={bp.enabled !== false}
+                    onChange={(e) => updateSetting('bot_policy.enabled', e.target.checked)} />}
+                  label="Enable bot protection"
+                />
+
+                <FormControl fullWidth size="small" sx={{ mt: 2 }}>
+                  <InputLabel>Bot policy</InputLabel>
+                  <Select
+                    label="Bot policy"
+                    value={bp.policy || 'restrict_until_approval'}
+                    onChange={(e) => updateSetting('bot_policy.policy', e.target.value)}
+                  >
+                    <MenuItem value="allow_all">Allow all bots (no protection)</MenuItem>
+                    <MenuItem value="restrict_until_approval">Restrict new bots until admin approval</MenuItem>
+                    <MenuItem value="block_unapproved">Block all non-trusted bots (auto-ban)</MenuItem>
+                    <MenuItem value="allowlist_only">Allow only trusted bots</MenuItem>
+                  </Select>
+                </FormControl>
+
+                <Grid container spacing={2} sx={{ mt: 0.5 }}>
+                  <Grid item xs={12} sm={6}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Notify admins via</InputLabel>
+                      <Select
+                        label="Notify admins via"
+                        value={bp.notify || 'dm'}
+                        onChange={(e) => updateSetting('bot_policy.notify', e.target.value)}
+                      >
+                        <MenuItem value="dm">Private DM (recommended)</MenuItem>
+                        <MenuItem value="group">In group (linkless)</MenuItem>
+                        <MenuItem value="both">DM + group</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>If no admin decides</InputLabel>
+                      <Select
+                        label="If no admin decides"
+                        value={bp.on_timeout || 'ban'}
+                        onChange={(e) => updateSetting('bot_policy.on_timeout', e.target.value)}
+                      >
+                        <MenuItem value="ban">Auto-ban the bot</MenuItem>
+                        <MenuItem value="keep_restricted">Keep it muted</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                </Grid>
+
+                <TextField
+                  fullWidth size="small" type="number" sx={{ mt: 2 }}
+                  label="Approval timeout (minutes)"
+                  value={bp.approval_timeout_minutes ?? 60}
+                  onChange={(e) => updateSetting('bot_policy.approval_timeout_minutes', Math.max(0, parseInt(e.target.value || '0', 10)))}
+                  helperText="The bot stays muted the whole time. 0 disables the timer (stays muted until you act)."
+                />
+
+                <FormControlLabel sx={{ mt: 1 }}
+                  control={<Switch checked={bp.auto_trust_own_bots !== false}
+                    onChange={(e) => updateSetting('bot_policy.auto_trust_own_bots', e.target.checked)} />}
+                  label="Auto-trust the Telegizer bot and your own custom bots"
+                />
+
+                <Divider sx={{ my: 2 }} />
+                <Typography variant="subtitle2" fontWeight={600} mb={1}>Trusted bots</Typography>
+                <Typography variant="body2" color="text.secondary" mb={1}>
+                  These bots are never restricted. Approving a bot from an alert adds it here automatically.
+                </Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1 }}>
+                  {(bp.trusted_bot_usernames || []).length === 0 && (
+                    <Typography variant="body2" color="text.disabled">No bots added yet.</Typography>
+                  )}
+                  {(bp.trusted_bot_usernames || []).map((u) => (
+                    <Chip key={u} label={'@' + u} onDelete={() => {
+                      const next = (bp.trusted_bot_usernames || []).filter((x) => x !== u);
+                      updateSetting('bot_policy.trusted_bot_usernames', next);
+                    }} />
+                  ))}
+                </Box>
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  <TextField
+                    fullWidth size="small" placeholder="username (without @)"
+                    value={trustedBotInput}
+                    onChange={(e) => setTrustedBotInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTrustedBot(); } }}
+                  />
+                  <Button variant="outlined" onClick={addTrustedBot}>Add</Button>
+                </Box>
               </CardContent>
             </Card>
 
