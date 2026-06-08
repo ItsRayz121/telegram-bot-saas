@@ -24,6 +24,7 @@ from .models import (
     db,
     EngagementCampaign,
     EngagementCustomField,
+    EngagementTask,
     EngagementSubmission,
     CAMPAIGN_TYPES,
     CAMPAIGN_VERIFICATION_MODES,
@@ -127,10 +128,17 @@ def get_campaign(campaign_id, scope, *, group_id=None, telegram_group_id=None):
 
 # ── Gating ──────────────────────────────────────────────────────────────────--
 
-def _check_create_gating(user, *, scope, group_id, telegram_group_id, status, verification_mode, platform, field_count):
+def _check_create_gating(user, *, scope, group_id, telegram_group_id, status, verification_mode, platform, field_count, task_count=0):
     """Raise EngagementError(403) if a free/expired user exceeds free limits."""
     if _is_paid(user):
         return
+
+    # Multi-task campaigns (more than one sub-task) are premium.
+    if task_count > 1:
+        raise EngagementError(
+            "Multi-task campaigns require a Pro or Enterprise subscription.",
+            403, code="FEATURE_REQUIRES_PRO",
+        )
 
     # Link-validity auto-checks are premium.
     if verification_mode == "link":
@@ -201,9 +209,13 @@ def create_campaign(user, data, *, scope, owner_user_id, group_id=None, telegram
     if not isinstance(fields_in, list):
         raise EngagementError("custom_fields must be a list", 400)
 
+    tasks_in = data.get("tasks")
+    task_count = len(tasks_in) if isinstance(tasks_in, list) else 0
+
     _check_create_gating(
         user, scope=scope, group_id=group_id, telegram_group_id=telegram_group_id,
-        status=status, verification_mode=vmode, platform=platform, field_count=len(fields_in),
+        status=status, verification_mode=vmode, platform=platform,
+        field_count=len(fields_in), task_count=task_count,
     )
 
     campaign = EngagementCampaign(
@@ -231,17 +243,19 @@ def create_campaign(user, data, *, scope, owner_user_id, group_id=None, telegram
     db.session.flush()  # get campaign.id for fields
 
     _replace_custom_fields(campaign, fields_in)
+    _replace_tasks(campaign, tasks_in)
 
     db.session.commit()
     _maybe_publish(campaign)
     return campaign
 
 
-def _replace_custom_fields(campaign, fields_in):
-    """Validate + (re)create custom fields for a campaign. Caller commits."""
-    # Drop existing
-    for f in campaign.custom_fields.all():
-        db.session.delete(f)
+def _validate_fields(fields_in):
+    """Validate raw proof-field dicts → list of normalized kwargs (no DB writes).
+    Shared by campaign-level and task-level field creation."""
+    if not isinstance(fields_in, list):
+        raise EngagementError("custom_fields must be a list", 400)
+    out = []
     seen_keys = set()
     for idx, raw in enumerate(fields_in):
         if not isinstance(raw, dict):
@@ -257,8 +271,7 @@ def _replace_custom_fields(campaign, fields_in):
             key = f"{key}_{idx}"
         seen_keys.add(key)
         example = (raw.get("example") or "").strip()
-        db.session.add(EngagementCustomField(
-            campaign_id=campaign.id,
+        out.append(dict(
             key=key,
             label=label[:200],
             field_type=ftype,
@@ -266,6 +279,59 @@ def _replace_custom_fields(campaign, fields_in):
             order=_coerce_int(raw.get("order"), "order") or idx,
             example=(example[:255] or None),
         ))
+    return out
+
+
+def _replace_custom_fields(campaign, fields_in):
+    """Validate + (re)create campaign-level custom fields. Caller commits."""
+    for f in campaign.custom_fields.all():
+        db.session.delete(f)
+    for kw in _validate_fields(fields_in):
+        db.session.add(EngagementCustomField(campaign_id=campaign.id, **kw))
+
+
+def _replace_tasks(campaign, tasks_in):
+    """Validate + (re)create the campaign's sub-tasks and each task's proof
+    fields. Caller commits. `tasks_in` None leaves tasks untouched; an empty list
+    clears them (back to single-task)."""
+    if tasks_in is None:
+        return
+    if not isinstance(tasks_in, list):
+        raise EngagementError("tasks must be a list", 400)
+    for t in campaign.tasks.all():
+        db.session.delete(t)
+    db.session.flush()
+    for idx, raw in enumerate(tasks_in):
+        if not isinstance(raw, dict):
+            raise EngagementError("Each task must be an object", 400)
+        title = (raw.get("title") or "").strip()
+        if not title:
+            raise EngagementError("Each task needs a title", 400)
+        ttype = (raw.get("type") or "social_task").strip()
+        if ttype not in CAMPAIGN_TYPES:
+            raise EngagementError(f"Invalid task type: {ttype}", 400)
+        tmode = (raw.get("verification_mode") or "manual").strip()
+        if tmode not in CAMPAIGN_VERIFICATION_MODES:
+            raise EngagementError(f"Invalid verification_mode: {tmode}", 400)
+        platform = raw.get("platform")
+        platform = (str(platform).strip().lower() or None) if platform else None
+        task = EngagementTask(
+            campaign_id=campaign.id,
+            order=_coerce_int(raw.get("order"), "order") or idx,
+            title=title[:200],
+            description=(raw.get("description") or None),
+            type=ttype,
+            platform=platform,
+            task_url=(raw.get("task_url") or None),
+            verification_mode=tmode,
+            reward_xp=_coerce_int(raw.get("reward_xp"), "reward_xp", minimum=0) or 0,
+            reward_label=(raw.get("reward_label") or None),
+            settings=raw.get("settings") or {},
+        )
+        db.session.add(task)
+        db.session.flush()  # need task.id for its fields
+        for kw in _validate_fields(raw.get("custom_fields") or []):
+            db.session.add(EngagementCustomField(task_id=task.id, **kw))
 
 
 # ── Update / lifecycle ────────────────────────────────────────────────────────
@@ -278,9 +344,16 @@ _EDITABLE_FIELDS = {
 }
 
 
-def update_campaign(campaign, data):
+def update_campaign(campaign, data, *, user=None):
     """Apply a content edit and/or a lifecycle `action`. Returns the campaign."""
     data = data or {}
+
+    # Multi-task is premium — gate when a free owner edits in >1 task.
+    if isinstance(data.get("tasks"), list) and len(data["tasks"]) > 1 and not _is_paid(user):
+        raise EngagementError(
+            "Multi-task campaigns require a Pro or Enterprise subscription.",
+            403, code="FEATURE_REQUIRES_PRO",
+        )
 
     action = data.get("action")
     if action is not None:
@@ -311,6 +384,8 @@ def update_campaign(campaign, data):
 
     if isinstance(data.get("custom_fields"), list):
         _replace_custom_fields(campaign, data["custom_fields"])
+    if "tasks" in data:
+        _replace_tasks(campaign, data.get("tasks"))
 
     db.session.commit()
     if action == "publish":
@@ -441,13 +516,17 @@ def _sibling_campaign_ids(campaign):
 _DEDUP_FIELD_TYPES = {"uid", "wallet", "tx_hash", "username", "url"}
 
 
-def detect_duplicate(campaign, answers, file_hash):
+def detect_duplicate(campaign, answers, file_hash, fields=None):
     """Return (is_dup, reason) if a normalized proof value or screenshot hash has
-    already been used by another participant in this group. Anti-farming guard."""
+    already been used by another participant in this group. Anti-farming guard.
+    `fields` defaults to the campaign's fields; pass a task's fields for a
+    multi-task submission."""
     answers = answers or {}
+    if fields is None:
+        fields = campaign.custom_fields.all()
     # Build the set of (key → normalized value) we care about.
     dedup_keys = {
-        f.key for f in campaign.custom_fields.all() if f.field_type in _DEDUP_FIELD_TYPES
+        f.key for f in fields if f.field_type in _DEDUP_FIELD_TYPES
     }
     values = {
         (answers.get(k) or "").strip().lower()
@@ -494,10 +573,16 @@ def log_suspicious(campaign_id, telegram_user_id, reason):
 
 
 def create_submission(campaign, *, telegram_user_id, telegram_username=None,
-                      answers=None, file_id=None, file_hash=None, forced_status=None):
+                      answers=None, file_id=None, file_hash=None, forced_status=None,
+                      task_id=None):
     """Shared submission pipeline used by BOTH the bot DM flow and the Mini App
     API. Validates window + one-per-user, decides status by verification mode,
     runs dedup, creates the row, logs fraud signals, and awards XP on verify.
+
+    For a multi-task campaign, `task_id` selects the sub-task; the task's own
+    verification_mode / platform / proof fields / reward then govern the
+    submission. For a legacy single-task campaign, task_id is None and the
+    campaign-level config is used.
 
     Returns (submission, error_message). error_message is a user-facing string
     when the submission was rejected (closed / duplicate / invalid link)."""
@@ -510,10 +595,23 @@ def create_submission(campaign, *, telegram_user_id, telegram_username=None,
     if not campaign.is_open:
         return None, "This campaign is closed. The submission window has ended."
 
+    # Resolve the task (spec source) for a multi-task campaign.
+    task = None
+    if task_id is not None:
+        task = EngagementTask.query.filter_by(id=task_id, campaign_id=campaign.id).first()
+        if not task:
+            return None, "That task is no longer available."
+    elif campaign.tasks.count() > 0:
+        return None, "Please choose a task to complete."
+
+    # `spec` is the task (multi-task) or the campaign (legacy single-task).
+    spec = task or campaign
+    spec_fields = (task.custom_fields if task else campaign.custom_fields).all()
+
     allow_resubmit = bool((campaign.settings or {}).get("allow_resubmit"))
     if campaign.one_per_user:
         dupe = EngagementSubmission.query.filter_by(
-            campaign_id=campaign.id, telegram_user_id=tg_user_id
+            campaign_id=campaign.id, task_id=task_id, telegram_user_id=tg_user_id
         ).order_by(EngagementSubmission.created_at.desc()).first()
         # A prior rejected attempt may be resubmitted only if the campaign allows it.
         if dupe and not (dupe.status == "rejected" and allow_resubmit):
@@ -521,7 +619,7 @@ def create_submission(campaign, *, telegram_user_id, telegram_username=None,
 
     # Per-field validation (also covers the Mini App path, which doesn't validate
     # field-by-field like the bot DM flow does). Screenshots validated elsewhere.
-    for f in campaign.custom_fields.all():
+    for f in spec_fields:
         if f.field_type == "screenshot":
             continue
         raw = answers.get(f.key)
@@ -529,7 +627,7 @@ def create_submission(campaign, *, telegram_user_id, telegram_username=None,
             if f.required:
                 return None, f"Please provide: {f.label}"
             continue
-        ok, normalized, err = validate_field_value(f.field_type, raw, platform=campaign.platform)
+        ok, normalized, err = validate_field_value(f.field_type, raw, platform=spec.platform)
         if not ok:
             return None, err
         answers[f.key] = normalized
@@ -542,26 +640,27 @@ def create_submission(campaign, *, telegram_user_id, telegram_username=None,
         ).first()
         member_id = m.id if m else None
 
-    # Status by verification mode.
+    # Status by verification mode (of the task when multi-task, else the campaign).
     if forced_status:
         status = forced_status
-    elif campaign.verification_mode == "honor":
+    elif spec.verification_mode == "honor":
         status = "verified"
-    elif campaign.verification_mode == "link":
-        ok, reason = validate_link_payload(campaign, answers)
+    elif spec.verification_mode == "link":
+        ok, reason = validate_link_payload(spec, answers)
         if not ok:
             return None, reason
         status = "verified"
     else:
         status = "pending"
 
-    # Anti-fraud: duplicate proof / screenshot.
-    flagged, flag_reason = detect_duplicate(campaign, answers, file_hash)
+    # Anti-fraud: duplicate proof / screenshot (dedup against the spec's fields).
+    flagged, flag_reason = detect_duplicate(campaign, answers, file_hash, fields=spec_fields)
     if flagged:
         status = "pending"  # never auto-verify/reward a duplicate
 
     sub = EngagementSubmission(
         campaign_id=campaign.id,
+        task_id=task_id,
         telegram_user_id=tg_user_id,
         telegram_username=telegram_username,
         member_id=member_id,
@@ -585,17 +684,22 @@ def create_submission(campaign, *, telegram_user_id, telegram_username=None,
 
 
 def award_submission(campaign, submission):
-    """Idempotently grant the campaign's reward_xp to the submitter. Best-effort:
-    never raises, guarded by submission.rewarded so it can't double-award.
-    Lineage-aware (custom → Member ledger, official → OfficialMember ledger)."""
-    if submission.rewarded or not campaign.reward_xp:
+    """Idempotently grant the reward_xp to the submitter — the task's reward for a
+    multi-task submission, else the campaign's. Best-effort: never raises, guarded
+    by submission.rewarded so it can't double-award. Lineage-aware (custom →
+    Member ledger, official → OfficialMember ledger)."""
+    reward = campaign.reward_xp
+    if submission.task_id:
+        task = EngagementTask.query.get(submission.task_id)
+        reward = task.reward_xp if task else 0
+    if submission.rewarded or not reward:
         return
     try:
         if campaign.group_id:  # custom lineage
             from .database import DatabaseManager
             DatabaseManager.add_xp(
                 campaign.group_id, submission.telegram_user_id,
-                campaign.reward_xp, submission.telegram_username,
+                reward, submission.telegram_username,
             )
         else:  # official lineage
             from .models import OfficialMember, XpEvent
@@ -604,14 +708,14 @@ def award_submission(campaign, submission):
                 telegram_user_id=str(submission.telegram_user_id),
             ).first()
             if m:
-                m.xp = (m.xp or 0) + campaign.reward_xp
-                m.xp_1d = (m.xp_1d or 0) + campaign.reward_xp
-                m.xp_7d = (m.xp_7d or 0) + campaign.reward_xp
-                m.xp_30d = (m.xp_30d or 0) + campaign.reward_xp
+                m.xp = (m.xp or 0) + reward
+                m.xp_1d = (m.xp_1d or 0) + reward
+                m.xp_7d = (m.xp_7d or 0) + reward
+                m.xp_30d = (m.xp_30d or 0) + reward
                 db.session.flush()
                 db.session.add(XpEvent(
                     scope="official", member_id=m.id,
-                    amount=campaign.reward_xp, reason=f"campaign:{campaign.id}",
+                    amount=reward, reason=f"campaign:{campaign.id}",
                 ))
         submission.rewarded = True
         db.session.commit()
@@ -653,11 +757,13 @@ def campaign_leaderboard(campaign, *, limit=LEADERBOARD_DEFAULT_LIMIT, offset=0,
     Ranking is by campaign contribution, derived from the campaign's own VERIFIED
     submissions — the same rows award_submission credits XP from, so the board
     lines up with the XP ledger without re-reading it:
-      • primary  → number of verified submissions (desc)
+      • primary  → total XP earned (sum of completed-task rewards) (desc)
+      • then     → number of verified submissions / tasks completed (desc)
       • tiebreak → earliest verification time (asc) — first to complete ranks higher
 
-    Each entry carries xp_earned = verified_count * reward_xp (reward_xp is fixed
-    per campaign, mirroring what was actually credited).
+    xp_earned sums the reward of each completed task (task.reward_xp for a
+    multi-task submission, else the campaign's reward_xp). For a single-task
+    campaign this is verified_count * reward_xp — unchanged.
 
     Returns {campaign_id, campaign_title, reward_xp, total_participants, limit,
     offset, entries:[…], me:{…}|None}. `me` is the highlight_user_id's row (with
@@ -669,59 +775,56 @@ def campaign_leaderboard(campaign, *, limit=LEADERBOARD_DEFAULT_LIMIT, offset=0,
             403, code="FEATURE_REQUIRES_PRO",
         )
 
-    from sqlalchemy import func
-
     limit = max(1, min(_coerce_int(limit, "limit", minimum=1) or LEADERBOARD_DEFAULT_LIMIT,
                        LEADERBOARD_MAX_LIMIT))
     offset = max(0, _coerce_int(offset, "offset") or 0)
-    reward_xp = campaign.reward_xp or 0
+    default_reward = campaign.reward_xp or 0
+    task_rewards = {t.id: (t.reward_xp or 0) for t in campaign.tasks.all()}
 
-    rows = (
-        db.session.query(
-            EngagementSubmission.telegram_user_id.label("uid"),
-            func.count(EngagementSubmission.id).label("verified_count"),
-            func.min(EngagementSubmission.reviewed_at).label("first_at"),
-            func.max(EngagementSubmission.created_at).label("last_at"),
-        )
-        .filter(EngagementSubmission.campaign_id == campaign.id)
-        .filter(EngagementSubmission.status == "verified")
-        .group_by(EngagementSubmission.telegram_user_id)
-        .all()
-    )
-
-    # Latest known username per participant (most recent submission wins).
+    # Aggregate each participant's verified submissions. Ordered newest-first so
+    # the first username seen per user is the most recent.
+    agg = {}
     unames = {}
-    for uid, uname in (
-        db.session.query(
-            EngagementSubmission.telegram_user_id, EngagementSubmission.telegram_username
-        )
+    for s in (
+        EngagementSubmission.query
         .filter(EngagementSubmission.campaign_id == campaign.id)
         .filter(EngagementSubmission.status == "verified")
         .order_by(EngagementSubmission.created_at.desc())
         .all()
     ):
-        if uname and uid not in unames:
-            unames[uid] = uname
+        uid = s.telegram_user_id
+        reward = task_rewards.get(s.task_id, default_reward) if s.task_id else default_reward
+        a = agg.get(uid)
+        if a is None:
+            a = agg[uid] = {"count": 0, "xp": 0, "first": None, "last": None}
+        a["count"] += 1
+        a["xp"] += reward
+        if s.reviewed_at and (a["first"] is None or s.reviewed_at < a["first"]):
+            a["first"] = s.reviewed_at
+        if s.created_at and (a["last"] is None or s.created_at > a["last"]):
+            a["last"] = s.created_at
+        if s.telegram_username and uid not in unames:
+            unames[uid] = s.telegram_username
 
-    # Most verified first, then earliest completion. A null first_at sorts last.
-    def _sort_key(r):
-        return (-int(r.verified_count or 0), r.first_at or datetime.max)
+    # Highest XP first, then most tasks done, then earliest completion (null last).
+    ordered = sorted(
+        agg.items(),
+        key=lambda kv: (-kv[1]["xp"], -kv[1]["count"], kv[1]["first"] or datetime.max),
+    )
 
-    ordered = sorted(rows, key=_sort_key)
-
-    def _entry(rank, r):
-        vc = int(r.verified_count or 0)
+    def _entry(rank, uid, a):
         return {
             "rank": rank,
-            "telegram_user_id": r.uid,
-            "telegram_username": unames.get(r.uid),
-            "verified_count": vc,
-            "xp_earned": vc * reward_xp,
-            "first_verified_at": r.first_at.isoformat() if r.first_at else None,
-            "last_activity_at": r.last_at.isoformat() if r.last_at else None,
+            "telegram_user_id": uid,
+            "telegram_username": unames.get(uid),
+            "verified_count": a["count"],
+            "xp_earned": a["xp"],
+            "first_verified_at": a["first"].isoformat() if a["first"] else None,
+            "last_activity_at": a["last"].isoformat() if a["last"] else None,
         }
 
-    entries = [_entry(i + 1, r) for i, r in enumerate(ordered)]
+    entries = [_entry(i + 1, uid, a) for i, (uid, a) in enumerate(ordered)]
+    reward_xp = default_reward
 
     me = None
     if highlight_user_id is not None:
@@ -742,10 +845,16 @@ def campaign_leaderboard(campaign, *, limit=LEADERBOARD_DEFAULT_LIMIT, offset=0,
 
 def submissions_csv(campaign):
     """Return a CSV string of all submissions for a campaign."""
-    fields = campaign.custom_fields.all()
-    field_keys = [f.key for f in fields]
+    # Union of campaign-level and all task-level field keys (multi-task safe).
+    field_keys = [f.key for f in campaign.custom_fields.all()]
+    task_titles = {}
+    for t in campaign.tasks.all():
+        task_titles[t.id] = t.title
+        for f in t.custom_fields.all():
+            if f.key not in field_keys:
+                field_keys.append(f.key)
     header = [
-        "submission_id", "telegram_user_id", "telegram_username",
+        "submission_id", "task_id", "task_title", "telegram_user_id", "telegram_username",
         "status", "created_at", "reviewed_at", "reviewed_by", "review_reason",
     ] + field_keys + ["file_id", "file_hash"]
 
@@ -755,7 +864,8 @@ def submissions_csv(campaign):
     for s in campaign.submissions.order_by(EngagementSubmission.created_at.asc()).all():
         payload = s.payload or {}
         row = [
-            s.id, s.telegram_user_id, s.telegram_username or "",
+            s.id, s.task_id or "", task_titles.get(s.task_id, ""),
+            s.telegram_user_id, s.telegram_username or "",
             s.status,
             s.created_at.isoformat() if s.created_at else "",
             s.reviewed_at.isoformat() if s.reviewed_at else "",

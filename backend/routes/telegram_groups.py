@@ -1679,7 +1679,7 @@ def update_official_campaign(group_id, campaign_id):
         return jsonify({"error": "Group not found"}), 404
     try:
         c = eng.get_campaign(campaign_id, "official", telegram_group_id=group_id)
-        c = eng.update_campaign(c, request.get_json() or {})
+        c = eng.update_campaign(c, request.get_json() or {}, user=user)
         return jsonify({"campaign": c.to_dict(include_analytics=True)}), 200
     except eng.EngagementError as e:
         db.session.rollback()

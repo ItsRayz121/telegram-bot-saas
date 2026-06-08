@@ -3352,8 +3352,14 @@ class EngagementCampaign(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
 
     custom_fields = db.relationship(
-        "EngagementCustomField", backref="campaign",
+        "EngagementCustomField",
+        primaryjoin="EngagementCustomField.campaign_id == EngagementCampaign.id",
+        backref="campaign",
         cascade="all, delete-orphan", lazy="dynamic", order_by="EngagementCustomField.order",
+    )
+    tasks = db.relationship(
+        "EngagementTask", backref="campaign",
+        cascade="all, delete-orphan", lazy="dynamic", order_by="EngagementTask.order",
     )
     submissions = db.relationship(
         "EngagementSubmission", backref="campaign",
@@ -3403,6 +3409,10 @@ class EngagementCampaign(db.Model):
         }
         if include_fields:
             d["custom_fields"] = [f.to_dict() for f in self.custom_fields.all()]
+            tasks = self.tasks.all()
+            if tasks:
+                d["tasks"] = [t.to_dict(include_fields=True) for t in tasks]
+                d["is_multitask"] = True
         if include_analytics:
             subs = self.submissions
             d["submissions_total"] = subs.count()
@@ -3412,14 +3422,74 @@ class EngagementCampaign(db.Model):
         return d
 
 
-class EngagementCustomField(db.Model):
-    """A typed proof field on a campaign (e.g. exchange UID, wallet, screenshot)."""
-    __tablename__ = "engagement_custom_fields"
+class EngagementTask(db.Model):
+    """One sub-task of a multi-task campaign. A campaign with zero tasks is a
+    legacy single-task campaign (proof fields + reward live on the campaign). When
+    tasks exist, each carries its own type/platform/verification/reward and proof
+    fields, and submissions are tagged with task_id."""
+    __tablename__ = "engagement_tasks"
 
     id = db.Column(db.Integer, primary_key=True)
     campaign_id = db.Column(
         db.Integer, db.ForeignKey("engagement_campaigns.id", ondelete="CASCADE"),
         nullable=False, index=True,
+    )
+    order = db.Column(db.Integer, nullable=False, default=0)
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    type = db.Column(db.String(32), nullable=False, default="social_task")  # CAMPAIGN_TYPES
+    platform = db.Column(db.String(32), nullable=True)
+    task_url = db.Column(db.String(2000), nullable=True)
+    verification_mode = db.Column(db.String(20), nullable=False, default="manual")  # CAMPAIGN_VERIFICATION_MODES
+    reward_xp = db.Column(db.Integer, nullable=False, default=0)
+    reward_label = db.Column(db.String(200), nullable=True)
+    settings = db.Column(db.JSON, nullable=False, default=dict)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    # A task owns its proof fields (campaign_id stays NULL on these rows).
+    custom_fields = db.relationship(
+        "EngagementCustomField",
+        primaryjoin="EngagementCustomField.task_id == EngagementTask.id",
+        cascade="all, delete-orphan", lazy="dynamic",
+        order_by="EngagementCustomField.order",
+    )
+
+    def to_dict(self, include_fields=True):
+        d = {
+            "id": self.id,
+            "campaign_id": self.campaign_id,
+            "order": self.order,
+            "title": self.title,
+            "description": self.description,
+            "type": self.type,
+            "platform": self.platform,
+            "task_url": self.task_url,
+            "verification_mode": self.verification_mode,
+            "reward_xp": self.reward_xp,
+            "reward_label": self.reward_label,
+            "settings": self.settings or {},
+        }
+        if include_fields:
+            d["custom_fields"] = [f.to_dict() for f in self.custom_fields.all()]
+        return d
+
+
+class EngagementCustomField(db.Model):
+    """A typed proof field on a campaign OR a task (e.g. exchange UID, wallet,
+    screenshot). Exactly one of campaign_id / task_id is set: campaign_id for a
+    legacy campaign-level field, task_id for a multi-task field."""
+    __tablename__ = "engagement_custom_fields"
+
+    id = db.Column(db.Integer, primary_key=True)
+    # Nullable since a field may instead belong to a task (task_id set). Legacy
+    # campaign-level fields keep campaign_id set and task_id NULL.
+    campaign_id = db.Column(
+        db.Integer, db.ForeignKey("engagement_campaigns.id", ondelete="CASCADE"),
+        nullable=True, index=True,
+    )
+    task_id = db.Column(
+        db.Integer, db.ForeignKey("engagement_tasks.id", ondelete="CASCADE"),
+        nullable=True, index=True,
     )
     key = db.Column(db.String(64), nullable=False)        # machine key, unique within a campaign
     label = db.Column(db.String(200), nullable=False)     # human prompt shown to the user
@@ -3435,6 +3505,7 @@ class EngagementCustomField(db.Model):
         return {
             "id": self.id,
             "campaign_id": self.campaign_id,
+            "task_id": self.task_id,
             "key": self.key,
             "label": self.label,
             "field_type": self.field_type,
@@ -3455,6 +3526,12 @@ class EngagementSubmission(db.Model):
     campaign_id = db.Column(
         db.Integer, db.ForeignKey("engagement_campaigns.id", ondelete="CASCADE"),
         nullable=False, index=True,
+    )
+    # Set when the submission is for a sub-task of a multi-task campaign; NULL for
+    # legacy single-task campaigns.
+    task_id = db.Column(
+        db.Integer, db.ForeignKey("engagement_tasks.id", ondelete="CASCADE"),
+        nullable=True, index=True,
     )
     telegram_user_id = db.Column(db.String(64), nullable=False, index=True)
     telegram_username = db.Column(db.String(255), nullable=True)
@@ -3486,12 +3563,14 @@ class EngagementSubmission(db.Model):
     __table_args__ = (
         db.Index("ix_engagement_submissions_campaign_user", "campaign_id", "telegram_user_id"),
         db.Index("ix_engagement_submissions_campaign_status", "campaign_id", "status"),
+        db.Index("ix_engagement_submissions_campaign_task_user", "campaign_id", "task_id", "telegram_user_id"),
     )
 
     def to_dict(self):
         return {
             "id": self.id,
             "campaign_id": self.campaign_id,
+            "task_id": self.task_id,
             "telegram_user_id": self.telegram_user_id,
             "telegram_username": self.telegram_username,
             "member_id": self.member_id,

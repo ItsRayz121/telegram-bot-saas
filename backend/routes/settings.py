@@ -849,7 +849,7 @@ def update_engagement_campaign(bot_id, group_id, campaign_id):
         return err
     try:
         c = eng.get_campaign(campaign_id, "custom", group_id=group.id)
-        c = eng.update_campaign(c, request.get_json() or {})
+        c = eng.update_campaign(c, request.get_json() or {}, user=user)
         return jsonify({"campaign": c.to_dict(include_analytics=True)})
     except eng.EngagementError as e:
         db.session.rollback()
