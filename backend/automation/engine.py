@@ -42,6 +42,24 @@ def _check_conditions(conditions: list, trigger_data: dict) -> bool:
 
 # ── Action executors ──────────────────────────────────────────────────────────
 
+def _resolve_owner(source_group_id):
+    """Return the owning User for a workflow's source chat, across BOTH lineages.
+
+    Official groups live in TelegramGroup (owner_user_id); custom-bot groups live
+    in Group (owner = Bot.user_id). Must be called inside an app context.
+    """
+    from ..models import TelegramGroup, Group, Bot, User
+    tg = TelegramGroup.query.filter_by(telegram_group_id=source_group_id).first()
+    if tg and tg.owner_user_id:
+        return User.query.get(tg.owner_user_id)
+    g = Group.query.filter_by(telegram_group_id=source_group_id).first()
+    if g and g.bot_id:
+        b = Bot.query.get(g.bot_id)
+        if b and b.user_id:
+            return User.query.get(b.user_id)
+    return None
+
+
 async def _execute_action(bot, action: dict, workflow, trigger_data: dict, flask_app):
     atype = action.get("type")
     params = action.get("params", {})
@@ -55,11 +73,7 @@ async def _execute_action(bot, action: dict, workflow, trigger_data: dict, flask
         msg = params.get("message") or "Automation triggered."
         try:
             with flask_app.app_context():
-                from ..models import TelegramGroup, User
-                tg = TelegramGroup.query.filter_by(
-                    telegram_group_id=workflow.source_group_id
-                ).first()
-                owner = User.query.get(tg.owner_user_id) if tg else None
+                owner = _resolve_owner(workflow.source_group_id)
                 owner_tg_id = owner.telegram_user_id if owner else None
             # Send outside the app context, through the governor.
             if owner_tg_id:
@@ -101,11 +115,8 @@ async def _execute_action(bot, action: dict, workflow, trigger_data: dict, flask
         delay_minutes = int(params.get("delay_minutes", 60))
         try:
             with flask_app.app_context():
-                from ..models import db, TelegramGroup, User, WorkspaceReminder
-                tg = TelegramGroup.query.filter_by(
-                    telegram_group_id=workflow.source_group_id
-                ).first()
-                owner = User.query.get(tg.owner_user_id) if tg else None
+                from ..models import db, WorkspaceReminder
+                owner = _resolve_owner(workflow.source_group_id)
                 if owner:
                     remind_at = datetime.utcnow() + timedelta(minutes=delay_minutes)
                     db.session.add(WorkspaceReminder(
