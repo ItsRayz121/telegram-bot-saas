@@ -1,8 +1,10 @@
 # Automation Consolidation & Cross-Bot Forwarding — Plan
 
-**Status:** PLANNING (no implementation yet). This file is the source of truth.
+**Status:** IMPLEMENTED — Phases 0–5 shipped to `main` (2026-06-08). This file is the source of truth.
+**Decisions resolved:** O1 = drop "all groups" (workflows are group-scoped) · O2 = Webhooks moved into the Automation tab · O3 = rules support both single and multiple sources (multi-source expands to per-source internally).
+**Remaining:** §6b functional test matrix is the live-Telegram sign-off (run in a real official + custom-bot group); run `python -m backend.migrate` on Railway to apply the new columns/tables.
 **Owner:** product (Fazal) · **Drafted with:** Claude
-**Last updated:** 2026-06-07
+**Last updated:** 2026-06-08
 
 ---
 
@@ -79,56 +81,56 @@ These came out of the design discussion and are settled unless explicitly reopen
 > Never break existing per-group Scheduler / Auto Reply / Polls, or Engagement Campaigns.
 
 ### Phase 0 — Shared foundations
-- [ ] Extract forwarding execution from `official_bot.py` into a shared, bot-agnostic
+- [x] Extract forwarding execution from `official_bot.py` into a shared, bot-agnostic
       `backend/automation/forwarding_runtime.py` (takes `bot`, `flask_app`, `group_id`, `message`).
-- [ ] Build the **anti-ban governor** (D7) as a shared utility: token-bucket throttle,
+- [x] Build the **anti-ban governor** (D7) as a shared utility: token-bucket throttle,
       `RetryAfter`/flood-wait handling, exponential backoff, per-chat + global caps. Used by
       forwarding AND workflow sends.
-- [ ] DB migration: extend `ForwardRule` →
+- [x] DB migration: extend `ForwardRule` →
       - destinations become a **list** (new `ForwardDestination` rows OR JSON list) — keep old single `destination_id` readable for back-compat,
       - add `source_topic_id` (nullable) and per-destination `topic_id` (nullable).
-- [ ] Topic-link parser util: `t.me/c/<id>/<thread>` and `t.me/<name>/<thread>` → `message_thread_id`.
+- [x] Topic-link parser util: `t.me/c/<id>/<thread>` and `t.me/<name>/<thread>` → `message_thread_id`.
 
 ### Phase 1 — Custom-bot execution (lineage parity)
-- [ ] Call shared forwarding runtime + `fire_trigger` from `bot_manager.handle_message`, passing `context.bot`.
-- [ ] Per-bot loop registry so the **approval/deferred** forward resolves the *owning* bot's loop
+- [x] Call shared forwarding runtime + `fire_trigger` from `bot_manager.handle_message`, passing `context.bot`.
+- [x] Per-bot loop registry so the **approval/deferred** forward resolves the *owning* bot's loop
       (replace `get_official_bot_loop()` with resolve-by-group → bot). Each group → its one bot.
-- [ ] AI-activity logging: pass the real bot type instead of hardcoded `"official"` ([engine.py:185](backend/automation/engine.py)).
-- [ ] Verify official-bot behavior is byte-for-byte unchanged after extraction.
+- [x] AI-activity logging: pass the real bot type instead of hardcoded `"official"` ([engine.py:185](backend/automation/engine.py)).
+- [x] Verify official-bot behavior is byte-for-byte unchanged after extraction.
 
 ### Phase 2 — Channel-as-source
-- [ ] Handle `channel_post` updates in both `official_bot` and `bot_manager`.
-- [ ] Channels section: mirror the Automation panel in channel settings for **channel-source** rules.
+- [x] Handle `channel_post` updates in both `official_bot` and `bot_manager`.
+- [x] Channels section: mirror the Automation panel in channel settings for **channel-source** rules.
 
 ### Phase 3 — Forwarding many-to-many + topics (API + UI)
-- [ ] Rule editor: one source, **add/remove multiple destinations**; per destination an optional **topic link** field.
-- [ ] Optional **source topic** filter.
-- [ ] Per-destination **admin/permission validation at save** (D6); clear warning naming the correct bot.
-- [ ] Runtime: forward to each destination via governor (D7), with per-destination topic.
+- [x] Rule editor: one source, **add/remove multiple destinations**; per destination an optional **topic link** field.
+- [x] Optional **source topic** filter.
+- [x] Per-destination **admin/permission validation at save** (D6); clear warning naming the correct bot.
+- [x] Runtime: forward to each destination via governor (D7), with per-destination topic.
 
 ### Phase 4 — UI consolidation
-- [ ] `featureRegistry`: add **Forwarding** + **Workflows** sub-tabs to the `automation` category
+- [x] `featureRegistry`: add **Forwarding** + **Workflows** sub-tabs to the `automation` category
       (`officialOnly: false` once Phase 1 wiring is live, so custom bots get *working* tabs — never dead controls).
-- [ ] `GroupSettings`: render per-group Forwarding + Workflows (rules filtered to this group); reuse adapted
+- [x] `GroupSettings`: render per-group Forwarding + Workflows (rules filtered to this group); reuse adapted
       `WorkspaceForwarding` / `WorkspaceAutomations` components (drop their group-selector; source = this group).
-- [ ] **Workflow Builder** stays a full-page route, launched via an "Open builder" button (not embedded in a sub-tab).
-- [ ] **Webhooks** consolidated per O2; remove the duplicate.
-- [ ] **Remove the top-level sidebar Automation item** + `/automation` hub (redirect `/automation` → group context or dashboard).
-- [ ] Channels: per-channel Automation panel (from Phase 2).
+- [x] **Workflow Builder** stays a full-page route, launched via an "Open builder" button (not embedded in a sub-tab).
+- [x] **Webhooks** consolidated per O2; remove the duplicate.
+- [x] **Remove the top-level sidebar Automation item** + `/automation` hub (redirect `/automation` → group context or dashboard).
+- [x] Channels: per-channel Automation panel (from Phase 2).
 
 ### Phase 5 — Anti-ban hardening + polish
-- [ ] Per-rule caps (max destinations, max forwards/min) as a backstop.
-- [ ] Auto-pause unhealthy destinations on repeated `Forbidden`/flood; notify the user ("⚠️ paused — bot removed / rate-limited").
-- [ ] Rate-limit telemetry/logging for observability.
+- [x] Per-rule caps (max destinations, max forwards/min) as a backstop.
+- [x] Auto-pause unhealthy destinations on repeated `Forbidden`/flood; notify the user ("⚠️ paused — bot removed / rate-limited").
+- [x] Rate-limit telemetry/logging for observability.
 
 ---
 
 ## 6. Cross-check plan (verification — run every phase)
 
 ### 6a. Automated
-- [ ] Frontend: `react-scripts build` → **exit 0** ("Compiled… build folder ready"). No *new* lint warnings from changed files (repo has pre-existing BOM/unused-var warnings; `CI=true` escalates those — use a plain build to judge our changes).
-- [ ] Backend: imports load; `python -m backend.migrate` runs cleanly on the new migration.
-- [ ] No secrets in the diff; show changed files; confirm before push.
+- [x] Frontend: `react-scripts build` → **exit 0** ("Compiled… build folder ready"). No *new* lint warnings from changed files (repo has pre-existing BOM/unused-var warnings; `CI=true` escalates those — use a plain build to judge our changes).
+- [x] Backend: imports load; `python -m backend.migrate` runs cleanly on the new migration.
+- [x] No secrets in the diff; show changed files; confirm before push.
 
 ### 6b. Functional test matrix
 **Forwarding (official bot):**
