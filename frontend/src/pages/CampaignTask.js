@@ -20,8 +20,6 @@ export default function CampaignTask() {
   const { id } = useParams();
   const [campaign, setCampaign] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [answers, setAnswers] = useState({});
-  const [submitting, setSubmitting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -38,27 +36,6 @@ export default function CampaignTask() {
 
   useEffect(() => { load(); }, [load]);
 
-  const setField = (key, val) => setAnswers((p) => ({ ...p, [key]: val }));
-
-  const submit = async () => {
-    const fields = campaign.custom_fields || [];
-    for (const f of fields) {
-      if (f.required && f.field_type !== 'screenshot' && !(answers[f.key] || '').trim()) {
-        toast.error(`${f.label} is required`); return;
-      }
-    }
-    setSubmitting(true);
-    try {
-      await engagementTasks.submit(id, answers);
-      toast.success('Submitted!');
-      load();
-    } catch (e) {
-      toast.error(e.response?.data?.error || 'Failed to submit');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   if (loading) {
     return <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}><CircularProgress /></Box>;
   }
@@ -66,11 +43,11 @@ export default function CampaignTask() {
     return <Box sx={{ p: 3 }}><Alert severity="error">This campaign is not available.</Alert></Box>;
   }
 
-  const sub = campaign.my_submission;
   const isOpen = campaign.is_open;
-  const fields = campaign.custom_fields || [];
-  const hasScreenshot = fields.some((f) => f.field_type === 'screenshot');
-  const isAuto = campaign.verification_mode === 'auto';
+  const tasks = campaign.tasks || [];
+  const isMulti = tasks.length > 0;
+  const mySubs = campaign.my_submissions || [];
+  const subForTask = (tid) => mySubs.find((s) => s.task_id === tid) || null;
 
   return (
     <Box sx={{ maxWidth: 560, mx: 'auto', p: 2, pb: 'calc(var(--bottom-nav-clearance, 16px))' }}>
@@ -80,53 +57,117 @@ export default function CampaignTask() {
           <Stack direction="row" spacing={1} sx={{ my: 1, flexWrap: 'wrap', gap: 0.5 }}>
             <Chip size="small" label={isOpen ? '🟢 Active' : '🔴 Closed'} color={isOpen ? 'success' : 'default'} />
             {campaign.reward_label && <Chip size="small" label={`🎁 ${campaign.reward_label}`} />}
-            {campaign.reward_xp ? <Chip size="small" label={`⭐ ${campaign.reward_xp} XP`} /> : null}
+            {!isMulti && campaign.reward_xp ? <Chip size="small" label={`⭐ ${campaign.reward_xp} XP`} /> : null}
+            {isMulti && <Chip size="small" label={`🧩 ${tasks.length} tasks`} />}
             {campaign.ends_at && <Chip size="small" label={`⏳ ${new Date(campaign.ends_at).toLocaleString()}`} />}
           </Stack>
-          {campaign.description && <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>{campaign.description}</Typography>}
-          {campaign.task_url && (
-            <Button variant="outlined" startIcon={<OpenInNew />} href={campaign.task_url} target="_blank" rel="noopener" sx={{ mb: 2 }}>
-              Open Task
-            </Button>
+          {campaign.description && (
+            <Typography variant="body2" color="text.secondary" sx={{ mb: isMulti ? 0 : 2 }}>{campaign.description}</Typography>
           )}
 
-          <Divider sx={{ my: 2 }} />
-
-          {sub ? (
-            <Alert severity={sub.status === 'verified' ? 'success' : sub.status === 'rejected' ? 'error' : 'info'} icon={<CheckCircle />}>
-              Your submission: {(STATUS_CHIP[sub.status] || {}).label || sub.status}
-              {sub.review_reason ? ` — ${sub.review_reason}` : ''}
-            </Alert>
-          ) : !isOpen ? (
-            <Alert severity="warning">This campaign is closed. The submission window has ended.</Alert>
-          ) : isAuto ? (
-            <Alert severity="info">
-              This task is auto-verified via Telegram. Please complete it from the bot chat to verify your membership.
-            </Alert>
-          ) : (
-            <Stack spacing={2}>
-              {hasScreenshot && (
-                <Alert severity="info">This task needs a screenshot — please submit it from the bot chat.</Alert>
+          {!isMulti && (
+            <>
+              {campaign.task_url && (
+                <Button variant="outlined" startIcon={<OpenInNew />} href={campaign.task_url} target="_blank" rel="noopener" sx={{ mt: 2, mb: 2 }}>
+                  Open Task
+                </Button>
               )}
-              {fields.filter((f) => f.field_type !== 'screenshot').map((f) => (
-                <TextField
-                  key={f.key}
-                  fullWidth
-                  label={f.label + (f.required ? ' *' : '')}
-                  value={answers[f.key] || ''}
-                  onChange={(e) => setField(f.key, e.target.value)}
-                />
-              ))}
-              <Button variant="contained" disabled={submitting || hasScreenshot} onClick={submit}>
-                {submitting ? <CircularProgress size={20} color="inherit" /> : (fields.length ? 'Submit' : 'Participate')}
-              </Button>
-            </Stack>
+              <Divider sx={{ my: 2 }} />
+              <TaskBlock campaignId={id} spec={campaign} taskId={null} mySub={campaign.my_submission} isOpen={isOpen} onSubmitted={load} />
+            </>
           )}
         </CardContent>
       </Card>
 
-      <CampaignLeaderboardCard campaignId={id} reloadKey={sub?.status} />
+      {isMulti && tasks.map((t) => (
+        <Card key={t.id} sx={{ mt: 2 }}>
+          <CardContent>
+            <Typography variant="subtitle1" fontWeight={700}>{t.title}</Typography>
+            <Stack direction="row" spacing={0.5} sx={{ my: 0.5, flexWrap: 'wrap', gap: 0.5 }}>
+              {t.platform && <Chip size="small" variant="outlined" label={t.platform} />}
+              {t.reward_xp ? <Chip size="small" label={`⭐ ${t.reward_xp} XP`} /> : null}
+            </Stack>
+            <Divider sx={{ my: 1.5 }} />
+            <TaskBlock campaignId={id} spec={t} taskId={t.id} mySub={subForTask(t.id)} isOpen={isOpen} onSubmitted={load} />
+          </CardContent>
+        </Card>
+      ))}
+
+      <CampaignLeaderboardCard campaignId={id} reloadKey={mySubs.length} />
     </Box>
+  );
+}
+
+// ── One task's proof form / status (used campaign-level and per task) ────────────
+
+function TaskBlock({ campaignId, spec, taskId, mySub, isOpen, onSubmitted }) {
+  const [answers, setAnswers] = useState({});
+  const [submitting, setSubmitting] = useState(false);
+  const fields = spec.custom_fields || [];
+  const hasScreenshot = fields.some((f) => f.field_type === 'screenshot');
+  const isAuto = spec.verification_mode === 'auto';
+  const setField = (k, v) => setAnswers((p) => ({ ...p, [k]: v }));
+
+  const submit = async () => {
+    for (const f of fields) {
+      if (f.required && f.field_type !== 'screenshot' && !(answers[f.key] || '').trim()) {
+        toast.error(`${f.label} is required`); return;
+      }
+    }
+    setSubmitting(true);
+    try {
+      await engagementTasks.submit(campaignId, answers, taskId);
+      toast.success('Submitted!');
+      onSubmitted();
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Failed to submit');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // For a multi-task block, the description / open-task link live with the task.
+  return (
+    <Stack spacing={1.5}>
+      {taskId != null && spec.description && (
+        <Typography variant="body2" color="text.secondary">{spec.description}</Typography>
+      )}
+      {taskId != null && spec.task_url && (
+        <Button variant="outlined" size="small" startIcon={<OpenInNew />} href={spec.task_url} target="_blank" rel="noopener" sx={{ alignSelf: 'flex-start' }}>
+          Open Task
+        </Button>
+      )}
+      {mySub ? (
+        <Alert severity={mySub.status === 'verified' ? 'success' : mySub.status === 'rejected' ? 'error' : 'info'} icon={<CheckCircle />}>
+          Your submission: {(STATUS_CHIP[mySub.status] || {}).label || mySub.status}
+          {mySub.review_reason ? ` — ${mySub.review_reason}` : ''}
+        </Alert>
+      ) : !isOpen ? (
+        <Alert severity="warning">This campaign is closed. The submission window has ended.</Alert>
+      ) : isAuto ? (
+        <Alert severity="info">
+          This task is auto-verified via Telegram. Please complete it from the bot chat to verify your membership.
+        </Alert>
+      ) : (
+        <>
+          {hasScreenshot && (
+            <Alert severity="info">This task needs a screenshot — please submit it from the bot chat.</Alert>
+          )}
+          {fields.filter((f) => f.field_type !== 'screenshot').map((f) => (
+            <TextField
+              key={f.key}
+              fullWidth
+              label={f.label + (f.required ? ' *' : '')}
+              value={answers[f.key] || ''}
+              onChange={(e) => setField(f.key, e.target.value)}
+            />
+          ))}
+          <Button variant="contained" disabled={submitting || hasScreenshot} onClick={submit}>
+            {submitting ? <CircularProgress size={20} color="inherit" /> : (fields.length ? 'Submit' : 'Participate')}
+          </Button>
+        </>
+      )}
+    </Stack>
   );
 }
 

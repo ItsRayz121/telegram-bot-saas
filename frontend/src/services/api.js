@@ -512,7 +512,8 @@ export const engagement = {
 // Participant-facing campaign API (Mini App task pages — Phase 9).
 export const engagementTasks = {
   get: (id) => api.get(`/api/engagement/campaigns/${id}`),
-  submit: (id, answers) => api.post(`/api/engagement/campaigns/${id}/submit`, { answers }),
+  submit: (id, answers, taskId = null) =>
+    api.post(`/api/engagement/campaigns/${id}/submit`, taskId == null ? { answers } : { answers, task_id: taskId }),
   myTasks: () => api.get('/api/engagement/my-tasks'),
   // Public leaderboard + the viewer's own rank (`me`).
   leaderboard: (id, params) => api.get(`/api/engagement/campaigns/${id}/leaderboard`, { params }),

@@ -27,15 +27,19 @@ def _user():
 
 
 def _public_dict(c, tg_user_id):
-    """Campaign info safe to expose to a participant + their own submission."""
+    """Campaign info safe to expose to a participant + their own submission(s)."""
     d = c.to_dict(include_fields=True)
     d.pop("settings", None)  # never leak verify_chat / internal flags
-    sub = None
+    for t in d.get("tasks", []):
+        t.pop("settings", None)
+    subs = []
     if tg_user_id:
-        sub = EngagementSubmission.query.filter_by(
+        subs = EngagementSubmission.query.filter_by(
             campaign_id=c.id, telegram_user_id=str(tg_user_id)
-        ).order_by(EngagementSubmission.created_at.desc()).first()
-    d["my_submission"] = sub.to_dict() if sub else None
+        ).order_by(EngagementSubmission.created_at.desc()).all()
+    # my_submission = latest (legacy single-task); my_submissions = all (per task).
+    d["my_submission"] = subs[0].to_dict() if subs else None
+    d["my_submissions"] = [s.to_dict() for s in subs]
     return d
 
 
@@ -62,14 +66,26 @@ def submit_campaign(campaign_id):
     if not c:
         return jsonify({"error": "Campaign not found"}), 404
 
-    # Screenshot proof can't be uploaded via the Mini App API — direct to the bot.
-    if any(f.field_type == "screenshot" and f.required for f in c.custom_fields.all()):
-        return jsonify({"error": "This task needs a screenshot — please submit via the bot chat."}), 400
-
     data = request.get_json() or {}
     answers = data.get("answers") or {}
     if not isinstance(answers, dict):
         return jsonify({"error": "answers must be an object"}), 400
+    task_id = data.get("task_id")
+
+    # Resolve the proof fields for the chosen task (multi-task) or the campaign.
+    fields = c.custom_fields.all()
+    if task_id is not None:
+        from ..models import EngagementTask
+        t = EngagementTask.query.filter_by(id=task_id, campaign_id=c.id).first()
+        if not t:
+            return jsonify({"error": "That task is no longer available."}), 404
+        fields = t.custom_fields.all()
+    elif c.tasks.count() > 0:
+        return jsonify({"error": "Please choose a task to complete."}), 400
+
+    # Screenshot proof can't be uploaded via the Mini App API — direct to the bot.
+    if any(f.field_type == "screenshot" and f.required for f in fields):
+        return jsonify({"error": "This task needs a screenshot — please submit via the bot chat."}), 400
 
     try:
         sub, error = eng.create_submission(
@@ -77,6 +93,7 @@ def submit_campaign(campaign_id):
             telegram_user_id=user.telegram_user_id,
             telegram_username=user.telegram_username,
             answers=answers,
+            task_id=task_id,
         )
     except Exception as e:
         logger.error(f"submit_campaign error: {e}", exc_info=True)
