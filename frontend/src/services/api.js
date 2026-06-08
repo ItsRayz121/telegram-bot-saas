@@ -504,6 +504,9 @@ export const engagement = {
     api.post(`${campaignBase(botId, groupId)}/${id}/submissions/${subId}/review`, data),
   exportCsv: (botId, groupId, id) =>
     api.get(`${campaignBase(botId, groupId)}/${id}/submissions/export`, { responseType: 'blob' }),
+  // Per-campaign leaderboard (Pro). 403 (FEATURE_REQUIRES_PRO) on a free owner.
+  leaderboard: (botId, groupId, id, params) =>
+    api.get(`${campaignBase(botId, groupId)}/${id}/leaderboard`, { params }),
 };
 
 // Participant-facing campaign API (Mini App task pages — Phase 9).
@@ -511,6 +514,8 @@ export const engagementTasks = {
   get: (id) => api.get(`/api/engagement/campaigns/${id}`),
   submit: (id, answers) => api.post(`/api/engagement/campaigns/${id}/submit`, { answers }),
   myTasks: () => api.get('/api/engagement/my-tasks'),
+  // Public leaderboard + the viewer's own rank (`me`).
+  leaderboard: (id, params) => api.get(`/api/engagement/campaigns/${id}/leaderboard`, { params }),
 };
 
 // Official groups: real AI-key endpoints via /api/telegram-groups

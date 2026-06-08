@@ -5,7 +5,7 @@ import {
   Chip, Alert, Table, TableBody, TableCell, TableContainer, TableHead,
   TableRow, Paper, FormControl, InputLabel, Select, MenuItem, Switch,
   FormControlLabel, Stepper, Step, StepLabel, Divider, Menu, Tooltip,
-  CircularProgress, Stack,
+  CircularProgress, Stack, Tabs, Tab,
 } from '@mui/material';
 import {
   Add, Delete, MoreVert, Download, EmojiEvents, Campaign as CampaignIcon,
@@ -554,6 +554,7 @@ function CampaignManageDialog({ botId, groupId, campaignId, onClose, onChanged }
   const [winners, setWinners] = useState([]);
   const [rejectFor, setRejectFor] = useState(null);  // submission pending a reject reason
   const [rejectReason, setRejectReason] = useState('');
+  const [tab, setTab] = useState(0);                 // 0 = Submissions, 1 = Leaderboard
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -698,10 +699,14 @@ function CampaignManageDialog({ botId, groupId, campaignId, onClose, onChanged }
               </Typography>
             )}
 
-            <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>
-              Submissions ({subs.length})
-            </Typography>
-            {subs.length === 0 ? (
+            <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}>
+              <Tab label={`Submissions (${subs.length})`} />
+              <Tab icon={<EmojiEvents fontSize="small" />} iconPosition="start" label="Leaderboard" />
+            </Tabs>
+
+            {tab === 1 ? (
+              <CampaignLeaderboard botId={botId} groupId={groupId} campaignId={campaignId} />
+            ) : subs.length === 0 ? (
               <Typography variant="body2" color="text.secondary">No submissions yet.</Typography>
             ) : (
               <TableContainer component={Paper} variant="outlined" sx={{ overflowX: 'auto' }}>
@@ -793,5 +798,96 @@ function CampaignManageDialog({ botId, groupId, campaignId, onClose, onChanged }
         </DialogActions>
       </Dialog>
     </Dialog>
+  );
+}
+
+// ── Per-campaign leaderboard (Pro) ──────────────────────────────────────────────
+
+const RANK_MEDAL = { 1: '🥇', 2: '🥈', 3: '🥉' };
+
+function CampaignLeaderboard({ botId, groupId, campaignId }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [locked, setLocked] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      setLoading(true); setLocked(false); setError(null);
+      try {
+        const res = await engagement.leaderboard(botId, groupId, campaignId, { limit: 100 });
+        if (active) setData(res.data);
+      } catch (e) {
+        if (!active) return;
+        if (e.response?.status === 403) setLocked(true);
+        else setError(e.response?.data?.error || 'Failed to load leaderboard');
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => { active = false; };
+  }, [botId, groupId, campaignId]);
+
+  if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>;
+  if (locked) {
+    return (
+      <Alert severity="info" icon={<EmojiEvents fontSize="inherit" />}>
+        Per-campaign leaderboards are a <strong>Pro</strong> feature. Upgrade to rank participants
+        by verified submissions and XP earned — your members see their own rank too.
+      </Alert>
+    );
+  }
+  if (error) return <Alert severity="error">{error}</Alert>;
+
+  const entries = data?.entries || [];
+  if (entries.length === 0) {
+    return <Typography variant="body2" color="text.secondary">No verified participants yet.</Typography>;
+  }
+
+  return (
+    <>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+        {data.total_participants} participant(s) · ranked by verified submissions
+        {data.reward_xp ? `, ${data.reward_xp} XP each` : ''}.
+      </Typography>
+      <TableContainer component={Paper} variant="outlined" sx={{ overflowX: 'auto' }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow sx={{ '& th': { fontWeight: 700, whiteSpace: 'nowrap' } }}>
+              <TableCell align="right">#</TableCell>
+              <TableCell>Participant</TableCell>
+              <TableCell align="right">Verified</TableCell>
+              <TableCell align="right">XP earned</TableCell>
+              <TableCell>First completed</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {entries.map((e) => (
+              <TableRow key={e.telegram_user_id} hover>
+                <TableCell align="right">
+                  <Typography variant="body2" fontWeight={e.rank <= 3 ? 700 : 400}>
+                    {RANK_MEDAL[e.rank] || e.rank}
+                  </Typography>
+                </TableCell>
+                <TableCell>
+                  <Typography variant="body2">
+                    {e.telegram_username ? `@${e.telegram_username}` : `User ${e.telegram_user_id}`}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">ID: {e.telegram_user_id}</Typography>
+                </TableCell>
+                <TableCell align="right">{e.verified_count}</TableCell>
+                <TableCell align="right">{e.xp_earned ? `+${e.xp_earned}` : '—'}</TableCell>
+                <TableCell>
+                  <Typography variant="caption" sx={{ whiteSpace: 'nowrap' }}>
+                    {e.first_verified_at ? new Date(e.first_verified_at).toLocaleString() : '—'}
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </>
   );
 }
