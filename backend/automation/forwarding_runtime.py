@@ -17,10 +17,34 @@ the app context so a slow Telegram call never holds a DB session open.
 """
 import logging
 import re
+import time
+from collections import deque
 
 from .anti_ban import get_governor, is_fatal_destination_error
 
 _log = logging.getLogger(__name__)
+
+# ── Anti-ban backstops (D7 / Phase 5) ─────────────────────────────────────────
+MAX_FORWARDS_PER_MIN_PER_RULE = 20   # per-rule throughput cap (on top of the governor)
+FAIL_PAUSE_THRESHOLD = 5             # consecutive non-fatal failures → auto-pause
+
+# Per-rule sliding-window send timestamps (in-memory, per process).
+_rule_send_times: dict[int, deque] = {}
+
+
+def _rule_rate_ok(rule_id) -> bool:
+    """Token-free sliding-window check: True if this rule may send another forward
+    in the last 60s, recording the send. A backstop above the per-chat governor so
+    a single misconfigured rule can't fan out abusively."""
+    now = time.monotonic()
+    dq = _rule_send_times.setdefault(rule_id, deque())
+    cutoff = now - 60.0
+    while dq and dq[0] < cutoff:
+        dq.popleft()
+    if len(dq) >= MAX_FORWARDS_PER_MIN_PER_RULE:
+        return False
+    dq.append(now)
+    return True
 
 
 # ── Topic-link parsing (D5) ───────────────────────────────────────────────────
@@ -186,6 +210,13 @@ async def run_forwarding(flask_app, bot, group_id, message, *, bot_type="officia
     # ── Pass 2: send (outside app context) ──
     results = []
     for job in jobs:
+        # Per-rule throughput backstop — skip (don't fail) if the rule is hot.
+        if not _rule_rate_ok(job["rule_id"]):
+            _log.warning(
+                "Anti-ban: rule %s hit %d forwards/min cap — skipping further sends this minute",
+                job["rule_id"], MAX_FORWARDS_PER_MIN_PER_RULE,
+            )
+            continue
         ok, err, fatal = True, None, False
         try:
             await _deliver(
@@ -206,7 +237,11 @@ async def run_forwarding(flask_app, bot, group_id, message, *, bot_type="officia
                        job["rule_id"], job["destination_id"], exc)
         results.append({**job, "ok": ok, "err": err, "fatal": fatal})
 
+    if not results:
+        return
+
     # ── Pass 3: persist logs / counters / pauses (inside app context) ──
+    paused_notes = []  # (rule_id, destination_id, reason) for user-facing notice
     try:
         with flask_app.app_context():
             from ..models import db, ForwardRule, ForwardLog, ForwardDestination
@@ -230,14 +265,40 @@ async def run_forwarding(flask_app, bot, group_id, message, *, bot_type="officia
                         if res["ok"]:
                             drow.forward_count = (drow.forward_count or 0) + 1
                             drow.last_error = None
+                            drow.fail_count = 0
                         else:
                             drow.last_error = res["err"]
-                            if res["fatal"]:
+                            drow.fail_count = (drow.fail_count or 0) + 1
+                            # Fatal (bot removed / no rights) pauses at once;
+                            # repeated transient failures pause after a threshold.
+                            if (res["fatal"] or drow.fail_count >= FAIL_PAUSE_THRESHOLD) \
+                                    and not drow.is_paused:
                                 drow.is_paused = True
-                                drow.pause_reason = "auto-paused: destination unreachable"
+                                drow.pause_reason = (
+                                    "auto-paused: destination unreachable"
+                                    if res["fatal"] else
+                                    f"auto-paused after {drow.fail_count} consecutive failures"
+                                )
+                                paused_notes.append(
+                                    (res["rule_id"], res["destination_id"], drow.pause_reason)
+                                )
             db.session.commit()
     except Exception as exc:
         _log.debug("run_forwarding pass-3 failed for group %s: %s", group_id, exc)
+        return
+
+    # ── User-facing notice for auto-paused destinations (dashboard AI Activity) ──
+    for rule_id, dest_id, reason in paused_notes:
+        _log.info("Anti-ban: paused forwarding rule=%s dest=%s (%s)", rule_id, dest_id, reason)
+        try:
+            from ..ai_activity import log_ai_activity
+            log_ai_activity(
+                bot_type, str(group_id), "automation",
+                f"⚠️ Forwarding paused to {dest_id}",
+                detail=reason, status="failed", source="forwarding",
+            )
+        except Exception:
+            pass
 
 
 # ── Approval path: deliver a previously-queued pending log ────────────────────

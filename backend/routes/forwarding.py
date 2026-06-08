@@ -23,6 +23,9 @@ _log = logging.getLogger(__name__)
 _VALID_MATCH = {"contains", "starts_with"}
 _MAX_RULES_FREE = 3
 _MAX_RULES_PRO = 20
+# Anti-ban backstop (D7): cap fan-out per rule so one rule can't blast many chats.
+_MAX_SOURCES = 10
+_MAX_DESTINATIONS = 20
 
 
 def _current_user() -> User:
@@ -187,6 +190,10 @@ def create_rule():
         return jsonify({"error": "At least one source is required"}), 400
     if not destinations:
         return jsonify({"error": "At least one destination is required"}), 400
+    if len(sources) > _MAX_SOURCES:
+        return jsonify({"error": f"Too many sources (max {_MAX_SOURCES} per rule)"}), 400
+    if len(destinations) > _MAX_DESTINATIONS:
+        return jsonify({"error": f"Too many destinations (max {_MAX_DESTINATIONS} per rule)"}), 400
     if match_type not in _VALID_MATCH:
         return jsonify({"error": f"match_type must be one of {sorted(_VALID_MATCH)}"}), 400
 
@@ -275,6 +282,10 @@ def update_rule(rule_id):
             return jsonify({"error": "At least one source is required"}), 400
         if not destinations:
             return jsonify({"error": "At least one destination is required"}), 400
+        if len(sources) > _MAX_SOURCES:
+            return jsonify({"error": f"Too many sources (max {_MAX_SOURCES} per rule)"}), 400
+        if len(destinations) > _MAX_DESTINATIONS:
+            return jsonify({"error": f"Too many destinations (max {_MAX_DESTINATIONS} per rule)"}), 400
         for src in sources:
             if not _owns_source(user, src["chat_id"]):
                 return jsonify({

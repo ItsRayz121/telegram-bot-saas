@@ -2224,6 +2224,7 @@ class ForwardDestination(db.Model):
     is_paused = db.Column(db.Boolean, default=False, nullable=False)
     pause_reason = db.Column(db.String(255), nullable=True)
     last_error = db.Column(db.String(500), nullable=True)
+    fail_count = db.Column(db.Integer, default=0, nullable=False)  # consecutive failures
     forward_count = db.Column(db.Integer, default=0, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
@@ -2236,6 +2237,7 @@ class ForwardDestination(db.Model):
             "is_paused": self.is_paused,
             "pause_reason": self.pause_reason,
             "last_error": self.last_error,
+            "fail_count": self.fail_count,
             "forward_count": self.forward_count,
         }
 
