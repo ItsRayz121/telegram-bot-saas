@@ -269,7 +269,8 @@ async def on_start(update, context, payload, *, flask_app, lineage, bot_id=None)
         if is_lb:
             from . import engagement as eng
             try:
-                lb = eng.campaign_leaderboard(campaign, limit=10, highlight_user_id=user.id)
+                lb = eng.campaign_leaderboard(campaign, limit=10, require_visible=True,
+                                              highlight_user_id=user.id)
             except eng.EngagementError:
                 await msg.reply_text("The leaderboard isn’t available for this campaign.")
                 return True

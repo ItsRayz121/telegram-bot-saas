@@ -865,7 +865,7 @@ def leaderboard_enabled(campaign):
 
 
 def campaign_leaderboard(campaign, *, limit=LEADERBOARD_DEFAULT_LIMIT, offset=0,
-                         enforce_premium=True, highlight_user_id=None):
+                         enforce_premium=True, require_visible=False, highlight_user_id=None):
     """Ranked participant board for ONE campaign (premium).
 
     Ranking is by campaign contribution, derived from the campaign's own VERIFIED
@@ -888,6 +888,11 @@ def campaign_leaderboard(campaign, *, limit=LEADERBOARD_DEFAULT_LIMIT, offset=0,
             "Per-campaign leaderboards require a Pro or Enterprise subscription.",
             403, code="FEATURE_REQUIRES_PRO",
         )
+    # Participant-facing surfaces (Mini App card, bot deep-link) honor the owner's
+    # visibility choice; the admin dashboard passes require_visible=False so the
+    # owner can always inspect rankings for their own campaign.
+    if require_visible and not leaderboard_visible(campaign):
+        raise EngagementError("The leaderboard isn't shown for this campaign.", 403)
 
     limit = max(1, min(_coerce_int(limit, "limit", minimum=1) or LEADERBOARD_DEFAULT_LIMIT,
                        LEADERBOARD_MAX_LIMIT))
@@ -967,6 +972,14 @@ def submissions_csv(campaign):
         for f in t.custom_fields.all():
             if f.key not in field_keys:
                 field_keys.append(f.key)
+    subs = campaign.submissions.order_by(EngagementSubmission.created_at.asc()).all()
+    # Also surface any extra payload keys that aren't a configured field — e.g. a
+    # bot-injected default proof field on a review task with no custom fields — so
+    # the proof never silently drops out of the export.
+    for s in subs:
+        for k in (s.payload or {}):
+            if k not in field_keys:
+                field_keys.append(k)
     header = [
         "submission_id", "task_id", "task_title", "telegram_user_id", "telegram_username",
         "status", "created_at", "reviewed_at", "reviewed_by", "review_reason",
@@ -975,7 +988,7 @@ def submissions_csv(campaign):
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow(header)
-    for s in campaign.submissions.order_by(EngagementSubmission.created_at.asc()).all():
+    for s in subs:
         payload = s.payload or {}
         row = [
             s.id, s.task_id or "", task_titles.get(s.task_id, ""),

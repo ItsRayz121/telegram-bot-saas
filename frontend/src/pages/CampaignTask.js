@@ -106,6 +106,9 @@ function TaskBlock({ campaignId, spec, taskId, mySub, isOpen, onSubmitted }) {
   const fields = spec.custom_fields || [];
   const hasScreenshot = fields.some((f) => f.field_type === 'screenshot');
   const isAuto = spec.verification_mode === 'auto';
+  // A review-based task with no fields collects its proof in the bot chat (the bot
+  // injects a default screenshot/link prompt), so the Mini App can't submit it here.
+  const needsBotProof = fields.length === 0 && ['manual', 'screenshot', 'link'].includes(spec.verification_mode);
   const setField = (k, v) => setAnswers((p) => ({ ...p, [k]: v }));
 
   const submit = async () => {
@@ -147,6 +150,10 @@ function TaskBlock({ campaignId, spec, taskId, mySub, isOpen, onSubmitted }) {
       ) : isAuto ? (
         <Alert severity="info">
           This task is auto-verified via Telegram. Please complete it from the bot chat to verify your membership.
+        </Alert>
+      ) : needsBotProof ? (
+        <Alert severity="info">
+          Please complete this task from the bot chat so it can collect your proof.
         </Alert>
       ) : (
         <>

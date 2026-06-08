@@ -128,6 +128,7 @@ def campaign_leaderboard(campaign_id):
             c,
             limit=request.args.get("limit", eng.LEADERBOARD_DEFAULT_LIMIT),
             offset=request.args.get("offset", 0),
+            require_visible=True,  # participant-facing → honor the owner's toggle
             highlight_user_id=tg,
         )
     except eng.EngagementError as e:
