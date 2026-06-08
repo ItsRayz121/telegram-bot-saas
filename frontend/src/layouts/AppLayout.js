@@ -36,10 +36,12 @@ export default function AppLayout({ children }) {
   // everywhere else. Covers: the official groups list + per-group settings/
   // analytics (/groups, /groups/*) and custom-bot group management
   // (/bot/:id/group/*) — but NOT the bot settings page itself (/bot/:id).
-  const isGroupsContext =
-    pathname === '/groups' ||
-    pathname.startsWith('/groups/') ||
-    /^\/bot\/[^/]+\/group\//.test(pathname);
+  // Assistant panel hidden globally per user request, so this guard is unused
+  // for now — kept commented alongside the renders below for easy re-enable.
+  // const isGroupsContext =
+  //   pathname === '/groups' ||
+  //   pathname.startsWith('/groups/') ||
+  //   /^\/bot\/[^/]+\/group\//.test(pathname);
 
   // Auto-collapse on small desktop screens (md-lg range)
   React.useEffect(() => {
