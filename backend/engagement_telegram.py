@@ -280,6 +280,53 @@ def publish_campaign(campaign):
         return False
 
 
+def edit_campaign_post(campaign):
+    """Re-render the already-posted group announcement in place after a content
+    edit — new title / reward / deadline / tasks / leaderboard button all refresh.
+    Also reconciles the pin state with the (possibly edited) pin_message setting.
+    Best-effort: never raises, and only acts on an active, already-posted campaign.
+    """
+    if campaign.status != "active" or not campaign.telegram_message_id:
+        return False
+    try:
+        bot, loop, chat_id, username = _resolve_target(campaign)
+        if not bot or not loop:
+            return False
+        text, keyboard = build_campaign_message(campaign, username)
+        try:
+            asyncio.run_coroutine_threadsafe(
+                bot.edit_message_text(
+                    chat_id=chat_id, message_id=campaign.telegram_message_id,
+                    text=text, parse_mode="HTML", reply_markup=keyboard,
+                    disable_web_page_preview=True,
+                ),
+                loop,
+            ).result(timeout=15)
+        except Exception as e:
+            # "message is not modified" → nothing visible changed; treat as success.
+            if "not modified" not in str(e).lower():
+                raise
+
+        # Reconcile pin state with the (possibly edited) preference.
+        try:
+            if campaign.pin_message:
+                coro = bot.pin_chat_message(
+                    chat_id=chat_id, message_id=campaign.telegram_message_id,
+                    disable_notification=True,
+                )
+            else:
+                coro = bot.unpin_chat_message(
+                    chat_id=chat_id, message_id=campaign.telegram_message_id,
+                )
+            asyncio.run_coroutine_threadsafe(coro, loop).result(timeout=10)
+        except Exception:
+            pass
+        return True
+    except Exception:
+        logger.info("edit_campaign_post failed for %s", getattr(campaign, "id", "?"), exc_info=True)
+        return False
+
+
 def close_campaign_post(campaign):
     """On close: strip the participate buttons, unpin, and post a short results
     summary. All best-effort (bot may be offline in this process)."""

@@ -444,6 +444,10 @@ def update_campaign(campaign, data, *, user=None):
         _maybe_publish(campaign)
     elif action == "close":
         _fire_campaign_event(campaign, "campaign.closed")
+    elif action is None:
+        # Pure content edit (no lifecycle change) → refresh the live group post so
+        # it reflects the new title/reward/deadline/tasks/leaderboard.
+        _maybe_refresh_post(campaign)
     return campaign
 
 
@@ -463,6 +467,19 @@ def _maybe_publish(campaign):
         publish_campaign(campaign)
     except Exception:
         logger.exception("campaign publish hook failed for %s", getattr(campaign, "id", "?"))
+
+
+def _maybe_refresh_post(campaign):
+    """Re-render the already-posted group announcement after a content edit
+    (best-effort). Only for an active, already-posted campaign — we never re-add
+    participate buttons to a paused/closed post."""
+    if campaign.status != "active" or campaign.post_status != "posted" or not campaign.telegram_message_id:
+        return
+    try:
+        from .engagement_telegram import edit_campaign_post
+        edit_campaign_post(campaign)
+    except Exception:
+        logger.debug("campaign post refresh hook failed for %s", getattr(campaign, "id", "?"), exc_info=True)
 
 
 def repost_campaign(campaign):
