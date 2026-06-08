@@ -107,6 +107,9 @@ class Config:
 
     # Engagement link-validity deep checks (optional). Absent → shape-only checks.
     YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY", "")
+    # X/Twitter existence checks: prefer the low-cost twitterapi.io provider when
+    # its key is set, else fall back to the official X API v2 bearer token.
+    TWITTERAPI_IO_KEY = os.environ.get("TWITTERAPI_IO_KEY", "")
     X_BEARER_TOKEN = os.environ.get("X_BEARER_TOKEN", "")
 
     # Google Calendar OAuth2

@@ -78,6 +78,19 @@ def build_campaign_message(campaign, bot_username):
         lines.append(html.escape(campaign.description))
         lines.append("")
 
+    # Multi-task: list the tasks so the group post is self-explanatory (members
+    # still complete each one via the picker in their private chat).
+    try:
+        tasks = campaign.tasks.all()
+    except Exception:
+        tasks = []
+    if tasks:
+        lines.append(f"📋 <b>{len(tasks)} tasks:</b>")
+        for t in tasks:
+            xp = f" — {t.reward_xp} XP" if t.reward_xp else ""
+            lines.append(f"• {html.escape(t.title or '')}{xp}")
+        lines.append("")
+
     # Raid goals checklist (e.g. 50 likes · 20 retweets).
     if campaign.type == "raid":
         goals = (campaign.settings or {}).get("raid_goals") or {}

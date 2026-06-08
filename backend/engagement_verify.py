@@ -164,8 +164,12 @@ def _deep_link_check(url, platform):
 
     if platform == "youtube" and Config.YOUTUBE_API_KEY:
         return _cached_check(url, lambda: _deep_check_youtube(url, Config.YOUTUBE_API_KEY))
-    if platform == "x" and Config.X_BEARER_TOKEN:
-        return _cached_check(url, lambda: _deep_check_x(url, Config.X_BEARER_TOKEN))
+    if platform == "x":
+        # Prefer the low-cost twitterapi.io provider; fall back to official X v2.
+        if Config.TWITTERAPI_IO_KEY:
+            return _cached_check(url, lambda: _deep_check_x_twitterapi(url, Config.TWITTERAPI_IO_KEY))
+        if Config.X_BEARER_TOKEN:
+            return _cached_check(url, lambda: _deep_check_x(url, Config.X_BEARER_TOKEN))
     return True, None
 
 
@@ -207,6 +211,34 @@ def _deep_check_youtube(url, api_key):
         return True, None
     except Exception as e:
         logger.info("youtube deep-check failed (accepting): %s", e)
+        return True, None
+
+
+def _deep_check_x_twitterapi(url, key):
+    """X/Twitter existence check via twitterapi.io (low-cost provider). Returns
+    (ok, reason). Conservative: only rejects on a clearly successful response that
+    explicitly returns no tweet for the id; any other shape/error → accept."""
+    m = _X_ID_RE.search(url)
+    if not m:
+        return True, None
+    tweet_id = m.group(1)
+    try:
+        import requests
+        resp = requests.get(
+            "https://api.twitterapi.io/twitter/tweets",
+            params={"tweet_ids": tweet_id},
+            headers={"X-API-Key": key},
+            timeout=_DEEP_TIMEOUT,
+        )
+        if resp.status_code == 200:
+            body = resp.json() or {}
+            tweets = body.get("tweets")
+            # Definitive "missing": success response with an empty tweets list.
+            if isinstance(tweets, list) and len(tweets) == 0:
+                return False, "That post doesn’t exist or was deleted. Check the link."
+        return True, None
+    except Exception as e:
+        logger.info("twitterapi.io deep-check failed (accepting): %s", e)
         return True, None
 
 
