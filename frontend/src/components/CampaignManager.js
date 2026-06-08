@@ -19,6 +19,15 @@ const TYPES = [
   { value: 'proof_collection',  label: 'Proof Collection',   emoji: '📋', chip: 'Proof',    help: 'Collect UID, wallet, referral link, screenshot or custom fields.' },
   { value: 'content_submission', label: 'Content Submission', emoji: '📝', chip: 'Content',  help: 'Users submit a link (YouTube / X / Telegram / blog) for review.' },
   { value: 'giveaway',          label: 'Giveaway',            emoji: '🎁', chip: 'Giveaway', help: 'Entry on completion of the task.' },
+  { value: 'raid',              label: 'Twitter Raid',        emoji: '🐦', chip: 'Raid',     help: 'Coordinate a like/retweet/comment raid on a tweet. Members submit their proof link.' },
+];
+
+// Raid goal fields (stored under settings.raid_goals).
+const RAID_GOALS = [
+  { key: 'likes', label: 'Likes' },
+  { key: 'retweets', label: 'Retweets' },
+  { key: 'comments', label: 'Comments' },
+  { key: 'follows', label: 'Follows' },
 ];
 const PLATFORMS = [
   { value: '', label: '—' },
@@ -76,6 +85,7 @@ const EMPTY_FORM = {
   custom_fields: [],
   multitask: false,   // Pro: campaign holds several sub-tasks
   tasks: [],
+  raid_goals: {},     // raid type: { likes, retweets, comments, follows }
 };
 
 // Default example/format hint by proof type — pre-fills the helper shown to users.
@@ -484,7 +494,11 @@ function CampaignRow({ c, botId, groupId, onChanged, onManage }) {
 
 function CampaignWizard({ botId, groupId, initialType, onClose, onCreated }) {
   const [step, setStep] = useState(0);
-  const [form, setForm] = useState({ ...EMPTY_FORM, type: initialType || EMPTY_FORM.type });
+  const [form, setForm] = useState({
+    ...EMPTY_FORM,
+    type: initialType || EMPTY_FORM.type,
+    platform: initialType === 'raid' ? 'x' : EMPTY_FORM.platform,
+  });
   const [saving, setSaving] = useState(false);
 
   const typeMeta = TYPES.find((t) => t.value === form.type) || {};
@@ -520,7 +534,18 @@ function CampaignWizard({ botId, groupId, initialType, onClose, onCreated }) {
         one_per_user: form.one_per_user,
         pin_message: form.pin_message,
         status: form.publishNow ? 'active' : 'draft',
-        settings: { allow_resubmit: !!form.allow_resubmit },
+        settings: {
+          allow_resubmit: !!form.allow_resubmit,
+          ...(form.type === 'raid'
+            ? {
+                raid_goals: RAID_GOALS.reduce((acc, g) => {
+                  const n = parseInt(form.raid_goals[g.key]);
+                  if (n > 0) acc[g.key] = n;
+                  return acc;
+                }, {}),
+              }
+            : {}),
+        },
         custom_fields: form.multitask ? [] : form.custom_fields
           .filter((f) => f.label.trim())
           .map((f) => ({
@@ -602,8 +627,23 @@ function CampaignWizard({ botId, groupId, initialType, onClose, onCreated }) {
                 </FormControl>
                 <TextField fullWidth multiline minRows={2} label="Instructions / Description"
                   value={form.description} onChange={(e) => set('description', e.target.value)} />
-                <TextField fullWidth label="Task Link (optional)" placeholder="https://x.com/..."
-                  value={form.task_url} onChange={(e) => set('task_url', e.target.value)} />
+                <TextField fullWidth label={form.type === 'raid' ? 'Tweet URL' : 'Task Link (optional)'}
+                  placeholder="https://x.com/..." value={form.task_url} onChange={(e) => set('task_url', e.target.value)} />
+                {form.type === 'raid' && (
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">Raid goals (shown as targets in the group post)</Typography>
+                    <Grid container spacing={1} sx={{ mt: 0.5 }}>
+                      {RAID_GOALS.map((g) => (
+                        <Grid item xs={6} key={g.key}>
+                          <TextField fullWidth size="small" type="number" label={g.label}
+                            value={form.raid_goals[g.key] || ''}
+                            onChange={(e) => set('raid_goals', { ...form.raid_goals, [g.key]: e.target.value })}
+                            inputProps={{ min: 0 }} />
+                        </Grid>
+                      ))}
+                    </Grid>
+                  </Box>
+                )}
                 <FormControl fullWidth>
                   <InputLabel>Verification</InputLabel>
                   <Select value={form.verification_mode} label="Verification" onChange={(e) => set('verification_mode', e.target.value)}>

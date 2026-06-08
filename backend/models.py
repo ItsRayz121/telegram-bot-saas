@@ -3294,7 +3294,7 @@ class TeamInvite(db.Model):
 # ══════════════════════════════════════════════════════════════════════════════
 
 # Campaign type values
-CAMPAIGN_TYPES = ("proof_collection", "content_submission", "social_task", "giveaway")
+CAMPAIGN_TYPES = ("proof_collection", "content_submission", "social_task", "giveaway", "raid")
 # Verification mode values
 CAMPAIGN_VERIFICATION_MODES = ("auto", "manual", "honor", "screenshot", "link")
 # Lifecycle status values

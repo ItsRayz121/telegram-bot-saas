@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions,
   Button, TextField, Grid, Typography, Box, IconButton,
-  Switch, FormControlLabel, CircularProgress, Divider,
+  Switch, FormControlLabel, CircularProgress, Divider, Alert,
 } from '@mui/material';
 import { Add, Remove } from '@mui/icons-material';
 import { toast } from 'react-toastify';
@@ -83,6 +83,10 @@ export default function RaidCreator({ open, onClose, botId, groupId }) {
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>Create Twitter/X Raid</DialogTitle>
       <DialogContent>
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Tip: the new <strong>Engagement Campaigns</strong> include a “🐦 Twitter Raid” type with
+          per-member proof, leaderboards and webhooks. This classic raid tool stays available.
+        </Alert>
         <TextField
           fullWidth
           label="Tweet URL"

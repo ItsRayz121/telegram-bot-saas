@@ -24,6 +24,7 @@ _PRIMARY_LABEL = {
     "content_submission": "🔗 Submit Content",
     "social_task": "✅ Verify / Submit",
     "giveaway": "🎉 Participate",
+    "raid": "🔁 Join Raid",
 }
 
 _TYPE_EMOJI = {
@@ -31,7 +32,11 @@ _TYPE_EMOJI = {
     "content_submission": "🎥",
     "social_task": "🔥",
     "giveaway": "🎁",
+    "raid": "🐦",
 }
+
+# Human labels for raid goal keys, in display order.
+_RAID_GOALS = [("likes", "Likes"), ("retweets", "Retweets"), ("comments", "Comments"), ("follows", "Follows")]
 
 
 def _status_label(campaign):
@@ -73,6 +78,13 @@ def build_campaign_message(campaign, bot_username):
         lines.append(html.escape(campaign.description))
         lines.append("")
 
+    # Raid goals checklist (e.g. 50 likes · 20 retweets).
+    if campaign.type == "raid":
+        goals = (campaign.settings or {}).get("raid_goals") or {}
+        parts = [f"{goals[k]} {label}" for k, label in _RAID_GOALS if goals.get(k)]
+        if parts:
+            lines.append("🎯 <b>Goals:</b> " + " · ".join(parts))
+
     if campaign.reward_label:
         lines.append(f"🎁 <b>Reward:</b> {html.escape(campaign.reward_label)}")
     if campaign.reward_xp:
@@ -93,7 +105,8 @@ def build_campaign_message(campaign, bot_username):
     # Phase 4 wires the `/start eng_<id>` handler that makes these functional.
     rows = []
     if campaign.task_url:
-        rows.append([InlineKeyboardButton("🔎 Open Task", url=campaign.task_url)])
+        open_label = "🐦 Open Tweet" if campaign.type == "raid" else "🔎 Open Task"
+        rows.append([InlineKeyboardButton(open_label, url=campaign.task_url)])
 
     primary = _PRIMARY_LABEL.get(campaign.type, "✅ Participate")
     deep = f"https://t.me/{bot_username}?start=eng_{campaign.id}"
