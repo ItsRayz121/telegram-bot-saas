@@ -74,6 +74,8 @@ const EMPTY_FORM = {
   publishNow: false,
   allow_resubmit: false,
   custom_fields: [],
+  multitask: false,   // Pro: campaign holds several sub-tasks
+  tasks: [],
 };
 
 // Default example/format hint by proof type — pre-fills the helper shown to users.
@@ -90,6 +92,105 @@ const EXAMPLE_PLACEHOLDER = {
 // Type is chosen up-front (via the Create ▾ menu), so the wizard no longer asks
 // for it — it opens straight on the task definition. Platform now lives in step 1.
 const WIZARD_STEPS = ['Task & Proof', 'Schedule & Reward'];
+
+const EMPTY_TASK = { title: '', type: 'social_task', platform: '', task_url: '', verification_mode: 'manual', reward_xp: 0, reward_label: '', custom_fields: [] };
+
+// Reusable proof-fields editor — used for campaign-level fields and per task.
+function ProofFieldsEditor({ fields, onChange }) {
+  const add = () => onChange([...fields, { label: '', field_type: 'text', required: true, example: '' }]);
+  const upd = (i, k, v) => onChange(fields.map((f, idx) => (idx === i ? { ...f, [k]: v } : f)));
+  const del = (i) => onChange(fields.filter((_, idx) => idx !== i));
+  return (
+    <>
+      {fields.map((f, i) => (
+        <Box key={i} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+            <TextField size="small" label="Prompt" placeholder="Submit your Bitget UID" value={f.label}
+              onChange={(e) => upd(i, 'label', e.target.value)} sx={{ flex: 1 }} />
+            <FormControl size="small" sx={{ minWidth: 130 }}>
+              <Select value={f.field_type} onChange={(e) => upd(i, 'field_type', e.target.value)}>
+                {FIELD_TYPES.map((t) => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)}
+              </Select>
+            </FormControl>
+            <Tooltip title={f.required ? 'Required' : 'Optional'}>
+              <Switch size="small" checked={f.required} onChange={(e) => upd(i, 'required', e.target.checked)} />
+            </Tooltip>
+            <IconButton size="small" color="error" onClick={() => del(i)}><Delete fontSize="small" /></IconButton>
+          </Box>
+          {f.field_type !== 'screenshot' && (
+            <TextField size="small" fullWidth sx={{ mt: 1 }}
+              label="Example / format (optional, shown to users)"
+              placeholder={EXAMPLE_PLACEHOLDER[f.field_type] || ''}
+              value={f.example || ''}
+              onChange={(e) => upd(i, 'example', e.target.value)} />
+          )}
+        </Box>
+      ))}
+      <Button size="small" startIcon={<Add />} onClick={add} sx={{ alignSelf: 'flex-start' }}>
+        Add proof field
+      </Button>
+    </>
+  );
+}
+
+// Multi-task editor — each task carries its own type/platform/verification/reward
+// and proof fields. (Pro feature; backend rejects >1 task for free plans.)
+function TasksEditor({ tasks, onChange }) {
+  const add = () => onChange([...tasks, { ...EMPTY_TASK }]);
+  const upd = (i, k, v) => onChange(tasks.map((t, idx) => (idx === i ? { ...t, [k]: v } : t)));
+  const del = (i) => onChange(tasks.filter((_, idx) => idx !== i));
+  return (
+    <Stack spacing={2}>
+      <Typography variant="caption" color="text.secondary">
+        Members complete each task separately and earn that task's XP. Each task has its own
+        verification and proof fields.
+      </Typography>
+      {tasks.map((t, i) => (
+        <Box key={i} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+            <Typography variant="subtitle2" fontWeight={600}>Task {i + 1}</Typography>
+            <IconButton size="small" color="error" onClick={() => del(i)}><Delete fontSize="small" /></IconButton>
+          </Box>
+          <Stack spacing={1.5}>
+            <TextField size="small" fullWidth label="Task title" value={t.title}
+              onChange={(e) => upd(i, 'title', e.target.value)} />
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+              <FormControl size="small" sx={{ minWidth: 150, flex: 1 }}>
+                <InputLabel>Type</InputLabel>
+                <Select value={t.type} label="Type" onChange={(e) => upd(i, 'type', e.target.value)}>
+                  {TYPES.map((x) => <MenuItem key={x.value} value={x.value}>{x.emoji} {x.label}</MenuItem>)}
+                </Select>
+              </FormControl>
+              <FormControl size="small" sx={{ minWidth: 130, flex: 1 }}>
+                <InputLabel>Platform</InputLabel>
+                <Select value={t.platform} label="Platform" onChange={(e) => upd(i, 'platform', e.target.value)}>
+                  {PLATFORMS.map((p) => <MenuItem key={p.value} value={p.value}>{p.label}</MenuItem>)}
+                </Select>
+              </FormControl>
+            </Box>
+            <FormControl size="small" fullWidth>
+              <InputLabel>Verification</InputLabel>
+              <Select value={t.verification_mode} label="Verification" onChange={(e) => upd(i, 'verification_mode', e.target.value)}>
+                {VERIFICATION_MODES.map((v) => <MenuItem key={v.value} value={v.value}>{v.label}</MenuItem>)}
+              </Select>
+            </FormControl>
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+              <TextField size="small" type="number" label="XP" value={t.reward_xp}
+                onChange={(e) => upd(i, 'reward_xp', e.target.value)} inputProps={{ min: 0 }} sx={{ width: 110 }} />
+              <TextField size="small" label="Task link (optional)" placeholder="https://x.com/..." value={t.task_url}
+                onChange={(e) => upd(i, 'task_url', e.target.value)} sx={{ flex: 1, minWidth: 160 }} />
+            </Box>
+            <Divider textAlign="left"><Typography variant="caption">Proof fields</Typography></Divider>
+            <ProofFieldsEditor fields={t.custom_fields || []} onChange={(v) => upd(i, 'custom_fields', v)} />
+          </Stack>
+        </Box>
+      ))}
+      <Button size="small" variant="outlined" startIcon={<Add />} onClick={add} sx={{ alignSelf: 'flex-start' }}>
+        Add task
+      </Button>
+    </Stack>
+  );
+}
 
 export default function CampaignManager({ botId, groupId }) {
   const [campaigns, setCampaigns] = useState([]);
@@ -350,7 +451,12 @@ function CampaignRow({ c, botId, groupId, onChanged, onManage }) {
         <Typography variant="body2" fontWeight={500}>{c.title}</Typography>
         {c.platform && <Typography variant="caption" color="text.secondary">{c.platform}</Typography>}
       </TableCell>
-      <TableCell><Typography variant="caption">{(TYPES.find(t => t.value === c.type) || {}).label || c.type}</Typography></TableCell>
+      <TableCell>
+        <Typography variant="caption">{(TYPES.find(t => t.value === c.type) || {}).label || c.type}</Typography>
+        {c.is_multitask && (
+          <Chip size="small" variant="outlined" label={`${c.tasks?.length || 0} tasks`} sx={{ ml: 0.5, height: 18 }} />
+        )}
+      </TableCell>
       <TableCell><Chip size="small" label={c.status} color={STATUS_COLOR[c.status] || 'default'} /></TableCell>
       <TableCell><PostStatusCell c={c} botId={botId} groupId={groupId} onChanged={onChanged} /></TableCell>
       <TableCell align="right">{c.submissions_verified ?? 0}</TableCell>
@@ -385,17 +491,20 @@ function CampaignWizard({ botId, groupId, initialType, onClose, onCreated }) {
 
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
 
-  const addField = () => set('custom_fields', [...form.custom_fields, { label: '', field_type: 'text', required: true, example: '' }]);
-  const updField = (i, k, v) => set('custom_fields', form.custom_fields.map((f, idx) => idx === i ? { ...f, [k]: v } : f));
-  const delField = (i) => set('custom_fields', form.custom_fields.filter((_, idx) => idx !== i));
-
   const canNext = () => {
-    if (step === 0) return !!form.title.trim();
+    if (step === 0) {
+      if (!form.title.trim()) return false;
+      if (form.multitask) return form.tasks.some((t) => (t.title || '').trim());
+      return true;
+    }
     return true;
   };
 
   const submit = async () => {
     if (!form.title.trim()) { toast.error('Title is required'); setStep(0); return; }
+    if (form.multitask && !form.tasks.some((t) => (t.title || '').trim())) {
+      toast.error('Add at least one task'); setStep(0); return;
+    }
     setSaving(true);
     try {
       const payload = {
@@ -412,7 +521,7 @@ function CampaignWizard({ botId, groupId, initialType, onClose, onCreated }) {
         pin_message: form.pin_message,
         status: form.publishNow ? 'active' : 'draft',
         settings: { allow_resubmit: !!form.allow_resubmit },
-        custom_fields: form.custom_fields
+        custom_fields: form.multitask ? [] : form.custom_fields
           .filter((f) => f.label.trim())
           .map((f) => ({
             label: f.label.trim(),
@@ -421,6 +530,27 @@ function CampaignWizard({ botId, groupId, initialType, onClose, onCreated }) {
             example: (f.example || '').trim() || null,
           })),
       };
+      if (form.multitask) {
+        payload.tasks = form.tasks
+          .filter((t) => (t.title || '').trim())
+          .map((t) => ({
+            title: t.title.trim(),
+            type: t.type,
+            platform: t.platform || null,
+            task_url: t.task_url || null,
+            verification_mode: t.verification_mode,
+            reward_xp: parseInt(t.reward_xp) || 0,
+            reward_label: t.reward_label || null,
+            custom_fields: (t.custom_fields || [])
+              .filter((f) => f.label.trim())
+              .map((f) => ({
+                label: f.label.trim(),
+                field_type: f.field_type,
+                required: f.required,
+                example: (f.example || '').trim() || null,
+              })),
+          }));
+      }
       if (form.duration_hours) payload.duration_hours = form.duration_hours;
       await engagement.create(botId, groupId, payload);
       toast.success(form.publishNow ? 'Campaign created & activated' : 'Campaign saved as draft');
@@ -449,55 +579,46 @@ function CampaignWizard({ botId, groupId, initialType, onClose, onCreated }) {
               <Typography variant="caption" color="text.secondary">{typeMeta.help}</Typography>
             )}
             <TextField fullWidth label="Title" value={form.title} onChange={(e) => set('title', e.target.value)} />
-            <FormControl fullWidth>
-              <InputLabel>Platform</InputLabel>
-              <Select value={form.platform} label="Platform" onChange={(e) => set('platform', e.target.value)}>
-                {PLATFORMS.map((p) => <MenuItem key={p.value} value={p.value}>{p.label}</MenuItem>)}
-              </Select>
-            </FormControl>
-            <TextField fullWidth multiline minRows={2} label="Instructions / Description"
-              value={form.description} onChange={(e) => set('description', e.target.value)} />
-            <TextField fullWidth label="Task Link (optional)" placeholder="https://x.com/..."
-              value={form.task_url} onChange={(e) => set('task_url', e.target.value)} />
-            <FormControl fullWidth>
-              <InputLabel>Verification</InputLabel>
-              <Select value={form.verification_mode} label="Verification" onChange={(e) => set('verification_mode', e.target.value)}>
-                {VERIFICATION_MODES.map((v) => <MenuItem key={v.value} value={v.value}>{v.label}</MenuItem>)}
-              </Select>
-            </FormControl>
 
-            <Divider textAlign="left"><Typography variant="caption">Proof fields</Typography></Divider>
-            <Typography variant="caption" color="text.secondary">
-              Ask participants for proof (UID, link, wallet, screenshot…). The bot collects each
-              field privately and validates the format before accepting it.
-            </Typography>
-            {form.custom_fields.map((f, i) => (
-              <Box key={i} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
-                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                  <TextField size="small" label="Prompt" placeholder="Submit your Bitget UID" value={f.label}
-                    onChange={(e) => updField(i, 'label', e.target.value)} sx={{ flex: 1 }} />
-                  <FormControl size="small" sx={{ minWidth: 130 }}>
-                    <Select value={f.field_type} onChange={(e) => updField(i, 'field_type', e.target.value)}>
-                      {FIELD_TYPES.map((t) => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)}
-                    </Select>
-                  </FormControl>
-                  <Tooltip title={f.required ? 'Required' : 'Optional'}>
-                    <Switch size="small" checked={f.required} onChange={(e) => updField(i, 'required', e.target.checked)} />
-                  </Tooltip>
-                  <IconButton size="small" color="error" onClick={() => delField(i)}><Delete fontSize="small" /></IconButton>
-                </Box>
-                {f.field_type !== 'screenshot' && (
-                  <TextField size="small" fullWidth sx={{ mt: 1 }}
-                    label="Example / format (optional, shown to users)"
-                    placeholder={EXAMPLE_PLACEHOLDER[f.field_type] || ''}
-                    value={f.example || ''}
-                    onChange={(e) => updField(i, 'example', e.target.value)} />
-                )}
-              </Box>
-            ))}
-            <Button size="small" startIcon={<Add />} onClick={addField} sx={{ alignSelf: 'flex-start' }}>
-              Add proof field
-            </Button>
+            <FormControlLabel
+              control={<Switch checked={form.multitask} onChange={(e) => set('multitask', e.target.checked)} />}
+              label="Multiple tasks (Pro) — one campaign, several tasks"
+            />
+
+            {form.multitask ? (
+              <Stack spacing={2}>
+                <TextField fullWidth multiline minRows={2} label="Campaign intro / description"
+                  value={form.description} onChange={(e) => set('description', e.target.value)} />
+                <Divider textAlign="left"><Typography variant="caption">Tasks</Typography></Divider>
+                <TasksEditor tasks={form.tasks} onChange={(v) => set('tasks', v)} />
+              </Stack>
+            ) : (
+              <>
+                <FormControl fullWidth>
+                  <InputLabel>Platform</InputLabel>
+                  <Select value={form.platform} label="Platform" onChange={(e) => set('platform', e.target.value)}>
+                    {PLATFORMS.map((p) => <MenuItem key={p.value} value={p.value}>{p.label}</MenuItem>)}
+                  </Select>
+                </FormControl>
+                <TextField fullWidth multiline minRows={2} label="Instructions / Description"
+                  value={form.description} onChange={(e) => set('description', e.target.value)} />
+                <TextField fullWidth label="Task Link (optional)" placeholder="https://x.com/..."
+                  value={form.task_url} onChange={(e) => set('task_url', e.target.value)} />
+                <FormControl fullWidth>
+                  <InputLabel>Verification</InputLabel>
+                  <Select value={form.verification_mode} label="Verification" onChange={(e) => set('verification_mode', e.target.value)}>
+                    {VERIFICATION_MODES.map((v) => <MenuItem key={v.value} value={v.value}>{v.label}</MenuItem>)}
+                  </Select>
+                </FormControl>
+
+                <Divider textAlign="left"><Typography variant="caption">Proof fields</Typography></Divider>
+                <Typography variant="caption" color="text.secondary">
+                  Ask participants for proof (UID, link, wallet, screenshot…). The bot collects each
+                  field privately and validates the format before accepting it.
+                </Typography>
+                <ProofFieldsEditor fields={form.custom_fields} onChange={(v) => set('custom_fields', v)} />
+              </>
+            )}
           </Stack>
         )}
 
@@ -588,7 +709,12 @@ function CampaignManageDialog({ botId, groupId, campaignId, onClose, onChanged }
     }
   };
 
-  const fieldMap = (campaign?.custom_fields || []).reduce((m, f) => { m[f.key] = f; return m; }, {});
+  const tasks = campaign?.tasks || [];
+  const isMulti = tasks.length > 0;
+  const taskTitle = (tid) => (tasks.find((t) => t.id === tid) || {}).title || (tid ? `Task ${tid}` : '—');
+  // Field map spans campaign-level + all task-level fields (multi-task safe).
+  const fieldMap = [...(campaign?.custom_fields || []), ...tasks.flatMap((t) => t.custom_fields || [])]
+    .reduce((m, f) => { m[f.key] = f; return m; }, {});
   const FIELD_TYPE_LABEL = FIELD_TYPES.reduce((m, t) => { m[t.value] = t.label; return m; }, {});
 
   const exportCsv = async () => {
@@ -714,6 +840,7 @@ function CampaignManageDialog({ botId, groupId, campaignId, onClose, onChanged }
                   <TableHead>
                     <TableRow sx={{ '& th': { fontWeight: 700, whiteSpace: 'nowrap' } }}>
                       <TableCell>User</TableCell>
+                      {isMulti && <TableCell>Task</TableCell>}
                       <TableCell>Proof</TableCell>
                       <TableCell>Status</TableCell>
                       <TableCell>Submitted</TableCell>
@@ -734,11 +861,18 @@ function CampaignManageDialog({ botId, groupId, campaignId, onClose, onChanged }
                           </Box>
                           <Typography variant="caption" color="text.secondary">ID: {s.telegram_user_id}</Typography>
                         </TableCell>
+                        {isMulti && (
+                          <TableCell><Typography variant="caption">{taskTitle(s.task_id)}</Typography></TableCell>
+                        )}
                         <TableCell>{renderPayload(s)}</TableCell>
                         <TableCell>
                           <Chip size="small" label={s.status}
                             color={s.status === 'verified' ? 'success' : s.status === 'rejected' ? 'error' : 'warning'} />
-                          {s.rewarded && <Typography variant="caption" display="block" color="success.main">+{campaign.reward_xp} XP</Typography>}
+                          {s.rewarded && (
+                            <Typography variant="caption" display="block" color="success.main">
+                              +{s.task_id ? ((tasks.find((t) => t.id === s.task_id) || {}).reward_xp || 0) : campaign.reward_xp} XP
+                            </Typography>
+                          )}
                           {s.reviewed_at && (
                             <Typography variant="caption" display="block" color="text.secondary">
                               by {s.reviewed_by || '—'}
