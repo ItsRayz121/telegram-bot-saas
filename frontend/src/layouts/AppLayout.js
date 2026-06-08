@@ -7,7 +7,8 @@ import {
 import { PALETTE } from '../theme';
 import { Menu as MenuIcon, Home, Groups, Psychology, AccountCircle, SmartToy } from '@mui/icons-material';
 import Sidebar, { SIDEBAR_WIDTH, SIDEBAR_COLLAPSED_WIDTH } from '../components/Sidebar';
-import { DesktopAssistantSidebar, MobileAssistantFab } from '../components/AssistantSidebar';
+// Telegizer Assistant panel hidden per user request — keep import handy for re-enable.
+// import { DesktopAssistantSidebar, MobileAssistantFab } from '../components/AssistantSidebar';
 import TelegizerLogo from '../components/TelegizerLogo';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -134,8 +135,8 @@ export default function AppLayout({ children }) {
           {children}
         </Box>
 
-        {/* Mobile: floating assistant button */}
-        {isMobile && !isGroupsContext && <MobileAssistantFab />}
+        {/* Mobile: floating assistant button — hidden per user request */}
+        {/* {isMobile && !isGroupsContext && <MobileAssistantFab />} */}
 
         {/* ── Mobile bottom navigation bar ── */}
         {isMobile && (
@@ -186,8 +187,8 @@ export default function AppLayout({ children }) {
         )}
       </Box>
 
-      {/* ── Desktop: persistent right assistant sidebar ── */}
-      {!isMobile && !isGroupsContext && <DesktopAssistantSidebar />}
+      {/* ── Desktop: persistent right assistant sidebar — hidden per user request ── */}
+      {/* {!isMobile && !isGroupsContext && <DesktopAssistantSidebar />} */}
 
     </Box>
     </>
