@@ -377,6 +377,16 @@ class ModerationSystem:
         if user_id in smart_cfg.get("trusted_users", []):
             return False
 
+        # Phase 3 raid mode — duplicate-flood detection (many distinct accounts
+        # posting the same text). Behaviour-based, never join-rate. Detection only;
+        # the lockdown response runs at join time in handle_new_member.
+        try:
+            from . import raid_guard
+            if raid_guard.note_message(chat_id, user_id, text, group.settings):
+                await self._announce_raid(bot, chat_id, group)
+        except Exception as e:
+            logger.debug(f"raid_guard message note failed: {e}")
+
         # Normalize homoglyphs before text checks
         normalized_text = normalize_homoglyphs(text) if settings.get("homoglyphs", {}).get("enabled") else text
 
@@ -979,6 +989,40 @@ class ModerationSystem:
                 reason=reason,
                 extra_data={"message_text": msg_text} if msg_text else None,
             )
+
+        # Phase 3 raid mode — a burst of DISTINCT violators is a coordinated-raid
+        # signature. Feed the detector; on activation lock down + alert once.
+        try:
+            from . import raid_guard
+            if raid_guard.note_violation(chat_id, user_id, group.settings):
+                await self._announce_raid(bot, chat_id, group)
+        except Exception as e:
+            logger.debug(f"raid_guard violation note failed: {e}")
+
+    async def _announce_raid(self, bot, chat_id, group):
+        """Post the one-time in-group raid-mode alert (best-effort)."""
+        from . import raid_guard
+        if not raid_guard.get_config(group.settings).get("notify", True):
+            return
+        try:
+            await bot.send_message(
+                chat_id=chat_id,
+                text=raid_guard.activation_notice(raid_guard.seconds_remaining(chat_id)),
+                parse_mode="Markdown",
+            )
+        except Exception as e:
+            logger.debug(f"raid announce failed: {e}")
+        try:
+            with self.app.app_context():
+                from ..database import DatabaseManager
+                DatabaseManager.log_action(
+                    group_id=group.id, action_type="raid_mode_activated",
+                    target_user_id="", target_username=None,
+                    moderator_id="raid_guard", moderator_username="RaidGuard",
+                    reason="Coordinated spam detected — new joins restricted",
+                )
+        except Exception:
+            pass
 
     # ── Smart Moderation: Layer 2 ─────────────────────────────────────────────
 

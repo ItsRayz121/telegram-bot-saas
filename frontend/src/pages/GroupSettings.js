@@ -799,6 +799,7 @@ export default function GroupSettings() {
   const l = settingsData.levels || {};
   const am = settingsData.automod || {};
   const bp = settingsData.bot_policy || {};
+  const rg = settingsData.raid_guard || {};
   const mod = settingsData.moderation || {};
   const ac = settingsData.auto_clean || {};
   const rep = settingsData.reports || {};
@@ -1112,6 +1113,82 @@ export default function GroupSettings() {
                   />
                   <Button variant="outlined" onClick={addTrustedBot}>Add</Button>
                 </Box>
+              </CardContent>
+            </Card>
+
+            {/* Raid Mode — behaviour-based coordinated-spam lockdown (Phase 3) */}
+            <Card sx={{ mb: 2 }}>
+              <CardContent>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                  <Typography variant="h6" fontWeight={600}>🚨 Raid Mode</Typography>
+                </Box>
+                <Typography variant="body2" color="text.secondary" mb={2}>
+                  Detects <b>coordinated</b> spam — many different accounts tripping the
+                  filters, or posting the same message, in a short burst. It does <b>not</b>
+                  lock on join rate (healthy spikes like shout-outs are fine). When a raid is
+                  detected, members who join <i>during</i> it are auto-restricted until it settles.
+                </Typography>
+
+                <FormControlLabel
+                  control={<Switch checked={!!rg.enabled}
+                    onChange={(e) => updateSetting('raid_guard.enabled', e.target.checked)} />}
+                  label="Enable raid mode"
+                />
+
+                <Grid container spacing={2} sx={{ mt: 0.5 }}>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth size="small" type="number"
+                      label="Distinct spammers to trigger"
+                      value={rg.trigger_violators ?? 5}
+                      onChange={(e) => updateSetting('raid_guard.trigger_violators', Math.max(2, parseInt(e.target.value || '0', 10)))}
+                      helperText="Different users tripping the filters within the window."
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth size="small" type="number"
+                      label="Duplicate posters to trigger"
+                      value={rg.duplicate_threshold ?? 5}
+                      onChange={(e) => updateSetting('raid_guard.duplicate_threshold', Math.max(2, parseInt(e.target.value || '0', 10)))}
+                      helperText="Different users posting the same message in the window."
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth size="small" type="number"
+                      label="Detection window (seconds)"
+                      value={rg.window_seconds ?? 60}
+                      onChange={(e) => updateSetting('raid_guard.window_seconds', Math.max(5, parseInt(e.target.value || '0', 10)))}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth size="small" type="number"
+                      label="Lockdown duration (minutes)"
+                      value={rg.lockdown_minutes ?? 10}
+                      onChange={(e) => updateSetting('raid_guard.lockdown_minutes', Math.max(1, parseInt(e.target.value || '0', 10)))}
+                    />
+                  </Grid>
+                </Grid>
+
+                <FormControl fullWidth size="small" sx={{ mt: 2 }}>
+                  <InputLabel>Action on members who join during a raid</InputLabel>
+                  <Select
+                    label="Action on members who join during a raid"
+                    value={rg.lockdown_action || 'mute'}
+                    onChange={(e) => updateSetting('raid_guard.lockdown_action', e.target.value)}
+                  >
+                    <MenuItem value="mute">Mute (recommended — reversible)</MenuItem>
+                    <MenuItem value="kick">Kick (they can rejoin after the raid)</MenuItem>
+                  </Select>
+                </FormControl>
+
+                <FormControlLabel sx={{ mt: 1 }}
+                  control={<Switch checked={rg.notify !== false}
+                    onChange={(e) => updateSetting('raid_guard.notify', e.target.checked)} />}
+                  label="Post an in-group alert when raid mode activates"
+                />
               </CardContent>
             </Card>
 

@@ -2782,6 +2782,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # AutoMod — runs on every non-command group message
     if not text.startswith("/"):
         am_cfg = {}
+        full_settings = {}
         try:
             with flask_app.app_context():
                 from .models import TelegramGroup
@@ -2789,9 +2790,20 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     telegram_group_id=group_id, is_disabled=False
                 ).first()
                 if tg_obj:
-                    am_cfg = (tg_obj.settings or {}).get("automod", {})
+                    full_settings = (tg_obj.settings or {})
+                    am_cfg = full_settings.get("automod", {})
         except Exception:
             pass
+
+        # Phase 3 raid mode — duplicate-flood detection (behaviour-based, never
+        # join-rate). Detection only; the lockdown response runs at join time.
+        try:
+            from .bot_features import raid_guard
+            uid = message.from_user.id if message.from_user else None
+            if raid_guard.note_message(group_id, uid, text, full_settings):
+                await _announce_raid(context.bot, group_id, full_settings, flask_app)
+        except Exception as _re:
+            _log.debug("raid_guard message note failed: %s", _re)
 
         if am_cfg.get("enabled"):
             if await _automod_check(context.bot, message, am_cfg, group_id, flask_app):
@@ -3194,6 +3206,25 @@ async def on_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as exc:
             _log.warning("[OfficialBot] bot-join handling failed for %s: %s", group_id, exc)
         return
+
+    # ── Raid mode: lock down members who join while a raid is active ──────────
+    # is_active() is an in-memory check, so the common (no-raid) path pays nothing
+    # and we only hit the DB for settings once a raid is genuinely underway.
+    try:
+        from .bot_features import raid_guard
+        if raid_guard.is_active(group_id):
+            settings = {}
+            with flask_app.app_context():
+                from .models import TelegramGroup
+                tg = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
+                settings = (tg.settings if tg else {}) or {}
+            action = await raid_guard.lockdown_joiner(context.bot, chat.id, user.id, settings)
+            _log_event(flask_app, group_id, "raid_lockdown_join",
+                       f"{user.first_name} (id={user.id}): {action} on join during active raid",
+                       {"telegram_user_id": str(user.id), "action": action})
+            return  # skip welcome/verification while locked down
+    except Exception as exc:
+        _log.debug("[OfficialBot] raid lockdown on join failed: %s", exc)
 
     _log.info(
         "[OfficialBot] New member: user_id=%s name=%s group=%s (%s)",
@@ -3608,6 +3639,25 @@ def _msg_preview(msg, max_len=500):
     return (text[: max_len - 1] + "…") if len(text) >= max_len else text
 
 
+async def _announce_raid(bot, group_id, settings, flask_app):
+    """Post the one-time in-group raid-mode alert and log the event (best-effort)."""
+    from .bot_features import raid_guard
+    if not raid_guard.get_config(settings).get("notify", True):
+        return
+    try:
+        if _can_send_to_group(str(group_id)):
+            await bot.send_message(
+                chat_id=int(group_id),
+                text=raid_guard.activation_notice(raid_guard.seconds_remaining(group_id)),
+                parse_mode=ParseMode.MARKDOWN,
+            )
+    except Exception as exc:
+        _log.debug("[OfficialBot] raid announce failed: %s", exc)
+    _log_event(flask_app, str(group_id), "raid_mode_activated",
+               "Coordinated spam detected — new joins restricted",
+               {"moderator_username": "RaidGuard"})
+
+
 async def _automod_execute(bot, message, group_id: str, flask_app, rule: str, action: str,
                            mute_minutes: int = 5, notify_seconds: int = 10):
     """Delete the offending message and apply the configured action."""
@@ -3625,17 +3675,28 @@ async def _automod_execute(bot, message, group_id: str, flask_app, rule: str, ac
 
     # #10 — auto-delete behavior comes from the group's moderation settings.
     auto_delete = True
+    _full_settings = {}
     try:
         if flask_app:
             with flask_app.app_context():
                 from .models import TelegramGroup
                 _tg = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
                 if _tg:
-                    _mod = (_tg.settings or {}).get("moderation", {})
+                    _full_settings = (_tg.settings or {})
+                    _mod = _full_settings.get("moderation", {})
                     auto_delete = _mod.get("auto_delete_warnings", True)
                     notify_seconds = int(_mod.get("auto_delete_warn_seconds", notify_seconds) or notify_seconds)
     except Exception:
         pass
+
+    # Phase 3 raid mode — a burst of DISTINCT violators is a raid signature. Feed
+    # the detector; on activation it locks down new joins and alerts once.
+    try:
+        from .bot_features import raid_guard
+        if raid_guard.note_violation(group_id, user_id, _full_settings):
+            await _announce_raid(bot, group_id, _full_settings, flask_app)
+    except Exception as _re:
+        _log.debug("raid_guard violation note failed: %s", _re)
 
     async def _timed_notify(text):
         try:

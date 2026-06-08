@@ -306,6 +306,27 @@ _DEFAULTS: dict = {
         "on_timeout": "ban",                    # "ban" | "keep_restricted"
     },
 
+    # ── Raid mode (Phase 3: bot-spam protection) ──────────────────────────────
+    # BEHAVIOUR-based, NOT join-rate. Join-rate locking trips on healthy spikes
+    # (shout-outs, launches, a timezone waking up), so we never lock on raw join
+    # count. Instead a raid is detected from coordinated-attack signatures:
+    #   • trigger_violators  — N DISTINCT users trip automod within window_seconds
+    #   • duplicate_threshold — N DISTINCT users post the SAME text within the window
+    # On detection the group enters a temporary lockdown: members who join WHILE
+    # the raid is active are auto-restricted (or kicked). Lockdown auto-expires
+    # after lockdown_minutes. OFF by default — opt-in, since a false activation
+    # would restrict genuine newcomers.
+    "raid_guard": {
+        "enabled": False,
+        "window_seconds": 60,
+        "trigger_violators": 5,
+        "duplicate_threshold": 5,
+        "min_text_len": 8,
+        "lockdown_minutes": 10,
+        "lockdown_action": "mute",              # "mute" | "kick" joiners during a raid
+        "notify": True,
+    },
+
     # ── Warning / moderation system ───────────────────────────────────────────
     "moderation": {
         "max_warnings": 3,

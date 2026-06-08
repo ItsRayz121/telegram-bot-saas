@@ -2157,6 +2157,28 @@ class BotInstance:
 
             settings = group.settings
 
+            # Phase 3 raid mode — members who join while a raid is active are
+            # auto-restricted (or kicked) so the flood can't grow. is_active() is
+            # an in-memory check, so the common (no-raid) path stays free.
+            try:
+                from .bot_features import raid_guard
+                if raid_guard.is_active(chat_id):
+                    action = await raid_guard.lockdown_joiner(
+                        context.bot, chat_id, new_user.id, settings
+                    )
+                    with self.app_context.app_context():
+                        from .database import DatabaseManager
+                        DatabaseManager.log_action(
+                            group_id=group.id, action_type="raid_lockdown_join",
+                            target_user_id=str(new_user.id),
+                            target_username=new_user.username,
+                            moderator_id="raid_guard", moderator_username="RaidGuard",
+                            reason=f"{action} on join during active raid",
+                        )
+                    continue  # skip welcome/verification while locked down
+            except Exception as exc:
+                logger.debug(f"raid lockdown on join failed: {exc}")
+
             if settings.get("verification", {}).get("enabled", False):
                 await self.verification.verify_new_member(
                     context.bot, update, new_user, group, settings
