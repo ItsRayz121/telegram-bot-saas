@@ -9,10 +9,11 @@ import {
 import {
   Add, Delete, Send, ExpandMore, ExpandLess, CheckCircle,
   Cancel, ArrowBack, FilterList, PlayArrow, Pause,
+  Warning, ErrorOutline, HelpOutline,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { forwarding as fwdApi, telegramGroups as tgApi } from '../services/api';
+import { forwarding as fwdApi } from '../services/api';
 import PlanGate from '../components/PlanGate';
 
 function _getUser() {
@@ -103,9 +104,9 @@ function RuleLogs({ ruleId, open }) {
 
 // ── Rule card ────────────────────────────────────────────────────────────────
 
-function RuleCard({ rule, groups, onToggle, onDelete, onEdit }) {
+function RuleCard({ rule, sources, onToggle, onDelete }) {
   const [logsOpen, setLogsOpen] = useState(false);
-  const sourceGroup = groups.find(g => g.telegram_group_id === rule.source_group_id);
+  const sourceGroup = sources.find(s => s.chat_id === rule.source_group_id);
 
   return (
     <Card sx={{ mb: 2, opacity: rule.is_active ? 1 : 0.65, transition: 'opacity 0.2s' }}>
@@ -186,9 +187,52 @@ function RuleCard({ rule, groups, onToggle, onDelete, onEdit }) {
   );
 }
 
+// ── Live bot-access badge ─────────────────────────────────────────────────────
+// Debounced read-only check: is the bot admin/member/absent in this chat? Shown
+// under source/destination fields so a rule is never created where it can't work.
+
+const _LEVEL_STYLE = {
+  ok:      { color: 'success.main', Icon: CheckCircle },
+  warn:    { color: 'warning.main', Icon: Warning },
+  error:   { color: 'error.main',   Icon: ErrorOutline },
+  unknown: { color: 'text.disabled', Icon: HelpOutline },
+};
+
+function AccessBadge({ chatId, role }) {
+  const [state, setState] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const id = (chatId || '').trim();
+
+  useEffect(() => {
+    if (!id) { setState(null); return undefined; }
+    let cancelled = false;
+    setLoading(true);
+    const t = setTimeout(() => {
+      fwdApi.checkAccess(id, role)
+        .then(r => { if (!cancelled) setState(r.data); })
+        .catch(() => { if (!cancelled) setState({ level: 'unknown', message: "Couldn't verify access." }); })
+        .finally(() => { if (!cancelled) setLoading(false); });
+    }, 600);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [id, role]);
+
+  if (!id) return null;
+  if (loading && !state) {
+    return <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 0.5 }}>Checking bot access…</Typography>;
+  }
+  if (!state) return null;
+  const { color, Icon } = _LEVEL_STYLE[state.level] || _LEVEL_STYLE.unknown;
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5, mt: 0.5 }}>
+      <Icon sx={{ fontSize: 14, color, mt: '1px', flexShrink: 0 }} />
+      <Typography variant="caption" sx={{ color }}>{state.message}</Typography>
+    </Box>
+  );
+}
+
 // ── Create dialog ────────────────────────────────────────────────────────────
 
-function CreateRuleDialog({ open, onClose, onCreated, groups, fixedSource }) {
+function CreateRuleDialog({ open, onClose, onCreated, sources, fixedSource }) {
   const [form, setForm] = useState(EMPTY_RULE);
   const [dests, setDests] = useState([{ ...EMPTY_DEST }]);
   const [saving, setSaving] = useState(false);
@@ -204,7 +248,7 @@ function CreateRuleDialog({ open, onClose, onCreated, groups, fixedSource }) {
   const handleSubmit = async () => {
     if (!form.rule_name.trim()) { toast.error('Rule name is required'); return; }
     const sourceId = fixedSource || form.source_group_id;
-    if (!sourceId) { toast.error('Select a source group'); return; }
+    if (!sourceId) { toast.error('Select a source chat'); return; }
     const cleanDests = dests
       .map(d => ({ chat_id: (d.chat_id || '').trim(), topic_link: (d.topic_link || '').trim() }))
       .filter(d => d.chat_id);
@@ -246,14 +290,24 @@ function CreateRuleDialog({ open, onClose, onCreated, groups, fixedSource }) {
         />
 
         {!fixedSource && (
-          <FormControl fullWidth size="small" sx={{ mb: 2 }}>
-            <InputLabel>Source group</InputLabel>
-            <Select label="Source group" value={form.source_group_id} onChange={set('source_group_id')}>
-              {groups.map(g => (
-                <MenuItem key={g.telegram_group_id} value={g.telegram_group_id}>{g.name}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <Box sx={{ mb: 2 }}>
+            <FormControl fullWidth size="small">
+              <InputLabel>Source chat</InputLabel>
+              <Select label="Source chat" value={form.source_group_id} onChange={set('source_group_id')}>
+                {sources.map(s => (
+                  <MenuItem key={s.chat_id} value={s.chat_id}>
+                    {s.name}
+                    <Chip
+                      label={s.type === 'channel' ? 'Channel' : 'Group'}
+                      size="small" variant="outlined"
+                      sx={{ ml: 1, height: 16, fontSize: '0.6rem' }}
+                    />
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <AccessBadge chatId={form.source_group_id} role="source" />
+          </Box>
         )}
 
         <TextField
@@ -271,6 +325,7 @@ function CreateRuleDialog({ open, onClose, onCreated, groups, fixedSource }) {
                 value={d.chat_id} onChange={setDest(idx, 'chat_id')}
                 helperText="The bot must be an admin of this chat"
               />
+              <AccessBadge chatId={d.chat_id} role="destination" />
               <TextField
                 fullWidth label="Topic link (optional)" size="small" sx={{ mt: 1 }}
                 value={d.topic_link} onChange={setDest(idx, 'topic_link')}
@@ -424,7 +479,7 @@ export default function WorkspaceForwarding({ embeddedGroupId = null, embeddedGr
   const navigate = useNavigate();
   const embedded = !!embeddedGroupId;
   const [rules, setRules] = useState([]);
-  const [groups, setGroups] = useState([]);
+  const [sources, setSources] = useState([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
@@ -443,7 +498,7 @@ export default function WorkspaceForwarding({ embeddedGroupId = null, embeddedGr
 
   useEffect(() => {
     loadRules();
-    tgApi.list().then(r => setGroups(r.data.groups || [])).catch(() => {});
+    fwdApi.listSources().then(r => setSources(r.data.sources || [])).catch(() => {});
     fwdApi.listPending().then(r => {
       let ps = r.data.pending || [];
       if (embeddedGroupId) ps = ps.filter(p => String(p.source_chat_id) === String(embeddedGroupId));
@@ -542,7 +597,7 @@ export default function WorkspaceForwarding({ embeddedGroupId = null, embeddedGr
             <RuleCard
               key={rule.id}
               rule={rule}
-              groups={groups}
+              sources={sources}
               onToggle={handleToggle}
               onDelete={handleDelete}
             />
@@ -557,7 +612,7 @@ export default function WorkspaceForwarding({ embeddedGroupId = null, embeddedGr
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onCreated={handleCreated}
-        groups={groups}
+        sources={sources}
         fixedSource={embeddedGroupId}
       />
     </Box>

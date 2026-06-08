@@ -884,6 +884,8 @@ export const forwarding = {
   listPending: () => api.get('/api/forwarding/pending'),
   approvePending: (logId) => api.post(`/api/forwarding/pending/${logId}/approve`),
   rejectPending: (logId) => api.post(`/api/forwarding/pending/${logId}/reject`),
+  listSources: () => api.get('/api/forwarding/sources'),
+  checkAccess: (chat_id, role) => api.post('/api/forwarding/check-access', { chat_id, role }),
 };
 
 export const marketplace = {

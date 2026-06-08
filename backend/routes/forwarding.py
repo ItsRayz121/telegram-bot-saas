@@ -82,6 +82,62 @@ def _parse_endpoints(raw_list, *, legacy_chat=None, legacy_topic=None):
     return out
 
 
+def _check_chat_access(chat_id):
+    """Live, read-only probe: is the managing bot present/admin in `chat_id`?
+
+    Resolves the bot for the chat (official or custom — both lineages) and asks
+    Telegram about the bot's OWN membership. Anti-ban safe: a single read-only
+    self-check, no messages sent. Never raises.
+
+    Returns {chat_id, status, is_admin, can_post, bot_username, title, message}
+    where status ∈ {admin, member, absent, unknown}.
+    """
+    chat_key = str(chat_id or "").strip()
+    out = {"chat_id": chat_key, "status": "unknown", "is_admin": False,
+           "can_post": False, "bot_username": None, "title": None, "message": ""}
+    if not chat_key:
+        out["message"] = "Enter a chat first."
+        return out
+    try:
+        from ..automation.bot_resolver import resolve_bot_loop_for_chat
+        import asyncio
+        bot, loop = resolve_bot_loop_for_chat(chat_key)
+        if not (bot and loop and loop.is_running()):
+            out["message"] = "Bot isn't running right now — couldn't verify access."
+            return out
+        out["bot_username"] = f"@{bot.username}" if getattr(bot, "username", None) else None
+
+        async def _probe():
+            chat = await bot.get_chat(chat_key)
+            me = await bot.get_chat_member(chat_key, bot.id)
+            return chat, me
+
+        try:
+            fut = asyncio.run_coroutine_threadsafe(_probe(), loop)
+            chat, me = fut.result(timeout=10)
+        except Exception:
+            out["status"] = "absent"
+            out["message"] = "The bot can't see this chat — add it there first."
+            return out
+
+        out["title"] = getattr(chat, "title", None) or getattr(chat, "username", None)
+        status = getattr(me, "status", None)
+        if status == "creator":
+            out.update(status="admin", is_admin=True, can_post=True)
+        elif status == "administrator":
+            out.update(status="admin", is_admin=True)
+            # For channels, posting needs can_post_messages; for groups admins can post.
+            out["can_post"] = getattr(me, "can_post_messages", None) is not False
+        elif status in ("member", "restricted"):
+            out["status"] = "member"
+        else:  # left / kicked / None
+            out["status"] = "absent"
+    except Exception as exc:  # noqa: BLE001
+        _log.debug("_check_chat_access failed for %s: %s", chat_id, exc)
+        out["message"] = "Couldn't verify access right now."
+    return out
+
+
 def _validate_destination_admin(source_chat, destinations):
     """Best-effort D6 check: is the managing bot an admin able to post in each
     destination? Returns a list of human warnings naming the correct bot. Never
@@ -165,6 +221,85 @@ def list_rules():
     rules = ForwardRule.query.filter_by(owner_user_id=user.id)\
         .order_by(ForwardRule.created_at.desc()).all()
     return jsonify({"rules": [r.to_dict() for r in rules]})
+
+
+# ── Owned source chats (for the source picker) ───────────────────────────────
+
+@forwarding_bp.route("/sources", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def list_sources():
+    """Every chat the user owns that can act as a forwarding source — official
+    groups, custom-bot groups, and channels — each tagged with its type so the
+    UI can render one unified picker. Mirrors what `_owns_source` accepts."""
+    user = _current_user()
+    items = []
+    seen = set()
+
+    def _add(chat_id, name, kind):
+        key = str(chat_id)
+        if not key or key in seen:
+            return
+        seen.add(key)
+        items.append({"chat_id": key, "name": name or key, "type": kind})
+
+    # Official-lineage groups linked by this user (skip disabled).
+    for g in TelegramGroup.query.filter_by(owner_user_id=user.id, is_disabled=False).all():
+        _add(g.telegram_group_id, g.title, "group")
+
+    # Custom-bot groups (groups whose bot belongs to this user).
+    bot_ids = [b.id for b in Bot.query.filter_by(user_id=user.id).all()]
+    if bot_ids:
+        for grp in Group.query.filter(Group.bot_id.in_(bot_ids)).all():
+            _add(grp.telegram_group_id, grp.group_name, "group")
+
+    # Channels owned by this user.
+    for ch in Channel.query.filter_by(user_id=user.id).all():
+        _add(ch.telegram_channel_id, ch.title, "channel")
+
+    items.sort(key=lambda x: (x["type"], (x["name"] or "").lower()))
+    return jsonify({"sources": items})
+
+
+# ── Live access check (for source/destination status badges) ─────────────────
+
+@forwarding_bp.route("/check-access", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def check_access():
+    """Read-only: report whether the managing bot is admin/member/absent in a
+    chat, with role-specific guidance (a source needs admin to READ messages;
+    a destination needs permission to POST)."""
+    data = request.get_json() or {}
+    chat_id = str(data.get("chat_id") or "").strip()
+    role = data.get("role", "destination")
+    if not chat_id:
+        return jsonify({"error": "chat_id is required"}), 400
+
+    info = _check_chat_access(chat_id)
+    bot_label = info["bot_username"] or "the bot"
+    name = info["title"] or chat_id
+    status = info["status"]
+
+    if status == "admin":
+        if role == "destination" and not info["can_post"]:
+            level, message = "warn", f"{bot_label} is an admin in «{name}» but lacks post permission — enable 'Post messages'."
+        else:
+            level, message = "ok", f"{bot_label} is an admin in «{name}» — forwarding will work."
+    elif status == "member":
+        if role == "source":
+            level, message = "warn", (f"{bot_label} is only a member of «{name}». Make it an admin so it "
+                                      f"can read every message (Telegram hides messages from non-admin bots).")
+        else:
+            level, message = "warn", (f"{bot_label} is only a member of «{name}» — it may not be able to post. "
+                                      f"Add it as an admin to be safe.")
+    elif status == "absent":
+        level, message = "error", (info["message"]
+                                   or f"{bot_label} isn't in «{name}» — add it there as an admin first.")
+    else:  # unknown
+        level, message = "unknown", (info["message"] or "Couldn't verify access right now.")
+
+    return jsonify({**info, "role": role, "level": level, "message": message})
 
 
 # ── Create rule ──────────────────────────────────────────────────────────────
