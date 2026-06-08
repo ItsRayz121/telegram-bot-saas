@@ -8,7 +8,7 @@ import {
   CircularProgress, Stack, Tabs, Tab,
 } from '@mui/material';
 import {
-  Add, Delete, DeleteOutline, MoreVert, Download, EmojiEvents, Campaign as CampaignIcon,
+  Add, Delete, DeleteOutline, Edit, MoreVert, Download, EmojiEvents, Campaign as CampaignIcon,
   CheckCircle, Cancel, Visibility, Send, Replay, ArrowDropDown,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
@@ -105,6 +105,18 @@ const EXAMPLE_PLACEHOLDER = {
 const WIZARD_STEPS = ['Task & Proof', 'Schedule & Reward'];
 
 const EMPTY_TASK = { title: '', type: 'social_task', platform: '', task_url: '', verification_mode: 'manual', reward_xp: 0, reward_label: '', custom_fields: [] };
+
+// Mirrors backend engagement._leaderboard_default_on: a ranked board is meaningful
+// for competitive / XP-bearing campaigns, not one-shot collection (UID/wallet/proof).
+const leaderboardDefaultOn = (c) =>
+  (parseInt(c.reward_xp) || 0) > 0 || (c.tasks?.length || 0) > 0 || ['social_task', 'raid'].includes(c.type);
+
+// Resolve the effective "show leaderboard" state from a campaign's saved settings,
+// falling back to the intelligent default when the owner hasn't set a preference.
+const leaderboardSettingFor = (c) => {
+  const pref = (c.settings || {}).leaderboard;
+  return pref === true ? true : pref === false ? false : leaderboardDefaultOn(c);
+};
 
 // Reusable proof-fields editor — used for campaign-level fields and per task.
 function ProofFieldsEditor({ fields, onChange }) {
@@ -478,6 +490,7 @@ function PostStatusCell({ c, botId, groupId, onChanged }) {
 
 function CampaignRow({ c, botId, groupId, onChanged, onManage }) {
   const [anchor, setAnchor] = useState(null);
+  const [editOpen, setEditOpen] = useState(false);
 
   const act = async (action) => {
     setAnchor(null);
@@ -524,11 +537,21 @@ function CampaignRow({ c, botId, groupId, onChanged, onManage }) {
         <Tooltip title="Manage & review"><IconButton size="small" onClick={onManage}><Visibility fontSize="small" /></IconButton></Tooltip>
         <IconButton size="small" onClick={(e) => setAnchor(e.currentTarget)}><MoreVert fontSize="small" /></IconButton>
         <Menu anchorEl={anchor} open={!!anchor} onClose={() => setAnchor(null)}>
+          <MenuItem onClick={() => { setAnchor(null); setEditOpen(true); }}>Edit campaign</MenuItem>
+          <Divider />
           {lifecycle.map((l) => (
             <MenuItem key={l.action} onClick={() => act(l.action)}>{l.label}</MenuItem>
           ))}
         </Menu>
       </TableCell>
+      {editOpen && (
+        <CampaignEditDialog
+          botId={botId} groupId={groupId} campaign={c}
+          hasSubmissions={(c.submissions_total || 0) > 0}
+          onClose={() => setEditOpen(false)}
+          onSaved={() => { setEditOpen(false); onChanged(); }}
+        />
+      )}
     </TableRow>
   );
 }
@@ -764,6 +787,7 @@ function CampaignManageDialog({ botId, groupId, campaignId, onClose, onChanged }
   const [rejectFor, setRejectFor] = useState(null);  // submission pending a reject reason
   const [rejectReason, setRejectReason] = useState('');
   const [tab, setTab] = useState(0);                 // 0 = Submissions, 1 = Leaderboard
+  const [editing, setEditing] = useState(false);     // edit-campaign dialog open
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -876,6 +900,7 @@ function CampaignManageDialog({ botId, groupId, campaignId, onClose, onChanged }
             </Stack>
 
             <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: 'wrap', gap: 1 }}>
+              <Button size="small" variant="outlined" startIcon={<Edit />} onClick={() => setEditing(true)}>Edit</Button>
               <Button size="small" startIcon={<Download />} onClick={exportCsv}>Export CSV</Button>
               <Button size="small" startIcon={<EmojiEvents />} onClick={pickWinners}>Pick Winners</Button>
             </Stack>
@@ -1031,6 +1056,214 @@ function CampaignManageDialog({ botId, groupId, campaignId, onClose, onChanged }
           <Button color="error" variant="contained" onClick={() => review(rejectFor.id, 'reject', rejectReason)}>Reject</Button>
         </DialogActions>
       </Dialog>
+
+      {editing && campaign && (
+        <CampaignEditDialog
+          botId={botId} groupId={groupId} campaign={campaign}
+          hasSubmissions={subs.length > 0}
+          onClose={() => setEditing(false)}
+          onSaved={() => { setEditing(false); load(); onChanged?.(); }}
+        />
+      )}
+    </Dialog>
+  );
+}
+
+// ── Edit existing campaign ─────────────────────────────────────────────────────
+
+function CampaignEditDialog({ botId, groupId, campaign, hasSubmissions, onClose, onSaved }) {
+  const tasks0 = campaign.tasks || [];
+  const isMulti = tasks0.length > 0;
+  // Tasks / proof fields are locked once members have submitted (backend refuses to
+  // replace tasks with existing submissions — protects their data). Details,
+  // reward, deadline and visibility stay editable.
+  const structureLocked = hasSubmissions;
+
+  const [form, setForm] = useState({
+    title: campaign.title || '',
+    description: campaign.description || '',
+    platform: campaign.platform || '',
+    task_url: campaign.task_url || '',
+    verification_mode: campaign.verification_mode || 'manual',
+    reward_xp: campaign.reward_xp || 0,
+    reward_label: campaign.reward_label || '',
+    ends_at: campaign.ends_at ? String(campaign.ends_at).slice(0, 16) : '',
+    max_participants: campaign.max_participants || '',
+    one_per_user: !!campaign.one_per_user,
+    pin_message: !!campaign.pin_message,
+    allow_resubmit: !!(campaign.settings || {}).allow_resubmit,
+    show_leaderboard: leaderboardSettingFor(campaign),
+    multitask: isMulti,
+    custom_fields: (campaign.custom_fields || []).map((f) => ({
+      label: f.label, field_type: f.field_type, required: f.required, example: f.example || '',
+    })),
+    tasks: tasks0.map((t) => ({
+      title: t.title, type: t.type, platform: t.platform || '', task_url: t.task_url || '',
+      verification_mode: t.verification_mode, reward_xp: t.reward_xp || 0, reward_label: t.reward_label || '',
+      custom_fields: (t.custom_fields || []).map((f) => ({
+        label: f.label, field_type: f.field_type, required: f.required, example: f.example || '',
+      })),
+    })),
+    raid_goals: (campaign.settings || {}).raid_goals || {},
+  });
+  const [saving, setSaving] = useState(false);
+  const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+
+  const save = async () => {
+    if (!form.title.trim()) { toast.error('Title is required'); return; }
+    setSaving(true);
+    try {
+      const cleanFields = (arr) => (arr || []).filter((f) => f.label.trim()).map((f) => ({
+        label: f.label.trim(), field_type: f.field_type, required: f.required,
+        example: (f.example || '').trim() || null,
+      }));
+      const payload = {
+        title: form.title.trim(),
+        description: form.description || null,
+        task_url: form.task_url || null,
+        platform: form.platform || null,
+        verification_mode: form.verification_mode,
+        reward_xp: parseInt(form.reward_xp) || 0,
+        reward_label: form.reward_label || null,
+        max_participants: form.max_participants ? parseInt(form.max_participants) : null,
+        one_per_user: form.one_per_user,
+        pin_message: form.pin_message,
+        ends_at: form.ends_at || null,
+        // Merge settings so we never drop winners / verify_chat / branding flags.
+        settings: {
+          ...(campaign.settings || {}),
+          allow_resubmit: !!form.allow_resubmit,
+          leaderboard: !!form.show_leaderboard,
+          ...(campaign.type === 'raid'
+            ? {
+                raid_goals: RAID_GOALS.reduce((acc, g) => {
+                  const n = parseInt(form.raid_goals[g.key]);
+                  if (n > 0) acc[g.key] = n;
+                  return acc;
+                }, {}),
+              }
+            : {}),
+        },
+      };
+      // Only touch tasks / fields when they're editable (no submissions yet).
+      if (!structureLocked) {
+        if (form.multitask) {
+          payload.custom_fields = [];
+          payload.tasks = form.tasks.filter((t) => (t.title || '').trim()).map((t) => ({
+            title: t.title.trim(), type: t.type, platform: t.platform || null,
+            task_url: t.task_url || null, verification_mode: t.verification_mode,
+            reward_xp: parseInt(t.reward_xp) || 0, reward_label: t.reward_label || null,
+            custom_fields: cleanFields(t.custom_fields),
+          }));
+        } else {
+          payload.custom_fields = cleanFields(form.custom_fields);
+        }
+      }
+      await engagement.update(botId, groupId, campaign.id, payload);
+      toast.success('Campaign updated');
+      onSaved();
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Failed to update campaign');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Edit campaign</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ mt: 1 }}>
+          {structureLocked && (
+            <Alert severity="info">
+              This campaign has submissions, so its {isMulti ? 'tasks' : 'proof fields'} are locked to
+              protect existing data. You can still edit the details, reward, deadline and visibility.
+            </Alert>
+          )}
+          <TextField fullWidth label="Title" value={form.title} onChange={(e) => set('title', e.target.value)} />
+          <TextField fullWidth multiline minRows={2} label={isMulti ? 'Campaign intro / description' : 'Instructions / Description'}
+            value={form.description} onChange={(e) => set('description', e.target.value)} />
+
+          {!isMulti && (
+            <>
+              <FormControl fullWidth>
+                <InputLabel>Platform</InputLabel>
+                <Select value={form.platform} label="Platform" onChange={(e) => set('platform', e.target.value)}>
+                  {PLATFORMS.map((p) => <MenuItem key={p.value} value={p.value}>{p.label}</MenuItem>)}
+                </Select>
+              </FormControl>
+              <TextField fullWidth label={campaign.type === 'raid' ? 'Tweet URL' : 'Task Link (optional)'}
+                placeholder="https://x.com/..." value={form.task_url} onChange={(e) => set('task_url', e.target.value)} />
+              <FormControl fullWidth>
+                <InputLabel>Verification</InputLabel>
+                <Select value={form.verification_mode} label="Verification" onChange={(e) => set('verification_mode', e.target.value)}>
+                  {VERIFICATION_MODES.map((v) => <MenuItem key={v.value} value={v.value}>{v.label}</MenuItem>)}
+                </Select>
+              </FormControl>
+            </>
+          )}
+
+          {campaign.type === 'raid' && (
+            <Box>
+              <Typography variant="caption" color="text.secondary">Raid goals (shown as targets in the group post)</Typography>
+              <Grid container spacing={1} sx={{ mt: 0.5 }}>
+                {RAID_GOALS.map((g) => (
+                  <Grid item xs={6} key={g.key}>
+                    <TextField fullWidth size="small" type="number" label={g.label}
+                      value={form.raid_goals[g.key] || ''}
+                      onChange={(e) => set('raid_goals', { ...form.raid_goals, [g.key]: e.target.value })}
+                      inputProps={{ min: 0 }} />
+                  </Grid>
+                ))}
+              </Grid>
+            </Box>
+          )}
+
+          <Grid container spacing={2}>
+            <Grid item xs={6}>
+              <TextField fullWidth type="number" label="XP Reward" value={form.reward_xp}
+                onChange={(e) => set('reward_xp', e.target.value)} inputProps={{ min: 0 }} />
+            </Grid>
+            <Grid item xs={6}>
+              <TextField fullWidth label="Reward Label" placeholder="Giveaway entry"
+                value={form.reward_label} onChange={(e) => set('reward_label', e.target.value)} />
+            </Grid>
+          </Grid>
+          <TextField fullWidth type="datetime-local" label="Deadline (UTC)" InputLabelProps={{ shrink: true }}
+            value={form.ends_at} onChange={(e) => set('ends_at', e.target.value)}
+            helperText="Leave empty for no deadline." />
+          <TextField fullWidth type="number" label="Max participants (optional)"
+            value={form.max_participants} onChange={(e) => set('max_participants', e.target.value)} inputProps={{ min: 1 }} />
+
+          <FormControlLabel control={<Switch checked={form.one_per_user} onChange={(e) => set('one_per_user', e.target.checked)} />}
+            label="One submission per user" />
+          <FormControlLabel control={<Switch checked={form.allow_resubmit} onChange={(e) => set('allow_resubmit', e.target.checked)} />}
+            label="Allow resubmission after rejection" />
+          <FormControlLabel control={<Switch checked={form.pin_message} onChange={(e) => set('pin_message', e.target.checked)} />}
+            label="Pin the group announcement" />
+          <FormControlLabel control={<Switch checked={form.show_leaderboard} onChange={(e) => set('show_leaderboard', e.target.checked)} />}
+            label="Show leaderboard (Pro) — rank participants by XP / tasks completed" />
+
+          {!structureLocked && !isMulti && (
+            <>
+              <Divider textAlign="left"><Typography variant="caption">Proof fields</Typography></Divider>
+              <ProofFieldsEditor fields={form.custom_fields} onChange={(v) => set('custom_fields', v)} />
+            </>
+          )}
+          {!structureLocked && isMulti && (
+            <>
+              <Divider textAlign="left"><Typography variant="caption">Tasks</Typography></Divider>
+              <TasksEditor tasks={form.tasks} onChange={(v) => set('tasks', v)} />
+            </>
+          )}
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} disabled={saving}>Cancel</Button>
+        <Button variant="contained" onClick={save} disabled={saving}>
+          {saving ? <CircularProgress size={20} color="inherit" /> : 'Save changes'}
+        </Button>
+      </DialogActions>
     </Dialog>
   );
 }
