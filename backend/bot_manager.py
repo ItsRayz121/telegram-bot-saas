@@ -2162,7 +2162,7 @@ class BotInstance:
             # an in-memory check, so the common (no-raid) path stays free.
             try:
                 from .bot_features import raid_guard
-                if raid_guard.is_active(chat_id):
+                if raid_guard.is_locked_down(chat_id, settings):
                     action = await raid_guard.lockdown_joiner(
                         context.bot, chat_id, new_user.id, settings
                     )

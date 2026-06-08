@@ -3208,19 +3208,20 @@ async def on_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # ── Raid mode: lock down members who join while a raid is active ──────────
-    # is_active() is an in-memory check, so the common (no-raid) path pays nothing
-    # and we only hit the DB for settings once a raid is genuinely underway.
+    # Either an auto-detected raid (in-memory) OR an admin's persisted emergency
+    # lockdown locks the group, so we load settings once to consult both. Joins
+    # are infrequent and the handler hits the DB right after anyway.
     try:
         from .bot_features import raid_guard
-        if raid_guard.is_active(group_id):
-            settings = {}
-            with flask_app.app_context():
-                from .models import TelegramGroup
-                tg = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
-                settings = (tg.settings if tg else {}) or {}
+        settings = {}
+        with flask_app.app_context():
+            from .models import TelegramGroup
+            tg = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
+            settings = (tg.settings if tg else {}) or {}
+        if raid_guard.is_locked_down(group_id, settings):
             action = await raid_guard.lockdown_joiner(context.bot, chat.id, user.id, settings)
             _log_event(flask_app, group_id, "raid_lockdown_join",
-                       f"{user.first_name} (id={user.id}): {action} on join during active raid",
+                       f"{user.first_name} (id={user.id}): {action} on join during lockdown",
                        {"telegram_user_id": str(user.id), "action": action})
             return  # skip welcome/verification while locked down
     except Exception as exc:

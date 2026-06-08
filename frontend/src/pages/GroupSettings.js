@@ -347,6 +347,7 @@ export default function GroupSettings() {
   // Protection Activity (bot policy + raid mode event log) — Moderation › AutoMod
   const [protectionLog, setProtectionLog] = useState([]);
   const [protectionLoading, setProtectionLoading] = useState(false);
+  const [emergencyMins, setEmergencyMins] = useState(60);
 
   const [digestConfig, setDigestConfig] = useState({
     daily: false, weekly: false, monthly: false,
@@ -712,6 +713,27 @@ export default function GroupSettings() {
       } else {
         toast.error(err.response?.data?.error || 'Failed to save settings');
       }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Emergency lockdown — persists raid_guard.manual_lockdown_until and saves
+  // immediately (it's a panic button, not a deferred setting). minutes=null lifts.
+  const setEmergencyLockdown = async (minutes) => {
+    const until = minutes ? new Date(Date.now() + minutes * 60000).toISOString() : null;
+    const patched = {
+      ...settingsData,
+      raid_guard: { ...(settingsData?.raid_guard || {}), manual_lockdown_until: until },
+    };
+    setSaving(true);
+    try {
+      await settings.updateGroupSettings(botId, groupId, patched);
+      setSettingsData(patched);
+      setOrigSettings(JSON.stringify(patched));
+      toast.success(minutes ? 'Emergency lockdown activated' : 'Lockdown lifted');
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to update lockdown');
     } finally {
       setSaving(false);
     }
@@ -1219,6 +1241,47 @@ export default function GroupSettings() {
                     onChange={(e) => updateSetting('raid_guard.notify', e.target.checked)} />}
                   label="Post an in-group alert when raid mode activates"
                 />
+
+                <Divider sx={{ my: 2 }} />
+                <Typography variant="subtitle2" fontWeight={600} mb={1}>Emergency lockdown</Typography>
+                {(() => {
+                  const until = rg.manual_lockdown_until ? new Date(rg.manual_lockdown_until) : null;
+                  const active = until && until.getTime() > Date.now();
+                  if (active) {
+                    return (
+                      <Alert severity="warning" sx={{ alignItems: 'center' }}
+                        action={<Button color="inherit" size="small" disabled={saving}
+                          onClick={() => setEmergencyLockdown(null)}>Lift now</Button>}>
+                        Locked down until <b>{fmtTs(rg.manual_lockdown_until)}</b> — every new
+                        member is being auto-{rg.lockdown_action || 'mute'}d on join.
+                      </Alert>
+                    );
+                  }
+                  return (
+                    <Box>
+                      <Typography variant="body2" color="text.secondary" mb={1}>
+                        Instantly restrict <b>all</b> new joiners for a set time — use during an
+                        active attack. Works even if raid detection above is off.
+                      </Typography>
+                      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <FormControl size="small" sx={{ minWidth: 130 }}>
+                          <InputLabel>Duration</InputLabel>
+                          <Select label="Duration" value={emergencyMins}
+                            onChange={(e) => setEmergencyMins(e.target.value)}>
+                            <MenuItem value={15}>15 minutes</MenuItem>
+                            <MenuItem value={60}>1 hour</MenuItem>
+                            <MenuItem value={360}>6 hours</MenuItem>
+                            <MenuItem value={1440}>24 hours</MenuItem>
+                          </Select>
+                        </FormControl>
+                        <Button variant="contained" color="error" disabled={saving}
+                          onClick={() => setEmergencyLockdown(emergencyMins)}>
+                          Activate emergency lockdown
+                        </Button>
+                      </Box>
+                    </Box>
+                  );
+                })()}
               </CardContent>
             </Card>
 

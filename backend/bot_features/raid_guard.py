@@ -86,6 +86,40 @@ def seconds_remaining(chat_id) -> int:
     return max(0, int((exp - datetime.utcnow()).total_seconds()))
 
 
+# ── Manual emergency lockdown (Phase 4b) ──────────────────────────────────────
+# The web API and the bot run in SEPARATE processes, so the dashboard can't flip
+# the in-memory lockdown above. Instead an admin's "emergency lockdown" persists
+# an expiry timestamp in settings (raid_guard.manual_lockdown_until, ISO-8601),
+# which the join handlers consult. This works even when auto raid detection is
+# disabled — it's a deliberate manual panic button.
+
+def manual_lockdown_until(settings: dict):
+    """Parse the persisted manual-lockdown expiry, or None. Tolerant of a
+    trailing 'Z' / '+00:00' (timestamps are written in naive UTC)."""
+    try:
+        raw = (settings.get("raid_guard", {}) or {}).get("manual_lockdown_until")
+    except Exception:
+        raw = None
+    if not raw:
+        return None
+    try:
+        s = str(raw).strip().replace("Z", "").replace("+00:00", "")
+        return datetime.fromisoformat(s)
+    except Exception:
+        return None
+
+
+def manual_active(settings: dict) -> bool:
+    dt = manual_lockdown_until(settings)
+    return bool(dt and datetime.utcnow() < dt)
+
+
+def is_locked_down(chat_id, settings: dict) -> bool:
+    """True if the group is under EITHER an auto-detected raid lockdown (in-memory)
+    OR an admin's persisted emergency lockdown. Use this at join time."""
+    return is_active(chat_id) or manual_active(settings)
+
+
 def activate(chat_id, minutes) -> None:
     _active[str(chat_id)] = datetime.utcnow() + timedelta(minutes=max(1, int(minutes)))
 

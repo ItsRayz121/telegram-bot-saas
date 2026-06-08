@@ -325,6 +325,10 @@ _DEFAULTS: dict = {
         "lockdown_minutes": 10,
         "lockdown_action": "mute",              # "mute" | "kick" joiners during a raid
         "notify": True,
+        # Phase 4b: admin "emergency lockdown" panic button. ISO-8601 UTC expiry
+        # set from the dashboard; join handlers restrict newcomers until it passes.
+        # Works even when enabled=False (manual override). null = no manual lockdown.
+        "manual_lockdown_until": None,
     },
 
     # ── Warning / moderation system ───────────────────────────────────────────
