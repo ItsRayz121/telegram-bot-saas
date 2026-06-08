@@ -7,7 +7,7 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions, Button,
 } from '@mui/material';
 import {
-  Home, Groups, AutoMode,
+  Home, Groups,
   CreditCard, Settings, AccountCircle, Logout,
   AdminPanelSettings, ExpandMore, ExpandLess,
   Psychology, ChevronLeft, ChevronRight,
@@ -323,7 +323,6 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
   const groupActive = isActive('/groups');
 
   const assistantActive = isActive('/ark') || isActive('/hub') || isActive('/workspace');
-  const automationActive = isActive('/automation') || isActive('/workspace/forwarding') || isActive('/workspace/automations') || isActive('/workflow-builder');
 
   useEffect(() => {
     const stored = localStorage.getItem('user');
@@ -374,7 +373,6 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
       { label: 'Memory',         icon: ManageAccounts, path: '/workspace/memory' },
       { label: 'Meeting Links',  icon: VideoCall,      path: '/workspace/meeting-links' },
       { label: 'Referrals',      icon: EmojiEvents,    path: '/referrals' },
-      { label: 'Automation',     icon: AutoMode,       path: '/automation' },
       { label: 'Settings',       icon: Settings,       path: '/settings' },
     ];
     return (
@@ -519,10 +517,8 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
         <HubSectionLabel />
         <NavItem label={assistantName} icon={Psychology} path="/ark" active={assistantActive} aiAccent onClick={() => nav('/ark')} tourId="tour-echo" />
 
-        {/* AUTOMATION */}
-        <SectionLabel label="Automation" />
-        <NavItem label="Automation" icon={AutoMode} path="/automation" active={automationActive} onClick={() => nav('/automation')} tourId="tour-automation" />
-
+        {/* Automation hub removed — Forwarding / Workflows / Webhooks now live in
+            each group's Automation tab (Groups › <group> › Automation). */}
         <NavItem label="Referrals" path="/referrals" icon={EmojiEvents} active={isActive('/referrals')} onClick={() => nav('/referrals')} />
 
         <NavItem label="Settings" path="/settings" icon={Settings} active={isActive('/settings')} onClick={() => nav('/settings')} tourId="tour-settings" />

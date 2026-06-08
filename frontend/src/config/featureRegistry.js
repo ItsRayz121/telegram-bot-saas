@@ -56,7 +56,6 @@ export const FEATURE_TABS = [
     icon: AutoAwesome,
     subTabs: [
       { label: 'Knowledge Base', officialOnly: false },
-      { label: 'Webhooks',       officialOnly: false },
       { label: 'Escalation',     officialOnly: false },
     ],
   },
@@ -68,6 +67,9 @@ export const FEATURE_TABS = [
       { label: 'Scheduler',   officialOnly: false },
       { label: 'Auto Reply',  officialOnly: false },
       { label: 'Polls',       officialOnly: false },
+      { label: 'Forwarding',  officialOnly: false },
+      { label: 'Workflows',   officialOnly: false },
+      { label: 'Webhooks',    officialOnly: false },
     ],
   },
   {

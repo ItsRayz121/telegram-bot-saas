@@ -8,7 +8,7 @@ import {
 } from '@mui/material';
 import {
   Add, Delete, AutoMode, ExpandMore, ExpandLess, PlayArrow, Pause,
-  ArrowBack, BoltOutlined, ContentCopy,
+  ArrowBack, BoltOutlined, ContentCopy, AccountTree,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -184,7 +184,7 @@ const EMPTY_FORM = {
   action_delay_minutes: 60,
 };
 
-function CreateDialog({ open, onClose, onCreated, groups, templates }) {
+function CreateDialog({ open, onClose, onCreated, groups, templates, fixedSource }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
 
@@ -228,7 +228,8 @@ function CreateDialog({ open, onClose, onCreated, groups, templates }) {
     const actions = [{ type: form.action_type, params: actionParams }];
     return {
       name: form.name,
-      source_group_id: form.source_group_id || null,
+      // O1: every workflow is scoped to exactly one group (no "all groups").
+      source_group_id: fixedSource || form.source_group_id,
       trigger,
       conditions,
       actions,
@@ -237,7 +238,7 @@ function CreateDialog({ open, onClose, onCreated, groups, templates }) {
 
   const handleSubmit = async () => {
     if (!form.name.trim()) { toast.error('Workflow name is required'); return; }
-    if (!form.source_group_id) { toast.error('Select a source group'); return; }
+    if (!fixedSource && !form.source_group_id) { toast.error('Select a source group'); return; }
     setSaving(true);
     try {
       const res = await autoApi.createWorkflow(buildPayload());
@@ -290,14 +291,16 @@ function CreateDialog({ open, onClose, onCreated, groups, templates }) {
         <TextField fullWidth label="Workflow name" size="small" sx={{ mb: 2 }}
           value={form.name} onChange={set('name')} />
 
-        <FormControl fullWidth size="small" sx={{ mb: 2 }}>
-          <InputLabel>Source group</InputLabel>
-          <Select label="Source group" value={form.source_group_id} onChange={set('source_group_id')}>
-            {groups.map(g => (
-              <MenuItem key={g.telegram_group_id} value={g.telegram_group_id}>{g.name}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+        {!fixedSource && (
+          <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+            <InputLabel>Source group</InputLabel>
+            <Select label="Source group" value={form.source_group_id} onChange={set('source_group_id')}>
+              {groups.map(g => (
+                <MenuItem key={g.telegram_group_id} value={g.telegram_group_id}>{g.name}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        )}
 
         <Typography variant="caption" color="text.secondary" fontWeight={700} display="block" mb={1}>
           TRIGGER — When this happens…
@@ -369,8 +372,9 @@ function CreateDialog({ open, onClose, onCreated, groups, templates }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-export default function WorkspaceAutomations() {
+export default function WorkspaceAutomations({ embeddedGroupId = null }) {
   const navigate = useNavigate();
+  const embedded = !!embeddedGroupId;
   const [workflows, setWorkflows] = useState([]);
   const [groups, setGroups] = useState([]);
   const [templates, setTemplates] = useState([]);
@@ -379,10 +383,14 @@ export default function WorkspaceAutomations() {
 
   const load = useCallback(() => {
     autoApi.listWorkflows()
-      .then(r => setWorkflows(r.data.workflows || []))
+      .then(r => {
+        let ws = r.data.workflows || [];
+        if (embeddedGroupId) ws = ws.filter(w => String(w.source_group_id) === String(embeddedGroupId));
+        setWorkflows(ws);
+      })
       .catch(() => toast.error('Failed to load workflows'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [embeddedGroupId]);
 
   useEffect(() => {
     load();
@@ -411,22 +419,26 @@ export default function WorkspaceAutomations() {
 
   return (
     <PlanGate plan="pro" userTier={user.subscription_tier} feature="Workflow Automations">
-    <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: 900, mx: 'auto' }}>
+    <Box sx={{ p: embedded ? 0 : { xs: 2, md: 4 }, maxWidth: embedded ? '100%' : 900, mx: 'auto' }}>
 
       {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-        <IconButton size="small" onClick={() => navigate('/workspace')} sx={{ mr: 0.5 }}>
-          <ArrowBack fontSize="small" />
-        </IconButton>
-        <AutoMode sx={{ color: '#10b981' }} />
-        <Typography variant="h5" fontWeight={700}>Automations</Typography>
-        {activeCount > 0 && (
-          <Chip label={`${activeCount} active`} size="small" color="success" sx={{ height: 20, fontSize: '0.65rem' }} />
-        )}
-      </Box>
-      <Typography color="text.secondary" mb={3} pl={6}>
-        Build workflows: trigger → condition → action. Runs automatically inside your groups — no code needed.
-      </Typography>
+      {!embedded && (
+        <>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+            <IconButton size="small" onClick={() => navigate('/workspace')} sx={{ mr: 0.5 }}>
+              <ArrowBack fontSize="small" />
+            </IconButton>
+            <AutoMode sx={{ color: '#10b981' }} />
+            <Typography variant="h5" fontWeight={700}>Automations</Typography>
+            {activeCount > 0 && (
+              <Chip label={`${activeCount} active`} size="small" color="success" sx={{ height: 20, fontSize: '0.65rem' }} />
+            )}
+          </Box>
+          <Typography color="text.secondary" mb={3} pl={6}>
+            Build workflows: trigger → condition → action. Runs automatically inside your groups — no code needed.
+          </Typography>
+        </>
+      )}
 
       <Alert severity="info" sx={{ mb: 3 }}>
         Workflows fire on messages and member events in your connected groups.
@@ -434,13 +446,18 @@ export default function WorkspaceAutomations() {
       </Alert>
 
       {/* Header bar */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, gap: 1, flexWrap: 'wrap' }}>
         <Typography variant="subtitle2" color="text.secondary">
           {workflows.length} workflow{workflows.length !== 1 ? 's' : ''}
         </Typography>
-        <Button variant="contained" startIcon={<Add />} onClick={() => setCreateOpen(true)}>
-          New Workflow
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button variant="outlined" startIcon={<AccountTree />} onClick={() => navigate('/workflow-builder')}>
+            Open builder
+          </Button>
+          <Button variant="contained" startIcon={<Add />} onClick={() => setCreateOpen(true)}>
+            New Workflow
+          </Button>
+        </Box>
       </Box>
 
       {loading ? (
@@ -468,11 +485,16 @@ export default function WorkspaceAutomations() {
         onCreated={wf => setWorkflows(prev => [wf, ...prev])}
         groups={groups}
         templates={templates}
+        fixedSource={embeddedGroupId}
       />
 
-      {/* ── Outbound Webhooks (n8n / Zapier / custom) ── */}
-      <Divider sx={{ my: 4 }} />
-      <WebhooksSection />
+      {/* ── Outbound Webhooks (n8n / Zapier / custom) — full-page only ── */}
+      {!embedded && (
+        <>
+          <Divider sx={{ my: 4 }} />
+          <WebhooksSection />
+        </>
+      )}
 
     </Box>
     </PlanGate>

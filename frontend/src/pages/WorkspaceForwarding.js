@@ -416,8 +416,9 @@ function PendingTab({ rules }) {
 
 // ── Main page ────────────────────────────────────────────────────────────────
 
-export default function WorkspaceForwarding() {
+export default function WorkspaceForwarding({ embeddedGroupId = null, embeddedGroupName = null }) {
   const navigate = useNavigate();
+  const embedded = !!embeddedGroupId;
   const [rules, setRules] = useState([]);
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -427,10 +428,14 @@ export default function WorkspaceForwarding() {
 
   const loadRules = useCallback(() => {
     fwdApi.listRules()
-      .then(r => setRules(r.data.rules || []))
+      .then(r => {
+        let rs = r.data.rules || [];
+        if (embeddedGroupId) rs = rs.filter(x => String(x.source_group_id) === String(embeddedGroupId));
+        setRules(rs);
+      })
       .catch(() => toast.error('Failed to load forwarding rules'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [embeddedGroupId]);
 
   useEffect(() => {
     loadRules();
@@ -462,23 +467,29 @@ export default function WorkspaceForwarding() {
 
   return (
     <PlanGate plan="pro" userTier={user.subscription_tier} feature="Message Forwarding">
-    <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: 900, mx: 'auto' }}>
+    <Box sx={{ p: embedded ? 0 : { xs: 2, md: 4 }, maxWidth: embedded ? '100%' : 900, mx: 'auto' }}>
 
       {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-        <IconButton size="small" onClick={() => navigate('/workspace')} sx={{ mr: 0.5 }}>
-          <ArrowBack fontSize="small" />
-        </IconButton>
-        <Send sx={{ color: 'info.main' }} />
-        <Typography variant="h5" fontWeight={700}>Message Forwarding</Typography>
-      </Box>
-      <Typography color="text.secondary" mb={3} pl={6}>
-        Automatically copy messages from one group to another — with keyword filters, prefix/suffix templates, and approval queues.
-      </Typography>
+      {!embedded && (
+        <>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+            <IconButton size="small" onClick={() => navigate('/workspace')} sx={{ mr: 0.5 }}>
+              <ArrowBack fontSize="small" />
+            </IconButton>
+            <Send sx={{ color: 'info.main' }} />
+            <Typography variant="h5" fontWeight={700}>Message Forwarding</Typography>
+          </Box>
+          <Typography color="text.secondary" mb={3} pl={6}>
+            Automatically copy messages from one group to another — with keyword filters, prefix/suffix templates, and approval queues.
+          </Typography>
+        </>
+      )}
 
       <Alert severity="info" sx={{ mb: 3 }}>
-        The bot must be a <strong>member or admin</strong> of the destination chat to forward messages.
-        Use the chat's numeric ID (e.g. <code>-1001234567890</code>) or public <code>@username</code>.
+        {embedded
+          ? <>Forwarding rules sourced from <strong>{embeddedGroupName || 'this group'}</strong>. The bot must be an admin of every destination chat.</>
+          : <>The bot must be a <strong>member or admin</strong> of the destination chat to forward messages.
+            Use the chat's numeric ID (e.g. <code>-1001234567890</code>) or public <code>@username</code>.</>}
       </Alert>
 
       {/* Tabs */}
@@ -539,6 +550,7 @@ export default function WorkspaceForwarding() {
         onClose={() => setCreateOpen(false)}
         onCreated={handleCreated}
         groups={groups}
+        fixedSource={embeddedGroupId}
       />
     </Box>
     </PlanGate>

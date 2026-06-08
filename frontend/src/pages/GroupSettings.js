@@ -23,6 +23,8 @@ import ScheduledMessages from '../components/ScheduledMessages';
 import KnowledgeBase from '../components/KnowledgeBase';
 import PollCreator from '../components/PollCreator';
 import WebhookManager from '../components/WebhookManager';
+import WorkspaceForwarding from './WorkspaceForwarding';
+import WorkspaceAutomations from './WorkspaceAutomations';
 import InviteLinks from '../components/InviteLinks';
 import CampaignManager from '../components/CampaignManager';
 import ForumTopicSelector from '../components/ForumTopicSelector';
@@ -635,20 +637,31 @@ export default function GroupSettings() {
   const warningsSubTabIdx     = getSubTabIndex(CATEGORIES, 'analytics', 'Warnings');
   const digestSubTabIdx       = getSubTabIndex(CATEGORIES, 'analytics', 'Digest');
   const aiActivitySubTabIdx   = getSubTabIndex(CATEGORIES, 'analytics', 'AI Activity');
+  // Automation + AI subtab indices (derived — Forwarding/Workflows/Webhooks were
+  // appended and Webhooks moved out of AI, so positional guards are unsafe).
+  const autoReplySubTabIdx    = getSubTabIndex(CATEGORIES, 'automation', 'Auto Reply');
+  const pollsSubTabIdx        = getSubTabIndex(CATEGORIES, 'automation', 'Polls');
+  const forwardingSubTabIdx   = getSubTabIndex(CATEGORIES, 'automation', 'Forwarding');
+  const workflowsSubTabIdx    = getSubTabIndex(CATEGORIES, 'automation', 'Workflows');
+  const webhooksSubTabIdx     = getSubTabIndex(CATEGORIES, 'automation', 'Webhooks');
+  const escalationSubTabIdx   = getSubTabIndex(CATEGORIES, 'ai', 'Escalation');
+  // Telegram chat id of this group — forwarding/workflows key on it.
+  const groupChatId = groupData?.telegram_group_id || groupId;
+  const groupDisplayName = groupData?.title || groupData?.name || null;
   useEffect(() => { fetchSettings(); }, [fetchSettings]);
   useEffect(() => { if (cat === 'analytics' && subTab === 0) fetchMembers(membersPage); }, [cat, subTab, membersPage, fetchMembers]);
   useEffect(() => { if (cat === 'analytics' && subTab === leaderboardSubTabIdx) fetchLeaderboard(); }, [cat, subTab, leaderboardSubTabIdx, fetchLeaderboard]);
   useEffect(() => { if (cat === 'analytics' && subTab === auditLogSubTabIdx) fetchAuditLogs(auditPage); }, [cat, subTab, auditLogSubTabIdx, auditPage, fetchAuditLogs]);
-  useEffect(() => { if (cat === 'automation' && subTab === 1) fetchAutoResponses(); }, [cat, subTab, fetchAutoResponses]);
+  useEffect(() => { if (cat === 'automation' && subTab === autoReplySubTabIdx) fetchAutoResponses(); }, [cat, subTab, autoReplySubTabIdx, fetchAutoResponses]);
   useEffect(() => { if (cat === 'moderation' && subTab === 2) fetchReports(); }, [cat, subTab, fetchReports]);
   useEffect(() => { if (cat === 'analytics' && subTab === warningsSubTabIdx) fetchWarnings(); }, [cat, subTab, warningsSubTabIdx, fetchWarnings]);
   useEffect(() => { if (cat === 'analytics' && subTab === digestSubTabIdx) fetchDigest(); }, [cat, subTab, digestSubTabIdx, fetchDigest]);
   useEffect(() => { if (cat === 'analytics' && subTab === aiActivitySubTabIdx) fetchAIActivity(); }, [cat, subTab, aiActivitySubTabIdx, fetchAIActivity]);
   useEffect(() => {
-    if ((cat === 'moderation' && subTab === 2) || (cat === 'analytics' && subTab === digestSubTabIdx) || (cat === 'ai' && subTab === 2)) {
+    if ((cat === 'moderation' && subTab === 2) || (cat === 'analytics' && subTab === digestSubTabIdx) || (cat === 'ai' && subTab === escalationSubTabIdx)) {
       fetchAdmins();
     }
-  }, [cat, subTab, digestSubTabIdx, fetchAdmins]);
+  }, [cat, subTab, digestSubTabIdx, escalationSubTabIdx, fetchAdmins]);
   useEffect(() => { fetchCmdRouting(); }, [fetchCmdRouting]);
 
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
@@ -799,7 +812,7 @@ export default function GroupSettings() {
   // #5 — AI Status cards link to the exact tab where each thing is configured.
   const aiStatusTargets = {
     'Smart Moderation': { cat: 'moderation', sub: getSubTabIndex(CATEGORIES, 'moderation', 'AutoMod') },
-    'AI Integrations':  { cat: 'ai',         sub: getSubTabIndex(CATEGORIES, 'ai', 'Webhooks') },
+    'AI Integrations':  { cat: 'automation', sub: getSubTabIndex(CATEGORIES, 'automation', 'Webhooks') },
     'Knowledge Base':   { cat: 'ai',         sub: getSubTabIndex(CATEGORIES, 'ai', 'Knowledge Base') },
     'OpenAI Provider':  { cat: 'ai',         sub: getSubTabIndex(CATEGORIES, 'ai', 'Knowledge Base') },
   };
@@ -2332,7 +2345,7 @@ export default function GroupSettings() {
         )}
 
         {/* AUTOMATION › Auto Reply */}
-        {cat === 'automation' && subTab === 1 && (
+        {cat === 'automation' && subTab === autoReplySubTabIdx && (
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
@@ -2440,13 +2453,34 @@ export default function GroupSettings() {
         )}
 
         {/* AUTOMATION › Polls */}
-        {cat === 'automation' && subTab === 2 && (
+        {cat === 'automation' && subTab === pollsSubTabIdx && (
           <>
             <DefaultTimezoneCard
               value={settingsData?.timezone || 'UTC'}
               onChange={tz => updateSetting('timezone', tz)}
             />
             <PollCreator botId={botId} groupId={groupId} defaultTimezone={settingsData?.timezone || 'UTC'} />
+          </>
+        )}
+
+        {/* AUTOMATION › Forwarding — per-group, source fixed to this group */}
+        {cat === 'automation' && subTab === forwardingSubTabIdx && forwardingSubTabIdx >= 0 && (
+          <WorkspaceForwarding embeddedGroupId={groupChatId} embeddedGroupName={groupDisplayName} />
+        )}
+
+        {/* AUTOMATION › Workflows — per-group, source fixed to this group */}
+        {cat === 'automation' && subTab === workflowsSubTabIdx && workflowsSubTabIdx >= 0 && (
+          <WorkspaceAutomations embeddedGroupId={groupChatId} />
+        )}
+
+        {/* AUTOMATION › Webhooks — moved here from AI & Integrations (O2) */}
+        {cat === 'automation' && subTab === webhooksSubTabIdx && webhooksSubTabIdx >= 0 && (
+          <>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+              <Typography variant="h6" fontWeight={600}>Webhooks</Typography>
+              <EntBadge />
+            </Box>
+            <WebhookManager botId={botId} groupId={groupId} />
           </>
         )}
 
@@ -2531,19 +2565,8 @@ export default function GroupSettings() {
           </>
         )}
 
-        {/* AI › Webhooks */}
-        {cat === 'ai' && subTab === 1 && (
-          <>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h6" fontWeight={600}>Webhooks</Typography>
-              <EntBadge />
-            </Box>
-            <WebhookManager botId={botId} groupId={groupId} />
-          </>
-        )}
-
         {/* AI › Escalation — global settings for all AI + Automation triggers */}
-        {cat === 'ai' && subTab === 2 && (() => {
+        {cat === 'ai' && subTab === escalationSubTabIdx && (() => {
           const esc = settingsData?.escalation || {};
           const adminIds = esc.admin_ids || [];
           return (

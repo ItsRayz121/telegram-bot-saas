@@ -8,12 +8,13 @@ import {
 import {
   ArrowBack, Refresh, Visibility, ThumbUp,
   Image, VideoLibrary, Poll, ArticleOutlined,
-  TrendingUp, TrendingDown, Remove, Shield, InfoOutlined,
+  TrendingUp, TrendingDown, Remove, Shield, InfoOutlined, Send,
 } from '@mui/icons-material';
 import LinearProgress from '@mui/material/LinearProgress';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { channels as chApi } from '../services/api';
+import WorkspaceForwarding from './WorkspaceForwarding';
 
 const FILTER_OPTIONS = [
   { label: '7 days', days: 7 },
@@ -591,6 +592,25 @@ export default function ChannelDetail() {
           )}
         </CardContent>
       </Card>
+
+      {/* Channel-as-source forwarding (Phase 2/4) — a new channel post can feed
+          forwarding rules into groups/other channels. */}
+      {channel.telegram_channel_id && (
+        <>
+          <Divider sx={{ my: 3 }} />
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+            <Send fontSize="small" sx={{ color: 'info.main' }} />
+            <Typography variant="subtitle2" fontWeight={700}>Forwarding</Typography>
+          </Box>
+          <Typography variant="caption" color="text.secondary" display="block" mb={2}>
+            Copy new posts from this channel into your groups or other channels. The bot must be an admin of every destination.
+          </Typography>
+          <WorkspaceForwarding
+            embeddedGroupId={channel.telegram_channel_id}
+            embeddedGroupName={channel.title}
+          />
+        </>
+      )}
 
       <Divider sx={{ my: 3 }} />
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>

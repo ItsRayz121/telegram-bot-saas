@@ -41,13 +41,6 @@ const STEPS = [
     disableBeacon: true,
   },
   {
-    target: '#tour-automation',
-    placement: 'right',
-    title: 'Automation',
-    content: 'Build auto-reply rules, set up message forwarding, and create visual workflow automations.',
-    disableBeacon: true,
-  },
-  {
     target: '#tour-settings',
     placement: 'right',
     title: 'Settings & Billing',
