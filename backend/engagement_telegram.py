@@ -313,8 +313,14 @@ def notify_submission_review(campaign, submission, *, approved, reason=None, all
             return False
 
         if approved:
-            credited = campaign.reward_xp and getattr(submission, "rewarded", False)
-            xp_line = f"\n+{campaign.reward_xp} XP has been credited to your account." if credited else ""
+            # Credited reward is the task's (multi-task) or the campaign's.
+            reward = campaign.reward_xp
+            if getattr(submission, "task_id", None):
+                from .models import EngagementTask
+                _t = EngagementTask.query.get(submission.task_id)
+                reward = _t.reward_xp if _t else 0
+            credited = reward and getattr(submission, "rewarded", False)
+            xp_line = f"\n+{reward} XP has been credited to your account." if credited else ""
             giveaway_line = ""
             if (campaign.reward_label or campaign.type == "giveaway"):
                 giveaway_line = "\nYour entry has been submitted for the giveaway."

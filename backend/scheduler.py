@@ -466,6 +466,11 @@ def check_campaign_lifecycle():
                     et.close_campaign_post(c)
                 except Exception:
                     logger.exception("close_campaign_post error for %s", c.id)
+                try:
+                    from . import engagement as eng
+                    eng._fire_campaign_event(c, "campaign.closed")
+                except Exception:
+                    logger.debug("campaign.closed webhook (auto-expiry) failed", exc_info=True)
 
             # ── 'Ending soon' reminder (once, when <1h remains) ──────────────
             from datetime import timedelta

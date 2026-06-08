@@ -337,7 +337,19 @@ def _replace_tasks(campaign, tasks_in):
         return
     if not isinstance(tasks_in, list):
         raise EngagementError("tasks must be a list", 400)
-    for t in campaign.tasks.all():
+    existing = campaign.tasks.all()
+    if existing:
+        # Deleting a task CASCADE-deletes its submissions at the DB level — refuse
+        # to replace tasks once members have started submitting (data-loss guard).
+        existing_ids = [t.id for t in existing]
+        if EngagementSubmission.query.filter(
+            EngagementSubmission.task_id.in_(existing_ids)
+        ).first():
+            raise EngagementError(
+                "This campaign's tasks can't be changed after members have started "
+                "submitting. Close it and create a new campaign instead.", 400,
+            )
+    for t in existing:
         db.session.delete(t)
     db.session.flush()
     for idx, raw in enumerate(tasks_in):
