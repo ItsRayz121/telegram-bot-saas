@@ -476,6 +476,24 @@ def repost_campaign(campaign):
     return campaign
 
 
+def delete_campaign_post(campaign):
+    """Delete the published group announcement from Telegram, then clear the
+    post-tracking columns so the dashboard shows 'Not posted' and the admin can
+    repost. Raises EngagementError if Telegram refused the delete."""
+    if not campaign.telegram_message_id:
+        raise EngagementError("This campaign hasn't been posted to the group.", 400)
+    from .engagement_telegram import delete_campaign_post as _delete
+    ok, error = _delete(campaign)
+    if not ok:
+        raise EngagementError(error or "Couldn't delete the group post.", 400)
+    campaign.telegram_message_id = None
+    campaign.post_status = "none"
+    campaign.posted_at = None
+    campaign.post_error = None
+    db.session.commit()
+    return campaign
+
+
 # ── Submissions ───────────────────────────────────────────────────────────────
 
 def list_submissions(campaign, *, status=None, limit=1000):
@@ -802,14 +820,48 @@ def _campaign_owner(campaign):
     return User.query.get(campaign.owner_user_id)
 
 
-def leaderboard_enabled(campaign):
-    """A per-campaign leaderboard is a premium feature, gated on the campaign
-    OWNER's plan (not the viewer's) so participants always see the board on a paid
-    owner's campaign. An explicit settings['leaderboard'] = False hides it even
-    for a paid owner (opt-out)."""
-    if (campaign.settings or {}).get("leaderboard") is False:
-        return False
+def leaderboard_premium_ok(campaign):
+    """ACCESS gate: per-campaign leaderboard DATA requires the campaign OWNER to be
+    on a paid plan (not the viewer's). This is what the dashboard board and the
+    API endpoints check, so a paid owner can always view rankings for their own
+    campaign — independent of whether the board is surfaced publicly."""
     return _is_paid(_campaign_owner(campaign))
+
+
+def _leaderboard_default_on(campaign):
+    """Intelligent default for whether to SURFACE the leaderboard when the owner
+    hasn't set an explicit preference. A ranked board is meaningful for
+    competitive / XP-bearing campaigns; it isn't for one-shot data collection
+    (UID / wallet / KYC / proof), where everyone submits once and there's nothing
+    to rank."""
+    if (campaign.reward_xp or 0) > 0:
+        return True
+    try:
+        if campaign.tasks.count() > 0:  # multi-task → ranked by tasks completed
+            return True
+    except Exception:
+        pass
+    return campaign.type in ("social_task", "raid")
+
+
+def leaderboard_visible(campaign):
+    """SURFACING gate: whether to show the 🏆 leaderboard button in the group post
+    and to participants. Requires the owner to be paid AND the board to be on —
+    an explicit settings['leaderboard'] True/False wins; otherwise an intelligent
+    default decides (on for XP/multi-task/social/raid, off for pure collection)."""
+    pref = (campaign.settings or {}).get("leaderboard")
+    if pref is False:
+        return False
+    if not leaderboard_premium_ok(campaign):
+        return False
+    if pref is True:
+        return True
+    return _leaderboard_default_on(campaign)
+
+
+# Back-compat alias (kept so any external caller keeps working).
+def leaderboard_enabled(campaign):
+    return leaderboard_visible(campaign)
 
 
 def campaign_leaderboard(campaign, *, limit=LEADERBOARD_DEFAULT_LIMIT, offset=0,
@@ -831,7 +883,7 @@ def campaign_leaderboard(campaign, *, limit=LEADERBOARD_DEFAULT_LIMIT, offset=0,
     offset, entries:[…], me:{…}|None}. `me` is the highlight_user_id's row (with
     its true rank) even when it falls outside the requested page.
     """
-    if enforce_premium and not leaderboard_enabled(campaign):
+    if enforce_premium and not leaderboard_premium_ok(campaign):
         raise EngagementError(
             "Per-campaign leaderboards require a Pro or Enterprise subscription.",
             403, code="FEATURE_REQUIRES_PRO",

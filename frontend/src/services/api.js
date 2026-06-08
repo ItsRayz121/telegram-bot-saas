@@ -492,6 +492,7 @@ export const engagement = {
   create: (botId, groupId, data) => api.post(campaignBase(botId, groupId), data),
   update: (botId, groupId, id, data) => api.patch(`${campaignBase(botId, groupId)}/${id}`, data),
   post: (botId, groupId, id) => api.post(`${campaignBase(botId, groupId)}/${id}/post`),
+  deletePost: (botId, groupId, id) => api.delete(`${campaignBase(botId, groupId)}/${id}/post`),
   // NOTE: GroupCRM passes botId as undefined (not 'official') for official groups,
   // so mirror the crm api convention: falsy/'official' → official path.
   memberSubmissions: (botId, groupId, tgUserId) =>

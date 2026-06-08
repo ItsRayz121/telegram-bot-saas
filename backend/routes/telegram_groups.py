@@ -1710,6 +1710,26 @@ def post_official_campaign(group_id, campaign_id):
         return jsonify({"error": "Failed to post campaign"}), 500
 
 
+@tg_groups_bp.route("/<group_id>/campaigns/<int:campaign_id>/post", methods=["DELETE"])
+@jwt_required()
+@rate_limit(requests_per_minute=15)
+def delete_official_campaign_post(group_id, campaign_id):
+    """Delete the published group announcement from Telegram (admin action)."""
+    user = _current_user()
+    if not _owns_group(user.id, group_id):
+        return jsonify({"error": "Group not found"}), 404
+    try:
+        c = eng.get_campaign(campaign_id, "official", telegram_group_id=group_id)
+        c = eng.delete_campaign_post(c)
+        return jsonify({"campaign": c.to_dict(include_analytics=True)}), 200
+    except eng.EngagementError as e:
+        db.session.rollback()
+        return _eng_err(e)
+    except Exception:
+        db.session.rollback()
+        return jsonify({"error": "Failed to delete campaign post"}), 500
+
+
 @tg_groups_bp.route("/<group_id>/campaigns/<int:campaign_id>/submissions", methods=["GET"])
 @jwt_required()
 @rate_limit(requests_per_minute=60)

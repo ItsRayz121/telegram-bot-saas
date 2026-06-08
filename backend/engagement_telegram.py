@@ -18,14 +18,30 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-# Button label for the primary "do it" action, by campaign type.
-_PRIMARY_LABEL = {
-    "proof_collection": "📝 Submit Proof",
-    "content_submission": "🔗 Submit Content",
-    "social_task": "✅ Verify / Submit",
-    "giveaway": "🎉 Participate",
-    "raid": "🔁 Join Raid",
-}
+def _primary_label(campaign):
+    """Label for the primary "do it" button, reflecting the ACTUAL action so the
+    member is never told something will be "verified" when nothing is checked:
+      • multi-task        → opens a task picker
+      • giveaway / raid   → type-specific entry label
+      • one-tap verify    → honor/auto mode with no proof to collect
+      • everything else   → proof gets collected, so "Submit Proof"
+    """
+    try:
+        if campaign.tasks.count() > 0:
+            return "🚀 Take Part"
+    except Exception:
+        pass
+    if campaign.type == "giveaway":
+        return "🎉 Enter Giveaway"
+    if campaign.type == "raid":
+        return "🔁 Join Raid"
+    try:
+        has_fields = campaign.custom_fields.count() > 0
+    except Exception:
+        has_fields = False
+    if not has_fields and campaign.verification_mode in ("auto", "honor"):
+        return "✅ Tap to Verify"
+    return "📤 Submit Proof"
 
 _TYPE_EMOJI = {
     "proof_collection": "📝",
@@ -121,7 +137,7 @@ def build_campaign_message(campaign, bot_username):
         open_label = "🐦 Open Tweet" if campaign.type == "raid" else "🔎 Open Task"
         rows.append([InlineKeyboardButton(open_label, url=campaign.task_url)])
 
-    primary = _PRIMARY_LABEL.get(campaign.type, "✅ Participate")
+    primary = _primary_label(campaign)
     deep = f"https://t.me/{bot_username}?start=eng_{campaign.id}"
     deep_my = f"https://t.me/{bot_username}?start=engmy_{campaign.id}"
     rows.append([
@@ -132,7 +148,7 @@ def build_campaign_message(campaign, bot_username):
     # Leaderboard (Pro owners only) — deep-link renders the board in the user's DM.
     try:
         from . import engagement as eng
-        if eng.leaderboard_enabled(campaign):
+        if eng.leaderboard_visible(campaign):
             rows.append([InlineKeyboardButton(
                 "🏆 Leaderboard",
                 url=f"https://t.me/{bot_username}?start=englb_{campaign.id}",
@@ -297,6 +313,47 @@ def close_campaign_post(campaign):
     except Exception:
         logger.exception("close_campaign_post failed for %s", getattr(campaign, "id", "?"))
         return False
+
+
+def delete_campaign_post(campaign):
+    """Delete the published group announcement from Telegram (unpin first, then
+    delete). Returns (ok, error_message). Never raises.
+
+    Telegram only lets a bot delete its own messages within ~48h (and needs delete
+    permission in the chat); older / already-gone messages are handled gracefully.
+    The caller clears the post-tracking columns on success so the admin can repost.
+    """
+    if not campaign.telegram_message_id:
+        return False, "This campaign hasn't been posted to the group."
+    try:
+        bot, loop, chat_id, _ = _resolve_target(campaign)
+        if not bot or not loop:
+            return False, "The bot is offline — try again once it reconnects."
+        # Best-effort unpin (ignore failure), then delete.
+        try:
+            asyncio.run_coroutine_threadsafe(
+                bot.unpin_chat_message(chat_id=chat_id, message_id=campaign.telegram_message_id),
+                loop,
+            ).result(timeout=10)
+        except Exception:
+            pass
+        asyncio.run_coroutine_threadsafe(
+            bot.delete_message(chat_id=chat_id, message_id=campaign.telegram_message_id),
+            loop,
+        ).result(timeout=10)
+        return True, None
+    except Exception as exc:
+        logger.info("delete_campaign_post failed for %s: %s",
+                    getattr(campaign, "id", "?"), exc)
+        m = str(exc).lower()
+        if "message to delete not found" in m or "message can't be found" in m:
+            return True, None  # already gone — treat as deleted
+        if "message can't be deleted" in m or "can't be deleted" in m:
+            return False, ("Telegram won't let the bot delete this message — it may be "
+                           "older than 48 hours. You can remove it manually in the group.")
+        if "not enough rights" in m or "delete messages" in m:
+            return False, "The bot lacks permission to delete messages in this group."
+        return False, "Couldn't delete the group post. Please remove it manually if needed."
 
 
 def notify_submission_review(campaign, submission, *, approved, reason=None, allow_resubmit=False):

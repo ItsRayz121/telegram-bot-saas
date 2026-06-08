@@ -87,6 +87,13 @@ def submit_campaign(campaign_id):
     if any(f.field_type == "screenshot" and f.required for f in fields):
         return jsonify({"error": "This task needs a screenshot — please submit via the bot chat."}), 400
 
+    # Review-based task (manual/screenshot/link) with no proof fields: the bot
+    # collects a default proof, but the Mini App API has none to send — submitting
+    # here would create an empty "under review" row. Direct the user to the bot.
+    spec = t if task_id is not None else c
+    if not fields and spec.verification_mode in ("manual", "screenshot", "link"):
+        return jsonify({"error": "Please complete this task from the bot chat so it can collect your proof."}), 400
+
     try:
         sub, error = eng.create_submission(
             c,

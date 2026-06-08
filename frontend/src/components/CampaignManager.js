@@ -8,7 +8,7 @@ import {
   CircularProgress, Stack, Tabs, Tab,
 } from '@mui/material';
 import {
-  Add, Delete, MoreVert, Download, EmojiEvents, Campaign as CampaignIcon,
+  Add, Delete, DeleteOutline, MoreVert, Download, EmojiEvents, Campaign as CampaignIcon,
   CheckCircle, Cancel, Visibility, Send, Replay, ArrowDropDown,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
@@ -82,6 +82,7 @@ const EMPTY_FORM = {
   pin_message: true,
   publishNow: false,
   allow_resubmit: false,
+  show_leaderboard: false,   // Pro: surface a ranked board (default set per type)
   custom_fields: [],
   multitask: false,   // Pro: campaign holds several sub-tasks
   tasks: [],
@@ -391,6 +392,8 @@ export default function CampaignManager({ botId, groupId }) {
 
 function PostStatusCell({ c, botId, groupId, onChanged }) {
   const [posting, setPosting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const map = {
     posted: { label: 'Posted', color: 'success' },
     failed: { label: 'Failed', color: 'error' },
@@ -399,6 +402,7 @@ function PostStatusCell({ c, botId, groupId, onChanged }) {
   };
   const meta = map[c.post_status] || map.none;
   const canRetry = c.status === 'active' && c.post_status !== 'posted' && c.post_status !== 'posting';
+  const canDelete = c.post_status === 'posted' && c.telegram_message_id;
 
   const doPost = async () => {
     setPosting(true);
@@ -412,6 +416,20 @@ function PostStatusCell({ c, botId, groupId, onChanged }) {
       toast.error(e.response?.data?.error || 'Failed to post');
     } finally {
       setPosting(false);
+    }
+  };
+
+  const doDelete = async () => {
+    setDeleting(true);
+    try {
+      await engagement.deletePost(botId, groupId, c.id);
+      toast.success('Group post deleted');
+      setConfirmDelete(false);
+      onChanged();
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Failed to delete post');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -429,6 +447,31 @@ function PostStatusCell({ c, botId, groupId, onChanged }) {
           </span>
         </Tooltip>
       )}
+      {canDelete && (
+        <Tooltip title="Delete the group post">
+          <span>
+            <IconButton size="small" color="error" onClick={() => setConfirmDelete(true)} disabled={deleting}>
+              {deleting ? <CircularProgress size={14} /> : <DeleteOutline fontSize="small" />}
+            </IconButton>
+          </span>
+        </Tooltip>
+      )}
+      <Dialog open={confirmDelete} onClose={() => !deleting && setConfirmDelete(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Delete group post?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            This removes the announcement message from the Telegram group. Submissions and
+            rewards are kept, and you can post it again afterwards. Telegram may refuse to
+            delete messages older than 48 hours.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmDelete(false)} disabled={deleting}>Cancel</Button>
+          <Button color="error" variant="contained" onClick={doDelete} disabled={deleting}>
+            {deleting ? <CircularProgress size={20} color="inherit" /> : 'Delete post'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
@@ -498,6 +541,8 @@ function CampaignWizard({ botId, groupId, initialType, onClose, onCreated }) {
     ...EMPTY_FORM,
     type: initialType || EMPTY_FORM.type,
     platform: initialType === 'raid' ? 'x' : EMPTY_FORM.platform,
+    // Intelligent default: rank competitive types; off for one-shot collection.
+    show_leaderboard: ['social_task', 'raid'].includes(initialType),
   });
   const [saving, setSaving] = useState(false);
 
@@ -536,6 +581,7 @@ function CampaignWizard({ botId, groupId, initialType, onClose, onCreated }) {
         status: form.publishNow ? 'active' : 'draft',
         settings: {
           allow_resubmit: !!form.allow_resubmit,
+          leaderboard: !!form.show_leaderboard,
           ...(form.type === 'raid'
             ? {
                 raid_goals: RAID_GOALS.reduce((acc, g) => {
@@ -688,6 +734,8 @@ function CampaignWizard({ botId, groupId, initialType, onClose, onCreated }) {
               label="Allow resubmission after rejection" />
             <FormControlLabel control={<Switch checked={form.pin_message} onChange={(e) => set('pin_message', e.target.checked)} />}
               label="Pin the group announcement" />
+            <FormControlLabel control={<Switch checked={form.show_leaderboard} onChange={(e) => set('show_leaderboard', e.target.checked)} />}
+              label="Show leaderboard (Pro) — rank participants by XP / tasks completed" />
             <FormControlLabel control={<Switch checked={form.publishNow} onChange={(e) => set('publishNow', e.target.checked)} />}
               label="Activate now (otherwise saved as draft)" />
           </Stack>
@@ -859,10 +907,22 @@ function CampaignManageDialog({ botId, groupId, campaignId, onClose, onChanged }
               </Alert>
             )}
             {campaign.post_status === 'posted' && campaign.posted_at && (
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                Posted to group {new Date(campaign.posted_at).toLocaleString()}
-                {campaign.telegram_message_id ? ` · msg #${campaign.telegram_message_id}` : ''}
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, flexWrap: 'wrap' }}>
+                <Typography variant="caption" color="text.secondary">
+                  Posted to group {new Date(campaign.posted_at).toLocaleString()}
+                  {campaign.telegram_message_id ? ` · msg #${campaign.telegram_message_id}` : ''}
+                </Typography>
+                {campaign.telegram_message_id && (
+                  <Button size="small" color="error" startIcon={<DeleteOutline />} onClick={async () => {
+                    if (!window.confirm('Delete the group announcement message from Telegram? Submissions are kept and you can repost afterwards.')) return;
+                    try {
+                      await engagement.deletePost(botId, groupId, campaignId);
+                      toast.success('Group post deleted');
+                      load(); onChanged?.();
+                    } catch (e) { toast.error(e.response?.data?.error || 'Failed to delete post'); }
+                  }}>Delete post</Button>
+                )}
+              </Box>
             )}
 
             <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}>

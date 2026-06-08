@@ -197,6 +197,21 @@ def _task_picker(campaign, done_ids):
     return InlineKeyboardMarkup(rows)
 
 
+def _default_proof_field(spec):
+    """A sensible proof field for a review-based task (manual / screenshot / link)
+    that has no configured proof fields — so the bot collects real proof instead
+    of accepting an empty submission. `link` mode needs a URL (its validator reads
+    any URL-looking answer); everything else is proven by a screenshot.
+
+    Returned as a field dict (the same shape as EngagementCustomField.to_dict) so
+    it flows through the normal field-collection path. It is not a DB row."""
+    if getattr(spec, "verification_mode", None) == "link":
+        return {"key": "proof_url", "label": "Proof link", "field_type": "url",
+                "required": True, "example": None}
+    return {"key": "proof_screenshot", "label": "Proof screenshot",
+            "field_type": "screenshot", "required": True, "example": None}
+
+
 async def _ask_field(message, field, *, error=None):
     label = html.escape(field["label"])
     hint = {
@@ -350,12 +365,19 @@ async def _begin_task(msg, context, campaign, spec, task_id, *, user, lineage, b
         force_verified = True
 
     if not fields:
-        # No proof fields → finalize straight away.
-        await _finalize(msg, context, flask_app, campaign.id, {}, None, None,
-                        user=user, lineage=lineage, bot_id=bot_id,
-                        forced_status="verified" if force_verified else None,
-                        task_id=task_id)
-        return
+        # Auto-verify (passed above) and honor-based tasks are legitimately
+        # one-tap → finalize straight away.
+        if force_verified or spec.verification_mode == "honor":
+            await _finalize(msg, context, flask_app, campaign.id, {}, None, None,
+                            user=user, lineage=lineage, bot_id=bot_id,
+                            forced_status="verified" if force_verified else None,
+                            task_id=task_id)
+            return
+        # Manual / screenshot / link review with NO configured proof fields would
+        # otherwise create an empty "under review" submission with nothing to
+        # review. Collect one sensible default proof so the admin (or the link
+        # checker) has something real to act on.
+        fields = [_default_proof_field(spec)]
 
     # Start field-by-field collection.
     context.user_data["eng"] = {

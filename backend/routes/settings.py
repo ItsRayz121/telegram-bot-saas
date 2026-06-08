@@ -884,6 +884,30 @@ def post_engagement_campaign(bot_id, group_id, campaign_id):
         return jsonify({"error": "Failed to post campaign"}), 500
 
 
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/campaigns/<int:campaign_id>/post", methods=["DELETE"])
+@jwt_required()
+@rate_limit(requests_per_minute=15)
+def delete_engagement_campaign_post(bot_id, group_id, campaign_id):
+    """Delete the published group announcement from Telegram (admin action)."""
+    user = _get_current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    _, group, err = _get_bot_and_group(user, bot_id, group_id)
+    if err:
+        return err
+    try:
+        c = eng.get_campaign(campaign_id, "custom", group_id=group.id)
+        c = eng.delete_campaign_post(c)
+        return jsonify({"campaign": c.to_dict(include_analytics=True)})
+    except eng.EngagementError as e:
+        db.session.rollback()
+        return _eng_err(e)
+    except Exception as e:
+        logger.error(f"delete_engagement_campaign_post error: {e}", exc_info=True)
+        db.session.rollback()
+        return jsonify({"error": "Failed to delete campaign post"}), 500
+
+
 @settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/campaigns/<int:campaign_id>/submissions", methods=["GET"])
 @jwt_required()
 @rate_limit(requests_per_minute=60)
