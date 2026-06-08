@@ -1756,6 +1756,25 @@ def member_submission_history_official(group_id, tg_user_id):
     return jsonify({"submissions": subs}), 200
 
 
+@tg_groups_bp.route("/<group_id>/campaigns/<int:campaign_id>/leaderboard", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def official_campaign_leaderboard(group_id, campaign_id):
+    """Ranked participant board for a campaign (premium — gated on owner plan)."""
+    user = _current_user()
+    if not _owns_group(user.id, group_id):
+        return jsonify({"error": "Group not found"}), 404
+    try:
+        c = eng.get_campaign(campaign_id, "official", telegram_group_id=group_id)
+        return jsonify(eng.campaign_leaderboard(
+            c,
+            limit=request.args.get("limit", eng.LEADERBOARD_DEFAULT_LIMIT),
+            offset=request.args.get("offset", 0),
+        )), 200
+    except eng.EngagementError as e:
+        return _eng_err(e)
+
+
 @tg_groups_bp.route("/<group_id>/campaigns/<int:campaign_id>/submissions/export", methods=["GET"])
 @jwt_required()
 @rate_limit(requests_per_minute=10)

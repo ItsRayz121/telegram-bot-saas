@@ -939,6 +939,28 @@ def member_submission_history_custom(bot_id, group_id, tg_user_id):
     return jsonify({"submissions": subs})
 
 
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/campaigns/<int:campaign_id>/leaderboard", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def engagement_campaign_leaderboard(bot_id, group_id, campaign_id):
+    """Ranked participant board for a campaign (premium — gated on owner plan)."""
+    user = _get_current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    _, group, err = _get_bot_and_group(user, bot_id, group_id)
+    if err:
+        return err
+    try:
+        c = eng.get_campaign(campaign_id, "custom", group_id=group.id)
+        return jsonify(eng.campaign_leaderboard(
+            c,
+            limit=request.args.get("limit", eng.LEADERBOARD_DEFAULT_LIMIT),
+            offset=request.args.get("offset", 0),
+        ))
+    except eng.EngagementError as e:
+        return _eng_err(e)
+
+
 @settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/campaigns/<int:campaign_id>/submissions/export", methods=["GET"])
 @jwt_required()
 @rate_limit(requests_per_minute=10)

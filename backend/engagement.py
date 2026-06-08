@@ -623,6 +623,123 @@ def award_submission(campaign, submission):
             pass
 
 
+# ── Leaderboards (premium) ─────────────────────────────────────────────────────
+
+LEADERBOARD_DEFAULT_LIMIT = 50
+LEADERBOARD_MAX_LIMIT = 200
+
+
+def _campaign_owner(campaign):
+    from .models import User
+    if not campaign.owner_user_id:
+        return None
+    return User.query.get(campaign.owner_user_id)
+
+
+def leaderboard_enabled(campaign):
+    """A per-campaign leaderboard is a premium feature, gated on the campaign
+    OWNER's plan (not the viewer's) so participants always see the board on a paid
+    owner's campaign. An explicit settings['leaderboard'] = False hides it even
+    for a paid owner (opt-out)."""
+    if (campaign.settings or {}).get("leaderboard") is False:
+        return False
+    return _is_paid(_campaign_owner(campaign))
+
+
+def campaign_leaderboard(campaign, *, limit=LEADERBOARD_DEFAULT_LIMIT, offset=0,
+                         enforce_premium=True, highlight_user_id=None):
+    """Ranked participant board for ONE campaign (premium).
+
+    Ranking is by campaign contribution, derived from the campaign's own VERIFIED
+    submissions — the same rows award_submission credits XP from, so the board
+    lines up with the XP ledger without re-reading it:
+      • primary  → number of verified submissions (desc)
+      • tiebreak → earliest verification time (asc) — first to complete ranks higher
+
+    Each entry carries xp_earned = verified_count * reward_xp (reward_xp is fixed
+    per campaign, mirroring what was actually credited).
+
+    Returns {campaign_id, campaign_title, reward_xp, total_participants, limit,
+    offset, entries:[…], me:{…}|None}. `me` is the highlight_user_id's row (with
+    its true rank) even when it falls outside the requested page.
+    """
+    if enforce_premium and not leaderboard_enabled(campaign):
+        raise EngagementError(
+            "Per-campaign leaderboards require a Pro or Enterprise subscription.",
+            403, code="FEATURE_REQUIRES_PRO",
+        )
+
+    from sqlalchemy import func
+
+    limit = max(1, min(_coerce_int(limit, "limit", minimum=1) or LEADERBOARD_DEFAULT_LIMIT,
+                       LEADERBOARD_MAX_LIMIT))
+    offset = max(0, _coerce_int(offset, "offset") or 0)
+    reward_xp = campaign.reward_xp or 0
+
+    rows = (
+        db.session.query(
+            EngagementSubmission.telegram_user_id.label("uid"),
+            func.count(EngagementSubmission.id).label("verified_count"),
+            func.min(EngagementSubmission.reviewed_at).label("first_at"),
+            func.max(EngagementSubmission.created_at).label("last_at"),
+        )
+        .filter(EngagementSubmission.campaign_id == campaign.id)
+        .filter(EngagementSubmission.status == "verified")
+        .group_by(EngagementSubmission.telegram_user_id)
+        .all()
+    )
+
+    # Latest known username per participant (most recent submission wins).
+    unames = {}
+    for uid, uname in (
+        db.session.query(
+            EngagementSubmission.telegram_user_id, EngagementSubmission.telegram_username
+        )
+        .filter(EngagementSubmission.campaign_id == campaign.id)
+        .filter(EngagementSubmission.status == "verified")
+        .order_by(EngagementSubmission.created_at.desc())
+        .all()
+    ):
+        if uname and uid not in unames:
+            unames[uid] = uname
+
+    # Most verified first, then earliest completion. A null first_at sorts last.
+    def _sort_key(r):
+        return (-int(r.verified_count or 0), r.first_at or datetime.max)
+
+    ordered = sorted(rows, key=_sort_key)
+
+    def _entry(rank, r):
+        vc = int(r.verified_count or 0)
+        return {
+            "rank": rank,
+            "telegram_user_id": r.uid,
+            "telegram_username": unames.get(r.uid),
+            "verified_count": vc,
+            "xp_earned": vc * reward_xp,
+            "first_verified_at": r.first_at.isoformat() if r.first_at else None,
+            "last_activity_at": r.last_at.isoformat() if r.last_at else None,
+        }
+
+    entries = [_entry(i + 1, r) for i, r in enumerate(ordered)]
+
+    me = None
+    if highlight_user_id is not None:
+        hid = str(highlight_user_id)
+        me = next((e for e in entries if e["telegram_user_id"] == hid), None)
+
+    return {
+        "campaign_id": campaign.id,
+        "campaign_title": campaign.title,
+        "reward_xp": reward_xp,
+        "total_participants": len(entries),
+        "limit": limit,
+        "offset": offset,
+        "entries": entries[offset:offset + limit],
+        "me": me,
+    }
+
+
 def submissions_csv(campaign):
     """Return a CSV string of all submissions for a campaign."""
     fields = campaign.custom_fields.all()

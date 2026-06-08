@@ -88,6 +88,30 @@ def submit_campaign(campaign_id):
     return jsonify({"submission": sub.to_dict()}), 201
 
 
+@engagement_public_bp.route("/campaigns/<int:campaign_id>/leaderboard", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def campaign_leaderboard(campaign_id):
+    """Public ranked board for a campaign + the viewer's own rank (`me`). Premium
+    feature — returns 403 (FEATURE_REQUIRES_PRO) on a non-paid owner's campaign."""
+    user = _user()
+    c = EngagementCampaign.query.get(campaign_id)
+    if not c or c.status in ("draft", "archived"):
+        return jsonify({"error": "Campaign not found"}), 404
+    tg = user.telegram_user_id if user else None
+    try:
+        lb = eng.campaign_leaderboard(
+            c,
+            limit=request.args.get("limit", eng.LEADERBOARD_DEFAULT_LIMIT),
+            offset=request.args.get("offset", 0),
+            highlight_user_id=tg,
+        )
+    except eng.EngagementError as e:
+        body, status = e.to_response()
+        return jsonify(body), status
+    return jsonify(lb)
+
+
 @engagement_public_bp.route("/my-tasks", methods=["GET"])
 @jwt_required()
 @rate_limit(requests_per_minute=30)
