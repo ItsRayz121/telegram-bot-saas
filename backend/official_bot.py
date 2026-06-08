@@ -6024,7 +6024,7 @@ class OfficialBotRunner:
             ),
             group=-1,
         )
-        a.add_handler(CallbackQueryHandler(_eng_cb, pattern=r"^eng_"), group=-1)
+        a.add_handler(CallbackQueryHandler(_eng_cb, pattern=r"^(eng_|engtask_)"), group=-1)
 
         a.add_handler(CommandHandler("start", cmd_start))
         a.add_handler(CommandHandler("help", cmd_help))

@@ -3218,7 +3218,7 @@ class BotInstance:
             ),
             group=-1,
         )
-        app.add_handler(CallbackQueryHandler(_eng_cb, pattern=r"^eng_"), group=-1)
+        app.add_handler(CallbackQueryHandler(_eng_cb, pattern=r"^(eng_|engtask_)"), group=-1)
 
         app.add_handler(CommandHandler("start", self.handle_start))
         app.add_handler(CommandHandler("help", self.handle_help))

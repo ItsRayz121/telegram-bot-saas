@@ -78,10 +78,10 @@ def _load_campaign(campaign_id, lineage, bot_id):
     return c
 
 
-def _existing_submission(campaign_id, telegram_user_id):
+def _existing_submission(campaign_id, telegram_user_id, task_id=None):
     from .models import EngagementSubmission
     return EngagementSubmission.query.filter_by(
-        campaign_id=campaign_id, telegram_user_id=str(telegram_user_id)
+        campaign_id=campaign_id, task_id=task_id, telegram_user_id=str(telegram_user_id)
     ).order_by(EngagementSubmission.created_at.desc()).first()
 
 
@@ -133,11 +133,20 @@ def _render_leaderboard(campaign, lb):
 
 
 def _render_my_submission(campaign, sub):
-    """A full, readable summary of the participant's own submission."""
-    fields = {f.key: f for f in campaign.custom_fields.all()}
+    """A full, readable summary of the participant's own submission. Resolves the
+    field labels from the submission's task (multi-task) or the campaign."""
+    from .models import EngagementTask
+    title_extra = ""
+    if sub.task_id:
+        task = EngagementTask.query.get(sub.task_id)
+        fields = {f.key: f for f in task.custom_fields.all()} if task else {}
+        if task:
+            title_extra = f" — {html.escape(task.title or '')}"
+    else:
+        fields = {f.key: f for f in campaign.custom_fields.all()}
     lines = [
         "📋 <b>Your Submission</b>",
-        f"Campaign: {html.escape(campaign.title or '')}",
+        f"Campaign: {html.escape(campaign.title or '')}{title_extra}",
     ]
     payload = sub.payload or {}
     for key, value in payload.items():
@@ -165,6 +174,27 @@ def _render_my_submission(campaign, sub):
 def _cancel_keyboard():
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
     return InlineKeyboardMarkup([[InlineKeyboardButton("✖ Cancel", callback_data="eng_cancel")]])
+
+
+def _completed_task_ids(campaign_id, telegram_user_id):
+    """Task ids the user has a verified/pending (i.e. non-rejected) submission for."""
+    from .models import EngagementSubmission
+    rows = EngagementSubmission.query.filter_by(
+        campaign_id=campaign_id, telegram_user_id=str(telegram_user_id)
+    ).all()
+    return {s.task_id for s in rows if s.task_id and s.status in ("verified", "pending")}
+
+
+def _task_picker(campaign, done_ids):
+    """Inline keyboard with one button per task (✓ on already-submitted tasks)."""
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    rows = []
+    for t in campaign.tasks.all():
+        mark = "✅ " if t.id in done_ids else ""
+        xp = f" (+{t.reward_xp} XP)" if t.reward_xp else ""
+        label = f"{mark}{t.title}{xp}"[:64]
+        rows.append([InlineKeyboardButton(label, callback_data=f"engtask_{campaign.id}_{t.id}")])
+    return InlineKeyboardMarkup(rows)
 
 
 async def _ask_field(message, field, *, error=None):
@@ -235,6 +265,12 @@ async def on_start(update, context, payload, *, flask_app, lineage, bot_id=None)
             return True
 
         if is_my:
+            if campaign.tasks.count() > 0:
+                await msg.reply_text(
+                    _render_my_status_multi(campaign, user.id),
+                    parse_mode="HTML", disable_web_page_preview=True,
+                )
+                return True
             sub = _existing_submission(campaign_id, user.id)
             if not sub:
                 await msg.reply_text("You haven’t submitted to this campaign yet.")
@@ -250,74 +286,113 @@ async def on_start(update, context, payload, *, flask_app, lineage, bot_id=None)
             await msg.reply_text("This campaign is closed. The submission window has ended.")
             return True
 
-        # Anti-spam cooldown between rapid taps.
-        _ck = (lineage, user.id)
-        _now = time.monotonic()
-        if _now - _last_participate.get(_ck, 0) < _PARTICIPATE_COOLDOWN:
-            await msg.reply_text("Please wait a moment before trying again.")
-            return True
-        _last_participate[_ck] = _now
-
-        if campaign.one_per_user:
-            existing = _existing_submission(campaign_id, user.id)
-            allow_resubmit = bool((campaign.settings or {}).get("allow_resubmit"))
-            if existing and not (existing.status == "rejected" and allow_resubmit):
-                await msg.reply_text(
-                    _render_my_submission(campaign, existing),
-                    parse_mode="HTML", disable_web_page_preview=True,
-                )
-                return True
-
-        # Optional membership gate (anti-farming): must be a real member first.
-        if (campaign.settings or {}).get("require_membership") and campaign.verification_mode != "auto":
-            from .engagement_verify import verify_telegram_join
-            if not await verify_telegram_join(context.bot, _verify_chat_ref(campaign, lineage), user.id):
-                await msg.reply_text("Please join the group/channel first, then tap the button again.")
-                return True
-
-        fields = _ordered_fields(campaign)
-        title = html.escape(campaign.title)
-
-        # ── Auto-verify: Telegram channel/group join ─────────────────────────
-        force_verified = False
-        if campaign.verification_mode == "auto":
-            from .engagement_verify import verify_telegram_join
-            chat_ref = _verify_chat_ref(campaign, lineage)
-            ok = await verify_telegram_join(context.bot, chat_ref, user.id)
-            if not ok:
-                target = chat_ref if isinstance(chat_ref, str) and chat_ref.startswith("@") else "the required channel/group"
-                await msg.reply_text(
-                    f"You don’t appear to be a member yet. Please join {html.escape(str(target))}, "
-                    "then tap the button again."
-                )
-                return True
-            force_verified = True
-
-        if not fields:
-            # No proof fields → finalize straight away.
-            await _finalize(msg, context, flask_app, campaign_id, {}, None, None,
-                            user=user, lineage=lineage, bot_id=bot_id,
-                            forced_status="verified" if force_verified else None)
+        # Multi-task → show a task picker; the chosen task is handled in on_callback.
+        if campaign.tasks.count() > 0:
+            done = _completed_task_ids(campaign.id, user.id)
+            await msg.reply_text(
+                f"🚀 <b>{html.escape(campaign.title or '')}</b>\nChoose a task to complete:",
+                parse_mode="HTML", reply_markup=_task_picker(campaign, done),
+            )
             return True
 
-        # Start field-by-field collection.
-        context.user_data["eng"] = {
-            "cid": campaign_id, "fields": fields, "idx": 0,
-            "answers": {}, "file_id": None, "file_hash": None,
-            "lineage": lineage, "bot_id": bot_id,
-            "force_verified": force_verified,
-            "platform": campaign.platform,
-        }
-        intro = f"🚀 <b>{title}</b>\nLet’s collect your submission. {len(fields)} step(s)."
-        await msg.reply_text(intro, parse_mode="HTML")
-        await _ask_field(msg, fields[0])
+        await _begin_task(msg, context, campaign, campaign, None,
+                          user=user, lineage=lineage, bot_id=bot_id, flask_app=flask_app)
     return True
 
 
-def _verify_chat_ref(campaign, lineage):
-    """Resolve the chat to check membership in for an auto-verify campaign:
-    an explicit settings['verify_chat'], else the campaign's own group/channel."""
-    explicit = (campaign.settings or {}).get("verify_chat")
+async def _begin_task(msg, context, campaign, spec, task_id, *, user, lineage, bot_id, flask_app):
+    """Shared 'start collecting proof for this task' flow. `spec` is the campaign
+    (single-task) or an EngagementTask (multi-task); task_id mirrors it. Applies
+    the anti-spam cooldown, one-per-(campaign,task,user) guard, optional membership
+    gate, and auto-verify, then either finalizes (no fields) or starts field
+    collection with the spec's fields/platform."""
+    # Anti-spam cooldown between rapid taps.
+    _ck = (lineage, user.id)
+    _now = time.monotonic()
+    if _now - _last_participate.get(_ck, 0) < _PARTICIPATE_COOLDOWN:
+        await msg.reply_text("Please wait a moment before trying again.")
+        return
+    _last_participate[_ck] = _now
+
+    if campaign.one_per_user:
+        existing = _existing_submission(campaign.id, user.id, task_id)
+        allow_resubmit = bool((campaign.settings or {}).get("allow_resubmit"))
+        if existing and not (existing.status == "rejected" and allow_resubmit):
+            await msg.reply_text(
+                _render_my_submission(campaign, existing),
+                parse_mode="HTML", disable_web_page_preview=True,
+            )
+            return
+
+    # Optional membership gate (anti-farming): must be a real member first.
+    if (campaign.settings or {}).get("require_membership") and spec.verification_mode != "auto":
+        from .engagement_verify import verify_telegram_join
+        if not await verify_telegram_join(context.bot, _verify_chat_ref(campaign, lineage, spec), user.id):
+            await msg.reply_text("Please join the group/channel first, then tap the button again.")
+            return
+
+    fields = [f.to_dict() for f in spec.custom_fields.all()]
+    title = html.escape(spec.title or campaign.title or "")
+
+    # ── Auto-verify: Telegram channel/group join ─────────────────────────
+    force_verified = False
+    if spec.verification_mode == "auto":
+        from .engagement_verify import verify_telegram_join
+        chat_ref = _verify_chat_ref(campaign, lineage, spec)
+        ok = await verify_telegram_join(context.bot, chat_ref, user.id)
+        if not ok:
+            target = chat_ref if isinstance(chat_ref, str) and chat_ref.startswith("@") else "the required channel/group"
+            await msg.reply_text(
+                f"You don’t appear to be a member yet. Please join {html.escape(str(target))}, "
+                "then tap the button again."
+            )
+            return
+        force_verified = True
+
+    if not fields:
+        # No proof fields → finalize straight away.
+        await _finalize(msg, context, flask_app, campaign.id, {}, None, None,
+                        user=user, lineage=lineage, bot_id=bot_id,
+                        forced_status="verified" if force_verified else None,
+                        task_id=task_id)
+        return
+
+    # Start field-by-field collection.
+    context.user_data["eng"] = {
+        "cid": campaign.id, "task_id": task_id, "fields": fields, "idx": 0,
+        "answers": {}, "file_id": None, "file_hash": None,
+        "lineage": lineage, "bot_id": bot_id,
+        "force_verified": force_verified,
+        "platform": spec.platform,
+    }
+    intro = f"🚀 <b>{title}</b>\nLet’s collect your submission. {len(fields)} step(s)."
+    await msg.reply_text(intro, parse_mode="HTML")
+    await _ask_field(msg, fields[0])
+
+
+def _render_my_status_multi(campaign, telegram_user_id):
+    """Per-task progress summary for a multi-task campaign."""
+    from .models import EngagementSubmission
+    subs = {}
+    for s in EngagementSubmission.query.filter_by(
+        campaign_id=campaign.id, telegram_user_id=str(telegram_user_id)
+    ).order_by(EngagementSubmission.created_at.asc()).all():
+        subs[s.task_id] = s
+    lines = [f"📋 <b>Your progress — {html.escape(campaign.title or '')}</b>"]
+    for t in campaign.tasks.all():
+        s = subs.get(t.id)
+        status = _STATUS_LINE.get(s.status, s.status) if s else "⬜ Not started"
+        lines.append(f"• {html.escape(t.title)} — {status}")
+    return "\n".join(lines)
+
+
+def _verify_chat_ref(campaign, lineage, spec=None):
+    """Resolve the chat to check membership in for an auto-verify task/campaign:
+    an explicit settings['verify_chat'] (task's, then campaign's), else the
+    campaign's own group/channel."""
+    explicit = (getattr(spec, "settings", None) or {}).get("verify_chat") if spec is not None else None
+    if not explicit:
+        explicit = (campaign.settings or {}).get("verify_chat")
     if explicit:
         return explicit
     if lineage == "official":
@@ -402,11 +477,12 @@ async def on_private(update, context, *, flask_app, lineage, bot_id=None):
     f_id = state.get("file_id")
     f_hash = state.get("file_hash")
     forced = "verified" if state.get("force_verified") else None
+    task_id = state.get("task_id")
     context.user_data.pop("eng", None)
     with flask_app.app_context():
         await _finalize(msg, context, flask_app, state["cid"], answers, f_id, f_hash,
                         user=update.effective_user, lineage=lineage, bot_id=bot_id,
-                        forced_status=forced)
+                        forced_status=forced, task_id=task_id)
     return True
 
 
@@ -414,7 +490,7 @@ async def on_private(update, context, *, flask_app, lineage, bot_id=None):
 
 async def on_callback(update, context, *, flask_app, lineage, bot_id=None):
     query = update.callback_query
-    if not query or not (query.data or "").startswith("eng_"):
+    if not query or not (query.data or "").startswith(("eng_", "engtask_")):
         return False
     data = query.data
     if data == "eng_cancel":
@@ -425,6 +501,36 @@ async def on_callback(update, context, *, flask_app, lineage, bot_id=None):
         except Exception:
             pass
         return True
+
+    # Multi-task picker → begin the chosen task's proof collection.
+    if data.startswith("engtask_"):
+        await query.answer()
+        try:
+            _, cid, tid = data.split("_", 2)
+            campaign_id, task_id = int(cid), int(tid)
+        except (ValueError, TypeError):
+            return True
+        msg = query.message
+        user = query.from_user
+        if not msg or not user:
+            return True
+        with flask_app.app_context():
+            from .models import EngagementTask
+            campaign = _load_campaign(campaign_id, lineage, bot_id)
+            if not campaign:
+                await msg.reply_text("This campaign is no longer available.")
+                return True
+            if not campaign.is_open:
+                await msg.reply_text("This campaign is closed. The submission window has ended.")
+                return True
+            task = EngagementTask.query.filter_by(id=task_id, campaign_id=campaign_id).first()
+            if not task:
+                await msg.reply_text("That task is no longer available.")
+                return True
+            await _begin_task(msg, context, campaign, task, task_id,
+                              user=user, lineage=lineage, bot_id=bot_id, flask_app=flask_app)
+        return True
+
     await query.answer()
     return True
 
@@ -432,7 +538,7 @@ async def on_callback(update, context, *, flask_app, lineage, bot_id=None):
 # ── Finalize: create the submission + reply ───────────────────────────────────
 
 async def _finalize(message, context, flask_app, campaign_id, answers, file_id, file_hash,
-                    *, user, lineage, bot_id=None, forced_status=None):
+                    *, user, lineage, bot_id=None, forced_status=None, task_id=None):
     """Create the EngagementSubmission (via the shared service) and reply with
     status. Assumes an app context is active OR creates one."""
     from .models import EngagementCampaign
@@ -450,6 +556,7 @@ async def _finalize(message, context, flask_app, campaign_id, answers, file_id, 
             file_id=file_id,
             file_hash=file_hash,
             forced_status=forced_status,
+            task_id=task_id,
         )
         if error:
             return None, error
@@ -466,9 +573,15 @@ async def _finalize(message, context, flask_app, campaign_id, answers, file_id, 
         await message.reply_text(err)
         return
     campaign, sub = result
+    # The credited reward is the task's (multi-task) or the campaign's.
+    reward = campaign.reward_xp
+    if sub.task_id:
+        from .models import EngagementTask
+        t = EngagementTask.query.get(sub.task_id)
+        reward = t.reward_xp if t else 0
     footer = _promo_footer(campaign, lineage, str(user.id))
     if sub.status == "verified":
-        bonus = f" +{campaign.reward_xp} XP added." if campaign.reward_xp else ""
+        bonus = f" +{reward} XP added." if reward else ""
         await message.reply_text(f"✅ Verified!{bonus} Thanks for taking part.{footer}",
                                  parse_mode="HTML", disable_web_page_preview=True)
     else:

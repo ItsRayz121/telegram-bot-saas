@@ -757,6 +757,51 @@ def init_db():
             "engagement_submissions.notify_error",
         )
 
+        # ── V2: Multi-task campaigns (engagement_tasks created by create_all) ────
+        # A proof field now belongs to EITHER a campaign or a task, so campaign_id
+        # must be nullable; submissions/fields gain task_id.
+        _run_alter(
+            db.engine,
+            "ALTER TABLE engagement_custom_fields ALTER COLUMN campaign_id DROP NOT NULL",
+            "engagement_custom_fields.campaign_id nullable (multi-task)",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE engagement_custom_fields ADD COLUMN IF NOT EXISTS task_id INTEGER "
+            "REFERENCES engagement_tasks(id) ON DELETE CASCADE",
+            "engagement_custom_fields.task_id",
+        )
+        _run_alter(
+            db.engine,
+            "CREATE INDEX IF NOT EXISTS ix_engagement_custom_fields_task_id "
+            "ON engagement_custom_fields (task_id)",
+            "engagement_custom_fields.task_id index",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE engagement_submissions ADD COLUMN IF NOT EXISTS task_id INTEGER "
+            "REFERENCES engagement_tasks(id) ON DELETE CASCADE",
+            "engagement_submissions.task_id",
+        )
+        _run_alter(
+            db.engine,
+            "CREATE INDEX IF NOT EXISTS ix_engagement_submissions_task_id "
+            "ON engagement_submissions (task_id)",
+            "engagement_submissions.task_id index",
+        )
+        _run_alter(
+            db.engine,
+            "CREATE INDEX IF NOT EXISTS ix_engagement_submissions_campaign_task_user "
+            "ON engagement_submissions (campaign_id, task_id, telegram_user_id)",
+            "engagement_submissions (campaign_id, task_id, telegram_user_id) index",
+        )
+        _run_alter(
+            db.engine,
+            "CREATE INDEX IF NOT EXISTS ix_engagement_tasks_campaign_id "
+            "ON engagement_tasks (campaign_id)",
+            "engagement_tasks.campaign_id index",
+        )
+
         # ── Automation Consolidation: forwarding many→many + topics (Phase 0) ──
         # forward_sources / forward_destinations tables are created by
         # db.create_all() above; here we add the new legacy columns and backfill
