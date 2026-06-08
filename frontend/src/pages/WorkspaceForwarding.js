@@ -30,13 +30,16 @@ const STATUS_COLOR = {
 const EMPTY_RULE = {
   rule_name: '',
   source_group_id: '',
-  destination_id: '',
+  source_topic_link: '',
   keyword_filter: '',
   match_type: 'contains',
   prefix_text: '',
   suffix_text: '',
   require_approval: false,
 };
+
+// One blank destination row: a chat id/@username + an optional forum topic link.
+const EMPTY_DEST = { chat_id: '', topic_link: '' };
 
 // ── Rule log drawer ─────────────────────────────────────────────────────────
 
@@ -125,9 +128,24 @@ function RuleCard({ rule, groups, onToggle, onDelete, onEdit }) {
 
             <Typography variant="caption" color="text.secondary" display="block">
               <strong>From:</strong> {sourceGroup?.name || rule.source_group_id}
-              {' → '}
-              <strong>To:</strong> {rule.destination_id}
+              {rule.source_topic_id ? ` (topic ${rule.source_topic_id})` : ''}
             </Typography>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
+              <Typography variant="caption" color="text.secondary"><strong>To:</strong></Typography>
+              {(rule.destinations && rule.destinations.length
+                ? rule.destinations
+                : [{ destination_id: rule.destination_id }]
+              ).map((d, i) => (
+                <Chip
+                  key={`${d.destination_id}-${i}`}
+                  size="small"
+                  variant="outlined"
+                  color={d.is_paused ? 'error' : 'default'}
+                  label={`${d.destination_id}${d.topic_id ? ` › topic ${d.topic_id}` : ''}${d.is_paused ? ' (paused)' : ''}`}
+                  sx={{ height: 18, fontSize: '0.62rem' }}
+                />
+              ))}
+            </Box>
 
             {rule.keyword_filter && (
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.75 }}>
@@ -170,22 +188,44 @@ function RuleCard({ rule, groups, onToggle, onDelete, onEdit }) {
 
 // ── Create dialog ────────────────────────────────────────────────────────────
 
-function CreateRuleDialog({ open, onClose, onCreated, groups }) {
+function CreateRuleDialog({ open, onClose, onCreated, groups, fixedSource }) {
   const [form, setForm] = useState(EMPTY_RULE);
+  const [dests, setDests] = useState([{ ...EMPTY_DEST }]);
   const [saving, setSaving] = useState(false);
 
   const set = (field) => (e) => setForm(f => ({ ...f, [field]: e.target.value }));
   const setCheck = (field) => (e) => setForm(f => ({ ...f, [field]: e.target.checked }));
 
+  const setDest = (idx, field) => (e) => setDests(ds =>
+    ds.map((d, i) => i === idx ? { ...d, [field]: e.target.value } : d));
+  const addDest = () => setDests(ds => [...ds, { ...EMPTY_DEST }]);
+  const removeDest = (idx) => setDests(ds => ds.length > 1 ? ds.filter((_, i) => i !== idx) : ds);
+
   const handleSubmit = async () => {
     if (!form.rule_name.trim()) { toast.error('Rule name is required'); return; }
-    if (!form.source_group_id) { toast.error('Select a source group'); return; }
-    if (!form.destination_id.trim()) { toast.error('Destination chat ID / username is required'); return; }
+    const sourceId = fixedSource || form.source_group_id;
+    if (!sourceId) { toast.error('Select a source group'); return; }
+    const cleanDests = dests
+      .map(d => ({ chat_id: (d.chat_id || '').trim(), topic_link: (d.topic_link || '').trim() }))
+      .filter(d => d.chat_id);
+    if (cleanDests.length === 0) { toast.error('Add at least one destination'); return; }
     setSaving(true);
     try {
-      const res = await fwdApi.createRule(form);
+      const payload = {
+        rule_name: form.rule_name,
+        keyword_filter: form.keyword_filter,
+        match_type: form.match_type,
+        prefix_text: form.prefix_text,
+        suffix_text: form.suffix_text,
+        require_approval: form.require_approval,
+        sources: [{ chat_id: sourceId, topic_link: form.source_topic_link || '' }],
+        destinations: cleanDests,
+      };
+      const res = await fwdApi.createRule(payload);
+      (res.data.warnings || []).forEach(w => toast.warn(w, { autoClose: 8000 }));
       onCreated(res.data.rule);
       setForm(EMPTY_RULE);
+      setDests([{ ...EMPTY_DEST }]);
       onClose();
       toast.success('Forwarding rule created');
     } catch (e) {
@@ -205,20 +245,47 @@ function CreateRuleDialog({ open, onClose, onCreated, groups }) {
           placeholder="e.g. Announcements → Community Chat"
         />
 
-        <FormControl fullWidth size="small" sx={{ mb: 2 }}>
-          <InputLabel>Source group</InputLabel>
-          <Select label="Source group" value={form.source_group_id} onChange={set('source_group_id')}>
-            {groups.map(g => (
-              <MenuItem key={g.telegram_group_id} value={g.telegram_group_id}>{g.name}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+        {!fixedSource && (
+          <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+            <InputLabel>Source group</InputLabel>
+            <Select label="Source group" value={form.source_group_id} onChange={set('source_group_id')}>
+              {groups.map(g => (
+                <MenuItem key={g.telegram_group_id} value={g.telegram_group_id}>{g.name}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        )}
 
         <TextField
-          fullWidth label="Destination chat ID or @username" size="small" sx={{ mb: 2 }}
-          value={form.destination_id} onChange={set('destination_id')}
-          helperText="The bot must be a member/admin of the destination chat"
+          fullWidth label="Source topic link (optional)" size="small" sx={{ mb: 2 }}
+          value={form.source_topic_link} onChange={set('source_topic_link')}
+          helperText="Only forward from this forum topic. Paste the topic link, e.g. https://t.me/c/123.../45"
         />
+
+        <Divider sx={{ mb: 1.5 }}><Typography variant="caption" color="text.secondary">Destinations</Typography></Divider>
+        {dests.map((d, idx) => (
+          <Box key={idx} sx={{ display: 'flex', gap: 1, mb: 1.5, alignItems: 'flex-start' }}>
+            <Box sx={{ flex: 1 }}>
+              <TextField
+                fullWidth label={`Destination ${idx + 1} — chat ID or @username`} size="small"
+                value={d.chat_id} onChange={setDest(idx, 'chat_id')}
+                helperText="The bot must be an admin of this chat"
+              />
+              <TextField
+                fullWidth label="Topic link (optional)" size="small" sx={{ mt: 1 }}
+                value={d.topic_link} onChange={setDest(idx, 'topic_link')}
+                placeholder="Paste a forum topic link to deliver into that topic"
+              />
+            </Box>
+            <IconButton size="small" color="error" onClick={() => removeDest(idx)}
+              disabled={dests.length === 1} sx={{ mt: 0.5 }}>
+              <Delete fontSize="small" />
+            </IconButton>
+          </Box>
+        ))}
+        <Button size="small" startIcon={<Add />} onClick={addDest} sx={{ mb: 2 }}>
+          Add destination
+        </Button>
 
         <TextField
           fullWidth label="Keyword filter (optional)" size="small" sx={{ mb: 2 }}
