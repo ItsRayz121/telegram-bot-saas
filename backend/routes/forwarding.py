@@ -96,25 +96,35 @@ def _validate_destination_admin(source_chat, destinations):
                     "couldn't be verified. Make sure the bot is an admin in every "
                     "destination chat."]
         bot_label = f"@{bot.username}" if getattr(bot, "username", None) else "the bot"
-        for dest in destinations:
-            chat = dest["chat_id"]
 
-            async def _check():
-                me = await bot.get_chat_member(chat, bot.id)
-                return getattr(me, "status", None)
+        # Check every destination concurrently under ONE bounded timeout, so a
+        # rule with many destinations can't make the save request hang.
+        async def _check_all():
+            async def _one(chat):
+                try:
+                    me = await bot.get_chat_member(chat, bot.id)
+                    return (chat, getattr(me, "status", None), None)
+                except Exception as exc:  # noqa: BLE001
+                    return (chat, None, str(exc))
+            return await asyncio.gather(*[_one(d["chat_id"]) for d in destinations])
 
-            try:
-                fut = asyncio.run_coroutine_threadsafe(_check(), loop)
-                status = fut.result(timeout=8)
-                if status not in ("administrator", "creator"):
-                    warnings.append(
-                        f"Add {bot_label} as an admin (with permission to post) in "
-                        f"destination {chat}, otherwise forwarding there will fail."
-                    )
-            except Exception:
+        try:
+            fut = asyncio.run_coroutine_threadsafe(_check_all(), loop)
+            results = fut.result(timeout=12)
+        except Exception:
+            return ["Couldn't verify destination permissions in time. "
+                    "Ensure the bot is an admin (with permission to post) in each destination."]
+
+        for chat, status, err in results:
+            if err is not None:
                 warnings.append(
                     f"Couldn't verify {bot_label}'s access to destination {chat}. "
                     f"Ensure it's added there as an admin."
+                )
+            elif status not in ("administrator", "creator"):
+                warnings.append(
+                    f"Add {bot_label} as an admin (with permission to post) in "
+                    f"destination {chat}, otherwise forwarding there will fail."
                 )
     except Exception as exc:  # noqa: BLE001
         _log.debug("destination admin validation failed: %s", exc)

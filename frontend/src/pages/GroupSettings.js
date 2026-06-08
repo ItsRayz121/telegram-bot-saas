@@ -647,7 +647,7 @@ export default function GroupSettings() {
   const escalationSubTabIdx   = getSubTabIndex(CATEGORIES, 'ai', 'Escalation');
   // Telegram chat id of this group — forwarding/workflows key on it.
   const groupChatId = groupData?.telegram_group_id || groupId;
-  const groupDisplayName = groupData?.title || groupData?.name || null;
+  const groupDisplayName = groupData?.title || groupData?.group_name || groupData?.name || null;
   useEffect(() => { fetchSettings(); }, [fetchSettings]);
   useEffect(() => { if (cat === 'analytics' && subTab === 0) fetchMembers(membersPage); }, [cat, subTab, membersPage, fetchMembers]);
   useEffect(() => { if (cat === 'analytics' && subTab === leaderboardSubTabIdx) fetchLeaderboard(); }, [cat, subTab, leaderboardSubTabIdx, fetchLeaderboard]);
