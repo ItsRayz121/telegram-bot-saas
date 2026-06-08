@@ -398,10 +398,17 @@ def approve_pending(log_id):
     # resolved from the source chat — then deliver through the shared runtime
     # so the anti-ban governor + topic targeting apply here too.
     try:
-        from ..automation.bot_resolver import resolve_bot_loop_for_chat
+        from ..automation.bot_resolver import (
+            resolve_bot_loop_for_chat, resolve_bot_loop_by_id,
+        )
         from ..automation.forwarding_runtime import deliver_pending_log
 
-        bot, loop = resolve_bot_loop_for_chat(log_entry.source_chat_id)
+        # Prefer the exact bot that captured the message (recorded on the log);
+        # fall back to chat-based resolution for legacy logs (bot_id is NULL).
+        if log_entry.bot_id:
+            bot, loop = resolve_bot_loop_by_id(log_entry.bot_id)
+        else:
+            bot, loop = resolve_bot_loop_for_chat(log_entry.source_chat_id)
         if bot and loop and loop.is_running():
             import asyncio
             future = asyncio.run_coroutine_threadsafe(

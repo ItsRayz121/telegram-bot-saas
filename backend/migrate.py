@@ -778,6 +778,11 @@ def init_db():
         )
         _run_alter(
             db.engine,
+            "ALTER TABLE forward_logs ADD COLUMN IF NOT EXISTS bot_id INTEGER",
+            "forward_logs.bot_id",
+        )
+        _run_alter(
+            db.engine,
             """
             INSERT INTO forward_sources (rule_id, source_chat_id, source_topic_id, created_at)
             SELECT id, source_group_id, source_topic_id, created_at FROM forward_rules fr

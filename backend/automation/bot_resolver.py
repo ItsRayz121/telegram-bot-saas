@@ -13,6 +13,26 @@ import logging
 _log = logging.getLogger(__name__)
 
 
+def resolve_bot_loop_by_id(bot_id):
+    """Return (bot, loop) for a specific custom Bot.id, or (None, None).
+
+    Used when we recorded exactly which bot captured a message (ForwardLog.bot_id),
+    so the approval path delivers via that bot rather than guessing from the chat.
+    """
+    if not bot_id:
+        return None, None
+    try:
+        from ..app import bot_manager
+        with bot_manager._lock:
+            instance = bot_manager.active_bots.get(bot_id)
+        if (instance and instance.application and instance.loop
+                and instance.loop.is_running()):
+            return instance.application.bot, instance.loop
+    except Exception as exc:  # noqa: BLE001
+        _log.debug("resolve_bot_loop_by_id(%s) failed: %s", bot_id, exc)
+    return None, None
+
+
 def resolve_bot_loop_for_chat(chat_id):
     """Return (bot, loop) for the bot that manages `chat_id`, or (None, None).
 

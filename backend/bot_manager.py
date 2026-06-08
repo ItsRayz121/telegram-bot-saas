@@ -2197,7 +2197,8 @@ class BotInstance:
         try:
             from .automation.forwarding_runtime import run_forwarding
             await run_forwarding(
-                self.app_context, context.bot, str(msg.chat.id), msg, bot_type="custom",
+                self.app_context, context.bot, str(msg.chat.id), msg,
+                bot_type="custom", owner_bot_id=self.bot_id,
             )
         except Exception as exc:
             logger.debug(f"channel_post forward (custom) failed: {exc}")
@@ -2312,7 +2313,7 @@ class BotInstance:
             from .automation.forwarding_runtime import run_forwarding
             await run_forwarding(
                 self.app_context, context.bot, str(chat_id), update.message,
-                bot_type="custom",
+                bot_type="custom", owner_bot_id=self.bot_id,
             )
         except Exception as _fwd_exc:
             logger.debug(f"run_forwarding (custom) failed: {_fwd_exc}")

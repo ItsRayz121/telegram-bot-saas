@@ -337,17 +337,21 @@ function CreateRuleDialog({ open, onClose, onCreated, groups, fixedSource }) {
 
 // ── Pending approval tab ─────────────────────────────────────────────────────
 
-function PendingTab({ rules }) {
+function PendingTab({ rules, embeddedGroupId = null }) {
   const [pending, setPending] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(() => {
     setLoading(true);
     fwdApi.listPending()
-      .then(r => setPending(r.data.pending || []))
+      .then(r => {
+        let ps = r.data.pending || [];
+        if (embeddedGroupId) ps = ps.filter(p => String(p.source_chat_id) === String(embeddedGroupId));
+        setPending(ps);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [embeddedGroupId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -440,8 +444,12 @@ export default function WorkspaceForwarding({ embeddedGroupId = null, embeddedGr
   useEffect(() => {
     loadRules();
     tgApi.list().then(r => setGroups(r.data.groups || [])).catch(() => {});
-    fwdApi.listPending().then(r => setPendingCount((r.data.pending || []).length)).catch(() => {});
-  }, [loadRules]);
+    fwdApi.listPending().then(r => {
+      let ps = r.data.pending || [];
+      if (embeddedGroupId) ps = ps.filter(p => String(p.source_chat_id) === String(embeddedGroupId));
+      setPendingCount(ps.length);
+    }).catch(() => {});
+  }, [loadRules, embeddedGroupId]);
 
   const handleToggle = async (id) => {
     try {
@@ -543,7 +551,7 @@ export default function WorkspaceForwarding({ embeddedGroupId = null, embeddedGr
       )}
 
       {/* Tab 1 — Pending */}
-      {tab === 1 && <PendingTab rules={rules} />}
+      {tab === 1 && <PendingTab rules={rules} embeddedGroupId={embeddedGroupId} />}
 
       <CreateRuleDialog
         open={createOpen}

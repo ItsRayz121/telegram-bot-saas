@@ -2163,6 +2163,9 @@ class ForwardLog(db.Model):
     source_text = db.Column(db.String(500), nullable=True)
     destination_id = db.Column(db.String(255), nullable=False)
     destination_topic_id = db.Column(db.Integer, nullable=True)  # forum thread, if any
+    # Which bot captured this message — custom Bot.id, or NULL = official bot.
+    # Lets the approval path deliver via the exact owning bot's loop.
+    bot_id = db.Column(db.Integer, nullable=True)
     # forwarded / pending_approval / approved / rejected / failed
     status = db.Column(db.String(30), default="forwarded", nullable=False, index=True)
     error_msg = db.Column(db.String(500), nullable=True)
@@ -2177,6 +2180,7 @@ class ForwardLog(db.Model):
             "source_text": self.source_text,
             "destination_id": self.destination_id,
             "destination_topic_id": self.destination_topic_id,
+            "bot_id": self.bot_id,
             "status": self.status,
             "error_msg": self.error_msg,
             "created_at": self.created_at.isoformat(),

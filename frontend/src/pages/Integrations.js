@@ -384,7 +384,7 @@ export default function Integrations() {
     <Box>
       <TopNav
         hasSidebar
-        breadcrumb={[{ label: 'Automation', path: '/automation' }, { label: 'Integrations' }]}
+        breadcrumb={[{ label: 'Workspace', path: '/workspace' }, { label: 'Integrations' }]}
         actions={
           <Button variant="contained" size="small" startIcon={<Add />} onClick={() => setCreateOpen(true)}>
             Add Webhook

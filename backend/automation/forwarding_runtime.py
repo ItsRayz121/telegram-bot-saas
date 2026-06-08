@@ -128,7 +128,8 @@ async def _deliver(bot, governor, *, destination_id, topic_id, prefix, suffix,
 
 # ── Live path: called from message handlers ───────────────────────────────────
 
-async def run_forwarding(flask_app, bot, group_id, message, *, bot_type="official"):
+async def run_forwarding(flask_app, bot, group_id, message, *, bot_type="official",
+                         owner_bot_id=None):
     """Evaluate + execute every active forward rule whose source matches this
     message's chat (and topic). Safe to call from any bot's handler.
 
@@ -186,6 +187,7 @@ async def run_forwarding(flask_app, bot, group_id, message, *, bot_type="officia
                             source_text=snippet,
                             destination_id=dest["destination_id"],
                             destination_topic_id=dest.get("topic_id"),
+                            bot_id=owner_bot_id,
                             status="pending_approval",
                         ))
                         pending_logs += 1
@@ -253,6 +255,7 @@ async def run_forwarding(flask_app, bot, group_id, message, *, bot_type="officia
                     source_text=snippet,
                     destination_id=res["destination_id"],
                     destination_topic_id=res["topic_id"],
+                    bot_id=owner_bot_id,
                     status="forwarded" if res["ok"] else "failed",
                     error_msg=res["err"],
                 ))
