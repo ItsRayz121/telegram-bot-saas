@@ -670,6 +670,10 @@ export const admin = {
   updatePromoCode: (id, data) => api.put(`/api/admin/promo-codes/${id}`, data),
   deletePromoCode: (id) => api.delete(`/api/admin/promo-codes/${id}`),
   getPromoUsage: (id) => api.get(`/api/admin/promo-codes/${id}/usage`),
+  // Roles & Access (RBAC — Super Admin only)
+  getRoleMatrix: () => api.get('/api/admin/roles/matrix'),
+  getAdmins: () => api.get('/api/admin/roles/admins'),
+  setAdminRole: (userId, data) => api.put(`/api/admin/roles/admins/${userId}`, data),
 };
 
 export const telegramGroups = {

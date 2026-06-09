@@ -152,7 +152,8 @@ def get_platform_stats():
     user = _get_current_user()
     if not user:
         return jsonify({"error": "User not found"}), 404
-    if user.email not in Config.ADMIN_EMAILS:
+    from .. import admin_rbac as rbac
+    if not rbac.is_admin(user):
         return jsonify({"error": "Admin access required"}), 403
     total_users = User.query.count()
     total_bots = Bot.query.count()

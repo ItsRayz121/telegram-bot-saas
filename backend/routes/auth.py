@@ -20,6 +20,21 @@ logger = logging.getLogger(__name__)
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 
 
+def _attach_admin_fields(user_data, user):
+    """Add RBAC fields (is_admin, admin_role, admin_permissions) to a user dict.
+
+    Single source of truth so login / 2FA / register / /me all agree. Uses
+    backend.admin_rbac so the email-allowlist bootstrap and the admin_role
+    column are both honoured.
+    """
+    from .. import admin_rbac as rbac
+    role = rbac.resolve_admin_role(user)
+    user_data["is_admin"] = role is not None
+    user_data["admin_role"] = role
+    user_data["admin_permissions"] = sorted(rbac.get_permissions(user))
+    return user_data
+
+
 # ── 1-D-01: Cookie auth helpers ────────────────────────────────────────────────
 
 def _is_secure() -> bool:
@@ -495,7 +510,7 @@ def login():
     token = create_access_token(identity=str(user.id))
     refresh_token = create_refresh_token(identity=str(user.id))
     user_data = user.to_dict()
-    user_data["is_admin"] = user.email.lower() in Config.ADMIN_EMAILS
+    _attach_admin_fields(user_data, user)
     resp = jsonify({"token": token, "user": user_data})  # token also in body for TMA
     _set_auth_cookies(resp, token, refresh_token)
     return resp, 200
@@ -550,7 +565,7 @@ def verify_totp_login():
     token = create_access_token(identity=str(user.id))
     refresh_token = create_refresh_token(identity=str(user.id))
     user_data = user.to_dict()
-    user_data["is_admin"] = user.email.lower() in Config.ADMIN_EMAILS
+    _attach_admin_fields(user_data, user)
     resp = jsonify({"token": token, "user": user_data})
     _set_auth_cookies(resp, token, refresh_token)
     return resp, 200
@@ -840,7 +855,7 @@ def get_me():
         pass
 
     user_data = user.to_dict()
-    user_data["is_admin"] = bool(user.email) and user.email.lower() in Config.ADMIN_EMAILS
+    _attach_admin_fields(user_data, user)
     return jsonify({"user": user_data}), 200
 
 
@@ -878,7 +893,7 @@ def update_me():
         return jsonify({"error": "Failed to save profile"}), 500
 
     user_data = user.to_dict()
-    user_data["is_admin"] = bool(user.email) and user.email.lower() in Config.ADMIN_EMAILS
+    _attach_admin_fields(user_data, user)
     return jsonify({"user": user_data}), 200
 
 

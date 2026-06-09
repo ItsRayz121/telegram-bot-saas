@@ -14,10 +14,19 @@ from ..models import (
 )
 from ..config import Config
 from ..middleware.rate_limit import rate_limit
+from .. import admin_rbac as rbac
 
 _log = logging.getLogger("admin")
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/api/admin")
+
+# Keys never written to the audit-log payload, even after sanitisation. Matched
+# case-insensitively. Extend this as new secret-bearing fields are added.
+_AUDIT_SECRET_KEYS = {
+    "password", "token", "api_key", "api_key_encrypted", "secret",
+    "bot_token", "ipn_secret", "webhook_secret", "smtp_password",
+    "client_secret", "value", "new_secret", "old_secret",
+}
 
 
 def _get_current_user():
@@ -25,57 +34,82 @@ def _get_current_user():
     return User.query.get(int(user_id))
 
 
+def _write_audit(user, severity="info"):
+    """Record an admin action. Best-effort: never blocks the request."""
+    try:
+        body = request.get_json(silent=True) or {}
+        sanitised = {k: v for k, v in body.items() if k.lower() not in _AUDIT_SECRET_KEYS}
+        log = AdminAuditLog(
+            admin_id=user.id,
+            action=request.endpoint or "",
+            method=request.method,
+            path=request.path,
+            payload_json=json.dumps(sanitised) if sanitised else None,
+            ip_address=request.remote_addr,
+            severity=severity,
+        )
+        db.session.add(log)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+
+def _build_admin_decorator(permission=None):
+    """Factory for the admin gate. ``permission=None`` ⇒ any admin role is allowed
+    (backwards-compatible with the old @admin_required). A permission key ⇒ the
+    caller's role must grant it. Every allowed call is audit-logged."""
+    def wrapper(f):
+        @wraps(f)
+        @jwt_required()
+        def decorated(*args, **kwargs):
+            user = _get_current_user()
+            if not user:
+                _log.warning("admin gate: JWT resolved but user not found — route=%s", request.path)
+                return jsonify({"error": "User not found"}), 404
+
+            if not rbac.is_admin(user):
+                _log.warning("admin gate: access denied — email=%s route=%s reason=not_admin",
+                             user.email, request.path)
+                return jsonify({"error": "Admin access required", "reason": "not_in_allowlist"}), 403
+
+            if Config.ENFORCE_ADMIN_2FA and not user.totp_enabled:
+                _log.warning("admin gate: access denied — email=%s route=%s reason=2fa_required",
+                             user.email, request.path)
+                return jsonify({
+                    "error": "Admin accounts must have 2FA enabled",
+                    "reason": "2fa_required",
+                }), 403
+
+            if permission and not rbac.has_permission(user, permission):
+                _log.warning("admin gate: permission denied — email=%s role=%s perm=%s route=%s",
+                             user.email, rbac.resolve_admin_role(user), permission, request.path)
+                return jsonify({
+                    "error": "You do not have permission to perform this action.",
+                    "reason": "missing_permission",
+                    "required_permission": permission,
+                }), 403
+
+            severity = "info" if request.method == "GET" else "notice"
+            _write_audit(user, severity)
+            return f(*args, **kwargs)
+        return decorated
+    return wrapper
+
+
 def admin_required(f):
-    @wraps(f)
-    @jwt_required()
-    def decorated(*args, **kwargs):
-        user = _get_current_user()
-        if not user:
-            _log.warning("admin_required: JWT resolved but user not found — route=%s", request.path)
-            return jsonify({"error": "User not found"}), 404
+    """Allow any admin role. Use require_permission(...) for scoped routes."""
+    return _build_admin_decorator(None)(f)
 
-        if user.email.lower() not in Config.ADMIN_EMAILS:
-            _log.warning(
-                "admin_required: access denied — email=%s route=%s reason=not_in_allowlist",
-                user.email, request.path,
-            )
-            return jsonify({"error": "Admin access required", "reason": "not_in_allowlist"}), 403
 
-        if Config.ENFORCE_ADMIN_2FA and not user.totp_enabled:
-            _log.warning(
-                "admin_required: access denied — email=%s route=%s reason=2fa_required",
-                user.email, request.path,
-            )
-            return jsonify({
-                "error": "Admin accounts must have 2FA enabled",
-                "reason": "2fa_required",
-            }), 403
-
-        _log.info("admin_required: access granted — email=%s route=%s method=%s", user.email, request.path, request.method)
-
-        try:
-            body = request.get_json(silent=True) or {}
-            sanitised = {k: v for k, v in body.items() if k not in {"password", "token", "api_key"}}
-            log = AdminAuditLog(
-                admin_id=user.id,
-                action=request.endpoint or "",
-                method=request.method,
-                path=request.path,
-                payload_json=json.dumps(sanitised) if sanitised else None,
-                ip_address=request.remote_addr,
-            )
-            db.session.add(log)
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
-        return f(*args, **kwargs)
-    return decorated
+def require_permission(permission):
+    """Decorator factory — require a specific RBAC permission key."""
+    return _build_admin_decorator(permission)
 
 
 # ── User Management ────────────────────────────────────────────────────────────
 
 @admin_bp.route("/users", methods=["GET"])
-@admin_required
+@require_permission(rbac.P_USERS_VIEW)
 @rate_limit(requests_per_minute=60)
 def list_users():
     page = request.args.get("page", 1, type=int)
@@ -111,7 +145,7 @@ def list_users():
 
 
 @admin_bp.route("/users/<int:user_id>", methods=["GET"])
-@admin_required
+@require_permission(rbac.P_USERS_VIEW)
 @rate_limit(requests_per_minute=60)
 def get_user(user_id):
     user = User.query.get(user_id)
@@ -131,7 +165,7 @@ def get_user(user_id):
 
 
 @admin_bp.route("/users/<int:user_id>/subscription", methods=["PUT"])
-@admin_required
+@require_permission(rbac.P_USERS_MANAGE)
 @rate_limit(requests_per_minute=30)
 def update_subscription(user_id):
     user = User.query.get(user_id)
@@ -156,13 +190,13 @@ def update_subscription(user_id):
 
 
 @admin_bp.route("/users/<int:user_id>/ban", methods=["POST"])
-@admin_required
+@require_permission(rbac.P_USERS_MANAGE)
 @rate_limit(requests_per_minute=30)
 def ban_user(user_id):
     user = User.query.get(user_id)
     if not user:
         return jsonify({"error": "User not found"}), 404
-    if user.email in Config.ADMIN_EMAILS:
+    if rbac.is_admin(user):
         return jsonify({"error": "Cannot ban an admin"}), 403
     data = request.get_json() or {}
     user.is_banned = True
@@ -172,7 +206,7 @@ def ban_user(user_id):
 
 
 @admin_bp.route("/users/<int:user_id>/unban", methods=["POST"])
-@admin_required
+@require_permission(rbac.P_USERS_MANAGE)
 @rate_limit(requests_per_minute=30)
 def unban_user(user_id):
     user = User.query.get(user_id)
@@ -185,13 +219,13 @@ def unban_user(user_id):
 
 
 @admin_bp.route("/users/<int:user_id>", methods=["DELETE"])
-@admin_required
+@require_permission(rbac.P_USERS_DELETE)
 @rate_limit(requests_per_minute=10)
 def delete_user(user_id):
     user = User.query.get(user_id)
     if not user:
         return jsonify({"error": "User not found"}), 404
-    if user.email in Config.ADMIN_EMAILS:
+    if rbac.is_admin(user):
         return jsonify({"error": "Cannot delete an admin"}), 403
     db.session.delete(user)
     db.session.commit()
@@ -201,7 +235,7 @@ def delete_user(user_id):
 # ── Platform Stats ─────────────────────────────────────────────────────────────
 
 @admin_bp.route("/stats", methods=["GET"])
-@admin_required
+@require_permission(rbac.P_ANALYTICS_VIEW)
 @rate_limit(requests_per_minute=30)
 def get_stats():
     total_users = User.query.count()
@@ -291,7 +325,7 @@ def _compute_mrr(now):
 
 
 @admin_bp.route("/revenue", methods=["GET"])
-@admin_required
+@require_permission(rbac.P_ANALYTICS_VIEW)
 @rate_limit(requests_per_minute=30)
 def get_revenue():
     """MRR, ARR, new revenue this month, and all-time totals from PaymentHistory."""
@@ -404,7 +438,7 @@ def get_revenue():
 
 
 @admin_bp.route("/health", methods=["GET"])
-@admin_required
+@require_permission(rbac.P_HEALTH_VIEW)
 @rate_limit(requests_per_minute=30)
 def platform_health():
     """Check DB, Redis, and Celery health for the admin dashboard."""
@@ -482,7 +516,7 @@ def set_own_plan():
 # ── Suspicious Activity ────────────────────────────────────────────────────────
 
 @admin_bp.route("/suspicious", methods=["GET"])
-@admin_required
+@require_permission(rbac.P_FRAUD_VIEW)
 @rate_limit(requests_per_minute=30)
 def list_suspicious():
     page = request.args.get("page", 1, type=int)
@@ -519,7 +553,7 @@ def list_suspicious():
 
 
 @admin_bp.route("/suspicious/<int:event_id>/dismiss", methods=["POST"])
-@admin_required
+@require_permission(rbac.P_FRAUD_VIEW)
 @rate_limit(requests_per_minute=30)
 def dismiss_suspicious(event_id):
     event = SuspiciousActivity.query.get(event_id)
@@ -533,7 +567,7 @@ def dismiss_suspicious(event_id):
 # ── Referrals ──────────────────────────────────────────────────────────────────
 
 @admin_bp.route("/referrals", methods=["GET"])
-@admin_required
+@require_permission(rbac.P_REFERRALS_MANAGE)
 @rate_limit(requests_per_minute=30)
 def list_referrals():
     page = request.args.get("page", 1, type=int)
@@ -565,7 +599,7 @@ def list_referrals():
 
 
 @admin_bp.route("/referrals/<int:referral_id>/status", methods=["POST"])
-@admin_required
+@require_permission(rbac.P_REFERRALS_MANAGE)
 @rate_limit(requests_per_minute=30)
 def update_referral_status(referral_id):
     referral = Referral.query.get(referral_id)
@@ -609,7 +643,7 @@ def update_referral_status(referral_id):
 # ── Bots ───────────────────────────────────────────────────────────────────────
 
 @admin_bp.route("/bots", methods=["GET"])
-@admin_required
+@require_permission(rbac.P_BOTS_VIEW)
 @rate_limit(requests_per_minute=30)
 def list_all_bots():
     page = request.args.get("page", 1, type=int)
@@ -633,7 +667,7 @@ def list_all_bots():
 # ── Official Bot Ecosystem ─────────────────────────────────────────────────────
 
 @admin_bp.route("/telegram-groups", methods=["GET"])
-@admin_required
+@require_permission(rbac.P_GROUPS_VIEW)
 @rate_limit(requests_per_minute=30)
 def admin_list_telegram_groups():
     page = request.args.get("page", 1, type=int)
@@ -676,7 +710,7 @@ def admin_list_telegram_groups():
 
 
 @admin_bp.route("/telegram-groups/stats", methods=["GET"])
-@admin_required
+@require_permission(rbac.P_GROUPS_VIEW)
 @rate_limit(requests_per_minute=30)
 def admin_telegram_group_stats():
     total = TelegramGroup.query.count()
@@ -716,7 +750,7 @@ def admin_telegram_group_stats():
 
 
 @admin_bp.route("/telegram-groups/<group_id>/disable", methods=["POST"])
-@admin_required
+@require_permission(rbac.P_GROUPS_MANAGE)
 @rate_limit(requests_per_minute=10)
 def admin_disable_group(group_id):
     tg = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
@@ -729,7 +763,7 @@ def admin_disable_group(group_id):
 
 
 @admin_bp.route("/telegram-groups/<group_id>/unlink", methods=["POST"])
-@admin_required
+@require_permission(rbac.P_GROUPS_MANAGE)
 @rate_limit(requests_per_minute=10)
 def admin_unlink_group(group_id):
     tg = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
@@ -752,7 +786,7 @@ def admin_unlink_group(group_id):
 
 
 @admin_bp.route("/telegram-groups/<group_id>/reconcile", methods=["POST"])
-@admin_required
+@require_permission(rbac.P_GROUPS_MANAGE)
 @rate_limit(requests_per_minute=20)
 def admin_reconcile_group(group_id):
     """P5: manually run the pending→active promotion check on one group.
@@ -788,7 +822,7 @@ def admin_reconcile_group(group_id):
 
 
 @admin_bp.route("/telegram-groups/<group_id>/events", methods=["GET"])
-@admin_required
+@require_permission(rbac.P_GROUPS_VIEW)
 @rate_limit(requests_per_minute=30)
 def admin_group_events(group_id):
     page = request.args.get("page", 1, type=int)
@@ -809,7 +843,7 @@ def admin_group_events(group_id):
 # ── Custom Bots ────────────────────────────────────────────────────────────────
 
 @admin_bp.route("/custom-bots", methods=["GET"])
-@admin_required
+@require_permission(rbac.P_BOTS_VIEW)
 @rate_limit(requests_per_minute=30)
 def admin_list_custom_bots():
     """Unified bot list — UNIONs the new `custom_bots` table and the legacy
@@ -892,7 +926,7 @@ def admin_list_custom_bots():
 # ── Diagnostics (read-only) ────────────────────────────────────────────────────
 
 @admin_bp.route("/diagnostics", methods=["GET"])
-@admin_required
+@require_permission(rbac.P_HEALTH_VIEW)
 @rate_limit(requests_per_minute=20)
 def admin_diagnostics():
     """One read-only snapshot that makes the audit findings auditable in-panel.
@@ -1044,7 +1078,7 @@ def admin_diagnostics():
 # ── Bot Health ─────────────────────────────────────────────────────────────────
 
 @admin_bp.route("/bot-health", methods=["GET"])
-@admin_required
+@require_permission(rbac.P_HEALTH_VIEW)
 @rate_limit(requests_per_minute=30)
 def admin_bot_health():
     """Health overview: official bot + paginated custom bots with 24h error counts.
@@ -1158,7 +1192,7 @@ def admin_bot_health():
 
 
 @admin_bp.route("/bot-health/ping", methods=["POST"])
-@admin_required
+@require_permission(rbac.P_BOTS_MANAGE)
 @rate_limit(requests_per_minute=30)
 def admin_bot_health_ping():
     """Active reachability test — calls Telegram getMe with the bot's real token."""
@@ -1207,7 +1241,7 @@ def admin_bot_health_ping():
 
 
 @admin_bp.route("/bot-health/errors", methods=["GET"])
-@admin_required
+@require_permission(rbac.P_HEALTH_VIEW)
 @rate_limit(requests_per_minute=60)
 def admin_bot_health_errors():
     """Recent error rows for drill-down, optionally filtered by scope/ref."""
@@ -1227,7 +1261,7 @@ def admin_bot_health_errors():
 # ── Bot Health Center (P1) ─────────────────────────────────────────────────────
 
 @admin_bp.route("/bot-health-center", methods=["GET"])
-@admin_required
+@require_permission(rbac.P_HEALTH_VIEW)
 @rate_limit(requests_per_minute=30)
 def admin_bot_health_center():
     """Rolled-up health grades + per-bot state from the scheduled ping job."""
@@ -1257,7 +1291,7 @@ def admin_bot_health_center():
 
 
 @admin_bp.route("/bot-health-center/run", methods=["POST"])
-@admin_required
+@require_permission(rbac.P_BOTS_MANAGE)
 @rate_limit(requests_per_minute=4)
 def admin_bot_health_center_run():
     """Manually run the health-check sweep now (admins) — pings every bot."""
@@ -1273,7 +1307,7 @@ def admin_bot_health_center_run():
 # ── AI self-test (P2) — real end-to-end calls ──────────────────────────────────
 
 @admin_bp.route("/ai-selftest", methods=["POST"])
-@admin_required
+@require_permission(rbac.P_AI_MANAGE)
 @rate_limit(requests_per_minute=4)
 def admin_ai_selftest():
     """Actually exercise each AI path with the configured platform key and report
@@ -1352,7 +1386,7 @@ def admin_ai_selftest():
 
 
 @admin_bp.route("/custom-bots/<int:bot_id>/disable", methods=["POST"])
-@admin_required
+@require_permission(rbac.P_BOTS_MANAGE)
 @rate_limit(requests_per_minute=10)
 def admin_disable_custom_bot(bot_id):
     bot = CustomBot.query.get(bot_id)
@@ -1366,7 +1400,7 @@ def admin_disable_custom_bot(bot_id):
 # ── Directory Moderation ───────────────────────────────────────────────────────
 
 @admin_bp.route("/directory/pending", methods=["GET"])
-@admin_required
+@require_permission(rbac.P_MODERATION_VIEW)
 @rate_limit(requests_per_minute=60)
 def list_pending_directory():
     pending = DirectoryListing.query.filter_by(moderation_status="pending").order_by(
@@ -1376,7 +1410,7 @@ def list_pending_directory():
 
 
 @admin_bp.route("/directory", methods=["GET"])
-@admin_required
+@require_permission(rbac.P_MODERATION_VIEW)
 @rate_limit(requests_per_minute=60)
 def list_all_directory():
     page = request.args.get("page", 1, type=int)
@@ -1396,7 +1430,7 @@ def list_all_directory():
 
 
 @admin_bp.route("/directory/<int:lid>/moderate", methods=["POST"])
-@admin_required
+@require_permission(rbac.P_MODERATION_MANAGE)
 @rate_limit(requests_per_minute=30)
 def moderate_directory_listing(lid):
     listing = DirectoryListing.query.get(lid)
@@ -1414,7 +1448,7 @@ def moderate_directory_listing(lid):
 # ── Announcements ──────────────────────────────────────────────────────────────
 
 @admin_bp.route("/announcements", methods=["GET"])
-@admin_required
+@require_permission(rbac.P_ANNOUNCEMENTS_MANAGE)
 @rate_limit(requests_per_minute=30)
 def list_announcements():
     page = request.args.get("page", 1, type=int)
@@ -1431,7 +1465,7 @@ def list_announcements():
 
 
 @admin_bp.route("/announcements", methods=["POST"])
-@admin_required
+@require_permission(rbac.P_ANNOUNCEMENTS_MANAGE)
 @rate_limit(requests_per_minute=10)
 def create_announcement():
     admin_user = _get_current_user()
@@ -1516,7 +1550,7 @@ def create_announcement():
 
 
 @admin_bp.route("/announcements/<int:ann_id>", methods=["DELETE"])
-@admin_required
+@require_permission(rbac.P_ANNOUNCEMENTS_MANAGE)
 @rate_limit(requests_per_minute=10)
 def delete_announcement(ann_id):
     ann = AdminAnnouncement.query.get(ann_id)
@@ -1530,7 +1564,7 @@ def delete_announcement(ann_id):
 # ── Audit Logs ─────────────────────────────────────────────────────────────────
 
 @admin_bp.route("/audit-logs", methods=["GET"])
-@admin_required
+@require_permission(rbac.P_AUDIT_VIEW)
 @rate_limit(requests_per_minute=30)
 def list_audit_logs():
     page = request.args.get("page", 1, type=int)
@@ -1567,7 +1601,7 @@ def list_audit_logs():
 # ── Reported Messages ──────────────────────────────────────────────────────────
 
 @admin_bp.route("/reports", methods=["GET"])
-@admin_required
+@require_permission(rbac.P_MODERATION_VIEW)
 @rate_limit(requests_per_minute=30)
 def list_reports():
     page = request.args.get("page", 1, type=int)
@@ -1631,7 +1665,7 @@ def list_reports():
 
 
 @admin_bp.route("/reports/<string:source>/<int:report_id>/resolve", methods=["POST"])
-@admin_required
+@require_permission(rbac.P_MODERATION_MANAGE)
 @rate_limit(requests_per_minute=30)
 def resolve_report(source, report_id):
     if source == "custom":
@@ -1652,7 +1686,7 @@ def resolve_report(source, report_id):
 # ── Feature Adoption ───────────────────────────────────────────────────────────
 
 @admin_bp.route("/feature-adoption", methods=["GET"])
-@admin_required
+@require_permission(rbac.P_ANALYTICS_VIEW)
 @rate_limit(requests_per_minute=30)
 def feature_adoption():
     total_users = User.query.count() or 1
@@ -1690,7 +1724,7 @@ def feature_adoption():
 # ── Fraud Detection ────────────────────────────────────────────────────────────
 
 @admin_bp.route("/fraud/clusters", methods=["GET"])
-@admin_required
+@require_permission(rbac.P_FRAUD_VIEW)
 @rate_limit(requests_per_minute=20)
 def fraud_clusters():
     """Multi-accounting detection: find ip_hash or device_hash shared by 2+ distinct users."""
@@ -1756,7 +1790,7 @@ def fraud_clusters():
 
 
 @admin_bp.route("/fraud/referral-farming", methods=["GET"])
-@admin_required
+@require_permission(rbac.P_FRAUD_VIEW)
 @rate_limit(requests_per_minute=20)
 def fraud_referral_farming():
     """Detect referral farming: referrers with many referrals where referred users share suspicious signals."""
@@ -1793,7 +1827,7 @@ def fraud_referral_farming():
 
 
 @admin_bp.route("/fraud/payment-anomalies", methods=["GET"])
-@admin_required
+@require_permission(rbac.P_FRAUD_VIEW)
 @rate_limit(requests_per_minute=20)
 def fraud_payment_anomalies():
     """Detect payment anomalies: multiple payments in 24h, duplicate amounts, unusual amounts."""
@@ -1850,7 +1884,7 @@ def fraud_payment_anomalies():
 # ── Chargeback Tracking ────────────────────────────────────────────────────────
 
 @admin_bp.route("/fraud/chargebacks", methods=["GET"])
-@admin_required
+@require_permission(rbac.P_FRAUD_VIEW)
 @rate_limit(requests_per_minute=20)
 def fraud_chargebacks():
     """List users with recorded chargebacks, ordered by count descending."""
@@ -1880,7 +1914,7 @@ def fraud_chargebacks():
 
 
 @admin_bp.route("/fraud/chargebacks/<int:user_id>/increment", methods=["POST"])
-@admin_required
+@require_permission(rbac.P_BILLING_MANAGE)
 @rate_limit(requests_per_minute=20)
 def increment_chargeback(user_id):
     """Manually record a chargeback against a user."""
@@ -1906,7 +1940,7 @@ def increment_chargeback(user_id):
 # ── Promo Codes ────────────────────────────────────────────────────────────────
 
 @admin_bp.route("/promo-codes", methods=["GET"])
-@admin_required
+@require_permission(rbac.P_BILLING_VIEW)
 @rate_limit(requests_per_minute=30)
 def list_promo_codes():
     codes = PromoCode.query.order_by(PromoCode.created_at.desc()).all()
@@ -1914,7 +1948,7 @@ def list_promo_codes():
 
 
 @admin_bp.route("/promo-codes", methods=["POST"])
-@admin_required
+@require_permission(rbac.P_BILLING_MANAGE)
 @rate_limit(requests_per_minute=20)
 def create_promo_code():
     admin_user = _get_current_user()
@@ -1964,7 +1998,7 @@ def create_promo_code():
 
 
 @admin_bp.route("/promo-codes/<int:code_id>", methods=["PUT"])
-@admin_required
+@require_permission(rbac.P_BILLING_MANAGE)
 @rate_limit(requests_per_minute=20)
 def update_promo_code(code_id):
     promo = PromoCode.query.get(code_id)
@@ -2002,7 +2036,7 @@ def update_promo_code(code_id):
 
 
 @admin_bp.route("/promo-codes/<int:code_id>", methods=["DELETE"])
-@admin_required
+@require_permission(rbac.P_BILLING_MANAGE)
 @rate_limit(requests_per_minute=20)
 def delete_promo_code(code_id):
     promo = PromoCode.query.get(code_id)
@@ -2014,7 +2048,7 @@ def delete_promo_code(code_id):
 
 
 @admin_bp.route("/promo-codes/<int:code_id>/usage", methods=["GET"])
-@admin_required
+@require_permission(rbac.P_BILLING_VIEW)
 @rate_limit(requests_per_minute=30)
 def promo_code_usage(code_id):
     promo = PromoCode.query.get(code_id)
@@ -2033,7 +2067,7 @@ def promo_code_usage(code_id):
 # ── Gift Subscription ──────────────────────────────────────────────────────────
 
 @admin_bp.route("/users/<int:user_id>/gift-subscription", methods=["POST"])
-@admin_required
+@require_permission(rbac.P_USERS_GIFT)
 @rate_limit(requests_per_minute=10)
 def gift_subscription(user_id):
     """Grant a user a free subscription without payment."""
@@ -2116,4 +2150,123 @@ def gift_subscription(user_id):
         "message": f"Gifted {tier} for {duration_days} days.",
         "user": user.to_dict(),
         "expires_at": expires.isoformat(),
+    })
+
+
+# ── Roles & Access (RBAC management — Super Admin only) ─────────────────────────
+
+@admin_bp.route("/roles/matrix", methods=["GET"])
+@require_permission(rbac.P_ROLES_MANAGE)
+@rate_limit(requests_per_minute=30)
+def roles_matrix():
+    """Return the role→permission matrix plus the caller's own role/permissions."""
+    me = _get_current_user()
+    return jsonify({
+        "roles": rbac.role_matrix(),
+        "all_permissions": rbac.ALL_PERMISSIONS,
+        "super_only": sorted(rbac.SUPER_ONLY),
+        "me": {
+            "role": rbac.resolve_admin_role(me),
+            "permissions": sorted(rbac.get_permissions(me)),
+        },
+    })
+
+
+@admin_bp.route("/roles/admins", methods=["GET"])
+@require_permission(rbac.P_ROLES_MANAGE)
+@rate_limit(requests_per_minute=30)
+def list_admins():
+    """List every account with admin access: explicit-role users plus the
+    env-allowlist bootstrap super-admins (which have no DB role of their own)."""
+    rows = []
+    seen = set()
+
+    # Users with an explicit admin_role column.
+    for u in User.query.filter(User.admin_role.isnot(None)).all():
+        role = rbac.resolve_admin_role(u)
+        if not role:
+            continue
+        seen.add(u.id)
+        rows.append({
+            "id": u.id,
+            "email": u.email,
+            "full_name": u.full_name,
+            "role": role,
+            "source": "explicit",
+            "is_bootstrap": bool(u.email and u.email.lower() in Config.ADMIN_EMAILS),
+            "totp_enabled": bool(u.totp_enabled),
+        })
+
+    # Bootstrap super-admins from ADMIN_EMAILS that don't have an explicit role.
+    for email in Config.ADMIN_EMAILS:
+        u = User.query.filter(db.func.lower(User.email) == email).first()
+        if u and u.id in seen:
+            continue
+        rows.append({
+            "id": u.id if u else None,
+            "email": email,
+            "full_name": u.full_name if u else None,
+            "role": rbac.SUPER_ADMIN,
+            "source": "env_allowlist",
+            "is_bootstrap": True,
+            "totp_enabled": bool(u.totp_enabled) if u else False,
+            "registered": u is not None,
+        })
+
+    rows.sort(key=lambda r: (r["role"] != rbac.SUPER_ADMIN, (r["email"] or "")))
+    return jsonify({"admins": rows, "total": len(rows)})
+
+
+@admin_bp.route("/roles/admins/<int:user_id>", methods=["PUT"])
+@require_permission(rbac.P_ROLES_MANAGE)
+@rate_limit(requests_per_minute=20)
+def set_admin_role(user_id):
+    """Grant, change, or revoke a user's admin role.
+
+    Body: {"role": "support" | ... | null}. null/empty revokes admin access.
+    Guardrails:
+      • You cannot change your own role (prevents accidental self-lockout).
+      • Env-allowlist (bootstrap) admins are managed via ADMIN_EMAILS, not here.
+    """
+    me = _get_current_user()
+    if user_id == me.id:
+        return jsonify({"error": "You cannot change your own admin role."}), 400
+
+    target = User.query.get(user_id)
+    if not target:
+        return jsonify({"error": "User not found"}), 404
+
+    if target.email and target.email.lower() in Config.ADMIN_EMAILS:
+        return jsonify({
+            "error": "This account is a bootstrap super-admin (in ADMIN_EMAILS). "
+                     "Manage it via the ADMIN_EMAILS environment variable.",
+        }), 400
+
+    data = request.get_json() or {}
+    new_role = (data.get("role") or "").strip().lower() or None
+    if new_role is not None and new_role not in rbac.ROLES:
+        return jsonify({"error": f"role must be one of: {', '.join(rbac.ROLES)} (or null to revoke)"}), 400
+
+    old_role = target.admin_role
+    target.admin_role = new_role
+
+    audit = AdminAuditLog(
+        admin_id=me.id,
+        action="set_admin_role",
+        method="PUT",
+        path=f"/api/admin/roles/admins/{user_id}",
+        ip_address=request.remote_addr,
+        severity="critical",
+        target_type="user",
+        target_id=str(user_id),
+        old_value=old_role,
+        new_value=new_role,
+    )
+    db.session.add(audit)
+    db.session.commit()
+
+    _log.info("[ADMIN] %s set admin_role of user %d: %s → %s", me.email, user_id, old_role, new_role)
+    return jsonify({
+        "message": (f"Role set to {rbac.ROLE_LABELS[new_role]}." if new_role else "Admin access revoked."),
+        "user": {"id": target.id, "email": target.email, "role": new_role},
     })

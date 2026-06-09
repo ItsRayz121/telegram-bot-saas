@@ -36,6 +36,11 @@ class User(db.Model):
     stripe_subscription_id = db.Column(db.String(255), nullable=True)
     is_banned = db.Column(db.Boolean, default=False)
     ban_reason = db.Column(db.Text, nullable=True)
+    # Platform-admin role (RBAC). NULL = not an admin via this column. Bootstrap:
+    # emails in Config.ADMIN_EMAILS are treated as super_admin even with NULL here,
+    # so a sole admin can never be locked out. See backend/admin_rbac.py.
+    # Values: super_admin | admin | support | finance | moderator | analyst
+    admin_role = db.Column(db.String(20), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     # Unique referral code assigned at registration
     referral_code = db.Column(db.String(16), unique=True, nullable=True, index=True)
@@ -166,6 +171,7 @@ class User(db.Model):
             "subscription_tier": self.subscription_tier,
             "subscription_expires": self.subscription_expires.isoformat() if self.subscription_expires else None,
             "is_banned": self.is_banned,
+            "admin_role": self.admin_role,
             "created_at": self.created_at.isoformat(),
             "referral_code": self.referral_code,
             "email_verified": self.email_verified,
@@ -2826,6 +2832,13 @@ class AdminAuditLog(db.Model):
     path = db.Column(db.String(500), nullable=False)
     payload_json = db.Column(db.Text, nullable=True)     # sanitised request body
     ip_address = db.Column(db.String(45), nullable=True)
+    # Richer audit context (Phase 1 admin-panel overhaul). All nullable so the
+    # auto-logger keeps working unchanged; sensitive routes populate them explicitly.
+    severity = db.Column(db.String(10), nullable=True)   # info | notice | warning | critical
+    target_type = db.Column(db.String(40), nullable=True)  # e.g. "user", "secret", "promo_code"
+    target_id = db.Column(db.String(64), nullable=True)
+    old_value = db.Column(db.Text, nullable=True)        # safe (never secret) prior value
+    new_value = db.Column(db.Text, nullable=True)        # safe (never secret) new value
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     def to_dict(self):
@@ -2836,6 +2849,11 @@ class AdminAuditLog(db.Model):
             "method": self.method,
             "path": self.path,
             "ip_address": self.ip_address,
+            "severity": self.severity or "info",
+            "target_type": self.target_type,
+            "target_id": self.target_id,
+            "old_value": self.old_value,
+            "new_value": self.new_value,
             "created_at": self.created_at.isoformat(),
         }
 

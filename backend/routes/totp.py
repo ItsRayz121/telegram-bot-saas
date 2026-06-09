@@ -44,8 +44,8 @@ def _generate_backup_codes():
 
 
 def _require_paid_or_admin(user):
-    from ..config import Config
-    is_admin = user.email in Config.ADMIN_EMAILS
+    from .. import admin_rbac as rbac
+    is_admin = rbac.is_admin(user)
     if not is_admin and not user.subscription_active:
         return jsonify({
             "error": "2FA is available for Pro and Enterprise subscribers.",

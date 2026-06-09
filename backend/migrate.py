@@ -850,6 +850,25 @@ def init_db():
             "forward_destinations backfill",
         )
 
+        # ── Admin RBAC (Phase 1 admin-panel overhaul) ──
+        _run_alter(
+            db.engine,
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_role VARCHAR(20)",
+            "users.admin_role",
+        )
+        for col, ddl in (
+            ("severity", "VARCHAR(10)"),
+            ("target_type", "VARCHAR(40)"),
+            ("target_id", "VARCHAR(64)"),
+            ("old_value", "TEXT"),
+            ("new_value", "TEXT"),
+        ):
+            _run_alter(
+                db.engine,
+                f"ALTER TABLE admin_audit_logs ADD COLUMN IF NOT EXISTS {col} {ddl}",
+                f"admin_audit_logs.{col}",
+            )
+
         # ── Backfill: create UserTelegramAccount rows for legacy User.telegram_user_id ──
         # Must run AFTER all users-table ALTER statements (including auth_provider)
         # so SQLAlchemy's User model doesn't query columns that don't exist yet.

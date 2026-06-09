@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Box, AppBar, Toolbar, Typography, IconButton, Card, CardContent,
   Grid, CircularProgress, TextField, Table, TableBody, TableCell,
@@ -86,12 +86,6 @@ function EmptyRow({ cols, message = 'No records found' }) {
       </TableCell>
     </TableRow>
   );
-}
-
-// ─── Tab panel wrapper ────────────────────────────────────────────────────────
-
-function TabPanel({ value, index, children }) {
-  return value === index ? <Box pt={3}>{children}</Box> : null;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2504,27 +2498,185 @@ function DiagnosticsTab({ onAdminError }) {
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// TAB — ROLES & ACCESS (Super Admin only)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const ROLE_LABELS = {
+  super_admin: 'Super Admin', admin: 'Admin', support: 'Support',
+  finance: 'Finance', moderator: 'Moderator', analyst: 'Read-only Analyst',
+};
+const ROLE_COLORS = {
+  super_admin: 'error', admin: 'primary', support: 'info',
+  finance: 'success', moderator: 'warning', analyst: 'default',
+};
+const ASSIGNABLE_ROLES = ['admin', 'support', 'finance', 'moderator', 'analyst'];
+
+function RolesTab({ onAdminError, currentUserId }) {
+  const [admins, setAdmins] = useState(null);
+  const [matrix, setMatrix] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [confirm, setConfirm] = useState(null); // { row, newRole }
+  const [saving, setSaving] = useState(false);
+  const [showMatrix, setShowMatrix] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [aRes, mRes] = await Promise.allSettled([admin.getAdmins(), admin.getRoleMatrix()]);
+      if (aRes.status === 'fulfilled') setAdmins(aRes.value.data.admins || []);
+      else onAdminError?.(aRes.reason, 'Failed to load admins');
+      if (mRes.status === 'fulfilled') setMatrix(mRes.value.data);
+    } finally { setLoading(false); }
+  }, [onAdminError]);
+  useEffect(() => { load(); }, [load]);
+
+  const applyRole = async () => {
+    if (!confirm) return;
+    setSaving(true);
+    try {
+      await admin.setAdminRole(confirm.row.id, { role: confirm.newRole || null });
+      toast.success(confirm.newRole ? `Role set to ${ROLE_LABELS[confirm.newRole]}` : 'Admin access revoked');
+      setConfirm(null);
+      load();
+    } catch (e) { onAdminError?.(e, 'Failed to update role'); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <Box>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2} flexWrap="wrap" gap={1}>
+        <Box>
+          <Typography variant="h6" fontWeight={700}>Roles &amp; Access</Typography>
+          <Typography variant="caption" color="text.secondary">
+            Assign platform-admin roles. Only a Super Admin can manage roles, secrets, platform config and pricing.
+          </Typography>
+        </Box>
+        <Stack direction="row" gap={1}>
+          <Button size="small" variant="outlined" onClick={() => setShowMatrix(s => !s)}>
+            {showMatrix ? 'Hide' : 'Show'} permission matrix
+          </Button>
+          <Button size="small" startIcon={<Refresh />} onClick={load}>Refresh</Button>
+        </Stack>
+      </Stack>
+
+      <Alert severity="info" sx={{ mb: 2, borderRadius: 2 }}>
+        Bootstrap admins (listed in the <code>ADMIN_EMAILS</code> environment variable) are always Super Admin and
+        can only be changed via that env var. Grant a role to any user below to make them an admin without touching env.
+      </Alert>
+
+      {showMatrix && matrix && (
+        <Paper variant="outlined" sx={{ p: 2, mb: 2, borderRadius: 2 }}>
+          <Typography variant="subtitle2" fontWeight={700} mb={1}>Permission matrix</Typography>
+          <Stack spacing={1.5}>
+            {Object.entries(matrix.roles || {}).map(([role, info]) => (
+              <Box key={role}>
+                <Stack direction="row" alignItems="center" gap={1} mb={0.5}>
+                  <Chip label={info.label} size="small" color={ROLE_COLORS[role] || 'default'} />
+                  <Typography variant="caption" color="text.secondary">{info.description}</Typography>
+                </Stack>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                  {(info.permissions || []).map(p => (
+                    <Chip key={p} label={p} size="small" variant="outlined"
+                      color={(matrix.super_only || []).includes(p) ? 'error' : 'default'}
+                      sx={{ fontFamily: 'monospace', fontSize: 11 }} />
+                  ))}
+                </Box>
+              </Box>
+            ))}
+          </Stack>
+        </Paper>
+      )}
+
+      <TableContainer component={Paper} variant="outlined">
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Email</TableCell>
+              <TableCell>Name</TableCell>
+              <TableCell>Role</TableCell>
+              <TableCell>2FA</TableCell>
+              <TableCell>Source</TableCell>
+              <TableCell align="right">Change role</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {loading ? (
+              <TableRow><TableCell colSpan={6} align="center"><CircularProgress size={24} sx={{ my: 3 }} /></TableCell></TableRow>
+            ) : !admins || admins.length === 0 ? (
+              <EmptyRow cols={6} message="No admins found" />
+            ) : admins.map((row, i) => {
+              const locked = row.is_bootstrap || (row.id && row.id === currentUserId) || !row.id;
+              const lockReason = row.is_bootstrap
+                ? 'Bootstrap admin — manage via ADMIN_EMAILS env var'
+                : (row.id === currentUserId ? 'You cannot change your own role' : 'User has not registered yet');
+              return (
+                <TableRow key={row.id || `env-${i}`} hover>
+                  <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{row.email}</TableCell>
+                  <TableCell>{row.full_name || '—'}</TableCell>
+                  <TableCell><Chip label={ROLE_LABELS[row.role] || row.role} size="small" color={ROLE_COLORS[row.role] || 'default'} /></TableCell>
+                  <TableCell>{row.totp_enabled ? <CheckCircle color="success" fontSize="small" /> : <Cancel color="disabled" fontSize="small" />}</TableCell>
+                  <TableCell><Typography variant="caption" color="text.secondary">{row.source === 'env_allowlist' ? 'env allowlist' : 'assigned'}</Typography></TableCell>
+                  <TableCell align="right">
+                    {locked ? (
+                      <Tooltip title={lockReason}><span><Lock fontSize="small" color="disabled" /></span></Tooltip>
+                    ) : (
+                      <FormControl size="small" sx={{ minWidth: 150 }}>
+                        <Select
+                          value={row.role || ''}
+                          displayEmpty
+                          onChange={(e) => setConfirm({ row, newRole: e.target.value })}
+                        >
+                          {ASSIGNABLE_ROLES.map(r => <MenuItem key={r} value={r}>{ROLE_LABELS[r]}</MenuItem>)}
+                          <Divider />
+                          <MenuItem value=""><em>Revoke admin access</em></MenuItem>
+                        </Select>
+                      </FormControl>
+                    )}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </TableContainer>
+
+      <Dialog open={!!confirm} onClose={() => !saving && setConfirm(null)}>
+        <DialogTitle>Change admin role?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            {confirm?.newRole
+              ? <>Set <b>{confirm?.row?.email}</b> to <b>{ROLE_LABELS[confirm?.newRole]}</b>?</>
+              : <>Revoke <b>all admin access</b> from <b>{confirm?.row?.email}</b>?</>}
+          </Typography>
+          <Alert severity="warning" sx={{ mt: 2 }}>
+            This change takes effect immediately and is recorded in the audit log.
+          </Alert>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirm(null)} disabled={saving}>Cancel</Button>
+          <Button onClick={applyRole} variant="contained" color={confirm?.newRole ? 'primary' : 'error'} disabled={saving}>
+            {saving ? 'Saving…' : (confirm?.newRole ? 'Confirm' : 'Revoke')}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const TABS = [
-  { label: 'Dashboard', icon: <TrendingUp fontSize="small" /> },
-  { label: 'Users', icon: <People fontSize="small" /> },
-  { label: 'TG Groups', icon: <Groups fontSize="small" /> },
-  { label: 'Custom Bots', icon: <SmartToy fontSize="small" /> },
-  { label: 'Suspicious', icon: <Warning fontSize="small" /> },
-  { label: 'Referrals', icon: <VerifiedUser fontSize="small" /> },
-  { label: 'Directory', icon: <FolderOpen fontSize="small" /> },
-  { label: 'Announce', icon: <Campaign fontSize="small" /> },
-  { label: 'Audit Log', icon: <History fontSize="small" /> },
-  { label: 'Reports', icon: <Flag fontSize="small" /> },
-  { label: 'Promo Codes', icon: <Payment fontSize="small" /> },
-  { label: 'Bot Health', icon: <MonitorHeart fontSize="small" /> },
-  { label: 'Diagnostics', icon: <NetworkCheck fontSize="small" /> },
-];
+function _initialPerms() {
+  try { return JSON.parse(localStorage.getItem('user'))?.admin_permissions || null; }
+  catch { return null; }
+}
 
 export default function AdminPanel() {
   const navigate = useNavigate();
+  const [perms, setPerms] = useState(_initialPerms);
+  const [me, setMe] = useState(null);
 
   useEffect(() => {
     import('../services/api').then(({ auth: authApi }) => {
@@ -2533,6 +2685,8 @@ export default function AdminPanel() {
           const u = r.data?.user || {};
           if (!u.is_admin) navigate('/dashboard', { replace: true });
           localStorage.setItem('user', JSON.stringify({ ...u }));
+          setMe(u);
+          setPerms(u.admin_permissions || []);
         })
         .catch(() => navigate('/dashboard', { replace: true }));
     });
@@ -2581,17 +2735,62 @@ export default function AdminPanel() {
 
   useEffect(() => { fetchDashboard(); }, [fetchDashboard]);
 
-  // Keyboard shortcuts: 1–9 to switch tabs, R to refresh dashboard
+  const can = useCallback((p) => !p || (perms || []).includes(p), [perms]);
+
+  // Tab definitions, each gated by an RBAC permission. Tabs the current admin
+  // role cannot access are hidden entirely (and the API also enforces it).
+  const tabDefs = useMemo(() => ([
+    { key: 'dashboard', label: 'Dashboard', icon: <TrendingUp fontSize="small" />, permission: 'analytics.view',
+      render: () => <DashboardTab stats={stats} botStats={botStats} revenue={revenue} health={health} featureAdoption={featureAdoption} loading={dashLoading} onRefresh={fetchDashboard} /> },
+    { key: 'users', label: 'Users', icon: <People fontSize="small" />, permission: 'users.view',
+      render: () => <UsersTab onAdminError={handleAdminError} /> },
+    { key: 'groups', label: 'TG Groups', icon: <Groups fontSize="small" />, permission: 'groups.view',
+      render: () => <TelegramGroupsTab onAdminError={handleAdminError} /> },
+    { key: 'bots', label: 'Custom Bots', icon: <SmartToy fontSize="small" />, permission: 'bots.view',
+      render: () => <CustomBotsTab onAdminError={handleAdminError} /> },
+    { key: 'suspicious', label: 'Suspicious', icon: <Warning fontSize="small" />, permission: 'fraud.view',
+      render: () => <SuspiciousTab onAdminError={handleAdminError} /> },
+    { key: 'referrals', label: 'Referrals', icon: <VerifiedUser fontSize="small" />, permission: 'referrals.manage',
+      render: () => <ReferralsTab onAdminError={handleAdminError} /> },
+    { key: 'directory', label: 'Directory', icon: <FolderOpen fontSize="small" />, permission: 'moderation.view',
+      render: () => <DirectoryTab onAdminError={handleAdminError} /> },
+    { key: 'announce', label: 'Announce', icon: <Campaign fontSize="small" />, permission: 'announcements.manage',
+      render: () => <AnnouncementsTab onAdminError={handleAdminError} /> },
+    { key: 'audit', label: 'Audit Log', icon: <History fontSize="small" />, permission: 'audit.view',
+      render: () => <AuditLogTab onAdminError={handleAdminError} /> },
+    { key: 'reports', label: 'Reports', icon: <Flag fontSize="small" />, permission: 'moderation.view',
+      render: () => <ReportsTab onAdminError={handleAdminError} /> },
+    { key: 'promo', label: 'Promo Codes', icon: <Payment fontSize="small" />, permission: 'billing.view',
+      render: () => <PromoCodesTab onAdminError={handleAdminError} /> },
+    { key: 'bothealth', label: 'Bot Health', icon: <MonitorHeart fontSize="small" />, permission: 'health.view',
+      render: () => <BotHealthTab onAdminError={handleAdminError} /> },
+    { key: 'diagnostics', label: 'Diagnostics', icon: <NetworkCheck fontSize="small" />, permission: 'health.view',
+      render: () => <DiagnosticsTab onAdminError={handleAdminError} /> },
+    { key: 'roles', label: 'Roles & Access', icon: <Security fontSize="small" />, permission: 'roles.manage',
+      render: () => <RolesTab onAdminError={handleAdminError} currentUserId={me?.id} /> },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  ]), [stats, botStats, revenue, health, featureAdoption, dashLoading, fetchDashboard, handleAdminError, me]);
+
+  const visibleTabs = useMemo(() => tabDefs.filter(t => can(t.permission)), [tabDefs, can]);
+
+  // Keep activeTab in range when the visible set changes.
+  useEffect(() => {
+    if (activeTab >= visibleTabs.length) setActiveTab(0);
+  }, [visibleTabs.length, activeTab]);
+
+  // Keyboard shortcuts: 1–9 to switch visible tabs, R to refresh dashboard
   useEffect(() => {
     const handler = (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
       const num = parseInt(e.key, 10);
-      if (num >= 1 && num <= TABS.length) { setActiveTab(num - 1); return; }
+      if (num >= 1 && num <= visibleTabs.length) { setActiveTab(num - 1); return; }
       if (e.key === 'r' || e.key === 'R') { fetchDashboard(); toast.info('Dashboard refreshed'); }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [fetchDashboard]);
+  }, [fetchDashboard, visibleTabs.length]);
+
+  const activeRole = me?.admin_role;
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
@@ -2601,7 +2800,10 @@ export default function AdminPanel() {
             <ArrowBack />
           </IconButton>
           <Typography variant="h6" fontWeight={600} flex={1}>Admin Panel</Typography>
-          <Chip label="ADMIN" size="small" color="error" sx={{ fontWeight: 700 }} />
+          {activeRole && (
+            <Chip label={(ROLE_LABELS[activeRole] || 'ADMIN').toUpperCase()} size="small"
+              color={ROLE_COLORS[activeRole] || 'error'} sx={{ fontWeight: 700 }} />
+          )}
         </Toolbar>
       </AppBar>
 
@@ -2621,77 +2823,31 @@ export default function AdminPanel() {
           </Alert>
         )}
 
-        {/* Tab navigation */}
+        {/* Tab navigation — only tabs the current role can access are shown */}
         <Paper sx={{ mb: 3 }}>
           <Tabs
-            value={activeTab}
+            value={Math.min(activeTab, Math.max(0, visibleTabs.length - 1))}
             onChange={(_, v) => setActiveTab(v)}
             variant="scrollable"
             scrollButtons="auto"
             allowScrollButtonsMobile
             sx={{ borderBottom: 1, borderColor: 'divider' }}
           >
-            {TABS.map((t, i) => (
-              <Tab key={i} icon={t.icon} iconPosition="start" label={t.label} sx={{ minHeight: 48, fontSize: 13 }} />
+            {visibleTabs.map((t) => (
+              <Tab key={t.key} icon={t.icon} iconPosition="start" label={t.label} sx={{ minHeight: 48, fontSize: 13 }} />
             ))}
           </Tabs>
         </Paper>
 
-        <TabPanel value={activeTab} index={0}>
-          <DashboardTab
-            stats={stats} botStats={botStats} revenue={revenue} health={health}
-            featureAdoption={featureAdoption}
-            loading={dashLoading} onRefresh={fetchDashboard}
-          />
-        </TabPanel>
-
-        <TabPanel value={activeTab} index={1}>
-          <UsersTab onAdminError={handleAdminError} />
-        </TabPanel>
-
-        <TabPanel value={activeTab} index={2}>
-          <TelegramGroupsTab onAdminError={handleAdminError} />
-        </TabPanel>
-
-        <TabPanel value={activeTab} index={3}>
-          <CustomBotsTab onAdminError={handleAdminError} />
-        </TabPanel>
-
-        <TabPanel value={activeTab} index={4}>
-          <SuspiciousTab onAdminError={handleAdminError} />
-        </TabPanel>
-
-        <TabPanel value={activeTab} index={5}>
-          <ReferralsTab onAdminError={handleAdminError} />
-        </TabPanel>
-
-        <TabPanel value={activeTab} index={6}>
-          <DirectoryTab onAdminError={handleAdminError} />
-        </TabPanel>
-
-        <TabPanel value={activeTab} index={7}>
-          <AnnouncementsTab onAdminError={handleAdminError} />
-        </TabPanel>
-
-        <TabPanel value={activeTab} index={8}>
-          <AuditLogTab onAdminError={handleAdminError} />
-        </TabPanel>
-
-        <TabPanel value={activeTab} index={9}>
-          <ReportsTab onAdminError={handleAdminError} />
-        </TabPanel>
-
-        <TabPanel value={activeTab} index={10}>
-          <PromoCodesTab onAdminError={handleAdminError} />
-        </TabPanel>
-
-        <TabPanel value={activeTab} index={11}>
-          <BotHealthTab onAdminError={handleAdminError} />
-        </TabPanel>
-
-        <TabPanel value={activeTab} index={12}>
-          <DiagnosticsTab onAdminError={handleAdminError} />
-        </TabPanel>
+        {perms === null ? (
+          <Box display="flex" justifyContent="center" py={6}><CircularProgress /></Box>
+        ) : visibleTabs.length === 0 ? (
+          <Alert severity="info" sx={{ borderRadius: 2 }}>
+            Your admin role has no sections enabled. Contact a Super Admin if you believe this is a mistake.
+          </Alert>
+        ) : (
+          <Box pt={3}>{visibleTabs[activeTab]?.render?.()}</Box>
+        )}
 
       </Box>
     </Box>
