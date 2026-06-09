@@ -4666,11 +4666,14 @@ function ProofMetricsTab({ onAdminError, canManage }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const TREND_COLOR = { heavy: 'success', growing: 'info', steady: 'default', declining: 'warning', dormant: 'error' };
+const PLAN_COLOR = { free: 'default', pro: 'primary', enterprise: 'secondary' };
 
 function FeatureUsageTab({ onAdminError }) {
   const [view, setView] = useState('bot');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [planFilter, setPlanFilter] = useState('all');
+  const [hideUnused, setHideUnused] = useState(false);
 
   const fetchData = useCallback(async (v) => {
     setLoading(true);
@@ -4705,42 +4708,80 @@ function FeatureUsageTab({ onAdminError }) {
               <Grid item xs={6} md={3}><StatCard label="Tracked features" value={data.totals?.distinct_features} color="#f59e0b" /></Grid>
             </Grid>
 
-            <Alert severity="info" sx={{ mb: 2 }}>{data.tracking_note}</Alert>
+            <Alert severity="info" sx={{ mb: 2 }}>{data.tracking_note} Every platform module is listed below with its plan badge; modules at 0 are tracked but their action hasn't fired yet.</Alert>
 
-            <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', mb: 2, overflowX: 'auto' }}>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Feature</TableCell>
-                    <TableCell align="right">Users</TableCell>
-                    <TableCell align="right">Groups</TableCell>
-                    <TableCell align="right">Today</TableCell>
-                    <TableCell align="right">7d</TableCell>
-                    <TableCell align="right">30d</TableCell>
-                    <TableCell align="right">All time</TableCell>
-                    <TableCell align="right">Errors</TableCell>
-                    <TableCell>Trend</TableCell>
-                    <TableCell>Last used</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {(!data.features || data.features.length === 0) ? <EmptyRow cols={10} message="No usage logged yet — tracking is live, data will appear as bots act." /> : data.features.map((f) => (
-                    <TableRow key={f.feature} hover>
-                      <TableCell><Typography variant="body2" fontWeight={500}>{f.label}</Typography></TableCell>
-                      <TableCell align="right">{f.users.toLocaleString()}</TableCell>
-                      <TableCell align="right">{f.groups.toLocaleString()}</TableCell>
-                      <TableCell align="right">{f.today.toLocaleString()}</TableCell>
-                      <TableCell align="right">{f.d7.toLocaleString()}</TableCell>
-                      <TableCell align="right">{f.d30.toLocaleString()}</TableCell>
-                      <TableCell align="right"><b>{f.all_time.toLocaleString()}</b></TableCell>
-                      <TableCell align="right" sx={{ color: f.errors > 0 ? 'error.main' : 'text.disabled' }}>{f.errors}</TableCell>
-                      <TableCell><Chip size="small" label={f.trend} color={TREND_COLOR[f.trend] || 'default'} /></TableCell>
-                      <TableCell><Typography variant="caption" color="text.disabled">{f.last_used ? fmtDate(f.last_used) : '—'}</Typography></TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
+            <Stack direction="row" spacing={1} mb={1.5} alignItems="center" flexWrap="wrap" useFlexGap>
+              <Typography variant="caption" color="text.secondary">Plan:</Typography>
+              {['all', 'free', 'pro', 'enterprise'].map(p => (
+                <Chip key={p} size="small" label={p === 'all' ? 'All' : p} clickable
+                  variant={planFilter === p ? 'filled' : 'outlined'}
+                  color={planFilter === p ? 'primary' : 'default'} onClick={() => setPlanFilter(p)} />
+              ))}
+              <Box flex={1} />
+              <Chip size="small" label={hideUnused ? 'Showing used only' : 'Hide unused'} clickable
+                variant={hideUnused ? 'filled' : 'outlined'} onClick={() => setHideUnused(v => !v)} />
+            </Stack>
+
+            {(() => {
+              const feats = (data.features || []).filter(f =>
+                (planFilter === 'all' || f.plan === planFilter) && (!hideUnused || f.all_time > 0));
+              if (feats.length === 0) return <EmptyRow cols={1} message="No features match the filter." />;
+              // Group by section, preserving the backend's section order.
+              const sections = [];
+              feats.forEach(f => {
+                const s = f.section || 'Other';
+                let g = sections.find(x => x.section === s);
+                if (!g) { g = { section: s, rows: [] }; sections.push(g); }
+                g.rows.push(f);
+              });
+              return (
+                <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', mb: 2, overflowX: 'auto' }}>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Feature</TableCell>
+                        <TableCell>Plan</TableCell>
+                        <TableCell align="right">Users</TableCell>
+                        <TableCell align="right">Groups</TableCell>
+                        <TableCell align="right">Today</TableCell>
+                        <TableCell align="right">7d</TableCell>
+                        <TableCell align="right">30d</TableCell>
+                        <TableCell align="right">All time</TableCell>
+                        <TableCell align="right">Errors</TableCell>
+                        <TableCell>Trend</TableCell>
+                        <TableCell>Last used</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {sections.map(sec => (
+                        <React.Fragment key={sec.section}>
+                          <TableRow>
+                            <TableCell colSpan={11} sx={{ bgcolor: 'action.hover', py: 0.5 }}>
+                              <Typography variant="caption" fontWeight={700} textTransform="uppercase" letterSpacing={0.6} color="text.secondary">{sec.section}</Typography>
+                            </TableCell>
+                          </TableRow>
+                          {sec.rows.map(f => (
+                            <TableRow key={f.feature} hover sx={{ opacity: f.all_time > 0 ? 1 : 0.6 }}>
+                              <TableCell><Typography variant="body2" fontWeight={500}>{f.label}</Typography></TableCell>
+                              <TableCell><Chip size="small" label={f.plan} color={PLAN_COLOR[f.plan] || 'default'} variant="outlined" /></TableCell>
+                              <TableCell align="right">{f.users.toLocaleString()}</TableCell>
+                              <TableCell align="right">{f.groups.toLocaleString()}</TableCell>
+                              <TableCell align="right">{f.today.toLocaleString()}</TableCell>
+                              <TableCell align="right">{f.d7.toLocaleString()}</TableCell>
+                              <TableCell align="right">{f.d30.toLocaleString()}</TableCell>
+                              <TableCell align="right"><b>{f.all_time.toLocaleString()}</b></TableCell>
+                              <TableCell align="right" sx={{ color: f.errors > 0 ? 'error.main' : 'text.disabled' }}>{f.errors}</TableCell>
+                              <TableCell><Chip size="small" label={f.trend} color={TREND_COLOR[f.trend] || 'default'} /></TableCell>
+                              <TableCell><Typography variant="caption" color="text.disabled">{f.last_used ? fmtDate(f.last_used) : '—'}</Typography></TableCell>
+                            </TableRow>
+                          ))}
+                        </React.Fragment>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              );
+            })()}
 
             <Grid container spacing={2}>
               <Grid item xs={12} md={6}>
@@ -4803,6 +4844,40 @@ function FeatureUsageTab({ onAdminError }) {
                       <TableCell align="right"><b>{c.all_time.toLocaleString()}</b></TableCell>
                       <TableCell align="right" sx={{ color: c.errors > 0 ? 'error.main' : 'text.disabled' }}>{c.errors}</TableCell>
                       <TableCell><Typography variant="caption" color="text.disabled">{c.last_used ? fmtDate(c.last_used) : '—'}</Typography></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+
+            <Typography variant="subtitle2" fontWeight={700} mb={1}>Echo features</Typography>
+            <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', overflowX: 'auto' }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Feature</TableCell>
+                    <TableCell>Plan</TableCell>
+                    <TableCell align="right">Users</TableCell>
+                    <TableCell align="right">Today</TableCell>
+                    <TableCell align="right">7d</TableCell>
+                    <TableCell align="right">30d</TableCell>
+                    <TableCell align="right">All time</TableCell>
+                    <TableCell>Trend</TableCell>
+                    <TableCell>Last used</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {(!data.echo_features || data.echo_features.length === 0) ? <EmptyRow cols={9} message="No Echo feature usage logged yet." /> : data.echo_features.map((f) => (
+                    <TableRow key={f.feature} hover sx={{ opacity: f.all_time > 0 ? 1 : 0.6 }}>
+                      <TableCell><Typography variant="body2" fontWeight={500}>{f.label}</Typography></TableCell>
+                      <TableCell><Chip size="small" label={f.plan} color={PLAN_COLOR[f.plan] || 'default'} variant="outlined" /></TableCell>
+                      <TableCell align="right">{(f.users || 0).toLocaleString()}</TableCell>
+                      <TableCell align="right">{(f.today || 0).toLocaleString()}</TableCell>
+                      <TableCell align="right">{(f.d7 || 0).toLocaleString()}</TableCell>
+                      <TableCell align="right">{(f.d30 || 0).toLocaleString()}</TableCell>
+                      <TableCell align="right"><b>{(f.all_time || 0).toLocaleString()}</b></TableCell>
+                      <TableCell><Chip size="small" label={f.trend} color={TREND_COLOR[f.trend] || 'default'} /></TableCell>
+                      <TableCell><Typography variant="caption" color="text.disabled">{f.last_used ? fmtDate(f.last_used) : '—'}</Typography></TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

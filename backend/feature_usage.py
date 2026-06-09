@@ -23,19 +23,70 @@ from datetime import datetime
 
 _log = logging.getLogger("feature_usage")
 
-# Canonical feature keys. Kept permissive (unknown keys are still stored, just
-# normalised) so a new feature emitting usage never silently drops rows — but
-# the catalog documents the expected set for the admin UI grouping.
-FEATURE_KEYS = {
-    # Moderation / protection
-    "automod", "spam", "link", "ai_mod", "warn", "mute", "ban", "kick",
-    "content_filter", "raid", "captcha", "nsfw", "flood",
-    # Engagement / ops
-    "welcome", "scheduler", "announce", "referral", "command",
-    "forwarding", "workflow", "poll", "knowledge",
-    # Echo assistant
-    "assistant", "summary", "digest", "reminder", "task",
-}
+# ── Feature catalog ─────────────────────────────────────────────────────────
+# (key, label, lineage, section, plan) — the authoritative map of every platform
+# module the admin Feature Usage tab should surface. `lineage` is 'group' (both
+# bot lineages) or 'echo'. `plan` is the tier the feature is available on (badge).
+# Kept permissive: unknown emitted keys are still stored, just not grouped.
+FEATURE_CATALOG = [
+    # ── Group Management — Moderation ──
+    ("automod", "AutoMod", "group", "Moderation", "free"),
+    ("spam", "Spam Protection", "group", "Moderation", "free"),
+    ("link", "Link Protection", "group", "Moderation", "free"),
+    ("nsfw", "NSFW Filter", "group", "Moderation", "pro"),
+    ("content_filter", "Content Filter", "group", "Moderation", "pro"),
+    ("ai_mod", "AI Moderation", "group", "Moderation", "pro"),
+    ("behavior", "Behavior Rules", "group", "Moderation", "pro"),
+    ("reports", "Reports", "group", "Moderation", "free"),
+    ("warn", "Warnings", "group", "Moderation", "free"),
+    ("mute", "Muting", "group", "Moderation", "free"),
+    ("ban", "Bans", "group", "Moderation", "free"),
+    ("kick", "Kicks", "group", "Moderation", "free"),
+    ("raid", "Raid Guard", "group", "Moderation", "pro"),
+    ("captcha", "Captcha", "group", "Moderation", "free"),
+    ("flood", "Flood Control", "group", "Moderation", "free"),
+    # ── Group Management — Members ──
+    ("verification", "Verification", "group", "Members", "free"),
+    ("welcome", "Welcome", "group", "Members", "free"),
+    ("xp_roles", "XP & Roles", "group", "Members", "pro"),
+    ("invite", "Invite Links", "group", "Members", "free"),
+    ("members", "Members Analytics", "group", "Members", "free"),
+    ("leaderboard", "Leaderboard", "group", "Members", "pro"),
+    # ── Group Management — Engagement ──
+    ("campaign", "Campaigns", "group", "Engagement", "pro"),
+    ("referral", "Referrals", "group", "Engagement", "free"),
+    # ── Group Management — AI & Integrations ──
+    ("knowledge", "Knowledge Base", "group", "AI & Integrations", "pro"),
+    ("escalation", "Escalation", "group", "AI & Integrations", "pro"),
+    # ── Group Management — Automation ──
+    ("scheduler", "Scheduler", "group", "Automation", "pro"),
+    ("auto_reply", "Auto Reply", "group", "Automation", "pro"),
+    ("poll", "Polls", "group", "Automation", "free"),
+    ("forwarding", "Forwarding", "group", "Automation", "pro"),
+    ("workflow", "Workflows", "group", "Automation", "pro"),
+    ("webhook", "Webhooks", "group", "Automation", "pro"),
+    # ── Group Management — Analytics / ops ──
+    ("command", "Commands", "group", "Analytics", "free"),
+    ("announce", "Announcements", "group", "Analytics", "free"),
+    ("audit", "Audit Log", "group", "Analytics", "free"),
+    ("digest", "Digest", "group", "Analytics", "pro"),
+    ("ai_activity", "AI Activity", "group", "Analytics", "pro"),
+    # ── Echo assistant ──
+    ("assistant", "Assistant Chat", "echo", "Echo", "free"),
+    ("notes", "Notes", "echo", "Echo", "free"),
+    ("reminder", "Reminders", "echo", "Echo", "free"),
+    ("task", "Tasks", "echo", "Echo", "free"),
+    ("template", "Templates", "echo", "Echo", "pro"),
+    ("automation", "Automation", "echo", "Echo", "pro"),
+    ("meeting", "Meetings", "echo", "Echo", "pro"),
+    ("summary", "Summaries", "echo", "Echo", "pro"),
+]
+
+# Derived structures.
+FEATURE_META = {c[0]: {"label": c[1], "lineage": c[2], "section": c[3], "plan": c[4]} for c in FEATURE_CATALOG}
+FEATURE_KEYS = set(FEATURE_META.keys())
+# Section display order per lineage (drives UI grouping order).
+GROUP_SECTION_ORDER = ["Moderation", "Members", "Engagement", "AI & Integrations", "Automation", "Analytics"]
 
 _VALID_STATUS = {"ok", "failed", "skipped"}
 _VALID_SCOPE = {"official", "custom", "echo"}
@@ -154,31 +205,8 @@ def derive_scope_ref(group=None, telegram_group_id=None, group_id=None):
 
 # ── Reporting layer (admin Feature Usage tab) ──────────────────────────────────
 
-# Human labels + grouping for the UI. Order matters (drives display order).
-FEATURE_LABELS = {
-    "automod": "AutoMod",
-    "spam": "Spam Protection",
-    "link": "Link Protection",
-    "nsfw": "NSFW Filter",
-    "content_filter": "Content Filter",
-    "ai_mod": "AI Moderation",
-    "warn": "Warnings",
-    "mute": "Muting",
-    "ban": "Bans",
-    "kick": "Kicks",
-    "raid": "Raid Guard",
-    "captcha": "Captcha",
-    "flood": "Flood Control",
-    "welcome": "Welcome",
-    "scheduler": "Scheduler",
-    "announce": "Announcements",
-    "referral": "Referrals",
-    "command": "Commands",
-    "forwarding": "Forwarding",
-    "workflow": "Workflows",
-    "poll": "Polls",
-    "knowledge": "Knowledge Base",
-}
+# Human labels for the UI — derived from the catalog (single source of truth).
+FEATURE_LABELS = {k: m["label"] for k, m in FEATURE_META.items()}
 
 
 def _trend_label(recent: int, prior: int) -> str:
@@ -250,13 +278,25 @@ def usage_overview(scopes) -> dict:
         .all()
     )
 
+    # Which lineage are we reporting? Drives which catalog features to surface
+    # (with honest zeros) even when nothing has been logged for them yet.
+    lineage = "echo" if (list(scopes) == ["echo"]) else "group"
+
+    def _meta(key):
+        return FEATURE_META.get(key, {"label": key.replace("_", " ").title(), "section": "Other", "plan": "free", "lineage": lineage})
+
     features = []
+    seen = set()
     for r in rows:
+        seen.add(r.feature)
         recent7 = int(r.d7)
         prior7 = int(prior_rows.get(r.feature, 0))
+        m = _meta(r.feature)
         features.append({
             "feature": r.feature,
-            "label": FEATURE_LABELS.get(r.feature, r.feature.replace("_", " ").title()),
+            "label": m["label"],
+            "section": m["section"],
+            "plan": m["plan"],
             "users": int(r.users or 0),
             "groups": int(r.groups or 0),
             "today": int(r.today or 0),
@@ -267,7 +307,22 @@ def usage_overview(scopes) -> dict:
             "last_used": r.last_used.isoformat() if r.last_used else None,
             "trend": _trend_label(recent7, prior7),
         })
-    features.sort(key=lambda f: f["all_time"], reverse=True)
+
+    # Surface every catalog feature for this lineage — zero rows are honest
+    # ("tracked, not yet used") so the admin sees the full module set, not just
+    # whatever has happened to fire.
+    for key, m in FEATURE_META.items():
+        if m["lineage"] != lineage or key in seen:
+            continue
+        features.append({
+            "feature": key, "label": m["label"], "section": m["section"], "plan": m["plan"],
+            "users": 0, "groups": 0, "today": 0, "d7": 0, "d30": 0,
+            "all_time": 0, "errors": 0, "last_used": None, "trend": "dormant",
+        })
+
+    # Sort by section order, then by all-time usage within a section.
+    _order = {s: i for i, s in enumerate(GROUP_SECTION_ORDER)}
+    features.sort(key=lambda f: (_order.get(f["section"], 99), -f["all_time"], f["label"]))
 
     # Most-active groups (top 5 by all-time usage), enriched with title.
     top_groups_raw = (
@@ -307,7 +362,8 @@ def usage_overview(scopes) -> dict:
             "events_today": sum(f["today"] for f in features),
             "active_groups": base.filter(FeatureUsageEvent.created_at >= d30).with_entities(
                 func.count(distinct(FeatureUsageEvent.group_ref))).scalar() or 0,
-            "distinct_features": len(features),
+            "distinct_features": sum(1 for f in features if f["all_time"] > 0),
+            "catalog_features": len(features),
         },
         "tracking_note": "Usage is tracked from the day this feature shipped — historical actions are not backfilled.",
     }
