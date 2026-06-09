@@ -3007,6 +3007,9 @@ function CampaignsTab({ onAdminError }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState('');
+  const [scope, setScope] = useState('');
+  const [owner, setOwner] = useState('');
+  const [group, setGroup] = useState('');
   const [page, setPage] = useState(1);
   const [confirm, setConfirm] = useState(null);   // { c, action }
   const [busy, setBusy] = useState(false);
@@ -3016,12 +3019,17 @@ function CampaignsTab({ onAdminError }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await admin.getCampaigns({ status: status || undefined, page });
+      const { data } = await admin.getCampaigns({
+        status: status || undefined, scope: scope || undefined,
+        owner: owner || undefined, group: group || undefined, page,
+      });
       setData(data);
     } catch (e) { onAdminError?.(e, 'Failed to load campaigns'); }
     finally { setLoading(false); }
-  }, [onAdminError, status, page]);
+  }, [onAdminError, status, scope, owner, group, page]);
   useEffect(() => { load(); }, [load]);
+
+  const ov = data?.overview;
 
   const apply = async () => {
     setBusy(true);
@@ -3043,17 +3051,49 @@ function CampaignsTab({ onAdminError }) {
 
   return (
     <Box>
-      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2} flexWrap="wrap" gap={1}>
+      <Box mb={1}>
         <Typography variant="h6" fontWeight={700}>Campaigns</Typography>
-        <Stack direction="row" gap={1} alignItems="center">
-          <FormControl size="small" sx={{ minWidth: 130 }}>
-            <InputLabel>Status</InputLabel>
-            <Select label="Status" value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}>
-              {CAMPAIGN_STATUSES.map(s => <MenuItem key={s} value={s}>{s || 'All'}</MenuItem>)}
-            </Select>
-          </FormControl>
-          <Button size="small" startIcon={<Refresh />} onClick={load}>Refresh</Button>
+        <Typography variant="caption" color="text.secondary">
+          Oversight view. Campaigns are owned and managed inside their group — official = platform/official
+          campaigns; custom = customer group campaigns. Manage a group's own campaigns from its group page.
+        </Typography>
+      </Box>
+
+      {/* Overview counts */}
+      {ov && (
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap mb={1.5}>
+          <Chip size="small" label={`Total: ${ov.total}`} />
+          <Chip size="small" color="primary" variant="outlined" label={`Official: ${ov.by_scope?.official ?? 0}`} />
+          <Chip size="small" color="secondary" variant="outlined" label={`Custom: ${ov.by_scope?.custom ?? 0}`} />
+          {Object.entries(ov.by_status || {}).map(([s, n]) => (
+            <Chip key={s} size="small" variant="outlined" label={`${s}: ${n}`}
+              onClick={() => { setStatus(s); setPage(1); }} clickable />
+          ))}
         </Stack>
+      )}
+
+      <Stack direction="row" alignItems="center" gap={1} mb={2} flexWrap="wrap" useFlexGap>
+        <FormControl size="small" sx={{ minWidth: 120 }}>
+          <InputLabel>Status</InputLabel>
+          <Select label="Status" value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}>
+            {CAMPAIGN_STATUSES.map(s => <MenuItem key={s} value={s}>{s || 'All'}</MenuItem>)}
+          </Select>
+        </FormControl>
+        <FormControl size="small" sx={{ minWidth: 120 }}>
+          <InputLabel>Scope</InputLabel>
+          <Select label="Scope" value={scope} onChange={e => { setScope(e.target.value); setPage(1); }}>
+            <MenuItem value="">All</MenuItem>
+            <MenuItem value="official">Official</MenuItem>
+            <MenuItem value="custom">Custom</MenuItem>
+          </Select>
+        </FormControl>
+        <TextField size="small" label="Owner email" value={owner}
+          onChange={e => setOwner(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { setPage(1); load(); } }} />
+        <TextField size="small" label="Group ref" value={group}
+          onChange={e => setGroup(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { setPage(1); load(); } }} />
+        <Button size="small" variant="outlined" onClick={() => { setPage(1); load(); }}>Apply</Button>
+        <Box flex={1} />
+        <Button size="small" startIcon={<Refresh />} onClick={load}>Refresh</Button>
       </Stack>
 
       <TableContainer component={Paper} variant="outlined">
@@ -3072,8 +3112,12 @@ function CampaignsTab({ onAdminError }) {
               <EmptyRow cols={7} message="No campaigns found" />
             ) : data.campaigns.map(c => (
               <TableRow key={c.id} hover>
-                <TableCell>{c.title}</TableCell>
-                <TableCell><Chip label={c.scope} size="small" variant="outlined" /></TableCell>
+                <TableCell>
+                  <Typography variant="body2">{c.title}</Typography>
+                  {c.group_ref && <Typography variant="caption" color="text.disabled">group {c.group_ref}</Typography>}
+                </TableCell>
+                <TableCell><Chip label={c.scope} size="small" variant="outlined"
+                  color={c.scope === 'official' ? 'primary' : 'secondary'} /></TableCell>
                 <TableCell sx={{ fontSize: 12 }}>{c.owner_email || '—'}</TableCell>
                 <TableCell><StatusChip label={c.status} /></TableCell>
                 <TableCell align="right">

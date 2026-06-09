@@ -3586,17 +3586,52 @@ _ADMIN_CAMPAIGN_ACTIONS = {"pause", "close", "archive"}  # safe stop-actions (no
 @require_permission(rbac.P_CAMPAIGNS_VIEW)
 @rate_limit(requests_per_minute=30)
 def admin_list_campaigns():
-    """All campaigns across both lineages, with owner, scope and submission counts."""
+    """Campaign oversight: filterable list + scope/status overview counts.
+
+    Global admin is an OVERSIGHT surface — campaigns are owned/managed inside
+    their group (official = platform/official campaigns with a telegram_group_id;
+    custom = customer group campaigns with a Group.id). Filters: scope
+    (official|custom), status, owner (email substring), group (group ref).
+    """
     from ..models import EngagementCampaign, EngagementSubmission
+    from sqlalchemy import or_, cast, String
     page = request.args.get("page", 1, type=int)
     per_page = min(request.args.get("per_page", 50, type=int), 100)
     status = request.args.get("status", "")
+    scope = (request.args.get("scope", "") or "").lower()
+    owner = (request.args.get("owner", "") or "").strip()
+    group = (request.args.get("group", "") or "").strip()
 
     q = EngagementCampaign.query
     if status:
         q = q.filter(EngagementCampaign.status == status)
+    if scope == "official":
+        q = q.filter(EngagementCampaign.telegram_group_id.isnot(None))
+    elif scope == "custom":
+        q = q.filter(EngagementCampaign.telegram_group_id.is_(None))
+    if owner:
+        owner_ids_match = [u.id for u in User.query.filter(User.email.ilike(f"%{owner}%")).limit(200).all()]
+        q = q.filter(EngagementCampaign.owner_user_id.in_(owner_ids_match or [-1]))
+    if group:
+        q = q.filter(or_(
+            EngagementCampaign.telegram_group_id == group,
+            cast(EngagementCampaign.group_id, String) == group,
+        ))
     q = q.order_by(EngagementCampaign.created_at.desc())
     paginated = q.paginate(page=page, per_page=per_page, error_out=False)
+
+    # ── Overview counts (whole table — oversight summary, not just this page) ──
+    overview = {"by_status": {}, "by_scope": {"official": 0, "custom": 0}, "total": 0}
+    try:
+        for st, cnt in (db.session.query(EngagementCampaign.status, db.func.count(EngagementCampaign.id))
+                        .group_by(EngagementCampaign.status).all()):
+            overview["by_status"][st or "unknown"] = int(cnt)
+            overview["total"] += int(cnt)
+        overview["by_scope"]["official"] = EngagementCampaign.query.filter(
+            EngagementCampaign.telegram_group_id.isnot(None)).count()
+        overview["by_scope"]["custom"] = overview["total"] - overview["by_scope"]["official"]
+    except Exception:
+        pass
 
     owner_ids = {c.owner_user_id for c in paginated.items if c.owner_user_id}
     owners = {u.id: u for u in User.query.filter(User.id.in_(owner_ids)).all()} if owner_ids else {}
@@ -3630,7 +3665,8 @@ def admin_list_campaigns():
             "ends_at": c.ends_at.isoformat() if c.ends_at else None,
         })
 
-    return jsonify({"campaigns": rows, "total": paginated.total, "pages": paginated.pages, "page": page})
+    return jsonify({"campaigns": rows, "total": paginated.total, "pages": paginated.pages,
+                    "page": page, "overview": overview})
 
 
 @admin_bp.route("/campaigns/<int:campaign_id>/action", methods=["POST"])
