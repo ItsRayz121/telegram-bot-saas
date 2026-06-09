@@ -3930,7 +3930,7 @@ export default function AdminPanel() {
         <Paper sx={{ mb: 3 }}>
           <Tabs
             value={Math.min(activeTab, Math.max(0, visibleTabs.length - 1))}
-            onChange={(_, v) => setActiveTab(v)}
+            onChange={(_, v) => { setNavFilter(null); setActiveTab(v); }}
             variant="scrollable"
             scrollButtons="auto"
             allowScrollButtonsMobile
