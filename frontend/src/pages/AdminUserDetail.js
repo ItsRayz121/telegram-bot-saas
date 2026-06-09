@@ -61,9 +61,17 @@ export default function AdminUserDetail() {
     await admin.giftSubscription(userId, { tier: giftTier, duration_days: giftDays, note: giftNote });
     setGiftOpen(false);
   }, `Gifted ${giftTier} for ${giftDays} days`);
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!window.confirm('Permanently delete this user? This cannot be undone.')) return;
-    run('del', () => admin.deleteUser(userId), 'User deleted', false).then(() => navigate('/admin'));
+    setAction('del');
+    try {
+      await admin.deleteUser(userId);
+      toast.success('User deleted');
+      navigate('/admin');
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Failed to delete user');
+      setAction('');
+    }
   };
   const saveNotes = () => run('notes', async () => {
     await admin.updateUserNotes(userId, { notes });

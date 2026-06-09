@@ -399,6 +399,7 @@ def get_user(user_id):
     ).order_by(AdminAuditLog.created_at.desc()).limit(25).all()
     user_data["admin_actions"] = [a.to_dict() for a in admin_actions]
     user_data["admin_notes"] = user.admin_notes or ""
+    user_data["ban_reason"] = user.ban_reason
 
     # ── Activity timeline (merged, newest first) ───────────────────────────────
     timeline = [{"type": "signup", "at": user.created_at.isoformat(), "label": "Account created"}]
