@@ -4174,6 +4174,15 @@ function RolesTab({ onAdminError, currentUserId }) {
   const [saving, setSaving] = useState(false);
   const [showMatrix, setShowMatrix] = useState(false);
 
+  // Invite-by-email state
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState('support');
+  const [lookup, setLookup] = useState(null);     // { user } | { error }
+  const [looking, setLooking] = useState(false);
+  const [inviting, setInviting] = useState(false);
+
+  const isSuper = matrix?.me?.role === 'super_admin';
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -4184,6 +4193,33 @@ function RolesTab({ onAdminError, currentUserId }) {
     } finally { setLoading(false); }
   }, [onAdminError]);
   useEffect(() => { load(); }, [load]);
+
+  const doLookup = async () => {
+    const email = inviteEmail.trim();
+    if (!email) return;
+    setLooking(true); setLookup(null);
+    try {
+      const res = await admin.lookupAdminCandidate(email);
+      setLookup({ user: res.data.user });
+    } catch (e) {
+      setLookup({ error: e?.response?.data?.error || 'This email is not registered yet.' });
+    } finally { setLooking(false); }
+  };
+
+  const doInvite = async () => {
+    const email = inviteEmail.trim();
+    if (!email) return;
+    setInviting(true);
+    try {
+      const res = await admin.inviteAdmin({ email, role: inviteRole });
+      toast.success(res.data.message || 'Admin role granted');
+      setInviteEmail(''); setLookup(null); setInviteRole('support');
+      load();
+    } catch (e) { onAdminError?.(e, e?.response?.data?.error || 'Failed to grant role'); }
+    finally { setInviting(false); }
+  };
+
+  const inviteRoleOptions = isSuper ? [...ASSIGNABLE_ROLES, 'super_admin'] : ASSIGNABLE_ROLES;
 
   const applyRole = async () => {
     if (!confirm) return;
@@ -4218,6 +4254,52 @@ function RolesTab({ onAdminError, currentUserId }) {
         Bootstrap admins (listed in the <code>ADMIN_EMAILS</code> environment variable) are always Super Admin and
         can only be changed via that env var. Grant a role to any user below to make them an admin without touching env.
       </Alert>
+
+      {/* Invite an admin by email */}
+      <Paper variant="outlined" sx={{ p: 2, mb: 2, borderRadius: 2 }}>
+        <Typography variant="subtitle2" fontWeight={700} mb={0.5}>Add an admin by email</Typography>
+        <Typography variant="caption" color="text.secondary" display="block" mb={1.5}>
+          The person must already have a registered Telegizer account. Assigning a role takes effect immediately and is audit-logged.
+        </Typography>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'flex-start' }}>
+          <TextField
+            size="small" fullWidth label="Enter registered user email" type="email"
+            value={inviteEmail}
+            onChange={(e) => { setInviteEmail(e.target.value); setLookup(null); }}
+            onKeyDown={(e) => { if (e.key === 'Enter') doLookup(); }}
+            InputProps={{ startAdornment: <InputAdornment position="start"><Search fontSize="small" /></InputAdornment> }}
+          />
+          <FormControl size="small" sx={{ minWidth: 180 }}>
+            <InputLabel>Role</InputLabel>
+            <Select value={inviteRole} label="Role" onChange={(e) => setInviteRole(e.target.value)}>
+              {inviteRoleOptions.map(r => <MenuItem key={r} value={r}>{ROLE_LABELS[r]}</MenuItem>)}
+            </Select>
+          </FormControl>
+          <Button variant="outlined" onClick={doLookup} disabled={!inviteEmail.trim() || looking} sx={{ whiteSpace: 'nowrap' }}>
+            {looking ? <CircularProgress size={18} /> : 'Look up'}
+          </Button>
+          <Button variant="contained" onClick={doInvite} disabled={!inviteEmail.trim() || inviting || lookup?.error} sx={{ whiteSpace: 'nowrap' }}>
+            {inviting ? <CircularProgress size={18} /> : 'Grant role'}
+          </Button>
+        </Stack>
+        {lookup?.error && (
+          <Alert severity="error" sx={{ mt: 1.5 }}>{lookup.error}</Alert>
+        )}
+        {lookup?.user && (
+          <Alert severity={lookup.user.is_bootstrap ? 'warning' : 'success'} sx={{ mt: 1.5 }}>
+            <Typography variant="body2" fontWeight={600}>{lookup.user.full_name || lookup.user.email}</Typography>
+            <Typography variant="caption" display="block">
+              {lookup.user.email} · plan {lookup.user.plan} · auth {lookup.user.auth_source}
+              {lookup.user.current_role ? ` · currently ${ROLE_LABELS[lookup.user.current_role] || lookup.user.current_role}` : ' · not yet an admin'}
+            </Typography>
+            {lookup.user.is_bootstrap && (
+              <Typography variant="caption" display="block" sx={{ mt: 0.5 }}>
+                This is a bootstrap super-admin (ADMIN_EMAILS) — manage via the env var.
+              </Typography>
+            )}
+          </Alert>
+        )}
+      </Paper>
 
       {showMatrix && matrix && (
         <Paper variant="outlined" sx={{ p: 2, mb: 2, borderRadius: 2 }}>

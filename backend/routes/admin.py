@@ -3061,6 +3061,90 @@ def set_admin_role(user_id):
     })
 
 
+@admin_bp.route("/roles/lookup", methods=["GET"])
+@require_permission(rbac.P_ROLES_MANAGE)
+@rate_limit(requests_per_minute=60)
+def lookup_admin_candidate():
+    """Look up a registered user by email so the invite UI can confirm the
+    account exists and show who it is before a role is granted."""
+    email = (request.args.get("email") or "").strip().lower()
+    if not email:
+        return jsonify({"error": "email is required"}), 400
+    u = User.query.filter(db.func.lower(User.email) == email).first()
+    if not u:
+        return jsonify({"found": False, "error": "This email is not registered yet."}), 404
+    return jsonify({
+        "found": True,
+        "user": {
+            "id": u.id,
+            "email": u.email,
+            "full_name": u.full_name,
+            "plan": (u.subscription_tier or "free").upper(),
+            "auth_source": u.auth_provider or "email",
+            "current_role": rbac.resolve_admin_role(u),
+            "is_bootstrap": bool(u.email and u.email.lower() in Config.ADMIN_EMAILS),
+        },
+    })
+
+
+@admin_bp.route("/roles/admins/invite", methods=["POST"])
+@require_permission(rbac.P_ROLES_MANAGE)
+@rate_limit(requests_per_minute=20)
+def invite_admin_by_email():
+    """Grant an admin role to an existing user, addressed by email.
+
+    A role is never created for an unregistered email — the person must already
+    have a Telegizer account. Env-allowlist (bootstrap) admins stay locked.
+    Audit-logged the same way as set_admin_role.
+    """
+    me = _get_current_user()
+    data = request.get_json() or {}
+    email = (data.get("email") or "").strip().lower()
+    new_role = (data.get("role") or "").strip().lower() or None
+
+    if not email:
+        return jsonify({"error": "email is required"}), 400
+    if new_role is None or new_role not in rbac.ROLES:
+        return jsonify({"error": f"role must be one of: {', '.join(rbac.ROLES)}"}), 400
+    if new_role == rbac.SUPER_ADMIN and not rbac.is_super_admin(me):
+        return jsonify({"error": "Only a super admin can grant the super_admin role."}), 403
+
+    target = User.query.filter(db.func.lower(User.email) == email).first()
+    if not target:
+        return jsonify({"error": "This email is not registered yet."}), 404
+    if target.id == me.id:
+        return jsonify({"error": "You cannot change your own admin role."}), 400
+    if target.email and target.email.lower() in Config.ADMIN_EMAILS:
+        return jsonify({
+            "error": "This account is a bootstrap super-admin (in ADMIN_EMAILS). "
+                     "Manage it via the ADMIN_EMAILS environment variable.",
+        }), 400
+
+    old_role = target.admin_role
+    target.admin_role = new_role
+
+    db.session.add(AdminAuditLog(
+        admin_id=me.id,
+        action="invite_admin_role",
+        method="POST",
+        path="/api/admin/roles/admins/invite",
+        ip_address=request.remote_addr,
+        severity="critical",
+        target_type="user",
+        target_id=str(target.id),
+        old_value=old_role,
+        new_value=new_role,
+    ))
+    db.session.commit()
+
+    _log.info("[ADMIN] %s invited user %s (%d) as admin: %s → %s",
+              me.email, target.email, target.id, old_role, new_role)
+    return jsonify({
+        "message": f"{target.email} is now {rbac.ROLE_LABELS[new_role]}.",
+        "user": {"id": target.id, "email": target.email, "full_name": target.full_name, "role": new_role},
+    })
+
+
 # ── Platform Configuration & Feature Flags (Super Admin only) ───────────────────
 
 @admin_bp.route("/platform-config", methods=["GET"])

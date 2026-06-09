@@ -687,6 +687,8 @@ export const admin = {
   getRoleMatrix: () => api.get('/api/admin/roles/matrix'),
   getAdmins: () => api.get('/api/admin/roles/admins'),
   setAdminRole: (userId, data) => api.put(`/api/admin/roles/admins/${userId}`, data),
+  lookupAdminCandidate: (email) => api.get('/api/admin/roles/lookup', { params: { email } }),
+  inviteAdmin: (data) => api.post('/api/admin/roles/admins/invite', data),
   // Platform Configuration & Feature Flags (Super Admin only)
   getPlatformConfig: () => api.get('/api/admin/platform-config'),
   updatePlatformSettings: (settings) => api.put('/api/admin/platform-config/settings', { settings }),
