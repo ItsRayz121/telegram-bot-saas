@@ -668,7 +668,13 @@ class ModerationSystem:
         if not cfg.get("enabled", False):
             return False
 
-        if message.forward_date or message.forward_from or message.forward_from_chat:
+        # PTB 21.x replaced forward_date/forward_from/forward_from_chat with
+        # forward_origin; use getattr so this works across versions without
+        # raising AttributeError ("Message object has no attribute forward_date").
+        if (getattr(message, "forward_origin", None)
+                or getattr(message, "forward_date", None)
+                or getattr(message, "forward_from", None)
+                or getattr(message, "forward_from_chat", None)):
             await self.execute_automod_action(
                 bot, message, group, cfg.get("action", "delete"),
                 reason="Forwarded message",

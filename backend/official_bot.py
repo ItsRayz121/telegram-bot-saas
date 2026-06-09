@@ -3879,7 +3879,14 @@ async def _automod_check(bot, message, am_cfg: dict, group_id: str, flask_app) -
 
     # ── 7. Forwarded messages ────────────────────────────────────────────────
     fwd_cfg = am_cfg.get("forwarded_messages", {})
-    if fwd_cfg.get("enabled") and (message.forward_date or message.forward_from or message.forward_from_chat):
+    # PTB 21.x replaced forward_date/forward_from/forward_from_chat with
+    # forward_origin; getattr keeps this working across versions without
+    # raising AttributeError on the removed attributes.
+    _is_forward = (getattr(message, "forward_origin", None)
+                   or getattr(message, "forward_date", None)
+                   or getattr(message, "forward_from", None)
+                   or getattr(message, "forward_from_chat", None))
+    if fwd_cfg.get("enabled") and _is_forward:
         await _automod_execute(bot, message, group_id, flask_app,
                                "forwarded_messages", fwd_cfg.get("action", "delete"))
         return True

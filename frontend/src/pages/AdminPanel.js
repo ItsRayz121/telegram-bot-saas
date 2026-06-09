@@ -46,9 +46,20 @@ function usd(val) {
 
 // ─── Reusable stat card ───────────────────────────────────────────────────────
 
-function StatCard({ label, value, color = '#2196f3', sub, icon: Icon }) {
+function StatCard({ label, value, color = '#2196f3', sub, icon: Icon, onClick }) {
+  const clickable = typeof onClick === 'function';
   return (
-    <Card sx={{ height: '100%' }}>
+    <Card
+      onClick={onClick}
+      sx={{
+        height: '100%',
+        ...(clickable && {
+          cursor: 'pointer',
+          transition: 'transform .12s ease, box-shadow .12s ease',
+          '&:hover': { transform: 'translateY(-2px)', boxShadow: 6, borderColor: color },
+        }),
+      }}
+    >
       <CardContent sx={{ pb: '12px !important' }}>
         <Stack direction="row" alignItems="flex-start" justifyContent="space-between">
           <Box>
@@ -93,7 +104,7 @@ function EmptyRow({ cols, message = 'No records found' }) {
 // TAB 0 — DASHBOARD
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function DashboardTab({ stats, botStats, revenue, health, featureAdoption, loading, onRefresh }) {
+function DashboardTab({ stats, botStats, revenue, health, featureAdoption, loading, onRefresh, onNavigate }) {
   if (loading) return <Box display="flex" justifyContent="center" mt={4}><CircularProgress /></Box>;
 
   const healthColor = (v) => {
@@ -102,6 +113,9 @@ function DashboardTab({ stats, botStats, revenue, health, featureAdoption, loadi
     return '#ef4444';
   };
 
+  // Drill-down helper — only attaches a click handler when navigation is wired.
+  const go = (key, filter) => (onNavigate ? () => onNavigate(key, filter) : undefined);
+
   return (
     <Box>
       {/* User stats */}
@@ -109,12 +123,12 @@ function DashboardTab({ stats, botStats, revenue, health, featureAdoption, loadi
         Platform Users
       </Typography>
       <Grid container spacing={2} mb={3}>
-        <Grid item xs={6} sm={4} md={2}><StatCard label="Total Users" value={stats?.total_users} icon={People} /></Grid>
-        <Grid item xs={6} sm={4} md={2}><StatCard label="Free" value={stats?.free_users} color="#64748b" /></Grid>
-        <Grid item xs={6} sm={4} md={2}><StatCard label="Pro" value={stats?.pro_users} color="#7c4dff" icon={VerifiedUser} /></Grid>
-        <Grid item xs={6} sm={4} md={2}><StatCard label="Enterprise" value={stats?.enterprise_users} color="#f59e0b" /></Grid>
+        <Grid item xs={6} sm={4} md={2}><StatCard label="Total Users" value={stats?.total_users} icon={People} onClick={go('users', {})} /></Grid>
+        <Grid item xs={6} sm={4} md={2}><StatCard label="Free" value={stats?.free_users} color="#64748b" onClick={go('users', { tier: 'free' })} /></Grid>
+        <Grid item xs={6} sm={4} md={2}><StatCard label="Pro" value={stats?.pro_users} color="#7c4dff" icon={VerifiedUser} onClick={go('users', { tier: 'pro' })} /></Grid>
+        <Grid item xs={6} sm={4} md={2}><StatCard label="Enterprise" value={stats?.enterprise_users} color="#f59e0b" onClick={go('users', { tier: 'enterprise' })} /></Grid>
         <Grid item xs={6} sm={4} md={2}><StatCard label="New (7d)" value={stats?.new_users_7d} color="#06b6d4" /></Grid>
-        <Grid item xs={6} sm={4} md={2}><StatCard label="Banned" value={stats?.banned_users} color="#ef4444" /></Grid>
+        <Grid item xs={6} sm={4} md={2}><StatCard label="Banned" value={stats?.banned_users} color="#ef4444" onClick={go('users', { status: 'banned' })} /></Grid>
       </Grid>
 
       {/* Bot / group stats */}
@@ -122,11 +136,11 @@ function DashboardTab({ stats, botStats, revenue, health, featureAdoption, loadi
         Bot Ecosystem
       </Typography>
       <Grid container spacing={2} mb={3}>
-        <Grid item xs={6} sm={4} md={2}><StatCard label="Custom Bots" value={stats?.total_bots} color="#00bcd4" icon={SmartToy} /></Grid>
-        <Grid item xs={6} sm={4} md={2}><StatCard label="Active Bots" value={stats?.active_bots} color="#22c55e" /></Grid>
-        <Grid item xs={6} sm={4} md={2}><StatCard label="Groups (Official)" value={botStats?.total_linked_groups} color="#8b5cf6" icon={Groups} /></Grid>
-        <Grid item xs={6} sm={4} md={2}><StatCard label="Active Groups" value={botStats?.active_groups} color="#22c55e" /></Grid>
-        <Grid item xs={6} sm={4} md={2}><StatCard label="Pending Groups" value={botStats?.pending_groups} color="#f59e0b" /></Grid>
+        <Grid item xs={6} sm={4} md={2}><StatCard label="Custom Bots" value={stats?.total_bots} color="#00bcd4" icon={SmartToy} onClick={go('bots', {})} /></Grid>
+        <Grid item xs={6} sm={4} md={2}><StatCard label="Active Bots" value={stats?.active_bots} color="#22c55e" onClick={go('bots', {})} /></Grid>
+        <Grid item xs={6} sm={4} md={2}><StatCard label="Groups (Official)" value={botStats?.total_linked_groups} color="#8b5cf6" icon={Groups} onClick={go('groups', {})} /></Grid>
+        <Grid item xs={6} sm={4} md={2}><StatCard label="Active Groups" value={botStats?.active_groups} color="#22c55e" onClick={go('groups', { status: 'active' })} /></Grid>
+        <Grid item xs={6} sm={4} md={2}><StatCard label="Pending Groups" value={botStats?.pending_groups} color="#f59e0b" onClick={go('groups', { status: 'pending' })} /></Grid>
         <Grid item xs={6} sm={4} md={2}><StatCard label="Total Members" value={stats?.total_members} color="#06b6d4" /></Grid>
       </Grid>
 
@@ -322,7 +336,7 @@ function DashboardTab({ stats, botStats, revenue, health, featureAdoption, loadi
 // TAB 1 — USER MANAGEMENT
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function UsersTab({ onAdminError }) {
+function UsersTab({ onAdminError, initialFilter }) {
   const [users, setUsers] = useState([]);
   const [total, setTotal] = useState(0);
   const [pages, setPages] = useState(1);
@@ -356,7 +370,22 @@ function UsersTab({ onAdminError }) {
     }
   }, [onAdminError]);
 
-  useEffect(() => { fetchUsers(); }, [fetchUsers]);
+  // Default load — skipped when arriving via a dashboard drill-down so the
+  // filtered fetch below is the only one that runs (avoids a flash of all-users).
+  useEffect(() => { if (!initialFilter) fetchUsers(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [fetchUsers]);
+
+  // Apply a filter handed in from a dashboard card click. The nonce on
+  // initialFilter changes every click so repeat navigations re-fire this.
+  useEffect(() => {
+    if (!initialFilter) return;
+    const f = initialFilter.filter || {};
+    const t = f.tier || '';
+    const s = f.status || '';
+    const q = f.search || '';
+    setTierFilter(t); setStatusFilter(s); setSearch(q); setPage(1);
+    fetchUsers(1, q, t, s);
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [initialFilter]);
 
   const refresh = () => fetchUsers(page, search, tierFilter, statusFilter);
 
@@ -693,7 +722,7 @@ function UsersTab({ onAdminError }) {
 // TAB 2 — TELEGRAM GROUPS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function TelegramGroupsTab({ onAdminError }) {
+function TelegramGroupsTab({ onAdminError, initialFilter }) {
   const [groups, setGroups] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -711,7 +740,15 @@ function TelegramGroupsTab({ onAdminError }) {
     finally { setLoading(false); }
   }, [onAdminError]);
 
-  useEffect(() => { fetch(); }, [fetch]);
+  useEffect(() => { if (!initialFilter) fetch(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [fetch]);
+
+  // Apply a status filter handed in from a dashboard card click.
+  useEffect(() => {
+    if (!initialFilter) return;
+    const st = (initialFilter.filter || {}).status || '';
+    setStatusFilter(st); setPage(1); fetch(1, '', st);
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [initialFilter]);
 
   const handleDisable = async (g) => {
     if (!window.confirm(`Disable group "${g.title}"?`)) return;
@@ -3722,6 +3759,10 @@ export default function AdminPanel() {
   }, [navigate]);
 
   const [activeTab, setActiveTab] = useState(0);
+  // Drill-down navigation from dashboard cards: a pending tab key + a filter to
+  // hand the destination tab (e.g. clicking "Pro" → Users tab pre-filtered).
+  const [pendingTabKey, setPendingTabKey] = useState(null);
+  const [navFilter, setNavFilter] = useState(null);
   const [stats, setStats] = useState(null);
   const [botStats, setBotStats] = useState(null);
   const [revenue, setRevenue] = useState(null);
@@ -3766,15 +3807,23 @@ export default function AdminPanel() {
 
   const can = useCallback((p) => !p || (perms || []).includes(p), [perms]);
 
+  // Drill-down: jump to a sibling tab and hand it a filter. Stable identity so
+  // it can be referenced from the memoised tab defs without a dependency cycle;
+  // the actual index resolution happens in an effect once visibleTabs is known.
+  const goToTab = useCallback((key, filter) => {
+    setNavFilter({ key, filter: filter || {}, nonce: Date.now() });
+    setPendingTabKey(key);
+  }, []);
+
   // Tab definitions, each gated by an RBAC permission. Tabs the current admin
   // role cannot access are hidden entirely (and the API also enforces it).
   const tabDefs = useMemo(() => ([
     { key: 'dashboard', label: 'Dashboard', icon: <TrendingUp fontSize="small" />, permission: 'analytics.view',
-      render: () => <DashboardTab stats={stats} botStats={botStats} revenue={revenue} health={health} featureAdoption={featureAdoption} loading={dashLoading} onRefresh={fetchDashboard} /> },
+      render: () => <DashboardTab stats={stats} botStats={botStats} revenue={revenue} health={health} featureAdoption={featureAdoption} loading={dashLoading} onRefresh={fetchDashboard} onNavigate={goToTab} /> },
     { key: 'users', label: 'Users', icon: <People fontSize="small" />, permission: 'users.view',
-      render: () => <UsersTab onAdminError={handleAdminError} /> },
+      render: () => <UsersTab onAdminError={handleAdminError} initialFilter={navFilter?.key === 'users' ? navFilter : null} /> },
     { key: 'groups', label: 'TG Groups', icon: <Groups fontSize="small" />, permission: 'groups.view',
-      render: () => <TelegramGroupsTab onAdminError={handleAdminError} /> },
+      render: () => <TelegramGroupsTab onAdminError={handleAdminError} initialFilter={navFilter?.key === 'groups' ? navFilter : null} /> },
     { key: 'bots', label: 'Custom Bots', icon: <SmartToy fontSize="small" />, permission: 'bots.view',
       render: () => <CustomBotsTab onAdminError={handleAdminError} /> },
     { key: 'suspicious', label: 'Suspicious', icon: <Warning fontSize="small" />, permission: 'fraud.view',
@@ -3812,9 +3861,20 @@ export default function AdminPanel() {
     { key: 'roles', label: 'Roles & Access', icon: <Security fontSize="small" />, permission: 'roles.manage',
       render: () => <RolesTab onAdminError={handleAdminError} currentUserId={me?.id} /> },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  ]), [stats, botStats, revenue, health, featureAdoption, dashLoading, fetchDashboard, handleAdminError, me]);
+  ]), [stats, botStats, revenue, health, featureAdoption, dashLoading, fetchDashboard, handleAdminError, me, navFilter, goToTab]);
 
   const visibleTabs = useMemo(() => tabDefs.filter(t => can(t.permission)), [tabDefs, can]);
+
+  // Resolve a pending drill-down once we know which tabs are visible. If the
+  // current role can't see the target tab, tell the user instead of silently
+  // doing nothing.
+  useEffect(() => {
+    if (!pendingTabKey) return;
+    const idx = visibleTabs.findIndex(t => t.key === pendingTabKey);
+    if (idx >= 0) setActiveTab(idx);
+    else toast.info("You don't have access to that section");
+    setPendingTabKey(null);
+  }, [pendingTabKey, visibleTabs]);
 
   // Keep activeTab in range when the visible set changes.
   useEffect(() => {
