@@ -499,7 +499,23 @@ def get_stats():
     total_users = User.query.count()
     total_bots = Bot.query.count()
     total_groups = Group.query.count()
-    total_members = Member.query.count()
+    # Total Members = real Telegram membership summed across active linked groups
+    # (reconciled by the member-count sync job), NOT the count of tracked-member
+    # rows the bot happened to witness. Matches the "members protected" proof metric.
+    total_members = db.session.query(
+        db.func.coalesce(db.func.sum(TelegramGroup.member_count), 0)
+    ).filter(
+        TelegramGroup.bot_status == "active",
+        TelegramGroup.is_disabled == False,  # noqa: E712
+    ).scalar() or 0
+    member_count_synced_at = db.session.query(
+        db.func.min(TelegramGroup.member_count_synced_at)
+    ).filter(
+        TelegramGroup.bot_status == "active",
+        TelegramGroup.is_disabled == False,  # noqa: E712
+        TelegramGroup.member_count_synced_at.isnot(None),
+    ).scalar()
+    tracked_member_rows = Member.query.count()
     active_bots = Bot.query.filter_by(is_active=True).count()
     free_users = User.query.filter_by(subscription_tier="free").count()
     pro_users = User.query.filter_by(subscription_tier="pro").count()
@@ -525,7 +541,9 @@ def get_stats():
             "total_bots": total_bots,
             "active_bots": active_bots,
             "total_groups": total_groups,
-            "total_members": total_members,
+            "total_members": int(total_members),
+            "total_members_synced_at": member_count_synced_at.isoformat() if member_count_synced_at else None,
+            "tracked_member_rows": tracked_member_rows,
         }
     })
 
@@ -1106,6 +1124,37 @@ def admin_reconcile_group(group_id):
     return jsonify({"promoted": False, "reason": why, "group": tg.to_dict()})
 
 
+@admin_bp.route("/telegram-groups/sync-members", methods=["POST"])
+@require_permission(rbac.P_GROUPS_MANAGE)
+@rate_limit(requests_per_minute=4)
+def admin_sync_member_counts():
+    """Reconcile member_count for all active groups against live Telegram counts.
+
+    Read-only Telegram calls (getChatMemberCount), throttled per the anti-ban
+    rule. Runs synchronously so the admin sees the result; capped to keep the
+    request bounded.
+    """
+    from ..member_sync import sync_member_counts
+    data = request.get_json(silent=True) or {}
+    limit = data.get("limit")
+    summary = sync_member_counts(limit=limit)
+    return jsonify(summary)
+
+
+@admin_bp.route("/telegram-groups/<group_id>/sync-members", methods=["POST"])
+@require_permission(rbac.P_GROUPS_MANAGE)
+@rate_limit(requests_per_minute=20)
+def admin_sync_group_members(group_id):
+    """Reconcile a single group's member_count against the live Telegram count."""
+    from ..member_sync import sync_member_counts
+    tg = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+    summary = sync_member_counts(group_ids=[group_id])
+    tg = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
+    return jsonify({**summary, "group": tg.to_dict() if tg else None})
+
+
 @admin_bp.route("/telegram-groups/<group_id>/events", methods=["GET"])
 @require_permission(rbac.P_GROUPS_VIEW)
 @rate_limit(requests_per_minute=30)
@@ -1173,6 +1222,7 @@ def admin_group_detail(group_id):
     member_q = OfficialMember.query.filter_by(telegram_group_id=group_id)
     data["members"] = {
         "member_count": tg.member_count,
+        "member_count_synced_at": tg.member_count_synced_at.isoformat() if tg.member_count_synced_at else None,
         "tracked_members": member_q.count(),
         "admin_count": member_q.filter_by(is_admin=True).count(),
         "muted_count": member_q.filter_by(is_muted=True).count(),

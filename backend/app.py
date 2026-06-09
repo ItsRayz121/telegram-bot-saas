@@ -1516,6 +1516,8 @@ def _run_migrations():
     """
     migrations = [
         "ALTER TABLE groups ADD COLUMN telegram_member_count INTEGER DEFAULT 0",
+        # Live Telegram member-count reconciliation timestamp
+        "ALTER TABLE telegram_groups ADD COLUMN member_count_synced_at TIMESTAMP",
         # Invite link creator tracking
         "ALTER TABLE invite_links ADD COLUMN created_by_user_id INTEGER",
         "ALTER TABLE invite_links ADD COLUMN created_by_telegram_id VARCHAR(255)",
@@ -2234,6 +2236,26 @@ def _run_scheduled_automations(app):
             _asyncio.run_coroutine_threadsafe(_fire(), loop)
 
 
+def _run_member_count_sync(app):
+    """Reconcile TelegramGroup.member_count to live Telegram counts.
+
+    Runs in the web process (where tokens + the bot live). The 6h per-process
+    gate in the scheduler loop bounds this; getChatMemberCount is a read, so the
+    worst case (both Gunicorn workers sweeping the same window) is a handful of
+    duplicate, idempotent reads — harmless.
+    """
+    try:
+        with app.app_context():
+            from .member_sync import sync_member_counts
+            summary = sync_member_counts()
+            _scheduler_log.info(
+                "member-count sync: synced=%s failed=%s total=%s",
+                summary.get("synced"), summary.get("failed"), summary.get("total"),
+            )
+    except Exception as exc:
+        _scheduler_log.error("member-count sync failed: %s", exc)
+
+
 def _cleanup_message_buffers(app):
     """Delete MessageBuffer rows older than 48 hours."""
     from .models import MessageBuffer
@@ -2314,6 +2336,7 @@ def _scheduler_loop(app):
     _last_event_cleanup = [0]
     _last_buffer_cleanup = [0]
     _last_token_cleanup = [0]
+    _last_member_sync = [0]
     time.sleep(15)  # Wait for bots to fully start
     while True:
         try:
@@ -2362,6 +2385,10 @@ def _scheduler_loop(app):
             if now_ts - _last_buffer_cleanup[0] > 21600:
                 _last_buffer_cleanup[0] = now_ts
                 _run_task_with_timeout(_cleanup_message_buffers, app, timeout=30, label="_cleanup_message_buffers")
+            # Live Telegram member-count reconciliation: every 6 hours
+            if now_ts - _last_member_sync[0] > 21600:
+                _last_member_sync[0] = now_ts
+                _run_task_with_timeout(_run_member_count_sync, app, timeout=120, label="_run_member_count_sync")
         except Exception as exc:
             _scheduler_log.error(f"Scheduler loop error: {exc}")
         time.sleep(60)

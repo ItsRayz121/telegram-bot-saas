@@ -1247,7 +1247,11 @@ class TelegramGroup(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     # Cached counts — kept up to date by the bot on member join/leave events
+    # and periodically reconciled to the live Telegram count by the member-sync job.
     member_count = db.Column(db.Integer, default=0, nullable=False)
+    # When member_count was last reconciled to the live Telegram getChatMemberCount.
+    # NULL = never synced (only the join/leave-delta estimate is shown).
+    member_count_synced_at = db.Column(db.DateTime, nullable=True)
     description = db.Column(db.Text, nullable=True)
     # 'group_management' = My Groups / moderation pillar
     # 'assistant_hub'    = Assistant Hub / AI extraction pillar
@@ -1278,6 +1282,7 @@ class TelegramGroup(db.Model):
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "member_count": self.member_count,
+            "member_count_synced_at": self.member_count_synced_at.isoformat() if self.member_count_synced_at else None,
             "description": self.description,
             "group_context": self.group_context or "group_management",
         }

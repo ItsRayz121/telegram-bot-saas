@@ -178,7 +178,7 @@ function DashboardTab({ stats, botStats, revenue, health, featureAdoption, loadi
         <Grid item xs={6} sm={4} md={2}><StatCard label="Groups (Official)" value={botStats?.total_linked_groups} color="#8b5cf6" icon={Groups} onClick={go('groups', {})} /></Grid>
         <Grid item xs={6} sm={4} md={2}><StatCard label="Active Groups" value={botStats?.active_groups} color="#22c55e" onClick={go('groups', { status: 'active' })} /></Grid>
         <Grid item xs={6} sm={4} md={2}><StatCard label="Pending Groups" value={botStats?.pending_groups} color="#f59e0b" onClick={go('groups', { status: 'pending' })} /></Grid>
-        <Grid item xs={6} sm={4} md={2}><StatCard label="Total Members" value={stats?.total_members} color="#06b6d4" /></Grid>
+        <Grid item xs={6} sm={4} md={2}><StatCard label="Total Members" value={stats?.total_members} color="#06b6d4" onClick={go('groups', { status: 'active' })} sub={stats?.total_members_synced_at ? `live · synced ${fmtRelative(stats.total_members_synced_at)}` : 'not synced yet'} /></Grid>
       </Grid>
 
       {/* Revenue */}
@@ -978,6 +978,7 @@ function TelegramGroupsTab({ onAdminError, initialFilter }) {
   const [detailOpen, setDetailOpen] = useState(false);
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   const fetchGroups = useCallback(async (p = {}) => {
     setLoading(true);
@@ -1043,6 +1044,18 @@ function TelegramGroupsTab({ onAdminError, initialFilter }) {
     finally { setDetailLoading(false); }
   };
 
+  const handleSyncMembers = async () => {
+    setSyncing(true);
+    try {
+      const res = await admin.syncMemberCounts();
+      const { synced = 0, failed = 0, total = 0 } = res.data || {};
+      if (failed) toast.warn(`Member counts: ${synced}/${total} synced, ${failed} failed (check bot is still admin)`);
+      else toast.success(`Synced live member counts for ${synced} group${synced === 1 ? '' : 's'}`);
+      refresh();
+    } catch (err) { onAdminError(err, 'Failed to sync member counts'); }
+    finally { setSyncing(false); }
+  };
+
   const handleDisable = async (g) => {
     if (!window.confirm(`Disable group "${g.title}"?`)) return;
     try { await admin.disableTelegramGroup(g.telegram_group_id); toast.success('Group disabled'); refresh(); setDetailOpen(false); }
@@ -1079,6 +1092,12 @@ function TelegramGroupsTab({ onAdminError, initialFilter }) {
             <MenuItem value="disabled">Disabled</MenuItem>
           </Select>
         </FormControl>
+        <Button
+          size="small" variant="outlined" startIcon={syncing ? <CircularProgress size={14} /> : <Refresh fontSize="small" />}
+          onClick={handleSyncMembers} disabled={syncing} sx={{ whiteSpace: 'nowrap' }}
+        >
+          {syncing ? 'Syncing…' : 'Refresh member counts'}
+        </Button>
         <Typography variant="body2" color="text.secondary" alignSelf="center" whiteSpace="nowrap">{total.toLocaleString()} groups</Typography>
       </Stack>
 
@@ -1128,7 +1147,14 @@ function TelegramGroupsTab({ onAdminError, initialFilter }) {
                     <TableCell>
                       <Chip label={g.linked_via_bot_type} size="small" color={g.linked_via_bot_type === 'official' ? 'success' : 'primary'} variant="outlined" />
                     </TableCell>
-                    <TableCell>{(g.member_count || 0).toLocaleString()}</TableCell>
+                    <TableCell>
+                      {(g.member_count || 0).toLocaleString()}
+                      <Tooltip title={g.member_count_synced_at ? `Live count synced ${fmtRelative(g.member_count_synced_at)}` : 'Estimate from join/leave events — never synced live. Click “Refresh member counts”.'}>
+                        <Typography variant="caption" color={g.member_count_synced_at ? 'text.disabled' : 'warning.main'} display="block">
+                          {g.member_count_synced_at ? `synced ${fmtRelative(g.member_count_synced_at)}` : 'not synced'}
+                        </Typography>
+                      </Tooltip>
+                    </TableCell>
                     <TableCell><StatusChip label={g.bot_status} /></TableCell>
                     <TableCell><Typography variant="caption" color="text.secondary">{fmtDate(g.linked_at)}</Typography></TableCell>
                     <TableCell align="right">

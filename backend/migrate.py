@@ -51,6 +51,11 @@ def init_db():
         )
         _run_alter(
             db.engine,
+            "ALTER TABLE telegram_groups ADD COLUMN IF NOT EXISTS member_count_synced_at TIMESTAMP",
+            "telegram_groups.member_count_synced_at",
+        )
+        _run_alter(
+            db.engine,
             "ALTER TABLE user_api_keys ADD COLUMN IF NOT EXISTS scope VARCHAR(20) NOT NULL DEFAULT 'group'",
             "user_api_keys.scope",
         )

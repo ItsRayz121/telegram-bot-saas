@@ -644,6 +644,9 @@ export const admin = {
   getDiagnostics: () => api.get('/api/admin/diagnostics'),
   // P5: manually run the pending→active promotion check on one group
   reconcileGroup: (groupId) => api.post(`/api/admin/telegram-groups/${groupId}/reconcile`),
+  // Reconcile member_count to live Telegram counts (all groups / one group)
+  syncMemberCounts: (data) => api.post('/api/admin/telegram-groups/sync-members', data || {}),
+  syncGroupMembers: (groupId) => api.post(`/api/admin/telegram-groups/${groupId}/sync-members`),
   // P2: real end-to-end AI self-test (makes live calls through each AI path)
   runAiSelftest: () => api.post('/api/admin/ai-selftest'),
   // Directory
