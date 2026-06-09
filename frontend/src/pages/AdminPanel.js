@@ -6,6 +6,7 @@ import {
   DialogTitle, DialogContent, DialogActions, MenuItem, Select,
   FormControl, InputLabel, Pagination, InputAdornment, Tabs, Tab,
   Alert, Tooltip, LinearProgress, Stack, Divider, Switch, FormControlLabel,
+  Breadcrumbs, Link as MuiLink,
 } from '@mui/material';
 import {
   ArrowBack, Search, Block, CheckCircle, Delete, Groups, SmartToy,
@@ -4343,6 +4344,15 @@ function ProofMetricsTab({ onAdminError, canManage }) {
     finally { setSaving(false); }
   };
 
+  const exportCSV = () => {
+    const rows = (data?.metrics || []).map(m => [m.key, m.label, m.value, m.public ? 'public' : 'private']);
+    const csv = [['key', 'label', 'value', 'visibility'], ...rows]
+      .map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    const a = document.createElement('a'); a.href = url; a.download = 'proof-metrics.csv'; a.click();
+    URL.revokeObjectURL(url);
+  };
+
   if (loading) return <Box display="flex" justifyContent="center" mt={4}><CircularProgress /></Box>;
 
   return (
@@ -4352,6 +4362,7 @@ function ProofMetricsTab({ onAdminError, canManage }) {
           Real platform metrics from the database/event logs. Toggle which are safe to publish on the landing page.
         </Typography>
         <Box flex={1} />
+        <Button size="small" variant="outlined" startIcon={<FileDownload />} onClick={exportCSV}>Export CSV</Button>
         <Tooltip title="Refresh"><IconButton size="small" onClick={fetchData}><Refresh fontSize="small" /></IconButton></Tooltip>
         {canManage && (
           <Button size="small" variant="contained" disabled={!dirty || saving} onClick={save}>
@@ -4840,6 +4851,15 @@ export default function AdminPanel() {
             <Typography variant="caption">{accessError}</Typography>
           </Alert>
         )}
+
+        {/* Breadcrumbs */}
+        <Breadcrumbs sx={{ mb: 2 }} aria-label="breadcrumb">
+          <MuiLink component="button" underline="hover" color="inherit" onClick={() => navigate('/dashboard')}>
+            Dashboard
+          </MuiLink>
+          <Typography color="text.primary" fontWeight={600}>Admin</Typography>
+          <Typography color="text.secondary">{visibleTabs[Math.min(activeTab, Math.max(0, visibleTabs.length - 1))]?.label || '—'}</Typography>
+        </Breadcrumbs>
 
         {/* Tab navigation — only tabs the current role can access are shown */}
         <Paper sx={{ mb: 3 }}>
