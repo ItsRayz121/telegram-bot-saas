@@ -47,6 +47,7 @@ import Settings from './pages/Settings';
 import AdminPanel from './pages/AdminPanel';
 import AdminUserDetail from './pages/AdminUserDetail';
 import AdminGroupDetail from './pages/AdminGroupDetail';
+import AdminCustomBotDetail from './pages/AdminCustomBotDetail';
 
 // Pages — new sections
 import Channels from './pages/Channels';
@@ -316,6 +317,7 @@ export default function App() {
             <Route path="/admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />
             <Route path="/admin/users/:userId" element={<AdminRoute><AdminUserDetail /></AdminRoute>} />
             <Route path="/admin/groups/:groupId" element={<AdminRoute><AdminGroupDetail /></AdminRoute>} />
+            <Route path="/admin/custom-bots/:botId" element={<AdminRoute><AdminCustomBotDetail /></AdminRoute>} />
             {/* Category → section routing (sidebar-driven). Static detail routes above win by specificity. */}
             <Route path="/admin/:category/:tab" element={<AdminRoute><AdminPanel /></AdminRoute>} />
 

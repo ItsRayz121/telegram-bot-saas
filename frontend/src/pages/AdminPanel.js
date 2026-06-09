@@ -1283,14 +1283,11 @@ function TelegramGroupsTab({ onAdminError, initialFilter }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function CustomBotsTab({ onAdminError }) {
+  const navigate = useNavigate();
   const [bots, setBots] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [detailOpen, setDetailOpen] = useState(false);
-  const [detail, setDetail] = useState(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [actionLoading, setActionLoading] = useState('');
 
   const fetch = useCallback(async (p = 1) => {
     setLoading(true);
@@ -1304,55 +1301,18 @@ function CustomBotsTab({ onAdminError }) {
 
   useEffect(() => { fetch(); }, [fetch]);
 
-  const openDetail = async (bot) => {
+  const openDetail = (bot) => {
     if (bot.source === 'legacy') { toast.info('Detail view is available for custom bots only.'); return; }
-    setDetail({ id: bot.id, bot_username: bot.bot_username, bot_name: bot.bot_name });
-    setDetailOpen(true);
-    setDetailLoading(true);
-    try {
-      const res = await admin.getCustomBotDetail(bot.id);
-      setDetail(res.data.bot);
-    } catch { toast.error('Failed to load bot detail'); }
-    finally { setDetailLoading(false); }
+    navigate(`/admin/custom-bots/${bot.id}`);
   };
 
   const handleDisable = async (bot) => {
     if (!window.confirm(`Disable bot "${bot.bot_username || bot.id}"?`)) return;
-    try { await admin.disableCustomBot(bot.id); toast.success('Bot disabled'); fetch(page); setDetailOpen(false); }
+    try { await admin.disableCustomBot(bot.id); toast.success('Bot disabled'); fetch(page); }
     catch { toast.error('Failed to disable bot'); }
   };
 
-  const handleEnable = async (bot) => {
-    try { await admin.enableCustomBot(bot.id); toast.success('Bot enabled'); fetch(page); setDetailOpen(false); }
-    catch { toast.error('Failed to enable bot'); }
-  };
-
-  const handlePing = async (bot) => {
-    setActionLoading('ping');
-    try {
-      const res = await admin.pingCustomBot(bot.id);
-      if (res.data?.ok) toast.success(`@${res.data.username || bot.bot_username} is reachable`);
-      else toast.error(res.data?.error || 'Bot unreachable');
-      // Refresh detail to reflect the new health state.
-      const d = await admin.getCustomBotDetail(bot.id);
-      setDetail(d.data.bot);
-    } catch { toast.error('Ping failed'); }
-    finally { setActionLoading(''); }
-  };
-
-  const handleClearHealth = async (bot) => {
-    setActionLoading('clear');
-    try {
-      await admin.clearBotHealth('custom', bot.id);
-      toast.success('Health state cleared');
-      const d = await admin.getCustomBotDetail(bot.id);
-      setDetail(d.data.bot);
-    } catch { toast.error('Failed to clear health'); }
-    finally { setActionLoading(''); }
-  };
-
   const pages = Math.ceil(total / 20);
-  const h = detail?.health || {};
 
   return (
     <Box>
@@ -1389,6 +1349,9 @@ function CustomBotsTab({ onAdminError }) {
                     <TableCell><StatusChip label={b.status || 'active'} /></TableCell>
                     <TableCell><Typography variant="caption" color="text.secondary">{fmtDate(b.created_at)}</Typography></TableCell>
                     <TableCell align="right">
+                      {b.source !== 'legacy' && (
+                        <Button size="small" onClick={(e) => { e.stopPropagation(); openDetail(b); }} sx={{ mr: 0.5 }}>View</Button>
+                      )}
                       <Button size="small" color="error" startIcon={<Block fontSize="small" />} onClick={(e) => { e.stopPropagation(); handleDisable(b); }}>
                         Disable
                       </Button>
@@ -1401,104 +1364,6 @@ function CustomBotsTab({ onAdminError }) {
           {pages > 1 && <Box display="flex" justifyContent="center"><Pagination count={pages} page={page} onChange={(_, p) => { setPage(p); fetch(p); }} color="primary" /></Box>}
         </>
       )}
-
-      {/* Custom bot detail dialog */}
-      <Dialog open={detailOpen} onClose={() => setDetailOpen(false)} maxWidth="md" fullWidth>
-        <DialogTitle sx={{ pb: 1 }}>
-          <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap">
-            <Typography fontWeight={700}>{detail?.bot_username ? `@${detail.bot_username}` : `Bot #${detail?.id}`}</Typography>
-            {detail?.health?.grade && <Chip size="small" label={detail.health.grade}
-              color={detail.health.grade === 'healthy' ? 'success' : detail.health.grade === 'warning' ? 'warning' : detail.health.grade === 'critical' ? 'error' : 'default'} />}
-            {detail?.status && <Chip size="small" variant="outlined" label={detail.status} />}
-          </Stack>
-          <Typography variant="caption" color="text.secondary">{detail?.bot_name}</Typography>
-        </DialogTitle>
-        {detailLoading && <LinearProgress />}
-        <DialogContent dividers>
-          {detail && (
-            <Box>
-              <SectionTitle sx={{ mt: 0 }}>Owner</SectionTitle>
-              <Grid container spacing={1.5}>
-                <Grid item xs={12} sm={4}><Field label="Owner" value={detail.owner?.email || detail.owner?.name || `User ${detail.owner?.user_id}`} /></Grid>
-                <Grid item xs={6} sm={4}><Field label="Telegram" value={detail.owner?.telegram_username ? `@${detail.owner.telegram_username}` : '—'} /></Grid>
-                <Grid item xs={6} sm={4}><Field label="Tier" value={(detail.owner?.tier || 'free').toUpperCase()} /></Grid>
-              </Grid>
-
-              <SectionTitle>Connected Groups & Reach</SectionTitle>
-              <Grid container spacing={1.5}>
-                <Grid item xs={6} sm={3}><Field label="Groups" value={detail.groups_count ?? 0} /></Grid>
-                <Grid item xs={6} sm={3}><Field label="Members managed" value={(detail.members_managed || 0).toLocaleString()} /></Grid>
-                <Grid item xs={6} sm={3}><Field label="Created" value={detail.config?.created_at ? fmtDate(detail.config.created_at) : '—'} /></Grid>
-                <Grid item xs={6} sm={3}><Field label="Last ping" value={h.last_ping_at ? fmtDate(h.last_ping_at) : 'never'} /></Grid>
-              </Grid>
-              {detail.connected_groups?.length > 0 && (
-                <Box mt={1}>
-                  {detail.connected_groups.slice(0, 6).map((g) => (
-                    <Stack key={g.telegram_group_id} direction="row" justifyContent="space-between" py={0.5} borderBottom="1px solid" borderColor="divider">
-                      <Typography variant="caption" noWrap sx={{ maxWidth: '60%' }}>{g.title}</Typography>
-                      <Chip size="small" label={g.bot_status} color={g.bot_status === 'active' ? 'success' : 'default'} />
-                      <Typography variant="caption" color="text.disabled">{(g.member_count || 0).toLocaleString()} members</Typography>
-                    </Stack>
-                  ))}
-                </Box>
-              )}
-
-              <SectionTitle>Health</SectionTitle>
-              <Grid container spacing={1.5}>
-                <Grid item xs={6} sm={3}><Field label="Grade" value={h.grade} /></Grid>
-                <Grid item xs={6} sm={3}><Field label="Consec. failures" value={h.consecutive_failures ?? 0} /></Grid>
-                <Grid item xs={6} sm={3}><Field label="Errors 24h" value={h.errors_24h ?? 0} /></Grid>
-                <Grid item xs={6} sm={3}><Field label="Errors 7d" value={h.errors_7d ?? 0} /></Grid>
-                <Grid item xs={12} sm={6}><Field label="Last successful ping" value={h.last_successful_ping ? fmtDate(h.last_successful_ping) : 'never'} /></Grid>
-                <Grid item xs={12} sm={6}><Field label="Last error" value={h.last_error || '—'} /></Grid>
-              </Grid>
-              {h.recent_errors?.length > 0 && (
-                <Box mt={1}>
-                  {h.recent_errors.slice(0, 5).map((e) => (
-                    <Typography key={e.id} variant="caption" display="block" color="error.main">
-                      • [{e.severity || 'info'}] {e.detail} <Typography component="span" variant="caption" color="text.disabled">({fmtDate(e.created_at)})</Typography>
-                    </Typography>
-                  ))}
-                </Box>
-              )}
-
-              <SectionTitle>Feature Usage</SectionTitle>
-              {detail.feature_usage?.total > 0 ? (
-                <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
-                  {Object.entries(detail.feature_usage.by_feature).map(([f, c]) => (
-                    <Chip key={f} size="small" label={`${f}: ${c}`} variant="outlined" />
-                  ))}
-                </Stack>
-              ) : <Typography variant="caption" color="text.disabled">No per-bot usage attributed yet. {detail.feature_usage?.note}</Typography>}
-
-              <SectionTitle>Config</SectionTitle>
-              <Grid container spacing={1.5}>
-                <Grid item xs={6} sm={4}><Field label="Token" value={detail.config?.token_configured ? 'Configured (hidden)' : 'Missing'} /></Grid>
-                <Grid item xs={6} sm={4}><Field label="Status" value={detail.config?.status} /></Grid>
-                <Grid item xs={6} sm={4}><Field label="Revenue" value="Not tracked per-bot" /></Grid>
-              </Grid>
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions>
-          {detail && (
-            <>
-              <Button startIcon={<Refresh />} disabled={actionLoading === 'ping'} onClick={() => handlePing(detail)}>
-                {actionLoading === 'ping' ? <CircularProgress size={16} /> : 'Ping'}
-              </Button>
-              {detail.health?.grade && detail.health.grade !== 'healthy' && detail.health.grade !== 'unknown' && (
-                <Button color="success" startIcon={<CheckCircle />} disabled={actionLoading === 'clear'} onClick={() => handleClearHealth(detail)}>
-                  {actionLoading === 'clear' ? <CircularProgress size={16} /> : 'Clear errors'}
-                </Button>
-              )}
-              {detail.status === 'inactive'
-                ? <Button color="success" startIcon={<CheckCircle />} onClick={() => handleEnable(detail)}>Enable</Button>
-                : <Button color="error" startIcon={<Block />} onClick={() => handleDisable(detail)}>Disable</Button>}
-            </>
-          )}
-          <Button onClick={() => setDetailOpen(false)}>Close</Button>
-        </DialogActions>
-      </Dialog>
     </Box>
   );
 }
