@@ -622,6 +622,7 @@ export const admin = {
   updateReferralStatus: (id, data) => api.post(`/api/admin/referrals/${id}/status`, data),
   // Official bot ecosystem
   getTelegramGroups: (params) => api.get('/api/admin/telegram-groups', { params }),
+  getTelegramGroupDetail: (groupId) => api.get(`/api/admin/telegram-groups/${groupId}/detail`),
   getTelegramGroupStats: () => api.get('/api/admin/telegram-groups/stats'),
   disableTelegramGroup: (groupId) => api.post(`/api/admin/telegram-groups/${groupId}/disable`),
   unlinkTelegramGroup: (groupId) => api.post(`/api/admin/telegram-groups/${groupId}/unlink`),

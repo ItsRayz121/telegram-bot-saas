@@ -3771,6 +3771,13 @@ async def _automod_execute(bot, message, group_id: str, flask_app, rule: str, ac
                     "official", automod_feature(rule), group_ref=str(group_id), user_ref=str(user_id),
                     bot_ref="official", action=rule, meta={"automod_action": action}, commit=True,
                 )
+                # Enforcement actions also get their own feature row (rare events)
+                # so Warnings/Muting/Bans/Kicks have clean, queryable counts.
+                if action in ("warn", "mute", "ban", "kick"):
+                    log_feature_usage(
+                        "official", action, group_ref=str(group_id), user_ref=str(user_id),
+                        bot_ref="official", action=rule, commit=True,
+                    )
     except Exception:
         pass
 

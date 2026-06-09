@@ -932,15 +932,42 @@ def admin_list_telegram_groups():
     per_page = min(request.args.get("per_page", 50, type=int), 200)
     search = request.args.get("search", "")
     status = request.args.get("status", "")
+    bot_type = request.args.get("bot_type", "")        # official | custom
+    visibility = request.args.get("visibility", "")    # public | private
+    min_members = request.args.get("min_members", type=int)
+    recent = request.args.get("recent", "")            # "1" → added in last 7 days
+    health = request.args.get("health", "")            # disabled | warning
 
     query = TelegramGroup.query
     if search:
         query = query.filter(
             TelegramGroup.title.ilike(f"%{search}%") |
-            TelegramGroup.telegram_group_id.ilike(f"%{search}%")
+            TelegramGroup.telegram_group_id.ilike(f"%{search}%") |
+            TelegramGroup.username.ilike(f"%{search}%")
         )
-    if status:
+    if status == "inactive":
+        # No recent activity (or never active) — a useful operational filter.
+        cutoff = datetime.utcnow() - timedelta(days=14)
+        query = query.filter(
+            db.or_(TelegramGroup.last_activity.is_(None), TelegramGroup.last_activity < cutoff)
+        )
+    elif status:
         query = query.filter(TelegramGroup.bot_status == status)
+    if bot_type in ("official", "custom"):
+        query = query.filter(TelegramGroup.linked_via_bot_type == bot_type)
+    if visibility == "public":
+        query = query.filter(TelegramGroup.username.isnot(None))
+    elif visibility == "private":
+        query = query.filter(TelegramGroup.username.is_(None))
+    if min_members:
+        query = query.filter(TelegramGroup.member_count >= min_members)
+    if recent == "1":
+        query = query.filter(TelegramGroup.created_at >= datetime.utcnow() - timedelta(days=7))
+    if health == "disabled":
+        query = query.filter(TelegramGroup.is_disabled == True)  # noqa: E712
+    elif health == "warning":
+        query = query.filter(TelegramGroup.bot_status.in_(("removed", "disabled")))
+
     query = query.order_by(TelegramGroup.created_at.desc())
     paginated = query.paginate(page=page, per_page=per_page, error_out=False)
 
@@ -1096,6 +1123,125 @@ def admin_group_events(group_id):
         "pages": paginated.pages,
         "page": page,
     })
+
+
+@admin_bp.route("/telegram-groups/<group_id>/detail", methods=["GET"])
+@require_permission(rbac.P_GROUPS_VIEW)
+@rate_limit(requests_per_minute=60)
+def admin_group_detail(group_id):
+    """Comprehensive audit profile for one linked group.
+
+    Aggregates ownership, bot/permissions, moderation throughput (from the
+    FeatureUsageEvent spine + OfficialWarning), AI activity, member admin/mute
+    counts, health/errors and a proof-metrics subset. Everything is real DB
+    data; anything not tracked is omitted or flagged rather than faked.
+    """
+    from ..models import (
+        OfficialWarning, OfficialMember, AIActivity, FeatureUsageEvent, BotHealthEvent,
+    )
+    tg = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+
+    data = tg.to_dict()
+
+    # ── Ownership / who-connected / managed-by ─────────────────────────────────
+    owner = User.query.get(tg.owner_user_id) if tg.owner_user_id else None
+    managed_by = "Official Telegizer bot"
+    managed_bot_username = None
+    if tg.linked_via_bot_type == "custom" and tg.linked_bot_id:
+        cb = CustomBot.query.get(tg.linked_bot_id)
+        if cb:
+            managed_by = f"Custom bot @{cb.bot_username}"
+            managed_bot_username = cb.bot_username
+    data["ownership"] = {
+        # Group Owner = the Telegizer account that linked/registered the group.
+        "owner_user_id": tg.owner_user_id,
+        "owner_email": owner.email if owner else None,
+        "owner_name": owner.full_name if owner else None,
+        # Connected By = best available is the same linking account.
+        "connected_by": owner.email if owner else None,
+        "managed_by_bot": managed_by,
+        "managed_bot_username": managed_bot_username,
+        "linked_via_bot_type": tg.linked_via_bot_type,
+        # Telegram-side owner/admin is not synced from the API yet.
+        "telegram_owner_not_synced": True,
+    }
+    data["visibility"] = "public" if tg.username else "private"
+
+    # ── Members & admins ───────────────────────────────────────────────────────
+    member_q = OfficialMember.query.filter_by(telegram_group_id=group_id)
+    data["members"] = {
+        "member_count": tg.member_count,
+        "tracked_members": member_q.count(),
+        "admin_count": member_q.filter_by(is_admin=True).count(),
+        "muted_count": member_q.filter_by(is_muted=True).count(),
+    }
+
+    # ── Moderation / feature throughput (FeatureUsageEvent spine) ──────────────
+    usage_rows = (
+        db.session.query(
+            FeatureUsageEvent.feature,
+            db.func.coalesce(db.func.sum(FeatureUsageEvent.count), 0),
+        )
+        .filter(FeatureUsageEvent.group_ref == group_id)
+        .group_by(FeatureUsageEvent.feature)
+        .all()
+    )
+    usage = {feat: int(c) for feat, c in usage_rows}
+    warnings_count = OfficialWarning.query.filter_by(telegram_group_id=group_id).count()
+    data["moderation"] = {
+        "by_feature": usage,
+        "spam_deleted": usage.get("spam", 0) + usage.get("automod", 0),
+        "links_blocked": usage.get("link", 0),
+        "warnings_issued": max(warnings_count, usage.get("warn", 0)),
+        "muted": usage.get("mute", 0),
+        "banned": usage.get("ban", 0),
+        "kicked": usage.get("kick", 0),
+        "commands_used": usage.get("command", 0),
+        "total_actions": sum(usage.values()),
+    }
+
+    # ── AI activity ────────────────────────────────────────────────────────────
+    ai_rows = (
+        db.session.query(AIActivity.category, db.func.count(AIActivity.id))
+        .filter(AIActivity.group_ref == group_id)
+        .group_by(AIActivity.category)
+        .all()
+    )
+    ai_by_cat = {cat: int(c) for cat, c in ai_rows}
+    data["ai_usage"] = {"by_category": ai_by_cat, "total": sum(ai_by_cat.values())}
+
+    # ── Health & recent errors (scoped to this group) ──────────────────────────
+    err_q = BotHealthEvent.query.filter(BotHealthEvent.ref == group_id)
+    recent_errors = err_q.order_by(BotHealthEvent.created_at.desc()).limit(10).all()
+    now = datetime.utcnow()
+    data["health"] = {
+        "bot_status": tg.bot_status,
+        "is_disabled": tg.is_disabled,
+        "last_activity": tg.last_activity.isoformat() if tg.last_activity else None,
+        "errors_24h": err_q.filter(BotHealthEvent.created_at >= now - timedelta(days=1)).count(),
+        "errors_7d": err_q.filter(BotHealthEvent.created_at >= now - timedelta(days=7)).count(),
+        "recent_errors": [e.to_dict() for e in recent_errors],
+    }
+
+    # ── Recent events timeline ─────────────────────────────────────────────────
+    events = BotEvent.query.filter_by(telegram_group_id=group_id)\
+        .order_by(BotEvent.created_at.desc()).limit(15).all()
+    data["recent_events"] = [e.to_dict() for e in events]
+
+    # ── Proof-metrics subset (group-level) ─────────────────────────────────────
+    data["proof_metrics"] = {
+        "members_protected": tg.member_count,
+        "spam_deleted": data["moderation"]["spam_deleted"],
+        "links_blocked": data["moderation"]["links_blocked"],
+        "warnings_issued": data["moderation"]["warnings_issued"],
+        "moderation_actions": data["moderation"]["total_actions"],
+        "ai_checks": data["ai_usage"]["total"],
+    }
+    data["command_count"] = len(tg.custom_commands)
+
+    return jsonify({"group": data})
 
 
 # ── Custom Bots ────────────────────────────────────────────────────────────────

@@ -955,65 +955,136 @@ function TelegramGroupsTab({ onAdminError, initialFilter }) {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [botType, setBotType] = useState('');
+  const [visibility, setVisibility] = useState('');
+  const [highMembers, setHighMembers] = useState(false);
+  const [recentOnly, setRecentOnly] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detail, setDetail] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
-  const fetch = useCallback(async (p = 1, s = '', st = '') => {
+  const fetchGroups = useCallback(async (p = {}) => {
     setLoading(true);
     try {
-      const res = await admin.getTelegramGroups({ page: p, per_page: 20, search: s, status: st });
+      const res = await admin.getTelegramGroups({
+        page: p.page || 1, per_page: 20,
+        search: p.search || '', status: p.status || '',
+        bot_type: p.bot_type || '', visibility: p.visibility || '',
+        min_members: p.min_members || undefined, recent: p.recent || undefined,
+      });
       setGroups(res.data.groups || []);
       setTotal(res.data.total || 0);
     } catch (err) { onAdminError(err, 'Failed to load groups'); }
     finally { setLoading(false); }
   }, [onAdminError]);
 
+  const query = (over = {}) => {
+    const next = {
+      page: over.page ?? 1,
+      search: over.search ?? search,
+      status: over.status ?? statusFilter,
+      bot_type: over.bot_type ?? botType,
+      visibility: over.visibility ?? visibility,
+      min_members: (over.high_members ?? highMembers) ? 1000 : undefined,
+      recent: (over.recent ?? recentOnly) ? '1' : undefined,
+    };
+    if (over.page !== undefined) setPage(over.page); else setPage(1);
+    if (over.search !== undefined) setSearch(over.search);
+    if (over.status !== undefined) setStatusFilter(over.status);
+    if (over.bot_type !== undefined) setBotType(over.bot_type);
+    if (over.visibility !== undefined) setVisibility(over.visibility);
+    if (over.high_members !== undefined) setHighMembers(over.high_members);
+    if (over.recent !== undefined) setRecentOnly(over.recent);
+    fetchGroups(next);
+  };
+
   useEffect(() => {
-    if (!initialFilter) fetch();
+    if (!initialFilter) fetchGroups({});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetch]);
+  }, [fetchGroups]);
 
   // Apply a status filter handed in from a dashboard card click.
   useEffect(() => {
     if (!initialFilter) return;
     const st = (initialFilter.filter || {}).status || '';
-    setStatusFilter(st); setPage(1); fetch(1, '', st);
+    setStatusFilter(st); setPage(1); fetchGroups({ page: 1, status: st });
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, [initialFilter]);
 
+  const refresh = () => fetchGroups({
+    page, search, status: statusFilter, bot_type: botType, visibility,
+    min_members: highMembers ? 1000 : undefined, recent: recentOnly ? '1' : undefined,
+  });
+
+  const openDetail = async (g) => {
+    setDetail({ telegram_group_id: g.telegram_group_id, title: g.title });
+    setDetailOpen(true);
+    setDetailLoading(true);
+    try {
+      const res = await admin.getTelegramGroupDetail(g.telegram_group_id);
+      setDetail(res.data.group);
+    } catch { toast.error('Failed to load group detail'); }
+    finally { setDetailLoading(false); }
+  };
+
   const handleDisable = async (g) => {
     if (!window.confirm(`Disable group "${g.title}"?`)) return;
-    try { await admin.disableTelegramGroup(g.telegram_group_id); toast.success('Group disabled'); fetch(page, search, statusFilter); }
+    try { await admin.disableTelegramGroup(g.telegram_group_id); toast.success('Group disabled'); refresh(); setDetailOpen(false); }
     catch { toast.error('Failed to disable group'); }
   };
 
   const handleUnlink = async (g) => {
     if (!window.confirm(`Unlink group "${g.title}" from its owner?`)) return;
-    try { await admin.unlinkTelegramGroup(g.telegram_group_id); toast.success('Group unlinked'); fetch(page, search, statusFilter); }
+    try { await admin.unlinkTelegramGroup(g.telegram_group_id); toast.success('Group unlinked'); refresh(); setDetailOpen(false); }
     catch { toast.error('Failed to unlink group'); }
   };
 
   const pages = Math.ceil(total / 20);
+  const m = detail?.moderation || {};
+  const pm = detail?.proof_metrics || {};
 
   return (
     <Box>
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} mb={2}>
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} mb={1.5}>
         <TextField
-          size="small" placeholder="Search title or group ID…" value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(1); fetch(1, e.target.value, statusFilter); }}
+          size="small" placeholder="Search title, group ID or @username…" value={search}
+          onChange={(e) => query({ search: e.target.value })}
           InputProps={{ startAdornment: <InputAdornment position="start"><Search fontSize="small" /></InputAdornment> }}
           sx={{ flex: 1 }}
         />
         <FormControl size="small" sx={{ minWidth: 130 }}>
           <InputLabel>Status</InputLabel>
-          <Select value={statusFilter} label="Status" onChange={(e) => { setStatusFilter(e.target.value); setPage(1); fetch(1, search, e.target.value); }}>
+          <Select value={statusFilter} label="Status" onChange={(e) => query({ status: e.target.value })}>
             <MenuItem value="">All</MenuItem>
             <MenuItem value="active">Active</MenuItem>
             <MenuItem value="pending">Pending</MenuItem>
+            <MenuItem value="inactive">Inactive</MenuItem>
             <MenuItem value="removed">Removed</MenuItem>
             <MenuItem value="disabled">Disabled</MenuItem>
           </Select>
         </FormControl>
         <Typography variant="body2" color="text.secondary" alignSelf="center" whiteSpace="nowrap">{total.toLocaleString()} groups</Typography>
+      </Stack>
+
+      {/* Quick filter chips */}
+      <Stack direction="row" spacing={0.75} mb={2} flexWrap="wrap" useFlexGap>
+        {[['', 'All bots'], ['official', 'Official'], ['custom', 'Custom']].map(([val, label]) => (
+          <Chip key={val || 'allbot'} label={label} size="small"
+            color={botType === val ? 'primary' : 'default'} variant={botType === val ? 'filled' : 'outlined'}
+            onClick={() => query({ bot_type: val })} />
+        ))}
+        <Box sx={{ width: 8 }} />
+        {[['', 'Any'], ['public', 'Public'], ['private', 'Private']].map(([val, label]) => (
+          <Chip key={val || 'anyvis'} label={label} size="small"
+            color={visibility === val ? 'info' : 'default'} variant={visibility === val ? 'filled' : 'outlined'}
+            onClick={() => query({ visibility: val })} />
+        ))}
+        <Box sx={{ width: 8 }} />
+        <Chip label="High members (1k+)" size="small" color={highMembers ? 'secondary' : 'default'}
+          variant={highMembers ? 'filled' : 'outlined'} onClick={() => query({ high_members: !highMembers })} />
+        <Chip label="Recently added" size="small" color={recentOnly ? 'success' : 'default'}
+          variant={recentOnly ? 'filled' : 'outlined'} onClick={() => query({ recent: !recentOnly })} />
       </Stack>
 
       {loading ? <Box display="flex" justifyContent="center" mt={4}><CircularProgress /></Box> : (
@@ -1025,15 +1096,15 @@ function TelegramGroupsTab({ onAdminError, initialFilter }) {
                   <TableCell>Group</TableCell>
                   <TableCell>Owner</TableCell>
                   <TableCell>Bot Type</TableCell>
+                  <TableCell>Members</TableCell>
                   <TableCell>Status</TableCell>
-                  <TableCell>Cmds</TableCell>
                   <TableCell>Linked</TableCell>
                   <TableCell align="right">Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {groups.length === 0 ? <EmptyRow cols={7} /> : groups.map((g) => (
-                  <TableRow key={g.telegram_group_id} hover>
+                  <TableRow key={g.telegram_group_id} hover sx={{ cursor: 'pointer' }} onClick={() => openDetail(g)}>
                     <TableCell>
                       <Typography variant="body2" fontWeight={500}>{g.title}</Typography>
                       <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>{g.telegram_group_id}</Typography>
@@ -1042,15 +1113,15 @@ function TelegramGroupsTab({ onAdminError, initialFilter }) {
                     <TableCell>
                       <Chip label={g.linked_via_bot_type} size="small" color={g.linked_via_bot_type === 'official' ? 'success' : 'primary'} variant="outlined" />
                     </TableCell>
+                    <TableCell>{(g.member_count || 0).toLocaleString()}</TableCell>
                     <TableCell><StatusChip label={g.bot_status} /></TableCell>
-                    <TableCell>{g.command_count}</TableCell>
                     <TableCell><Typography variant="caption" color="text.secondary">{fmtDate(g.linked_at)}</Typography></TableCell>
                     <TableCell align="right">
                       <Tooltip title="Unlink from owner">
-                        <IconButton size="small" color="warning" onClick={() => handleUnlink(g)}><LinkOff fontSize="small" /></IconButton>
+                        <IconButton size="small" color="warning" onClick={(e) => { e.stopPropagation(); handleUnlink(g); }}><LinkOff fontSize="small" /></IconButton>
                       </Tooltip>
                       <Tooltip title="Disable group">
-                        <IconButton size="small" color="error" onClick={() => handleDisable(g)}><Block fontSize="small" /></IconButton>
+                        <IconButton size="small" color="error" onClick={(e) => { e.stopPropagation(); handleDisable(g); }}><Block fontSize="small" /></IconButton>
                       </Tooltip>
                     </TableCell>
                   </TableRow>
@@ -1058,9 +1129,130 @@ function TelegramGroupsTab({ onAdminError, initialFilter }) {
               </TableBody>
             </Table>
           </TableContainer>
-          {pages > 1 && <Box display="flex" justifyContent="center"><Pagination count={pages} page={page} onChange={(_, p) => { setPage(p); fetch(p, search, statusFilter); }} color="primary" /></Box>}
+          {pages > 1 && <Box display="flex" justifyContent="center"><Pagination count={pages} page={page} onChange={(_, p) => query({
+            page: p, search, status: statusFilter, bot_type: botType, visibility,
+            high_members: highMembers, recent: recentOnly,
+          })} color="primary" /></Box>}
         </>
       )}
+
+      {/* Group detail dialog */}
+      <Dialog open={detailOpen} onClose={() => setDetailOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle sx={{ pb: 1 }}>
+          <Typography fontWeight={700}>{detail?.title || 'Group'}</Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>{detail?.telegram_group_id}</Typography>
+        </DialogTitle>
+        {detailLoading && <LinearProgress />}
+        <DialogContent dividers>
+          {detail && (
+            <Box>
+              <SectionTitle sx={{ mt: 0 }}>Overview</SectionTitle>
+              <Grid container spacing={1.5}>
+                <Grid item xs={6} sm={3}><Field label="Visibility" value={detail.visibility} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Username" value={detail.username ? `@${detail.username}` : '—'} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Members" value={(detail.member_count || 0).toLocaleString()} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Status" value={detail.bot_status} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Context" value={detail.group_context} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Linked" value={detail.linked_at ? fmtDate(detail.linked_at) : '—'} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Last activity" value={detail.last_activity ? fmtDate(detail.last_activity) : '—'} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Commands" value={detail.command_count} /></Grid>
+              </Grid>
+
+              <SectionTitle>Ownership</SectionTitle>
+              <Grid container spacing={1.5}>
+                <Grid item xs={12} sm={4}><Field label="Group Owner (linked account)" value={detail.ownership?.owner_email || detail.ownership?.owner_name || '— (unlinked)'} /></Grid>
+                <Grid item xs={6} sm={4}><Field label="Connected by" value={detail.ownership?.connected_by || '—'} /></Grid>
+                <Grid item xs={6} sm={4}><Field label="Managed by bot" value={detail.ownership?.managed_by_bot} /></Grid>
+              </Grid>
+              <Typography variant="caption" color="text.disabled" display="block" mt={0.5}>
+                Telegram-side owner/admins are not synced from the Telegram API yet.
+              </Typography>
+
+              <SectionTitle>Bot Permissions</SectionTitle>
+              {detail.bot_permissions && Object.keys(detail.bot_permissions).length > 0 ? (
+                <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+                  {Object.entries(detail.bot_permissions).map(([k, v]) => (
+                    <Chip key={k} size="small" label={k.replace(/_/g, ' ')} color={v ? 'success' : 'default'} variant={v ? 'filled' : 'outlined'} />
+                  ))}
+                </Stack>
+              ) : <Typography variant="caption" color="text.disabled">Permissions not recorded.</Typography>}
+
+              <SectionTitle>Members & Admins</SectionTitle>
+              <Grid container spacing={1.5}>
+                <Grid item xs={6} sm={3}><Field label="Tracked members" value={detail.members?.tracked_members ?? 0} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Admins" value={detail.members?.admin_count ?? 0} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Muted" value={detail.members?.muted_count ?? 0} /></Grid>
+              </Grid>
+
+              <SectionTitle>Moderation Throughput</SectionTitle>
+              <Grid container spacing={1.5}>
+                <Grid item xs={6} sm={3}><Field label="Spam deleted" value={(m.spam_deleted || 0).toLocaleString()} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Links blocked" value={(m.links_blocked || 0).toLocaleString()} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Warnings" value={(m.warnings_issued || 0).toLocaleString()} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Commands" value={(m.commands_used || 0).toLocaleString()} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Muted" value={(m.muted || 0).toLocaleString()} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Banned" value={(m.banned || 0).toLocaleString()} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Kicked" value={(m.kicked || 0).toLocaleString()} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Total actions" value={(m.total_actions || 0).toLocaleString()} /></Grid>
+              </Grid>
+
+              <SectionTitle>AI Moderation / Activity</SectionTitle>
+              <Grid container spacing={1.5}>
+                <Grid item xs={6} sm={3}><Field label="AI checks (total)" value={(detail.ai_usage?.total || 0).toLocaleString()} /></Grid>
+                {Object.entries(detail.ai_usage?.by_category || {}).map(([cat, c]) => (
+                  <Grid item xs={6} sm={3} key={cat}><Field label={cat} value={c} /></Grid>
+                ))}
+              </Grid>
+
+              <SectionTitle>Health & Errors</SectionTitle>
+              <Grid container spacing={1.5}>
+                <Grid item xs={6} sm={3}><Field label="Bot status" value={detail.health?.bot_status} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Errors 24h" value={detail.health?.errors_24h ?? 0} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Errors 7d" value={detail.health?.errors_7d ?? 0} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Disabled" value={detail.health?.is_disabled ? 'Yes' : 'No'} /></Grid>
+              </Grid>
+              {detail.health?.recent_errors?.length > 0 && (
+                <Box mt={1}>
+                  {detail.health.recent_errors.slice(0, 5).map((e) => (
+                    <Typography key={e.id} variant="caption" display="block" color="error.main">
+                      • [{e.severity || 'info'}] {e.detail} <Typography component="span" variant="caption" color="text.disabled">({fmtDate(e.created_at)})</Typography>
+                    </Typography>
+                  ))}
+                </Box>
+              )}
+
+              <SectionTitle>Proof Metrics (group)</SectionTitle>
+              <Grid container spacing={1.5}>
+                <Grid item xs={6} sm={3}><Field label="Members protected" value={(pm.members_protected || 0).toLocaleString()} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Spam deleted" value={(pm.spam_deleted || 0).toLocaleString()} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Links blocked" value={(pm.links_blocked || 0).toLocaleString()} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="AI checks" value={(pm.ai_checks || 0).toLocaleString()} /></Grid>
+              </Grid>
+
+              {detail.recent_events?.length > 0 && (
+                <>
+                  <SectionTitle>Recent Events</SectionTitle>
+                  {detail.recent_events.slice(0, 8).map((e) => (
+                    <Stack key={e.id} direction="row" justifyContent="space-between" py={0.4} borderBottom="1px solid" borderColor="divider">
+                      <Typography variant="caption">{e.event_type}: {e.message}</Typography>
+                      <Typography variant="caption" color="text.disabled">{fmtDate(e.created_at)}</Typography>
+                    </Stack>
+                  ))}
+                </>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          {detail && !detail.is_disabled && (
+            <Button color="error" startIcon={<Block />} onClick={() => handleDisable(detail)}>Disable</Button>
+          )}
+          {detail?.owner_user_id && (
+            <Button color="warning" startIcon={<LinkOff />} onClick={() => handleUnlink(detail)}>Unlink</Button>
+          )}
+          <Button onClick={() => setDetailOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

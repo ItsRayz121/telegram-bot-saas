@@ -1001,11 +1001,18 @@ class ModerationSystem:
             # counts); the enforcement action (warn/mute/ban) is kept in meta.
             try:
                 from ..feature_usage import log_feature_usage, automod_feature
+                _act = "warn" if (warn or action == "warn") else action
                 log_feature_usage(
                     "custom", automod_feature(reason), group_ref=str(group.id), user_ref=str(user_id),
-                    action=reason, meta={"automod_action": ("warn" if (warn or action == "warn") else action)},
-                    commit=True,
+                    action=reason, meta={"automod_action": _act}, commit=True,
                 )
+                # Enforcement actions also get their own feature row (rare events)
+                # so Muting/Bans/Kicks have clean, queryable counts.
+                if _act in ("warn", "mute", "ban", "kick"):
+                    log_feature_usage(
+                        "custom", _act, group_ref=str(group.id), user_ref=str(user_id),
+                        action=reason, commit=True,
+                    )
             except Exception:
                 pass
 
