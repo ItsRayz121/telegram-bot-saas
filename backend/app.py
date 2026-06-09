@@ -441,9 +441,14 @@ def create_app():
     # Maintenance mode: when enabled in platform config, non-admin API traffic is
     # paused with a 503. Auth, admin panel, billing, bot-ingestion and webhook
     # endpoints stay open so admins can manage the platform and bots keep working.
+    # Inbound bot ingestion + webhook receivers MUST stay open during maintenance,
+    # or Telegram/payment providers will retry and eventually disable the webhook.
+    # Custom bots POST to /api/telegram/custom/<id> (bot_manager), hub bots to
+    # /api/hub/webhook[/<id>], plus per-bot /api/tg-update/<hash>.
     _MAINT_EXEMPT_PREFIX = (
         '/api/auth/', '/api/admin/', '/api/billing/', '/api/integrations/',
-        '/api/tg-update/', '/api/webhooks/',
+        '/api/tg-update/', '/api/telegram/', '/api/webhooks/',
+        '/api/hub/webhook', '/api/telegram-groups/webhook-trigger',
     )
     _MAINT_EXEMPT_EXACT = {
         '/health', '/ready', '/api/platform/config', '/api/platform-stats',

@@ -553,7 +553,7 @@ def list_suspicious():
 
 
 @admin_bp.route("/suspicious/<int:event_id>/dismiss", methods=["POST"])
-@require_permission(rbac.P_FRAUD_VIEW)
+@require_permission(rbac.P_MODERATION_MANAGE)
 @rate_limit(requests_per_minute=30)
 def dismiss_suspicious(event_id):
     event = SuspiciousActivity.query.get(event_id)
@@ -2246,6 +2246,11 @@ def set_admin_role(user_id):
     new_role = (data.get("role") or "").strip().lower() or None
     if new_role is not None and new_role not in rbac.ROLES:
         return jsonify({"error": f"role must be one of: {', '.join(rbac.ROLES)} (or null to revoke)"}), 400
+
+    # Defence-in-depth: only a super admin may grant super_admin (this endpoint is
+    # already super-only via P_ROLES_MANAGE, but guard against future matrix edits).
+    if new_role == rbac.SUPER_ADMIN and not rbac.is_super_admin(me):
+        return jsonify({"error": "Only a super admin can grant the super_admin role."}), 403
 
     old_role = target.admin_role
     target.admin_role = new_role

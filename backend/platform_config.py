@@ -137,6 +137,10 @@ def set_setting(key, value, user_id=None):
         raise ValueError(f"Unknown setting key: {key}")
     from .models import db, PlatformSetting
     meta = DEFAULT_SETTINGS[key]
+    # Coerce to the default's type so a stringy "false" can't be stored as a
+    # truthy string (bool("false") is True). Protects the maintenance gate etc.
+    if isinstance(meta.get("value"), bool) and not isinstance(value, bool):
+        value = str(value).strip().lower() in ("true", "1", "yes", "on")
     row = PlatformSetting.query.filter_by(key=key).first()
     if not row:
         row = PlatformSetting(key=key, category=meta["category"], is_public=meta["is_public"])
