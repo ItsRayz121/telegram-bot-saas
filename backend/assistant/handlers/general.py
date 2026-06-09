@@ -186,6 +186,14 @@ def handle_general(user_id: int, message: str, key_info: dict, ai_reply: str | N
 
     try:
         reply = call_ai_text(key_info, HYBRID_AI_SYSTEM, prompt)
+        try:
+            from ...ai_usage import record_from_key_info
+            record_from_key_info(
+                "echo", "assistant", key_info,
+                user_ref=user_id, input_text=f"{HYBRID_AI_SYSTEM}\n{prompt}", output_text=reply,
+            )
+        except Exception:
+            pass
         suggestions = _generate_proactive_suggestions(key_info, message, reply) or _build_followup_suggestions(query_type, message, ctx)
         return {"reply": reply, "intent": "general", "data": None, "suggestions": suggestions}
     except Exception as exc:

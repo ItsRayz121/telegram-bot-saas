@@ -249,6 +249,15 @@ def ask_doc(doc_id):
         _log.warning("Document Q&A failed: %s", exc)
         return jsonify({"error": "AI request failed"}), 502
 
+    try:
+        from ..ai_usage import record_from_key_info
+        record_from_key_info(
+            "workspace", "knowledge", key_info,
+            user_ref=user.id, email=user.email, input_text=prompt, output_text=answer,
+        )
+    except Exception:
+        pass
+
     return jsonify({"answer": answer, "document": doc.filename})
 
 

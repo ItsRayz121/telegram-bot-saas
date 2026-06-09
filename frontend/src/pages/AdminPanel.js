@@ -21,7 +21,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ADMIN_CATEGORIES, findAdminItem } from '../config/adminNav';
 import { toast } from 'react-toastify';
 import { admin } from '../services/api';
-import { LineChart, Line, XAxis, YAxis, Tooltip as ReTooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, Tooltip as ReTooltip, ResponsiveContainer, CartesianGrid, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -3488,6 +3488,180 @@ function AITab({ onAdminError }) {
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// TAB — AI USAGE (ai.manage) — token/cost ledger analytics
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const AI_PIE_COLORS = ['#3d8ef8', '#9d6cf7', '#22d3ee', '#22c55e', '#f59e0b', '#ef4444', '#7ab8ff', '#c4a8ff'];
+const AI_RANGES = [
+  { id: 'today', label: 'Today' }, { id: '7d', label: '7 days' },
+  { id: '30d', label: '30 days' }, { id: '1y', label: '1 year' }, { id: 'all', label: 'All time' },
+];
+
+function AiStat({ label, value, color }) {
+  return (
+    <Card variant="outlined" sx={{ height: '100%' }}>
+      <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+        <Typography variant="caption" color="text.secondary">{label}</Typography>
+        <Typography variant="h6" fontWeight={700} color={color || 'text.primary'} lineHeight={1.2}>{value}</Typography>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AIUsageTab({ onAdminError }) {
+  const [range, setRange] = useState('30d');
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async (r) => {
+    setLoading(true);
+    try {
+      const res = await admin.getAiUsage(r);
+      setData(res.data);
+    } catch (e) { onAdminError?.(e, 'Failed to load AI usage'); }
+    finally { setLoading(false); }
+  }, [onAdminError]);
+  useEffect(() => { load(range); }, [load, range]);
+
+  const t = data?.totals || {};
+  const pie = (rows, keyName) => (rows || [])
+    .filter(r => (r.cost_usd || 0) > 0 || (r.total_tokens || 0) > 0)
+    .slice(0, 8)
+    .map(r => ({ name: String(r[keyName] ?? '—'), value: Number((r.cost_usd || 0).toFixed(4)) || r.total_tokens || 0 }));
+
+  return (
+    <Box>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2} flexWrap="wrap" gap={1}>
+        <Box>
+          <Typography variant="h6" fontWeight={700}>AI Usage & Cost</Typography>
+          <Typography variant="caption" color="text.secondary">
+            Traceable chain: user → group → bot → feature → model → tokens → cost. Tracked from ship date (not backfilled).
+          </Typography>
+        </Box>
+        <Stack direction="row" gap={1} alignItems="center">
+          <FormControl size="small" sx={{ minWidth: 130 }}>
+            <InputLabel>Range</InputLabel>
+            <Select label="Range" value={range} onChange={e => setRange(e.target.value)}>
+              {AI_RANGES.map(r => <MenuItem key={r.id} value={r.id}>{r.label}</MenuItem>)}
+            </Select>
+          </FormControl>
+          <Button size="small" startIcon={<Refresh />} onClick={() => load(range)} disabled={loading}>Refresh</Button>
+        </Stack>
+      </Stack>
+
+      {loading && !data ? <Box display="flex" justifyContent="center" py={6}><CircularProgress /></Box> : (
+        <>
+          <Grid container spacing={1.5} mb={2}>
+            <Grid item xs={6} sm={3} md={2.4}><AiStat label="Total cost" value={usd(t.cost_usd)} color="success.main" /></Grid>
+            <Grid item xs={6} sm={3} md={2.4}><AiStat label="Total tokens" value={(t.total_tokens || 0).toLocaleString()} /></Grid>
+            <Grid item xs={6} sm={3} md={2.4}><AiStat label="Input tokens" value={(t.input_tokens || 0).toLocaleString()} /></Grid>
+            <Grid item xs={6} sm={3} md={2.4}><AiStat label="Output tokens" value={(t.output_tokens || 0).toLocaleString()} /></Grid>
+            <Grid item xs={6} sm={3} md={2.4}><AiStat label="Calls" value={(t.calls || 0).toLocaleString()} /></Grid>
+          </Grid>
+
+          {(t.calls || 0) === 0 ? (
+            <Alert severity="info" variant="outlined">
+              No AI usage recorded for this range yet. The ledger fills as AI features run (Echo chat, AI moderation, knowledge Q&A).
+            </Alert>
+          ) : (
+            <>
+              <Grid container spacing={2} mb={1}>
+                <Grid item xs={12} md={7}>
+                  <Card variant="outlined"><CardContent>
+                    <Typography variant="subtitle2" fontWeight={700} mb={1}>Daily spend (USD)</Typography>
+                    <Box sx={{ height: 240 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={data.daily} margin={{ top: 4, right: 12, bottom: 4, left: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.15} />
+                          <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                          <YAxis tick={{ fontSize: 10 }} />
+                          <ReTooltip />
+                          <Line type="monotone" dataKey="cost_usd" stroke="#22c55e" strokeWidth={2} dot={false} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </Box>
+                  </CardContent></Card>
+                </Grid>
+                <Grid item xs={12} md={5}>
+                  <Card variant="outlined"><CardContent>
+                    <Typography variant="subtitle2" fontWeight={700} mb={1}>Daily tokens</Typography>
+                    <Box sx={{ height: 240 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={data.daily} margin={{ top: 4, right: 12, bottom: 4, left: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.15} />
+                          <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                          <YAxis tick={{ fontSize: 10 }} />
+                          <ReTooltip />
+                          <Bar dataKey="total_tokens" fill="#3d8ef8" radius={[3, 3, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </Box>
+                  </CardContent></Card>
+                </Grid>
+              </Grid>
+
+              <Grid container spacing={2} mb={1}>
+                {[{ title: 'Cost by feature', rows: data.by_feature, key: 'feature' },
+                  { title: 'Cost by user', rows: data.by_user, key: 'email' },
+                  { title: 'Cost by group', rows: data.by_group, key: 'group_ref' }].map(p => (
+                  <Grid item xs={12} md={4} key={p.title}>
+                    <Card variant="outlined"><CardContent>
+                      <Typography variant="subtitle2" fontWeight={700} mb={1}>{p.title}</Typography>
+                      {pie(p.rows, p.key).length === 0 ? (
+                        <Typography variant="caption" color="text.disabled">No data.</Typography>
+                      ) : (
+                        <Box sx={{ height: 220 }}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie data={pie(p.rows, p.key)} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70}>
+                                {pie(p.rows, p.key).map((_, i) => <Cell key={i} fill={AI_PIE_COLORS[i % AI_PIE_COLORS.length]} />)}
+                              </Pie>
+                              <ReTooltip formatter={(v) => usd(v)} />
+                              <Legend wrapperStyle={{ fontSize: 10 }} />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </Box>
+                      )}
+                    </CardContent></Card>
+                  </Grid>
+                ))}
+              </Grid>
+
+              <Grid container spacing={2}>
+                {[{ title: 'Top expensive users', rows: data.by_user, label: r => r.email || r.user_ref },
+                  { title: 'Top expensive groups', rows: data.by_group, label: r => r.group_ref },
+                  { title: 'Top models', rows: data.by_model, label: r => r.model }].map(tbl => (
+                  <Grid item xs={12} md={4} key={tbl.title}>
+                    <Card variant="outlined"><CardContent>
+                      <Typography variant="subtitle2" fontWeight={700} mb={1}>{tbl.title}</Typography>
+                      <Table size="small">
+                        <TableBody>
+                          {(tbl.rows || []).slice(0, 8).map((r, i) => (
+                            <TableRow key={i}>
+                              <TableCell sx={{ fontSize: 12, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tbl.label(r) || '—'}</TableCell>
+                              <TableCell align="right" sx={{ fontSize: 12, fontWeight: 600, color: 'success.main' }}>{usd(r.cost_usd)}</TableCell>
+                              <TableCell align="right" sx={{ fontSize: 11, color: 'text.disabled' }}>{(r.total_tokens || 0).toLocaleString()}</TableCell>
+                            </TableRow>
+                          ))}
+                          {(tbl.rows || []).length === 0 && (
+                            <TableRow><TableCell><Typography variant="caption" color="text.disabled">No data.</Typography></TableCell></TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </CardContent></Card>
+                  </Grid>
+                ))}
+              </Grid>
+            </>
+          )}
+        </>
+      )}
+    </Box>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // TAB — PRICING (Super Admin only)
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -4853,6 +5027,8 @@ export default function AdminPanel() {
       render: () => <ReportsTab onAdminError={handleAdminError} /> },
     { key: 'campaigns', label: 'Campaigns', icon: <Campaign fontSize="small" />, permission: 'campaigns.view',
       render: () => <CampaignsTab onAdminError={handleAdminError} /> },
+    { key: 'ai-usage', label: 'AI Usage', icon: <Insights fontSize="small" />, permission: 'ai.manage',
+      render: () => <AIUsageTab onAdminError={handleAdminError} /> },
     { key: 'compliance', label: 'Compliance', icon: <Gavel fontSize="small" />, permission: 'moderation.view',
       render: () => <ComplianceTab onAdminError={handleAdminError} /> },
     { key: 'promo', label: 'Promo Codes', icon: <Payment fontSize="small" />, permission: 'billing.view',

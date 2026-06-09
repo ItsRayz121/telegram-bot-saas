@@ -1249,6 +1249,20 @@ class ModerationSystem:
             text, group_topic, message.chat.title or "", key_info,
         )
 
+        # AI usage ledger (best-effort) — one row per moderation completion.
+        try:
+            from ..ai_usage import record_from_key_info
+            from ..ai_activity import derive_scope_ref as _dsr
+            with self.app.app_context():
+                _scope, _ref = _dsr(group)
+                record_from_key_info(
+                    _scope or "official", "ai_mod", key_info,
+                    user_ref=user_id, group_ref=_ref,
+                    input_text=f"{group_topic}\n{text}", output_text=f"{verdict} {reason or ''}",
+                )
+        except Exception:
+            pass
+
         if verdict in ("promotional", "irrelevant"):
             username = message.from_user.username or str(user_id)
             fallback = "off-topic content" if verdict == "irrelevant" else "promotional content"

@@ -1957,6 +1957,62 @@ class FeatureUsageEvent(db.Model):
         }
 
 
+class AITokenUsage(db.Model):
+    """Per-call AI token/cost ledger (Phase 5 admin-panel overhaul).
+
+    One row per AI completion, written best-effort via backend.ai_usage. Lets the
+    admin trace the full chain: user → group → bot → feature → model → tokens →
+    cost. Cost is priced from the configured per-1M rates (ai_config). Tokens are
+    exact when the provider returns usage, else estimated from text length
+    (meta.estimated=True). `key_source` distinguishes platform-key spend (real
+    platform cost) from user/group BYO-key calls.
+    """
+    __tablename__ = "ai_token_usage"
+
+    id = db.Column(db.Integer, primary_key=True)
+    scope = db.Column(db.String(20), nullable=False, index=True)        # official | custom | echo | workspace
+    bot_ref = db.Column(db.String(64), nullable=True, index=True)       # 'official' | custom bot id
+    group_ref = db.Column(db.String(64), nullable=True, index=True)     # telegram_group_id or Group.id
+    user_ref = db.Column(db.String(64), nullable=True, index=True)      # app user id or telegram user id
+    email = db.Column(db.String(255), nullable=True)                    # owner email (denormalised for cost-by-email)
+    feature = db.Column(db.String(40), nullable=False, index=True)      # assistant | ai_mod | knowledge | digest | notes ...
+    provider = db.Column(db.String(40), nullable=True)                  # openrouter | openai | gemini | anthropic ...
+    model = db.Column(db.String(120), nullable=True, index=True)
+    key_source = db.Column(db.String(20), nullable=True)               # platform | user | group
+    input_tokens = db.Column(db.Integer, nullable=False, default=0)
+    output_tokens = db.Column(db.Integer, nullable=False, default=0)
+    total_tokens = db.Column(db.Integer, nullable=False, default=0)
+    cost_usd = db.Column(db.Numeric(12, 6), nullable=False, default=0)
+    meta = db.Column(db.JSON, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    __table_args__ = (
+        db.Index("ix_ai_usage_user_created", "user_ref", "created_at"),
+        db.Index("ix_ai_usage_group_created", "group_ref", "created_at"),
+        db.Index("ix_ai_usage_model_created", "model", "created_at"),
+        db.Index("ix_ai_usage_feature_created", "feature", "created_at"),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "scope": self.scope,
+            "bot_ref": self.bot_ref,
+            "group_ref": self.group_ref,
+            "user_ref": self.user_ref,
+            "email": self.email,
+            "feature": self.feature,
+            "provider": self.provider,
+            "model": self.model,
+            "key_source": self.key_source,
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "total_tokens": self.total_tokens,
+            "cost_usd": float(self.cost_usd or 0),
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 # ── Official-group feature models (Phase 2 — full parity with custom bots) ──────
 
 class OfficialRaid(db.Model):

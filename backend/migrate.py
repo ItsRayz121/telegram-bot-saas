@@ -188,6 +188,11 @@ def init_db():
             "group_daily_signals.updated_at",
         )
 
+        # ── AI usage ledger (Phase 5 admin overhaul) ──────────────────────────
+        # The ai_token_usage table + its indexes are created by db.create_all()
+        # above (model: AITokenUsage). No ALTER needed — new table. Noted here so
+        # the migration intent is documented alongside the other analytics tables.
+
         # ── Bot Health Center: error classification columns (Part 6) ──────────
         # bot_health_events / ai_activity tables are created by db.create_all();
         # these ALTERs add the new columns when the table already existed.

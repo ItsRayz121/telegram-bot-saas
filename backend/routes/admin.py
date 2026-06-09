@@ -421,6 +421,25 @@ def get_user(user_id):
     timeline.sort(key=lambda x: x["at"], reverse=True)
     user_data["timeline"] = timeline[:40]
 
+    # ── AI/Token usage (from the ledger, attributed to this user) ──────────────
+    try:
+        from ..models import AITokenUsage
+        from sqlalchemy import func
+        row = db.session.query(
+            func.coalesce(func.sum(AITokenUsage.input_tokens), 0),
+            func.coalesce(func.sum(AITokenUsage.output_tokens), 0),
+            func.coalesce(func.sum(AITokenUsage.total_tokens), 0),
+            func.coalesce(func.sum(AITokenUsage.cost_usd), 0),
+            func.count(AITokenUsage.id),
+        ).filter(AITokenUsage.user_ref == str(user.id)).one()
+        user_data["ai_usage"] = {
+            "input_tokens": int(row[0] or 0), "output_tokens": int(row[1] or 0),
+            "total_tokens": int(row[2] or 0), "cost_usd": round(float(row[3] or 0), 4),
+            "calls": int(row[4] or 0),
+        }
+    except Exception:
+        user_data["ai_usage"] = None
+
     return jsonify({"user": user_data})
 
 
@@ -2007,6 +2026,28 @@ def admin_custom_bot_detail(bot_id):
         "note": "Per-bot usage attribution is partial — group-level moderation counts appear in each group's detail.",
     }
 
+    # ── AI/Token usage attributed to this bot's connected groups ───────────────
+    try:
+        from ..models import AITokenUsage
+        grefs = [str(g.telegram_group_id) for g in groups if g.telegram_group_id]
+        if grefs:
+            arow = db.session.query(
+                db.func.coalesce(db.func.sum(AITokenUsage.input_tokens), 0),
+                db.func.coalesce(db.func.sum(AITokenUsage.output_tokens), 0),
+                db.func.coalesce(db.func.sum(AITokenUsage.total_tokens), 0),
+                db.func.coalesce(db.func.sum(AITokenUsage.cost_usd), 0),
+                db.func.count(AITokenUsage.id),
+            ).filter(AITokenUsage.group_ref.in_(grefs)).one()
+            data["ai_usage"] = {
+                "input_tokens": int(arow[0] or 0), "output_tokens": int(arow[1] or 0),
+                "total_tokens": int(arow[2] or 0), "cost_usd": round(float(arow[3] or 0), 4),
+                "calls": int(arow[4] or 0),
+            }
+        else:
+            data["ai_usage"] = None
+    except Exception:
+        data["ai_usage"] = None
+
     # ── Config / token status (status only — secret never exposed) ─────────────
     data["config"] = {
         "token_configured": bool(bot.bot_token_encrypted),
@@ -3371,6 +3412,122 @@ def update_ai_config():
             ))
     db.session.commit()
     return jsonify({"message": f"Updated {len(changed)} setting(s).", "settings": ai_config.all_settings()})
+
+
+# ── AI Usage ledger analytics (ai.manage) ─────────────────────────────────────
+
+@admin_bp.route("/ai-usage", methods=["GET"])
+@require_permission(rbac.P_AI_MANAGE)
+@rate_limit(requests_per_minute=30)
+def get_ai_usage():
+    """Token/cost analytics from the AITokenUsage ledger.
+
+    Query params: range=today|7d|30d|1y|all (default 30d). Returns totals, a daily
+    series, and breakdowns by feature / model / provider / user / group, plus
+    top-N expensive lists — so the admin can trace User→Group→Bot→Feature→Model→
+    Tokens→Cost.
+    """
+    from ..models import AITokenUsage
+    from sqlalchemy import func
+    from datetime import datetime, timedelta
+
+    rng = (request.args.get("range") or "30d").lower()
+    now = datetime.utcnow()
+    since = None
+    if rng == "today":
+        since = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    elif rng == "7d":
+        since = now - timedelta(days=7)
+    elif rng == "1y":
+        since = now - timedelta(days=365)
+    elif rng == "all":
+        since = None
+    else:
+        rng = "30d"
+        since = now - timedelta(days=30)
+
+    def _base():
+        q = db.session.query(AITokenUsage)
+        if since is not None:
+            q = q.filter(AITokenUsage.created_at >= since)
+        return q
+
+    cols = (
+        func.coalesce(func.sum(AITokenUsage.input_tokens), 0),
+        func.coalesce(func.sum(AITokenUsage.output_tokens), 0),
+        func.coalesce(func.sum(AITokenUsage.total_tokens), 0),
+        func.coalesce(func.sum(AITokenUsage.cost_usd), 0),
+        func.count(AITokenUsage.id),
+    )
+
+    def _filtered_agg(query):
+        if since is not None:
+            query = query.filter(AITokenUsage.created_at >= since)
+        return query
+
+    tin, tout, ttot, tcost, tcalls = _filtered_agg(db.session.query(*cols)).one()
+    totals = {
+        "input_tokens": int(tin or 0), "output_tokens": int(tout or 0),
+        "total_tokens": int(ttot or 0), "cost_usd": round(float(tcost or 0), 4),
+        "calls": int(tcalls or 0),
+    }
+
+    def _group(col, limit=None, label="key"):
+        q = db.session.query(
+            col,
+            func.coalesce(func.sum(AITokenUsage.total_tokens), 0),
+            func.coalesce(func.sum(AITokenUsage.cost_usd), 0),
+            func.count(AITokenUsage.id),
+        )
+        if since is not None:
+            q = q.filter(AITokenUsage.created_at >= since)
+        q = q.filter(col.isnot(None)).group_by(col).order_by(func.sum(AITokenUsage.cost_usd).desc())
+        if limit:
+            q = q.limit(limit)
+        return [
+            {label: row[0], "total_tokens": int(row[1] or 0),
+             "cost_usd": round(float(row[2] or 0), 4), "calls": int(row[3] or 0)}
+            for row in q.all()
+        ]
+
+    # Daily series (cost + tokens).
+    dq = db.session.query(
+        func.date(AITokenUsage.created_at),
+        func.coalesce(func.sum(AITokenUsage.cost_usd), 0),
+        func.coalesce(func.sum(AITokenUsage.total_tokens), 0),
+    )
+    if since is not None:
+        dq = dq.filter(AITokenUsage.created_at >= since)
+    dq = dq.group_by(func.date(AITokenUsage.created_at)).order_by(func.date(AITokenUsage.created_at))
+    daily = [
+        {"date": str(d), "cost_usd": round(float(c or 0), 4), "total_tokens": int(t or 0)}
+        for d, c, t in dq.all()
+    ]
+
+    # by_user — attach email for cost-by-email.
+    by_user = _group(AITokenUsage.user_ref, limit=15, label="user_ref")
+    if by_user:
+        emap = {}
+        urefs = [u["user_ref"] for u in by_user]
+        try:
+            erows = db.session.query(AITokenUsage.user_ref, func.max(AITokenUsage.email)).filter(
+                AITokenUsage.user_ref.in_(urefs)).group_by(AITokenUsage.user_ref).all()
+            emap = {r[0]: r[1] for r in erows}
+        except Exception:
+            emap = {}
+        for u in by_user:
+            u["email"] = emap.get(u["user_ref"])
+
+    return jsonify({
+        "range": rng,
+        "totals": totals,
+        "daily": daily,
+        "by_feature": _group(AITokenUsage.feature, label="feature"),
+        "by_model": _group(AITokenUsage.model, limit=15, label="model"),
+        "by_provider": _group(AITokenUsage.provider, label="provider"),
+        "by_user": by_user,
+        "by_group": _group(AITokenUsage.group_ref, limit=15, label="group_ref"),
+    })
 
 
 # ── Pricing (Super Admin only) ─────────────────────────────────────────────────

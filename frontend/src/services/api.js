@@ -701,6 +701,7 @@ export const admin = {
   // AI Management (ai.manage)
   getAiConfig: () => api.get('/api/admin/ai-config'),
   updateAiConfig: (settings) => api.put('/api/admin/ai-config', { settings }),
+  getAiUsage: (range) => api.get('/api/admin/ai-usage', { params: { range } }),
   // Pricing (Super Admin only)
   getPricing: () => api.get('/api/admin/pricing'),
   updatePricing: (prices) => api.put('/api/admin/pricing', { prices }),

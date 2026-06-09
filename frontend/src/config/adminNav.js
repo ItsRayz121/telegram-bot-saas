@@ -10,7 +10,7 @@ import {
   TrendingUp, Verified, Flag, People, Security, VerifiedUser, Warning,
   FolderOpen, Groups, SmartToy, MonitorHeart, NetworkCheck, Insights,
   Campaign, Timeline, History, AttachMoney, Psychology, Tune, Key, Dns,
-  Gavel, Payment, SpaceDashboard, Settings,
+  Gavel, Payment, SpaceDashboard, Settings, ShowChart,
 } from '@mui/icons-material';
 
 export const ADMIN_CATEGORIES = [
@@ -54,6 +54,7 @@ export const ADMIN_CATEGORIES = [
     items: [
       { key: 'feature-usage', label: 'Feature Usage', permission: 'analytics.view', icon: Insights },
       { key: 'campaigns', label: 'Campaigns', permission: 'campaigns.view', icon: Campaign },
+      { key: 'ai-usage', label: 'AI Usage', permission: 'ai.manage', icon: ShowChart },
       { key: 'event-log', label: 'Event Log', permission: 'audit.view', icon: Timeline },
       { key: 'audit', label: 'Audit Log', permission: 'audit.view', icon: History },
     ],
