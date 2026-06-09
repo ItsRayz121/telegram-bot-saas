@@ -2535,3 +2535,178 @@ def update_pricing():
         "message": f"Updated {len(changed)} price(s).", "changed": changed,
         "prices": billing_config.get_tier_prices(), "plans": billing_config.get_plans(),
     })
+
+
+# ── Campaigns (platform-wide moderation view) ──────────────────────────────────
+
+_ADMIN_CAMPAIGN_ACTIONS = {"pause", "close", "archive"}  # safe stop-actions (no TG post)
+
+
+@admin_bp.route("/campaigns", methods=["GET"])
+@require_permission(rbac.P_CAMPAIGNS_VIEW)
+@rate_limit(requests_per_minute=30)
+def admin_list_campaigns():
+    """All campaigns across both lineages, with owner, scope and submission counts."""
+    from ..models import EngagementCampaign, EngagementSubmission
+    page = request.args.get("page", 1, type=int)
+    per_page = min(request.args.get("per_page", 50, type=int), 100)
+    status = request.args.get("status", "")
+
+    q = EngagementCampaign.query
+    if status:
+        q = q.filter(EngagementCampaign.status == status)
+    q = q.order_by(EngagementCampaign.created_at.desc())
+    paginated = q.paginate(page=page, per_page=per_page, error_out=False)
+
+    owner_ids = {c.owner_user_id for c in paginated.items if c.owner_user_id}
+    owners = {u.id: u for u in User.query.filter(User.id.in_(owner_ids)).all()} if owner_ids else {}
+
+    # One grouped query for submission counts on this page.
+    ids = [c.id for c in paginated.items]
+    counts = {}
+    if ids:
+        for cid, cnt in (
+            db.session.query(EngagementSubmission.campaign_id, db.func.count(EngagementSubmission.id))
+            .filter(EngagementSubmission.campaign_id.in_(ids))
+            .group_by(EngagementSubmission.campaign_id).all()
+        ):
+            counts[cid] = cnt
+
+    rows = []
+    for c in paginated.items:
+        owner = owners.get(c.owner_user_id)
+        rows.append({
+            "id": c.id,
+            "title": c.title,
+            "type": c.type,
+            "status": c.status,
+            "scope": "official" if c.telegram_group_id else "custom",
+            "group_ref": c.telegram_group_id or (str(c.group_id) if c.group_id else None),
+            "owner_email": owner.email if owner else None,
+            "owner_tier": owner.subscription_tier if owner else None,
+            "reward_xp": c.reward_xp,
+            "submission_count": counts.get(c.id, 0),
+            "created_at": c.created_at.isoformat() if c.created_at else None,
+            "ends_at": c.ends_at.isoformat() if c.ends_at else None,
+        })
+
+    return jsonify({"campaigns": rows, "total": paginated.total, "pages": paginated.pages, "page": page})
+
+
+@admin_bp.route("/campaigns/<int:campaign_id>/action", methods=["POST"])
+@require_permission(rbac.P_CAMPAIGNS_MANAGE)
+@rate_limit(requests_per_minute=20)
+def admin_campaign_action(campaign_id):
+    """Apply a moderation stop-action (pause/close/archive) to any campaign."""
+    from ..models import EngagementCampaign
+    from .. import engagement as eng
+    me = _get_current_user()
+    c = EngagementCampaign.query.get(campaign_id)
+    if not c:
+        return jsonify({"error": "Campaign not found"}), 404
+    action = (request.get_json() or {}).get("action")
+    if action not in _ADMIN_CAMPAIGN_ACTIONS:
+        return jsonify({"error": f"action must be one of: {', '.join(sorted(_ADMIN_CAMPAIGN_ACTIONS))}"}), 400
+    old_status = c.status
+    try:
+        eng.update_campaign(c, {"action": action}, user=me)
+    except Exception as e:
+        return jsonify({"error": str(e)[:200]}), 400
+    db.session.add(AdminAuditLog(
+        admin_id=me.id, action="campaign_moderation", method="POST",
+        path=f"/api/admin/campaigns/{campaign_id}/action", ip_address=request.remote_addr,
+        severity="notice", target_type="campaign", target_id=str(campaign_id),
+        old_value=old_status, new_value=c.status,
+    ))
+    db.session.commit()
+    return jsonify({"message": f"Campaign {action}d.", "id": c.id, "status": c.status})
+
+
+@admin_bp.route("/campaigns/<int:campaign_id>/submissions", methods=["GET"])
+@require_permission(rbac.P_CAMPAIGNS_VIEW)
+@rate_limit(requests_per_minute=30)
+def admin_campaign_submissions(campaign_id):
+    from ..models import EngagementCampaign
+    from .. import engagement as eng
+    c = EngagementCampaign.query.get(campaign_id)
+    if not c:
+        return jsonify({"error": "Campaign not found"}), 404
+    status = request.args.get("status") or None
+    subs = eng.list_submissions(c, status=status, limit=500)
+    return jsonify({"submissions": [s.to_dict() for s in subs], "total": len(subs)})
+
+
+# ── Support & Compliance ───────────────────────────────────────────────────────
+
+@admin_bp.route("/compliance/requests", methods=["GET"])
+@require_permission(rbac.P_MODERATION_VIEW)
+@rate_limit(requests_per_minute=30)
+def admin_compliance_requests():
+    """GDPR export/delete request queue."""
+    from ..models import ComplianceRequest
+    page = request.args.get("page", 1, type=int)
+    per_page = min(request.args.get("per_page", 50, type=int), 100)
+    status = request.args.get("status", "")
+    req_type = request.args.get("type", "")
+
+    q = ComplianceRequest.query
+    if status:
+        q = q.filter(ComplianceRequest.status == status)
+    if req_type in ("export", "delete"):
+        q = q.filter(ComplianceRequest.request_type == req_type)
+    q = q.order_by(ComplianceRequest.requested_at.desc())
+    paginated = q.paginate(page=page, per_page=per_page, error_out=False)
+    return jsonify({
+        "requests": [r.to_dict() for r in paginated.items],
+        "total": paginated.total, "pages": paginated.pages, "page": page,
+    })
+
+
+@admin_bp.route("/compliance/requests/<int:req_id>/resolve", methods=["POST"])
+@require_permission(rbac.P_MODERATION_MANAGE)
+@rate_limit(requests_per_minute=20)
+def admin_resolve_compliance(req_id):
+    from ..models import ComplianceRequest
+    me = _get_current_user()
+    req = ComplianceRequest.query.get(req_id)
+    if not req:
+        return jsonify({"error": "Request not found"}), 404
+    data = request.get_json() or {}
+    new_status = data.get("status", "completed")
+    if new_status not in ("completed", "cancelled", "pending"):
+        return jsonify({"error": "status must be completed, cancelled, or pending"}), 400
+    req.status = new_status
+    req.handled_by = me.id
+    req.handled_at = datetime.utcnow()
+    if data.get("note"):
+        req.note = data["note"]
+    db.session.add(AdminAuditLog(
+        admin_id=me.id, action="resolve_compliance_request", method="POST",
+        path=f"/api/admin/compliance/requests/{req_id}/resolve", ip_address=request.remote_addr,
+        severity="notice", target_type="compliance_request", target_id=str(req_id),
+        new_value=new_status,
+    ))
+    db.session.commit()
+    return jsonify({"message": f"Request marked {new_status}.", "request": req.to_dict()})
+
+
+@admin_bp.route("/compliance/tos", methods=["GET"])
+@require_permission(rbac.P_MODERATION_VIEW)
+@rate_limit(requests_per_minute=30)
+def admin_compliance_tos():
+    """Current ToS/privacy versions + acceptance stats."""
+    from .. import platform_config as pc
+    tos_version = pc.get_setting("tos_version")
+    privacy_version = pc.get_setting("privacy_version")
+    total = User.query.filter(User.deleted_at.is_(None)).count()
+    on_current = User.query.filter(
+        User.deleted_at.is_(None), User.tos_version_accepted == tos_version
+    ).count()
+    return jsonify({
+        "tos_version": tos_version,
+        "privacy_version": privacy_version,
+        "users_total": total,
+        "users_on_current_tos": on_current,
+        "users_outdated_tos": max(0, total - on_current),
+        "note": "Edit versions in Configuration (compliance category). Re-acceptance enforcement is not automated.",
+    })

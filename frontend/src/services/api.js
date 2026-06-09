@@ -689,6 +689,14 @@ export const admin = {
   // Pricing (Super Admin only)
   getPricing: () => api.get('/api/admin/pricing'),
   updatePricing: (prices) => api.put('/api/admin/pricing', { prices }),
+  // Campaigns (platform moderation view)
+  getCampaigns: (params) => api.get('/api/admin/campaigns', { params }),
+  campaignAction: (id, action) => api.post(`/api/admin/campaigns/${id}/action`, { action }),
+  getCampaignSubmissions: (id, params) => api.get(`/api/admin/campaigns/${id}/submissions`, { params }),
+  // Support & Compliance
+  getComplianceRequests: (params) => api.get('/api/admin/compliance/requests', { params }),
+  resolveCompliance: (id, data) => api.post(`/api/admin/compliance/requests/${id}/resolve`, data),
+  getComplianceTos: () => api.get('/api/admin/compliance/tos'),
 };
 
 // Public, unauthenticated platform config (branding, links, maintenance status)

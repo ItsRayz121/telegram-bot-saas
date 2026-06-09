@@ -14,6 +14,7 @@ import {
   CheckCircleOutline, Cancel, Circle, Flag,
   Security, AccountTree, TrendingDown, Payment, FileDownload,
   MonitorHeart, NetworkCheck, Tune, Key, Psychology, AttachMoney as MoneyIcon,
+  Gavel,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -2498,6 +2499,262 @@ function DiagnosticsTab({ onAdminError }) {
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// TAB — CAMPAIGNS (platform moderation view)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const CAMPAIGN_STATUSES = ['', 'draft', 'active', 'paused', 'closed', 'archived'];
+const CAMPAIGN_ACTIONS_FOR = (status) => {
+  const a = [];
+  if (status === 'active') a.push('pause');
+  if (status === 'active' || status === 'paused') a.push('close');
+  if (status !== 'archived') a.push('archive');
+  return a;
+};
+
+function CampaignsTab({ onAdminError }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState('');
+  const [page, setPage] = useState(1);
+  const [confirm, setConfirm] = useState(null);   // { c, action }
+  const [busy, setBusy] = useState(false);
+  const [subsFor, setSubsFor] = useState(null);   // campaign being viewed
+  const [subs, setSubs] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await admin.getCampaigns({ status: status || undefined, page });
+      setData(data);
+    } catch (e) { onAdminError?.(e, 'Failed to load campaigns'); }
+    finally { setLoading(false); }
+  }, [onAdminError, status, page]);
+  useEffect(() => { load(); }, [load]);
+
+  const apply = async () => {
+    setBusy(true);
+    try {
+      await admin.campaignAction(confirm.c.id, confirm.action);
+      toast.success(`Campaign ${confirm.action}d`);
+      setConfirm(null); load();
+    } catch (e) { onAdminError?.(e, 'Action failed'); }
+    finally { setBusy(false); }
+  };
+
+  const openSubs = async (c) => {
+    setSubsFor(c); setSubs(null);
+    try {
+      const { data } = await admin.getCampaignSubmissions(c.id);
+      setSubs(data.submissions || []);
+    } catch (e) { onAdminError?.(e, 'Failed to load submissions'); setSubs([]); }
+  };
+
+  return (
+    <Box>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2} flexWrap="wrap" gap={1}>
+        <Typography variant="h6" fontWeight={700}>Campaigns</Typography>
+        <Stack direction="row" gap={1} alignItems="center">
+          <FormControl size="small" sx={{ minWidth: 130 }}>
+            <InputLabel>Status</InputLabel>
+            <Select label="Status" value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}>
+              {CAMPAIGN_STATUSES.map(s => <MenuItem key={s} value={s}>{s || 'All'}</MenuItem>)}
+            </Select>
+          </FormControl>
+          <Button size="small" startIcon={<Refresh />} onClick={load}>Refresh</Button>
+        </Stack>
+      </Stack>
+
+      <TableContainer component={Paper} variant="outlined">
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Title</TableCell><TableCell>Scope</TableCell><TableCell>Owner</TableCell>
+              <TableCell>Status</TableCell><TableCell align="right">Subs</TableCell>
+              <TableCell>Created</TableCell><TableCell align="right">Actions</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {loading ? (
+              <TableRow><TableCell colSpan={7} align="center"><CircularProgress size={24} sx={{ my: 3 }} /></TableCell></TableRow>
+            ) : !data?.campaigns?.length ? (
+              <EmptyRow cols={7} message="No campaigns found" />
+            ) : data.campaigns.map(c => (
+              <TableRow key={c.id} hover>
+                <TableCell>{c.title}</TableCell>
+                <TableCell><Chip label={c.scope} size="small" variant="outlined" /></TableCell>
+                <TableCell sx={{ fontSize: 12 }}>{c.owner_email || '—'}</TableCell>
+                <TableCell><StatusChip label={c.status} /></TableCell>
+                <TableCell align="right">
+                  <Button size="small" disabled={!c.submission_count} onClick={() => openSubs(c)}>
+                    {c.submission_count}
+                  </Button>
+                </TableCell>
+                <TableCell sx={{ fontSize: 12 }}>{fmtDate(c.created_at)}</TableCell>
+                <TableCell align="right">
+                  <Stack direction="row" gap={0.5} justifyContent="flex-end">
+                    {CAMPAIGN_ACTIONS_FOR(c.status).map(a => (
+                      <Button key={a} size="small" color={a === 'archive' ? 'error' : 'warning'}
+                        onClick={() => setConfirm({ c, action: a })} sx={{ textTransform: 'capitalize' }}>
+                        {a}
+                      </Button>
+                    ))}
+                  </Stack>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+      {data?.pages > 1 && (
+        <Box display="flex" justifyContent="center" mt={2}>
+          <Pagination count={data.pages} page={page} onChange={(_, p) => setPage(p)} size="small" />
+        </Box>
+      )}
+
+      <Dialog open={!!confirm} onClose={() => !busy && setConfirm(null)}>
+        <DialogTitle sx={{ textTransform: 'capitalize' }}>{confirm?.action} campaign?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            {confirm?.action === 'archive' ? 'Archiving hides the campaign from listings.'
+              : confirm?.action === 'close' ? 'Closing ends participation immediately.'
+              : 'Pausing stops new participation; the group post stays.'} This is an admin moderation action.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirm(null)} disabled={busy}>Cancel</Button>
+          <Button variant="contained" color={confirm?.action === 'archive' ? 'error' : 'warning'} onClick={apply} disabled={busy}>
+            {busy ? 'Working…' : 'Confirm'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={!!subsFor} onClose={() => setSubsFor(null)} fullWidth maxWidth="md">
+        <DialogTitle>Submissions — {subsFor?.title}</DialogTitle>
+        <DialogContent>
+          {subs == null ? <Box display="flex" justifyContent="center" py={3}><CircularProgress size={24} /></Box>
+            : subs.length === 0 ? <Typography variant="body2" color="text.secondary">No submissions.</Typography>
+            : (
+              <Table size="small">
+                <TableHead><TableRow>
+                  <TableCell>User</TableCell><TableCell>Status</TableCell><TableCell>Submitted</TableCell>
+                </TableRow></TableHead>
+                <TableBody>
+                  {subs.map(s => (
+                    <TableRow key={s.id}>
+                      <TableCell sx={{ fontSize: 12 }}>{s.telegram_username || s.telegram_user_id}</TableCell>
+                      <TableCell><StatusChip label={s.status} /></TableCell>
+                      <TableCell sx={{ fontSize: 12 }}>{fmtDateTime(s.created_at)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+        </DialogContent>
+        <DialogActions><Button onClick={() => setSubsFor(null)}>Close</Button></DialogActions>
+      </Dialog>
+    </Box>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TAB — SUPPORT & COMPLIANCE (moderation.view)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function ComplianceTab({ onAdminError }) {
+  const [tos, setTos] = useState(null);
+  const [reqs, setReqs] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('pending');
+  const [busy, setBusy] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [tRes, rRes] = await Promise.allSettled([
+        admin.getComplianceTos(),
+        admin.getComplianceRequests({ status: filter || undefined }),
+      ]);
+      if (tRes.status === 'fulfilled') setTos(tRes.value.data);
+      if (rRes.status === 'fulfilled') setReqs(rRes.value.data.requests || []);
+      else onAdminError?.(rRes.reason, 'Failed to load compliance requests');
+    } finally { setLoading(false); }
+  }, [onAdminError, filter]);
+  useEffect(() => { load(); }, [load]);
+
+  const resolve = async (r, status) => {
+    setBusy(r.id);
+    try {
+      await admin.resolveCompliance(r.id, { status });
+      toast.success(`Request marked ${status}`);
+      load();
+    } catch (e) { onAdminError?.(e, 'Failed to update request'); }
+    finally { setBusy(null); }
+  };
+
+  return (
+    <Box>
+      <Typography variant="h6" fontWeight={700} mb={2}>Support &amp; Compliance</Typography>
+
+      <Grid container spacing={2} mb={1}>
+        <Grid item xs={12} md={4}><StatCard label="ToS version" value={tos?.tos_version ?? '—'} color="#3d8ef8" /></Grid>
+        <Grid item xs={6} md={4}><StatCard label="On current ToS" value={tos?.users_on_current_tos} color="#34c759" /></Grid>
+        <Grid item xs={6} md={4}><StatCard label="Outdated ToS" value={tos?.users_outdated_tos} color="#ff9f0a" /></Grid>
+      </Grid>
+      <Typography variant="caption" color="text.secondary">
+        Edit ToS / privacy version in Configuration → Compliance. Re-acceptance enforcement is not automated.
+      </Typography>
+
+      <Stack direction="row" alignItems="center" justifyContent="space-between" mt={3} mb={1} flexWrap="wrap" gap={1}>
+        <Typography variant="subtitle1" fontWeight={700}>GDPR requests</Typography>
+        <Stack direction="row" gap={1} alignItems="center">
+          <FormControl size="small" sx={{ minWidth: 130 }}>
+            <InputLabel>Status</InputLabel>
+            <Select label="Status" value={filter} onChange={e => setFilter(e.target.value)}>
+              {['', 'pending', 'completed', 'cancelled'].map(s => <MenuItem key={s} value={s}>{s || 'All'}</MenuItem>)}
+            </Select>
+          </FormControl>
+          <Button size="small" startIcon={<Refresh />} onClick={load}>Refresh</Button>
+        </Stack>
+      </Stack>
+
+      <TableContainer component={Paper} variant="outlined">
+        <Table size="small">
+          <TableHead><TableRow>
+            <TableCell>Type</TableCell><TableCell>User</TableCell><TableCell>Status</TableCell>
+            <TableCell>Requested</TableCell><TableCell align="right">Actions</TableCell>
+          </TableRow></TableHead>
+          <TableBody>
+            {loading ? (
+              <TableRow><TableCell colSpan={5} align="center"><CircularProgress size={24} sx={{ my: 3 }} /></TableCell></TableRow>
+            ) : !reqs?.length ? (
+              <EmptyRow cols={5} message="No requests" />
+            ) : reqs.map(r => (
+              <TableRow key={r.id} hover>
+                <TableCell><Chip label={r.request_type} size="small"
+                  color={r.request_type === 'delete' ? 'error' : 'info'} /></TableCell>
+                <TableCell sx={{ fontSize: 12 }}>{r.user_email || `#${r.user_id}`}</TableCell>
+                <TableCell><StatusChip label={r.status} map={{ pending: 'warning', completed: 'success', cancelled: 'default' }} /></TableCell>
+                <TableCell sx={{ fontSize: 12 }}>{fmtDateTime(r.requested_at)}</TableCell>
+                <TableCell align="right">
+                  {r.status === 'pending' && (
+                    <Stack direction="row" gap={0.5} justifyContent="flex-end">
+                      <Button size="small" color="success" disabled={busy === r.id} onClick={() => resolve(r, 'completed')}>Done</Button>
+                      <Button size="small" disabled={busy === r.id} onClick={() => resolve(r, 'cancelled')}>Cancel</Button>
+                    </Stack>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Box>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // TAB — AI MANAGEMENT (ai.manage)
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -3394,6 +3651,10 @@ export default function AdminPanel() {
       render: () => <AuditLogTab onAdminError={handleAdminError} /> },
     { key: 'reports', label: 'Reports', icon: <Flag fontSize="small" />, permission: 'moderation.view',
       render: () => <ReportsTab onAdminError={handleAdminError} /> },
+    { key: 'campaigns', label: 'Campaigns', icon: <Campaign fontSize="small" />, permission: 'campaigns.view',
+      render: () => <CampaignsTab onAdminError={handleAdminError} /> },
+    { key: 'compliance', label: 'Compliance', icon: <Gavel fontSize="small" />, permission: 'moderation.view',
+      render: () => <ComplianceTab onAdminError={handleAdminError} /> },
     { key: 'promo', label: 'Promo Codes', icon: <Payment fontSize="small" />, permission: 'billing.view',
       render: () => <PromoCodesTab onAdminError={handleAdminError} /> },
     { key: 'pricing', label: 'Pricing', icon: <MoneyIcon fontSize="small" />, permission: 'pricing.manage',

@@ -1531,6 +1531,15 @@ def export_data():
         logger.error("Failed to queue GDPR export for user %s: %s", user.id, exc)
         return jsonify({"error": "Failed to queue export. Please try again."}), 500
 
+    # Log for the admin compliance queue (best-effort).
+    try:
+        from ..models import ComplianceRequest
+        db.session.add(ComplianceRequest(
+            user_id=user.id, user_email=user.email, request_type="export", status="pending"))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
     return jsonify({"message": "Export requested. You will receive an email with your data within 24 hours."})
 
 
@@ -1585,6 +1594,16 @@ def delete_account():
         logger.warning("Could not stop bots on account deletion user=%s: %s", user.id, exc)
 
     db.session.commit()
+
+    # Log for the admin compliance queue (best-effort).
+    try:
+        from ..models import ComplianceRequest
+        db.session.add(ComplianceRequest(
+            user_id=user.id, user_email=user.email, request_type="delete", status="pending",
+            note="Soft-deleted; hard deletion scheduled in 30 days."))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
 
     # Schedule hard deletion in 30 days
     try:

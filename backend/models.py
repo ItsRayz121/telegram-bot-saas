@@ -2890,6 +2890,36 @@ class PlatformSetting(db.Model):
         }
 
 
+class ComplianceRequest(db.Model):
+    """Audit trail for GDPR-style requests (data export / account deletion) so
+    admins have visibility into who requested what and when, and can mark them
+    handled. Created automatically when a user triggers export/delete."""
+    __tablename__ = "compliance_requests"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
+    user_email = db.Column(db.String(255), nullable=True)   # denormalised (survives hard-delete)
+    request_type = db.Column(db.String(20), nullable=False)  # export | delete
+    status = db.Column(db.String(20), nullable=False, default="pending")  # pending | completed | cancelled
+    note = db.Column(db.Text, nullable=True)
+    handled_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    requested_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+    handled_at = db.Column(db.DateTime, nullable=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "user_email": self.user_email,
+            "request_type": self.request_type,
+            "status": self.status,
+            "note": self.note,
+            "handled_by": self.handled_by,
+            "requested_at": self.requested_at.isoformat() if self.requested_at else None,
+            "handled_at": self.handled_at.isoformat() if self.handled_at else None,
+        }
+
+
 class PlatformSecret(db.Model):
     """A platform-level secret/API key, editable from the admin panel and stored
     Fernet-encrypted (reusing utils.encryption). Resolved DB-first with env

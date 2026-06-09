@@ -47,6 +47,9 @@ DEFAULT_SETTINGS = {
                             "category": "maintenance", "is_public": True},
     # Onboarding
     "onboarding_tour_enabled": {"value": True, "category": "onboarding", "is_public": True},
+    # Compliance — current policy versions (display + acceptance tracking)
+    "tos_version": {"value": "2.0", "category": "compliance", "is_public": True},
+    "privacy_version": {"value": "1.0", "category": "compliance", "is_public": True},
 }
 
 # key -> {enabled, description}
