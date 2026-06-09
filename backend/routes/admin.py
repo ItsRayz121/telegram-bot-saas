@@ -3312,9 +3312,24 @@ def get_ai_config():
         .order_by(User.workspace_ai_tokens_today.desc()).limit(10).all()
     )
     cap = ai_config.daily_spend_cap()
+
+    # Provider balances + presets (best-effort — never block the settings page).
+    balances, presets, budget = [], [], {}
+    try:
+        from .. import ai_providers
+        balances = ai_providers.get_balances()
+        presets = ai_providers.MODEL_PRESETS
+        budget = ai_providers.budget_status()
+    except Exception as e:
+        import logging
+        logging.getLogger("admin").warning("ai_providers snapshot failed: %s", e)
+
     return jsonify({
         "settings": ai_config.all_settings(),
         "ai_features_enabled": pc.is_feature_enabled("ai_features_enabled"),
+        "presets": presets,
+        "balances": balances,
+        "budget": budget,
         "usage": {
             "spend_today_usd": spend_today,
             "daily_cap_usd": cap,

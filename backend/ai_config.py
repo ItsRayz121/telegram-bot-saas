@@ -23,12 +23,25 @@ _cache = {"data": None, "ts": 0.0}
 # key -> default. Defaults mirror the previous hardcoded values so behaviour is
 # identical until an admin overrides them.
 AI_DEFAULTS = {
+    # Provider & models
+    "ai_provider": "openrouter",                 # openrouter | openai | deepseek | llama | custom
     "ai_default_model": "openai/gpt-4o-mini",
+    "ai_fallback_model": "",                      # used when the primary model errors (optional)
     "ai_default_base_url": "https://openrouter.ai/api/v1",
+    # Spend / token limits
     "ai_daily_spend_cap_usd": float(getattr(Config, "MAX_DAILY_AI_SPEND_USD", 50) or 50),
+    "ai_max_tokens_per_request": 2048,
     "ai_tokens_free": 10000,
     "ai_tokens_pro": 200000,
     "ai_tokens_enterprise": 500000,
+    # Cost model (USD per 1M tokens) — drives the AI usage ledger cost computation.
+    # Defaults track openai/gpt-4o-mini list pricing.
+    "ai_cost_in_per_1m": 0.15,
+    "ai_cost_out_per_1m": 0.60,
+    # Manual balance / budget (for providers without a balance API, e.g. OpenAI)
+    "ai_purchased_balance_usd": 0.0,
+    "ai_monthly_budget_usd": 0.0,
+    "ai_alert_threshold_pct": 80,
 }
 AI_KEYS = set(AI_DEFAULTS.keys())
 
@@ -114,6 +127,44 @@ def daily_token_limit(tier):
         return int(get(key))
     except (TypeError, ValueError):
         return AI_DEFAULTS[key]
+
+
+def provider():
+    return get("ai_provider") or AI_DEFAULTS["ai_provider"]
+
+
+def fallback_model():
+    return get("ai_fallback_model") or ""
+
+
+def max_tokens_per_request():
+    try:
+        return int(get("ai_max_tokens_per_request"))
+    except (TypeError, ValueError):
+        return AI_DEFAULTS["ai_max_tokens_per_request"]
+
+
+def cost_per_1m():
+    """(input_usd_per_1m, output_usd_per_1m) used to price logged token usage."""
+    try:
+        cin = float(get("ai_cost_in_per_1m"))
+    except (TypeError, ValueError):
+        cin = AI_DEFAULTS["ai_cost_in_per_1m"]
+    try:
+        cout = float(get("ai_cost_out_per_1m"))
+    except (TypeError, ValueError):
+        cout = AI_DEFAULTS["ai_cost_out_per_1m"]
+    return cin, cout
+
+
+def compute_cost_usd(input_tokens, output_tokens):
+    """Price a single call from the configured per-1M rates. Best-effort."""
+    try:
+        cin, cout = cost_per_1m()
+        return round((int(input_tokens or 0) / 1_000_000.0) * cin
+                     + (int(output_tokens or 0) / 1_000_000.0) * cout, 6)
+    except Exception:
+        return 0.0
 
 
 def all_settings():

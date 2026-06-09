@@ -3252,18 +3252,37 @@ function ComplianceTab({ onAdminError }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const AI_FIELD_LABELS = {
+  ai_provider: 'Provider',
   ai_default_model: 'Default model',
-  ai_default_base_url: 'Default base URL',
+  ai_fallback_model: 'Fallback model (optional)',
+  ai_default_base_url: 'Base URL',
   ai_daily_spend_cap_usd: 'Daily platform spend cap (USD)',
+  ai_max_tokens_per_request: 'Max tokens per request',
   ai_tokens_free: 'Daily token limit — Free',
   ai_tokens_pro: 'Daily token limit — Pro',
   ai_tokens_enterprise: 'Daily token limit — Enterprise',
+  ai_cost_in_per_1m: 'Cost / 1M input tokens (USD)',
+  ai_cost_out_per_1m: 'Cost / 1M output tokens (USD)',
+  ai_purchased_balance_usd: 'Purchased balance (USD, manual)',
+  ai_monthly_budget_usd: 'Monthly budget (USD)',
+  ai_alert_threshold_pct: 'Alert threshold (%)',
 };
+
+const AI_GROUPS = [
+  { title: 'Provider & Models', keys: ['ai_provider', 'ai_default_model', 'ai_fallback_model', 'ai_default_base_url'] },
+  { title: 'Limits', keys: ['ai_daily_spend_cap_usd', 'ai_max_tokens_per_request', 'ai_tokens_free', 'ai_tokens_pro', 'ai_tokens_enterprise'] },
+  { title: 'Cost model & Budget', keys: ['ai_cost_in_per_1m', 'ai_cost_out_per_1m', 'ai_purchased_balance_usd', 'ai_monthly_budget_usd', 'ai_alert_threshold_pct'] },
+];
+
+const AI_TEXT_KEYS = new Set(['ai_provider', 'ai_default_model', 'ai_fallback_model', 'ai_default_base_url']);
+const AI_PROVIDERS = ['openrouter', 'openai', 'deepseek', 'llama', 'custom'];
 
 function AITab({ onAdminError }) {
   const [form, setForm] = useState(null);
   const [original, setOriginal] = useState({});
   const [usage, setUsage] = useState(null);
+  const [balances, setBalances] = useState([]);
+  const [presets, setPresets] = useState([]);
   const [aiEnabled, setAiEnabled] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -3275,6 +3294,8 @@ function AITab({ onAdminError }) {
       const f = {}; (data.settings || []).forEach(s => { f[s.key] = s.value; });
       setForm(f); setOriginal({ ...f });
       setUsage(data.usage || null);
+      setBalances(data.balances || []);
+      setPresets(data.presets || []);
       setAiEnabled(data.ai_features_enabled);
     } catch (e) { onAdminError?.(e, 'Failed to load AI config'); }
     finally { setLoading(false); }
@@ -3296,9 +3317,41 @@ function AITab({ onAdminError }) {
     finally { setSaving(false); }
   };
 
+  const applyPreset = (p) => {
+    if (!p) return;
+    setForm(f => ({
+      ...f,
+      ai_provider: p.provider ?? f.ai_provider,
+      ai_default_base_url: p.base_url ?? f.ai_default_base_url,
+      ai_default_model: p.model ?? f.ai_default_model,
+      ai_cost_in_per_1m: p.cost_in ?? f.ai_cost_in_per_1m,
+      ai_cost_out_per_1m: p.cost_out ?? f.ai_cost_out_per_1m,
+    }));
+  };
+
   if (loading || !form) return <Box display="flex" justifyContent="center" py={6}><CircularProgress /></Box>;
 
-  const isNumber = (k) => k !== 'ai_default_model' && k !== 'ai_default_base_url';
+  const renderField = (k) => {
+    if (k === 'ai_provider') {
+      return (
+        <FormControl key={k} size="small" fullWidth>
+          <InputLabel>{AI_FIELD_LABELS[k]}</InputLabel>
+          <Select label={AI_FIELD_LABELS[k]} value={form[k] ?? 'openrouter'}
+            onChange={e => setForm({ ...form, [k]: e.target.value })}>
+            {AI_PROVIDERS.map(p => <MenuItem key={p} value={p}>{p}</MenuItem>)}
+          </Select>
+        </FormControl>
+      );
+    }
+    return (
+      <TextField key={k} size="small" fullWidth
+        label={AI_FIELD_LABELS[k] || k}
+        type={AI_TEXT_KEYS.has(k) ? 'text' : 'number'}
+        value={form[k] ?? ''}
+        onChange={e => setForm({ ...form, [k]: e.target.value })}
+      />
+    );
+  };
 
   return (
     <Box>
@@ -3306,7 +3359,7 @@ function AITab({ onAdminError }) {
         <Box>
           <Typography variant="h6" fontWeight={700}>AI Management</Typography>
           <Typography variant="caption" color="text.secondary">
-            Default model, platform spend cap and per-tier daily token limits. Applies within ~30s.
+            One control center: provider, models, spend caps, per-tier limits, cost model and balances. Applies within ~30s.
           </Typography>
         </Box>
         <Stack direction="row" gap={1} alignItems="center">
@@ -3325,62 +3378,108 @@ function AITab({ onAdminError }) {
         </Alert>
       )}
 
+      {/* Cheap-model presets */}
+      {presets.length > 0 && (
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap mb={2} alignItems="center">
+          <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>Quick presets:</Typography>
+          {presets.map(p => (
+            <Chip key={p.id} label={p.label} size="small" variant="outlined"
+              onClick={() => applyPreset(p)} clickable />
+          ))}
+        </Stack>
+      )}
+
       <Grid container spacing={2}>
-        <Grid item xs={12} md={6}>
-          <Card sx={{ height: '100%' }}>
-            <CardContent>
-              <Typography variant="subtitle1" fontWeight={700} mb={1.5}>Settings</Typography>
-              <Stack spacing={2}>
-                {Object.keys(form).map(k => (
-                  <TextField key={k} size="small" fullWidth
-                    label={AI_FIELD_LABELS[k] || k}
-                    type={isNumber(k) ? 'number' : 'text'}
-                    value={form[k] ?? ''}
-                    onChange={e => setForm({ ...form, [k]: isNumber(k) ? e.target.value : e.target.value })}
-                  />
-                ))}
-              </Stack>
-            </CardContent>
-          </Card>
+        <Grid item xs={12} md={7}>
+          <Stack spacing={2}>
+            {AI_GROUPS.map(group => (
+              <Card key={group.title}>
+                <CardContent>
+                  <Typography variant="subtitle1" fontWeight={700} mb={1.5}>{group.title}</Typography>
+                  <Grid container spacing={2}>
+                    {group.keys.filter(k => k in form).map(k => (
+                      <Grid item xs={12} sm={6} key={k}>{renderField(k)}</Grid>
+                    ))}
+                  </Grid>
+                </CardContent>
+              </Card>
+            ))}
+          </Stack>
         </Grid>
-        <Grid item xs={12} md={6}>
-          <Card sx={{ height: '100%' }}>
-            <CardContent>
-              <Typography variant="subtitle1" fontWeight={700} mb={1.5}>Usage today</Typography>
-              {!usage ? <Typography variant="body2" color="text.secondary">No usage data.</Typography> : (
-                <>
-                  <Typography variant="body2" color="text.secondary">Platform AI spend</Typography>
-                  <Typography variant="h5" fontWeight={700}>
-                    {usage.spend_today_usd == null ? 'n/a' : usd(usage.spend_today_usd)}
-                    <Typography component="span" variant="body2" color="text.secondary"> / {usd(usage.daily_cap_usd)} cap</Typography>
-                  </Typography>
-                  {usage.spend_pct != null && (
-                    <LinearProgress variant="determinate" value={Math.min(100, usage.spend_pct)}
-                      color={usage.spend_pct > 80 ? 'error' : 'primary'} sx={{ my: 1, height: 8, borderRadius: 1 }} />
-                  )}
-                  <Divider sx={{ my: 1.5 }} />
-                  <Typography variant="body2" fontWeight={600} mb={0.5}>Top token users (today)</Typography>
-                  {(usage.top_token_users || []).length === 0 ? (
-                    <Typography variant="caption" color="text.secondary">No platform-key usage today.</Typography>
-                  ) : (
-                    <Table size="small">
-                      <TableBody>
-                        {usage.top_token_users.map(u => (
-                          <TableRow key={u.id}>
-                            <TableCell sx={{ fontSize: 12 }}>{u.email}</TableCell>
-                            <TableCell><Chip label={u.tier} size="small" /></TableCell>
-                            <TableCell align="right" sx={{ fontFamily: 'monospace', fontSize: 12 }}>
-                              {(u.tokens_today || 0).toLocaleString()}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  )}
-                </>
-              )}
-            </CardContent>
-          </Card>
+
+        <Grid item xs={12} md={5}>
+          <Stack spacing={2}>
+            {/* Provider balances */}
+            <Card>
+              <CardContent>
+                <Typography variant="subtitle1" fontWeight={700} mb={1.5}>Provider balances</Typography>
+                {balances.length === 0 ? (
+                  <Typography variant="caption" color="text.secondary">No balance data.</Typography>
+                ) : balances.map(b => (
+                  <Box key={b.provider} sx={{ mb: 1.5 }}>
+                    <Stack direction="row" alignItems="center" spacing={1} mb={0.5}>
+                      <Typography variant="body2" fontWeight={700} textTransform="capitalize">{b.provider}</Typography>
+                      <Chip size="small"
+                        label={b.source === 'live' ? 'live' : b.source === 'manual' ? 'manual' : b.source === 'error' ? 'error' : 'no key'}
+                        color={b.source === 'live' ? 'success' : b.source === 'manual' ? 'info' : b.source === 'error' ? 'error' : 'default'} />
+                    </Stack>
+                    {b.source === 'live' && (
+                      <Typography variant="caption" color="text.secondary">
+                        Remaining <b>{usd(b.remaining_usd)}</b> · used {usd(b.used_usd)} of {usd(b.total_usd)}
+                      </Typography>
+                    )}
+                    {b.source === 'manual' && (
+                      <Typography variant="caption" color="text.secondary">
+                        {b.purchased_usd ? <>Balance <b>{usd(b.remaining_usd)}</b> of {usd(b.purchased_usd)} · </> : 'No purchased balance set · '}
+                        spend today {b.spend_today_usd == null ? 'n/a' : usd(b.spend_today_usd)}
+                      </Typography>
+                    )}
+                    {b.source === 'error' && <Typography variant="caption" color="error.main">{b.error}</Typography>}
+                    {b.source === 'missing' && <Typography variant="caption" color="text.disabled">Key not configured (Secrets &amp; Keys).</Typography>}
+                  </Box>
+                ))}
+              </CardContent>
+            </Card>
+
+            {/* Usage today */}
+            <Card>
+              <CardContent>
+                <Typography variant="subtitle1" fontWeight={700} mb={1.5}>Usage today</Typography>
+                {!usage ? <Typography variant="body2" color="text.secondary">No usage data.</Typography> : (
+                  <>
+                    <Typography variant="body2" color="text.secondary">Platform AI spend</Typography>
+                    <Typography variant="h5" fontWeight={700}>
+                      {usage.spend_today_usd == null ? 'n/a' : usd(usage.spend_today_usd)}
+                      <Typography component="span" variant="body2" color="text.secondary"> / {usd(usage.daily_cap_usd)} cap</Typography>
+                    </Typography>
+                    {usage.spend_pct != null && (
+                      <LinearProgress variant="determinate" value={Math.min(100, usage.spend_pct)}
+                        color={usage.spend_pct > 80 ? 'error' : 'primary'} sx={{ my: 1, height: 8, borderRadius: 1 }} />
+                    )}
+                    <Divider sx={{ my: 1.5 }} />
+                    <Typography variant="body2" fontWeight={600} mb={0.5}>Top token users (today)</Typography>
+                    {(usage.top_token_users || []).length === 0 ? (
+                      <Typography variant="caption" color="text.secondary">No platform-key usage today.</Typography>
+                    ) : (
+                      <Table size="small">
+                        <TableBody>
+                          {usage.top_token_users.map(u => (
+                            <TableRow key={u.id}>
+                              <TableCell sx={{ fontSize: 12 }}>{u.email}</TableCell>
+                              <TableCell><Chip label={u.tier} size="small" /></TableCell>
+                              <TableCell align="right" sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+                                {(u.tokens_today || 0).toLocaleString()}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </Stack>
         </Grid>
       </Grid>
     </Box>
