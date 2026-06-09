@@ -41,17 +41,17 @@ SECRET_CATALOG = [
     {"name": "TELEGRAM_BOT_TOKEN", "label": "Official bot token (@telegizer_bot)", "category": "telegram", "provider": "telegram", "test": "telegram", "live": False},
     {"name": "ECHO_BOT_TOKEN", "label": "Echo assistant bot token", "category": "telegram", "provider": "telegram", "test": "telegram", "live": False},
     # Payments
-    {"name": "NOWPAYMENTS_API_KEY", "label": "NOWPayments API key", "category": "payments", "provider": "nowpayments", "test": None, "live": True},
+    {"name": "NOWPAYMENTS_API_KEY", "label": "NOWPayments API key", "category": "payments", "provider": "nowpayments", "test": "nowpayments", "live": True},
     {"name": "NOWPAYMENTS_IPN_SECRET", "label": "NOWPayments IPN secret", "category": "payments", "provider": "nowpayments", "test": None, "live": True},
-    {"name": "LS_API_KEY", "label": "Lemon Squeezy API key", "category": "payments", "provider": "lemonsqueezy", "test": None, "live": True},
+    {"name": "LS_API_KEY", "label": "Lemon Squeezy API key", "category": "payments", "provider": "lemonsqueezy", "test": "lemonsqueezy", "live": True},
     {"name": "LS_WEBHOOK_SECRET", "label": "Lemon Squeezy webhook secret", "category": "payments", "provider": "lemonsqueezy", "test": None, "live": True},
     # Email
-    {"name": "RESEND_API_KEY", "label": "Resend email API key", "category": "email", "provider": "resend", "test": None, "live": True},
+    {"name": "RESEND_API_KEY", "label": "Resend email API key", "category": "email", "provider": "resend", "test": "resend", "live": True},
     {"name": "SMTP_PASSWORD", "label": "SMTP password", "category": "email", "provider": "smtp", "test": None, "live": True},
     # Social / link checks
-    {"name": "YOUTUBE_API_KEY", "label": "YouTube Data API key", "category": "social", "provider": "youtube", "test": None, "live": True},
+    {"name": "YOUTUBE_API_KEY", "label": "YouTube Data API key", "category": "social", "provider": "youtube", "test": "youtube", "live": True},
     {"name": "TWITTERAPI_IO_KEY", "label": "twitterapi.io key", "category": "social", "provider": "twitterapi", "test": None, "live": True},
-    {"name": "X_BEARER_TOKEN", "label": "X / Twitter bearer token", "category": "social", "provider": "x", "test": None, "live": True},
+    {"name": "X_BEARER_TOKEN", "label": "X / Twitter bearer token", "category": "social", "provider": "x", "test": "x", "live": True},
     # OAuth
     {"name": "GOOGLE_CLIENT_SECRET", "label": "Google OAuth client secret", "category": "oauth", "provider": "google", "test": None, "live": True},
 ]
@@ -216,6 +216,48 @@ def test_secret(name, value=None):
                 ok, message = True, f"@{body.get('result', {}).get('username')}"
             else:
                 ok, message = False, body.get("description") or f"HTTP {resp.status_code}"
+        elif kind == "nowpayments":
+            import httpx
+            resp = httpx.get("https://api.nowpayments.io/v1/balance",
+                             headers={"x-api-key": key}, timeout=8.0)
+            if resp.status_code == 200:
+                ok, message = True, "Authenticated (balance reachable)"
+            elif resp.status_code in (401, 403):
+                ok, message = False, "Invalid API key"
+            else:
+                ok, message = False, f"HTTP {resp.status_code}"
+        elif kind == "lemonsqueezy":
+            import httpx
+            resp = httpx.get("https://api.lemonsqueezy.com/v1/users/me",
+                             headers={"Authorization": f"Bearer {key}", "Accept": "application/vnd.api+json"},
+                             timeout=8.0)
+            ok = resp.status_code == 200
+            message = "Authenticated" if ok else ("Invalid API key" if resp.status_code == 401 else f"HTTP {resp.status_code}")
+        elif kind == "resend":
+            import httpx
+            resp = httpx.get("https://api.resend.com/domains",
+                             headers={"Authorization": f"Bearer {key}"}, timeout=8.0)
+            ok = resp.status_code == 200
+            message = "Authenticated" if ok else ("Invalid API key" if resp.status_code == 401 else f"HTTP {resp.status_code}")
+        elif kind == "youtube":
+            import httpx
+            resp = httpx.get("https://www.googleapis.com/youtube/v3/videos",
+                             params={"part": "id", "id": "dQw4w9WgXcQ", "key": key}, timeout=8.0)
+            if resp.status_code == 200:
+                ok, message = True, "Valid (Data API reachable)"
+            else:
+                body = {}
+                try:
+                    body = resp.json()
+                except Exception:
+                    pass
+                ok, message = False, (body.get("error", {}).get("message") or f"HTTP {resp.status_code}")[:160]
+        elif kind == "x":
+            import httpx
+            resp = httpx.get("https://api.twitter.com/2/tweets/20",
+                             headers={"Authorization": f"Bearer {key}"}, timeout=8.0)
+            ok = resp.status_code == 200
+            message = "Authenticated" if ok else ("Invalid bearer token" if resp.status_code in (401, 403) else f"HTTP {resp.status_code}")
         else:
             return False, "No automated test for this secret"
     except Exception as e:
