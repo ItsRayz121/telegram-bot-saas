@@ -629,7 +629,10 @@ export const admin = {
   getGroupEvents: (groupId, params) => api.get(`/api/admin/telegram-groups/${groupId}/events`, { params }),
   // Custom Bots
   getCustomBots: (params) => api.get('/api/admin/custom-bots', { params }),
+  getCustomBotDetail: (id) => api.get(`/api/admin/custom-bots/${id}/detail`),
   disableCustomBot: (id) => api.post(`/api/admin/custom-bots/${id}/disable`),
+  enableCustomBot: (id) => api.post(`/api/admin/custom-bots/${id}/enable`),
+  pingCustomBot: (id) => api.post(`/api/admin/custom-bots/${id}/ping`),
   // Bot Health
   getBotHealth: (params) => api.get('/api/admin/bot-health', { params }),
   pingBot: (body) => api.post('/api/admin/bot-health/ping', body),

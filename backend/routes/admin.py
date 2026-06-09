@@ -1802,6 +1802,148 @@ def admin_disable_custom_bot(bot_id):
     return jsonify({"message": "Custom bot disabled", "bot": bot.to_dict()})
 
 
+@admin_bp.route("/custom-bots/<int:bot_id>/enable", methods=["POST"])
+@require_permission(rbac.P_BOTS_MANAGE)
+@rate_limit(requests_per_minute=10)
+def admin_enable_custom_bot(bot_id):
+    bot = CustomBot.query.get(bot_id)
+    if not bot:
+        return jsonify({"error": "Bot not found"}), 404
+    bot.status = "active"
+    db.session.commit()
+    return jsonify({"message": "Custom bot enabled", "bot": bot.to_dict()})
+
+
+@admin_bp.route("/custom-bots/<int:bot_id>/ping", methods=["POST"])
+@require_permission(rbac.P_BOTS_MANAGE)
+@rate_limit(requests_per_minute=20)
+def admin_ping_custom_bot(bot_id):
+    """Active getMe reachability test for a CustomBot, rolled into BotHealthState.
+
+    Distinct from /bot-health/ping (which targets the legacy `bots` table); this
+    pings the new custom_bots row and updates the same state the 6h monitor uses,
+    so manual + scheduled checks stay consistent.
+    """
+    from ..models import BotHealthState, BotHealthEvent
+    from ..bot_health_monitor import _ping_telegram, grade_for
+    bot = CustomBot.query.get(bot_id)
+    if not bot:
+        return jsonify({"error": "Bot not found"}), 404
+    try:
+        token = bot.get_token()
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Token decrypt failed: {e}"}), 200
+
+    now = datetime.utcnow()
+    ok, detail = _ping_telegram(token) if token else (False, "no token")
+
+    state = BotHealthState.query.filter_by(scope="custom", ref=str(bot.id)).first()
+    if not state:
+        state = BotHealthState(scope="custom", ref=str(bot.id))
+        db.session.add(state)
+    state.bot_username = bot.bot_username
+    state.owner_user_id = bot.owner_user_id
+    state.last_ping_at = now
+    if ok:
+        state.consecutive_failures = 0
+        state.last_successful_ping = now
+        state.last_error = None
+    else:
+        state.consecutive_failures = (state.consecutive_failures or 0) + 1
+        state.last_failed_ping = now
+        state.last_error = detail
+        try:
+            from ..error_classification import classify_error
+            err_class, severity, _ = classify_error(detail)
+            db.session.add(BotHealthEvent(scope="custom", ref=str(bot.id), category="ping",
+                                          detail=str(detail)[:500], severity=severity,
+                                          error_class=err_class, created_at=now))
+        except Exception:
+            pass
+    state.health_grade = grade_for(state.consecutive_failures, state.last_successful_ping, now)
+    db.session.commit()
+
+    return jsonify({"ok": ok, "username": bot.bot_username, "grade": state.health_grade,
+                    "error": None if ok else detail})
+
+
+@admin_bp.route("/custom-bots/<int:bot_id>/detail", methods=["GET"])
+@require_permission(rbac.P_BOTS_VIEW)
+@rate_limit(requests_per_minute=60)
+def admin_custom_bot_detail(bot_id):
+    """Full profile for one custom bot — identity, owner, connected groups,
+    members managed, health, feature usage and config status (never the token).
+    """
+    from ..models import BotHealthState, FeatureUsageEvent
+    bot = CustomBot.query.get(bot_id)
+    if not bot:
+        return jsonify({"error": "Bot not found"}), 404
+
+    data = bot.to_dict()  # never includes the token (include_token defaults False)
+
+    # ── Owner ──────────────────────────────────────────────────────────────────
+    owner = User.query.get(bot.owner_user_id)
+    data["owner"] = {
+        "user_id": bot.owner_user_id,
+        "email": owner.email if owner else None,
+        "name": owner.full_name if owner else None,
+        "telegram_username": owner.telegram_username if owner else None,
+        "tier": owner.subscription_tier if owner else None,
+    }
+
+    # ── Connected groups + members managed ─────────────────────────────────────
+    groups = TelegramGroup.query.filter_by(linked_bot_id=bot.id).all()
+    data["connected_groups"] = [{
+        "telegram_group_id": g.telegram_group_id, "title": g.title,
+        "bot_status": g.bot_status, "member_count": g.member_count,
+    } for g in groups]
+    data["groups_count"] = len(groups)
+    data["members_managed"] = sum(g.member_count or 0 for g in groups)
+
+    # ── Health (per-bot getMe ping state + error log) ──────────────────────────
+    now = datetime.utcnow()
+    state = BotHealthState.query.filter_by(scope="custom", ref=str(bot.id)).first()
+    err_q = BotHealthEvent.query.filter(BotHealthEvent.scope == "custom", BotHealthEvent.ref == str(bot.id))
+    recent_errors = err_q.order_by(BotHealthEvent.created_at.desc()).limit(10).all()
+    data["health"] = {
+        "grade": state.health_grade if state else "unknown",
+        "consecutive_failures": state.consecutive_failures if state else 0,
+        "last_ping_at": state.last_ping_at.isoformat() if state and state.last_ping_at else None,
+        "last_successful_ping": state.last_successful_ping.isoformat() if state and state.last_successful_ping else None,
+        "last_error": state.last_error if state else None,
+        "errors_24h": err_q.filter(BotHealthEvent.created_at >= now - timedelta(days=1)).count(),
+        "errors_7d": err_q.filter(BotHealthEvent.created_at >= now - timedelta(days=7)).count(),
+        "recent_errors": [e.to_dict() for e in recent_errors],
+    }
+
+    # ── Feature usage attributed to this bot (bot_ref) ─────────────────────────
+    usage_rows = (
+        db.session.query(FeatureUsageEvent.feature, db.func.coalesce(db.func.sum(FeatureUsageEvent.count), 0))
+        .filter(FeatureUsageEvent.bot_ref == str(bot.id))
+        .group_by(FeatureUsageEvent.feature)
+        .all()
+    )
+    usage = {feat: int(c) for feat, c in usage_rows}
+    data["feature_usage"] = {
+        "by_feature": usage,
+        "total": sum(usage.values()),
+        "note": "Per-bot usage attribution is partial — group-level moderation counts appear in each group's detail.",
+    }
+
+    # ── Config / token status (status only — secret never exposed) ─────────────
+    data["config"] = {
+        "token_configured": bool(bot.bot_token_encrypted),
+        "status": bot.status,
+        "created_at": bot.created_at.isoformat() if bot.created_at else None,
+        "updated_at": bot.updated_at.isoformat() if bot.updated_at else None,
+    }
+
+    # Revenue is not attributed per-bot (bots aren't sold individually).
+    data["revenue_not_tracked"] = True
+
+    return jsonify({"bot": data})
+
+
 # ── Directory Moderation ───────────────────────────────────────────────────────
 
 @admin_bp.route("/directory/pending", methods=["GET"])
