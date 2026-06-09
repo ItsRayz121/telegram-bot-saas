@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
-  Box, AppBar, Toolbar, Typography, IconButton, Card, CardContent,
+  Box, Typography, IconButton, Card, CardContent,
   Grid, CircularProgress, TextField, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Paper, Chip, Button, Dialog,
   DialogTitle, DialogContent, DialogActions, MenuItem, Select,
-  FormControl, InputLabel, Pagination, InputAdornment, Tabs, Tab,
+  FormControl, InputLabel, Pagination, InputAdornment,
   Alert, Tooltip, LinearProgress, Stack, Divider, Switch, FormControlLabel,
   Breadcrumbs, Link as MuiLink,
 } from '@mui/material';
 import {
-  ArrowBack, Search, Block, CheckCircle, Delete, Groups, SmartToy,
+  Search, Block, CheckCircle, Delete, Groups, SmartToy,
   LinkOff, Lock, Warning, TrendingUp, People, AttachMoney,
   History, FolderOpen, Campaign, VerifiedUser, Refresh,
   CheckCircleOutline, Cancel, Circle, Flag,
@@ -17,7 +17,8 @@ import {
   MonitorHeart, NetworkCheck, Tune, Key, Psychology, AttachMoney as MoneyIcon,
   Gavel, Dns, Insights, Verified, Timeline, InfoOutlined,
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
+import { ADMIN_CATEGORIES, findAdminItem } from '../config/adminNav';
 import { toast } from 'react-toastify';
 import { admin } from '../services/api';
 import { LineChart, Line, XAxis, YAxis, Tooltip as ReTooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
@@ -4782,6 +4783,7 @@ function _initialPerms() {
 
 export default function AdminPanel() {
   const navigate = useNavigate();
+  const { tab: tabParam } = useParams();
   const [perms, setPerms] = useState(_initialPerms);
   const [me, setMe] = useState(null);
 
@@ -4799,10 +4801,9 @@ export default function AdminPanel() {
     });
   }, [navigate]);
 
-  const [activeTab, setActiveTab] = useState(0);
-  // Drill-down navigation from dashboard cards: a pending tab key + a filter to
-  // hand the destination tab (e.g. clicking "Pro" → Users tab pre-filtered).
-  const [pendingTabKey, setPendingTabKey] = useState(null);
+  // Drill-down navigation from dashboard cards hands a filter to the destination
+  // section (e.g. clicking "Pro" → Users section pre-filtered). The active
+  // section itself is driven by the URL (/admin/:category/:tab).
   const [navFilter, setNavFilter] = useState(null);
   const [stats, setStats] = useState(null);
   const [botStats, setBotStats] = useState(null);
@@ -4853,8 +4854,9 @@ export default function AdminPanel() {
   // the actual index resolution happens in an effect once visibleTabs is known.
   const goToTab = useCallback((key, filter) => {
     setNavFilter({ key, filter: filter || {}, nonce: Date.now() });
-    setPendingTabKey(key);
-  }, []);
+    const item = findAdminItem(key);
+    navigate(item ? `/admin/${item.category}/${item.key}` : '/admin');
+  }, [navigate]);
 
   // Tab definitions, each gated by an RBAC permission. Tabs the current admin
   // role cannot access are hidden entirely (and the API also enforces it).
@@ -4910,105 +4912,87 @@ export default function AdminPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   ]), [stats, botStats, revenue, health, featureAdoption, dashLoading, fetchDashboard, handleAdminError, me, navFilter, goToTab, can]);
 
+  // Renderer + metadata lookup by section key.
+  const tabByKey = useMemo(() => {
+    const m = {};
+    tabDefs.forEach(t => { m[t.key] = t; });
+    return m;
+  }, [tabDefs]);
+
   const visibleTabs = useMemo(() => tabDefs.filter(t => can(t.permission)), [tabDefs, can]);
 
-  // Resolve a pending drill-down once we know which tabs are visible. If the
-  // current role can't see the target tab, tell the user instead of silently
-  // doing nothing.
-  useEffect(() => {
-    if (!pendingTabKey) return;
-    const idx = visibleTabs.findIndex(t => t.key === pendingTabKey);
-    if (idx >= 0) setActiveTab(idx);
-    else toast.info("You don't have access to that section");
-    setPendingTabKey(null);
-  }, [pendingTabKey, visibleTabs]);
+  // Resolve the active section from the URL, falling back to the first section
+  // the current role can access.
+  const firstVisibleKey = visibleTabs[0]?.key || null;
+  const requestedAllowed = tabParam && tabByKey[tabParam] && can(tabByKey[tabParam].permission);
+  const activeKey = requestedAllowed ? tabParam : firstVisibleKey;
+  const activeDef = activeKey ? tabByKey[activeKey] : null;
+  const activeItem = activeKey ? findAdminItem(activeKey) : null;
+  const activeCategoryLabel = activeItem
+    ? (ADMIN_CATEGORIES.find(c => c.slug === activeItem.category)?.label || 'Admin')
+    : 'Admin';
 
-  // Keep activeTab in range when the visible set changes.
+  // Canonicalise the URL: bare /admin (or an unknown/inaccessible section) →
+  // the resolved section's path, so the sidebar highlights correctly and the
+  // dashboard + its drill-downs share the /admin/:category/:tab route (keeping
+  // navFilter state alive across drill-down navigation).
   useEffect(() => {
-    if (activeTab >= visibleTabs.length) setActiveTab(0);
-  }, [visibleTabs.length, activeTab]);
+    if (!activeKey) return;
+    const item = findAdminItem(activeKey);
+    if (!item) return;
+    if (!tabParam || !requestedAllowed) {
+      navigate(`/admin/${item.category}/${item.key}`, { replace: true });
+    }
+  }, [activeKey, tabParam, requestedAllowed, navigate]);
 
-  // Keyboard shortcuts: 1–9 to switch visible tabs, R to refresh dashboard
+  // Keyboard: R refreshes the dashboard.
   useEffect(() => {
     const handler = (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-      const num = parseInt(e.key, 10);
-      if (num >= 1 && num <= visibleTabs.length) { setActiveTab(num - 1); return; }
       if (e.key === 'r' || e.key === 'R') { fetchDashboard(); toast.info('Dashboard refreshed'); }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [fetchDashboard, visibleTabs.length]);
-
-  const activeRole = me?.admin_role;
+  }, [fetchDashboard]);
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
-      <AppBar position="sticky" elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
-        <Toolbar>
-          <IconButton edge="start" onClick={() => navigate('/dashboard')} sx={{ mr: 1 }}>
-            <ArrowBack />
-          </IconButton>
-          <Typography variant="h6" fontWeight={600} flex={1}>Admin Panel</Typography>
-          {activeRole && (
-            <Chip label={(ROLE_LABELS[activeRole] || 'ADMIN').toUpperCase()} size="small"
-              color={ROLE_COLORS[activeRole] || 'error'} sx={{ fontWeight: 700 }} />
-          )}
-        </Toolbar>
-      </AppBar>
+    <Box sx={{ maxWidth: 1400, mx: 'auto', p: { xs: 2, md: 3 } }}>
 
-      <Box sx={{ maxWidth: 1400, mx: 'auto', p: { xs: 2, md: 3 } }}>
+      {accessError && (
+        <Alert
+          severity="error" icon={<Lock />} sx={{ mb: 3, borderRadius: 2 }}
+          action={
+            <Button color="inherit" size="small" onClick={() => { accessErrorShown.current = false; setAccessError(null); fetchDashboard(); }}>
+              Retry
+            </Button>
+          }
+        >
+          <Typography variant="body2" fontWeight={700}>Admin Access Denied</Typography>
+          <Typography variant="caption">{accessError}</Typography>
+        </Alert>
+      )}
 
-        {accessError && (
-          <Alert
-            severity="error" icon={<Lock />} sx={{ mb: 3, borderRadius: 2 }}
-            action={
-              <Button color="inherit" size="small" onClick={() => { accessErrorShown.current = false; setAccessError(null); fetchDashboard(); }}>
-                Retry
-              </Button>
-            }
-          >
-            <Typography variant="body2" fontWeight={700}>Admin Access Denied</Typography>
-            <Typography variant="caption">{accessError}</Typography>
-          </Alert>
-        )}
+      {/* Breadcrumbs */}
+      <Breadcrumbs sx={{ mb: 2 }} aria-label="breadcrumb">
+        <MuiLink component="button" underline="hover" color="inherit" onClick={() => navigate('/dashboard')}>
+          Dashboard
+        </MuiLink>
+        <Typography color="text.primary" fontWeight={600}>{activeCategoryLabel}</Typography>
+        <Typography color="text.secondary">{activeDef?.label || '—'}</Typography>
+      </Breadcrumbs>
 
-        {/* Breadcrumbs */}
-        <Breadcrumbs sx={{ mb: 2 }} aria-label="breadcrumb">
-          <MuiLink component="button" underline="hover" color="inherit" onClick={() => navigate('/dashboard')}>
-            Dashboard
-          </MuiLink>
-          <Typography color="text.primary" fontWeight={600}>Admin</Typography>
-          <Typography color="text.secondary">{visibleTabs[Math.min(activeTab, Math.max(0, visibleTabs.length - 1))]?.label || '—'}</Typography>
-        </Breadcrumbs>
+      {perms === null ? (
+        <Box display="flex" justifyContent="center" py={6}><CircularProgress /></Box>
+      ) : visibleTabs.length === 0 ? (
+        <Alert severity="info" sx={{ borderRadius: 2 }}>
+          Your admin role has no sections enabled. Contact a Super Admin if you believe this is a mistake.
+        </Alert>
+      ) : !activeDef ? (
+        <Alert severity="info" sx={{ borderRadius: 2 }}>Select a section from the sidebar.</Alert>
+      ) : (
+        <Box pt={1}>{activeDef.render?.()}</Box>
+      )}
 
-        {/* Tab navigation — only tabs the current role can access are shown */}
-        <Paper sx={{ mb: 3 }}>
-          <Tabs
-            value={Math.min(activeTab, Math.max(0, visibleTabs.length - 1))}
-            onChange={(_, v) => { setNavFilter(null); setActiveTab(v); }}
-            variant="scrollable"
-            scrollButtons="auto"
-            allowScrollButtonsMobile
-            sx={{ borderBottom: 1, borderColor: 'divider' }}
-          >
-            {visibleTabs.map((t) => (
-              <Tab key={t.key} icon={t.icon} iconPosition="start" label={t.label} sx={{ minHeight: 48, fontSize: 13 }} />
-            ))}
-          </Tabs>
-        </Paper>
-
-        {perms === null ? (
-          <Box display="flex" justifyContent="center" py={6}><CircularProgress /></Box>
-        ) : visibleTabs.length === 0 ? (
-          <Alert severity="info" sx={{ borderRadius: 2 }}>
-            Your admin role has no sections enabled. Contact a Super Admin if you believe this is a mistake.
-          </Alert>
-        ) : (
-          <Box pt={3}>{visibleTabs[activeTab]?.render?.()}</Box>
-        )}
-
-      </Box>
     </Box>
   );
 }

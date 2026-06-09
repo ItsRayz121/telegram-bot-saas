@@ -11,6 +11,7 @@ import PWAInstallBanner from './components/PWAInstallBanner';
 import CookieConsent from './components/CookieConsent';
 import DebugPanel from './components/DebugPanel';
 import AppLayout from './layouts/AppLayout';
+import AdminLayout from './layouts/AdminLayout';
 import { API_CONFIG_ERROR } from './services/api';
 import { isTelegramMiniApp } from './utils/telegram';
 
@@ -188,7 +189,7 @@ function AdminRoute({ children }) {
       </Box>
     );
   }
-  return <AppLayout>{children}</AppLayout>;
+  return <AdminLayout>{children}</AdminLayout>;
 }
 
 export default function App() {
@@ -315,6 +316,8 @@ export default function App() {
             <Route path="/admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />
             <Route path="/admin/users/:userId" element={<AdminRoute><AdminUserDetail /></AdminRoute>} />
             <Route path="/admin/groups/:groupId" element={<AdminRoute><AdminGroupDetail /></AdminRoute>} />
+            {/* Category → section routing (sidebar-driven). Static detail routes above win by specificity. */}
+            <Route path="/admin/:category/:tab" element={<AdminRoute><AdminPanel /></AdminRoute>} />
 
             {/* ── 404 ───────────────────────────────────────────────────────── */}
             <Route path="*" element={<NotFound />} />
