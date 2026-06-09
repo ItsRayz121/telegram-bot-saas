@@ -1313,7 +1313,8 @@ def admin_ai_selftest():
     """Actually exercise each AI path with the configured platform key and report
     Working / Broken / Not Connected. This turns the static availability audit
     into a real end-to-end test runnable in any environment that has a key."""
-    platform_key = getattr(Config, "PLATFORM_OPENROUTER_API_KEY", None)
+    from .. import secret_vault as _sv
+    platform_key = _sv.get_secret("PLATFORM_OPENROUTER_API_KEY")
     features = [
         "Chat / Echo AI (replies, digests, summaries)",
         "AI moderation (relevance / anti-promo)",
@@ -2344,3 +2345,76 @@ def update_feature_flag(key):
     ))
     db.session.commit()
     return jsonify({"message": f"Feature '{key}' {'enabled' if new else 'disabled'}.", **pc.admin_config()})
+
+
+# ── Secret & API-Key Vault (Super Admin only) ──────────────────────────────────
+
+@admin_bp.route("/secrets", methods=["GET"])
+@require_permission(rbac.P_SECRETS_MANAGE)
+@rate_limit(requests_per_minute=30)
+def list_secrets():
+    """Masked status of every managed platform secret. Never returns plaintext."""
+    from .. import secret_vault as sv
+    return jsonify({"secrets": sv.status()})
+
+
+@admin_bp.route("/secrets/<name>", methods=["PUT"])
+@require_permission(rbac.P_SECRETS_MANAGE)
+@rate_limit(requests_per_minute=20)
+def set_secret(name):
+    """Set/rotate a secret. Body: {"value": "..."}. The value is encrypted at rest
+    and never echoed back or written to the audit log (only its masked hint)."""
+    from .. import secret_vault as sv
+    me = _get_current_user()
+    if name not in sv.SECRET_NAMES:
+        return jsonify({"error": "Unknown secret"}), 404
+    data = request.get_json(silent=True) or {}
+    value = data.get("value")
+    try:
+        masked = sv.set_secret(name, value, user_id=me.id)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    # Audit WITHOUT the secret value — only the masked hint is recorded.
+    db.session.add(AdminAuditLog(
+        admin_id=me.id, action="set_platform_secret", method="PUT",
+        path=f"/api/admin/secrets/{name}", ip_address=request.remote_addr,
+        severity="critical", target_type="secret", target_id=name,
+        old_value=None, new_value=f"set ({masked})",
+    ))
+    db.session.commit()
+    _log.info("[ADMIN] %s set platform secret %s", me.email, name)
+    return jsonify({"message": f"{name} updated.", "secrets": sv.status()})
+
+
+@admin_bp.route("/secrets/<name>", methods=["DELETE"])
+@require_permission(rbac.P_SECRETS_MANAGE)
+@rate_limit(requests_per_minute=20)
+def delete_secret(name):
+    """Clear the DB override so the secret falls back to the environment value."""
+    from .. import secret_vault as sv
+    me = _get_current_user()
+    if name not in sv.SECRET_NAMES:
+        return jsonify({"error": "Unknown secret"}), 404
+    sv.clear_secret(name, user_id=me.id)
+    db.session.add(AdminAuditLog(
+        admin_id=me.id, action="clear_platform_secret", method="DELETE",
+        path=f"/api/admin/secrets/{name}", ip_address=request.remote_addr,
+        severity="critical", target_type="secret", target_id=name,
+        old_value="db_override", new_value="env_fallback",
+    ))
+    db.session.commit()
+    return jsonify({"message": f"{name} cleared — using environment value.", "secrets": sv.status()})
+
+
+@admin_bp.route("/secrets/<name>/test", methods=["POST"])
+@require_permission(rbac.P_SECRETS_MANAGE)
+@rate_limit(requests_per_minute=10)
+def test_secret(name):
+    """Test connectivity for a secret. Body may include {"value": "..."} to test a
+    candidate before saving; otherwise the stored/resolved value is used."""
+    from .. import secret_vault as sv
+    if name not in sv.SECRET_NAMES:
+        return jsonify({"error": "Unknown secret"}), 404
+    data = request.get_json(silent=True) or {}
+    ok, message = sv.test_secret(name, value=data.get("value"))
+    return jsonify({"ok": ok, "message": message})

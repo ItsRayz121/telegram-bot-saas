@@ -45,12 +45,18 @@ def generate_embedding(text: str, api_key: str) -> Optional[list[float]]:
 
 
 def _get_platform_openai_key() -> Optional[str]:
-    """Return the platform OpenAI key if configured, else None."""
+    """Return the platform OpenAI key if configured, else None.
+    Resolved DB-first (admin vault) with env fallback so it can be rotated
+    without a redeploy."""
     try:
-        from ..config import Config
-        return getattr(Config, "OPENAI_API_KEY", None) or None
+        from .. import secret_vault as sv
+        return sv.get_secret("OPENAI_API_KEY") or None
     except Exception:
-        return None
+        try:
+            from ..config import Config
+            return getattr(Config, "OPENAI_API_KEY", None) or None
+        except Exception:
+            return None
 
 
 def embed_note_background(note_id: str, content: str) -> None:

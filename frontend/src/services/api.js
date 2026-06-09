@@ -678,6 +678,11 @@ export const admin = {
   getPlatformConfig: () => api.get('/api/admin/platform-config'),
   updatePlatformSettings: (settings) => api.put('/api/admin/platform-config/settings', { settings }),
   updateFeatureFlag: (key, enabled) => api.put(`/api/admin/feature-flags/${key}`, { enabled }),
+  // Secret & API-Key Vault (Super Admin only) — values are write-only & masked
+  getSecrets: () => api.get('/api/admin/secrets'),
+  setSecret: (name, value) => api.put(`/api/admin/secrets/${name}`, { value }),
+  clearSecret: (name) => api.delete(`/api/admin/secrets/${name}`),
+  testSecret: (name, value) => api.post(`/api/admin/secrets/${name}/test`, value ? { value } : {}),
 };
 
 // Public, unauthenticated platform config (branding, links, maintenance status)

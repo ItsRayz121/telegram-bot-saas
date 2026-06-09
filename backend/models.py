@@ -2890,6 +2890,37 @@ class PlatformSetting(db.Model):
         }
 
 
+class PlatformSecret(db.Model):
+    """A platform-level secret/API key, editable from the admin panel and stored
+    Fernet-encrypted (reusing utils.encryption). Resolved DB-first with env
+    fallback via backend/secret_vault.py. The plaintext is NEVER returned by the
+    API — only a masked hint (first4****last4). ``name`` matches the Config attr."""
+    __tablename__ = "platform_secrets"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    value_encrypted = db.Column(db.Text, nullable=True)
+    masked_hint = db.Column(db.String(40), nullable=True)   # safe-to-display, e.g. "sk-1****ab2"
+    provider = db.Column(db.String(40), nullable=True)
+    category = db.Column(db.String(40), nullable=True)
+    last_test_ok = db.Column(db.Boolean, nullable=True)
+    last_tested_at = db.Column(db.DateTime, nullable=True)
+    updated_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    def get_value(self):
+        """Decrypt and return the stored secret, or None."""
+        if not self.value_encrypted:
+            return None
+        from .utils.encryption import decrypt_value, DecryptionError
+        try:
+            return decrypt_value(self.value_encrypted)
+        except DecryptionError:
+            import logging
+            logging.getLogger(__name__).error("PlatformSecret %s decrypt failed", self.name)
+            return None
+
+
 class FeatureFlag(db.Model):
     """A platform-wide feature toggle / kill-switch, editable from the admin panel.
     Consumed via platform_config.is_feature_enabled(key)."""

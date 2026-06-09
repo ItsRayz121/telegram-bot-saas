@@ -217,10 +217,14 @@ def get_workspace_ai_key(user) -> dict:
                 "Quota resets in 24 hours or add your own API key in AI Settings."
             )
 
-    if _cfg.Config.PLATFORM_OPENROUTER_API_KEY:
+    # Resolve the platform key DB-first (admin vault) with env fallback so it can
+    # be rotated from the admin panel without a redeploy.
+    from .. import secret_vault as _sv
+    _platform_key = _sv.get_secret("PLATFORM_OPENROUTER_API_KEY")
+    if _platform_key:
         return {
             "provider": "openrouter",
-            "api_key": _cfg.Config.PLATFORM_OPENROUTER_API_KEY,
+            "api_key": _platform_key,
             "model": "openai/gpt-4o-mini",
             "base_url": "https://openrouter.ai/api/v1",
             "source": "platform",

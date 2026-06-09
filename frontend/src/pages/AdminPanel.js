@@ -13,7 +13,7 @@ import {
   History, FolderOpen, Campaign, VerifiedUser, Refresh,
   CheckCircleOutline, Cancel, Circle, Flag,
   Security, AccountTree, TrendingDown, Payment, FileDownload,
-  MonitorHeart, NetworkCheck, Tune,
+  MonitorHeart, NetworkCheck, Tune, Key,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -2498,6 +2498,216 @@ function DiagnosticsTab({ onAdminError }) {
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// TAB — SECRET & API-KEY VAULT (Super Admin only)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const SECRET_CATEGORY_LABELS = {
+  ai: 'AI Providers', telegram: 'Telegram Bots', payments: 'Payments',
+  email: 'Email', social: 'Social / Link Checks', oauth: 'OAuth',
+};
+const SECRET_CATEGORY_ORDER = ['ai', 'telegram', 'payments', 'email', 'social', 'oauth'];
+
+function SecretsTab({ onAdminError }) {
+  const [secrets, setSecrets] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(null);   // secret object being set
+  const [value, setValue] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [testResult, setTestResult] = useState(null); // { ok, message }
+  const [confirmClear, setConfirmClear] = useState(null);
+  const [testingRow, setTestingRow] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await admin.getSecrets();
+      setSecrets(data.secrets || []);
+    } catch (e) { onAdminError?.(e, 'Failed to load secrets'); }
+    finally { setLoading(false); }
+  }, [onAdminError]);
+  useEffect(() => { load(); }, [load]);
+
+  const openEdit = (s) => { setEditing(s); setValue(''); setTestResult(null); };
+
+  const saveSecret = async () => {
+    if (!value.trim()) return;
+    setBusy(true);
+    try {
+      const { data } = await admin.setSecret(editing.name, value.trim());
+      setSecrets(data.secrets || secrets);
+      toast.success(`${editing.label} updated`);
+      setEditing(null); setValue('');
+    } catch (e) { onAdminError?.(e, 'Failed to save secret'); }
+    finally { setBusy(false); }
+  };
+
+  const testInDialog = async () => {
+    setBusy(true); setTestResult(null);
+    try {
+      const { data } = await admin.testSecret(editing.name, value.trim() || undefined);
+      setTestResult(data);
+    } catch (e) { setTestResult({ ok: false, message: 'Test request failed' }); }
+    finally { setBusy(false); }
+  };
+
+  const testRow = async (s) => {
+    setTestingRow(s.name);
+    try {
+      const { data } = await admin.testSecret(s.name);
+      toast[data.ok ? 'success' : 'error'](`${s.label}: ${data.message}`);
+      load();
+    } catch (e) { onAdminError?.(e, 'Test failed'); }
+    finally { setTestingRow(null); }
+  };
+
+  const doClear = async () => {
+    setBusy(true);
+    try {
+      const { data } = await admin.clearSecret(confirmClear.name);
+      setSecrets(data.secrets || secrets);
+      toast.success(`${confirmClear.label} cleared — using environment value`);
+      setConfirmClear(null);
+    } catch (e) { onAdminError?.(e, 'Failed to clear secret'); }
+    finally { setBusy(false); }
+  };
+
+  if (loading || !secrets) {
+    return <Box display="flex" justifyContent="center" py={6}><CircularProgress /></Box>;
+  }
+
+  const byCat = {};
+  secrets.forEach(s => { (byCat[s.category] = byCat[s.category] || []).push(s); });
+  const cats = SECRET_CATEGORY_ORDER.filter(c => byCat[c]).concat(Object.keys(byCat).filter(c => !SECRET_CATEGORY_ORDER.includes(c)));
+
+  const sourceChip = (s) => {
+    if (s.source === 'db') return <Chip label="DB override" size="small" color="primary" />;
+    if (s.source === 'env') return <Chip label="env var" size="small" color="default" />;
+    return <Chip label="not set" size="small" color="warning" variant="outlined" />;
+  };
+
+  return (
+    <Box>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2} flexWrap="wrap" gap={1}>
+        <Box>
+          <Typography variant="h6" fontWeight={700}>Secrets &amp; API Keys</Typography>
+          <Typography variant="caption" color="text.secondary">
+            Manage platform keys without redeploying. Stored encrypted; values are write-only and never displayed.
+          </Typography>
+        </Box>
+        <Button size="small" startIcon={<Refresh />} onClick={load}>Refresh</Button>
+      </Stack>
+
+      <Alert severity="warning" sx={{ mb: 2, borderRadius: 2 }}>
+        Setting a value here overrides the environment variable for that key. Keys marked <b>applies on restart</b>
+        &nbsp;(bot tokens) take effect after the next deploy/restart; the rest apply within ~30s.
+      </Alert>
+
+      <Stack spacing={2}>
+        {cats.map(cat => (
+          <Card key={cat}>
+            <CardContent>
+              <Typography variant="subtitle1" fontWeight={700} mb={1}>{SECRET_CATEGORY_LABELS[cat] || cat}</Typography>
+              <TableContainer>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Key</TableCell>
+                      <TableCell>Value</TableCell>
+                      <TableCell>Source</TableCell>
+                      <TableCell>Last test</TableCell>
+                      <TableCell align="right">Actions</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {byCat[cat].map(s => (
+                      <TableRow key={s.name} hover>
+                        <TableCell>
+                          <Typography variant="body2" fontWeight={600}>{s.label}</Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
+                            {s.name}{!s.live && ' · applies on restart'}
+                          </Typography>
+                        </TableCell>
+                        <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{s.masked || '—'}</TableCell>
+                        <TableCell>{sourceChip(s)}</TableCell>
+                        <TableCell>
+                          {s.last_test_ok == null ? <Typography variant="caption" color="text.disabled">—</Typography>
+                            : s.last_test_ok ? <CheckCircle color="success" fontSize="small" />
+                            : <Cancel color="error" fontSize="small" />}
+                        </TableCell>
+                        <TableCell align="right">
+                          <Stack direction="row" gap={0.5} justifyContent="flex-end">
+                            {s.testable && (
+                              <Button size="small" disabled={testingRow === s.name || !s.is_set} onClick={() => testRow(s)}>
+                                {testingRow === s.name ? '…' : 'Test'}
+                              </Button>
+                            )}
+                            <Button size="small" variant="outlined" startIcon={<Key fontSize="small" />} onClick={() => openEdit(s)}>
+                              {s.source === 'db' ? 'Rotate' : 'Set'}
+                            </Button>
+                            {s.source === 'db' && (
+                              <Tooltip title="Clear DB override (revert to env var)">
+                                <span><IconButton size="small" color="error" onClick={() => setConfirmClear(s)}><Delete fontSize="small" /></IconButton></span>
+                              </Tooltip>
+                            )}
+                          </Stack>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </CardContent>
+          </Card>
+        ))}
+      </Stack>
+
+      {/* Set / rotate dialog */}
+      <Dialog open={!!editing} onClose={() => !busy && setEditing(null)} fullWidth maxWidth="sm">
+        <DialogTitle>{editing?.source === 'db' ? 'Rotate' : 'Set'} — {editing?.label}</DialogTitle>
+        <DialogContent>
+          <Typography variant="caption" color="text.secondary">
+            The value is encrypted at rest and never shown again. Leave the panel without saving to cancel.
+          </Typography>
+          <TextField
+            type="password" fullWidth autoFocus margin="normal" label="New value"
+            value={value} onChange={e => { setValue(e.target.value); setTestResult(null); }}
+            placeholder="Paste the key/token"
+          />
+          {testResult && (
+            <Alert severity={testResult.ok ? 'success' : 'error'} sx={{ mt: 1 }}>{testResult.message}</Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditing(null)} disabled={busy}>Cancel</Button>
+          {editing?.testable && (
+            <Button onClick={testInDialog} disabled={busy || !value.trim()}>Test</Button>
+          )}
+          <Button variant="contained" onClick={saveSecret} disabled={busy || !value.trim()}>
+            {busy ? 'Saving…' : 'Save'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Clear confirm */}
+      <Dialog open={!!confirmClear} onClose={() => !busy && setConfirmClear(null)}>
+        <DialogTitle>Clear {confirmClear?.label}?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            This removes the stored override. The key will fall back to its environment variable
+            (or be unset if there is none). Continue?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmClear(null)} disabled={busy}>Cancel</Button>
+          <Button color="error" variant="contained" onClick={doClear} disabled={busy}>Clear</Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // TAB — PLATFORM CONFIGURATION & FEATURE FLAGS (Super Admin only)
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -2949,6 +3159,8 @@ export default function AdminPanel() {
       render: () => <DiagnosticsTab onAdminError={handleAdminError} /> },
     { key: 'config', label: 'Configuration', icon: <Tune fontSize="small" />, permission: 'config.manage',
       render: () => <ConfigurationTab onAdminError={handleAdminError} /> },
+    { key: 'secrets', label: 'Secrets & Keys', icon: <Key fontSize="small" />, permission: 'secrets.manage',
+      render: () => <SecretsTab onAdminError={handleAdminError} /> },
     { key: 'roles', label: 'Roles & Access', icon: <Security fontSize="small" />, permission: 'roles.manage',
       render: () => <RolesTab onAdminError={handleAdminError} currentUserId={me?.id} /> },
     // eslint-disable-next-line react-hooks/exhaustive-deps

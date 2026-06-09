@@ -162,14 +162,19 @@ def _deep_link_check(url, platform):
         elif "x.com" in low or "twitter.com" in low:
             platform = "x"
 
-    if platform == "youtube" and Config.YOUTUBE_API_KEY:
-        return _cached_check(url, lambda: _deep_check_youtube(url, Config.YOUTUBE_API_KEY))
+    # Resolve link-check keys DB-first (admin vault) with env fallback.
+    from . import secret_vault as _sv
+    _yt_key = _sv.get_secret("YOUTUBE_API_KEY")
+    _twio_key = _sv.get_secret("TWITTERAPI_IO_KEY")
+    _x_token = _sv.get_secret("X_BEARER_TOKEN")
+    if platform == "youtube" and _yt_key:
+        return _cached_check(url, lambda: _deep_check_youtube(url, _yt_key))
     if platform == "x":
         # Prefer the low-cost twitterapi.io provider; fall back to official X v2.
-        if Config.TWITTERAPI_IO_KEY:
-            return _cached_check(url, lambda: _deep_check_x_twitterapi(url, Config.TWITTERAPI_IO_KEY))
-        if Config.X_BEARER_TOKEN:
-            return _cached_check(url, lambda: _deep_check_x(url, Config.X_BEARER_TOKEN))
+        if _twio_key:
+            return _cached_check(url, lambda: _deep_check_x_twitterapi(url, _twio_key))
+        if _x_token:
+            return _cached_check(url, lambda: _deep_check_x(url, _x_token))
     return True, None
 
 
