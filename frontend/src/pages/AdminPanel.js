@@ -14,7 +14,7 @@ import {
   CheckCircleOutline, Cancel, Circle, Flag,
   Security, AccountTree, TrendingDown, Payment, FileDownload,
   MonitorHeart, NetworkCheck, Tune, Key, Psychology, AttachMoney as MoneyIcon,
-  Gavel, Dns, Insights,
+  Gavel, Dns, Insights, Verified,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -4284,6 +4284,97 @@ function RolesTab({ onAdminError, currentUserId }) {
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// TAB — PROOF METRICS (public-stats source)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function ProofMetricsTab({ onAdminError, canManage }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [publicKeys, setPublicKeys] = useState(new Set());
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await admin.getProofMetrics();
+      setData(res.data);
+      setPublicKeys(new Set((res.data.metrics || []).filter(m => m.public).map(m => m.key)));
+      setDirty(false);
+    } catch (err) { onAdminError(err, 'Failed to load proof metrics'); }
+    finally { setLoading(false); }
+  }, [onAdminError]);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const toggle = (key) => {
+    if (!canManage) return;
+    setPublicKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+    setDirty(true);
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await admin.updateProofPublic(Array.from(publicKeys));
+      toast.success('Public proof metrics updated');
+      fetchData();
+    } catch (err) { toast.error(err.response?.data?.error || 'Failed to save'); }
+    finally { setSaving(false); }
+  };
+
+  if (loading) return <Box display="flex" justifyContent="center" mt={4}><CircularProgress /></Box>;
+
+  return (
+    <Box>
+      <Stack direction="row" spacing={1} mb={2} alignItems="center" flexWrap="wrap" useFlexGap>
+        <Typography variant="body2" color="text.secondary">
+          Real platform metrics from the database/event logs. Toggle which are safe to publish on the landing page.
+        </Typography>
+        <Box flex={1} />
+        <Tooltip title="Refresh"><IconButton size="small" onClick={fetchData}><Refresh fontSize="small" /></IconButton></Tooltip>
+        {canManage && (
+          <Button size="small" variant="contained" disabled={!dirty || saving} onClick={save}>
+            {saving ? <CircularProgress size={16} /> : 'Save public flags'}
+          </Button>
+        )}
+      </Stack>
+
+      <Grid container spacing={2} mb={2}>
+        {(data?.metrics || []).map((m) => (
+          <Grid item xs={6} sm={4} md={3} key={m.key}>
+            <Card sx={{ height: '100%', position: 'relative', borderColor: publicKeys.has(m.key) ? 'success.main' : 'divider' }}>
+              <CardContent sx={{ pb: '12px !important' }}>
+                <Typography variant="h5" fontWeight={700}>{(m.value ?? 0).toLocaleString()}</Typography>
+                <Typography variant="caption" color="text.secondary" display="block">{m.label}</Typography>
+                <FormControlLabel
+                  sx={{ mt: 0.5, ml: 0 }}
+                  control={<Switch size="small" checked={publicKeys.has(m.key)} onChange={() => toggle(m.key)} disabled={!canManage} />}
+                  label={<Typography variant="caption" color={publicKeys.has(m.key) ? 'success.main' : 'text.disabled'}>{publicKeys.has(m.key) ? 'Public' : 'Private'}</Typography>}
+                />
+              </CardContent>
+            </Card>
+          </Grid>
+        ))}
+      </Grid>
+
+      <Alert severity="info">
+        Public metrics are served unauthenticated at <code>/api/platform/proof</code> for the landing page.
+        {!canManage && ' Only a Super Admin can change which metrics are public.'}
+      </Alert>
+      <Typography variant="caption" color="text.disabled" display="block" mt={1}>
+        Generated {data?.generated_at ? fmtDate(data.generated_at) : '—'}.
+      </Typography>
+    </Box>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // TAB — FEATURE USAGE (Telegizer Bot / Echo)
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -4528,6 +4619,8 @@ export default function AdminPanel() {
   const tabDefs = useMemo(() => ([
     { key: 'dashboard', label: 'Dashboard', icon: <TrendingUp fontSize="small" />, permission: 'analytics.view',
       render: () => <DashboardTab stats={stats} botStats={botStats} revenue={revenue} health={health} featureAdoption={featureAdoption} loading={dashLoading} onRefresh={fetchDashboard} onNavigate={goToTab} /> },
+    { key: 'proof', label: 'Proof Metrics', icon: <Verified fontSize="small" />, permission: 'analytics.view',
+      render: () => <ProofMetricsTab onAdminError={handleAdminError} canManage={can('config.manage')} /> },
     { key: 'users', label: 'Users', icon: <People fontSize="small" />, permission: 'users.view',
       render: () => <UsersTab onAdminError={handleAdminError} initialFilter={navFilter?.key === 'users' ? navFilter : null} /> },
     { key: 'groups', label: 'TG Groups', icon: <Groups fontSize="small" />, permission: 'groups.view',
@@ -4571,7 +4664,7 @@ export default function AdminPanel() {
     { key: 'roles', label: 'Roles & Access', icon: <Security fontSize="small" />, permission: 'roles.manage',
       render: () => <RolesTab onAdminError={handleAdminError} currentUserId={me?.id} /> },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  ]), [stats, botStats, revenue, health, featureAdoption, dashLoading, fetchDashboard, handleAdminError, me, navFilter, goToTab]);
+  ]), [stats, botStats, revenue, health, featureAdoption, dashLoading, fetchDashboard, handleAdminError, me, navFilter, goToTab, can]);
 
   const visibleTabs = useMemo(() => tabDefs.filter(t => can(t.permission)), [tabDefs, can]);
 

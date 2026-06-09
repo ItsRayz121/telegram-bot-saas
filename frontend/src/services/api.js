@@ -661,6 +661,8 @@ export const admin = {
   // Feature Adoption
   getFeatureAdoption: () => api.get('/api/admin/feature-adoption'),
   getFeatureUsage: (view) => api.get('/api/admin/feature-usage', { params: { view } }),
+  getProofMetrics: () => api.get('/api/admin/proof-metrics'),
+  updateProofPublic: (keys) => api.put('/api/admin/proof-metrics/public', { keys }),
   // Fraud Detection
   getFraudClusters: () => api.get('/api/admin/fraud/clusters'),
   getFraudReferralFarming: () => api.get('/api/admin/fraud/referral-farming'),

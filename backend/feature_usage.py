@@ -313,6 +313,114 @@ def usage_overview(scopes) -> dict:
     }
 
 
+# Proof metrics that are safe to expose publicly by default (no internal/ops
+# numbers like error counts or active-user counts).
+DEFAULT_PUBLIC_PROOF_KEYS = [
+    "groups_managed", "members_protected", "spam_deleted", "links_blocked",
+    "warnings_issued", "moderation_actions", "ai_checks", "commands_handled",
+]
+
+PROOF_METRIC_LABELS = {
+    "groups_managed": "Total groups managed",
+    "members_protected": "Total members protected",
+    "spam_deleted": "Spam messages deleted",
+    "links_blocked": "Suspicious links blocked",
+    "warnings_issued": "Warnings issued",
+    "muted": "Members muted",
+    "banned": "Members banned",
+    "kicked": "Members kicked",
+    "moderation_actions": "Total moderation actions",
+    "commands_handled": "Bot commands handled",
+    "ai_checks": "AI moderation checks",
+    "active_groups_today": "Active groups today",
+    "active_members_today": "Active members today",
+    "custom_bots_created": "Custom bots created",
+    "errors_24h": "Errors (last 24h)",
+}
+
+
+def compute_proof_metrics(public_keys=None) -> dict:
+    """Platform-wide proof metrics from real DB/event sources (never fabricated).
+
+    `public_keys` (list) marks which metrics are flagged safe for the landing
+    page. Returns an ordered list of {key,label,value,public}.
+    """
+    from datetime import datetime, timedelta
+    from sqlalchemy import func, distinct
+    from .models import (
+        db, TelegramGroup, FeatureUsageEvent, AIActivity, BotHealthEvent, CustomBot, Bot,
+    )
+
+    if public_keys is None:
+        public_keys = DEFAULT_PUBLIC_PROOF_KEYS
+    public_set = set(public_keys)
+
+    now = datetime.utcnow()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    # Groups + members (active, non-disabled).
+    active_groups = TelegramGroup.query.filter(
+        TelegramGroup.bot_status == "active", TelegramGroup.is_disabled == False  # noqa: E712
+    )
+    groups_managed = active_groups.count()
+    members_protected = db.session.query(
+        func.coalesce(func.sum(TelegramGroup.member_count), 0)
+    ).filter(TelegramGroup.bot_status == "active", TelegramGroup.is_disabled == False).scalar() or 0  # noqa: E712
+
+    # Feature-usage sums by feature (one grouped query).
+    usage_rows = db.session.query(
+        FeatureUsageEvent.feature, func.coalesce(func.sum(FeatureUsageEvent.count), 0)
+    ).group_by(FeatureUsageEvent.feature).all()
+    usage = {feat: int(c) for feat, c in usage_rows}
+
+    spam_deleted = usage.get("spam", 0) + usage.get("automod", 0)
+    links_blocked = usage.get("link", 0)
+    warnings_issued = usage.get("warn", 0)
+    muted, banned, kicked = usage.get("mute", 0), usage.get("ban", 0), usage.get("kick", 0)
+    commands_handled = usage.get("command", 0)
+    moderation_actions = sum(usage.get(k, 0) for k in ("spam", "link", "automod", "warn", "mute", "ban", "kick", "nsfw"))
+
+    ai_checks = db.session.query(func.count(AIActivity.id)).filter(
+        AIActivity.category == "moderation"
+    ).scalar() or 0
+
+    active_groups_today = TelegramGroup.query.filter(
+        TelegramGroup.last_activity >= today_start
+    ).count()
+    active_members_today = db.session.query(
+        func.count(distinct(FeatureUsageEvent.user_ref))
+    ).filter(FeatureUsageEvent.created_at >= today_start, FeatureUsageEvent.user_ref.isnot(None)).scalar() or 0
+
+    custom_bots_created = (CustomBot.query.count() or 0) + (Bot.query.count() or 0)
+
+    errors_24h = BotHealthEvent.query.filter(
+        BotHealthEvent.created_at >= now - timedelta(days=1),
+        db.or_(BotHealthEvent.severity != "info", BotHealthEvent.severity.is_(None)),
+    ).count()
+
+    raw = {
+        "groups_managed": groups_managed,
+        "members_protected": int(members_protected),
+        "spam_deleted": spam_deleted,
+        "links_blocked": links_blocked,
+        "warnings_issued": warnings_issued,
+        "muted": muted, "banned": banned, "kicked": kicked,
+        "moderation_actions": moderation_actions,
+        "commands_handled": commands_handled,
+        "ai_checks": int(ai_checks),
+        "active_groups_today": active_groups_today,
+        "active_members_today": int(active_members_today),
+        "custom_bots_created": custom_bots_created,
+        "errors_24h": errors_24h,
+    }
+
+    metrics = [
+        {"key": k, "label": PROOF_METRIC_LABELS.get(k, k), "value": v, "public": k in public_set}
+        for k, v in raw.items()
+    ]
+    return {"metrics": metrics, "generated_at": now.isoformat()}
+
+
 def echo_overview() -> dict:
     """Echo assistant usage from AIActivity (+ any echo-scoped usage events).
 

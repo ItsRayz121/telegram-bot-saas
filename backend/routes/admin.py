@@ -2286,6 +2286,36 @@ def feature_usage():
     return jsonify({"view": "bot", **usage_overview(["official", "custom"])})
 
 
+# ── Proof Metrics (public-stats source) ─────────────────────────────────────────
+
+@admin_bp.route("/proof-metrics", methods=["GET"])
+@require_permission(rbac.P_ANALYTICS_VIEW)
+@rate_limit(requests_per_minute=30)
+def proof_metrics():
+    """Platform-wide proof metrics + which are flagged public for the landing page."""
+    from ..feature_usage import compute_proof_metrics
+    from .. import platform_config as pc
+    public_keys = pc.get_setting("proof_public_metrics", None)
+    return jsonify(compute_proof_metrics(public_keys))
+
+
+@admin_bp.route("/proof-metrics/public", methods=["PUT"])
+@require_permission(rbac.P_CONFIG_MANAGE)
+@rate_limit(requests_per_minute=20)
+def update_proof_public():
+    """Set which proof-metric keys are safe to show publicly (super/admin only)."""
+    from .. import platform_config as pc
+    data = request.get_json() or {}
+    keys = data.get("keys")
+    if not isinstance(keys, list):
+        return jsonify({"error": "keys must be a list"}), 400
+    keys = [str(k) for k in keys][:40]
+    user = _get_current_user()
+    pc.set_setting("proof_public_metrics", keys, user_id=user.id if user else None)
+    _write_audit(user, severity="notice")
+    return jsonify({"message": "Public proof metrics updated", "keys": keys})
+
+
 # ── Fraud Detection ────────────────────────────────────────────────────────────
 
 @admin_bp.route("/fraud/clusters", methods=["GET"])

@@ -16,6 +16,20 @@ def get_public_platform_config():
     from .. import platform_config as pc
     return jsonify(pc.public_config())
 
+@platform_stats_bp.route("/api/platform/proof", methods=["GET"])
+@rate_limit(requests_per_minute=120)
+def get_public_proof_metrics():
+    """Public (unauthenticated) proof metrics — ONLY the keys an admin has flagged
+    safe for the landing page. Never exposes internal/ops metrics unless flagged."""
+    from .. import platform_config as pc
+    from ..feature_usage import compute_proof_metrics
+    public_keys = pc.get_setting("proof_public_metrics", None)
+    full = compute_proof_metrics(public_keys)
+    public = [{"key": m["key"], "label": m["label"], "value": m["value"]}
+              for m in full["metrics"] if m["public"]]
+    return jsonify({"metrics": public, "generated_at": full["generated_at"]})
+
+
 MOD_EVENT_TYPES = {
     "ban", "mute", "warn", "kick", "delete_message",
     "spam_removed", "link_removed", "flood_muted",

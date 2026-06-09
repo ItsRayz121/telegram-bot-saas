@@ -452,6 +452,7 @@ def create_app():
     )
     _MAINT_EXEMPT_EXACT = {
         '/health', '/ready', '/api/platform/config', '/api/platform-stats',
+        '/api/platform/proof',
         '/api/official-bot-update', '/api/echo-bot-update', '/api/auth/me',
     }
 

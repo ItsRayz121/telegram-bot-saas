@@ -50,6 +50,14 @@ DEFAULT_SETTINGS = {
     # Compliance — current policy versions (display + acceptance tracking)
     "tos_version": {"value": "2.0", "category": "compliance", "is_public": True},
     "privacy_version": {"value": "1.0", "category": "compliance", "is_public": True},
+    # Proof metrics — which metric keys are flagged safe for the public landing
+    # page. Edited via the Proof Metrics tab, not the Configuration tab, so it's
+    # marked hidden (kept out of the generic settings editor).
+    "proof_public_metrics": {
+        "value": ["groups_managed", "members_protected", "spam_deleted", "links_blocked",
+                  "warnings_issued", "moderation_actions", "ai_checks", "commands_handled"],
+        "category": "proof", "is_public": False, "hidden": True,
+    },
 }
 
 # key -> {enabled, description}
@@ -213,6 +221,8 @@ def admin_config():
     flags = _flags()
     settings_out = []
     for k, meta in DEFAULT_SETTINGS.items():
+        if meta.get("hidden"):
+            continue  # edited via a dedicated tab, not the generic settings editor
         settings_out.append({
             "key": k,
             "value": settings.get(k, meta["value"]),
