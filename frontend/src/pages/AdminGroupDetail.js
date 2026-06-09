@@ -71,7 +71,7 @@ export default function AdminGroupDetail() {
   if (!detail) {
     return (
       <Box p={3}>
-        <Button startIcon={<ArrowBack />} onClick={() => navigate('/admin')}>Back to Admin</Button>
+        <Button startIcon={<ArrowBack />} onClick={() => navigate('/admin/bots/groups')}>Back to TG Groups</Button>
         <Alert severity="error" sx={{ mt: 2 }}>Group not found.</Alert>
       </Box>
     );
@@ -86,12 +86,12 @@ export default function AdminGroupDetail() {
     <Box sx={{ maxWidth: 1100, mx: 'auto', p: { xs: 2, sm: 3 }, pb: 'var(--bottom-nav-clearance, 24px)' }}>
       <Breadcrumbs sx={{ mb: 1 }}>
         <MuiLink component={RouterLink} to="/admin" underline="hover" color="inherit">Admin</MuiLink>
-        <MuiLink component={RouterLink} to="/admin" underline="hover" color="inherit">TG Groups</MuiLink>
+        <MuiLink component={RouterLink} to="/admin/bots/groups" underline="hover" color="inherit">TG Groups</MuiLink>
         <Typography color="text.primary">{detail.title}</Typography>
       </Breadcrumbs>
 
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'center' }} mb={2}>
-        <Button startIcon={<ArrowBack />} onClick={() => navigate('/admin')} size="small">Back</Button>
+        <Button startIcon={<ArrowBack />} onClick={() => navigate('/admin/bots/groups')} size="small">Back</Button>
         <Box flex={1}>
           <Typography variant="h5" fontWeight={700}>{detail.title}</Typography>
           <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>{detail.telegram_group_id}</Typography>

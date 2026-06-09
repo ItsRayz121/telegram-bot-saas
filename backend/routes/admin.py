@@ -3446,12 +3446,6 @@ def get_ai_usage():
         rng = "30d"
         since = now - timedelta(days=30)
 
-    def _base():
-        q = db.session.query(AITokenUsage)
-        if since is not None:
-            q = q.filter(AITokenUsage.created_at >= since)
-        return q
-
     cols = (
         func.coalesce(func.sum(AITokenUsage.input_tokens), 0),
         func.coalesce(func.sum(AITokenUsage.output_tokens), 0),

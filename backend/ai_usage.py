@@ -85,8 +85,11 @@ def record_ai_usage(
         if estimated:
             meta["estimated"] = True
 
-        # Resolve owner email if not supplied and we have an app user id.
-        if email is None and user_ref is not None:
+        # Resolve owner email only for workspace scope, where user_ref is a real
+        # app User.id. For echo/official/custom the user_ref is a Telegram user
+        # id (a different namespace), so a PK lookup would be wrong — leave email
+        # to be passed explicitly by those call sites.
+        if email is None and user_ref is not None and scope == "workspace":
             try:
                 from .models import User
                 u = User.query.get(int(user_ref))

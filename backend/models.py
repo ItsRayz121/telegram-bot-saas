@@ -1977,7 +1977,7 @@ class AITokenUsage(db.Model):
     email = db.Column(db.String(255), nullable=True)                    # owner email (denormalised for cost-by-email)
     feature = db.Column(db.String(40), nullable=False, index=True)      # assistant | ai_mod | knowledge | digest | notes ...
     provider = db.Column(db.String(40), nullable=True)                  # openrouter | openai | gemini | anthropic ...
-    model = db.Column(db.String(120), nullable=True, index=True)
+    model = db.Column(db.String(120), nullable=True)                   # indexed via ix_ai_usage_model_created
     key_source = db.Column(db.String(20), nullable=True)               # platform | user | group
     input_tokens = db.Column(db.Integer, nullable=False, default=0)
     output_tokens = db.Column(db.Integer, nullable=False, default=0)

@@ -3568,10 +3568,11 @@ function AIUsageTab({ onAdminError }) {
   useEffect(() => { load(range); }, [load, range]);
 
   const t = data?.totals || {};
+  // Cost-based pies (titles say "Cost by …"); USD tooltip stays consistent.
   const pie = (rows, keyName) => (rows || [])
-    .filter(r => (r.cost_usd || 0) > 0 || (r.total_tokens || 0) > 0)
+    .filter(r => (r.cost_usd || 0) > 0)
     .slice(0, 8)
-    .map(r => ({ name: String(r[keyName] ?? '—'), value: Number((r.cost_usd || 0).toFixed(4)) || r.total_tokens || 0 }));
+    .map(r => ({ name: String(r[keyName] ?? '—'), value: Number((r.cost_usd || 0).toFixed(6)) }));
 
   return (
     <Box>
@@ -3646,7 +3647,7 @@ function AIUsageTab({ onAdminError }) {
 
               <Grid container spacing={2} mb={1}>
                 {[{ title: 'Cost by feature', rows: data.by_feature, key: 'feature' },
-                  { title: 'Cost by user', rows: data.by_user, key: 'email' },
+                  { title: 'Cost by user', rows: (data.by_user || []).map(r => ({ ...r, _name: r.email || r.user_ref })), key: '_name' },
                   { title: 'Cost by group', rows: data.by_group, key: 'group_ref' }].map(p => (
                   <Grid item xs={12} md={4} key={p.title}>
                     <Card variant="outlined"><CardContent>
@@ -4808,13 +4809,13 @@ function FeatureUsageTab({ onAdminError }) {
                             <TableRow key={f.feature} hover sx={{ opacity: f.all_time > 0 ? 1 : 0.6 }}>
                               <TableCell><Typography variant="body2" fontWeight={500}>{f.label}</Typography></TableCell>
                               <TableCell><Chip size="small" label={f.plan} color={PLAN_COLOR[f.plan] || 'default'} variant="outlined" /></TableCell>
-                              <TableCell align="right">{f.users.toLocaleString()}</TableCell>
-                              <TableCell align="right">{f.groups.toLocaleString()}</TableCell>
-                              <TableCell align="right">{f.today.toLocaleString()}</TableCell>
-                              <TableCell align="right">{f.d7.toLocaleString()}</TableCell>
-                              <TableCell align="right">{f.d30.toLocaleString()}</TableCell>
-                              <TableCell align="right"><b>{f.all_time.toLocaleString()}</b></TableCell>
-                              <TableCell align="right" sx={{ color: f.errors > 0 ? 'error.main' : 'text.disabled' }}>{f.errors}</TableCell>
+                              <TableCell align="right">{(f.users || 0).toLocaleString()}</TableCell>
+                              <TableCell align="right">{(f.groups || 0).toLocaleString()}</TableCell>
+                              <TableCell align="right">{(f.today || 0).toLocaleString()}</TableCell>
+                              <TableCell align="right">{(f.d7 || 0).toLocaleString()}</TableCell>
+                              <TableCell align="right">{(f.d30 || 0).toLocaleString()}</TableCell>
+                              <TableCell align="right"><b>{(f.all_time || 0).toLocaleString()}</b></TableCell>
+                              <TableCell align="right" sx={{ color: f.errors > 0 ? 'error.main' : 'text.disabled' }}>{f.errors || 0}</TableCell>
                               <TableCell><Chip size="small" label={f.trend} color={TREND_COLOR[f.trend] || 'default'} /></TableCell>
                               <TableCell><Typography variant="caption" color="text.disabled">{f.last_used ? fmtDate(f.last_used) : '—'}</Typography></TableCell>
                             </TableRow>
