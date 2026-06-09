@@ -387,8 +387,8 @@ function UsersTab({ onAdminError, initialFilter }) {
   const [sort, setSort] = useState('created_at');
   const [order, setOrder] = useState('desc');
   const [loading, setLoading] = useState(true);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [selectedUser, setSelectedUser] = useState(null);
+  const [detailLoading] = useState(false);
+  const [selectedUser] = useState(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [subTier, setSubTier] = useState('');
   const [actionLoading, setActionLoading] = useState('');
@@ -963,8 +963,8 @@ function TelegramGroupsTab({ onAdminError, initialFilter }) {
   const [recentOnly, setRecentOnly] = useState(false);
   const [loading, setLoading] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
-  const [detail, setDetail] = useState(null);
-  const [detailLoading, setDetailLoading] = useState(false);
+  const [detail] = useState(null);
+  const [detailLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
 
   const fetchGroups = useCallback(async (p = {}) => {
