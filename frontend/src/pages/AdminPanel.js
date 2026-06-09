@@ -14,7 +14,7 @@ import {
   CheckCircleOutline, Cancel, Circle, Flag,
   Security, AccountTree, TrendingDown, Payment, FileDownload,
   MonitorHeart, NetworkCheck, Tune, Key, Psychology, AttachMoney as MoneyIcon,
-  Gavel, Dns, Insights, Verified,
+  Gavel, Dns, Insights, Verified, Timeline,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -1319,6 +1319,17 @@ function CustomBotsTab({ onAdminError }) {
     finally { setActionLoading(''); }
   };
 
+  const handleClearHealth = async (bot) => {
+    setActionLoading('clear');
+    try {
+      await admin.clearBotHealth('custom', bot.id);
+      toast.success('Health state cleared');
+      const d = await admin.getCustomBotDetail(bot.id);
+      setDetail(d.data.bot);
+    } catch { toast.error('Failed to clear health'); }
+    finally { setActionLoading(''); }
+  };
+
   const pages = Math.ceil(total / 20);
   const h = detail?.health || {};
 
@@ -1454,6 +1465,11 @@ function CustomBotsTab({ onAdminError }) {
               <Button startIcon={<Refresh />} disabled={actionLoading === 'ping'} onClick={() => handlePing(detail)}>
                 {actionLoading === 'ping' ? <CircularProgress size={16} /> : 'Ping'}
               </Button>
+              {detail.health?.grade && detail.health.grade !== 'healthy' && detail.health.grade !== 'unknown' && (
+                <Button color="success" startIcon={<CheckCircle />} disabled={actionLoading === 'clear'} onClick={() => handleClearHealth(detail)}>
+                  {actionLoading === 'clear' ? <CircularProgress size={16} /> : 'Clear errors'}
+                </Button>
+              )}
               {detail.status === 'inactive'
                 ? <Button color="success" startIcon={<CheckCircle />} onClick={() => handleEnable(detail)}>Enable</Button>
                 : <Button color="error" startIcon={<Block />} onClick={() => handleDisable(detail)}>Disable</Button>}
@@ -4530,6 +4546,100 @@ function FeatureUsageTab({ onAdminError }) {
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// TAB — UNIFIED EVENT LOG
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const EVENT_SOURCE_COLOR = { admin: 'secondary', group: 'primary', health: 'error', payment: 'success', referral: 'info' };
+const SEV_COLOR = { info: 'default', notice: 'info', warning: 'warning', critical: 'error', error: 'error' };
+
+function EventLogTab({ onAdminError }) {
+  const [events, setEvents] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [source, setSource] = useState('all');
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  const fetchLog = useCallback(async (p = 1, src = 'all', q = '') => {
+    setLoading(true);
+    try {
+      const res = await admin.getEventLog({ page: p, per_page: 50, source: src, search: q });
+      setEvents(res.data.events || []);
+      setTotal(res.data.total || 0);
+    } catch (err) { onAdminError(err, 'Failed to load event log'); }
+    finally { setLoading(false); }
+  }, [onAdminError]);
+
+  useEffect(() => {
+    fetchLog(1, source, search);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchLog, source]);
+
+  const pages = Math.ceil(total / 50);
+
+  return (
+    <Box>
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} mb={2} alignItems={{ sm: 'center' }}>
+        <TextField
+          size="small" placeholder="Search events…" value={search}
+          onChange={(e) => { setSearch(e.target.value); setPage(1); fetchLog(1, source, e.target.value); }}
+          InputProps={{ startAdornment: <InputAdornment position="start"><Search fontSize="small" /></InputAdornment> }}
+          sx={{ flex: 1 }}
+        />
+        <FormControl size="small" sx={{ minWidth: 150 }}>
+          <InputLabel>Source</InputLabel>
+          <Select value={source} label="Source" onChange={(e) => { setSource(e.target.value); setPage(1); }}>
+            <MenuItem value="all">All sources</MenuItem>
+            <MenuItem value="admin">Admin actions</MenuItem>
+            <MenuItem value="groups">Group / bot events</MenuItem>
+            <MenuItem value="health">Bot health</MenuItem>
+            <MenuItem value="payments">Payments</MenuItem>
+            <MenuItem value="referrals">Referrals</MenuItem>
+          </Select>
+        </FormControl>
+        <Typography variant="body2" color="text.secondary" whiteSpace="nowrap">{total.toLocaleString()} events</Typography>
+        <Tooltip title="Refresh"><IconButton size="small" onClick={() => fetchLog(page, source, search)}><Refresh fontSize="small" /></IconButton></Tooltip>
+      </Stack>
+
+      {loading ? <Box display="flex" justifyContent="center" mt={4}><CircularProgress /></Box> : (
+        <>
+          <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', mb: 2, overflowX: 'auto' }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Source</TableCell>
+                  <TableCell>Type</TableCell>
+                  <TableCell>Actor</TableCell>
+                  <TableCell>Target</TableCell>
+                  <TableCell>Message</TableCell>
+                  <TableCell>Severity</TableCell>
+                  <TableCell>When</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {events.length === 0 ? <EmptyRow cols={7} /> : events.map((e, i) => (
+                  <TableRow key={i} hover>
+                    <TableCell><Chip size="small" label={e.source} color={EVENT_SOURCE_COLOR[e.source] || 'default'} variant="outlined" /></TableCell>
+                    <TableCell><Typography variant="caption" fontWeight={600}>{e.type}</Typography></TableCell>
+                    <TableCell><Typography variant="caption">{e.actor || '—'}</Typography></TableCell>
+                    <TableCell><Typography variant="caption" sx={{ fontFamily: 'monospace' }}>{e.target || '—'}</Typography></TableCell>
+                    <TableCell><Typography variant="caption" color="text.secondary" sx={{ display: 'block', maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.message || '—'}</Typography></TableCell>
+                    <TableCell><Chip size="small" label={e.severity} color={SEV_COLOR[e.severity] || 'default'} /></TableCell>
+                    <TableCell><Typography variant="caption" color="text.disabled">{fmtDate(e.at)}</Typography></TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+          {pages > 1 && <Box display="flex" justifyContent="center"><Pagination count={pages} page={page} onChange={(_, p) => { setPage(p); fetchLog(p, source, search); }} color="primary" /></Box>}
+        </>
+      )}
+    </Box>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -4639,6 +4749,8 @@ export default function AdminPanel() {
       render: () => <AnnouncementsTab onAdminError={handleAdminError} /> },
     { key: 'audit', label: 'Audit Log', icon: <History fontSize="small" />, permission: 'audit.view',
       render: () => <AuditLogTab onAdminError={handleAdminError} /> },
+    { key: 'event-log', label: 'Event Log', icon: <Timeline fontSize="small" />, permission: 'audit.view',
+      render: () => <EventLogTab onAdminError={handleAdminError} /> },
     { key: 'reports', label: 'Reports', icon: <Flag fontSize="small" />, permission: 'moderation.view',
       render: () => <ReportsTab onAdminError={handleAdminError} /> },
     { key: 'campaigns', label: 'Campaigns', icon: <Campaign fontSize="small" />, permission: 'campaigns.view',

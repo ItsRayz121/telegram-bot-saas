@@ -2145,6 +2145,120 @@ def list_audit_logs():
     })
 
 
+# ── Unified Event Log ───────────────────────────────────────────────────────────
+
+@admin_bp.route("/event-log", methods=["GET"])
+@require_permission(rbac.P_AUDIT_VIEW)
+@rate_limit(requests_per_minute=30)
+def unified_event_log():
+    """One merged, filterable timeline across admin actions, bot/group events,
+    bot-health errors, payments and referrals.
+
+    Each source is bounded (most-recent rows only) then merged + sorted in
+    Python — fine for an operator timeline and avoids a heavyweight SQL UNION
+    across schemas. Normalised shape: {source, type, actor, target, message,
+    severity, at}.
+    """
+    source = request.args.get("source", "all")
+    search = (request.args.get("search", "") or "").strip().lower()
+    page = request.args.get("page", 1, type=int)
+    per_page = min(request.args.get("per_page", 50, type=int), 100)
+    cap = 400  # per-source fetch ceiling
+
+    want = (lambda s: source in ("all", s))
+    events = []
+
+    if want("admin"):
+        rows = AdminAuditLog.query.order_by(AdminAuditLog.created_at.desc()).limit(cap).all()
+        admin_ids = {r.admin_id for r in rows}
+        emails = {u.id: u.email for u in User.query.filter(User.id.in_(admin_ids)).all()} if admin_ids else {}
+        for r in rows:
+            events.append({
+                "source": "admin", "type": r.action, "actor": emails.get(r.admin_id, f"admin#{r.admin_id}"),
+                "target": (f"{r.target_type}:{r.target_id}" if r.target_type else None),
+                "message": f"{r.method} {r.path}", "severity": r.severity or "info",
+                "at": r.created_at.isoformat(),
+            })
+
+    if want("bots") or want("groups"):
+        rows = BotEvent.query.order_by(BotEvent.created_at.desc()).limit(cap).all()
+        for r in rows:
+            events.append({
+                "source": "group", "type": r.event_type, "actor": "bot",
+                "target": r.telegram_group_id, "message": r.message, "severity": "info",
+                "at": r.created_at.isoformat(),
+            })
+
+    if want("health"):
+        rows = BotHealthEvent.query.order_by(BotHealthEvent.created_at.desc()).limit(cap).all()
+        for r in rows:
+            events.append({
+                "source": "health", "type": r.error_class or r.category, "actor": f"{r.scope}:{r.ref}",
+                "target": r.ref, "message": r.detail, "severity": r.severity or "warning",
+                "at": r.created_at.isoformat(),
+            })
+
+    if want("payments"):
+        rows = PaymentHistory.query.order_by(PaymentHistory.created_at.desc()).limit(cap).all()
+        uid_set = {r.user_id for r in rows}
+        emails = {u.id: u.email for u in User.query.filter(User.id.in_(uid_set)).all()} if uid_set else {}
+        for r in rows:
+            events.append({
+                "source": "payment", "type": f"{r.status}_{r.plan}", "actor": emails.get(r.user_id, f"user#{r.user_id}"),
+                "target": r.provider, "message": f"{r.plan} {r.billing_period or ''} · {(r.amount_usd or 0)/100:.2f} {r.currency or 'USD'}".strip(),
+                "severity": "info" if r.status == "confirmed" else "warning",
+                "at": r.created_at.isoformat(),
+            })
+
+    if want("referrals"):
+        rows = Referral.query.order_by(Referral.created_at.desc()).limit(cap).all()
+        for r in rows:
+            events.append({
+                "source": "referral", "type": f"referral_{r.status}", "actor": f"user#{r.referrer_user_id}",
+                "target": f"user#{r.referred_user_id}",
+                "message": f"status={r.status}" + (" · ip_match" if r.ip_match else "") + (" · device_match" if r.device_match else ""),
+                "severity": "warning" if (r.ip_match or r.device_match) else "info",
+                "at": r.created_at.isoformat(),
+            })
+
+    if search:
+        def _hit(e):
+            return any(search in str(e.get(f) or "").lower() for f in ("type", "actor", "target", "message", "source"))
+        events = [e for e in events if _hit(e)]
+
+    events.sort(key=lambda e: e["at"], reverse=True)
+    total = len(events)
+    start = (page - 1) * per_page
+    items = events[start:start + per_page]
+    pages = (total + per_page - 1) // per_page if per_page else 1
+
+    return jsonify({
+        "events": items, "total": total, "pages": pages, "page": page,
+        "note": "Each source is capped at the 400 most-recent rows before merging.",
+    })
+
+
+@admin_bp.route("/bot-health/clear/<scope>/<ref>", methods=["POST"])
+@require_permission(rbac.P_BOTS_MANAGE)
+@rate_limit(requests_per_minute=20)
+def admin_clear_bot_health(scope, ref):
+    """Resolve/clear a bot's error state after a fix: reset the rolled-up health
+    state to healthy. The append-only BotHealthEvent log is preserved.
+    """
+    from ..models import BotHealthState
+    state = BotHealthState.query.filter_by(scope=scope, ref=str(ref)).first()
+    if not state:
+        return jsonify({"error": "No health state for that bot"}), 404
+    state.consecutive_failures = 0
+    state.last_error = None
+    state.health_grade = "healthy"
+    state.last_alert_grade = None
+    db.session.commit()
+    user = _get_current_user()
+    _write_audit(user, severity="notice")
+    return jsonify({"message": "Health state cleared", "state": state.to_dict()})
+
+
 # ── Reported Messages ──────────────────────────────────────────────────────────
 
 @admin_bp.route("/reports", methods=["GET"])
