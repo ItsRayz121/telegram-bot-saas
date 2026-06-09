@@ -338,6 +338,26 @@ PROOF_METRIC_LABELS = {
     "errors_24h": "Errors (last 24h)",
 }
 
+# Human-readable data source for each metric, shown as a tooltip in the admin
+# Proof Metrics tab so it's auditable that every number is real DB-derived.
+PROOF_METRIC_SOURCES = {
+    "groups_managed": "telegram_groups (bot_status='active', not disabled)",
+    "members_protected": "SUM(telegram_groups.member_count) for active groups — synced live from Telegram",
+    "spam_deleted": "feature_usage_events (feature in spam, automod)",
+    "links_blocked": "feature_usage_events (feature='link')",
+    "warnings_issued": "feature_usage_events (feature='warn')",
+    "muted": "feature_usage_events (feature='mute')",
+    "banned": "feature_usage_events (feature='ban')",
+    "kicked": "feature_usage_events (feature='kick')",
+    "moderation_actions": "feature_usage_events (all moderation features summed)",
+    "commands_handled": "feature_usage_events (feature='command')",
+    "ai_checks": "ai_activity (category='moderation')",
+    "active_groups_today": "telegram_groups (last_activity >= today 00:00 UTC)",
+    "active_members_today": "feature_usage_events (distinct user_ref since today 00:00 UTC)",
+    "custom_bots_created": "custom_bots + bots tables (row count)",
+    "errors_24h": "bot_health_events (severity != 'info', last 24h)",
+}
+
 
 def compute_proof_metrics(public_keys=None) -> dict:
     """Platform-wide proof metrics from real DB/event sources (never fabricated).
@@ -415,7 +435,13 @@ def compute_proof_metrics(public_keys=None) -> dict:
     }
 
     metrics = [
-        {"key": k, "label": PROOF_METRIC_LABELS.get(k, k), "value": v, "public": k in public_set}
+        {
+            "key": k,
+            "label": PROOF_METRIC_LABELS.get(k, k),
+            "value": v,
+            "public": k in public_set,
+            "source": PROOF_METRIC_SOURCES.get(k, "Derived from platform DB"),
+        }
         for k, v in raw.items()
     ]
     return {"metrics": metrics, "generated_at": now.isoformat()}

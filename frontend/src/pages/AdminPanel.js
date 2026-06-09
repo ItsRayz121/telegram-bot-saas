@@ -15,7 +15,7 @@ import {
   CheckCircleOutline, Cancel, Circle, Flag,
   Security, AccountTree, TrendingDown, Payment, FileDownload,
   MonitorHeart, NetworkCheck, Tune, Key, Psychology, AttachMoney as MoneyIcon,
-  Gavel, Dns, Insights, Verified, Timeline,
+  Gavel, Dns, Insights, Verified, Timeline, InfoOutlined,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -43,6 +43,20 @@ function fmtDateTime(iso) {
 
 function usd(val) {
   return `$${(val || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function fmtRelative(iso) {
+  if (!iso) return 'never';
+  const diff = Date.now() - new Date(iso).getTime();
+  if (Number.isNaN(diff)) return 'never';
+  const s = Math.floor(diff / 1000);
+  if (s < 60) return 'just now';
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m} min ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
 }
 
 // ─── Reusable stat card ───────────────────────────────────────────────────────
@@ -4376,7 +4390,25 @@ function ProofMetricsTab({ onAdminError, canManage }) {
           <Grid item xs={6} sm={4} md={3} key={m.key}>
             <Card sx={{ height: '100%', position: 'relative', borderColor: publicKeys.has(m.key) ? 'success.main' : 'divider' }}>
               <CardContent sx={{ pb: '12px !important' }}>
-                <Typography variant="h5" fontWeight={700}>{(m.value ?? 0).toLocaleString()}</Typography>
+                <Stack direction="row" alignItems="flex-start" justifyContent="space-between">
+                  <Typography variant="h5" fontWeight={700}>{(m.value ?? 0).toLocaleString()}</Typography>
+                  <Tooltip
+                    arrow
+                    title={
+                      <Box>
+                        <Typography variant="caption" display="block" fontWeight={600}>Source</Typography>
+                        <Typography variant="caption" display="block">{m.source || 'Derived from platform DB'}</Typography>
+                        {data?.generated_at && (
+                          <Typography variant="caption" display="block" sx={{ mt: 0.5, opacity: 0.8 }}>
+                            Last updated {fmtRelative(data.generated_at)}
+                          </Typography>
+                        )}
+                      </Box>
+                    }
+                  >
+                    <InfoOutlined sx={{ fontSize: 15, color: 'text.disabled', cursor: 'help' }} />
+                  </Tooltip>
+                </Stack>
                 <Typography variant="caption" color="text.secondary" display="block">{m.label}</Typography>
                 <FormControlLabel
                   sx={{ mt: 0.5, ml: 0 }}
@@ -4390,11 +4422,13 @@ function ProofMetricsTab({ onAdminError, canManage }) {
       </Grid>
 
       <Alert severity="info">
-        Public metrics are served unauthenticated at <code>/api/platform/proof</code> for the landing page.
+        The <strong>Public</strong> toggle only controls whether a metric appears on the public landing page
+        (served unauthenticated at <code>/api/platform/proof</code>). It never changes the value or hides it from this admin view.
         {!canManage && ' Only a Super Admin can change which metrics are public.'}
       </Alert>
       <Typography variant="caption" color="text.disabled" display="block" mt={1}>
-        Generated {data?.generated_at ? fmtDate(data.generated_at) : '—'}.
+        Generated {data?.generated_at ? fmtDateTime(data.generated_at) : '—'} · updated {data?.generated_at ? fmtRelative(data.generated_at) : '—'}.
+        All values are live DB reads — hover any card's ⓘ for its source table.
       </Typography>
     </Box>
   );

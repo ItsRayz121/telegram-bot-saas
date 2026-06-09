@@ -1534,8 +1534,16 @@ def admin_bot_health():
             BotHealthEvent.created_at >= since,
             _real_failure,
         ).count()
+        # Only surface a "last error" that is a REAL failure inside the same 24h
+        # window as the count. A stale pre-fix crash (e.g. an old forward_date
+        # AttributeError) must not haunt the card once it's resolved and no new
+        # failures have occurred. errors_24h == 0  ⇒  no last_error shown.
         last = (
-            BotHealthEvent.query.filter(BotHealthEvent.scope.in_(["official", "ai"]))
+            BotHealthEvent.query.filter(
+                BotHealthEvent.scope.in_(["official", "ai"]),
+                BotHealthEvent.created_at >= since,
+                _real_failure,
+            )
             .order_by(BotHealthEvent.created_at.desc())
             .first()
         )
