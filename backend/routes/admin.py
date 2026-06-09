@@ -2254,8 +2254,7 @@ def admin_clear_bot_health(scope, ref):
     state.health_grade = "healthy"
     state.last_alert_grade = None
     db.session.commit()
-    user = _get_current_user()
-    _write_audit(user, severity="notice")
+    # NB: the require_permission decorator already audit-logs this call.
     return jsonify({"message": "Health state cleared", "state": state.to_dict()})
 
 
@@ -2426,7 +2425,7 @@ def update_proof_public():
     keys = [str(k) for k in keys][:40]
     user = _get_current_user()
     pc.set_setting("proof_public_metrics", keys, user_id=user.id if user else None)
-    _write_audit(user, severity="notice")
+    # NB: the require_permission decorator already audit-logs this call.
     return jsonify({"message": "Public proof metrics updated", "keys": keys})
 
 
