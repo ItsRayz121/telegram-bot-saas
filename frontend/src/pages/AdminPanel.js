@@ -2710,6 +2710,7 @@ function PricingTab({ onAdminError }) {
                       label={`${period[0].toUpperCase()}${period.slice(1)} price (USD)`}
                       value={prices[tier]?.[period] ?? ''}
                       onChange={e => setP(tier, period, e.target.value)}
+                      inputProps={{ min: 0.01, step: 0.01 }}
                       InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
                     />
                   ))}

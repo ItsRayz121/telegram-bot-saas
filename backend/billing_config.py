@@ -73,9 +73,13 @@ def invalidate_cache():
 def set_tier_price(tier, period, usd, user_id=None):
     if tier not in TIERS or period not in PERIODS:
         raise ValueError("Invalid tier/period")
+    if usd is None or usd == "":
+        raise ValueError("Price cannot be empty")
     usd = float(usd)
     if usd <= 0:
         raise ValueError("Price must be greater than 0")
+    if usd > 100000:
+        raise ValueError("Price must be less than $100,000")
     from .models import db, PlatformSetting
     key = _key(tier, period)
     row = PlatformSetting.query.filter_by(key=key).first()

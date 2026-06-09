@@ -79,7 +79,9 @@ def _load_settings():
         merged[k] = val
     try:
         from .models import PlatformSetting
-        for row in PlatformSetting.query.all():
+        # Only this module's own keys — the platform_settings table is shared with
+        # ai_config / billing_config, so filtering keeps namespaces isolated.
+        for row in PlatformSetting.query.filter(PlatformSetting.key.in_(SETTING_KEYS)).all():
             try:
                 merged[row.key] = json.loads(row.value_json) if row.value_json is not None else None
             except Exception:

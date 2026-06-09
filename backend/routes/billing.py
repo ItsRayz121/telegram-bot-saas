@@ -67,7 +67,9 @@ def _activate_subscription(user, tier, provider="unknown", payment_id=None,
         payment_id=payment_id,
         plan=tier,
         billing_period=billing_period,
-        amount_usd=(amount_usd or default_amount) * 100,
+        # amount_usd is an INTEGER cents column — round to int so a float price
+        # (e.g. 12.0 or 9.99 from an admin pricing edit) can't break the insert.
+        amount_usd=int(round((amount_usd or default_amount) * 100)),
         currency=currency,
         status="confirmed",
         confirmed_at=now,

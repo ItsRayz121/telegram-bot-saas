@@ -71,7 +71,7 @@ def set_value(key, value, user_id=None):
     if isinstance(default, bool):
         value = bool(value)
     elif isinstance(default, int) and not isinstance(default, bool):
-        value = int(value)
+        value = int(float(value))   # tolerate "200000" and "200000.0"
     elif isinstance(default, float):
         value = float(value)
     else:
