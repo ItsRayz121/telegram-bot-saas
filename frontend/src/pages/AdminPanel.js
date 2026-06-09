@@ -13,7 +13,7 @@ import {
   History, FolderOpen, Campaign, VerifiedUser, Refresh,
   CheckCircleOutline, Cancel, Circle, Flag,
   Security, AccountTree, TrendingDown, Payment, FileDownload,
-  MonitorHeart, NetworkCheck, Tune, Key,
+  MonitorHeart, NetworkCheck, Tune, Key, Psychology, AttachMoney as MoneyIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -2498,6 +2498,248 @@ function DiagnosticsTab({ onAdminError }) {
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// TAB — AI MANAGEMENT (ai.manage)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const AI_FIELD_LABELS = {
+  ai_default_model: 'Default model',
+  ai_default_base_url: 'Default base URL',
+  ai_daily_spend_cap_usd: 'Daily platform spend cap (USD)',
+  ai_tokens_free: 'Daily token limit — Free',
+  ai_tokens_pro: 'Daily token limit — Pro',
+  ai_tokens_enterprise: 'Daily token limit — Enterprise',
+};
+
+function AITab({ onAdminError }) {
+  const [form, setForm] = useState(null);
+  const [original, setOriginal] = useState({});
+  const [usage, setUsage] = useState(null);
+  const [aiEnabled, setAiEnabled] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await admin.getAiConfig();
+      const f = {}; (data.settings || []).forEach(s => { f[s.key] = s.value; });
+      setForm(f); setOriginal({ ...f });
+      setUsage(data.usage || null);
+      setAiEnabled(data.ai_features_enabled);
+    } catch (e) { onAdminError?.(e, 'Failed to load AI config'); }
+    finally { setLoading(false); }
+  }, [onAdminError]);
+  useEffect(() => { load(); }, [load]);
+
+  const changed = form ? Object.keys(form).filter(k => String(form[k]) !== String(original[k])) : [];
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const payload = {};
+      changed.forEach(k => { payload[k] = form[k]; });
+      const { data } = await admin.updateAiConfig(payload);
+      const f = {}; (data.settings || []).forEach(s => { f[s.key] = s.value; });
+      setForm(f); setOriginal({ ...f });
+      toast.success(data.message || 'AI settings saved');
+    } catch (e) { onAdminError?.(e, 'Failed to save AI settings'); }
+    finally { setSaving(false); }
+  };
+
+  if (loading || !form) return <Box display="flex" justifyContent="center" py={6}><CircularProgress /></Box>;
+
+  const isNumber = (k) => k !== 'ai_default_model' && k !== 'ai_default_base_url';
+
+  return (
+    <Box>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2} flexWrap="wrap" gap={1}>
+        <Box>
+          <Typography variant="h6" fontWeight={700}>AI Management</Typography>
+          <Typography variant="caption" color="text.secondary">
+            Default model, platform spend cap and per-tier daily token limits. Applies within ~30s.
+          </Typography>
+        </Box>
+        <Stack direction="row" gap={1} alignItems="center">
+          {aiEnabled === false && <Chip label="AI features OFF" color="error" size="small" />}
+          <Button size="small" startIcon={<Refresh />} onClick={load} disabled={saving}>Refresh</Button>
+          <Button size="small" variant="contained" onClick={save} disabled={saving || changed.length === 0}>
+            {saving ? 'Saving…' : `Save${changed.length ? ` (${changed.length})` : ''}`}
+          </Button>
+        </Stack>
+      </Stack>
+
+      {aiEnabled === false && (
+        <Alert severity="warning" sx={{ mb: 2, borderRadius: 2 }}>
+          The <b>ai_features_enabled</b> master switch is OFF (toggle it in Configuration → Feature Flags).
+          These limits won't matter until AI is re-enabled.
+        </Alert>
+      )}
+
+      <Grid container spacing={2}>
+        <Grid item xs={12} md={6}>
+          <Card sx={{ height: '100%' }}>
+            <CardContent>
+              <Typography variant="subtitle1" fontWeight={700} mb={1.5}>Settings</Typography>
+              <Stack spacing={2}>
+                {Object.keys(form).map(k => (
+                  <TextField key={k} size="small" fullWidth
+                    label={AI_FIELD_LABELS[k] || k}
+                    type={isNumber(k) ? 'number' : 'text'}
+                    value={form[k] ?? ''}
+                    onChange={e => setForm({ ...form, [k]: isNumber(k) ? e.target.value : e.target.value })}
+                  />
+                ))}
+              </Stack>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={6}>
+          <Card sx={{ height: '100%' }}>
+            <CardContent>
+              <Typography variant="subtitle1" fontWeight={700} mb={1.5}>Usage today</Typography>
+              {!usage ? <Typography variant="body2" color="text.secondary">No usage data.</Typography> : (
+                <>
+                  <Typography variant="body2" color="text.secondary">Platform AI spend</Typography>
+                  <Typography variant="h5" fontWeight={700}>
+                    {usage.spend_today_usd == null ? 'n/a' : usd(usage.spend_today_usd)}
+                    <Typography component="span" variant="body2" color="text.secondary"> / {usd(usage.daily_cap_usd)} cap</Typography>
+                  </Typography>
+                  {usage.spend_pct != null && (
+                    <LinearProgress variant="determinate" value={Math.min(100, usage.spend_pct)}
+                      color={usage.spend_pct > 80 ? 'error' : 'primary'} sx={{ my: 1, height: 8, borderRadius: 1 }} />
+                  )}
+                  <Divider sx={{ my: 1.5 }} />
+                  <Typography variant="body2" fontWeight={600} mb={0.5}>Top token users (today)</Typography>
+                  {(usage.top_token_users || []).length === 0 ? (
+                    <Typography variant="caption" color="text.secondary">No platform-key usage today.</Typography>
+                  ) : (
+                    <Table size="small">
+                      <TableBody>
+                        {usage.top_token_users.map(u => (
+                          <TableRow key={u.id}>
+                            <TableCell sx={{ fontSize: 12 }}>{u.email}</TableCell>
+                            <TableCell><Chip label={u.tier} size="small" /></TableCell>
+                            <TableCell align="right" sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+                              {(u.tokens_today || 0).toLocaleString()}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+    </Box>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TAB — PRICING (Super Admin only)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function PricingTab({ onAdminError }) {
+  const [prices, setPrices] = useState(null);
+  const [original, setOriginal] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [confirm, setConfirm] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await admin.getPricing();
+      setPrices(data.prices); setOriginal(JSON.parse(JSON.stringify(data.prices)));
+    } catch (e) { onAdminError?.(e, 'Failed to load pricing'); }
+    finally { setLoading(false); }
+  }, [onAdminError]);
+  useEffect(() => { load(); }, [load]);
+
+  const dirty = prices && original && JSON.stringify(prices) !== JSON.stringify(original);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const { data } = await admin.updatePricing(prices);
+      setPrices(data.prices); setOriginal(JSON.parse(JSON.stringify(data.prices)));
+      toast.success(data.message || 'Pricing updated');
+      setConfirm(false);
+    } catch (e) { onAdminError?.(e, 'Failed to update pricing'); }
+    finally { setSaving(false); }
+  };
+
+  if (loading || !prices) return <Box display="flex" justifyContent="center" py={6}><CircularProgress /></Box>;
+
+  const setP = (tier, period, val) => setPrices({ ...prices, [tier]: { ...prices[tier], [period]: val } });
+
+  return (
+    <Box>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2} flexWrap="wrap" gap={1}>
+        <Box>
+          <Typography variant="h6" fontWeight={700}>Pricing</Typography>
+          <Typography variant="caption" color="text.secondary">
+            Tier prices in USD. Drives the public plans page, checkout amount and payment verification — all in sync.
+          </Typography>
+        </Box>
+        <Stack direction="row" gap={1}>
+          <Button size="small" startIcon={<Refresh />} onClick={load} disabled={saving}>Refresh</Button>
+          <Button size="small" variant="contained" color="warning" onClick={() => setConfirm(true)} disabled={saving || !dirty}>
+            Save pricing
+          </Button>
+        </Stack>
+      </Stack>
+
+      <Alert severity="warning" sx={{ mb: 2, borderRadius: 2 }}>
+        Pricing changes take effect immediately for new checkouts and are recorded in the audit log. Existing
+        subscriptions are unaffected.
+      </Alert>
+
+      <Grid container spacing={2}>
+        {['pro', 'enterprise'].map(tier => (
+          <Grid item xs={12} md={6} key={tier}>
+            <Card>
+              <CardContent>
+                <Typography variant="subtitle1" fontWeight={700} mb={1.5} textTransform="capitalize">{tier}</Typography>
+                <Stack spacing={2}>
+                  {['monthly', 'annual'].map(period => (
+                    <TextField key={period} size="small" fullWidth type="number"
+                      label={`${period[0].toUpperCase()}${period.slice(1)} price (USD)`}
+                      value={prices[tier]?.[period] ?? ''}
+                      onChange={e => setP(tier, period, e.target.value)}
+                      InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
+                    />
+                  ))}
+                </Stack>
+              </CardContent>
+            </Card>
+          </Grid>
+        ))}
+      </Grid>
+
+      <Dialog open={confirm} onClose={() => !saving && setConfirm(false)}>
+        <DialogTitle>Update pricing?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            New prices will apply to all new checkouts immediately and update the public pricing page. Confirm?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirm(false)} disabled={saving}>Cancel</Button>
+          <Button color="warning" variant="contained" onClick={save} disabled={saving}>
+            {saving ? 'Saving…' : 'Confirm'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // TAB — SECRET & API-KEY VAULT (Super Admin only)
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -3153,10 +3395,14 @@ export default function AdminPanel() {
       render: () => <ReportsTab onAdminError={handleAdminError} /> },
     { key: 'promo', label: 'Promo Codes', icon: <Payment fontSize="small" />, permission: 'billing.view',
       render: () => <PromoCodesTab onAdminError={handleAdminError} /> },
+    { key: 'pricing', label: 'Pricing', icon: <MoneyIcon fontSize="small" />, permission: 'pricing.manage',
+      render: () => <PricingTab onAdminError={handleAdminError} /> },
     { key: 'bothealth', label: 'Bot Health', icon: <MonitorHeart fontSize="small" />, permission: 'health.view',
       render: () => <BotHealthTab onAdminError={handleAdminError} /> },
     { key: 'diagnostics', label: 'Diagnostics', icon: <NetworkCheck fontSize="small" />, permission: 'health.view',
       render: () => <DiagnosticsTab onAdminError={handleAdminError} /> },
+    { key: 'ai', label: 'AI', icon: <Psychology fontSize="small" />, permission: 'ai.manage',
+      render: () => <AITab onAdminError={handleAdminError} /> },
     { key: 'config', label: 'Configuration', icon: <Tune fontSize="small" />, permission: 'config.manage',
       render: () => <ConfigurationTab onAdminError={handleAdminError} /> },
     { key: 'secrets', label: 'Secrets & Keys', icon: <Key fontSize="small" />, permission: 'secrets.manage',

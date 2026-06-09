@@ -18,7 +18,14 @@ billing_bp = Blueprint("billing", __name__, url_prefix="/api/billing")
 
 _TIER_DURATION_MONTHLY = 30
 _TIER_DURATION_ANNUAL = 365
-_TIER_PRICES_USD = {"pro": {"monthly": 9, "annual": 86}, "enterprise": {"monthly": 49, "annual": 392}}
+
+
+def _tier_prices():
+    """Resolved tier prices (DB-first via billing_config, hardcoded fallback).
+    Used by checkout, webhook amount-verification AND the public /plans display so
+    they can never drift apart when an admin edits pricing."""
+    from .. import billing_config
+    return billing_config.get_tier_prices()
 
 
 def _get_current_user():
@@ -43,7 +50,7 @@ def _activate_subscription(user, tier, provider="unknown", payment_id=None,
     user.subscription_expires_at  = expires
     user.subscription_grace_until = expires + timedelta(days=7)
     user.subscription_interval    = billing_period
-    default_amount = _TIER_PRICES_USD.get(tier, {}).get(billing_period, 0)
+    default_amount = _tier_prices().get(tier, {}).get(billing_period, 0)
     # 1-A-02: renewal audit record
     renewal = SubscriptionRenewal(
         user_id=user.id,
@@ -104,7 +111,8 @@ def _claim_dedup(dedup_key: str) -> bool:
 
 @billing_bp.route("/plans", methods=["GET"])
 def get_plans():
-    return jsonify({"plans": Config.PLANS})
+    from .. import billing_config
+    return jsonify({"plans": billing_config.get_plans()})
 
 
 # ─── 14-day Pro trial ────────────────────────────────────────────────────────
@@ -256,7 +264,7 @@ def validate_promo():
     if not ok:
         return jsonify({"valid": False, "error": reason}), 200
 
-    base = float(_TIER_PRICES_USD.get(tier, {}).get(billing_period, 0))
+    base = float(_tier_prices().get(tier, {}).get(billing_period, 0))
     discount = promo.compute_discount(base)
     final = max(0.0, round(base - discount, 2))
 
@@ -305,7 +313,7 @@ def crypto_checkout():
     if not Config.NOWPAYMENTS_API_KEY:
         return jsonify({"error": "Crypto payments are not configured yet."}), 503
 
-    base_amount = float(_TIER_PRICES_USD[tier][billing_period])
+    base_amount = float(_tier_prices()[tier][billing_period])
     period_label = "1 Year" if billing_period == "annual" else "1 Month"
 
     # ── Promo code (optional) ─────────────────────────────────────────────────
@@ -520,7 +528,7 @@ def crypto_webhook():
             logger.warning("[NOWPAYMENTS] Could not resolve order_id: %s — no PendingInvoice found", order_id)
             return jsonify({"status": "ok"})
         user = User.query.get(user_id)
-        expected_usd = _TIER_PRICES_USD.get(tier, {}).get(billing_period)
+        expected_usd = _tier_prices().get(tier, {}).get(billing_period)
 
     if not user:
         logger.warning("[NOWPAYMENTS] User not found for order %s", order_id)
@@ -722,7 +730,7 @@ def ls_webhook():
         pass
 
     # Server-side amount validation — prevent paying $1 to activate a $49 plan.
-    expected_usd = _TIER_PRICES_USD.get(tier, {}).get(interval)
+    expected_usd = _tier_prices().get(tier, {}).get(interval)
     if expected_usd and amount_usd is not None:
         if amount_usd < expected_usd * 0.99:
             logger.error(

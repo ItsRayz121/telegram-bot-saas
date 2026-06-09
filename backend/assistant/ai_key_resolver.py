@@ -66,8 +66,8 @@ def _redis_check_and_increment(user_id: int, daily_limit: int):
 
 def _check_platform_cost_circuit():
     """Raise PlatformCostLimitError if the daily platform AI spend limit is hit."""
-    from flask import current_app
-    limit = float(current_app.config.get("MAX_DAILY_AI_SPEND_USD", 50))
+    from .. import ai_config
+    limit = ai_config.daily_spend_cap()
     r = _get_redis()
     if r is None:
         return  # Redis down — allow request
@@ -194,9 +194,12 @@ def get_workspace_ai_key(user) -> dict:
                 "source": "user",
             }
 
-    # Platform key path — enforce daily quota (Redis-atomic) + cost circuit breaker
+    # Platform key path — enforce daily quota (Redis-atomic) + cost circuit breaker.
+    # Per-tier limits are admin-editable (ai_config), DB-first with the same
+    # hardcoded defaults as before.
+    from .. import ai_config
     tier = user.subscription_tier
-    daily_limit = 500000 if tier == "enterprise" else (200000 if tier == "pro" else 10000)
+    daily_limit = ai_config.daily_token_limit(tier)
 
     # 1. Platform cost circuit breaker — hard stop if daily budget exceeded
     _check_platform_cost_circuit()
@@ -225,8 +228,8 @@ def get_workspace_ai_key(user) -> dict:
         return {
             "provider": "openrouter",
             "api_key": _platform_key,
-            "model": "openai/gpt-4o-mini",
-            "base_url": "https://openrouter.ai/api/v1",
+            "model": ai_config.default_model(),
+            "base_url": ai_config.default_base_url(),
             "source": "platform",
             "daily_limit": daily_limit,
         }

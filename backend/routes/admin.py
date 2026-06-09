@@ -2418,3 +2418,120 @@ def test_secret(name):
     data = request.get_json(silent=True) or {}
     ok, message = sv.test_secret(name, value=data.get("value"))
     return jsonify({"ok": ok, "message": message})
+
+
+# ── AI Management (ai.manage) ──────────────────────────────────────────────────
+
+@admin_bp.route("/ai-config", methods=["GET"])
+@require_permission(rbac.P_AI_MANAGE)
+@rate_limit(requests_per_minute=30)
+def get_ai_config():
+    """AI settings + live usage analytics (today's platform spend, top token users)."""
+    from .. import ai_config
+    from .. import platform_config as pc
+    from datetime import date
+
+    spend_today = 0.0
+    try:
+        import redis as _redis
+        r = _redis.from_url(Config.REDIS_URL or "redis://localhost:6379/0", socket_timeout=2)
+        spend_today = round(float(r.get(f"platform_ai_spend:{date.today().isoformat()}") or 0), 4)
+    except Exception:
+        spend_today = None  # Redis unavailable
+
+    top = (
+        User.query.filter(User.workspace_ai_tokens_today > 0)
+        .order_by(User.workspace_ai_tokens_today.desc()).limit(10).all()
+    )
+    cap = ai_config.daily_spend_cap()
+    return jsonify({
+        "settings": ai_config.all_settings(),
+        "ai_features_enabled": pc.is_feature_enabled("ai_features_enabled"),
+        "usage": {
+            "spend_today_usd": spend_today,
+            "daily_cap_usd": cap,
+            "spend_pct": (round(spend_today / cap * 100, 1) if (spend_today is not None and cap) else None),
+            "top_token_users": [
+                {"id": u.id, "email": u.email, "tier": u.subscription_tier,
+                 "tokens_today": u.workspace_ai_tokens_today or 0}
+                for u in top
+            ],
+        },
+    })
+
+
+@admin_bp.route("/ai-config", methods=["PUT"])
+@require_permission(rbac.P_AI_MANAGE)
+@rate_limit(requests_per_minute=20)
+def update_ai_config():
+    """Update AI settings. Body: {"settings": {key: value, ...}}."""
+    from .. import ai_config
+    me = _get_current_user()
+    updates = (request.get_json() or {}).get("settings") or {}
+    unknown = [k for k in updates if k not in ai_config.AI_KEYS]
+    if unknown:
+        return jsonify({"error": f"Unknown AI setting(s): {', '.join(unknown)}"}), 400
+    changed = []
+    for key, value in updates.items():
+        old = ai_config.get(key)
+        try:
+            new = ai_config.set_value(key, value, user_id=me.id)
+        except (ValueError, TypeError):
+            return jsonify({"error": f"Invalid value for {key}"}), 400
+        if old != new:
+            changed.append(key)
+            db.session.add(AdminAuditLog(
+                admin_id=me.id, action="update_ai_config", method="PUT",
+                path="/api/admin/ai-config", ip_address=request.remote_addr,
+                severity="notice", target_type="ai_setting", target_id=key,
+                old_value=str(old), new_value=str(new),
+            ))
+    db.session.commit()
+    return jsonify({"message": f"Updated {len(changed)} setting(s).", "settings": ai_config.all_settings()})
+
+
+# ── Pricing (Super Admin only) ─────────────────────────────────────────────────
+
+@admin_bp.route("/pricing", methods=["GET"])
+@require_permission(rbac.P_PRICING_MANAGE)
+@rate_limit(requests_per_minute=30)
+def get_pricing():
+    from .. import billing_config
+    return jsonify({"prices": billing_config.get_tier_prices(), "plans": billing_config.get_plans()})
+
+
+@admin_bp.route("/pricing", methods=["PUT"])
+@require_permission(rbac.P_PRICING_MANAGE)
+@rate_limit(requests_per_minute=20)
+def update_pricing():
+    """Update one or more tier prices (USD). Body: {"prices": {"pro": {"monthly": 9, ...}}}.
+    All consumers (checkout, webhook verification, /plans) read the same resolver,
+    so display, charge and verification stay consistent."""
+    from .. import billing_config
+    me = _get_current_user()
+    prices = (request.get_json() or {}).get("prices") or {}
+    changed = []
+    for tier, periods in prices.items():
+        if tier not in billing_config.TIERS or not isinstance(periods, dict):
+            return jsonify({"error": f"Invalid tier: {tier}"}), 400
+        for period, usd in periods.items():
+            if period not in billing_config.PERIODS:
+                return jsonify({"error": f"Invalid period: {period}"}), 400
+            old = billing_config.get_tier_prices().get(tier, {}).get(period)
+            try:
+                new = billing_config.set_tier_price(tier, period, usd, user_id=me.id)
+            except (ValueError, TypeError):
+                return jsonify({"error": f"Invalid price for {tier}/{period}"}), 400
+            if old != new:
+                changed.append(f"{tier}/{period}")
+                db.session.add(AdminAuditLog(
+                    admin_id=me.id, action="update_pricing", method="PUT",
+                    path="/api/admin/pricing", ip_address=request.remote_addr,
+                    severity="critical", target_type="price", target_id=f"{tier}/{period}",
+                    old_value=str(old), new_value=str(new),
+                ))
+    db.session.commit()
+    return jsonify({
+        "message": f"Updated {len(changed)} price(s).", "changed": changed,
+        "prices": billing_config.get_tier_prices(), "plans": billing_config.get_plans(),
+    })

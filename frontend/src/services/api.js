@@ -683,6 +683,12 @@ export const admin = {
   setSecret: (name, value) => api.put(`/api/admin/secrets/${name}`, { value }),
   clearSecret: (name) => api.delete(`/api/admin/secrets/${name}`),
   testSecret: (name, value) => api.post(`/api/admin/secrets/${name}/test`, value ? { value } : {}),
+  // AI Management (ai.manage)
+  getAiConfig: () => api.get('/api/admin/ai-config'),
+  updateAiConfig: (settings) => api.put('/api/admin/ai-config', { settings }),
+  // Pricing (Super Admin only)
+  getPricing: () => api.get('/api/admin/pricing'),
+  updatePricing: (prices) => api.put('/api/admin/pricing', { prices }),
 };
 
 // Public, unauthenticated platform config (branding, links, maintenance status)
