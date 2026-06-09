@@ -96,13 +96,12 @@ def invalidate_cache():
 
 
 def get_secret(name, default=None):
-    """Resolve a platform secret: DB override first, then env (Config), then default."""
-    data = _resolved()
-    val = data.get(name)
-    if val:
-        return val
-    env_val = getattr(Config, name, None)
-    return env_val if env_val else default
+    """Resolve a platform secret: DB override first, then env (Config), then default.
+
+    The resolved map already folds in the env value for keys without a DB
+    override (see _load), so a single lookup covers both DB and env.
+    """
+    return _resolved().get(name) or default
 
 
 def _mask(value):
@@ -222,15 +221,18 @@ def test_secret(name, value=None):
     except Exception as e:
         ok, message = False, str(e)[:200]
 
-    # Persist the result (only if a stored row exists; don't create one for an env-only test)
-    try:
-        from .models import db, PlatformSecret
-        from datetime import datetime
-        row = PlatformSecret.query.filter_by(name=name).first()
-        if row:
-            row.last_test_ok = ok
-            row.last_tested_at = datetime.utcnow()
-            db.session.commit()
-    except Exception:
-        pass
+    # Persist the result only when testing the STORED value (no candidate passed),
+    # so testing an unsaved candidate in the Set dialog can't overwrite the badge
+    # for the live key.
+    if not value:
+        try:
+            from .models import db, PlatformSecret
+            from datetime import datetime
+            row = PlatformSecret.query.filter_by(name=name).first()
+            if row:
+                row.last_test_ok = ok
+                row.last_tested_at = datetime.utcnow()
+                db.session.commit()
+        except Exception:
+            pass
     return ok, message
