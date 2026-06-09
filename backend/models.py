@@ -2858,6 +2858,59 @@ class AdminAuditLog(db.Model):
         }
 
 
+# ── PlatformSetting & FeatureFlag (Phase 2 admin-panel overhaul) ───────────────
+
+class PlatformSetting(db.Model):
+    """A single DB-backed platform configuration value, editable from the admin
+    panel. Resolved DB-first with hardcoded/env fallback (see backend/platform_config.py).
+    ``value_json`` stores any JSON-serialisable value. ``is_public`` marks settings
+    safe to expose unauthenticated (branding, URLs, maintenance status)."""
+    __tablename__ = "platform_settings"
+
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(80), unique=True, nullable=False, index=True)
+    value_json = db.Column(db.Text, nullable=True)
+    category = db.Column(db.String(40), nullable=True)
+    is_public = db.Column(db.Boolean, default=False, nullable=False)
+    updated_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    def to_dict(self):
+        import json as _json
+        try:
+            value = _json.loads(self.value_json) if self.value_json is not None else None
+        except Exception:
+            value = self.value_json
+        return {
+            "key": self.key,
+            "value": value,
+            "category": self.category,
+            "is_public": self.is_public,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class FeatureFlag(db.Model):
+    """A platform-wide feature toggle / kill-switch, editable from the admin panel.
+    Consumed via platform_config.is_feature_enabled(key)."""
+    __tablename__ = "feature_flags"
+
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(80), unique=True, nullable=False, index=True)
+    enabled = db.Column(db.Boolean, default=True, nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    updated_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "key": self.key,
+            "enabled": self.enabled,
+            "description": self.description,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
 # ── AdminAnnouncement ─────────────────────────────────────────────────────────
 
 class AdminAnnouncement(db.Model):

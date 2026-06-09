@@ -2,10 +2,11 @@
 import useAssistantName from '../hooks/useAssistantName';
 import {
   Box, AppBar, Toolbar, IconButton, Typography, Drawer,
-  useMediaQuery, useTheme, Paper, BottomNavigation, BottomNavigationAction,
+  useMediaQuery, useTheme, Paper, BottomNavigation, BottomNavigationAction, Alert,
 } from '@mui/material';
 import { PALETTE } from '../theme';
 import { Menu as MenuIcon, Home, Groups, Psychology, AccountCircle, SmartToy } from '@mui/icons-material';
+import { getPublicPlatformConfig } from '../services/api';
 import Sidebar, { SIDEBAR_WIDTH, SIDEBAR_COLLAPSED_WIDTH } from '../components/Sidebar';
 // Telegizer Assistant panel hidden per user request — keep import handy for re-enable.
 // import { DesktopAssistantSidebar, MobileAssistantFab } from '../components/AssistantSidebar';
@@ -30,6 +31,19 @@ export default function AppLayout({ children }) {
   });
   const navigate = useNavigate();
   const { pathname } = useLocation();
+
+  // Maintenance banner — surfaced from public platform config (refreshed on mount).
+  const [maintenance, setMaintenance] = useState(null);
+  React.useEffect(() => {
+    let alive = true;
+    getPublicPlatformConfig()
+      .then(r => {
+        const s = r.data?.settings || {};
+        if (alive && s.maintenance_mode) setMaintenance(s.maintenance_message || 'Maintenance in progress.');
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
 
   // Echo's co-pilot is hidden inside the Groups context (group management),
   // where an AI assistant panel reads as unrelated clutter. It remains global
@@ -134,6 +148,9 @@ export default function AppLayout({ children }) {
           }}
           className="page-enter"
         >
+          {maintenance && (
+            <Alert severity="warning" sx={{ borderRadius: 0 }}>{maintenance}</Alert>
+          )}
           {children}
         </Box>
 

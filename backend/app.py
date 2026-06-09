@@ -438,6 +438,42 @@ def create_app():
             pass  # Bad/missing token — route handles its own auth check
         return None
 
+    # Maintenance mode: when enabled in platform config, non-admin API traffic is
+    # paused with a 503. Auth, admin panel, billing, bot-ingestion and webhook
+    # endpoints stay open so admins can manage the platform and bots keep working.
+    _MAINT_EXEMPT_PREFIX = (
+        '/api/auth/', '/api/admin/', '/api/billing/', '/api/integrations/',
+        '/api/tg-update/', '/api/webhooks/',
+    )
+    _MAINT_EXEMPT_EXACT = {
+        '/health', '/ready', '/api/platform/config', '/api/platform-stats',
+        '/api/official-bot-update', '/api/echo-bot-update', '/api/auth/me',
+    }
+
+    @app.before_request
+    def _enforce_maintenance_mode():
+        path = request.path
+        if not path.startswith('/api/'):
+            return None
+        if path in _MAINT_EXEMPT_EXACT or path.startswith(_MAINT_EXEMPT_PREFIX):
+            return None
+        try:
+            from .platform_config import is_maintenance_enabled, maintenance_message
+            if not is_maintenance_enabled():
+                return None
+            # Admins bypass maintenance so they can still operate the panel.
+            from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
+            verify_jwt_in_request(optional=True)
+            uid = get_jwt_identity()
+            if uid:
+                from .models import User
+                from . import admin_rbac as rbac
+                if rbac.is_admin(User.query.get(int(uid))):
+                    return None
+            return jsonify({"error": maintenance_message(), "code": "MAINTENANCE_MODE"}), 503
+        except Exception:
+            return None  # never let the gate itself break the app
+
     @app.before_request
     def _assign_request_id():
         g.request_id = str(uuid.uuid4())[:8]

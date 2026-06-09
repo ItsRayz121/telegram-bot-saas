@@ -5,7 +5,7 @@ import {
   TableContainer, TableHead, TableRow, Paper, Chip, Button, Dialog,
   DialogTitle, DialogContent, DialogActions, MenuItem, Select,
   FormControl, InputLabel, Pagination, InputAdornment, Tabs, Tab,
-  Alert, Tooltip, LinearProgress, Stack, Divider,
+  Alert, Tooltip, LinearProgress, Stack, Divider, Switch, FormControlLabel,
 } from '@mui/material';
 import {
   ArrowBack, Search, Block, CheckCircle, Delete, Groups, SmartToy,
@@ -13,7 +13,7 @@ import {
   History, FolderOpen, Campaign, VerifiedUser, Refresh,
   CheckCircleOutline, Cancel, Circle, Flag,
   Security, AccountTree, TrendingDown, Payment, FileDownload,
-  MonitorHeart, NetworkCheck,
+  MonitorHeart, NetworkCheck, Tune,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -2498,6 +2498,187 @@ function DiagnosticsTab({ onAdminError }) {
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// TAB — PLATFORM CONFIGURATION & FEATURE FLAGS (Super Admin only)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const CATEGORY_LABELS = {
+  branding: 'Branding', links: 'URLs & Links', localization: 'Localization',
+  maintenance: 'Maintenance', onboarding: 'Onboarding',
+};
+const CATEGORY_ORDER = ['branding', 'links', 'localization', 'maintenance', 'onboarding'];
+
+function prettyKey(k) {
+  return k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function ConfigurationTab({ onAdminError }) {
+  const [form, setForm] = useState(null);     // { key: value }
+  const [original, setOriginal] = useState({});
+  const [meta, setMeta] = useState({});        // key -> { category, is_public }
+  const [flags, setFlags] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [confirm, setConfirm] = useState(null); // { title, body, color, onConfirm }
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await admin.getPlatformConfig();
+      const f = {}; const m = {};
+      (data.settings || []).forEach(s => { f[s.key] = s.value; m[s.key] = { category: s.category, is_public: s.is_public }; });
+      setForm(f); setOriginal({ ...f }); setMeta(m);
+      setFlags(data.flags || []);
+    } catch (e) { onAdminError?.(e, 'Failed to load configuration'); }
+    finally { setLoading(false); }
+  }, [onAdminError]);
+  useEffect(() => { load(); }, [load]);
+
+  const changedKeys = form ? Object.keys(form).filter(k => form[k] !== original[k]) : [];
+
+  const doSave = async () => {
+    setSaving(true);
+    try {
+      const payload = {};
+      changedKeys.forEach(k => { payload[k] = form[k]; });
+      const { data } = await admin.updatePlatformSettings(payload);
+      const f = {}; (data.settings || []).forEach(s => { f[s.key] = s.value; });
+      setForm(f); setOriginal({ ...f });
+      toast.success(data.message || 'Configuration saved');
+    } catch (e) { onAdminError?.(e, 'Failed to save configuration'); }
+    finally { setSaving(false); setConfirm(null); }
+  };
+
+  const onSave = () => {
+    // Confirm before enabling maintenance mode (it pauses the platform).
+    if (form.maintenance_mode === true && original.maintenance_mode !== true) {
+      setConfirm({
+        title: 'Enable maintenance mode?',
+        body: 'All non-admin users will be blocked from the app until you turn this off. Bots and webhooks keep running.',
+        color: 'error', onConfirm: doSave,
+      });
+    } else { doSave(); }
+  };
+
+  const toggleFlag = (flag, next) => {
+    const apply = async () => {
+      try {
+        const { data } = await admin.updateFeatureFlag(flag.key, next);
+        setFlags(data.flags || flags);
+        toast.success(`${prettyKey(flag.key)} ${next ? 'enabled' : 'disabled'}`);
+      } catch (e) { onAdminError?.(e, 'Failed to update feature flag'); }
+      finally { setConfirm(null); }
+    };
+    if (!next) {
+      setConfirm({
+        title: `Disable ${prettyKey(flag.key)}?`,
+        body: flag.description || 'This turns the feature off platform-wide immediately.',
+        color: 'error', onConfirm: apply,
+      });
+    } else { apply(); }
+  };
+
+  if (loading || !form) {
+    return <Box display="flex" justifyContent="center" py={6}><CircularProgress /></Box>;
+  }
+
+  const byCategory = {};
+  Object.keys(meta).forEach(k => {
+    const cat = meta[k].category || 'other';
+    (byCategory[cat] = byCategory[cat] || []).push(k);
+  });
+  const cats = CATEGORY_ORDER.filter(c => byCategory[c]).concat(Object.keys(byCategory).filter(c => !CATEGORY_ORDER.includes(c)));
+
+  return (
+    <Box>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2} flexWrap="wrap" gap={1}>
+        <Box>
+          <Typography variant="h6" fontWeight={700}>Platform Configuration</Typography>
+          <Typography variant="caption" color="text.secondary">
+            Edit branding, links, localization, maintenance mode and feature flags. Changes apply within ~30s.
+          </Typography>
+        </Box>
+        <Stack direction="row" gap={1}>
+          <Button size="small" startIcon={<Refresh />} onClick={load} disabled={saving}>Refresh</Button>
+          <Button size="small" variant="contained" onClick={onSave} disabled={saving || changedKeys.length === 0}>
+            {saving ? 'Saving…' : `Save${changedKeys.length ? ` (${changedKeys.length})` : ''}`}
+          </Button>
+        </Stack>
+      </Stack>
+
+      <Grid container spacing={2}>
+        {cats.map(cat => (
+          <Grid item xs={12} md={6} key={cat}>
+            <Card sx={{ height: '100%' }}>
+              <CardContent>
+                <Typography variant="subtitle1" fontWeight={700} mb={1.5}
+                  color={cat === 'maintenance' ? 'error.main' : 'text.primary'}>
+                  {CATEGORY_LABELS[cat] || prettyKey(cat)}
+                </Typography>
+                <Stack spacing={2}>
+                  {byCategory[cat].map(key => (
+                    typeof form[key] === 'boolean' ? (
+                      <FormControlLabel key={key}
+                        control={<Switch checked={!!form[key]}
+                          color={key === 'maintenance_mode' ? 'error' : 'primary'}
+                          onChange={e => setForm({ ...form, [key]: e.target.checked })} />}
+                        label={<Box>
+                          <Typography variant="body2">{prettyKey(key)}</Typography>
+                          {key === 'maintenance_mode' && form[key] && (
+                            <Typography variant="caption" color="error">Platform is paused for non-admins</Typography>)}
+                        </Box>}
+                      />
+                    ) : (
+                      <TextField key={key} size="small" fullWidth
+                        label={prettyKey(key)}
+                        value={form[key] ?? ''}
+                        multiline={key === 'maintenance_message'}
+                        onChange={e => setForm({ ...form, [key]: e.target.value })}
+                      />
+                    )
+                  ))}
+                </Stack>
+              </CardContent>
+            </Card>
+          </Grid>
+        ))}
+
+        {/* Feature flags */}
+        <Grid item xs={12}>
+          <Card>
+            <CardContent>
+              <Typography variant="subtitle1" fontWeight={700} mb={1.5}>Feature Flags</Typography>
+              <Stack divider={<Divider />}>
+                {flags.map(flag => (
+                  <Stack key={flag.key} direction="row" alignItems="center" justifyContent="space-between" py={1} gap={2}>
+                    <Box>
+                      <Typography variant="body2" fontWeight={600}>{prettyKey(flag.key)}</Typography>
+                      <Typography variant="caption" color="text.secondary">{flag.description}</Typography>
+                    </Box>
+                    <Switch checked={!!flag.enabled} onChange={e => toggleFlag(flag, e.target.checked)} />
+                  </Stack>
+                ))}
+              </Stack>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      <Dialog open={!!confirm} onClose={() => !saving && setConfirm(null)}>
+        <DialogTitle>{confirm?.title}</DialogTitle>
+        <DialogContent><Typography variant="body2">{confirm?.body}</Typography></DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirm(null)} disabled={saving}>Cancel</Button>
+          <Button variant="contained" color={confirm?.color || 'primary'} disabled={saving} onClick={confirm?.onConfirm}>
+            Confirm
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // TAB — ROLES & ACCESS (Super Admin only)
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -2766,6 +2947,8 @@ export default function AdminPanel() {
       render: () => <BotHealthTab onAdminError={handleAdminError} /> },
     { key: 'diagnostics', label: 'Diagnostics', icon: <NetworkCheck fontSize="small" />, permission: 'health.view',
       render: () => <DiagnosticsTab onAdminError={handleAdminError} /> },
+    { key: 'config', label: 'Configuration', icon: <Tune fontSize="small" />, permission: 'config.manage',
+      render: () => <ConfigurationTab onAdminError={handleAdminError} /> },
     { key: 'roles', label: 'Roles & Access', icon: <Security fontSize="small" />, permission: 'roles.manage',
       render: () => <RolesTab onAdminError={handleAdminError} currentUserId={me?.id} /> },
     // eslint-disable-next-line react-hooks/exhaustive-deps

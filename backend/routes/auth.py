@@ -242,6 +242,14 @@ def _log_suspicious(user_id, event_type: str, ip_hash, device_hash, reason: str,
 @auth_bp.route("/register", methods=["POST"])
 @rate_limit(requests_per_minute=10)
 def register():
+    # Platform kill-switch: admins can pause new sign-ups from the admin panel.
+    from .. import platform_config as pc
+    if not pc.is_feature_enabled("registrations_enabled"):
+        return jsonify({
+            "error": "New registrations are temporarily disabled. Please check back later.",
+            "code": "REGISTRATIONS_DISABLED",
+        }), 403
+
     data = request.get_json()
     if not data:
         return jsonify({"error": "No data provided"}), 400

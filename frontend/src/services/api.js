@@ -674,7 +674,14 @@ export const admin = {
   getRoleMatrix: () => api.get('/api/admin/roles/matrix'),
   getAdmins: () => api.get('/api/admin/roles/admins'),
   setAdminRole: (userId, data) => api.put(`/api/admin/roles/admins/${userId}`, data),
+  // Platform Configuration & Feature Flags (Super Admin only)
+  getPlatformConfig: () => api.get('/api/admin/platform-config'),
+  updatePlatformSettings: (settings) => api.put('/api/admin/platform-config/settings', { settings }),
+  updateFeatureFlag: (key, enabled) => api.put(`/api/admin/feature-flags/${key}`, { enabled }),
 };
+
+// Public, unauthenticated platform config (branding, links, maintenance status)
+export const getPublicPlatformConfig = () => api.get('/api/platform/config');
 
 export const telegramGroups = {
   list: () => api.get('/api/telegram-groups'),

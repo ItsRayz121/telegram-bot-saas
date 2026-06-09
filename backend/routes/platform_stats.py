@@ -7,6 +7,15 @@ from ..middleware.rate_limit import rate_limit
 
 platform_stats_bp = Blueprint("platform_stats", __name__)
 
+
+@platform_stats_bp.route("/api/platform/config", methods=["GET"])
+@rate_limit(requests_per_minute=120)
+def get_public_platform_config():
+    """Public (unauthenticated) platform config: branding, links, localization,
+    maintenance status and public feature flags. Never returns secrets."""
+    from .. import platform_config as pc
+    return jsonify(pc.public_config())
+
 MOD_EVENT_TYPES = {
     "ban", "mute", "warn", "kick", "delete_message",
     "spam_removed", "link_removed", "flood_muted",

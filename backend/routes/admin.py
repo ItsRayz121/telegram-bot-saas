@@ -2270,3 +2270,72 @@ def set_admin_role(user_id):
         "message": (f"Role set to {rbac.ROLE_LABELS[new_role]}." if new_role else "Admin access revoked."),
         "user": {"id": target.id, "email": target.email, "role": new_role},
     })
+
+
+# ── Platform Configuration & Feature Flags (Super Admin only) ───────────────────
+
+@admin_bp.route("/platform-config", methods=["GET"])
+@require_permission(rbac.P_CONFIG_MANAGE)
+@rate_limit(requests_per_minute=30)
+def get_platform_config():
+    from .. import platform_config as pc
+    return jsonify(pc.admin_config())
+
+
+@admin_bp.route("/platform-config/settings", methods=["PUT"])
+@require_permission(rbac.P_CONFIG_MANAGE)
+@rate_limit(requests_per_minute=20)
+def update_platform_settings():
+    """Bulk-update platform settings. Body: {"settings": {key: value, ...}}."""
+    from .. import platform_config as pc
+    me = _get_current_user()
+    data = request.get_json() or {}
+    updates = data.get("settings") or {}
+    if not isinstance(updates, dict):
+        return jsonify({"error": "settings must be an object"}), 400
+
+    unknown = [k for k in updates if k not in pc.SETTING_KEYS]
+    if unknown:
+        return jsonify({"error": f"Unknown setting key(s): {', '.join(unknown)}"}), 400
+
+    changed = []
+    for key, value in updates.items():
+        old = pc.get_setting(key)
+        if old == value:
+            continue
+        pc.set_setting(key, value, user_id=me.id)
+        changed.append(key)
+        sev = "critical" if key == "maintenance_mode" else "notice"
+        db.session.add(AdminAuditLog(
+            admin_id=me.id, action="update_platform_setting", method="PUT",
+            path="/api/admin/platform-config/settings", ip_address=request.remote_addr,
+            severity=sev, target_type="setting", target_id=key,
+            old_value=json.dumps(old)[:500] if old is not None else None,
+            new_value=json.dumps(value)[:500] if value is not None else None,
+        ))
+    db.session.commit()
+    return jsonify({"message": f"Updated {len(changed)} setting(s).", "changed": changed, **pc.admin_config()})
+
+
+@admin_bp.route("/feature-flags/<key>", methods=["PUT"])
+@require_permission(rbac.P_CONFIG_MANAGE)
+@rate_limit(requests_per_minute=20)
+def update_feature_flag(key):
+    from .. import platform_config as pc
+    me = _get_current_user()
+    if key not in pc.FLAG_KEYS:
+        return jsonify({"error": f"Unknown feature flag: {key}"}), 400
+    data = request.get_json() or {}
+    if "enabled" not in data:
+        return jsonify({"error": "enabled is required"}), 400
+    old = pc.is_feature_enabled(key)
+    new = bool(data["enabled"])
+    pc.set_feature_flag(key, new, user_id=me.id)
+    db.session.add(AdminAuditLog(
+        admin_id=me.id, action="update_feature_flag", method="PUT",
+        path=f"/api/admin/feature-flags/{key}", ip_address=request.remote_addr,
+        severity="notice", target_type="feature_flag", target_id=key,
+        old_value=str(old), new_value=str(new),
+    ))
+    db.session.commit()
+    return jsonify({"message": f"Feature '{key}' {'enabled' if new else 'disabled'}.", **pc.admin_config()})
