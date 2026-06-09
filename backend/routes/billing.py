@@ -9,6 +9,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy.exc import IntegrityError
 from ..models import db, User, ProcessedPayment, PaymentHistory, PendingInvoice, SubscriptionRenewal, PromoCode, PromoCodeUsage
 from ..config import Config
+from .. import secret_vault as _sv
 from ..middleware.rate_limit import rate_limit
 from ..notifications import send_subscription_confirmation, send_subscription_cancelled
 
@@ -312,7 +313,7 @@ def crypto_checkout():
             "code": "ACCOUNT_FLAGGED",
         }), 403
 
-    if not Config.NOWPAYMENTS_API_KEY:
+    if not _sv.get_secret("NOWPAYMENTS_API_KEY"):
         return jsonify({"error": "Crypto payments are not configured yet."}), 503
 
     base_amount = float(_tier_prices()[tier][billing_period])
@@ -341,7 +342,7 @@ def crypto_checkout():
         resp = requests.post(
             "https://api.nowpayments.io/v1/invoice",
             headers={
-                "x-api-key": Config.NOWPAYMENTS_API_KEY,
+                "x-api-key": _sv.get_secret("NOWPAYMENTS_API_KEY"),
                 "Content-Type": "application/json",
             },
             json={
@@ -413,7 +414,7 @@ def crypto_webhook():
     payload = request.get_data()
     sig = request.headers.get("x-nowpayments-sig", "")
 
-    if not Config.NOWPAYMENTS_IPN_SECRET:
+    if not _sv.get_secret("NOWPAYMENTS_IPN_SECRET"):
         logger.error("[NOWPAYMENTS] NOWPAYMENTS_IPN_SECRET is not configured — rejecting all webhooks")
         return jsonify({"error": "Webhook not configured"}), 503
 
@@ -424,7 +425,7 @@ def crypto_webhook():
         body = json.loads(payload)
         sorted_body = json.dumps(body, sort_keys=True, separators=(",", ":"))
         expected = hmac.new(
-            Config.NOWPAYMENTS_IPN_SECRET.encode(),
+            _sv.get_secret("NOWPAYMENTS_IPN_SECRET").encode(),
             sorted_body.encode(),
             hashlib.sha512,
         ).hexdigest()
@@ -603,7 +604,7 @@ def _ls_variant_map() -> dict:
 @rate_limit(requests_per_minute=10)
 def ls_create_checkout():
     """Create a Lemon Squeezy checkout session and return the hosted checkout URL."""
-    if not Config.LS_API_KEY or not Config.LS_STORE_ID:
+    if not _sv.get_secret("LS_API_KEY") or not Config.LS_STORE_ID:
         return jsonify({"error": "Card payments are not configured"}), 503
 
     user = _get_current_user()
@@ -650,7 +651,7 @@ def ls_create_checkout():
         resp = requests.post(
             "https://api.lemonsqueezy.com/v1/checkouts",
             headers={
-                "Authorization": f"Bearer {Config.LS_API_KEY}",
+                "Authorization": f"Bearer {_sv.get_secret("LS_API_KEY")}",
                 "Accept":        "application/vnd.api+json",
                 "Content-Type":  "application/vnd.api+json",
             },
@@ -676,12 +677,12 @@ def ls_webhook():
     raw_body = request.get_data()
     signature = request.headers.get("X-Signature", "")
 
-    if not Config.LS_WEBHOOK_SECRET:
+    if not _sv.get_secret("LS_WEBHOOK_SECRET"):
         logger.error("[LS] Webhook received but LS_WEBHOOK_SECRET not configured")
         return jsonify({"error": "Webhook not configured"}), 500
 
     expected = hmac.new(
-        Config.LS_WEBHOOK_SECRET.encode(),
+        _sv.get_secret("LS_WEBHOOK_SECRET").encode(),
         raw_body,
         hashlib.sha256,
     ).hexdigest()
@@ -776,13 +777,13 @@ def verify_payment():
     if not pending:
         return jsonify({"upgraded": False, "status": "no_pending_invoice"}), 200
 
-    if not Config.NOWPAYMENTS_API_KEY:
+    if not _sv.get_secret("NOWPAYMENTS_API_KEY"):
         return jsonify({"upgraded": False, "status": "crypto_not_configured"}), 200
 
     try:
         resp = requests.get(
             f"https://api.nowpayments.io/v1/invoice/{pending.invoice_id}",
-            headers={"x-api-key": Config.NOWPAYMENTS_API_KEY},
+            headers={"x-api-key": _sv.get_secret("NOWPAYMENTS_API_KEY")},
             timeout=10,
         )
         resp.raise_for_status()

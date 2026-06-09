@@ -1,4 +1,5 @@
 import logging
+from backend import secret_vault as _sv
 from datetime import datetime
 from celery import Celery
 from celery.schedules import crontab
@@ -1191,7 +1192,7 @@ def recover_missed_payments():
         from datetime import timedelta
         from sqlalchemy.exc import IntegrityError
 
-        if not Config.NOWPAYMENTS_API_KEY:
+        if not _sv.get_secret("NOWPAYMENTS_API_KEY"):
             return
 
         cutoff = datetime.utcnow() - timedelta(minutes=5)
@@ -1205,7 +1206,7 @@ def recover_missed_payments():
             try:
                 resp = _req.get(
                     f"https://api.nowpayments.io/v1/invoice/{invoice.invoice_id}",
-                    headers={"x-api-key": Config.NOWPAYMENTS_API_KEY},
+                    headers={"x-api-key": _sv.get_secret("NOWPAYMENTS_API_KEY")},
                     timeout=10,
                 )
                 if not resp.ok:

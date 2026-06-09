@@ -196,5 +196,8 @@ def apply_rewards():
     user = _get_user()
     if not user:
         return jsonify({"error": "User not found"}), 404
+    from .. import platform_config as _pc
+    if not _pc.is_feature_enabled("referrals_enabled"):
+        return jsonify({"status": "disabled"}), 200
     _apply_referral_rewards(user)
     return jsonify({"status": "ok"})

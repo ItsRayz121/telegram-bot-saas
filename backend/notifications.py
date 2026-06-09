@@ -3,6 +3,7 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from flask import current_app
+from . import secret_vault as _sv
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,7 @@ def _send_via_smtp(cfg, from_email: str, to_email: str, subject: str,
     with smtplib.SMTP(cfg["SMTP_SERVER"], cfg["SMTP_PORT"]) as server:
         server.ehlo()
         server.starttls()
-        server.login(cfg["SMTP_USERNAME"], cfg["SMTP_PASSWORD"])
+        server.login(cfg["SMTP_USERNAME"], _sv.get_secret("SMTP_PASSWORD") or cfg["SMTP_PASSWORD"])
         server.sendmail(from_email, to_email, msg.as_string())
 
 
@@ -86,7 +87,7 @@ def send_email(to_email: str, subject: str, html_body: str, text_body: str = Non
 
     try:
         if provider == "resend":
-            api_key = cfg.get("RESEND_API_KEY", "")
+            api_key = _sv.get_secret("RESEND_API_KEY") or cfg.get("RESEND_API_KEY", "")
             if not api_key:
                 raise RuntimeError("RESEND_API_KEY is not configured.")
             _send_via_resend(api_key, from_email, to_email, subject, html_body,

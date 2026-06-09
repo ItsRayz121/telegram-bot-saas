@@ -77,6 +77,10 @@ def create_bot():
     if not user:
         return jsonify({"error": "User not found"}), 404
 
+    from .. import platform_config as _pc
+    if not _pc.is_feature_enabled("new_bot_creation_enabled"):
+        return jsonify({"error": "New bot creation is temporarily disabled.", "code": "FEATURE_DISABLED"}), 403
+
     max_bots = current_app.config["MAX_BOTS"].get(user.subscription_tier, 1)
     current_count = Bot.query.filter_by(user_id=user.id).count()
     if current_count >= max_bots:

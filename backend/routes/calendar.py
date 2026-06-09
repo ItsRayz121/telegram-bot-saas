@@ -27,6 +27,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..models import db, User, GoogleCalendarToken
 from ..middleware.rate_limit import rate_limit
 from ..config import Config
+from .. import secret_vault as _sv
 
 _log = logging.getLogger(__name__)
 
@@ -52,7 +53,7 @@ def _client_config() -> dict:
     return {
         "web": {
             "client_id": Config.GOOGLE_CLIENT_ID,
-            "client_secret": Config.GOOGLE_CLIENT_SECRET,
+            "client_secret": _sv.get_secret("GOOGLE_CLIENT_SECRET"),
             "redirect_uris": [Config.GOOGLE_REDIRECT_URI],
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
             "token_uri": "https://oauth2.googleapis.com/token",
@@ -81,7 +82,7 @@ def _build_credentials(token_row: GoogleCalendarToken):
         refresh_token=token_data.get("refresh_token"),
         token_uri="https://oauth2.googleapis.com/token",
         client_id=Config.GOOGLE_CLIENT_ID,
-        client_secret=Config.GOOGLE_CLIENT_SECRET,
+        client_secret=_sv.get_secret("GOOGLE_CLIENT_SECRET"),
         scopes=_SCOPES,
         expiry=datetime.fromisoformat(token_data["expiry"]) if token_data.get("expiry") else None,
     )

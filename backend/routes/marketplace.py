@@ -8,6 +8,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..models import db, PartnershipDeal, DealMessage, DirectoryListing, User
 from ..config import Config
+from .. import secret_vault as _sv
 from ..middleware.rate_limit import rate_limit
 
 _log = logging.getLogger(__name__)
@@ -41,6 +42,9 @@ def _enrich_deal(deal, current_user_id):
 
 @marketplace_bp.route("/api/marketplace", methods=["GET"])
 def browse():
+    from .. import platform_config as _pc
+    if not _pc.is_feature_enabled("marketplace_enabled"):
+        return jsonify({"listings": [], "disabled": True})
     q = DirectoryListing.query.filter_by(is_public=True, accepts_partnerships=True)
 
     category = request.args.get("category")
@@ -129,6 +133,9 @@ def get_deal(did):
 @jwt_required()
 def create_deal():
     user = _get_user()
+    from .. import platform_config as _pc
+    if not _pc.is_feature_enabled("marketplace_enabled"):
+        return jsonify({"error": "The marketplace is currently disabled.", "code": "FEATURE_DISABLED"}), 403
     data = request.get_json() or {}
 
     listing_id = data.get("listing_id")
@@ -263,7 +270,7 @@ def initiate_payment(did):
     import requests as _http
     from ..config import Config
 
-    api_key = Config.NOWPAYMENTS_API_KEY
+    api_key = _sv.get_secret("NOWPAYMENTS_API_KEY")
     if not api_key:
         return jsonify({"error": "Payment provider not configured"}), 503
 
@@ -311,7 +318,7 @@ def payment_webhook():
     payload = request.get_data()
     sig = request.headers.get("x-nowpayments-sig", "")
 
-    if not Config.NOWPAYMENTS_IPN_SECRET:
+    if not _sv.get_secret("NOWPAYMENTS_IPN_SECRET"):
         _log.error("[MARKETPLACE_WEBHOOK] NOWPAYMENTS_IPN_SECRET not configured — rejecting")
         return jsonify({"error": "Webhook not configured"}), 503
 
@@ -323,7 +330,7 @@ def payment_webhook():
         body_obj = json.loads(payload)
         sorted_body = json.dumps(body_obj, sort_keys=True, separators=(",", ":"))
         expected = hmac.new(
-            Config.NOWPAYMENTS_IPN_SECRET.encode(),
+            _sv.get_secret("NOWPAYMENTS_IPN_SECRET").encode(),
             sorted_body.encode(),
             hashlib.sha512,
         ).hexdigest()
