@@ -1980,6 +1980,24 @@ def feature_adoption():
     return jsonify({"total_users": total_users, "features": features})
 
 
+# ── Feature Usage (Telegizer Bot / Echo) ───────────────────────────────────────
+
+@admin_bp.route("/feature-usage", methods=["GET"])
+@require_permission(rbac.P_ANALYTICS_VIEW)
+@rate_limit(requests_per_minute=30)
+def feature_usage():
+    """Real feature-usage analytics from the FeatureUsageEvent spine.
+
+    ?view=bot  → Telegizer bot (official + custom lineages)
+    ?view=echo → Echo assistant (AIActivity + echo-scoped usage)
+    """
+    from ..feature_usage import usage_overview, echo_overview
+    view = request.args.get("view", "bot")
+    if view == "echo":
+        return jsonify({"view": "echo", **echo_overview()})
+    return jsonify({"view": "bot", **usage_overview(["official", "custom"])})
+
+
 # ── Fraud Detection ────────────────────────────────────────────────────────────
 
 @admin_bp.route("/fraud/clusters", methods=["GET"])

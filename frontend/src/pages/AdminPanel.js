@@ -14,7 +14,7 @@ import {
   CheckCircleOutline, Cancel, Circle, Flag,
   Security, AccountTree, TrendingDown, Payment, FileDownload,
   MonitorHeart, NetworkCheck, Tune, Key, Psychology, AttachMoney as MoneyIcon,
-  Gavel, Dns,
+  Gavel, Dns, Insights,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -3961,6 +3961,161 @@ function RolesTab({ onAdminError, currentUserId }) {
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// TAB — FEATURE USAGE (Telegizer Bot / Echo)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const TREND_COLOR = { heavy: 'success', growing: 'info', steady: 'default', declining: 'warning', dormant: 'error' };
+
+function FeatureUsageTab({ onAdminError }) {
+  const [view, setView] = useState('bot');
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const fetchData = useCallback(async (v) => {
+    setLoading(true);
+    try {
+      const res = await admin.getFeatureUsage(v);
+      setData(res.data);
+    } catch (err) {
+      onAdminError(err, 'Failed to load feature usage');
+    } finally { setLoading(false); }
+  }, [onAdminError]);
+
+  useEffect(() => { fetchData(view); }, [fetchData, view]);
+
+  return (
+    <Box>
+      <Stack direction="row" spacing={1} mb={2} alignItems="center" flexWrap="wrap" useFlexGap>
+        <Chip label="Telegizer Bot" color={view === 'bot' ? 'primary' : 'default'}
+          variant={view === 'bot' ? 'filled' : 'outlined'} onClick={() => setView('bot')} />
+        <Chip label="Telegizer Echo" color={view === 'echo' ? 'primary' : 'default'}
+          variant={view === 'echo' ? 'filled' : 'outlined'} onClick={() => setView('echo')} />
+        <Box flex={1} />
+        <Tooltip title="Refresh"><IconButton size="small" onClick={() => fetchData(view)}><Refresh fontSize="small" /></IconButton></Tooltip>
+      </Stack>
+
+      {loading ? <Box display="flex" justifyContent="center" mt={4}><CircularProgress /></Box> : !data ? <EmptyRow cols={1} /> : (
+        view === 'bot' ? (
+          <>
+            <Grid container spacing={2} mb={2}>
+              <Grid item xs={6} md={3}><StatCard label="Events (all time)" value={data.totals?.events_all_time} color="#7c4dff" /></Grid>
+              <Grid item xs={6} md={3}><StatCard label="Events today" value={data.totals?.events_today} color="#06b6d4" /></Grid>
+              <Grid item xs={6} md={3}><StatCard label="Active groups (30d)" value={data.totals?.active_groups} color="#22c55e" /></Grid>
+              <Grid item xs={6} md={3}><StatCard label="Tracked features" value={data.totals?.distinct_features} color="#f59e0b" /></Grid>
+            </Grid>
+
+            <Alert severity="info" sx={{ mb: 2 }}>{data.tracking_note}</Alert>
+
+            <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', mb: 2, overflowX: 'auto' }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Feature</TableCell>
+                    <TableCell align="right">Users</TableCell>
+                    <TableCell align="right">Groups</TableCell>
+                    <TableCell align="right">Today</TableCell>
+                    <TableCell align="right">7d</TableCell>
+                    <TableCell align="right">30d</TableCell>
+                    <TableCell align="right">All time</TableCell>
+                    <TableCell align="right">Errors</TableCell>
+                    <TableCell>Trend</TableCell>
+                    <TableCell>Last used</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {(!data.features || data.features.length === 0) ? <EmptyRow cols={10} message="No usage logged yet — tracking is live, data will appear as bots act." /> : data.features.map((f) => (
+                    <TableRow key={f.feature} hover>
+                      <TableCell><Typography variant="body2" fontWeight={500}>{f.label}</Typography></TableCell>
+                      <TableCell align="right">{f.users.toLocaleString()}</TableCell>
+                      <TableCell align="right">{f.groups.toLocaleString()}</TableCell>
+                      <TableCell align="right">{f.today.toLocaleString()}</TableCell>
+                      <TableCell align="right">{f.d7.toLocaleString()}</TableCell>
+                      <TableCell align="right">{f.d30.toLocaleString()}</TableCell>
+                      <TableCell align="right"><b>{f.all_time.toLocaleString()}</b></TableCell>
+                      <TableCell align="right" sx={{ color: f.errors > 0 ? 'error.main' : 'text.disabled' }}>{f.errors}</TableCell>
+                      <TableCell><Chip size="small" label={f.trend} color={TREND_COLOR[f.trend] || 'default'} /></TableCell>
+                      <TableCell><Typography variant="caption" color="text.disabled">{f.last_used ? fmtDate(f.last_used) : '—'}</Typography></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+
+            <Grid container spacing={2}>
+              <Grid item xs={12} md={6}>
+                <Card><CardContent>
+                  <Typography variant="subtitle2" fontWeight={700} mb={1}>Most Active Groups</Typography>
+                  {(!data.top_groups || data.top_groups.length === 0) ? <Typography variant="caption" color="text.disabled">No data yet.</Typography> :
+                    data.top_groups.map((g) => (
+                      <Stack key={g.group_ref} direction="row" justifyContent="space-between" py={0.5} borderBottom="1px solid" borderColor="divider">
+                        <Typography variant="caption" noWrap sx={{ maxWidth: '70%' }}>{g.title}</Typography>
+                        <Typography variant="caption" fontWeight={600}>{g.count.toLocaleString()}</Typography>
+                      </Stack>
+                    ))}
+                </CardContent></Card>
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <Card><CardContent>
+                  <Typography variant="subtitle2" fontWeight={700} mb={1}>Most Active Users (Telegram ID)</Typography>
+                  {(!data.top_users || data.top_users.length === 0) ? <Typography variant="caption" color="text.disabled">No data yet.</Typography> :
+                    data.top_users.map((u) => (
+                      <Stack key={u.user_ref} direction="row" justifyContent="space-between" py={0.5} borderBottom="1px solid" borderColor="divider">
+                        <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>{u.user_ref}</Typography>
+                        <Typography variant="caption" fontWeight={600}>{u.count.toLocaleString()}</Typography>
+                      </Stack>
+                    ))}
+                </CardContent></Card>
+              </Grid>
+            </Grid>
+          </>
+        ) : (
+          <>
+            <Grid container spacing={2} mb={2}>
+              <Grid item xs={6} md={3}><StatCard label="AI requests (all time)" value={data.totals?.ai_requests_all_time} color="#7c4dff" /></Grid>
+              <Grid item xs={6} md={3}><StatCard label="AI requests today" value={data.totals?.ai_requests_today} color="#06b6d4" /></Grid>
+              <Grid item xs={6} md={3}><StatCard label="Active groups (30d)" value={data.totals?.active_groups_30d} color="#22c55e" /></Grid>
+              <Grid item xs={6} md={3}><StatCard label="Cost tracking" value={null} sub="not tracked per-feature" color="#64748b" /></Grid>
+            </Grid>
+
+            <Alert severity="info" sx={{ mb: 2 }}>{data.cost_note} {data.tracking_note}</Alert>
+
+            <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', mb: 2, overflowX: 'auto' }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>AI Category</TableCell>
+                    <TableCell align="right">Today</TableCell>
+                    <TableCell align="right">7d</TableCell>
+                    <TableCell align="right">30d</TableCell>
+                    <TableCell align="right">All time</TableCell>
+                    <TableCell align="right">Errors</TableCell>
+                    <TableCell>Last used</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {(!data.categories || data.categories.length === 0) ? <EmptyRow cols={7} message="No Echo AI activity logged yet." /> : data.categories.map((c) => (
+                    <TableRow key={c.category} hover>
+                      <TableCell sx={{ textTransform: 'capitalize' }}>{c.category}</TableCell>
+                      <TableCell align="right">{c.today.toLocaleString()}</TableCell>
+                      <TableCell align="right">{c.d7.toLocaleString()}</TableCell>
+                      <TableCell align="right">{c.d30.toLocaleString()}</TableCell>
+                      <TableCell align="right"><b>{c.all_time.toLocaleString()}</b></TableCell>
+                      <TableCell align="right" sx={{ color: c.errors > 0 ? 'error.main' : 'text.disabled' }}>{c.errors}</TableCell>
+                      <TableCell><Typography variant="caption" color="text.disabled">{c.last_used ? fmtDate(c.last_used) : '—'}</Typography></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </>
+        )
+      )}
+    </Box>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -4056,6 +4211,8 @@ export default function AdminPanel() {
       render: () => <TelegramGroupsTab onAdminError={handleAdminError} initialFilter={navFilter?.key === 'groups' ? navFilter : null} /> },
     { key: 'bots', label: 'Custom Bots', icon: <SmartToy fontSize="small" />, permission: 'bots.view',
       render: () => <CustomBotsTab onAdminError={handleAdminError} /> },
+    { key: 'feature-usage', label: 'Feature Usage', icon: <Insights fontSize="small" />, permission: 'analytics.view',
+      render: () => <FeatureUsageTab onAdminError={handleAdminError} /> },
     { key: 'suspicious', label: 'Suspicious', icon: <Warning fontSize="small" />, permission: 'fraud.view',
       render: () => <SuspiciousTab onAdminError={handleAdminError} /> },
     { key: 'referrals', label: 'Referrals', icon: <VerifiedUser fontSize="small" />, permission: 'referrals.manage',

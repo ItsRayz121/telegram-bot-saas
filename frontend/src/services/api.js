@@ -656,6 +656,7 @@ export const admin = {
   resolveReport: (source, id) => api.post(`/api/admin/reports/${source}/${id}/resolve`),
   // Feature Adoption
   getFeatureAdoption: () => api.get('/api/admin/feature-adoption'),
+  getFeatureUsage: (view) => api.get('/api/admin/feature-usage', { params: { view } }),
   // Fraud Detection
   getFraudClusters: () => api.get('/api/admin/fraud/clusters'),
   getFraudReferralFarming: () => api.get('/api/admin/fraud/referral-farming'),
