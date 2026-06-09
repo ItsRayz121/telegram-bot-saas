@@ -2485,6 +2485,17 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 _log_event(flask_app, group_id, "command_triggered",
                            f"/{cmd_raw}", {"command": cmd_raw})
+                # Feature-usage spine (best-effort). Official-bot lineage.
+                try:
+                    from .feature_usage import log_feature_usage
+                    _uid = message.from_user.id if message.from_user else None
+                    with flask_app.app_context():
+                        log_feature_usage(
+                            "official", "command", group_ref=group_id, bot_ref="official",
+                            user_ref=(str(_uid) if _uid else None), action=f"/{cmd_raw}", commit=True,
+                        )
+                except Exception:
+                    pass
             except Exception as exc:
                 _log.debug("Custom command reply failed: %s", exc)
                 try:
@@ -3748,6 +3759,20 @@ async def _automod_execute(bot, message, group_id: str, flask_app, rule: str, ac
         meta["message_text"] = msg_text
     _log_event(flask_app, group_id, "automod_action",
                f"User {user_id}: {rule} → {action}", meta)
+
+    # Feature-usage spine (best-effort, never raises). Official-bot lineage.
+    # feature = what was DETECTED (spam/link/nsfw/automod); the enforcement
+    # action (warn/mute/ban/kick) is kept in meta for the breakdown.
+    try:
+        from .feature_usage import log_feature_usage, automod_feature
+        if flask_app:
+            with flask_app.app_context():
+                log_feature_usage(
+                    "official", automod_feature(rule), group_ref=str(group_id), user_ref=str(user_id),
+                    bot_ref="official", action=rule, meta={"automod_action": action}, commit=True,
+                )
+    except Exception:
+        pass
 
 
 async def _automod_check(bot, message, am_cfg: dict, group_id: str, flask_app) -> bool:

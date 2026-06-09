@@ -1899,6 +1899,57 @@ class AIActivity(db.Model):
         }
 
 
+class FeatureUsageEvent(db.Model):
+    """Append-only usage spine for the admin Feature Usage + Proof Metrics tabs.
+
+    One row per discrete feature action (a spam delete, a warn, a command, a
+    scheduled send, …) written best-effort via backend.feature_usage. Shared by
+    both bot lineages so custom bots inherit tracking automatically:
+      • official-bot groups → scope='official', group_ref=telegram_group_id
+      • custom-bot groups   → scope='custom',   group_ref=str(Group.id),
+                               bot_ref=str(CustomBot.id)
+      • Echo assistant      → scope='echo'
+
+    This table is the source of truth for "which features are actually used,
+    by whom, where, and how often" — never fabricated, only what bots emit.
+    """
+    __tablename__ = "feature_usage_events"
+
+    id = db.Column(db.Integer, primary_key=True)
+    scope = db.Column(db.String(20), nullable=False, index=True)        # official | custom | echo
+    bot_ref = db.Column(db.String(64), nullable=True, index=True)       # 'official' | custom bot id
+    group_ref = db.Column(db.String(64), nullable=True, index=True)     # telegram_group_id or Group.id
+    user_ref = db.Column(db.String(64), nullable=True, index=True)      # telegram user id (actor/target)
+    # Stable feature key, e.g. automod|spam|link|ai_mod|warn|mute|ban|kick|
+    # scheduler|announce|referral|command|welcome|raid|captcha|content_filter
+    feature = db.Column(db.String(40), nullable=False, index=True)
+    action = db.Column(db.String(120), nullable=True)                   # specific action / command name
+    count = db.Column(db.Integer, nullable=False, default=1)
+    status = db.Column(db.String(20), nullable=False, default="ok")     # ok | failed | skipped
+    meta = db.Column(db.JSON, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    __table_args__ = (
+        db.Index("ix_feature_usage_feature_created", "feature", "created_at"),
+        db.Index("ix_feature_usage_scope_group_created", "scope", "group_ref", "created_at"),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "scope": self.scope,
+            "bot_ref": self.bot_ref,
+            "group_ref": self.group_ref,
+            "user_ref": self.user_ref,
+            "feature": self.feature,
+            "action": self.action,
+            "count": self.count,
+            "status": self.status,
+            "meta": self.meta,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 # ── Official-group feature models (Phase 2 — full parity with custom bots) ──────
 
 class OfficialRaid(db.Model):

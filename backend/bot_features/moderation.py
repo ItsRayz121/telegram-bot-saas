@@ -996,6 +996,19 @@ class ModerationSystem:
                 extra_data={"message_text": msg_text} if msg_text else None,
             )
 
+            # Feature-usage spine (best-effort, never raises). Custom-bot lineage.
+            # feature = what was DETECTED (so Spam/Link protection get their own
+            # counts); the enforcement action (warn/mute/ban) is kept in meta.
+            try:
+                from ..feature_usage import log_feature_usage, automod_feature
+                log_feature_usage(
+                    "custom", automod_feature(reason), group_ref=str(group.id), user_ref=str(user_id),
+                    action=reason, meta={"automod_action": ("warn" if (warn or action == "warn") else action)},
+                    commit=True,
+                )
+            except Exception:
+                pass
+
         # Phase 3 raid mode — a burst of DISTINCT violators is a coordinated-raid
         # signature. Feed the detector; on activation lock down + alert once.
         try:
