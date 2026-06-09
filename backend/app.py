@@ -1518,6 +1518,8 @@ def _run_migrations():
         "ALTER TABLE groups ADD COLUMN telegram_member_count INTEGER DEFAULT 0",
         # Live Telegram member-count reconciliation timestamp
         "ALTER TABLE telegram_groups ADD COLUMN member_count_synced_at TIMESTAMP",
+        # Platform-admin free-text notes on the user detail page
+        "ALTER TABLE users ADD COLUMN admin_notes TEXT",
         # Invite link creator tracking
         "ALTER TABLE invite_links ADD COLUMN created_by_user_id INTEGER",
         "ALTER TABLE invite_links ADD COLUMN created_by_telegram_id VARCHAR(255)",

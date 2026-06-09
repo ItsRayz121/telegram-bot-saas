@@ -398,6 +398,7 @@ def get_user(user_id):
         )
     ).order_by(AdminAuditLog.created_at.desc()).limit(25).all()
     user_data["admin_actions"] = [a.to_dict() for a in admin_actions]
+    user_data["admin_notes"] = user.admin_notes or ""
 
     # ── Activity timeline (merged, newest first) ───────────────────────────────
     timeline = [{"type": "signup", "at": user.created_at.isoformat(), "label": "Account created"}]
@@ -445,6 +446,23 @@ def update_subscription(user_id):
                 return jsonify({"error": "Invalid expires format"}), 400
     db.session.commit()
     return jsonify({"user": user.to_dict(), "message": "Subscription updated"})
+
+
+@admin_bp.route("/users/<int:user_id>/notes", methods=["PUT"])
+@require_permission(rbac.P_USERS_MANAGE)
+@rate_limit(requests_per_minute=30)
+def update_user_notes(user_id):
+    """Save platform-admin free-text notes for a user (user detail page)."""
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    data = request.get_json() or {}
+    notes = data.get("notes", "")
+    if notes is not None and len(notes) > 10000:
+        return jsonify({"error": "Notes too long (max 10000 chars)"}), 400
+    user.admin_notes = notes or None
+    db.session.commit()
+    return jsonify({"message": "Notes saved", "admin_notes": user.admin_notes or ""})
 
 
 @admin_bp.route("/users/<int:user_id>/ban", methods=["POST"])

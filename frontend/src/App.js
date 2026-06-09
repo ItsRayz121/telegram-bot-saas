@@ -44,6 +44,8 @@ import Analytics from './pages/Analytics';
 import Billing from './pages/Billing';
 import Settings from './pages/Settings';
 import AdminPanel from './pages/AdminPanel';
+import AdminUserDetail from './pages/AdminUserDetail';
+import AdminGroupDetail from './pages/AdminGroupDetail';
 
 // Pages — new sections
 import Channels from './pages/Channels';
@@ -311,6 +313,8 @@ export default function App() {
 
             {/* ── Admin ─────────────────────────────────────────────────────── */}
             <Route path="/admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />
+            <Route path="/admin/users/:userId" element={<AdminRoute><AdminUserDetail /></AdminRoute>} />
+            <Route path="/admin/groups/:groupId" element={<AdminRoute><AdminGroupDetail /></AdminRoute>} />
 
             {/* ── 404 ───────────────────────────────────────────────────────── */}
             <Route path="*" element={<NotFound />} />

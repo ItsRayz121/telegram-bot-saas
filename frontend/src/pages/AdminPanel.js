@@ -374,6 +374,7 @@ function DashboardTab({ stats, botStats, revenue, health, featureAdoption, loadi
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function UsersTab({ onAdminError, initialFilter }) {
+  const navigate = useNavigate();
   const [users, setUsers] = useState([]);
   const [total, setTotal] = useState(0);
   const [pages, setPages] = useState(1);
@@ -493,23 +494,8 @@ function UsersTab({ onAdminError, initialFilter }) {
     } catch { toast.error('Export failed'); }
   };
 
-  const openDetail = async (user) => {
-    // Open immediately with a lightweight shell, then hydrate the full profile.
-    setSelectedUser({ id: user.id, email: user.email, full_name: user.full_name,
-      subscription_tier: user.subscription_tier, created_at: user.created_at });
-    setSubTier(user.subscription_tier);
-    setDetailOpen(true);
-    setDetailLoading(true);
-    try {
-      const res = await admin.getUser(user.id);
-      setSelectedUser(res.data.user);
-      setSubTier(res.data.user.subscription_tier);
-    } catch {
-      toast.error('Failed to load user details');
-    } finally {
-      setDetailLoading(false);
-    }
-  };
+  // Full routed detail page (replaces the legacy modal).
+  const openDetail = (user) => navigate(`/admin/users/${user.id}`);
 
   const handleUpdateSub = async () => {
     setActionLoading('sub');
@@ -965,6 +951,7 @@ function UsersTab({ onAdminError, initialFilter }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function TelegramGroupsTab({ onAdminError, initialFilter }) {
+  const navigate = useNavigate();
   const [groups, setGroups] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -1033,16 +1020,8 @@ function TelegramGroupsTab({ onAdminError, initialFilter }) {
     min_members: highMembers ? 1000 : undefined, recent: recentOnly ? '1' : undefined,
   });
 
-  const openDetail = async (g) => {
-    setDetail({ telegram_group_id: g.telegram_group_id, title: g.title });
-    setDetailOpen(true);
-    setDetailLoading(true);
-    try {
-      const res = await admin.getTelegramGroupDetail(g.telegram_group_id);
-      setDetail(res.data.group);
-    } catch { toast.error('Failed to load group detail'); }
-    finally { setDetailLoading(false); }
-  };
+  // Full routed detail page (replaces the legacy modal).
+  const openDetail = (g) => navigate(`/admin/groups/${g.telegram_group_id}`);
 
   const handleSyncMembers = async () => {
     setSyncing(true);

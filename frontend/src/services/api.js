@@ -607,6 +607,7 @@ export const admin = {
   updateSubscription: (id, data) => api.put(`/api/admin/users/${id}/subscription`, data),
   banUser: (id, data) => api.post(`/api/admin/users/${id}/ban`, data),
   unbanUser: (id) => api.post(`/api/admin/users/${id}/unban`),
+  updateUserNotes: (id, data) => api.put(`/api/admin/users/${id}/notes`, data),
   deleteUser: (id) => api.delete(`/api/admin/users/${id}`),
   // Stats & Revenue
   getStats: () => api.get('/api/admin/stats'),

@@ -131,6 +131,8 @@ class User(db.Model):
     onboarding_tour_completed = db.Column(db.Boolean, default=False, nullable=False)
     # Payment abuse tracking
     chargeback_count = db.Column(db.Integer, default=0, nullable=False)
+    # Free-text notes written by platform admins on the user detail page.
+    admin_notes = db.Column(db.Text, nullable=True)
 
     bots = db.relationship("Bot", backref="owner", lazy=True, cascade="all, delete-orphan")
 
