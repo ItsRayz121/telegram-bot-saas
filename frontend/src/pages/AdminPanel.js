@@ -88,6 +88,28 @@ function StatusChip({ label, map }) {
   return <Chip label={label} size="small" color={color} />;
 }
 
+// ─── Detail-view helpers (labeled field + section heading) ────────────────────
+
+function Field({ label, value, mono }) {
+  return (
+    <Box>
+      <Typography variant="caption" color="text.secondary">{label}</Typography>
+      <Typography variant="body2" sx={mono ? { fontFamily: 'monospace', wordBreak: 'break-all' } : undefined}>
+        {value === null || value === undefined || value === '' ? '—' : value}
+      </Typography>
+    </Box>
+  );
+}
+
+function SectionTitle({ children, sx }) {
+  return (
+    <Typography variant="caption" color="text.secondary" fontWeight={700} textTransform="uppercase"
+      letterSpacing={0.8} display="block" mb={1} mt={2} sx={sx}>
+      {children}
+    </Typography>
+  );
+}
+
 // ─── Empty state ──────────────────────────────────────────────────────────────
 
 function EmptyRow({ cols, message = 'No records found' }) {
@@ -344,7 +366,12 @@ function UsersTab({ onAdminError, initialFilter }) {
   const [search, setSearch] = useState('');
   const [tierFilter, setTierFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [authProvider, setAuthProvider] = useState('');   // '' | email | telegram | both
+  const [verifiedFilter, setVerifiedFilter] = useState(''); // '' | yes | no
+  const [sort, setSort] = useState('created_at');
+  const [order, setOrder] = useState('desc');
   const [loading, setLoading] = useState(true);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [subTier, setSubTier] = useState('');
@@ -356,10 +383,17 @@ function UsersTab({ onAdminError, initialFilter }) {
   const [giftDays, setGiftDays] = useState(30);
   const [giftNote, setGiftNote] = useState('');
 
-  const fetchUsers = useCallback(async (p = 1, s = '', tier = '', status = '') => {
+  // Single param-object fetch — every caller passes the full filter set so this
+  // stays dependency-light (only onAdminError) and never double-fires from state.
+  const fetchUsers = useCallback(async (p = {}) => {
     setLoading(true);
     try {
-      const res = await admin.getUsers({ page: p, per_page: 20, search: s, tier, status });
+      const res = await admin.getUsers({
+        page: p.page || 1, per_page: 20,
+        search: p.search || '', tier: p.tier || '', status: p.status || '',
+        auth_provider: p.auth_provider || '', verified: p.verified || '',
+        sort: p.sort || 'created_at', order: p.order || 'desc',
+      });
       setUsers(res.data.users);
       setTotal(res.data.total);
       setPages(res.data.pages);
@@ -370,9 +404,36 @@ function UsersTab({ onAdminError, initialFilter }) {
     }
   }, [onAdminError]);
 
+  // Merge an override into the current filter state, persist it, and re-query.
+  // Defined in render so it always reads fresh state.
+  const query = (over = {}) => {
+    const next = {
+      page: over.page ?? 1,
+      search: over.search ?? search,
+      tier: over.tier ?? tierFilter,
+      status: over.status ?? statusFilter,
+      auth_provider: over.auth_provider ?? authProvider,
+      verified: over.verified ?? verifiedFilter,
+      sort: over.sort ?? sort,
+      order: over.order ?? order,
+    };
+    if (over.page !== undefined) setPage(over.page); else setPage(1);
+    if (over.search !== undefined) setSearch(over.search);
+    if (over.tier !== undefined) setTierFilter(over.tier);
+    if (over.status !== undefined) setStatusFilter(over.status);
+    if (over.auth_provider !== undefined) setAuthProvider(over.auth_provider);
+    if (over.verified !== undefined) setVerifiedFilter(over.verified);
+    if (over.sort !== undefined) setSort(over.sort);
+    if (over.order !== undefined) setOrder(over.order);
+    fetchUsers(next);
+  };
+
   // Default load — skipped when arriving via a dashboard drill-down so the
   // filtered fetch below is the only one that runs (avoids a flash of all-users).
-  useEffect(() => { if (!initialFilter) fetchUsers(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [fetchUsers]);
+  useEffect(() => {
+    if (!initialFilter) fetchUsers({});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchUsers]);
 
   // Apply a filter handed in from a dashboard card click. The nonce on
   // initialFilter changes every click so repeat navigations re-fire this.
@@ -383,15 +444,21 @@ function UsersTab({ onAdminError, initialFilter }) {
     const s = f.status || '';
     const q = f.search || '';
     setTierFilter(t); setStatusFilter(s); setSearch(q); setPage(1);
-    fetchUsers(1, q, t, s);
+    fetchUsers({ page: 1, search: q, tier: t, status: s });
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, [initialFilter]);
 
-  const refresh = () => fetchUsers(page, search, tierFilter, statusFilter);
+  const refresh = () => fetchUsers({
+    page, search, tier: tierFilter, status: statusFilter,
+    auth_provider: authProvider, verified: verifiedFilter, sort, order,
+  });
 
   const exportUsersCSV = async () => {
     try {
-      const res = await admin.getUsers({ page: 1, per_page: 9999, search, tier: tierFilter, status: statusFilter });
+      const res = await admin.getUsers({
+        page: 1, per_page: 9999, search, tier: tierFilter, status: statusFilter,
+        auth_provider: authProvider, verified: verifiedFilter, sort, order,
+      });
       const all = res.data.users || [];
       const headers = ['Name', 'Email', 'User ID', 'Plan', 'Email Verified', 'Status', 'Joined'];
       const rows = all.map(u => [
@@ -412,13 +479,20 @@ function UsersTab({ onAdminError, initialFilter }) {
   };
 
   const openDetail = async (user) => {
+    // Open immediately with a lightweight shell, then hydrate the full profile.
+    setSelectedUser({ id: user.id, email: user.email, full_name: user.full_name,
+      subscription_tier: user.subscription_tier, created_at: user.created_at });
+    setSubTier(user.subscription_tier);
+    setDetailOpen(true);
+    setDetailLoading(true);
     try {
       const res = await admin.getUser(user.id);
       setSelectedUser(res.data.user);
       setSubTier(res.data.user.subscription_tier);
-      setDetailOpen(true);
     } catch {
       toast.error('Failed to load user details');
+    } finally {
+      setDetailLoading(false);
     }
   };
 
@@ -490,11 +564,26 @@ function UsersTab({ onAdminError, initialFilter }) {
       {/* Filters row */}
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} mb={1.5} alignItems={{ sm: 'center' }}>
         <TextField
-          size="small" placeholder="Search email or name…" value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(1); fetchUsers(1, e.target.value, tierFilter, statusFilter); }}
+          size="small" placeholder="Search name, email, @username, Telegram ID or user ID…" value={search}
+          onChange={(e) => query({ search: e.target.value })}
           InputProps={{ startAdornment: <InputAdornment position="start"><Search fontSize="small" /></InputAdornment> }}
           sx={{ flex: 1 }}
         />
+        <FormControl size="small" sx={{ minWidth: 150 }}>
+          <InputLabel>Sort by</InputLabel>
+          <Select label="Sort by" value={sort} onChange={(e) => query({ sort: e.target.value })}>
+            <MenuItem value="created_at">Joined date</MenuItem>
+            <MenuItem value="email">Email</MenuItem>
+            <MenuItem value="revenue">Revenue</MenuItem>
+            <MenuItem value="groups">Groups</MenuItem>
+            <MenuItem value="referrals">Referrals</MenuItem>
+          </Select>
+        </FormControl>
+        <Tooltip title={order === 'desc' ? 'Descending' : 'Ascending'}>
+          <IconButton size="small" onClick={() => query({ order: order === 'desc' ? 'asc' : 'desc' })}>
+            {order === 'desc' ? <TrendingDown fontSize="small" /> : <TrendingUp fontSize="small" />}
+          </IconButton>
+        </Tooltip>
         <Typography variant="body2" color="text.secondary" whiteSpace="nowrap">
           {total.toLocaleString()} users
         </Typography>
@@ -510,19 +599,40 @@ function UsersTab({ onAdminError, initialFilter }) {
           <Chip key={val} label={label} size="small"
             color={tierFilter === val ? (val === 'enterprise' ? 'secondary' : 'primary') : 'default'}
             variant={tierFilter === val ? 'filled' : 'outlined'}
-            onClick={() => { setTierFilter(val); setPage(1); fetchUsers(1, search, val, statusFilter); }}
+            onClick={() => query({ tier: val })}
           />
         ))}
       </Stack>
 
       {/* Status filter chips */}
-      <Stack direction="row" spacing={0.75} mb={2} flexWrap="wrap" useFlexGap>
+      <Stack direction="row" spacing={0.75} mb={0.75} flexWrap="wrap" useFlexGap>
         <Typography variant="caption" color="text.secondary" alignSelf="center" mr={0.5}>Status:</Typography>
         {[['', 'All'], ['active', 'Active'], ['banned', 'Banned'], ['suspicious', 'Suspicious']].map(([val, label]) => (
           <Chip key={val} label={label} size="small"
             color={statusFilter === val ? (val === 'banned' ? 'error' : val === 'suspicious' ? 'warning' : val === 'active' ? 'success' : 'primary') : 'default'}
             variant={statusFilter === val ? 'filled' : 'outlined'}
-            onClick={() => { setStatusFilter(val); setPage(1); fetchUsers(1, search, tierFilter, val); }}
+            onClick={() => query({ status: val })}
+          />
+        ))}
+      </Stack>
+
+      {/* Auth source + verification chips */}
+      <Stack direction="row" spacing={0.75} mb={2} flexWrap="wrap" useFlexGap alignItems="center">
+        <Typography variant="caption" color="text.secondary" alignSelf="center" mr={0.5}>Source:</Typography>
+        {[['', 'All'], ['email', 'Email'], ['telegram', 'Telegram'], ['both', 'Both']].map(([val, label]) => (
+          <Chip key={val} label={label} size="small"
+            color={authProvider === val ? 'info' : 'default'}
+            variant={authProvider === val ? 'filled' : 'outlined'}
+            onClick={() => query({ auth_provider: val })}
+          />
+        ))}
+        <Box sx={{ width: 12 }} />
+        <Typography variant="caption" color="text.secondary" alignSelf="center" mr={0.5}>Verified:</Typography>
+        {[['', 'All'], ['yes', 'Yes'], ['no', 'No']].map(([val, label]) => (
+          <Chip key={val} label={label} size="small"
+            color={verifiedFilter === val ? 'success' : 'default'}
+            variant={verifiedFilter === val ? 'filled' : 'outlined'}
+            onClick={() => query({ verified: val })}
           />
         ))}
       </Stack>
@@ -545,10 +655,10 @@ function UsersTab({ onAdminError, initialFilter }) {
               </TableHead>
               <TableBody>
                 {users.length === 0 ? <EmptyRow cols={6} /> : users.map((u) => (
-                  <TableRow key={u.id} hover>
+                  <TableRow key={u.id} hover sx={{ cursor: 'pointer' }} onClick={() => openDetail(u)}>
                     <TableCell>
                       <Typography variant="body2" fontWeight={500}>{u.full_name || '—'}</Typography>
-                      <Typography variant="caption" color="text.secondary">{u.email}</Typography>
+                      <Typography variant="caption" color="text.secondary">{u.email || (u.telegram_username ? `@${u.telegram_username}` : `ID ${u.id}`)}</Typography>
                     </TableCell>
                     <TableCell>
                       <Chip
@@ -573,7 +683,7 @@ function UsersTab({ onAdminError, initialFilter }) {
                       <Typography variant="caption" color="text.secondary">{fmtDate(u.created_at)}</Typography>
                     </TableCell>
                     <TableCell align="right">
-                      <Button size="small" onClick={() => openDetail(u)}>Details</Button>
+                      <Button size="small" onClick={(e) => { e.stopPropagation(); openDetail(u); }}>Details</Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -582,28 +692,32 @@ function UsersTab({ onAdminError, initialFilter }) {
           </TableContainer>
           {pages > 1 && (
             <Box display="flex" justifyContent="center">
-              <Pagination count={pages} page={page} onChange={(_, p) => { setPage(p); fetchUsers(p, search, tierFilter, statusFilter); }} color="primary" />
+              <Pagination count={pages} page={page} onChange={(_, p) => query({
+                page: p, search, tier: tierFilter, status: statusFilter,
+                auth_provider: authProvider, verified: verifiedFilter, sort, order,
+              })} color="primary" />
             </Box>
           )}
         </>
       )}
 
-      {/* User detail dialog */}
-      <Dialog open={detailOpen} onClose={() => setDetailOpen(false)} maxWidth="sm" fullWidth>
+      {/* User detail dialog — full audit profile */}
+      <Dialog open={detailOpen} onClose={() => setDetailOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle sx={{ pb: 1 }}>
-          <Typography fontWeight={700}>{selectedUser?.full_name || selectedUser?.email}</Typography>
+          <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap">
+            <Typography fontWeight={700}>{selectedUser?.full_name || selectedUser?.email || `User ${selectedUser?.id}`}</Typography>
+            {selectedUser?.risk && (
+              <Chip size="small" label={`Risk: ${selectedUser.risk.score} (${selectedUser.risk.level})`}
+                color={selectedUser.risk.level === 'high' ? 'error' : selectedUser.risk.level === 'medium' ? 'warning' : 'success'} />
+            )}
+            {selectedUser?.admin_role && <Chip size="small" color="secondary" label={(selectedUser.admin_role || '').toUpperCase()} />}
+          </Stack>
           <Typography variant="caption" color="text.secondary">ID: {selectedUser?.id} · Joined {fmtDate(selectedUser?.created_at)}</Typography>
         </DialogTitle>
-        <DialogContent>
+        {detailLoading && <LinearProgress />}
+        <DialogContent dividers>
           {selectedUser && (
             <Box>
-              <Grid container spacing={1.5} mb={2}>
-                <Grid item xs={6}><Typography variant="caption" color="text.secondary">Email</Typography><Typography variant="body2">{selectedUser.email}</Typography></Grid>
-                <Grid item xs={6}><Typography variant="caption" color="text.secondary">Bots</Typography><Typography variant="body2">{selectedUser.bots?.length ?? 0}</Typography></Grid>
-                <Grid item xs={6}><Typography variant="caption" color="text.secondary">Telegram</Typography><Typography variant="body2">{selectedUser.telegram_username ? `@${selectedUser.telegram_username}` : '—'}</Typography></Grid>
-                <Grid item xs={6}><Typography variant="caption" color="text.secondary">2FA</Typography><Typography variant="body2">{selectedUser.totp_enabled ? 'Enabled' : 'Disabled'}</Typography></Grid>
-              </Grid>
-
               {selectedUser.is_banned && (
                 <Alert severity="error" sx={{ mb: 2 }}>
                   <Typography variant="body2" fontWeight={600}>Banned</Typography>
@@ -611,13 +725,36 @@ function UsersTab({ onAdminError, initialFilter }) {
                 </Alert>
               )}
 
-              {/* Recent payments */}
+              {/* Profile & auth */}
+              <SectionTitle sx={{ mt: 0 }}>Profile & Auth</SectionTitle>
+              <Grid container spacing={1.5}>
+                <Grid item xs={6} sm={3}><Field label="Email" value={selectedUser.email} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Plan" value={selectedUser.subscription_tier?.toUpperCase()} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Auth source" value={selectedUser.auth?.provider} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Timezone" value={selectedUser.timezone} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Telegram" value={selectedUser.telegram_username ? `@${selectedUser.telegram_username}` : (selectedUser.auth?.telegram_user_id || '—')} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Telegram ID" mono value={selectedUser.auth?.telegram_user_id} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Email verified" value={selectedUser.auth?.email_verified ? 'Yes' : 'No'} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="2FA" value={selectedUser.auth?.two_factor_enabled ? 'Enabled' : 'Disabled'} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Password set" value={selectedUser.auth?.has_password ? 'Yes' : 'No'} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Recovery email" value="Not tracked yet" /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Last login" value="Not tracked yet" /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Referral code" mono value={selectedUser.referral_code} /></Grid>
+              </Grid>
+
+              {/* Revenue */}
+              <SectionTitle>Revenue & Subscription</SectionTitle>
+              <Grid container spacing={1.5}>
+                <Grid item xs={6} sm={3}><Field label="Lifetime revenue" value={usd(selectedUser.revenue?.lifetime_usd || 0)} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Payments" value={selectedUser.revenue?.payment_count ?? 0} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Trial used" value={selectedUser.revenue?.trial_used ? 'Yes' : 'No'} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Expires" value={selectedUser.revenue?.subscription_expires_at ? fmtDate(selectedUser.revenue.subscription_expires_at) : '—'} /></Grid>
+              </Grid>
               {selectedUser.recent_payments?.length > 0 && (
-                <Box mb={2}>
-                  <Typography variant="caption" color="text.secondary" fontWeight={600} textTransform="uppercase">Recent Payments</Typography>
-                  {selectedUser.recent_payments.slice(0, 3).map((p) => (
+                <Box mt={1}>
+                  {selectedUser.recent_payments.slice(0, 5).map((p) => (
                     <Stack key={p.id} direction="row" justifyContent="space-between" py={0.5} borderBottom="1px solid" borderColor="divider">
-                      <Typography variant="caption">{p.plan?.toUpperCase()} · {p.provider}</Typography>
+                      <Typography variant="caption">{p.plan?.toUpperCase()} · {p.provider} · {p.status}</Typography>
                       <Typography variant="caption" fontWeight={600} color="success.main">{usd((p.amount_usd || 0) / 100)}</Typography>
                       <Typography variant="caption" color="text.disabled">{fmtDate(p.created_at)}</Typography>
                     </Stack>
@@ -625,6 +762,103 @@ function UsersTab({ onAdminError, initialFilter }) {
                 </Box>
               )}
 
+              {/* Referrals */}
+              <SectionTitle>Referrals</SectionTitle>
+              <Grid container spacing={1.5}>
+                <Grid item xs={12} sm={6}>
+                  <Field label="Referred by" value={selectedUser.referrer
+                    ? `${selectedUser.referrer.email || selectedUser.referrer.name || 'User ' + selectedUser.referrer.user_id} (${selectedUser.referrer.status})`
+                    : 'Direct signup'} />
+                </Grid>
+                <Grid item xs={6} sm={3}><Field label="Referrals made" value={selectedUser.referral_stats?.total ?? 0} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Approved" value={selectedUser.referral_stats?.approved ?? 0} /></Grid>
+              </Grid>
+              {selectedUser.referrals_made?.length > 0 && (
+                <Box mt={1}>
+                  {selectedUser.referrals_made.slice(0, 5).map((r, i) => (
+                    <Stack key={i} direction="row" justifyContent="space-between" py={0.5} borderBottom="1px solid" borderColor="divider">
+                      <Typography variant="caption">{r.email || `User ${r.referred_user_id}`}</Typography>
+                      <Chip size="small" label={r.status} color={r.status === 'approved' ? 'success' : r.status === 'pending' ? 'warning' : 'default'} />
+                      {(r.ip_match || r.device_match) && <Chip size="small" color="error" label={r.ip_match ? 'IP match' : 'Device match'} />}
+                      <Typography variant="caption" color="text.disabled">{fmtDate(r.created_at)}</Typography>
+                    </Stack>
+                  ))}
+                </Box>
+              )}
+
+              {/* Groups & bots */}
+              <SectionTitle>Groups & Bots</SectionTitle>
+              <Grid container spacing={1.5}>
+                <Grid item xs={6} sm={3}><Field label="Groups owned" value={selectedUser.owned_groups?.length ?? 0} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Admin of (TG)" value={selectedUser.admin_of_groups?.length ?? 0} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Custom bots" value={selectedUser.custom_bots?.length ?? 0} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Legacy bots" value={selectedUser.bots?.length ?? 0} /></Grid>
+              </Grid>
+              {selectedUser.owned_groups?.length > 0 && (
+                <Box mt={1}>
+                  {selectedUser.owned_groups.slice(0, 6).map((g) => (
+                    <Stack key={g.telegram_group_id} direction="row" justifyContent="space-between" py={0.5} borderBottom="1px solid" borderColor="divider">
+                      <Typography variant="caption" noWrap sx={{ maxWidth: '50%' }}>{g.title}</Typography>
+                      <Chip size="small" label={g.bot_status} color={g.bot_status === 'active' ? 'success' : g.bot_status === 'pending' ? 'warning' : 'default'} />
+                      <Typography variant="caption" color="text.disabled">{(g.member_count || 0).toLocaleString()} members · {g.linked_via_bot_type}</Typography>
+                    </Stack>
+                  ))}
+                </Box>
+              )}
+
+              {/* Official-bot usage */}
+              <SectionTitle>Official Bot Usage</SectionTitle>
+              {selectedUser.official_bot_usage ? (
+                <Grid container spacing={1.5}>
+                  <Grid item xs={6} sm={3}><Field label="Groups active in" value={selectedUser.official_bot_usage.groups_active_in} /></Grid>
+                  <Grid item xs={6} sm={3}><Field label="Messages" value={(selectedUser.official_bot_usage.total_messages || 0).toLocaleString()} /></Grid>
+                  <Grid item xs={6} sm={3}><Field label="XP" value={(selectedUser.official_bot_usage.total_xp || 0).toLocaleString()} /></Grid>
+                  <Grid item xs={6} sm={3}><Field label="Last message" value={selectedUser.official_bot_usage.last_message_at ? fmtDate(selectedUser.official_bot_usage.last_message_at) : '—'} /></Grid>
+                </Grid>
+              ) : (
+                <Typography variant="caption" color="text.disabled">No linked Telegram identity — usage not attributable.</Typography>
+              )}
+              <Typography variant="caption" color="text.disabled" display="block" mt={1}>
+                Echo / AI usage is group-scoped and not yet attributable to a single user — tracking lands in a later phase.
+              </Typography>
+
+              {/* Risk & suspicious */}
+              <SectionTitle>Risk & Suspicious Activity</SectionTitle>
+              <Grid container spacing={1.5}>
+                <Grid item xs={6} sm={3}><Field label="Risk score" value={`${selectedUser.risk?.score ?? 0} / 100`} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Suspicious flag" value={selectedUser.risk?.is_suspicious ? 'Yes' : 'No'} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Chargebacks" value={selectedUser.risk?.chargeback_count ?? 0} /></Grid>
+                <Grid item xs={6} sm={3}><Field label="Suspicious events" value={selectedUser.risk?.suspicious_event_count ?? 0} /></Grid>
+              </Grid>
+              {selectedUser.suspicious_events?.length > 0 && (
+                <Box mt={1}>
+                  {selectedUser.suspicious_events.map((s) => (
+                    <Typography key={s.id} variant="caption" display="block" color="warning.main">
+                      • {s.reason} <Typography component="span" variant="caption" color="text.disabled">({fmtDate(s.created_at)})</Typography>
+                    </Typography>
+                  ))}
+                </Box>
+              )}
+
+              {/* Admin actions + timeline */}
+              <SectionTitle>Admin Actions Against This User</SectionTitle>
+              {selectedUser.admin_actions?.length > 0 ? selectedUser.admin_actions.slice(0, 8).map((a) => (
+                <Stack key={a.id} direction="row" justifyContent="space-between" py={0.4} borderBottom="1px solid" borderColor="divider">
+                  <Typography variant="caption">{a.action} {a.severity && a.severity !== 'info' ? `· ${a.severity}` : ''}</Typography>
+                  <Typography variant="caption" color="text.disabled">{fmtDate(a.created_at)}</Typography>
+                </Stack>
+              )) : <Typography variant="caption" color="text.disabled">No admin actions recorded.</Typography>}
+
+              <SectionTitle>Activity Timeline</SectionTitle>
+              {selectedUser.timeline?.length > 0 ? selectedUser.timeline.slice(0, 15).map((t, i) => (
+                <Stack key={i} direction="row" justifyContent="space-between" py={0.4} borderBottom="1px solid" borderColor="divider">
+                  <Typography variant="caption">{t.label}</Typography>
+                  <Typography variant="caption" color="text.disabled">{fmtDate(t.at)}</Typography>
+                </Stack>
+              )) : <Typography variant="caption" color="text.disabled">No activity recorded.</Typography>}
+
+              {/* Actions */}
+              <SectionTitle>Manage</SectionTitle>
               <FormControl fullWidth sx={{ mb: 2 }} size="small">
                 <InputLabel>Subscription Tier</InputLabel>
                 <Select value={subTier} label="Subscription Tier" onChange={(e) => setSubTier(e.target.value)}>
@@ -633,33 +867,26 @@ function UsersTab({ onAdminError, initialFilter }) {
                   <MenuItem value="enterprise">Enterprise</MenuItem>
                 </Select>
               </FormControl>
-              <Button variant="outlined" fullWidth onClick={handleUpdateSub} disabled={actionLoading === 'sub'} sx={{ mb: 1 }}>
-                {actionLoading === 'sub' ? <CircularProgress size={18} /> : 'Update Subscription'}
-              </Button>
-              <Button variant="contained" color="success" fullWidth onClick={() => setGiftDialogOpen(true)} disabled={!!actionLoading} sx={{ mb: 2 }}>
-                🎁 Gift Free Subscription
-              </Button>
-
-              <Grid container spacing={1}>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                <Button variant="outlined" fullWidth onClick={handleUpdateSub} disabled={actionLoading === 'sub'}>
+                  {actionLoading === 'sub' ? <CircularProgress size={18} /> : 'Update Subscription'}
+                </Button>
+                <Button variant="contained" color="success" fullWidth onClick={() => setGiftDialogOpen(true)} disabled={!!actionLoading}>
+                  🎁 Gift Subscription
+                </Button>
                 {selectedUser.is_banned ? (
-                  <Grid item xs={6}>
-                    <Button fullWidth variant="outlined" color="success" startIcon={<CheckCircle />} onClick={handleUnban} disabled={!!actionLoading}>
-                      {actionLoading === 'unban' ? <CircularProgress size={18} /> : 'Unban'}
-                    </Button>
-                  </Grid>
-                ) : (
-                  <Grid item xs={6}>
-                    <Button fullWidth variant="outlined" color="warning" startIcon={<Block />} onClick={() => setBanDialogOpen(true)} disabled={!!actionLoading}>
-                      Ban
-                    </Button>
-                  </Grid>
-                )}
-                <Grid item xs={6}>
-                  <Button fullWidth variant="outlined" color="error" startIcon={<Delete />} onClick={handleDelete} disabled={!!actionLoading}>
-                    {actionLoading === 'del' ? <CircularProgress size={18} /> : 'Delete'}
+                  <Button fullWidth variant="outlined" color="success" startIcon={<CheckCircle />} onClick={handleUnban} disabled={!!actionLoading}>
+                    {actionLoading === 'unban' ? <CircularProgress size={18} /> : 'Unban'}
                   </Button>
-                </Grid>
-              </Grid>
+                ) : (
+                  <Button fullWidth variant="outlined" color="warning" startIcon={<Block />} onClick={() => setBanDialogOpen(true)} disabled={!!actionLoading}>
+                    Ban
+                  </Button>
+                )}
+                <Button fullWidth variant="outlined" color="error" startIcon={<Delete />} onClick={handleDelete} disabled={!!actionLoading}>
+                  {actionLoading === 'del' ? <CircularProgress size={18} /> : 'Delete'}
+                </Button>
+              </Stack>
             </Box>
           )}
         </DialogContent>
@@ -740,7 +967,10 @@ function TelegramGroupsTab({ onAdminError, initialFilter }) {
     finally { setLoading(false); }
   }, [onAdminError]);
 
-  useEffect(() => { if (!initialFilter) fetch(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [fetch]);
+  useEffect(() => {
+    if (!initialFilter) fetch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetch]);
 
   // Apply a status filter handed in from a dashboard card click.
   useEffect(() => {

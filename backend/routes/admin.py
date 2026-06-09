@@ -10,7 +10,7 @@ from ..models import (
     PaymentHistory, SubscriptionRenewal, UserNotification, AdminAnnouncement,
     ReportedMessage, OfficialReportedMessage,
     AutomationWorkflow, WorkspaceReminder, Note, Channel, KnowledgeDocument,
-    PromoCode, PromoCodeUsage,
+    PromoCode, PromoCodeUsage, OfficialMember,
 )
 from ..config import Config
 from ..middleware.rate_limit import rate_limit
@@ -112,28 +112,119 @@ def require_permission(permission):
 @require_permission(rbac.P_USERS_VIEW)
 @rate_limit(requests_per_minute=60)
 def list_users():
+    """Paginated user list with real backend search, filtering and sorting.
+
+    Search spans name, email, Telegram username, Telegram ID and numeric user ID
+    (an all-digits query also matches the user PK). Sort options that rank by
+    revenue / groups / referrals are backed by aggregate sub-queries so the
+    ordering is correct across the whole table, not just the current page.
+    """
     page = request.args.get("page", 1, type=int)
     per_page = min(request.args.get("per_page", 50, type=int), 100)
-    search = request.args.get("search", "")
+    search = (request.args.get("search", "") or "").strip()
     tier = request.args.get("tier", "")
     status = request.args.get("status", "")
+    auth_provider = request.args.get("auth_provider", "")   # email | telegram | both
+    verified = request.args.get("verified", "")             # yes | no  (email verified)
+    joined_after = request.args.get("joined_after", "")     # ISO date
+    joined_before = request.args.get("joined_before", "")   # ISO date
+    sort = request.args.get("sort", "created_at")           # created_at|email|revenue|groups|referrals
+    order = request.args.get("order", "desc")               # asc | desc
 
     query = User.query
+
     if search:
-        query = query.filter(
-            (User.email.ilike(f"%{search}%")) |
-            (User.full_name.ilike(f"%{search}%"))
-        )
+        like = f"%{search}%"
+        conds = [
+            User.email.ilike(like),
+            User.full_name.ilike(like),
+            User.telegram_username.ilike(like),
+            User.telegram_user_id.ilike(like),
+        ]
+        if search.isdigit():
+            conds.append(User.id == int(search))
+        query = query.filter(db.or_(*conds))
+
     if tier in ("free", "pro", "enterprise"):
         query = query.filter(User.subscription_tier == tier)
-    if status == "banned":
-        query = query.filter(User.is_banned == True)
-    elif status == "active":
-        query = query.filter(User.is_banned == False)
-    elif status == "suspicious":
-        query = query.filter(User.is_suspicious == True)
 
-    query = query.order_by(User.created_at.desc())
+    if status == "banned":
+        query = query.filter(User.is_banned == True)  # noqa: E712
+    elif status == "active":
+        query = query.filter(User.is_banned == False)  # noqa: E712
+    elif status == "suspicious":
+        query = query.filter(User.is_suspicious == True)  # noqa: E712
+
+    if auth_provider in ("email", "telegram", "both"):
+        query = query.filter(User.auth_provider == auth_provider)
+
+    if verified == "yes":
+        query = query.filter(User.email_verified == True)  # noqa: E712
+    elif verified == "no":
+        query = query.filter(User.email_verified == False)  # noqa: E712
+
+    def _parse_date(s):
+        try:
+            return datetime.fromisoformat(s.replace("Z", "+00:00")).replace(tzinfo=None)
+        except (ValueError, AttributeError):
+            return None
+
+    if joined_after:
+        d = _parse_date(joined_after)
+        if d:
+            query = query.filter(User.created_at >= d)
+    if joined_before:
+        d = _parse_date(joined_before)
+        if d:
+            query = query.filter(User.created_at < d)
+
+    descending = order != "asc"
+
+    # Sorts that need an aggregate join. Each sub-query is grouped by user_id so
+    # the outer join stays 1:1 and pagination remains correct.
+    if sort == "revenue":
+        rev_sq = (
+            db.session.query(
+                PaymentHistory.user_id.label("uid"),
+                db.func.coalesce(db.func.sum(PaymentHistory.amount_usd), 0).label("rev"),
+            )
+            .filter(PaymentHistory.status == "confirmed")
+            .group_by(PaymentHistory.user_id)
+            .subquery()
+        )
+        query = query.outerjoin(rev_sq, rev_sq.c.uid == User.id)
+        col = db.func.coalesce(rev_sq.c.rev, 0)
+        query = query.order_by(col.desc() if descending else col.asc())
+    elif sort == "groups":
+        grp_sq = (
+            db.session.query(
+                TelegramGroup.owner_user_id.label("uid"),
+                db.func.count(TelegramGroup.id).label("cnt"),
+            )
+            .filter(TelegramGroup.owner_user_id.isnot(None))
+            .group_by(TelegramGroup.owner_user_id)
+            .subquery()
+        )
+        query = query.outerjoin(grp_sq, grp_sq.c.uid == User.id)
+        col = db.func.coalesce(grp_sq.c.cnt, 0)
+        query = query.order_by(col.desc() if descending else col.asc())
+    elif sort == "referrals":
+        ref_sq = (
+            db.session.query(
+                Referral.referrer_user_id.label("uid"),
+                db.func.count(Referral.id).label("cnt"),
+            )
+            .group_by(Referral.referrer_user_id)
+            .subquery()
+        )
+        query = query.outerjoin(ref_sq, ref_sq.c.uid == User.id)
+        col = db.func.coalesce(ref_sq.c.cnt, 0)
+        query = query.order_by(col.desc() if descending else col.asc())
+    elif sort == "email":
+        query = query.order_by(User.email.desc() if descending else User.email.asc())
+    else:  # created_at (default)
+        query = query.order_by(User.created_at.desc() if descending else User.created_at.asc())
+
     paginated = query.paginate(page=page, per_page=per_page, error_out=False)
     return jsonify({
         "users": [u.to_dict() for u in paginated.items],
@@ -141,6 +232,8 @@ def list_users():
         "pages": paginated.pages,
         "page": page,
         "per_page": per_page,
+        "sort": sort,
+        "order": order,
     })
 
 
@@ -148,19 +241,184 @@ def list_users():
 @require_permission(rbac.P_USERS_VIEW)
 @rate_limit(requests_per_minute=60)
 def get_user(user_id):
+    """Full audit profile for one user — everything the admin panel can derive
+    from existing tables. Fields we don't yet track are returned as null with a
+    `not_tracked` marker so the UI can honestly show "Not tracked yet" rather
+    than fabricate data.
+    """
     user = User.query.get(user_id)
     if not user:
         return jsonify({"error": "User not found"}), 404
+
     user_data = user.to_dict()
-    user_data["bots"] = [b.to_dict() for b in user.bots]
-    # Recent payment history
+
+    # ── Auth source & verification ─────────────────────────────────────────────
+    user_data["auth"] = {
+        "provider": user.auth_provider or "email",
+        "has_password": bool(user.password_hash),
+        "email_linked": bool(user.email),
+        "telegram_linked": bool(user.telegram_user_id),
+        "telegram_user_id": user.telegram_user_id,
+        "telegram_connected_at": user.telegram_connected_at.isoformat() if user.telegram_connected_at else None,
+        "email_verified": bool(user.email_verified),
+        "telegram_verified": bool(user.telegram_user_id),
+        "two_factor_enabled": bool(user.totp_enabled),
+        "recovery_email": None, "recovery_email_not_tracked": True,
+        "signup_source": (user.auth_provider or "email"),
+    }
+
+    # ── Subscription & revenue ─────────────────────────────────────────────────
     payments = PaymentHistory.query.filter_by(user_id=user_id)\
-        .order_by(PaymentHistory.created_at.desc()).limit(10).all()
+        .order_by(PaymentHistory.created_at.desc()).limit(25).all()
     user_data["recent_payments"] = [p.to_dict() for p in payments]
-    # Recent suspicious activity
+    revenue_cents = db.session.query(
+        db.func.coalesce(db.func.sum(PaymentHistory.amount_usd), 0)
+    ).filter(PaymentHistory.user_id == user_id, PaymentHistory.status == "confirmed").scalar() or 0
+    user_data["revenue"] = {
+        "lifetime_usd": round(revenue_cents / 100, 2),
+        "payment_count": PaymentHistory.query.filter_by(user_id=user_id, status="confirmed").count(),
+        "trial_used": bool(user.trial_used),
+        "trial_ends_at": user.trial_ends_at.isoformat() if user.trial_ends_at else None,
+        "subscription_expires_at": (user.subscription_expires_at or user.subscription_expires).isoformat()
+            if (user.subscription_expires_at or user.subscription_expires) else None,
+    }
+
+    # ── Referrals (referrer + referrals made) ──────────────────────────────────
+    referred_row = Referral.query.filter_by(referred_user_id=user_id).first()
+    referrer = None
+    if referred_row:
+        ru = User.query.get(referred_row.referrer_user_id)
+        referrer = {
+            "user_id": referred_row.referrer_user_id,
+            "email": ru.email if ru else None,
+            "name": ru.full_name if ru else None,
+            "status": referred_row.status,
+            "created_at": referred_row.created_at.isoformat(),
+        }
+    made = Referral.query.filter_by(referrer_user_id=user_id)\
+        .order_by(Referral.created_at.desc()).limit(50).all()
+    referrals_made = []
+    for r in made:
+        invitee = User.query.get(r.referred_user_id)
+        referrals_made.append({
+            "referred_user_id": r.referred_user_id,
+            "email": invitee.email if invitee else None,
+            "status": r.status,
+            "ip_match": r.ip_match, "device_match": r.device_match,
+            "rewards_given": r.rewards_given,
+            "created_at": r.created_at.isoformat(),
+        })
+    user_data["referrer"] = referrer
+    user_data["referrals_made"] = referrals_made
+    user_data["referral_stats"] = {
+        "total": len(referrals_made),
+        "approved": sum(1 for r in referrals_made if r["status"] == "approved"),
+        "pending": sum(1 for r in referrals_made if r["status"] == "pending"),
+    }
+
+    # ── Groups: owned (linked by this user) + where they're a TG admin ─────────
+    owned_groups = TelegramGroup.query.filter_by(owner_user_id=user_id)\
+        .order_by(TelegramGroup.created_at.desc()).all()
+    user_data["owned_groups"] = [{
+        "telegram_group_id": g.telegram_group_id, "title": g.title,
+        "bot_status": g.bot_status, "member_count": g.member_count,
+        "linked_via_bot_type": g.linked_via_bot_type,
+        "linked_at": g.linked_at.isoformat() if g.linked_at else None,
+    } for g in owned_groups]
+    admin_of = []
+    if user.telegram_user_id:
+        admin_rows = OfficialMember.query.filter_by(
+            telegram_user_id=str(user.telegram_user_id), is_admin=True
+        ).limit(50).all()
+        for m in admin_rows:
+            tg = TelegramGroup.query.filter_by(telegram_group_id=m.telegram_group_id).first()
+            admin_of.append({
+                "telegram_group_id": m.telegram_group_id,
+                "title": tg.title if tg else m.telegram_group_id,
+                "role": m.role,
+            })
+    user_data["admin_of_groups"] = admin_of
+
+    # ── Bots (custom + legacy) ─────────────────────────────────────────────────
+    custom_bots = CustomBot.query.filter_by(owner_user_id=user_id).all()
+    user_data["custom_bots"] = [{
+        "id": b.id, "bot_username": b.bot_username, "bot_name": b.bot_name,
+        "status": getattr(b, "status", None),
+        "created_at": b.created_at.isoformat() if b.created_at else None,
+    } for b in custom_bots]
+    user_data["bots"] = [b.to_dict() for b in user.bots]  # legacy table
+
+    # ── Official-bot usage (derived from OfficialMember rows for this TG id) ────
+    if user.telegram_user_id:
+        member_rows = OfficialMember.query.filter_by(telegram_user_id=str(user.telegram_user_id)).all()
+        user_data["official_bot_usage"] = {
+            "groups_active_in": len(member_rows),
+            "total_messages": sum(m.message_count or 0 for m in member_rows),
+            "total_xp": sum(m.xp or 0 for m in member_rows),
+            "warnings": sum(m.warnings or 0 for m in member_rows),
+            "last_message_at": max(
+                (m.last_message_at for m in member_rows if m.last_message_at), default=None
+            ).isoformat() if any(m.last_message_at for m in member_rows) else None,
+        }
+    else:
+        user_data["official_bot_usage"] = None  # no linked Telegram identity
+
+    # AI / Echo usage is group-scoped (AIActivity has no user FK), so it can't be
+    # reliably attributed to one website user yet.
+    user_data["echo_usage_not_tracked"] = True
+    user_data["ai_cost_usd_today"] = float(user.ai_cost_usd_today or 0)
+
+    # ── Risk score (derived, 0–100) ────────────────────────────────────────────
     suspicious = SuspiciousActivity.query.filter_by(user_id=user_id)\
-        .order_by(SuspiciousActivity.created_at.desc()).limit(5).all()
-    user_data["suspicious_events"] = [s.to_dict() for s in suspicious]
+        .order_by(SuspiciousActivity.created_at.desc()).limit(20).all()
+    risk = 0
+    risk += 25 if user.is_suspicious else 0
+    risk += min(20, (user.chargeback_count or 0) * 10)
+    risk += min(20, len(suspicious) * 5)
+    risk += sum(8 for r in referrals_made if r["ip_match"] or r["device_match"])
+    risk += 15 if user.is_banned else 0
+    risk = min(100, risk)
+    user_data["risk"] = {
+        "score": risk,
+        "level": "high" if risk >= 60 else "medium" if risk >= 25 else "low",
+        "is_suspicious": bool(user.is_suspicious),
+        "chargeback_count": user.chargeback_count or 0,
+        "suspicious_event_count": len(suspicious),
+    }
+    user_data["suspicious_events"] = [s.to_dict() for s in suspicious[:5]]
+
+    # ── Admin actions taken against this user ──────────────────────────────────
+    # Match the exact /users/<id> path segment (not a LIKE prefix, so user 12
+    # never matches /users/123) plus any structured target reference.
+    admin_actions = AdminAuditLog.query.filter(
+        db.or_(
+            db.and_(AdminAuditLog.target_type == "user", AdminAuditLog.target_id == str(user_id)),
+            AdminAuditLog.path.like(f"%/users/{user_id}"),
+            AdminAuditLog.path.like(f"%/users/{user_id}/%"),
+        )
+    ).order_by(AdminAuditLog.created_at.desc()).limit(25).all()
+    user_data["admin_actions"] = [a.to_dict() for a in admin_actions]
+
+    # ── Activity timeline (merged, newest first) ───────────────────────────────
+    timeline = [{"type": "signup", "at": user.created_at.isoformat(), "label": "Account created"}]
+    if user.telegram_connected_at:
+        timeline.append({"type": "telegram_linked", "at": user.telegram_connected_at.isoformat(),
+                         "label": f"Linked Telegram @{user.telegram_username or user.telegram_user_id}"})
+    for p in payments[:10]:
+        timeline.append({"type": "payment", "at": p.created_at.isoformat(),
+                         "label": f"{p.status} payment · {p.plan} · {p.provider}"})
+    for r in made[:10]:
+        timeline.append({"type": "referral", "at": r.created_at.isoformat(),
+                         "label": f"Referred a user ({r.status})"})
+    for s in suspicious[:10]:
+        timeline.append({"type": "suspicious", "at": s.created_at.isoformat(),
+                         "label": f"Suspicious: {s.reason}"})
+    for a in admin_actions[:10]:
+        timeline.append({"type": "admin_action", "at": a.created_at.isoformat(),
+                         "label": f"Admin: {a.action}"})
+    timeline.sort(key=lambda x: x["at"], reverse=True)
+    user_data["timeline"] = timeline[:40]
+
     return jsonify({"user": user_data})
 
 
