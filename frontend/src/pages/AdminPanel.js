@@ -2676,6 +2676,7 @@ function ComplianceTab({ onAdminError }) {
         admin.getComplianceRequests({ status: filter || undefined }),
       ]);
       if (tRes.status === 'fulfilled') setTos(tRes.value.data);
+      else onAdminError?.(tRes.reason, 'Failed to load ToS versions');
       if (rRes.status === 'fulfilled') setReqs(rRes.value.data.requests || []);
       else onAdminError?.(rRes.reason, 'Failed to load compliance requests');
     } finally { setLoading(false); }
@@ -3213,9 +3214,9 @@ function SecretsTab({ onAdminError }) {
 
 const CATEGORY_LABELS = {
   branding: 'Branding', links: 'URLs & Links', localization: 'Localization',
-  maintenance: 'Maintenance', onboarding: 'Onboarding',
+  maintenance: 'Maintenance', onboarding: 'Onboarding', compliance: 'Compliance',
 };
-const CATEGORY_ORDER = ['branding', 'links', 'localization', 'maintenance', 'onboarding'];
+const CATEGORY_ORDER = ['branding', 'links', 'localization', 'maintenance', 'onboarding', 'compliance'];
 
 function prettyKey(k) {
   return k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
