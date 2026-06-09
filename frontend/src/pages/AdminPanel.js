@@ -14,7 +14,7 @@ import {
   CheckCircleOutline, Cancel, Circle, Flag,
   Security, AccountTree, TrendingDown, Payment, FileDownload,
   MonitorHeart, NetworkCheck, Tune, Key, Psychology, AttachMoney as MoneyIcon,
-  Gavel,
+  Gavel, Dns,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -2999,6 +2999,143 @@ function PricingTab({ onAdminError }) {
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// TAB — SYSTEM HEALTH & DEVOPS (health.view)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const ENV_LABELS = {
+  telegram_bot_token: 'Official bot token', echo_bot_token: 'Echo bot token',
+  platform_ai_key: 'Platform AI key', email_provider: 'Email provider',
+  nowpayments: 'NOWPayments', lemonsqueezy: 'Lemon Squeezy', google_oauth: 'Google OAuth',
+};
+
+function SystemTab({ onAdminError }) {
+  const [sys, setSys] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await admin.getSystem();
+      setSys(data);
+    } catch (e) { onAdminError?.(e, 'Failed to load system status'); }
+    finally { setLoading(false); }
+  }, [onAdminError]);
+  useEffect(() => { load(); }, [load]);
+
+  if (loading || !sys) return <Box display="flex" justifyContent="center" py={6}><CircularProgress /></Box>;
+
+  const svcColor = (v) => v === 'ok' ? 'success' : (String(v).startsWith('error') ? 'error' : 'warning');
+
+  return (
+    <Box>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2} flexWrap="wrap" gap={1}>
+        <Stack direction="row" alignItems="center" gap={1}>
+          <Typography variant="h6" fontWeight={700}>System Health &amp; DevOps</Typography>
+          <Chip label={sys.status} size="small" color={sys.status === 'ok' ? 'success' : 'warning'} />
+        </Stack>
+        <Button size="small" startIcon={<Refresh />} onClick={load}>Refresh</Button>
+      </Stack>
+
+      <Grid container spacing={2}>
+        {/* Runtime */}
+        <Grid item xs={12} md={6}>
+          <Card sx={{ height: '100%' }}><CardContent>
+            <Typography variant="subtitle1" fontWeight={700} mb={1.5}>Runtime</Typography>
+            <Stack spacing={0.75}>
+              {[
+                ['App version', sys.runtime?.app_version],
+                ['Python', sys.runtime?.python],
+                ['Platform', sys.runtime?.platform],
+                ['Bot webhook mode', sys.runtime?.webhook_mode ? 'on' : 'polling'],
+                ['Enforce admin 2FA', sys.runtime?.enforce_admin_2fa ? 'yes' : 'no'],
+              ].map(([k, v]) => (
+                <Stack key={k} direction="row" justifyContent="space-between">
+                  <Typography variant="body2" color="text.secondary">{k}</Typography>
+                  <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>{String(v ?? '—')}</Typography>
+                </Stack>
+              ))}
+            </Stack>
+          </CardContent></Card>
+        </Grid>
+
+        {/* Services */}
+        <Grid item xs={12} md={6}>
+          <Card sx={{ height: '100%' }}><CardContent>
+            <Typography variant="subtitle1" fontWeight={700} mb={1.5}>Services</Typography>
+            <Stack spacing={1}>
+              {Object.entries(sys.services || {}).map(([k, v]) => (
+                <Stack key={k} direction="row" justifyContent="space-between" alignItems="center">
+                  <Typography variant="body2" textTransform="capitalize">{k}</Typography>
+                  <Chip label={String(v)} size="small" color={svcColor(v)} />
+                </Stack>
+              ))}
+              <Stack direction="row" justifyContent="space-between" alignItems="center">
+                <Typography variant="body2">Queue depth</Typography>
+                <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>{sys.queue_depth ?? 'n/a'}</Typography>
+              </Stack>
+            </Stack>
+          </CardContent></Card>
+        </Grid>
+
+        {/* Environment checklist */}
+        <Grid item xs={12} md={6}>
+          <Card sx={{ height: '100%' }}><CardContent>
+            <Typography variant="subtitle1" fontWeight={700} mb={1.5}>Environment</Typography>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+              {Object.entries(sys.environment || {}).map(([k, v]) => (
+                <Chip key={k} size="small" label={ENV_LABELS[k] || k}
+                  color={v ? 'success' : 'default'} variant={v ? 'filled' : 'outlined'}
+                  icon={v ? <CheckCircle fontSize="small" /> : <Cancel fontSize="small" />} />
+              ))}
+            </Box>
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+              Green = configured. Manage values in Secrets &amp; Keys.
+            </Typography>
+          </CardContent></Card>
+        </Grid>
+
+        {/* 24h errors */}
+        <Grid item xs={12} md={6}>
+          <Card sx={{ height: '100%' }}><CardContent>
+            <Typography variant="subtitle1" fontWeight={700} mb={1.5}>Last 24 hours</Typography>
+            <Grid container spacing={2}>
+              <Grid item xs={6}><StatCard label="Bot/AI errors" value={sys.errors?.bot_health_24h} color="#ff9f0a" /></Grid>
+              <Grid item xs={6}><StatCard label="Critical admin actions" value={sys.errors?.critical_admin_actions_24h} color="#ff453a" /></Grid>
+            </Grid>
+          </CardContent></Card>
+        </Grid>
+
+        {/* Scheduled jobs */}
+        <Grid item xs={12}>
+          <Card><CardContent>
+            <Typography variant="subtitle1" fontWeight={700} mb={1.5}>
+              Scheduled jobs ({sys.scheduled_jobs?.length || 0})
+            </Typography>
+            <TableContainer>
+              <Table size="small">
+                <TableHead><TableRow>
+                  <TableCell>Name</TableCell><TableCell>Task</TableCell><TableCell>Schedule</TableCell>
+                </TableRow></TableHead>
+                <TableBody>
+                  {(sys.scheduled_jobs || []).map(j => (
+                    <TableRow key={j.name}>
+                      <TableCell sx={{ fontSize: 12 }}>{j.name}</TableCell>
+                      <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{j.task}</TableCell>
+                      <TableCell><Chip label={j.schedule} size="small" variant="outlined" /></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </CardContent></Card>
+        </Grid>
+      </Grid>
+    </Box>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // TAB — SECRET & API-KEY VAULT (Super Admin only)
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -3664,6 +3801,8 @@ export default function AdminPanel() {
       render: () => <BotHealthTab onAdminError={handleAdminError} /> },
     { key: 'diagnostics', label: 'Diagnostics', icon: <NetworkCheck fontSize="small" />, permission: 'health.view',
       render: () => <DiagnosticsTab onAdminError={handleAdminError} /> },
+    { key: 'system', label: 'System', icon: <Dns fontSize="small" />, permission: 'health.view',
+      render: () => <SystemTab onAdminError={handleAdminError} /> },
     { key: 'ai', label: 'AI', icon: <Psychology fontSize="small" />, permission: 'ai.manage',
       render: () => <AITab onAdminError={handleAdminError} /> },
     { key: 'config', label: 'Configuration', icon: <Tune fontSize="small" />, permission: 'config.manage',

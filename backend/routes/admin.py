@@ -2710,3 +2710,134 @@ def admin_compliance_tos():
         "users_outdated_tos": max(0, total - on_current),
         "note": "Edit versions in Configuration (compliance category). Re-acceptance enforcement is not automated.",
     })
+
+
+# ── System Health & DevOps (health.view) ───────────────────────────────────────
+
+def _describe_schedule(sched):
+    """Human-readable label for a Celery beat schedule entry."""
+    try:
+        from celery.schedules import crontab
+        if isinstance(sched, crontab):
+            return f"cron {sched._orig_minute} {sched._orig_hour} * * {sched._orig_day_of_week}"
+        secs = float(sched)
+        if secs % 3600 == 0:
+            return f"every {int(secs // 3600)}h"
+        if secs % 60 == 0:
+            return f"every {int(secs // 60)}m"
+        return f"every {int(secs)}s"
+    except Exception:
+        return str(sched)
+
+
+@admin_bp.route("/system", methods=["GET"])
+@require_permission(rbac.P_HEALTH_VIEW)
+@rate_limit(requests_per_minute=20)
+def admin_system():
+    """Consolidated DevOps snapshot: version, service health, environment checklist,
+    scheduled jobs and 24h error counts. No secret values are ever returned."""
+    import os
+    import platform as _platform
+    from .. import secret_vault as sv
+
+    now = datetime.utcnow()
+
+    # ── Version / runtime ──
+    runtime = {
+        "app_version": Config.VERSION,
+        "python": _platform.python_version(),
+        "platform": _platform.system(),
+        "webhook_mode": bool(getattr(Config, "CUSTOM_BOT_WEBHOOK_BASE_URL", "")),
+        "enforce_admin_2fa": bool(getattr(Config, "ENFORCE_ADMIN_2FA", False)),
+        "generated_at": now.isoformat(),
+    }
+
+    # ── Services ──
+    services = {}
+    try:
+        db.session.execute(db.text("SELECT 1"))
+        services["database"] = "ok"
+    except Exception as e:
+        services["database"] = f"error: {str(e)[:60]}"
+
+    redis_client = None
+    try:
+        import redis as _redis
+        redis_client = _redis.from_url(Config.REDIS_URL or "redis://localhost:6379/0", socket_timeout=2)
+        redis_client.ping()
+        services["redis"] = "ok"
+    except Exception as e:
+        services["redis"] = f"error: {str(e)[:60]}"
+        redis_client = None
+
+    # Celery heartbeat + queue depth (best-effort).
+    queue_depth = None
+    if redis_client is not None:
+        try:
+            services["celery"] = "ok" if redis_client.get("celery:heartbeat") else "unknown"
+        except Exception:
+            services["celery"] = "unknown"
+        try:
+            queue_depth = redis_client.llen("celery")  # default queue key
+        except Exception:
+            queue_depth = None
+    else:
+        services["celery"] = "unknown"
+
+    # ── Environment checklist (booleans only — never values) ──
+    def _set(name):
+        return bool(sv.get_secret(name))
+    environment = {
+        "telegram_bot_token": _set("TELEGRAM_BOT_TOKEN"),
+        "echo_bot_token": _set("ECHO_BOT_TOKEN"),
+        "platform_ai_key": _set("PLATFORM_OPENROUTER_API_KEY") or _set("OPENAI_API_KEY"),
+        "email_provider": bool(getattr(Config, "EMAIL_PROVIDER", "")),
+        "nowpayments": _set("NOWPAYMENTS_API_KEY"),
+        "lemonsqueezy": _set("LS_API_KEY"),
+        "google_oauth": _set("GOOGLE_CLIENT_SECRET"),
+    }
+
+    # ── Scheduled jobs (from the Celery beat schedule) ──
+    jobs = []
+    try:
+        from ..scheduler import celery as _celery
+        for name, cfg in (_celery.conf.beat_schedule or {}).items():
+            jobs.append({
+                "name": name,
+                "task": (cfg.get("task") or "").replace("backend.scheduler.", ""),
+                "schedule": _describe_schedule(cfg.get("schedule")),
+            })
+        jobs.sort(key=lambda j: j["name"])
+    except Exception as e:
+        _log.warning("system: beat schedule read failed: %s", e)
+
+    # ── 24h errors ──
+    since = now - timedelta(hours=24)
+    errors = {"bot_health_24h": 0, "critical_admin_actions_24h": 0}
+    try:
+        errors["bot_health_24h"] = BotHealthEvent.query.filter(
+            BotHealthEvent.created_at >= since,
+            db.or_(BotHealthEvent.severity != "info", BotHealthEvent.severity.is_(None)),
+        ).count()
+    except Exception:
+        pass
+    try:
+        errors["critical_admin_actions_24h"] = AdminAuditLog.query.filter(
+            AdminAuditLog.created_at >= since, AdminAuditLog.severity == "critical"
+        ).count()
+    except Exception:
+        pass
+
+    overall = "ok" if all(v == "ok" for v in services.values()) else (
+        "degraded" if any(str(v).startswith("error") for v in services.values()) else "ok"
+    )
+
+    return jsonify({
+        "status": overall,
+        "runtime": runtime,
+        "services": services,
+        "queue_depth": queue_depth,
+        "environment": environment,
+        "scheduled_jobs": jobs,
+        "errors": errors,
+    })

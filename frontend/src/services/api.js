@@ -697,6 +697,8 @@ export const admin = {
   getComplianceRequests: (params) => api.get('/api/admin/compliance/requests', { params }),
   resolveCompliance: (id, data) => api.post(`/api/admin/compliance/requests/${id}/resolve`, data),
   getComplianceTos: () => api.get('/api/admin/compliance/tos'),
+  // System Health & DevOps
+  getSystem: () => api.get('/api/admin/system'),
 };
 
 // Public, unauthenticated platform config (branding, links, maintenance status)
