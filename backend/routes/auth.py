@@ -58,10 +58,14 @@ def _set_auth_cookies(response, access_token: str, refresh_token: str = None):
             path="/api/auth/refresh",
             max_age=2592000,
         )
-    # CSRF cookie — readable by JS, paired with X-CSRF-Token header (1-D-02)
+    # CSRF cookie — readable by JS, paired with X-CSRF-Token header (1-D-02).
+    # max_age matches the access cookie: if it were a session cookie it could
+    # expire before the access token, leaving a cookie-authenticated browser
+    # unable to pass the CSRF check until the next login.
     response.set_cookie(
         "csrf_token", generate_csrf_token(),
         httponly=False, secure=secure, samesite="Strict",
+        max_age=86400,
     )
     return response
 
@@ -1050,6 +1054,88 @@ def change_password():
     return jsonify({"message": "Password updated successfully"}), 200
 
 
+def _purge_user_data(user):
+    """Delete or detach every row referencing users.id that has no DB-level
+    ON DELETE CASCADE. Without this, db.session.delete(user) raises
+    IntegrityError for any active account — breaking the GDPR right to erasure
+    promised in the Privacy Policy.
+
+    Order matters only loosely: user-scoped bulk deletes are independent;
+    TelegramGroup/CustomBot are deleted as ORM instances so their own
+    child-cascade relationships fire.
+    """
+    from ..models import (
+        PasswordResetToken, UserApiKey, PendingInvoice, PaymentHistory,
+        SubscriptionRenewal, PromoCode, PromoCodeUsage, UserNotification,
+        Note, DigestLog, BotDMMessage, PendingReminderState, Task,
+        AutoReplyLog, WorkspaceKnowledgeDocument, Meeting,
+        AssistantConversationState, WorkspaceReminder, AutomationWorkflow,
+        ForwardRule, CustomBot, TelegramGroup, TelegramGroupLinkCode,
+        AutoResponse, InviteLink, SuspiciousActivity, EngagementCampaign,
+        PlatformSetting, ComplianceRequest,
+    )
+    from ..assistant.hub_models import HubExtractionBatch
+
+    uid = user.id
+
+    # Owned content — hard delete (right to erasure).
+    for model, col in [
+        (PasswordResetToken, PasswordResetToken.user_id),
+        (UserApiKey, UserApiKey.user_id),
+        (PendingInvoice, PendingInvoice.user_id),
+        (PaymentHistory, PaymentHistory.user_id),
+        (SubscriptionRenewal, SubscriptionRenewal.user_id),
+        (PromoCodeUsage, PromoCodeUsage.user_id),
+        (UserNotification, UserNotification.user_id),
+        (Note, Note.user_id),
+        (DigestLog, DigestLog.user_id),
+        (BotDMMessage, BotDMMessage.user_id),
+        (PendingReminderState, PendingReminderState.user_id),
+        (Task, Task.user_id),
+        (AutoReplyLog, AutoReplyLog.user_id),
+        (WorkspaceKnowledgeDocument, WorkspaceKnowledgeDocument.user_id),
+        (Meeting, Meeting.owner_user_id),
+        (AssistantConversationState, AssistantConversationState.user_id),
+        (WorkspaceReminder, WorkspaceReminder.owner_user_id),
+        (AutomationWorkflow, AutomationWorkflow.owner_user_id),
+        (ForwardRule, ForwardRule.owner_user_id),
+        (HubExtractionBatch, HubExtractionBatch.user_id),
+    ]:
+        model.query.filter(col == uid).delete(synchronize_session=False)
+
+    # Referrals reference the user from both sides.
+    Referral.query.filter(
+        (Referral.referrer_user_id == uid) | (Referral.referred_user_id == uid)
+    ).delete(synchronize_session=False)
+
+    # Group/bot configurations — instance deletes so ORM child cascades
+    # (members, commands, warnings, events, ...) fire.
+    for grp in TelegramGroup.query.filter_by(owner_user_id=uid).all():
+        db.session.delete(grp)
+    for cbot in CustomBot.query.filter_by(owner_user_id=uid).all():
+        db.session.delete(cbot)
+
+    # Nullable references — detach instead of deleting shared/audit rows.
+    TelegramGroupLinkCode.query.filter_by(user_id=uid).update(
+        {"user_id": None}, synchronize_session=False)
+    AutoResponse.query.filter_by(owner_user_id=uid).update(
+        {"owner_user_id": None}, synchronize_session=False)
+    InviteLink.query.filter_by(created_by_user_id=uid).update(
+        {"created_by_user_id": None}, synchronize_session=False)
+    SuspiciousActivity.query.filter_by(user_id=uid).update(
+        {"user_id": None}, synchronize_session=False)
+    EngagementCampaign.query.filter_by(owner_user_id=uid).update(
+        {"owner_user_id": None}, synchronize_session=False)
+    PromoCode.query.filter_by(created_by_user_id=uid).update(
+        {"created_by_user_id": None}, synchronize_session=False)
+    PlatformSetting.query.filter_by(updated_by=uid).update(
+        {"updated_by": None}, synchronize_session=False)
+    ComplianceRequest.query.filter_by(user_id=uid).update(
+        {"user_id": None}, synchronize_session=False)
+    ComplianceRequest.query.filter_by(handled_by=uid).update(
+        {"handled_by": None}, synchronize_session=False)
+
+
 @auth_bp.route("/account", methods=["DELETE"])
 @jwt_required()
 @rate_limit(requests_per_minute=3)
@@ -1082,8 +1168,17 @@ def delete_account():
     except Exception:
         pass
 
-    db.session.delete(user)
-    db.session.commit()
+    try:
+        _purge_user_data(user)
+        db.session.delete(user)
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        logger.error("Account deletion failed for user %s: %s", user.id, exc, exc_info=True)
+        return jsonify({
+            "error": "Account deletion failed. Please contact support@telegizer.com and we will delete your account manually.",
+            "code": "DELETE_FAILED",
+        }), 500
     return jsonify({"message": "Account deleted successfully"}), 200
 
 

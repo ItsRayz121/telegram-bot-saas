@@ -1,4 +1,4 @@
-﻿/**
+/**
  * /hub/official/:tab — Official bot workspace.
  * Sprint 4: Overview, Tasks, Reminders, Notes tabs are fully live.
  */

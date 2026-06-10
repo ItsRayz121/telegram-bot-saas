@@ -205,15 +205,30 @@ def get_subscription():
 @jwt_required()
 @rate_limit(requests_per_minute=5)
 def cancel_subscription():
+    """Cancel a subscription WITHOUT destroying paid time.
+
+    Plans are one-time payments that never auto-renew, so "cancel" must never
+    strip a period the user already paid for. Behaviour:
+      - active paid period  -> keep the tier until subscription_expires; record
+                               the cancellation for audit (P1-07)
+      - active trial        -> end the trial immediately (nothing was paid)
+      - no expiry on record -> legacy/edge data: downgrade immediately
+    """
     user = _get_current_user()
     if not user:
         return jsonify({"error": "User not found"}), 404
     if user.subscription_tier == "free":
         return jsonify({"error": "No active paid subscription to cancel"}), 400
 
+    now = datetime.utcnow()
     prev_tier = user.subscription_tier
-    user.subscription_tier = "free"
-    user.subscription_expires = None
+    on_trial = (
+        user.subscription_expires is None
+        and user.trial_ends_at is not None
+        and user.trial_ends_at > now
+    )
+    has_paid_time = user.subscription_expires is not None and user.subscription_expires > now
+
     record = PaymentHistory(
         user_id=user.id,
         provider="manual",
@@ -223,19 +238,42 @@ def cancel_subscription():
         amount_usd=0,
         currency="USD",
         status="cancelled",
-        confirmed_at=datetime.utcnow(),
+        confirmed_at=now,
     )
     db.session.add(record)
+
+    if on_trial:
+        user.subscription_tier = "free"
+        user.trial_ends_at = None
+        message = "Your Pro trial has ended. You are now on the Free plan."
+        effective = "immediate"
+    elif has_paid_time:
+        # Paid time is kept — plans never auto-renew, so nothing else to stop.
+        expires_str = user.subscription_expires.strftime("%Y-%m-%d")
+        message = (
+            f"Cancellation noted. Your {prev_tier.capitalize()} plan stays active until "
+            f"{expires_str} (already paid), then your account moves to the Free plan. "
+            "Plans never auto-renew, so you will not be charged again."
+        )
+        effective = "at_period_end"
+    else:
+        user.subscription_tier = "free"
+        user.subscription_expires = None
+        message = "Subscription cancelled. You have been moved to the Free plan."
+        effective = "immediate"
+
     db.session.commit()
     try:
         send_subscription_cancelled(user.email, user.full_name)
     except Exception:
         pass
-    tenure_days = (datetime.utcnow() - user.created_at).days
-    logger.info("[BILLING] User %d cancelled %s subscription", user.id, prev_tier)
+    tenure_days = (now - user.created_at).days
+    logger.info("[BILLING] User %d cancelled %s subscription (%s)", user.id, prev_tier, effective)
     return jsonify({
-        "message": "Subscription cancelled. You have been moved to the Free plan.",
+        "message": message,
         "plan": prev_tier,
+        "effective": effective,
+        "expires": user.subscription_expires.isoformat() if user.subscription_expires else None,
         "tenure_days": tenure_days,
     })
 

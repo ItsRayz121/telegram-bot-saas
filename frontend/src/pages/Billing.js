@@ -100,9 +100,11 @@ export default function Billing() {
       track('subscription_cancelled', {
         plan: resp.data.plan || 'pro',
         tenure_days: resp.data.tenure_days,
+        effective: resp.data.effective,
         reason: 'user_initiated',
       });
-      toast.success('Subscription cancelled. You are now on the Free plan.');
+      // Backend message explains whether paid time is kept until expiry
+      toast.success(resp.data.message || 'Subscription cancelled.');
       setCancelDialogOpen(false);
       await fetchSub();
     } catch (err) {
@@ -681,8 +683,10 @@ export default function Billing() {
           <DialogTitle>Cancel your subscription?</DialogTitle>
           <DialogContent>
             <DialogContentText>
-              Your plan will be immediately downgraded to <strong>Free</strong>. You will lose access
-              to paid features and any remaining days will not be refunded. This action cannot be undone.
+              Plans never auto-renew, so cancelling simply confirms you won't be charged again.
+              If you have paid time remaining, your plan <strong>stays active until its expiry date</strong> —
+              you keep everything you paid for. After that your account moves to the <strong>Free</strong> plan.
+              (Active trials end immediately.)
             </DialogContentText>
           </DialogContent>
           <DialogActions>

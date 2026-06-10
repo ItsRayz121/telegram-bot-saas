@@ -59,7 +59,7 @@ export default function Register() {
         identify(res.data.user.id, { plan: res.data.user.subscription_tier });
       }
       track('signup_completed', { ref_code: refCode || null });
-      toast.success('Account created! Please verify your email to continue.');
+      toast.success('Account created — your 14-day Pro trial is active! Verify your email to continue.');
       navigate('/verify-email');
     } catch (err) {
       const code = err.response?.data?.code;

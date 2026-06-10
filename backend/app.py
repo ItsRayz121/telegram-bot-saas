@@ -508,6 +508,52 @@ def create_app():
             _scheduler_log.warning("[ORIGIN] Unexpected origin=%s path=%s", origin, request.path)
         return None
 
+    # 1-D-02: enforce the CSRF double-submit check for COOKIE-authenticated
+    # state-changing requests. Previously validate_csrf() existed but was never
+    # wired in — the frontend sent X-CSRF-Token on every request and nothing
+    # verified it. Scope:
+    #   - only when an access_token cookie is present AND there is no
+    #     Authorization header (Bearer flows — TMA, API clients — are immune
+    #     to CSRF and carry no cookies worth protecting)
+    #   - webhook receivers are exempt (no browser cookies are ever sent there)
+    #   - login/register/refresh are exempt: they establish the session that
+    #     issues the CSRF cookie in the first place
+    _CSRF_EXEMPT_PREFIX = (
+        '/api/billing/crypto/webhook', '/api/billing/lemon-squeezy/webhook',
+        '/api/webhooks/', '/api/telegram/', '/api/tg-update/',
+        '/api/hub/webhook', '/api/official-bot-update', '/api/echo-bot-update',
+        '/api/integrations/',
+    )
+    _CSRF_EXEMPT_EXACT = {
+        '/api/auth/login', '/api/auth/register', '/api/auth/refresh',
+        '/api/auth/verify-totp-login', '/api/auth/forgot-password',
+        '/api/auth/reset-password', '/api/auth/verify-email',
+        '/api/miniapp/auth',
+    }
+
+    @app.before_request
+    def _enforce_csrf():
+        if request.method in ("GET", "HEAD", "OPTIONS"):
+            return None
+        path = request.path
+        if not path.startswith('/api/'):
+            return None
+        if path in _CSRF_EXEMPT_EXACT or path.startswith(_CSRF_EXEMPT_PREFIX):
+            return None
+        if request.headers.get("Authorization"):
+            return None  # Bearer-authenticated — not a CSRF vector
+        if not request.cookies.get("access_token"):
+            return None  # no auth cookie — nothing to ride on
+        import hmac as _hmac
+        cookie_token = request.cookies.get("csrf_token", "")
+        header_token = request.headers.get("X-CSRF-Token", "")
+        if not cookie_token or not header_token or not _hmac.compare_digest(cookie_token, header_token):
+            return jsonify({
+                "error": "CSRF validation failed. Please refresh the page and try again.",
+                "code": "CSRF_FAILED",
+            }), 403
+        return None
+
     # 1-D-04: tighter size limit for webhook endpoints
     @app.before_request
     def _limit_webhook_size():

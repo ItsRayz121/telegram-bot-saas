@@ -1,4 +1,4 @@
-﻿/**
+/**
  * /hub/bots/:botId/:tab — Custom bot workspace.
  * Uses the same 8 tabs as the official bot workspace, with all data scoped
  * to this bot's ID. The Settings tab shows bot-specific danger zone instead

@@ -214,8 +214,8 @@ class Config:
             "max_bots": 1,
             "ai_tokens_day": 10_000,
             "features": [
-                "1 custom bot",
-                "Unlimited groups",
+                "1 custom bot · 3 groups per bot",
+                "@telegizer_bot · unlimited groups",
                 "Welcome messages",
                 "Basic moderation",
                 "Verification system",

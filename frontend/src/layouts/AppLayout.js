@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import useAssistantName from '../hooks/useAssistantName';
 import {
   Box, AppBar, Toolbar, IconButton, Typography, Drawer,

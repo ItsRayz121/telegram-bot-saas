@@ -101,7 +101,7 @@ export default function PaymentSuccess() {
             <TelegizerLogo size="md" />
           </Box>
 
-          {/* â"€â"€ Checking â"€â"€ */}
+          {/* ── Checking ── */}
           {status === 'checking' && (
             <>
               <CircularProgress size={56} sx={{ mb: 3 }} />
@@ -126,7 +126,7 @@ export default function PaymentSuccess() {
             </>
           )}
 
-          {/* â"€â"€ Success â"€â"€ */}
+          {/* ── Success ── */}
           {status === 'success' && (
             <>
               <CheckCircle sx={{ fontSize: 72, color: 'success.main', mb: 2 }} />
@@ -140,7 +140,7 @@ export default function PaymentSuccess() {
               />
               <Typography color="text.secondary" mb={4}>
                 Your subscription is now active. All {tier} features are unlocked.
-                Taking you to your dashboardâ€¦
+                Taking you to your dashboard…
               </Typography>
               <Stack spacing={2}>
                 <Button
@@ -155,7 +155,7 @@ export default function PaymentSuccess() {
             </>
           )}
 
-          {/* â"€â"€ Pending â"€â"€ */}
+          {/* ── Pending ── */}
           {status === 'pending' && (
             <>
               <HourglassTop sx={{ fontSize: 72, color: 'warning.main', mb: 2 }} />
@@ -181,7 +181,7 @@ export default function PaymentSuccess() {
             </>
           )}
 
-          {/* â"€â"€ Failed / Cancelled â"€â"€ */}
+          {/* ── Failed / Cancelled ── */}
           {status === 'failed' && (
             <>
               <ErrorOutline sx={{ fontSize: 72, color: 'error.main', mb: 2 }} />

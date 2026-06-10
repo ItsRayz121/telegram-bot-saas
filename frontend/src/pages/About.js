@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { openSupportEmail } from '../config/support';
 import {
   Box, AppBar, Toolbar, Typography, Button, Container, Divider,

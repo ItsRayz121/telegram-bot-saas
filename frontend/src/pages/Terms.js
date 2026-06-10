@@ -157,9 +157,12 @@ export default function Terms() {
 
         <Section title="5. Free Plan">
           <P>
-            The Free plan is available at no cost and includes basic features (1 custom bot,
-            1 group per bot). We reserve the right to modify, limit, or discontinue the Free
-            plan at any time with reasonable notice (minimum 30 days for existing free users).
+            The Free plan is available at no cost and includes basic features (1 custom bot
+            with up to 3 groups, plus unlimited groups on the shared @telegizer_bot). New
+            accounts also receive a one-time 14-day Pro trial, which downgrades to the Free
+            plan automatically when it ends — no payment is taken. We reserve the right to
+            modify, limit, or discontinue the Free plan at any time with reasonable notice
+            (minimum 30 days for existing free users).
           </P>
         </Section>
 

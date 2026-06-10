@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box, AppBar, Toolbar, Typography, Button, Card, CardContent,
   Grid, Chip, List, ListItem, ListItemIcon, ListItemText,
@@ -156,6 +156,18 @@ export default function Pricing() {
       .catch(() => { /* keep fallback defaults */ });
   }, []);
 
+  // Trial state from the cached user (set by login / register / TMA auth).
+  // Every new account starts a 14-day Pro trial at registration (trial_used=true),
+  // so the "start trial" CTA must only show for accounts that truly still have it.
+  const storedUser = (() => {
+    try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; }
+  })();
+  const trialEndsAt = storedUser.trial_ends_at ? new Date(storedUser.trial_ends_at) : null;
+  // On an active trial: tier reads "pro" but there is no paid expiry date.
+  const onTrial = currentTier === 'pro' && !subExpires && !!trialEndsAt && trialEndsAt > new Date();
+  const trialDaysLeft = onTrial ? Math.max(1, Math.ceil((trialEndsAt - new Date()) / 86400000)) : 0;
+  const trialAvailable = token && currentTier === 'free' && !trialStarted && !storedUser.trial_used;
+
   const priceFor = (planId) => {
     if (planId === 'free') return { monthly: 0, annual: 0 };
     return livePrices[planId] || { monthly: 0, annual: 0 };
@@ -190,7 +202,9 @@ export default function Pricing() {
       });
   }, [token]);
 
-  const isCurrentPlan = (planId) => planId === currentTier;
+  // A trial user's tier reads "pro" but they haven't bought it — Pro must stay
+  // purchasable during the trial or there is no way to pay until it expires.
+  const isCurrentPlan = (planId) => planId === currentTier && !(planId === 'pro' && onTrial);
 
   const handleUpgrade = (tier) => {
     if (!token) { navigate('/register'); return; }
@@ -245,6 +259,7 @@ export default function Pricing() {
   const getPlanButtonLabel = (plan) => {
     if (plan.id === 'free') return 'Free Forever';
     if (isCurrentPlan(plan.id)) return 'Current Plan';
+    if (plan.id === 'pro' && onTrial) return 'Upgrade Now — Keep Pro';
     return `Get ${plan.name}`;
   };
 
@@ -303,8 +318,41 @@ export default function Pricing() {
           />
         )}
 
-        {/* Trial banner — only shown to free users who haven't used trial */}
-        {token && currentTier === 'free' && !trialStarted && (
+        {/* Active-trial banner — nudge to purchase before the trial ends */}
+        {onTrial && (
+          <Box
+            sx={{
+              mb: 4, p: { xs: 2, sm: 2.5 }, borderRadius: 2,
+              background: 'linear-gradient(135deg, rgba(245,158,11,0.10) 0%, rgba(33,150,243,0.08) 100%)',
+              border: '1px solid rgba(245,158,11,0.35)',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              flexWrap: 'wrap', gap: 2,
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <Star sx={{ color: '#f59e0b', fontSize: 22, flexShrink: 0 }} />
+              <Box sx={{ textAlign: 'left' }}>
+                <Typography fontWeight={700} fontSize="0.95rem">
+                  Pro trial active — {trialDaysLeft} day{trialDaysLeft > 1 ? 's' : ''} left
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Upgrade now and your paid plan starts today — no interruption when the trial ends.
+                </Typography>
+              </Box>
+            </Box>
+            <Button
+              variant="contained"
+              size="small"
+              onClick={() => handleUpgrade('pro')}
+              sx={{ fontWeight: 700, px: 3 }}
+            >
+              Upgrade Now
+            </Button>
+          </Box>
+        )}
+
+        {/* Trial banner — only for accounts that still have an unused trial */}
+        {trialAvailable && (
           <Box
             sx={{
               mb: 4, p: { xs: 2, sm: 2.5 }, borderRadius: 2,
@@ -342,7 +390,11 @@ export default function Pricing() {
           {PLANS.map((plan) => (
             <Grid item xs={12} sm={6} md={4} key={plan.id}>
               <Box sx={{ position: 'relative', pt: '14px', height: '100%' }}>
-                {plan.popular && !isCurrentPlan(plan.id) && (
+                {plan.id === 'pro' && onTrial ? (
+                  <Chip label={`Trial — ${trialDaysLeft}d left`} color="warning" size="small" icon={<Star fontSize="small" />}
+                    sx={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', zIndex: 1, fontWeight: 700, whiteSpace: 'nowrap' }}
+                  />
+                ) : plan.popular && !isCurrentPlan(plan.id) && (
                   <Chip label="Most Popular" color="primary" size="small" icon={<Bolt fontSize="small" />}
                     sx={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', zIndex: 1, fontWeight: 700, whiteSpace: 'nowrap' }}
                   />
@@ -399,11 +451,11 @@ export default function Pricing() {
                       color={isCurrentPlan(plan.id) ? 'success' : plan.color === 'default' ? 'inherit' : plan.color}
                       onClick={() => handleUpgrade(plan.id)}
                       disabled={loading === plan.id || plan.id === 'free' || isCurrentPlan(plan.id)}
-                      sx={{ mb: plan.id === 'pro' && token && currentTier === 'free' && !trialStarted ? 1 : 2.5 }}
+                      sx={{ mb: plan.id === 'pro' && trialAvailable ? 1 : 2.5 }}
                     >
                       {loading === plan.id ? <CircularProgress size={20} color="inherit" /> : getPlanButtonLabel(plan)}
                     </Button>
-                    {plan.id === 'pro' && token && currentTier === 'free' && !trialStarted && (
+                    {plan.id === 'pro' && trialAvailable && (
                       <Button
                         fullWidth variant="text" size="small"
                         onClick={handleStartTrial}

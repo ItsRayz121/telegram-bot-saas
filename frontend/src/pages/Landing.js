@@ -157,21 +157,20 @@ const STEPS = [
   { n: '5', title: 'Turn on automation', desc: 'Enable AutoMod, schedule posts, track growth — done.' },
 ];
 
+// Paraphrased feedback from early test communities — presented as themes, not
+// star-rated quotes, until we have named, verifiable testimonials to show.
 const EARLY_FEEDBACK = [
   {
     text: 'AutoMod cut my daily moderation work dramatically. Spam was the biggest pain point and now it just handles itself.',
     context: 'Community admin, crypto group',
-    stars: 5,
   },
   {
     text: 'Scheduling posts once and forgetting about them is exactly what I needed. My group stays active even when I\'m offline.',
     context: 'Project founder, managing 4 groups',
-    stars: 5,
   },
   {
     text: 'Seeing which invite links actually brought real members changed how I run growth. The analytics alone are worth it.',
     context: 'Group owner, DeFi community',
-    stars: 5,
   },
 ];
 
@@ -372,15 +371,9 @@ function formatStat(n) {
 }
 
 const STATS_CACHE_KEY = 'telegizer_platform_stats_v1';
-// Conservative floor shown to first-time visitors when the API is unreachable.
-const STATS_FLOOR = {
-  total_members: 1200,
-  total_mod_actions: 3400,
-  new_members_this_week: 80,
-  total_groups: 24,
-  official_groups: 18,
-  custom_bots: 6,
-};
+// NOTE: no fabricated fallback numbers here. The section is headlined
+// "Real groups. Real numbers." — if we have no real data (no cache, API down)
+// the entire section is hidden rather than showing invented stats.
 function loadCachedStats() {
   try {
     const raw = localStorage.getItem(STATS_CACHE_KEY);
@@ -392,7 +385,7 @@ export default function Landing() {
   const navigate = useNavigate();
   const token = localStorage.getItem('token');
 
-  const [platformStats, setPlatformStats] = useState(() => loadCachedStats() || STATS_FLOOR);
+  const [platformStats, setPlatformStats] = useState(() => loadCachedStats());
   const [statsLoading, setStatsLoading] = useState(true);
   const [statsRef, statsVisible] = useScrollReveal(0.15);
   const [proofRef, proofVisible] = useScrollReveal(0.1);
@@ -418,9 +411,9 @@ export default function Landing() {
       })
       .catch((err) => {
         if (process.env.NODE_ENV !== 'production') {
-          console.warn('[platform-stats] fetch failed, using cached/floor data:', err?.message);
+          console.warn('[platform-stats] fetch failed, using cached data if any:', err?.message);
         }
-        // platformStats already set to cached or STATS_FLOOR — nothing to do
+        // platformStats stays at cached value or null (section hidden) — never fabricated
       })
       .finally(() => { if (!cancelled) setStatsLoading(false); });
     return () => { cancelled = true; };
@@ -435,7 +428,7 @@ export default function Landing() {
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
 
-      {/* â"€â"€ Nav â"€â"€ */}
+      {/* ── Nav ── */}
       <AppBar position="sticky" elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.default' }}>
         <Toolbar sx={{ maxWidth: 1200, mx: 'auto', width: '100%', px: { xs: 2, md: 3 } }}>
           <Box sx={{ flexGrow: 1 }}>
@@ -459,7 +452,7 @@ export default function Landing() {
         </Toolbar>
       </AppBar>
 
-      {/* â"€â"€ Hero â"€â"€ */}
+      {/* ── Hero ── */}
       <Box
         sx={{
           background: 'linear-gradient(160deg, #0d1117 0%, #0d1b2e 50%, #0d1117 100%)',
@@ -533,7 +526,7 @@ export default function Landing() {
             </Button>
           </Stack>
           <Typography variant="caption" color="text.disabled">
-            No credit card required · Free plan, forever · Pay with 300+ cryptos · No auto-renew
+            14-day Pro trial included · No credit card required · Free plan, forever · Pay with 300+ cryptos · No auto-renew
           </Typography>
           {platformStats?.total_groups > 0 && (
             <Typography variant="caption" color="text.disabled" display="block" mt={1.5}>
@@ -606,7 +599,7 @@ export default function Landing() {
           </Box>
         </Box>
 
-      {/* â"€â"€ Stats Strip â"€â"€ */}
+      {/* ── Stats Strip ── */}
       <Box ref={statsRef} sx={{ bgcolor: '#0b1626', borderTop: '1px solid', borderBottom: '1px solid', borderColor: 'divider', py: 3, ...reveal(statsVisible) }}>
         <Container maxWidth="md">
           <Grid container justifyContent="center" spacing={0}>
@@ -630,8 +623,10 @@ export default function Landing() {
         </Container>
       </Box>
 
-      {/* ── Live Platform Stats ── */}
-      <LivePlatformStats proofRef={proofRef} proofVisible={proofVisible} reveal={reveal} stats={platformStats} statsLoading={statsLoading} />
+      {/* ── Live Platform Stats — only rendered with real data (cache or live API) ── */}
+      {(platformStats || statsLoading) && (
+        <LivePlatformStats proofRef={proofRef} proofVisible={proofVisible} reveal={reveal} stats={platformStats} statsLoading={statsLoading} />
+      )}
 
       {/* ── Pain ── */}
       <Box sx={{ bgcolor: '#07101f' }}>
@@ -663,7 +658,7 @@ export default function Landing() {
         </Container>
       </Box>
 
-      {/* â"€â"€ Solution bridge â"€â"€ */}
+      {/* ── Solution bridge ── */}
       <Box ref={solutionRef} sx={{ bgcolor: '#0b1626', borderTop: '1px solid', borderBottom: '1px solid', borderColor: 'divider', py: { xs: 6, md: 8 }, textAlign: 'center', px: 2, ...reveal(solutionVisible) }}>
         <Container maxWidth="sm">
           <Typography variant="overline" color="success.main" fontWeight={700} letterSpacing={2}>
@@ -681,7 +676,7 @@ export default function Landing() {
         </Container>
       </Box>
 
-      {/* â"€â"€ Features â"€â"€ */}
+      {/* ── Features ── */}
       <Box sx={{ bgcolor: '#07101f' }}>
         <Container maxWidth="lg" sx={{ py: { xs: 8, md: 12 } }}>
           <Box ref={featuresRef} sx={{ textAlign: 'center', mb: 6, ...reveal(featuresVisible) }}>
@@ -721,7 +716,7 @@ export default function Landing() {
         </Container>
       </Box>
 
-      {/* â"€â"€ How It Works â"€â"€ */}
+      {/* ── How It Works ── */}
       <Box sx={{ bgcolor: '#0b1626', borderTop: '1px solid', borderColor: 'divider', py: { xs: 8, md: 10 } }}>
         <Container maxWidth="sm">
           <Box ref={stepsRef} sx={{ textAlign: 'center', mb: 6, ...reveal(stepsVisible) }}>
@@ -762,7 +757,7 @@ export default function Landing() {
         </Container>
       </Box>
 
-      {/* â"€â"€ Social Proof â"€â"€ */}
+      {/* ── Social Proof ── */}
       <Box sx={{ bgcolor: '#07101f' }}>
         <Container maxWidth="lg" sx={{ py: { xs: 8, md: 10 } }}>
           <Box ref={testimonialsRef} sx={{ textAlign: 'center', mb: 6, ...reveal(testimonialsVisible) }}>
@@ -770,7 +765,10 @@ export default function Landing() {
               Community Feedback
             </Typography>
             <Typography variant="h4" fontWeight={800} mt={1}>
-              What community admins say
+              What early users tell us
+            </Typography>
+            <Typography variant="caption" color="text.disabled" display="block" mt={1}>
+              Paraphrased feedback from our first test communities
             </Typography>
           </Box>
           <Grid container spacing={3}>
@@ -778,11 +776,6 @@ export default function Landing() {
               <Grid item xs={12} sm={6} md={4} key={i} sx={reveal(testimonialsVisible, i * 90)}>
                 <Card sx={{ height: '100%', p: 1 }}>
                   <CardContent>
-                    <Box sx={{ display: 'flex', gap: 0.25, mb: 1.5 }}>
-                      {Array.from({ length: t.stars }).map((_, s) => (
-                        <Box key={s} component="span" sx={{ color: '#f59e0b', fontSize: '1rem' }}>★</Box>
-                      ))}
-                    </Box>
                     <Typography variant="body1" color="text.primary" lineHeight={1.7} mb={2} sx={{ fontStyle: 'italic' }}>
                       "{t.text}"
                     </Typography>
@@ -796,7 +789,7 @@ export default function Landing() {
         </Container>
       </Box>
 
-      {/* â"€â"€ Pricing â"€â"€ */}
+      {/* ── Pricing ── */}
       <Box sx={{ bgcolor: '#0b1626', borderTop: '1px solid', borderColor: 'divider', py: { xs: 8, md: 12 } }}>
         <Container maxWidth="lg">
           <Box ref={pricingRef} sx={{ textAlign: 'center', mb: 6, ...reveal(pricingVisible) }}>
@@ -894,7 +887,7 @@ export default function Landing() {
         </Container>
       </Box>
 
-      {/* â"€â"€ FAQ â"€â"€ */}
+      {/* ── FAQ ── */}
       <Box ref={faqRef} sx={{ py: { xs: 8, md: 10 }, bgcolor: '#07101f', ...reveal(faqVisible) }}>
         <Container maxWidth="md">
           <Typography variant="overline" color="primary.main" fontWeight={700} display="block" textAlign="center">
@@ -926,11 +919,11 @@ export default function Landing() {
             },
             {
               q: 'Can I manage multiple groups with one bot?',
-              a: 'Yes. One bot can be added to unlimited Telegram groups. Each group has its own settings, moderation rules, XP system, and scheduled content. Pro plan supports up to 5 bots; Enterprise supports 50.'
+              a: 'Yes. The shared @telegizer_bot can be added to unlimited groups on every plan. Your own custom bots support 3 groups each on Free, and unlimited groups on Pro and Enterprise. Each group has its own settings, moderation rules, XP system, and scheduled content. Pro includes up to 3 custom bots; Enterprise includes 50.'
             },
             {
               q: 'What is included in Free vs Pro vs Enterprise?',
-              a: 'Free: 1 bot, basic moderation, welcome messages, XP system. Pro ($9/mo): 3 bots, unlimited groups, advanced AutoMod, scheduled messages, analytics, AI knowledge base. Enterprise ($49/mo): 50 bots, all Pro features plus API access, dedicated support, SLA.'
+              a: 'Free: 1 custom bot (3 groups per bot), basic moderation, welcome messages, XP system — plus unlimited groups on the shared @telegizer_bot. Pro ($9/mo): 3 custom bots, unlimited groups, advanced AutoMod, scheduled messages, analytics, AI knowledge base. Enterprise ($49/mo): 50 custom bots, all Pro features plus API access, dedicated support, SLA. Every new account also starts with a free 14-day Pro trial.'
             },
             {
               q: 'Do you store my bot token securely?',
@@ -938,7 +931,7 @@ export default function Landing() {
             },
             {
               q: 'Can I change the timezone for scheduled posts?',
-              a: 'Yes. You can set a default timezone per group (under Automation â€º Scheduler). You can also override the timezone for each individual scheduled message or poll.'
+              a: 'Yes. You can set a default timezone per group (under Automation › Scheduler). You can also override the timezone for each individual scheduled message or poll.'
             },
           ].map(({ q, a }) => (
             <Accordion key={q} disableGutters elevation={0}
@@ -1012,7 +1005,7 @@ export default function Landing() {
         </Container>
       </Box>
 
-      {/* â"€â"€ Footer â"€â"€ */}
+      {/* ── Footer ── */}
       <Box sx={{ bgcolor: '#07101f', borderTop: '1px solid', borderColor: 'divider', py: 4 }}>
         <Container maxWidth="lg">
           <Grid container alignItems="center" spacing={2}>
