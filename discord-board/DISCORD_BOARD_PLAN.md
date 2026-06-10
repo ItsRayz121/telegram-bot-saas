@@ -130,4 +130,12 @@ discord-board/
 - [x] Phase 5 — Billing & Plans (NOWPayments checkout + HMAC-verified IPN webhook → flips Guild.plan=pro w/ stacking expiry; Subscription model; Billing tab. Decision: monetize engagement, never paywall safety)
 - [x] Phase 6 — Admin Panel (RBAC via ADMIN_USER_IDS env, admin_api overview/guilds/users/campaigns/events drill-downs + manual plan grant; analytics derived from existing tables; gated /admin shell w/ sidebar)
 - [x] Phase 7 — AI / Assistant (reminders /remind+/reminders w/ DM due loop, notes /note+/notes, AI /ask via Anthropic + AITokenUsage ledger, graceful when unconfigured. Workflows deferred.)
-- [ ] Phase 8 — Scaling & Launch
+- [x] Phase 8 — Scaling & Launch (AutoShardedClient, one-time boot guard, SIGTERM graceful shutdown; SETUP.md env-var reference + verification + launch checklist). Manual remaining: create Railway/Vercel services, apply for Discord verification, live smoke test.
+
+---
+
+## 7. Build complete (2026-06-10)
+All 9 phases (0–8) built, cross-checked, and pushed to `main`. Remaining work is
+operational: provision the Railway services + Vercel project (subfolder roots),
+set env vars (SETUP.md §C), enable privileged intents, apply for Discord
+verification, and run the live smoke test (SETUP.md §D).

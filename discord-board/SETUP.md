@@ -63,9 +63,52 @@ and **(B) deploy-time steps** (later, at the end of Phase 0). Nothing here touch
 
 ---
 
+## C. Backend env vars (Railway — web + worker)
+
+Both the `web` (Flask) and `worker` (bot) services share the same DATABASE_URL
+and Discord credentials. Set these on each:
+
+| Var | Required | Notes |
+|---|---|---|
+| `DISCORD_BOT_TOKEN` | ✅ | Bot tab token (secret) — worker needs it |
+| `DISCORD_CLIENT_ID` | ✅ | OAuth2 client id (public) |
+| `DISCORD_CLIENT_SECRET` | ✅ | OAuth2 secret (web, for token exchange) |
+| `DISCORD_REDIRECT_URI` | ✅ | `<BACKEND_URL>/auth/discord/callback` — must match the portal |
+| `DATABASE_URL` | ✅ | Railway Postgres (separate DB from Telegizer) |
+| `FLASK_SECRET_KEY` | ✅ | long random string (signs the session cookie) |
+| `FRONTEND_URL` | ✅ | the Vercel dashboard URL |
+| `BACKEND_URL` | ✅ | the Railway web URL (used for OAuth + IPN callbacks) |
+| `SESSION_COOKIE_SECURE` | prod | `true` (cross-site cookie over HTTPS) |
+| `SESSION_COOKIE_SAMESITE` | prod | `None` (frontend + API on different domains) |
+| `ADMIN_USER_IDS` | ✅ | comma-separated Discord ids with `/admin` access |
+| `NOWPAYMENTS_API_KEY` / `NOWPAYMENTS_IPN_SECRET` | for billing | IPN URL = `<BACKEND_URL>/webhooks/nowpayments` |
+| `ANTHROPIC_API_KEY` | optional | enables the `/ask` assistant |
+
+Frontend (Vercel): `VITE_API_URL` = the Railway web URL.
+
+---
+
+## D. Launch checklist
+- [ ] Enable **Server Members** + **Message Content** privileged intents in the
+      Developer Portal (welcome/roles/raid need members; content filter needs
+      message content).
+- [ ] Apply for **Discord bot verification** EARLY (required at 100 servers to
+      keep privileged intents; approval is slow).
+- [ ] Set the NOWPayments IPN callback URL to `<BACKEND_URL>/webhooks/nowpayments`.
+- [ ] Set the OAuth2 redirect + Web App URL to the production domain.
+- [ ] Smoke test: login → invite bot → `/ping`, welcome, a custom command,
+      content-filter delete, `/rank`, a campaign with a proof button, an
+      upgrade, `/remind`.
+- [ ] Confirm graceful redeploys (worker handles SIGTERM) and that the bot is
+      `AutoShardedClient` (scales past ~2,500 servers automatically).
+
+---
+
 ## Status
 - [ ] A1 Discord Application created
 - [ ] A2 Test server created
-- [ ] A3 Name chosen
+- [x] A3 Name chosen (Guildizer)
 - [ ] A4 Client ID shared (secrets kept private)
-- [ ] B (deploy) — later
+- [ ] B Railway + Vercel services created (subfolder roots)
+- [ ] C Env vars set
+- [ ] D Launch checklist complete

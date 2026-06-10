@@ -10,6 +10,7 @@ coupling. Bot and API coordinate only through the shared database.
 """
 import asyncio
 import logging
+import signal
 from datetime import timedelta
 
 import discord
@@ -45,10 +46,13 @@ intents.members = True
 intents.message_content = True
 
 
-class GuildizerBot(discord.Client):
+# AutoShardedClient so the bot scales past ~2,500 guilds without code changes
+# (Discord requires sharding beyond that; it auto-determines the shard count).
+class GuildizerBot(discord.AutoShardedClient):
     def __init__(self) -> None:
         super().__init__(intents=intents)
         self.tree = app_commands.CommandTree(self)
+        self._booted = False   # guard one-time startup work across (re)connects/shards
 
     async def setup_hook(self) -> None:
         await asyncio.to_thread(init_db)
@@ -62,7 +66,12 @@ class GuildizerBot(discord.Client):
 
     async def on_ready(self) -> None:
         log.info("Guildizer is online as %s (id=%s)", self.user, self.user.id)
-        log.info("Connected to %d server(s).", len(self.guilds))
+        log.info("Connected to %d server(s) across %d shard(s).",
+                 len(self.guilds), self.shard_count or 1)
+        # on_ready can fire again on reconnects / per shard — only boot once.
+        if self._booted:
+            return
+        self._booted = True
         guilds = list(self.guilds)
         ids = [gd.id for gd in guilds]
         await asyncio.to_thread(self._sync_all_guilds, guilds)
@@ -621,7 +630,29 @@ async def ask(interaction: discord.Interaction, question: str) -> None:
 
 def main() -> None:
     token = Config.require_bot_token()
-    client.run(token)
+
+    async def runner() -> None:
+        loop = asyncio.get_running_loop()
+
+        def _shutdown() -> None:
+            log.info("Shutdown signal received — closing gateway gracefully…")
+            loop.create_task(client.close())
+
+        # Railway/containers send SIGTERM on deploy; close cleanly so the
+        # interpreter doesn't tear down mid-request (avoids shutdown errors).
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            try:
+                loop.add_signal_handler(sig, _shutdown)
+            except (NotImplementedError, AttributeError):
+                pass  # not supported on Windows; KeyboardInterrupt still works
+
+        async with client:
+            await client.start(token)
+
+    try:
+        asyncio.run(runner())
+    except KeyboardInterrupt:
+        pass
 
 
 if __name__ == "__main__":
