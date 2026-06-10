@@ -503,13 +503,14 @@ class BotInstance:
 
             # Check if this polling instance belongs to a custom bot (match by username)
             bot_rec = Bot.query.get(self.bot_id)
-            is_custom_bot = bool(
-                bot_rec and bot_rec.bot_username and
+            custom_bot_match = (
                 CustomBot.query.filter_by(
                     bot_username=bot_rec.bot_username,
                     owner_user_id=bot_rec.user_id,
                 ).first()
+                if bot_rec and bot_rec.bot_username else None
             )
+            is_custom_bot = bool(custom_bot_match)
 
             # Private group + custom bot → route to Assistant Hub only.
             # The Hub consent DM was already sent when the bot was added; skip creating
@@ -547,7 +548,10 @@ class BotInstance:
                         tg.bot_status = "active"
                         tg.linked_at = _dt.utcnow()
                         tg.linked_via_bot_type = "custom"
-                        tg.linked_bot_id = None
+                        # Stamp the owning CustomBot so admin views and member-sync
+                        # can attribute the group to its real bot (was hard-coded
+                        # None, which mis-labeled every legacy-linked group as official).
+                        tg.linked_bot_id = custom_bot_match.id if custom_bot_match else None
                         tg.group_context = "group_management"
                         TelegramGroupLinkCode.query.filter_by(
                             telegram_group_id=group_id,

@@ -4,7 +4,7 @@ import {
   useMediaQuery, useTheme,
 } from '@mui/material';
 import { Menu as MenuIcon, Shield } from '@mui/icons-material';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { PALETTE } from '../theme';
 import { auth as authApi } from '../services/api';
 import AdminSidebar, { SIDEBAR_WIDTH, SIDEBAR_COLLAPSED_WIDTH } from '../components/AdminSidebar';
@@ -28,6 +28,7 @@ export default function AdminLayout({ children, user: userProp }) {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const isSmallDesktop = useMediaQuery(theme.breakpoints.down('lg'));
   const { pathname } = useLocation();
+  const navigate = useNavigate();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem('admin_sidebar_collapsed') === 'true'; } catch { return false; }
@@ -106,8 +107,19 @@ export default function AdminLayout({ children, user: userProp }) {
                 <MenuIcon fontSize="small" />
               </IconButton>
             )}
-            <Shield sx={{ fontSize: 18, color: PALETTE.purpleLt }} />
-            <Typography fontWeight={700} fontSize="0.95rem" flex={1}>Admin Console</Typography>
+            <Box
+              onClick={() => navigate('/admin/overview/dashboard')}
+              sx={{
+                display: 'flex', alignItems: 'center', gap: 1, flex: 1,
+                cursor: 'pointer', borderRadius: 1, px: 0.5, py: 0.25, ml: -0.5,
+                transition: 'background 0.15s ease',
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.06)' },
+              }}
+              title="Back to Dashboard"
+            >
+              <Shield sx={{ fontSize: 18, color: PALETTE.purpleLt }} />
+              <Typography fontWeight={700} fontSize="0.95rem">Admin Console</Typography>
+            </Box>
             {role && (
               <Chip label={(ROLE_LABELS[role] || 'Admin').toUpperCase()} size="small"
                 color={ROLE_COLORS[role] || 'default'} sx={{ fontWeight: 700, fontSize: '0.62rem' }} />

@@ -2681,11 +2681,26 @@ def proof_metrics_drilldown():
                 .offset((page - 1) * per_page).limit(per_page).all())
         bot_ids = {g.linked_bot_id for g in rows if g.linked_bot_id}
         bots = {b.id: b for b in CustomBot.query.filter(CustomBot.id.in_(bot_ids)).all()} if bot_ids else {}
+        # Resolve custom bots via the legacy bots/groups lineage too, so a group
+        # whose telegram_groups row was never stamped with linked_bot_id still
+        # shows its real bot instead of falling through to "Telegizer (official)".
+        from ..bot_links import custom_bot_labels_for_tgids
+        legacy_labels = custom_bot_labels_for_tgids(g.telegram_group_id for g in rows)
+
+        def _bot_label(g):
+            if g.linked_bot_id and g.linked_bot_id in bots:
+                return f"@{bots[g.linked_bot_id].bot_username}"
+            legacy = legacy_labels.get(str(g.telegram_group_id))
+            if legacy:
+                return legacy
+            if (g.linked_via_bot_type or "official") == "official":
+                return "Telegizer (official)"
+            return "custom"
+
         items = [{
             "title": g.title,
             "telegram_group_id": g.telegram_group_id,
-            "bot": (f"@{bots[g.linked_bot_id].bot_username}" if g.linked_bot_id and g.linked_bot_id in bots
-                    else ("Telegizer (official)" if (g.linked_via_bot_type or "official") == "official" else "custom")),
+            "bot": _bot_label(g),
             "member_count": g.member_count or 0,
             "last_sync": g.member_count_synced_at.isoformat() if getattr(g, "member_count_synced_at", None) else None,
             "status": "disabled" if g.is_disabled else g.bot_status,

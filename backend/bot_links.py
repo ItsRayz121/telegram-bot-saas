@@ -69,6 +69,52 @@ def resolve_connected_groups(custom_bot) -> list[dict]:
     return list(by_tgid.values())
 
 
+def custom_bot_labels_for_tgids(tgids) -> dict:
+    """Reverse map: ``{telegram_group_id: '@bot_username'}`` for groups managed by
+    a custom bot via the **legacy** ``bots``/``groups`` lineage.
+
+    The new lineage (``TelegramGroup.linked_bot_id``) is resolved directly by
+    callers, so this fills the gap where a ``telegram_groups`` row was never
+    stamped with ``linked_bot_id`` (legacy-only bot, or a group linked through the
+    official bot before being switched to a custom bot). Without it, admin
+    drill-downs mis-attribute such groups to "Telegizer (official)".
+
+    Targeted + best-effort: only queries the requested tgids and never raises.
+    """
+    want = {str(t) for t in (tgids or []) if t is not None}
+    if not want:
+        return {}
+    try:
+        from .models import Group, Bot, CustomBot
+
+        grp_rows = Group.query.filter(Group.telegram_group_id.in_(want)).all()
+        if not grp_rows:
+            return {}
+        bot_ids = {g.bot_id for g in grp_rows if g.bot_id}
+        bots = {b.id: b for b in Bot.query.filter(Bot.id.in_(bot_ids)).all()} if bot_ids else {}
+        # Resolve each legacy Bot to its CustomBot twin by username (case-insensitive).
+        unames = {(b.bot_username or "").lstrip("@").lower() for b in bots.values() if b.bot_username}
+        cb_by_uname = {}
+        if unames:
+            for cb in CustomBot.query.all():
+                u = (cb.bot_username or "").lstrip("@").lower()
+                if u in unames:
+                    cb_by_uname[u] = cb
+
+        out = {}
+        for g in grp_rows:
+            b = bots.get(g.bot_id)
+            if not b or not b.bot_username:
+                continue
+            uname = b.bot_username.lstrip("@")
+            cb = cb_by_uname.get(uname.lower())
+            label = f"@{cb.bot_username.lstrip('@')}" if cb and cb.bot_username else f"@{uname}"
+            out.setdefault(str(g.telegram_group_id), label)
+        return out
+    except Exception:
+        return {}
+
+
 def connected_groups_summary(custom_bot) -> dict:
     """Convenience wrapper: groups list + counts for a custom bot."""
     groups = resolve_connected_groups(custom_bot)
