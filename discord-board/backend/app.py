@@ -6,8 +6,10 @@ Standalone web service for the dashboard. Runs separately from the Discord bot
 from flask import Flask, jsonify
 from flask_cors import CORS
 
+from auth import auth_bp
 from config import Config
 from database import init_db
+from guilds_api import guilds_bp
 
 
 def create_app() -> Flask:
@@ -18,6 +20,9 @@ def create_app() -> Flask:
     CORS(app, resources={r"/*": {"origins": [Config.FRONTEND_URL]}}, supports_credentials=True)
 
     init_db()
+
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(guilds_bp)
 
     @app.get("/")
     def root():

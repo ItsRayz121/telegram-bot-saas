@@ -122,8 +122,8 @@ discord-board/
 
 ## 6. Status
 - [x] Plan written (2026-06-10)
-- [ ] Phase 0 — Foundation & Isolation
-- [ ] Phase 1 — Auth & Onboarding
+- [x] Phase 0 — Foundation & Isolation (scaffold, `/ping`, isolated)
+- [x] Phase 1 — Auth & Onboarding (Discord OAuth2 login, bot-invite flow, guild/channel/role sync, dashboard + server detail)
 - [ ] Phase 2 — Core Management
 - [ ] Phase 3 — Moderation & Protection
 - [ ] Phase 4 — Engagement Engine

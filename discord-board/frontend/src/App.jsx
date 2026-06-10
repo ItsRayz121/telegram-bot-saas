@@ -1,34 +1,41 @@
-import { useEffect, useState } from "react";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { AuthProvider, useAuth } from "./auth";
+import Login from "./pages/Login";
+import Dashboard from "./pages/Dashboard";
+import ServerDetail from "./pages/ServerDetail";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+function Protected({ children }) {
+  const { user, loading } = useAuth();
+  if (loading) return <div className="shell"><p className="muted">Loading…</p></div>;
+  if (!user) return <Navigate to="/login" replace />;
+  return children;
+}
 
 export default function App() {
-  const [state, setState] = useState({ status: "wait", label: "Connecting to API…" });
-
-  useEffect(() => {
-    fetch(`${API_URL}/health`)
-      .then((r) => r.json())
-      .then((d) =>
-        setState({
-          status: d.status === "healthy" ? "ok" : "bad",
-          label: `API ${d.status} · ${d.service}`,
-        })
-      )
-      .catch(() => setState({ status: "bad", label: "API unreachable" }));
-  }, []);
-
   return (
-    <div className="shell">
-      <div className="card">
-        <div className="brand">
-          Guild<span>izer</span>
-        </div>
-        <p className="sub">Discord community & server management — Phase 0</p>
-        <div className="status">
-          <span className={`dot ${state.status}`} />
-          {state.label}
-        </div>
-      </div>
-    </div>
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route
+            path="/dashboard"
+            element={
+              <Protected>
+                <Dashboard />
+              </Protected>
+            }
+          />
+          <Route
+            path="/servers/:id"
+            element={
+              <Protected>
+                <ServerDetail />
+              </Protected>
+            }
+          />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }
