@@ -2026,25 +2026,29 @@ def admin_custom_bot_detail(bot_id):
         "note": "Per-bot usage attribution is partial — group-level moderation counts appear in each group's detail.",
     }
 
-    # ── AI/Token usage attributed to this bot's connected groups ───────────────
+    # ── AI/Token usage attributed to this bot ──────────────────────────────────
+    # Match by bot_ref (direct, set by the recorder) OR any of the bot's connected
+    # group refs (covers rows logged before bot_ref was populated). Either side
+    # alone could miss rows, so OR them for the most complete attribution.
     try:
         from ..models import AITokenUsage
+        from sqlalchemy import or_ as _or
         grefs = [str(g.telegram_group_id) for g in groups if g.telegram_group_id]
+        conds = [AITokenUsage.bot_ref == str(bot.id)]
         if grefs:
-            arow = db.session.query(
-                db.func.coalesce(db.func.sum(AITokenUsage.input_tokens), 0),
-                db.func.coalesce(db.func.sum(AITokenUsage.output_tokens), 0),
-                db.func.coalesce(db.func.sum(AITokenUsage.total_tokens), 0),
-                db.func.coalesce(db.func.sum(AITokenUsage.cost_usd), 0),
-                db.func.count(AITokenUsage.id),
-            ).filter(AITokenUsage.group_ref.in_(grefs)).one()
-            data["ai_usage"] = {
-                "input_tokens": int(arow[0] or 0), "output_tokens": int(arow[1] or 0),
-                "total_tokens": int(arow[2] or 0), "cost_usd": round(float(arow[3] or 0), 4),
-                "calls": int(arow[4] or 0),
-            }
-        else:
-            data["ai_usage"] = None
+            conds.append(AITokenUsage.group_ref.in_(grefs))
+        arow = db.session.query(
+            db.func.coalesce(db.func.sum(AITokenUsage.input_tokens), 0),
+            db.func.coalesce(db.func.sum(AITokenUsage.output_tokens), 0),
+            db.func.coalesce(db.func.sum(AITokenUsage.total_tokens), 0),
+            db.func.coalesce(db.func.sum(AITokenUsage.cost_usd), 0),
+            db.func.count(AITokenUsage.id),
+        ).filter(_or(*conds)).one()
+        data["ai_usage"] = {
+            "input_tokens": int(arow[0] or 0), "output_tokens": int(arow[1] or 0),
+            "total_tokens": int(arow[2] or 0), "cost_usd": round(float(arow[3] or 0), 4),
+            "calls": int(arow[4] or 0),
+        }
     except Exception:
         data["ai_usage"] = None
 

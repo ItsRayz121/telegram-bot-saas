@@ -8,6 +8,7 @@ import { useLocation } from 'react-router-dom';
 import { PALETTE } from '../theme';
 import { auth as authApi } from '../services/api';
 import AdminSidebar, { SIDEBAR_WIDTH, SIDEBAR_COLLAPSED_WIDTH } from '../components/AdminSidebar';
+import { AdminContext } from '../contexts/AdminContext';
 
 const ROLE_LABELS = {
   super_admin: 'Super Admin', admin: 'Admin', support: 'Support',
@@ -22,7 +23,7 @@ const ROLE_COLORS = {
 // Dashboard/Groups/Echo/Referrals/Settings sidebar) for every /admin route, so
 // the admin console has its own dedicated navigation. Authorized restructure —
 // scoped to /admin/* only.
-export default function AdminLayout({ children }) {
+export default function AdminLayout({ children, user: userProp }) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const isSmallDesktop = useMediaQuery(theme.breakpoints.down('lg'));
@@ -32,15 +33,20 @@ export default function AdminLayout({ children }) {
     try { return localStorage.getItem('admin_sidebar_collapsed') === 'true'; } catch { return false; }
   });
   const [user, setUser] = useState(() => {
+    if (userProp) return userProp;
     try { return JSON.parse(localStorage.getItem('user') || 'null'); } catch { return null; }
   });
 
+  // AdminRoute already fetched /auth/me to gate access and passes the user in —
+  // reuse it (one fetch for the whole admin shell). Only fetch as a fallback if
+  // it wasn't provided (e.g. a detail page mounted without the gate user yet).
   useEffect(() => {
+    if (userProp) { setUser(userProp); return; }
     authApi.getMe().then(r => {
       setUser(r.data.user);
       localStorage.setItem('user', JSON.stringify(r.data.user));
     }).catch(() => {});
-  }, []);
+  }, [userProp]);
 
   useEffect(() => {
     if (!isMobile && isSmallDesktop) setCollapsed(true);
@@ -58,6 +64,7 @@ export default function AdminLayout({ children }) {
   const role = user?.admin_role;
 
   return (
+    <AdminContext.Provider value={{ user }}>
     <Box
       sx={{
         display: 'flex', height: '100vh', overflow: 'hidden', bgcolor: PALETTE.bg0,
@@ -113,5 +120,6 @@ export default function AdminLayout({ children }) {
         </Box>
       </Box>
     </Box>
+    </AdminContext.Provider>
   );
 }

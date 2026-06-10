@@ -159,6 +159,7 @@ function PublicOnlyRoute({ children }) {
 
 function AdminRoute({ children }) {
   const [status, setStatus] = useState('loading');
+  const [adminUser, setAdminUser] = useState(null);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -166,7 +167,15 @@ function AdminRoute({ children }) {
     const base = process.env.REACT_APP_API_URL || '';
     fetch(`${base}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
-      .then(data => setStatus(data.user?.is_admin ? 'allowed' : 'denied'))
+      .then(data => {
+        if (data.user?.is_admin) {
+          setAdminUser(data.user);
+          try { localStorage.setItem('user', JSON.stringify(data.user)); } catch {}
+          setStatus('allowed');
+        } else {
+          setStatus('denied');
+        }
+      })
       .catch(() => setStatus('denied'));
   }, []);
 
@@ -190,7 +199,7 @@ function AdminRoute({ children }) {
       </Box>
     );
   }
-  return <AdminLayout>{children}</AdminLayout>;
+  return <AdminLayout user={adminUser}>{children}</AdminLayout>;
 }
 
 export default function App() {

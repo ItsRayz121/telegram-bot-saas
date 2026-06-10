@@ -19,6 +19,7 @@ import {
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ADMIN_CATEGORIES, findAdminItem } from '../config/adminNav';
+import { useAdmin } from '../contexts/AdminContext';
 import { toast } from 'react-toastify';
 import { admin } from '../services/api';
 import { LineChart, Line, XAxis, YAxis, Tooltip as ReTooltip, ResponsiveContainer, CartesianGrid, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
@@ -5042,22 +5043,11 @@ function _initialPerms() {
 export default function AdminPanel() {
   const navigate = useNavigate();
   const { tab: tabParam } = useParams();
-  const [perms, setPerms] = useState(_initialPerms);
-  const [me, setMe] = useState(null);
-
-  useEffect(() => {
-    import('../services/api').then(({ auth: authApi }) => {
-      authApi.getMe()
-        .then(r => {
-          const u = r.data?.user || {};
-          if (!u.is_admin) navigate('/dashboard', { replace: true });
-          localStorage.setItem('user', JSON.stringify({ ...u }));
-          setMe(u);
-          setPerms(u.admin_permissions || []);
-        })
-        .catch(() => navigate('/dashboard', { replace: true }));
-    });
-  }, [navigate]);
+  // User/permissions come from the shared AdminContext (fetched once by
+  // AdminRoute) — no extra /auth/me call here. Access is already gated upstream.
+  const { user: adminUser } = useAdmin();
+  const me = adminUser;
+  const perms = adminUser?.admin_permissions || _initialPerms();
 
   // Drill-down navigation from dashboard cards hands a filter to the destination
   // section (e.g. clicking "Pro" → Users section pre-filtered). The active

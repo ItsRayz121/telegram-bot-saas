@@ -1255,9 +1255,14 @@ class ModerationSystem:
             from ..ai_activity import derive_scope_ref as _dsr
             with self.app.app_context():
                 _scope, _ref = _dsr(group)
+                # bot_ref enables direct per-bot attribution in the admin detail.
+                # TelegramGroup.linked_bot_id is the CustomBot id; official → 'official'.
+                _bot_ref = (str(getattr(group, "linked_bot_id", None))
+                            if getattr(group, "linked_bot_id", None)
+                            else ("official" if _scope == "official" else None))
                 record_from_key_info(
                     _scope or "official", "ai_mod", key_info,
-                    user_ref=user_id, group_ref=_ref,
+                    user_ref=user_id, group_ref=_ref, bot_ref=_bot_ref,
                     input_text=f"{group_topic}\n{text}", output_text=f"{verdict} {reason or ''}",
                 )
         except Exception:
