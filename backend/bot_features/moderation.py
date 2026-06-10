@@ -502,6 +502,7 @@ class ModerationSystem:
                     bot, message, group, action,
                     reason=reason, warn=nsfw_cfg.get("warn_user", True),
                 )
+                self._log_content_filter(group, message, reason)
                 return True
 
         # ── Inline-button spam ───────────────────────────────────────────────
@@ -518,9 +519,27 @@ class ModerationSystem:
                 bot, message, group, action,
                 reason=reason, warn=btn_cfg.get("warn_user", False),
             )
+            self._log_content_filter(group, message, reason)
             return True
 
         return False
+
+    def _log_content_filter(self, group, message, reason):
+        """Record a Content Filter feature event (custom lineage, best-effort).
+
+        The enforcement is also logged via execute_automod_action (as nsfw/automod);
+        this gives the Content Filter module its own queryable count so it isn't
+        invisible behind the generic automod bucket.
+        """
+        try:
+            from ..feature_usage import log_feature_usage
+            uid = message.from_user.id if getattr(message, "from_user", None) else None
+            log_feature_usage(
+                "custom", "content_filter", group_ref=str(group.id),
+                user_ref=(str(uid) if uid else None), action=reason, commit=True,
+            )
+        except Exception:
+            pass
 
     async def check_bad_words(self, bot, message, text, group, settings):
         cfg = settings.get("bad_words", {})
@@ -1028,6 +1047,14 @@ class ModerationSystem:
     async def _announce_raid(self, bot, chat_id, group):
         """Post the one-time in-group raid-mode alert (best-effort)."""
         from . import raid_guard
+        # Raid Guard feature event — logged before the notify gate so silent
+        # (notify=off) activations still count. Custom lineage, best-effort.
+        try:
+            from ..feature_usage import log_feature_usage
+            log_feature_usage("custom", "raid", group_ref=str(group.id),
+                              action="raid_mode_activated", commit=True)
+        except Exception:
+            pass
         if not raid_guard.get_config(group.settings).get("notify", True):
             return
         try:

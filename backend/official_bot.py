@@ -3656,6 +3656,16 @@ def _msg_preview(msg, max_len=500):
 async def _announce_raid(bot, group_id, settings, flask_app):
     """Post the one-time in-group raid-mode alert and log the event (best-effort)."""
     from .bot_features import raid_guard
+    # Raid Guard feature event — logged before the notify gate so silent
+    # (notify=off) activations still count. Official lineage, best-effort.
+    try:
+        from .feature_usage import log_feature_usage
+        if flask_app:
+            with flask_app.app_context():
+                log_feature_usage("official", "raid", group_ref=str(group_id),
+                                  bot_ref="official", action="raid_mode_activated", commit=True)
+    except Exception:
+        pass
     if not raid_guard.get_config(settings).get("notify", True):
         return
     try:
@@ -3776,6 +3786,13 @@ async def _automod_execute(bot, message, group_id: str, flask_app, rule: str, ac
                 if action in ("warn", "mute", "ban", "kick"):
                     log_feature_usage(
                         "official", action, group_ref=str(group_id), user_ref=str(user_id),
+                        bot_ref="official", action=rule, commit=True,
+                    )
+                # Content Filter module (NSFW words + inline-button scan) gets its
+                # own count so it isn't hidden behind the nsfw/automod buckets.
+                if rule in ("nsfw_filter", "inline_button_scan"):
+                    log_feature_usage(
+                        "official", "content_filter", group_ref=str(group_id), user_ref=str(user_id),
                         bot_ref="official", action=rule, commit=True,
                     )
     except Exception:
