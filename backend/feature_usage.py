@@ -505,14 +505,21 @@ def compute_proof_metrics(public_keys=None) -> dict:
     # it to the live getChatMemberCount. Surface how fresh the sum actually is so a
     # stale "members protected" (e.g. before migrate.py / the 6h job has run) is
     # visible instead of silently wrong.
+    # Wrapped defensively: on a DB where the column hasn't been added yet (pre
+    # migration) this query would raise — that must never 500 the proof endpoint.
     synced_at_col = getattr(TelegramGroup, "member_count_synced_at", None)
     members_synced_at = None
     members_never_synced = None
     if synced_at_col is not None:
-        members_synced_at = db.session.query(func.max(synced_at_col)).filter(
-            TelegramGroup.bot_status == "active", TelegramGroup.is_disabled == False  # noqa: E712
-        ).scalar()
-        members_never_synced = active_groups.filter(synced_at_col.is_(None)).count()
+        try:
+            members_synced_at = db.session.query(func.max(synced_at_col)).filter(
+                TelegramGroup.bot_status == "active", TelegramGroup.is_disabled == False  # noqa: E712
+            ).scalar()
+            members_never_synced = active_groups.filter(synced_at_col.is_(None)).count()
+        except Exception:
+            db.session.rollback()
+            members_synced_at = None
+            members_never_synced = None
 
     # Feature-usage sums by feature (one grouped query).
     usage_rows = db.session.query(

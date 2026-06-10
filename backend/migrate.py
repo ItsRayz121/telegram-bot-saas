@@ -877,12 +877,20 @@ def init_db():
             ("target_id", "VARCHAR(64)"),
             ("old_value", "TEXT"),
             ("new_value", "TEXT"),
+            # Phase 8 — critical-action resolution tracking.
+            ("resolved_at", "TIMESTAMP"),
+            ("resolved_by", "INTEGER"),
         ):
             _run_alter(
                 db.engine,
                 f"ALTER TABLE admin_audit_logs ADD COLUMN IF NOT EXISTS {col} {ddl}",
                 f"admin_audit_logs.{col}",
             )
+        _run_alter(
+            db.engine,
+            "CREATE INDEX IF NOT EXISTS ix_admin_audit_sev_resolved ON admin_audit_logs (severity, resolved_at)",
+            "admin_audit_logs (severity, resolved_at) index",
+        )
 
         # ── Backfill: create UserTelegramAccount rows for legacy User.telegram_user_id ──
         # Must run AFTER all users-table ALTER statements (including auth_provider)
