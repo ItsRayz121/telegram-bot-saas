@@ -17,6 +17,12 @@ class Config:
     # Empty -> a sensible default computed in discord_api.bot_invite_permissions().
     DISCORD_BOT_PERMISSIONS = os.getenv("DISCORD_BOT_PERMISSIONS", "")
 
+    # Billing — NOWPayments (reuse the account; separate webhook endpoint)
+    NOWPAYMENTS_API_KEY = os.getenv("NOWPAYMENTS_API_KEY", "")
+    NOWPAYMENTS_IPN_SECRET = os.getenv("NOWPAYMENTS_IPN_SECRET", "")
+    PRO_PRICE_USD = float(os.getenv("PRO_PRICE_USD", "9"))
+    PRO_PERIOD_DAYS = int(os.getenv("PRO_PERIOD_DAYS", "30"))
+
     # Database (own DB — never shared with Telegizer)
     DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///instance/guildizer.db")
 

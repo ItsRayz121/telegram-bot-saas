@@ -127,7 +127,7 @@ discord-board/
 - [x] Phase 2 — Core Management (per-guild settings + self-heal, custom slash commands w/ dirty-flag resync, welcome/leave + auto-roles via Members intent, tabbed dashboard)
 - [x] Phase 3 — Moderation & Protection (content_filter + moderation engine, behavior-based raid_guard, account-age join gate, manual lockdown, ProtectionEvent audit + Protection tab; rate-limit governor leans on discord.py)
 - [x] Phase 4 — Engagement Engine (XP/leveling + /rank + /leaderboard; campaigns engine w/ multi-task, proof via persistent Discord buttons+modals, honor auto-verify, manual review→XP, Pro-gated campaign leaderboard, Guild.plan)
-- [ ] Phase 5 — Billing & Plans
+- [x] Phase 5 — Billing & Plans (NOWPayments checkout + HMAC-verified IPN webhook → flips Guild.plan=pro w/ stacking expiry; Subscription model; Billing tab. Decision: monetize engagement, never paywall safety)
 - [ ] Phase 6 — Admin Panel
 - [ ] Phase 7 — AI / Assistant (optional)
 - [ ] Phase 8 — Scaling & Launch

@@ -75,6 +75,7 @@ class Guild(Base):
     bot_present = Column(Boolean, default=False)
     member_count = Column(Integer, default=0)
     plan = Column(String(16), default="free")          # free | pro (set by billing)
+    plan_expires_at = Column(DateTime, nullable=True)  # null = no expiry
 
     added_at = Column(DateTime, default=datetime.utcnow)
     synced_at = Column(DateTime)                       # last bot gateway sync
@@ -121,11 +122,17 @@ class Guild(Base):
             "bot_present": bool(self.bot_present),
             "member_count": self.member_count or 0,
             "plan": self.plan or "free",
+            "is_pro": self.is_pro,
+            "plan_expires_at": self.plan_expires_at.isoformat() + "Z" if self.plan_expires_at else None,
         }
 
     @property
     def is_pro(self) -> bool:
-        return (self.plan or "free") == "pro"
+        if (self.plan or "free") != "pro":
+            return False
+        if self.plan_expires_at and self.plan_expires_at < datetime.utcnow():
+            return False
+        return True
 
 
 class UserGuild(Base):
@@ -569,4 +576,39 @@ class CampaignSubmission(Base):
             "reward_granted": self.reward_granted or 0,
             "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
             "reviewed_at": self.reviewed_at.isoformat() + "Z" if self.reviewed_at else None,
+        }
+
+
+class Subscription(Base):
+    """A Pro upgrade purchase for a guild, paid via NOWPayments. The IPN webhook
+    flips the row to active and sets the guild's plan + expiry."""
+
+    __tablename__ = "subscriptions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, ForeignKey("guilds.id"), nullable=False, index=True)
+    user_id = Column(BigInteger, nullable=True)           # who initiated checkout
+    plan = Column(String(16), default="pro")
+    status = Column(String(16), default="pending")        # pending|active|expired|failed
+    provider = Column(String(24), default="nowpayments")
+    order_id = Column(String(80), unique=True, index=True)  # our id, sent to provider
+    invoice_id = Column(String(80), nullable=True)        # provider invoice id
+    payment_id = Column(String(80), nullable=True)        # provider payment id
+    amount = Column(Integer, default=0)                   # price in whole USD
+    currency = Column(String(8), default="usd")
+    period_days = Column(Integer, default=30)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    activated_at = Column(DateTime, nullable=True)
+    expires_at = Column(DateTime, nullable=True)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "plan": self.plan,
+            "status": self.status,
+            "order_id": self.order_id,
+            "amount": self.amount,
+            "currency": self.currency,
+            "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
+            "expires_at": self.expires_at.isoformat() + "Z" if self.expires_at else None,
         }
