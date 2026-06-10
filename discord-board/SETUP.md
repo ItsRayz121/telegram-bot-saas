@@ -47,6 +47,9 @@ and **(B) deploy-time steps** (later, at the end of Phase 0). Nothing here touch
 - Add a **new Postgres** in the project for Discord (separate DB).
 - **Variables** → paste Discord env vars (token, client id/secret, DB url, etc.).
 - Repeat for the **worker** service if needed.
+- ℹ️ The worker pins **Python 3.12** via `backend/runtime.txt` — `discord.py` 2.4
+  uses the `audioop` module that Python 3.13+ removed. Keep the pin (or bump
+  discord.py + add `audioop-lts`) so the bot boots on Railway.
 
 ### B2. Vercel — add a NEW PROJECT (same account)
 - **Add New → Project** → same GitHub repo.

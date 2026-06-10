@@ -124,7 +124,7 @@ discord-board/
 - [x] Plan written (2026-06-10)
 - [x] Phase 0 — Foundation & Isolation (scaffold, `/ping`, isolated)
 - [x] Phase 1 — Auth & Onboarding (Discord OAuth2 login, bot-invite flow, guild/channel/role sync, dashboard + server detail)
-- [ ] Phase 2 — Core Management
+- [x] Phase 2 — Core Management (per-guild settings + self-heal, custom slash commands w/ dirty-flag resync, welcome/leave + auto-roles via Members intent, tabbed dashboard)
 - [ ] Phase 3 — Moderation & Protection
 - [ ] Phase 4 — Engagement Engine
 - [ ] Phase 5 — Billing & Plans

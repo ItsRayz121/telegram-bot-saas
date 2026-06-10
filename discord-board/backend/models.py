@@ -7,6 +7,7 @@ Phase 1 adds Discord OAuth + server-onboarding shape:
 from datetime import datetime
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     Boolean,
     Column,
@@ -14,6 +15,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    Text,
 )
 from sqlalchemy.orm import relationship
 
@@ -85,6 +87,15 @@ class Guild(Base):
     )
     roles = relationship(
         "Role", back_populates="guild", cascade="all, delete-orphan"
+    )
+    settings = relationship(
+        "GuildSettings",
+        back_populates="guild",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+    commands = relationship(
+        "CustomCommand", back_populates="guild", cascade="all, delete-orphan"
     )
 
     def icon_url(self) -> str | None:
@@ -175,4 +186,77 @@ class Role(Base):
             "position": self.position,
             "managed": bool(self.managed),
             "mentionable": bool(self.mentionable),
+        }
+
+
+class GuildSettings(Base):
+    """Per-server configuration: welcome/leave messages + auto-roles. One row per
+    guild, created/self-healed on bot startup (see settings.py)."""
+
+    __tablename__ = "guild_settings"
+
+    guild_id = Column(BigInteger, ForeignKey("guilds.id"), primary_key=True)
+
+    # Welcome
+    welcome_enabled = Column(Boolean, default=False)
+    welcome_channel_id = Column(BigInteger, nullable=True)
+    welcome_message = Column(Text, default="")
+
+    # Leave
+    leave_enabled = Column(Boolean, default=False)
+    leave_channel_id = Column(BigInteger, nullable=True)
+    leave_message = Column(Text, default="")
+
+    # Auto-roles assigned on join (list of role-id strings)
+    autorole_enabled = Column(Boolean, default=False)
+    autorole_ids = Column(JSON, default=list)
+
+    # Set true by the API when custom commands change; the bot's resync loop
+    # re-registers that guild's slash commands and clears the flag.
+    commands_dirty = Column(Boolean, default=False)
+
+    # Forward-compat bag so new settings self-heal without a migration.
+    extra = Column(JSON, default=dict)
+
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+    guild = relationship("Guild", back_populates="settings")
+
+    def to_dict(self) -> dict:
+        return {
+            "welcome_enabled": bool(self.welcome_enabled),
+            "welcome_channel_id": str(self.welcome_channel_id) if self.welcome_channel_id else None,
+            "welcome_message": self.welcome_message or "",
+            "leave_enabled": bool(self.leave_enabled),
+            "leave_channel_id": str(self.leave_channel_id) if self.leave_channel_id else None,
+            "leave_message": self.leave_message or "",
+            "autorole_enabled": bool(self.autorole_enabled),
+            "autorole_ids": [str(r) for r in (self.autorole_ids or [])],
+        }
+
+
+class CustomCommand(Base):
+    """A dashboard-defined slash command: `/name` -> a stored text response.
+    The bot registers these as per-guild slash commands."""
+
+    __tablename__ = "custom_commands"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, ForeignKey("guilds.id"), nullable=False)
+    name = Column(String(32), nullable=False)          # slash command name (no slash)
+    description = Column(String(100), default="Custom command")
+    response = Column(Text, default="")
+    enabled = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+    guild = relationship("Guild", back_populates="commands")
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description or "",
+            "response": self.response or "",
+            "enabled": bool(self.enabled),
         }
