@@ -792,9 +792,12 @@ def verify_payment():
         logger.error("[verify-payment] NOWPayments API error: %s", e)
         return jsonify({"upgraded": False, "status": "api_error"}), 200
 
-    # NOWPayments invoice status
+    # NOWPayments invoice status. Only fully-settled statuses may activate a plan —
+    # "partially_paid" means the user sent LESS than the invoice amount, so
+    # activating on it would let a 1% payment unlock a full subscription.
+    # (The IPN webhook and the scheduler recovery task enforce the same rule.)
     status = data.get("status", data.get("payment_status", "unknown"))
-    if status in ("finished", "confirmed", "partially_paid"):
+    if status in ("finished", "confirmed"):
         dedup_key = f"np:invoice:{pending.invoice_id}:verify"
         if not _claim_dedup(dedup_key):
             return jsonify({"upgraded": True, "plan": user.subscription_tier}), 200

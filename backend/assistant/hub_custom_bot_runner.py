@@ -24,10 +24,13 @@ def register_webhook(bot_id: str, token: str, base_url: str) -> bool:
     """
     webhook_url = f"{base_url.rstrip('/')}{_WEBHOOK_PATH}/{bot_id}"
     try:
+        from ..config import Config
+        secret_token = getattr(Config, "TELEGRAM_WEBHOOK_SECRET", None) or Config.SECRET_KEY[:32]
         resp = _req.post(
             f"https://api.telegram.org/bot{token}/setWebhook",
             json={
                 "url": webhook_url,
+                "secret_token": secret_token,
                 "allowed_updates": ["message", "edited_message", "my_chat_member", "callback_query"],
             },
             timeout=10,

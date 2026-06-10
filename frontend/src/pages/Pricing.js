@@ -35,7 +35,7 @@ const PLANS = [
     id: 'pro',
     name: 'Pro',
     monthlyPrice: 9,
-    annualPrice: 72,
+    annualPrice: 86,
     color: 'primary',
     popular: true,
     tagline: 'For serious community builders',
@@ -124,7 +124,53 @@ export default function Pricing() {
   const [annual, setAnnual] = useState(false);
   const [trialLoading, setTrialLoading] = useState(false);
   const [trialStarted, setTrialStarted] = useState(false);
+  // Live prices from the backend — the same source checkout charges against,
+  // so the displayed price can never drift from the invoiced amount.
+  // Defaults mirror backend billing_config.PRICE_DEFAULTS as a fallback.
+  const [livePrices, setLivePrices] = useState({
+    pro: { monthly: 9, annual: 86 },
+    enterprise: { monthly: 49, annual: 392 },
+  });
   const token = localStorage.getItem('token');
+
+  useEffect(() => {
+    billing.getPlans()
+      .then((res) => {
+        const plans = res.data?.plans || {};
+        setLivePrices((prev) => {
+          const next = { ...prev };
+          ['pro', 'enterprise'].forEach((tier) => {
+            const p = plans[tier];
+            if (p && typeof p.price === 'number' && p.price > 0) {
+              next[tier] = {
+                monthly: p.price / 100,
+                annual: typeof p.price_annual === 'number' && p.price_annual > 0
+                  ? p.price_annual / 100
+                  : prev[tier].annual,
+              };
+            }
+          });
+          return next;
+        });
+      })
+      .catch(() => { /* keep fallback defaults */ });
+  }, []);
+
+  const priceFor = (planId) => {
+    if (planId === 'free') return { monthly: 0, annual: 0 };
+    return livePrices[planId] || { monthly: 0, annual: 0 };
+  };
+  const savingsPct = (planId) => {
+    const { monthly, annual: yr } = priceFor(planId);
+    if (!monthly || !yr) return 0;
+    return Math.max(0, Math.round(100 - (yr / (monthly * 12)) * 100));
+  };
+  const maxSavingsPct = Math.max(savingsPct('pro'), savingsPct('enterprise'));
+  const monthsFree = (planId) => {
+    const { monthly, annual: yr } = priceFor(planId);
+    if (!monthly || !yr) return 0;
+    return Math.max(0, Math.round(12 - yr / monthly));
+  };
 
   // Load current subscription so we can show correct "Current Plan" state
   useEffect(() => {
@@ -241,7 +287,7 @@ export default function Pricing() {
             Annual
           </Typography>
           <Chip
-            label="Save ~33%"
+            label={`Save up to ~${maxSavingsPct}%`}
             size="small"
             color="success"
             icon={<LocalOffer fontSize="small" />}
@@ -251,7 +297,7 @@ export default function Pricing() {
 
         {subExpires && (
           <Chip
-            label={`${currentTier.charAt(0).toUpperCase() + currentTier.slice(1)} plan â€" expires ${new Date(subExpires).toLocaleDateString()}`}
+            label={`${currentTier.charAt(0).toUpperCase() + currentTier.slice(1)} plan — expires ${new Date(subExpires).toLocaleDateString()}`}
             color="primary"
             sx={{ mb: 3 }}
           />
@@ -316,7 +362,7 @@ export default function Pricing() {
                     <Typography variant="h5" fontWeight={700}>{plan.name}</Typography>
                     <Typography variant="caption" color="text.secondary" display="block" mb={2}>{plan.tagline}</Typography>
 
-                    {/* Price */}
+                    {/* Price — always from livePrices (same source the backend charges) */}
                     <Box sx={{ mb: 2 }}>
                       {plan.id === 'free' ? (
                         <>
@@ -326,22 +372,22 @@ export default function Pricing() {
                       ) : annual ? (
                         <>
                           <Typography component="span" fontWeight={800} sx={{ fontSize: { xs: '1.9rem', sm: '2.4rem', md: '2.8rem' } }}>
-                            ${Math.round(plan.annualPrice / 12)}
+                            ${(priceFor(plan.id).annual / 12).toFixed(2).replace(/\.00$/, '')}
                           </Typography>
                           <Typography component="span" variant="body1" color="text.secondary">/month</Typography>
                           <Typography variant="caption" display="block" color="success.main" fontWeight={600}>
-                            ${plan.annualPrice}/year · ~{Math.round(100 - (plan.annualPrice / (plan.monthlyPrice * 12)) * 100)}% off
+                            ${priceFor(plan.id).annual}/year · ~{savingsPct(plan.id)}% off
                           </Typography>
                         </>
                       ) : (
                         <>
                           <Typography component="span" fontWeight={800} sx={{ fontSize: { xs: '1.9rem', sm: '2.4rem', md: '2.8rem' } }}>
-                            ${plan.monthlyPrice}
+                            ${priceFor(plan.id).monthly}
                           </Typography>
                           <Typography component="span" variant="body1" color="text.secondary">/month</Typography>
-                          {plan.annualPrice > 0 && (
+                          {priceFor(plan.id).annual > 0 && (
                             <Typography variant="caption" display="block" color="text.disabled">
-                              or ${plan.annualPrice}/yr billed annually
+                              or ${priceFor(plan.id).annual}/yr billed annually
                             </Typography>
                           )}
                         </>
@@ -501,7 +547,10 @@ export default function Pricing() {
               <>
                 <strong>{selectedTier.charAt(0).toUpperCase() + selectedTier.slice(1)}</strong> Plan
                 {' — '}<strong>{annual ? 'Annual' : 'Monthly'}</strong>
-                {annual && <> · <span style={{ color: '#66bb6a' }}>~4 months free</span></>}
+                {' · '}<strong>${annual ? priceFor(selectedTier).annual : priceFor(selectedTier).monthly}</strong>
+                {annual && monthsFree(selectedTier) >= 1 && (
+                  <> · <span style={{ color: '#66bb6a' }}>~{monthsFree(selectedTier)} month{monthsFree(selectedTier) > 1 ? 's' : ''} free</span></>
+                )}
               </>
             )}
           </Typography>

@@ -1438,10 +1438,14 @@ def hub_webhook():
     import json
     import hashlib
 
-    # Validate secret token from Telegram webhook header
+    # Validate secret token from Telegram webhook header.
+    # The header is REQUIRED: every registration of this shared-bot endpoint sets a
+    # secret_token, so a request without one (or with a wrong one) is forged —
+    # skipping validation on a missing header would let anyone inject fake group
+    # messages into the hub extraction pipeline.
     secret_token = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
     expected = Config.SECRET_KEY[:32] if Config.SECRET_KEY else ""
-    if secret_token and expected and not _safe_compare(secret_token, expected):
+    if not secret_token or not expected or not _safe_compare(secret_token, expected):
         return jsonify({"ok": False}), 403
 
     payload = request.get_json(force=True, silent=True) or {}
@@ -2542,6 +2546,14 @@ def custom_bot_webhook(bot_id):
     """
     from ..assistant.hub_crypto import _dec
     from ..assistant.hub_reply import handle_mention
+
+    # If a webhook secret header is present it must match (new registrations set
+    # one; legacy registrations without a secret send no header, and remain
+    # implicitly protected by the unguessable UUID bot_id in the URL).
+    _incoming_secret = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+    _expected_secret = Config.SECRET_KEY[:32] if Config.SECRET_KEY else ""
+    if _incoming_secret and not _safe_compare(_incoming_secret, _expected_secret):
+        return jsonify({"ok": False}), 403
 
     # Verify the bot exists and is active
     bot = HubBotIdentity.query.filter_by(id=bot_id, bot_type="custom", is_active=True).first()

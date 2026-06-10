@@ -2,6 +2,9 @@
 builder = "RAILPACK"
 
 [deploy]
+# Railway does NOT execute the Procfile "release:" phase — migrations must run
+# as a pre-deploy command or schema changes silently never reach production.
+preDeployCommand = "python -m backend.migrate"
 healthcheckPath = "/health"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
