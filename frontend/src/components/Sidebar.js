@@ -13,7 +13,7 @@ import {
   Psychology, ChevronLeft, ChevronRight,
   EmojiEvents, CheckCircle, RadioButtonUnchecked,
   CheckBox, LibraryBooks, ManageAccounts, VideoCall,
-  NewReleases,
+  NewReleases, Forum,
 } from '@mui/icons-material';
 import TelegizerLogo from './TelegizerLogo';
 import { auth as authApi } from '../services/api';
@@ -368,6 +368,7 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
       { label: 'Dashboard',      icon: Home,           path: '/dashboard', exact: true },
       { label: 'Groups',         icon: Groups,         path: '/groups' },
       { label: assistantName,    icon: Psychology,     path: '/ark', ai: true },
+      { label: 'Discord',        icon: Forum,          path: '/guildizer' },
       { label: 'Tasks',          icon: CheckBox,       path: '/workspace/tasks' },
       { label: 'Knowledge',      icon: LibraryBooks,   path: '/workspace/knowledge' },
       { label: 'Memory',         icon: ManageAccounts, path: '/workspace/memory' },
@@ -516,6 +517,10 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
         {/* ECHO */}
         <HubSectionLabel />
         <NavItem label={assistantName} icon={Psychology} path="/ark" active={assistantActive} aiAccent onClick={() => nav('/ark')} tourId="tour-echo" />
+
+        {/* DISCORD — Guildizer, the 3rd pillar (separate backend, embedded UI) */}
+        <SectionLabel label="Discord" />
+        <NavItem label="Servers" path="/guildizer" icon={Forum} active={isActive('/guildizer')} onClick={() => nav('/guildizer')} tourId="tour-guildizer" />
 
         {/* Automation hub removed — Forwarding / Workflows / Webhooks now live in
             each group's Automation tab (Groups › <group> › Automation). */}

@@ -39,6 +39,9 @@ class Config:
     # App
     SECRET_KEY = os.getenv("FLASK_SECRET_KEY", "dev-secret-change-me")
     FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+    # Path on the frontend the Discord OAuth flow returns to. Guildizer lives as a
+    # section inside telegizer.com, so this is "/guildizer" in production.
+    GUILDIZER_FRONTEND_PATH = os.getenv("GUILDIZER_FRONTEND_PATH", "/guildizer")
     BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:5000")
     PORT = int(os.getenv("PORT", "5000"))
 

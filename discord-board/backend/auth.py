@@ -132,15 +132,18 @@ def discord_login():
 
 @auth_bp.get("/auth/discord/callback")
 def discord_callback():
+    # Guildizer is a section inside telegizer.com → always return to that path.
+    return_to = f"{Config.FRONTEND_URL}{Config.GUILDIZER_FRONTEND_PATH}"
+
     error = request.args.get("error")
     if error:
-        return redirect(f"{Config.FRONTEND_URL}/login?error={error}")
+        return redirect(f"{return_to}?error={error}")
 
     code = request.args.get("code")
     state = request.args.get("state")
     expected_state = request.cookies.get(_STATE_COOKIE)
     if not code or not state or state != expected_state:
-        return redirect(f"{Config.FRONTEND_URL}/login?error=invalid_state")
+        return redirect(f"{return_to}?error=invalid_state")
 
     try:
         token = discord_api.exchange_code(code)
@@ -149,7 +152,7 @@ def discord_callback():
         guilds = discord_api.get_user_guilds(access_token)
     except Exception:  # noqa: BLE001 — surface any OAuth/REST failure as a clean bounce
         current_app.logger.exception("Discord OAuth callback failed")
-        return redirect(f"{Config.FRONTEND_URL}/login?error=oauth_failed")
+        return redirect(f"{return_to}?error=oauth_failed")
 
     db = SessionLocal()
     try:
@@ -171,7 +174,7 @@ def discord_callback():
         db.close()
         SessionLocal.remove()
 
-    resp = make_response(redirect(f"{Config.FRONTEND_URL}/dashboard"))
+    resp = make_response(redirect(return_to))
     _set_session_cookie(resp, user_id)
     resp.delete_cookie(_STATE_COOKIE)
     return resp
