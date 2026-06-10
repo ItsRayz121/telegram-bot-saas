@@ -285,3 +285,31 @@ code {
   background: var(--panel-2); border: 1px solid var(--border);
   padding: 1px 5px; border-radius: 5px; font-size: 0.9em;
 }
+
+/* ---------- protection activity feed ---------- */
+.lockdown-on { color: var(--danger); font-weight: 600; font-size: 14px; }
+
+.feed { list-style: none; margin: 0; padding: 0; }
+.feed-row {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 4px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.feed-row:last-child { border-bottom: none; }
+.feed-action { color: var(--muted); text-transform: capitalize; }
+.feed-detail { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.feed-time { color: var(--muted); font-size: 12px; white-space: nowrap; }
+
+.tag {
+  font-size: 11px; font-weight: 600;
+  padding: 2px 9px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--panel-2); color: var(--muted);
+  white-space: nowrap;
+}
+.tag-nsfw, .tag-csam { color: #ffb3b4; border-color: rgba(237,66,69,0.4); background: rgba(237,66,69,0.12); }
+.tag-raid, .tag-manual_lockdown, .tag-lockdown_join { color: #ffd28a; border-color: rgba(250,166,26,0.4); background: rgba(250,166,26,0.12); }
+.tag-invite, .tag-link { color: #9fc6ff; border-color: rgba(88,101,242,0.4); background: rgba(88,101,242,0.12); }

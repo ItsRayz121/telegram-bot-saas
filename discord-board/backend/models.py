@@ -97,6 +97,15 @@ class Guild(Base):
     commands = relationship(
         "CustomCommand", back_populates="guild", cascade="all, delete-orphan"
     )
+    moderation = relationship(
+        "ModerationSettings",
+        back_populates="guild",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+    protection_events = relationship(
+        "ProtectionEvent", back_populates="guild", cascade="all, delete-orphan"
+    )
 
     def icon_url(self) -> str | None:
         if not self.icon:
@@ -259,4 +268,95 @@ class CustomCommand(Base):
             "description": self.description or "",
             "response": self.response or "",
             "enabled": bool(self.enabled),
+        }
+
+
+class ModerationSettings(Base):
+    """Per-server moderation config: content filter + raid guard + join gate.
+    One row per guild, created/self-healed on startup (see settings.py)."""
+
+    __tablename__ = "moderation_settings"
+
+    guild_id = Column(BigInteger, ForeignKey("guilds.id"), primary_key=True)
+
+    # Content filter
+    cf_enabled = Column(Boolean, default=False)
+    cf_action = Column(String(16), default="delete")   # delete|warn|timeout|kick|ban
+    cf_nsfw = Column(Boolean, default=True)
+    cf_invites = Column(Boolean, default=True)          # block foreign Discord invites
+    cf_links = Column(Boolean, default=False)           # block shortener/scam-TLD links
+    cf_custom_words = Column(JSON, default=list)        # admin-added terms
+
+    # Raid guard (behavior-based — distinct accounts tripping filters / dup-flooding)
+    rg_enabled = Column(Boolean, default=False)
+    rg_window_seconds = Column(Integer, default=60)
+    rg_trigger_violators = Column(Integer, default=5)
+    rg_duplicate_threshold = Column(Integer, default=5)
+    rg_lockdown_minutes = Column(Integer, default=10)
+    rg_lockdown_action = Column(String(16), default="timeout")  # timeout|kick
+    rg_notify = Column(Boolean, default=True)
+    rg_notify_channel_id = Column(BigInteger, nullable=True)
+    manual_lockdown_until = Column(DateTime, nullable=True)      # admin panic button
+
+    # Join gate
+    jg_min_account_age_days = Column(Integer, default=0)         # 0 = off
+
+    extra = Column(JSON, default=dict)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+    guild = relationship("Guild", back_populates="moderation")
+
+    def to_dict(self) -> dict:
+        from datetime import datetime as _dt
+
+        locked = bool(self.manual_lockdown_until and self.manual_lockdown_until > _dt.utcnow())
+        return {
+            "cf_enabled": bool(self.cf_enabled),
+            "cf_action": self.cf_action or "delete",
+            "cf_nsfw": bool(self.cf_nsfw),
+            "cf_invites": bool(self.cf_invites),
+            "cf_links": bool(self.cf_links),
+            "cf_custom_words": list(self.cf_custom_words or []),
+            "rg_enabled": bool(self.rg_enabled),
+            "rg_window_seconds": self.rg_window_seconds or 60,
+            "rg_trigger_violators": self.rg_trigger_violators or 5,
+            "rg_duplicate_threshold": self.rg_duplicate_threshold or 5,
+            "rg_lockdown_minutes": self.rg_lockdown_minutes or 10,
+            "rg_lockdown_action": self.rg_lockdown_action or "timeout",
+            "rg_notify": bool(self.rg_notify),
+            "rg_notify_channel_id": str(self.rg_notify_channel_id) if self.rg_notify_channel_id else None,
+            "jg_min_account_age_days": self.jg_min_account_age_days or 0,
+            "manual_lockdown_active": locked,
+            "manual_lockdown_until": self.manual_lockdown_until.isoformat() + "Z" if self.manual_lockdown_until else None,
+        }
+
+
+class ProtectionEvent(Base):
+    """An audit record of a moderation/protection action, shown in the
+    Protection Activity feed."""
+
+    __tablename__ = "protection_events"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, ForeignKey("guilds.id"), nullable=False)
+    category = Column(String(24))    # nsfw|csam|invite|link|custom|spam|raid|lockdown_join|join_gate|manual_lockdown
+    action = Column(String(16))      # deleted|warned|timeout|kick|ban|restricted|none
+    user_id = Column(BigInteger, nullable=True)
+    username = Column(String(120), nullable=True)
+    channel_id = Column(BigInteger, nullable=True)
+    detail = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    guild = relationship("Guild", back_populates="protection_events")
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "category": self.category,
+            "action": self.action,
+            "user_id": str(self.user_id) if self.user_id else None,
+            "username": self.username,
+            "channel_id": str(self.channel_id) if self.channel_id else None,
+            "detail": self.detail,
+            "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
         }
