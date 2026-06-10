@@ -74,6 +74,7 @@ class Guild(Base):
     owner_id = Column(BigInteger, ForeignKey("users.id"), nullable=True)
     bot_present = Column(Boolean, default=False)
     member_count = Column(Integer, default=0)
+    plan = Column(String(16), default="free")          # free | pro (set by billing)
 
     added_at = Column(DateTime, default=datetime.utcnow)
     synced_at = Column(DateTime)                       # last bot gateway sync
@@ -119,7 +120,12 @@ class Guild(Base):
             "icon_url": self.icon_url(),
             "bot_present": bool(self.bot_present),
             "member_count": self.member_count or 0,
+            "plan": self.plan or "free",
         }
+
+    @property
+    def is_pro(self) -> bool:
+        return (self.plan or "free") == "pro"
 
 
 class UserGuild(Base):
@@ -415,3 +421,152 @@ class XpEvent(Base):
     amount = Column(Integer, default=0)
     reason = Column(String(64))                           # message | campaign:<id> | manual
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+CAMPAIGN_TYPES = ("proof_collection", "content_submission", "social_task", "raid")
+CAMPAIGN_VERIFICATION_MODES = ("manual", "honor", "link")
+CAMPAIGN_STATUSES = ("draft", "active", "paused", "closed")
+SUBMISSION_STATUSES = ("pending", "verified", "rejected")
+
+
+class Campaign(Base):
+    """An engagement campaign created from the dashboard. Belongs to one guild.
+    A campaign with tasks is multi-task; tasks carry their own reward + proof."""
+
+    __tablename__ = "campaigns"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, ForeignKey("guilds.id"), nullable=False, index=True)
+    type = Column(String(32), default="proof_collection")
+    title = Column(String(200), nullable=False)
+    description = Column(Text, default="")
+    task_url = Column(String(2000), nullable=True)
+    verification_mode = Column(String(20), default="manual")  # manual|honor|link
+    reward_xp = Column(Integer, default=0)
+    reward_label = Column(String(200), nullable=True)
+
+    status = Column(String(20), default="draft", index=True)
+    starts_at = Column(DateTime, nullable=True)
+    ends_at = Column(DateTime, nullable=True)
+    one_per_user = Column(Boolean, default=True)
+
+    # Discord post tracking + coordination flag the bot's post loop watches.
+    channel_id = Column(BigInteger, nullable=True)        # where to announce
+    message_id = Column(BigInteger, nullable=True)        # posted announcement
+    needs_post = Column(Boolean, default=False)           # API asked the bot to (re)post
+    post_status = Column(String(16), default="none")      # none|posted|failed
+    post_error = Column(String(255), nullable=True)
+
+    settings = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    tasks = relationship(
+        "CampaignTask", back_populates="campaign",
+        cascade="all, delete-orphan", order_by="CampaignTask.order",
+    )
+    submissions = relationship(
+        "CampaignSubmission", back_populates="campaign", cascade="all, delete-orphan"
+    )
+
+    @property
+    def is_open(self) -> bool:
+        if self.status != "active":
+            return False
+        now = datetime.utcnow()
+        if self.starts_at and now < self.starts_at:
+            return False
+        if self.ends_at and now >= self.ends_at:
+            return False
+        return True
+
+    def to_dict(self, include_tasks=True, include_counts=False) -> dict:
+        d = {
+            "id": self.id,
+            "guild_id": str(self.guild_id),
+            "type": self.type,
+            "title": self.title,
+            "description": self.description or "",
+            "task_url": self.task_url,
+            "verification_mode": self.verification_mode,
+            "reward_xp": self.reward_xp or 0,
+            "reward_label": self.reward_label,
+            "status": self.status,
+            "is_open": self.is_open,
+            "starts_at": self.starts_at.isoformat() + "Z" if self.starts_at else None,
+            "ends_at": self.ends_at.isoformat() + "Z" if self.ends_at else None,
+            "one_per_user": bool(self.one_per_user),
+            "channel_id": str(self.channel_id) if self.channel_id else None,
+            "message_id": str(self.message_id) if self.message_id else None,
+            "post_status": self.post_status or "none",
+            "post_error": self.post_error,
+            "settings": self.settings or {},
+            "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
+        }
+        if include_tasks:
+            d["tasks"] = [t.to_dict() for t in self.tasks]
+        return d
+
+
+class CampaignTask(Base):
+    """One sub-task of a multi-task campaign, with its own reward + proof button."""
+
+    __tablename__ = "campaign_tasks"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    campaign_id = Column(Integer, ForeignKey("campaigns.id"), nullable=False, index=True)
+    order = Column(Integer, default=0)
+    title = Column(String(200), nullable=False)
+    description = Column(Text, default="")
+    type = Column(String(32), default="social_task")
+    task_url = Column(String(2000), nullable=True)
+    verification_mode = Column(String(20), default="manual")
+    reward_xp = Column(Integer, default=0)
+
+    campaign = relationship("Campaign", back_populates="tasks")
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "campaign_id": self.campaign_id,
+            "order": self.order,
+            "title": self.title,
+            "description": self.description or "",
+            "type": self.type,
+            "task_url": self.task_url,
+            "verification_mode": self.verification_mode,
+            "reward_xp": self.reward_xp or 0,
+        }
+
+
+class CampaignSubmission(Base):
+    """A user's proof submission for a campaign (or one of its tasks)."""
+
+    __tablename__ = "campaign_submissions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    campaign_id = Column(Integer, ForeignKey("campaigns.id"), nullable=False, index=True)
+    task_id = Column(Integer, ForeignKey("campaign_tasks.id"), nullable=True, index=True)
+    user_id = Column(BigInteger, nullable=False)
+    username = Column(String(120))
+    status = Column(String(16), default="pending")        # pending|verified|rejected
+    proof = Column(JSON, default=dict)                    # {"value": "...url/text"}
+    reward_granted = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    reviewed_at = Column(DateTime, nullable=True)
+    reviewer_id = Column(BigInteger, nullable=True)
+
+    campaign = relationship("Campaign", back_populates="submissions")
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "campaign_id": self.campaign_id,
+            "task_id": self.task_id,
+            "user_id": str(self.user_id),
+            "username": self.username,
+            "status": self.status,
+            "proof": self.proof or {},
+            "reward_granted": self.reward_granted or 0,
+            "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
+            "reviewed_at": self.reviewed_at.isoformat() + "Z" if self.reviewed_at else None,
+        }

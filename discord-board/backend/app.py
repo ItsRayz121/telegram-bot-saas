@@ -7,6 +7,7 @@ from flask import Flask, jsonify
 from flask_cors import CORS
 
 from auth import auth_bp
+from campaigns_api import campaigns_bp
 from config import Config
 from database import init_db
 from guilds_api import guilds_bp
@@ -29,6 +30,7 @@ def create_app() -> Flask:
     app.register_blueprint(settings_bp)
     app.register_blueprint(protection_bp)
     app.register_blueprint(leveling_bp)
+    app.register_blueprint(campaigns_bp)
 
     @app.get("/")
     def root():

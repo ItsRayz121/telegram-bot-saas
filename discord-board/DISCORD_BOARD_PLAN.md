@@ -126,7 +126,7 @@ discord-board/
 - [x] Phase 1 — Auth & Onboarding (Discord OAuth2 login, bot-invite flow, guild/channel/role sync, dashboard + server detail)
 - [x] Phase 2 — Core Management (per-guild settings + self-heal, custom slash commands w/ dirty-flag resync, welcome/leave + auto-roles via Members intent, tabbed dashboard)
 - [x] Phase 3 — Moderation & Protection (content_filter + moderation engine, behavior-based raid_guard, account-age join gate, manual lockdown, ProtectionEvent audit + Protection tab; rate-limit governor leans on discord.py)
-- [ ] Phase 4 — Engagement Engine
+- [x] Phase 4 — Engagement Engine (XP/leveling + /rank + /leaderboard; campaigns engine w/ multi-task, proof via persistent Discord buttons+modals, honor auto-verify, manual review→XP, Pro-gated campaign leaderboard, Guild.plan)
 - [ ] Phase 5 — Billing & Plans
 - [ ] Phase 6 — Admin Panel
 - [ ] Phase 7 — AI / Assistant (optional)

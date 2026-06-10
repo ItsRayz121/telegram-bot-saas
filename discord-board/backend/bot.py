@@ -16,6 +16,8 @@ import discord
 from discord import app_commands
 from discord.ext import tasks
 
+import campaign_runtime
+import campaign_views
 import command_registrar
 import content_filter  # noqa: F401  (kept explicit; moderation imports it)
 import governor
@@ -50,7 +52,10 @@ class GuildizerBot(discord.Client):
         await asyncio.to_thread(init_db)
         await self.tree.sync()
         log.info("Global slash commands synced.")
+        # Persistent campaign proof buttons survive restarts via DynamicItem.
+        self.add_dynamic_items(campaign_views.ProofButton)
         self.resync_commands.start()
+        self.post_campaigns.start()
 
     async def on_ready(self) -> None:
         log.info("Guildizer is online as %s (id=%s)", self.user, self.user.id)
@@ -243,6 +248,20 @@ class GuildizerBot(discord.Client):
 
     @resync_commands.before_loop
     async def _before_resync(self) -> None:
+        await self.wait_until_ready()
+
+    # --- post campaigns the dashboard flagged (needs_post) --------------------
+    @tasks.loop(seconds=20)
+    async def post_campaigns(self) -> None:
+        ids = await asyncio.to_thread(campaign_runtime.campaigns_to_post)
+        for cid in ids:
+            try:
+                await campaign_views.post_campaign(self, cid)
+            except Exception:  # noqa: BLE001
+                log.exception("post_campaign failed for %s", cid)
+
+    @post_campaigns.before_loop
+    async def _before_post(self) -> None:
         await self.wait_until_ready()
 
     # --- sync DB writes/reads (run off the event loop via to_thread) ----------

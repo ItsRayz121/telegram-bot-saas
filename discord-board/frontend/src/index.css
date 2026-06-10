@@ -318,3 +318,22 @@ code {
   min-width: 34px; text-align: center;
   font-size: 12px; font-weight: 700; color: var(--accent);
 }
+
+/* ---------- campaigns ---------- */
+.campaign-row { cursor: pointer; }
+.campaign-row:hover { background: var(--panel-2); }
+
+.status-draft { color: var(--muted); }
+.status-active { color: var(--ok); border-color: rgba(59,165,93,0.4); background: rgba(59,165,93,0.12); }
+.status-paused { color: #ffd28a; border-color: rgba(250,166,26,0.4); background: rgba(250,166,26,0.12); }
+.status-closed { color: var(--muted); }
+
+.create-box {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin: 12px 0;
+}
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 560px) { .two-col { grid-template-columns: 1fr; } }
