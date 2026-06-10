@@ -17,6 +17,11 @@ class Config:
     # Empty -> a sensible default computed in discord_api.bot_invite_permissions().
     DISCORD_BOT_PERMISSIONS = os.getenv("DISCORD_BOT_PERMISSIONS", "")
 
+    # AI assistant (optional — /ask is graceful when unset)
+    ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+    AI_MODEL = os.getenv("GUILDIZER_AI_MODEL", "claude-haiku-4-5-20251001")
+    AI_MAX_TOKENS = int(os.getenv("GUILDIZER_AI_MAX_TOKENS", "600"))
+
     # Billing — NOWPayments (reuse the account; separate webhook endpoint)
     NOWPAYMENTS_API_KEY = os.getenv("NOWPAYMENTS_API_KEY", "")
     NOWPAYMENTS_IPN_SECRET = os.getenv("NOWPAYMENTS_IPN_SECRET", "")

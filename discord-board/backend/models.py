@@ -612,3 +612,58 @@ class Subscription(Base):
             "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
             "expires_at": self.expires_at.isoformat() + "Z" if self.expires_at else None,
         }
+
+
+class Reminder(Base):
+    """A user reminder set via /remind. The due loop DMs the user when due."""
+
+    __tablename__ = "reminders"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=True)          # where it was set (context)
+    user_id = Column(BigInteger, nullable=False, index=True)
+    text = Column(String(500))
+    due_at = Column(DateTime, nullable=False, index=True)
+    delivered = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "text": self.text,
+            "due_at": self.due_at.isoformat() + "Z" if self.due_at else None,
+            "delivered": bool(self.delivered),
+        }
+
+
+class Note(Base):
+    """A personal note saved via /note."""
+
+    __tablename__ = "notes"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, nullable=False, index=True)
+    guild_id = Column(BigInteger, nullable=True)
+    content = Column(Text, default="")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "content": self.content or "",
+            "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
+        }
+
+
+class AITokenUsage(Base):
+    """Append-only ledger of AI token consumption (cost/usage analytics)."""
+
+    __tablename__ = "ai_token_usage"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=True)
+    user_id = Column(BigInteger, nullable=True)
+    model = Column(String(64))
+    input_tokens = Column(Integer, default=0)
+    output_tokens = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)

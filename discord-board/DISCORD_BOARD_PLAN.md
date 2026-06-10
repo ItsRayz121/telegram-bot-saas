@@ -129,5 +129,5 @@ discord-board/
 - [x] Phase 4 — Engagement Engine (XP/leveling + /rank + /leaderboard; campaigns engine w/ multi-task, proof via persistent Discord buttons+modals, honor auto-verify, manual review→XP, Pro-gated campaign leaderboard, Guild.plan)
 - [x] Phase 5 — Billing & Plans (NOWPayments checkout + HMAC-verified IPN webhook → flips Guild.plan=pro w/ stacking expiry; Subscription model; Billing tab. Decision: monetize engagement, never paywall safety)
 - [x] Phase 6 — Admin Panel (RBAC via ADMIN_USER_IDS env, admin_api overview/guilds/users/campaigns/events drill-downs + manual plan grant; analytics derived from existing tables; gated /admin shell w/ sidebar)
-- [ ] Phase 7 — AI / Assistant (optional)
+- [x] Phase 7 — AI / Assistant (reminders /remind+/reminders w/ DM due loop, notes /note+/notes, AI /ask via Anthropic + AITokenUsage ledger, graceful when unconfigured. Workflows deferred.)
 - [ ] Phase 8 — Scaling & Launch

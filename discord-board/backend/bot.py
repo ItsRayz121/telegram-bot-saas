@@ -16,6 +16,8 @@ import discord
 from discord import app_commands
 from discord.ext import tasks
 
+import ai
+import assistant
 import campaign_runtime
 import campaign_views
 import command_registrar
@@ -56,6 +58,7 @@ class GuildizerBot(discord.Client):
         self.add_dynamic_items(campaign_views.ProofButton)
         self.resync_commands.start()
         self.post_campaigns.start()
+        self.deliver_reminders.start()
 
     async def on_ready(self) -> None:
         log.info("Guildizer is online as %s (id=%s)", self.user, self.user.id)
@@ -264,6 +267,24 @@ class GuildizerBot(discord.Client):
     async def _before_post(self) -> None:
         await self.wait_until_ready()
 
+    # --- deliver due reminders (DM the user) ----------------------------------
+    @tasks.loop(seconds=30)
+    async def deliver_reminders(self) -> None:
+        due = await asyncio.to_thread(self._fetch_due_reminders)
+        for rid, user_id, text in due:
+            try:
+                user = self.get_user(int(user_id)) or await self.fetch_user(int(user_id))
+                if user is not None:
+                    await governor.safe(user.send(f"⏰ Reminder: {text}"), what="reminder DM")
+            except Exception:  # noqa: BLE001
+                log.exception("reminder delivery failed for %s", user_id)
+            finally:
+                await asyncio.to_thread(self._mark_reminder_delivered, rid)
+
+    @deliver_reminders.before_loop
+    async def _before_reminders(self) -> None:
+        await self.wait_until_ready()
+
     # --- sync DB writes/reads (run off the event loop via to_thread) ----------
     @staticmethod
     def _sync_all_guilds(guilds) -> None:
@@ -399,6 +420,79 @@ class GuildizerBot(discord.Client):
             db.close()
             SessionLocal.remove()
 
+    # --- assistant DB helpers -------------------------------------------------
+    @staticmethod
+    def _add_reminder(guild_id, user_id, text, seconds):
+        db = SessionLocal()
+        try:
+            r = assistant.add_reminder(db, guild_id, user_id, text, seconds)
+            db.commit()
+            return r.due_at
+        finally:
+            db.close()
+            SessionLocal.remove()
+
+    @staticmethod
+    def _list_reminders(user_id):
+        db = SessionLocal()
+        try:
+            return [(r.text, r.due_at) for r in assistant.list_reminders(db, user_id)]
+        finally:
+            db.close()
+            SessionLocal.remove()
+
+    @staticmethod
+    def _fetch_due_reminders():
+        db = SessionLocal()
+        try:
+            return [(r.id, r.user_id, r.text) for r in assistant.due_reminders(db)]
+        finally:
+            db.close()
+            SessionLocal.remove()
+
+    @staticmethod
+    def _mark_reminder_delivered(rid):
+        db = SessionLocal()
+        try:
+            from models import Reminder
+            r = db.get(Reminder, rid)
+            if r is not None:
+                r.delivered = True
+                db.commit()
+        finally:
+            db.close()
+            SessionLocal.remove()
+
+    @staticmethod
+    def _add_note(user_id, guild_id, content):
+        db = SessionLocal()
+        try:
+            assistant.add_note(db, user_id, guild_id, content)
+            db.commit()
+        finally:
+            db.close()
+            SessionLocal.remove()
+
+    @staticmethod
+    def _list_notes(user_id):
+        db = SessionLocal()
+        try:
+            return [(n.content, n.created_at) for n in assistant.list_notes(db, user_id)]
+        finally:
+            db.close()
+            SessionLocal.remove()
+
+    @staticmethod
+    def _log_ai(guild_id, user_id, result):
+        db = SessionLocal()
+        try:
+            assistant.log_ai_usage(db, guild_id, user_id, result.model,
+                                   result.input_tokens, result.output_tokens)
+            db.commit()
+        finally:
+            db.close()
+            SessionLocal.remove()
+
     @staticmethod
     def _log(guild_id, category, action, user_id=None, username=None, channel_id=None, detail=None):
         db = SessionLocal()
@@ -461,6 +555,68 @@ async def leaderboard(interaction: discord.Interaction) -> None:
         for i, (name, lvl, xp) in enumerate(rows)
     ]
     await interaction.response.send_message("🏆 **Leaderboard**\n" + "\n".join(lines))
+
+
+@client.tree.command(name="remind", description="Set a reminder. e.g. /remind 2h take a break")
+@app_commands.describe(when="When: 10m, 2h, 1d, 1h30m (a bare number = minutes)", text="What to remind you about")
+async def remind(interaction: discord.Interaction, when: str, text: str) -> None:
+    seconds = assistant.parse_duration(when)
+    if not seconds:
+        await interaction.response.send_message(
+            "I couldn't read that time. Try `10m`, `2h`, `1d`, or `1h30m`.", ephemeral=True
+        )
+        return
+    gid = interaction.guild_id
+    due = await asyncio.to_thread(
+        GuildizerBot._add_reminder, gid, interaction.user.id, text, seconds
+    )
+    ts = int(due.replace(tzinfo=None).timestamp()) if hasattr(due, "timestamp") else None
+    when_str = f"<t:{int(due.timestamp())}:R>" if ts else "soon"
+    await interaction.response.send_message(f"⏰ Okay! I'll remind you {when_str}: {text}", ephemeral=True)
+
+
+@client.tree.command(name="reminders", description="List your pending reminders.")
+async def reminders(interaction: discord.Interaction) -> None:
+    rows = await asyncio.to_thread(GuildizerBot._list_reminders, interaction.user.id)
+    if not rows:
+        await interaction.response.send_message("You have no pending reminders.", ephemeral=True)
+        return
+    lines = [f"• {text} — <t:{int(due.timestamp())}:R>" for text, due in rows]
+    await interaction.response.send_message("⏰ **Your reminders**\n" + "\n".join(lines), ephemeral=True)
+
+
+@client.tree.command(name="note", description="Save a personal note.")
+@app_commands.describe(text="The note to save")
+async def note(interaction: discord.Interaction, text: str) -> None:
+    await asyncio.to_thread(GuildizerBot._add_note, interaction.user.id, interaction.guild_id, text)
+    await interaction.response.send_message("📝 Saved.", ephemeral=True)
+
+
+@client.tree.command(name="notes", description="List your saved notes.")
+async def notes(interaction: discord.Interaction) -> None:
+    rows = await asyncio.to_thread(GuildizerBot._list_notes, interaction.user.id)
+    if not rows:
+        await interaction.response.send_message("You have no notes yet.", ephemeral=True)
+        return
+    lines = [f"• {content}" for content, _ in rows]
+    await interaction.response.send_message("📝 **Your notes**\n" + "\n".join(lines)[:1900], ephemeral=True)
+
+
+@client.tree.command(name="ask", description="Ask Guildizer's AI assistant a question.")
+@app_commands.describe(question="Your question")
+async def ask(interaction: discord.Interaction, question: str) -> None:
+    if not ai.is_configured():
+        await interaction.response.send_message(
+            "🤖 The AI assistant isn't configured on this server yet.", ephemeral=True
+        )
+        return
+    await interaction.response.defer(ephemeral=True, thinking=True)
+    result = await asyncio.to_thread(ai.ask, question)
+    if result is None:
+        await interaction.followup.send("Sorry, I couldn't answer that right now.", ephemeral=True)
+        return
+    await asyncio.to_thread(GuildizerBot._log_ai, interaction.guild_id, interaction.user.id, result)
+    await interaction.followup.send(result.text[:1950], ephemeral=True)
 
 
 def main() -> None:
