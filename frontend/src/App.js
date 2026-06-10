@@ -80,6 +80,7 @@ import HubCustomBotWorkspace from './pages/HubCustomBotWorkspace';
 // Discord pillar (Guildizer) — separate backend, embedded UI
 import GuildizerServers from './pages/guildizer/GuildizerServers';
 import GuildizerServerDetail from './pages/guildizer/GuildizerServerDetail';
+import GuildizerAdmin from './pages/guildizer/GuildizerAdmin';
 
 // Pages — lazy loaded
 const AssistantNotes = React.lazy(() => import('./pages/AssistantNotes'));
@@ -274,6 +275,7 @@ export default function App() {
 
             {/* ── Discord (Guildizer) — 3rd pillar ──────────────────────────── */}
             <Route path="/guildizer"                    element={<AppRoute><GuildizerServers /></AppRoute>} />
+            <Route path="/guildizer/admin"              element={<AppRoute><GuildizerAdmin /></AppRoute>} />
             <Route path="/guildizer/servers/:guildId"   element={<AppRoute><GuildizerServerDetail /></AppRoute>} />
 
             {/* ── Workspace ─────────────────────────────────────────────────── */}

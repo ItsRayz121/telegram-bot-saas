@@ -4,7 +4,7 @@ import {
   Box, Typography, Button, Card, CardContent, Grid, Avatar,
   CircularProgress, Alert, Chip, Stack,
 } from '@mui/material';
-import { Forum, Add, OpenInNew } from '@mui/icons-material';
+import { Forum, Add, OpenInNew, AdminPanelSettings } from '@mui/icons-material';
 import guildizerApi, { guildizerLoginUrl } from '../../services/guildizerApi';
 
 const OAUTH_ERRORS = {
@@ -18,6 +18,7 @@ export default function GuildizerServers() {
   const [params] = useSearchParams();
   const [state, setState] = useState({ loading: true, connected: false, guilds: [], inviteUrl: null });
   const [error, setError] = useState(OAUTH_ERRORS[params.get('error')] || null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -26,6 +27,8 @@ export default function GuildizerServers() {
         await guildizerApi.get('/auth/me'); // 401 → not connected
         const { data } = await guildizerApi.get('/api/guilds');
         if (alive) setState({ loading: false, connected: true, guilds: data.guilds, inviteUrl: data.invite_url });
+        // probe admin access (200 only for Guildizer admins) — quietly ignore 403
+        guildizerApi.get('/api/admin/overview').then(() => alive && setIsAdmin(true)).catch(() => {});
       } catch (e) {
         if (!alive) return;
         if (e?.response?.status === 401) setState({ loading: false, connected: false, guilds: [], inviteUrl: null });
@@ -69,7 +72,12 @@ export default function GuildizerServers() {
         </Card>
       ) : (
         <>
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mb: 2 }}>
+            {isAdmin && (
+              <Button variant="outlined" startIcon={<AdminPanelSettings />} onClick={() => navigate('/guildizer/admin')}>
+                Admin
+              </Button>
+            )}
             {state.inviteUrl && (
               <Button variant="contained" startIcon={<Add />} href={state.inviteUrl} target="_blank" rel="noreferrer">
                 Add to a server
