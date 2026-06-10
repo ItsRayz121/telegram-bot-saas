@@ -1988,13 +1988,16 @@ def admin_custom_bot_detail(bot_id):
     }
 
     # ── Connected groups + members managed ─────────────────────────────────────
-    groups = TelegramGroup.query.filter_by(linked_bot_id=bot.id).all()
-    data["connected_groups"] = [{
-        "telegram_group_id": g.telegram_group_id, "title": g.title,
-        "bot_status": g.bot_status, "member_count": g.member_count,
-    } for g in groups]
-    data["groups_count"] = len(groups)
-    data["members_managed"] = sum(g.member_count or 0 for g in groups)
+    # Single source of truth shared with the user dashboard: resolves BOTH the new
+    # TelegramGroup.linked_bot_id lineage AND the legacy bots/groups tables (matched
+    # by username). Previously this read only linked_bot_id, so a bot whose groups
+    # live in the legacy tables showed "No connected groups" here while the user
+    # dashboard correctly showed them.
+    from ..bot_links import connected_groups_summary
+    summary = connected_groups_summary(bot)
+    data["connected_groups"] = summary["connected_groups"]
+    data["groups_count"] = summary["groups_count"]
+    data["members_managed"] = summary["members_managed"]
 
     # ── Health (per-bot getMe ping state + error log) ──────────────────────────
     now = datetime.utcnow()
@@ -2532,6 +2535,27 @@ def proof_metrics():
     from .. import platform_config as pc
     public_keys = pc.get_setting("proof_public_metrics", None)
     return jsonify(compute_proof_metrics(public_keys))
+
+
+@admin_bp.route("/proof-metrics/sync-members", methods=["POST"])
+@require_permission(rbac.P_CONFIG_MANAGE)
+@rate_limit(requests_per_minute=4)
+def proof_metrics_sync_members():
+    """Reconcile TelegramGroup.member_count to live Telegram counts on demand.
+
+    The same reconciliation the 6h background job runs, exposed so an admin can
+    force "members protected" to refresh immediately (e.g. right after migrate.py)
+    instead of waiting for the next sweep. Throttled hard — it makes one Telegram
+    read per group.
+    """
+    from ..member_sync import sync_member_counts
+    limit = request.args.get("limit", type=int)
+    try:
+        summary = sync_member_counts(limit=limit)
+    except Exception as exc:  # never 500 the admin UI over a sync attempt
+        _log.warning("on-demand member sync failed: %s", exc)
+        return jsonify({"error": f"Member sync failed: {exc}"}), 502
+    return jsonify(summary)
 
 
 @admin_bp.route("/proof-metrics/public", methods=["PUT"])

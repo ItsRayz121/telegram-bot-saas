@@ -667,6 +667,7 @@ export const admin = {
   getFeatureUsage: (view) => api.get('/api/admin/feature-usage', { params: { view } }),
   getProofMetrics: () => api.get('/api/admin/proof-metrics'),
   updateProofPublic: (keys) => api.put('/api/admin/proof-metrics/public', { keys }),
+  syncProofMembers: () => api.post('/api/admin/proof-metrics/sync-members'),
   getEventLog: (params) => api.get('/api/admin/event-log', { params }),
   clearBotHealth: (scope, ref) => api.post(`/api/admin/bot-health/clear/${scope}/${ref}`),
   // Fraud Detection

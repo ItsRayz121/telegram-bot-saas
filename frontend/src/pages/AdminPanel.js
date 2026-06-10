@@ -4596,6 +4596,7 @@ function ProofMetricsTab({ onAdminError, canManage }) {
   const [publicKeys, setPublicKeys] = useState(new Set());
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -4639,7 +4640,21 @@ function ProofMetricsTab({ onAdminError, canManage }) {
     URL.revokeObjectURL(url);
   };
 
+  const syncMembers = async () => {
+    setSyncing(true);
+    try {
+      const res = await admin.syncProofMembers();
+      const s = res.data || {};
+      toast.success(`Member counts synced — ${s.synced ?? 0} updated, ${s.failed ?? 0} failed`);
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Member sync failed');
+    } finally { setSyncing(false); }
+  };
+
   if (loading) return <Box display="flex" justifyContent="center" mt={4}><CircularProgress /></Box>;
+
+  const ms = data?.members_sync || {};
 
   return (
     <Box>
@@ -4648,6 +4663,12 @@ function ProofMetricsTab({ onAdminError, canManage }) {
           Real platform metrics from the database/event logs. Toggle which are safe to publish on the landing page.
         </Typography>
         <Box flex={1} />
+        {canManage && (
+          <Button size="small" variant="outlined" startIcon={syncing ? <CircularProgress size={14} /> : <Refresh fontSize="small" />}
+            disabled={syncing} onClick={syncMembers}>
+            Refresh member counts
+          </Button>
+        )}
         <Button size="small" variant="outlined" startIcon={<FileDownload />} onClick={exportCSV}>Export CSV</Button>
         <Tooltip title="Refresh"><IconButton size="small" onClick={fetchData}><Refresh fontSize="small" /></IconButton></Tooltip>
         {canManage && (
@@ -4656,6 +4677,21 @@ function ProofMetricsTab({ onAdminError, canManage }) {
           </Button>
         )}
       </Stack>
+
+      {(ms.last_synced_at !== undefined) && (
+        <Alert
+          severity={ms.never_synced_groups ? 'warning' : 'info'}
+          sx={{ mb: 2 }}
+          action={canManage ? (
+            <Button color="inherit" size="small" disabled={syncing} onClick={syncMembers}>Sync now</Button>
+          ) : null}
+        >
+          {ms.last_synced_at
+            ? <>Member counts last reconciled {fmtRelative(ms.last_synced_at)} ({fmtDateTime(ms.last_synced_at)}).</>
+            : <>Member counts have <strong>never</strong> been reconciled to live Telegram counts — "Members protected" reads low until you sync.</>}
+          {ms.never_synced_groups ? <> {ms.never_synced_groups} active group(s) never synced.</> : null}
+        </Alert>
+      )}
 
       <Grid container spacing={2} mb={2}>
         {(data?.metrics || []).map((m) => (

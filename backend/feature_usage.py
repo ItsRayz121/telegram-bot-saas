@@ -443,6 +443,19 @@ def compute_proof_metrics(public_keys=None) -> dict:
         func.coalesce(func.sum(TelegramGroup.member_count), 0)
     ).filter(TelegramGroup.bot_status == "active", TelegramGroup.is_disabled == False).scalar() or 0  # noqa: E712
 
+    # Member-count freshness: member_count drifts low until member_sync reconciles
+    # it to the live getChatMemberCount. Surface how fresh the sum actually is so a
+    # stale "members protected" (e.g. before migrate.py / the 6h job has run) is
+    # visible instead of silently wrong.
+    synced_at_col = getattr(TelegramGroup, "member_count_synced_at", None)
+    members_synced_at = None
+    members_never_synced = None
+    if synced_at_col is not None:
+        members_synced_at = db.session.query(func.max(synced_at_col)).filter(
+            TelegramGroup.bot_status == "active", TelegramGroup.is_disabled == False  # noqa: E712
+        ).scalar()
+        members_never_synced = active_groups.filter(synced_at_col.is_(None)).count()
+
     # Feature-usage sums by feature (one grouped query).
     usage_rows = db.session.query(
         FeatureUsageEvent.feature, func.coalesce(func.sum(FeatureUsageEvent.count), 0)
@@ -500,7 +513,19 @@ def compute_proof_metrics(public_keys=None) -> dict:
         }
         for k, v in raw.items()
     ]
-    return {"metrics": metrics, "generated_at": now.isoformat()}
+    return {
+        "metrics": metrics,
+        "generated_at": now.isoformat(),
+        "members_sync": {
+            "last_synced_at": members_synced_at.isoformat() if members_synced_at else None,
+            "never_synced_groups": members_never_synced,
+            "note": (
+                "member_count is reconciled to live Telegram counts by a 6h job and "
+                "on demand. Until it runs, busy groups read low (only members the bot "
+                "witnessed). Use 'Refresh member counts' to reconcile now."
+            ),
+        },
+    }
 
 
 def echo_overview() -> dict:
