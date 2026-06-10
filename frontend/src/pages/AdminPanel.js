@@ -4683,6 +4683,123 @@ function RolesTab({ onAdminError, currentUserId }) {
 // TAB — PROOF METRICS (public-stats source)
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// Proof-metric keys that have a backing row-level dataset (clickable cards).
+const PROOF_DRILLABLE = new Set([
+  'groups_managed', 'members_protected', 'warnings_issued', 'spam_deleted',
+  'links_blocked', 'moderation_actions', 'commands_handled', 'ai_checks',
+  'muted', 'banned', 'kicked',
+]);
+
+const _humanCol = (c) => c.replace(/_/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase());
+
+function ProofDrilldownDialog({ metric, label, onClose }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [page, setPage] = useState(1);
+
+  const fetchPage = useCallback(async (p = 1, append = false) => {
+    setLoading(true);
+    try {
+      const res = await admin.getProofDrilldown({
+        metric, search: search || undefined, from: from || undefined, to: to || undefined,
+        page: p, per_page: 50,
+      });
+      setData((prev) => (append && prev
+        ? { ...res.data, items: [...prev.items, ...res.data.items] }
+        : res.data));
+      setPage(p);
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to load details');
+    } finally { setLoading(false); }
+  }, [metric, search, from, to]);
+
+  // Debounced (re)load on filter change.
+  useEffect(() => {
+    const t = setTimeout(() => fetchPage(1, false), 300);
+    return () => clearTimeout(t);
+  }, [fetchPage]);
+
+  const exportCSV = () => {
+    const cols = data?.columns || [];
+    const rows = (data?.items || []).map((it) => cols.map((c) => {
+      const v = it[c];
+      return typeof v === 'object' && v !== null ? JSON.stringify(v) : (v ?? '');
+    }));
+    const csv = [cols.map(_humanCol), ...rows]
+      .map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    const a = document.createElement('a'); a.href = url; a.download = `${metric}.csv`; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const cols = data?.columns || [];
+  const items = data?.items || [];
+  const fmtCell = (c, v) => {
+    if (v === null || v === undefined || v === '') return '—';
+    if (c === 'date' || c === 'last_sync') return fmtDateTime(v);
+    if (typeof v === 'object') return JSON.stringify(v);
+    if (c === 'member_count') return Number(v).toLocaleString();
+    return String(v);
+  };
+
+  return (
+    <Dialog open fullWidth maxWidth="lg" onClose={onClose}>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        {label}
+        {data?.total !== undefined && <Chip size="small" label={`${data.total.toLocaleString()} total`} />}
+        <Box flex={1} />
+        <Button size="small" startIcon={<FileDownload />} onClick={exportCSV} disabled={!items.length}>CSV</Button>
+      </DialogTitle>
+      <DialogContent dividers>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} mb={1.5}>
+          <TextField size="small" fullWidth placeholder="Search…" value={search}
+            onChange={(e) => setSearch(e.target.value)} />
+          <TextField size="small" type="date" label="From" InputLabelProps={{ shrink: true }}
+            value={from} onChange={(e) => setFrom(e.target.value)} />
+          <TextField size="small" type="date" label="To" InputLabelProps={{ shrink: true }}
+            value={to} onChange={(e) => setTo(e.target.value)} />
+        </Stack>
+        {data?.note && <Alert severity="info" sx={{ mb: 1.5 }}>{data.note}</Alert>}
+        {loading && !items.length ? (
+          <Box display="flex" justifyContent="center" py={4}><CircularProgress size={24} /></Box>
+        ) : items.length === 0 ? (
+          <Typography variant="body2" color="text.secondary" py={3} textAlign="center">No rows match.</Typography>
+        ) : (
+          <TableContainer sx={{ overflowX: 'auto' }}>
+            <Table size="small" stickyHeader>
+              <TableHead><TableRow sx={{ '& th': { fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap' } }}>
+                {cols.map((c) => <TableCell key={c}>{_humanCol(c)}</TableCell>)}
+              </TableRow></TableHead>
+              <TableBody>
+                {items.map((it, i) => (
+                  <TableRow key={i} hover>
+                    {cols.map((c) => (
+                      <TableCell key={c} sx={{ fontSize: 12, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={String(it[c] ?? '')}>
+                        {fmtCell(c, it[c])}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
+        {items.length > 0 && data && items.length < data.total && (
+          <Box display="flex" justifyContent="center" mt={1.5}>
+            <Button size="small" variant="outlined" disabled={loading} onClick={() => fetchPage(page + 1, true)}>
+              {loading ? 'Loading…' : `Load more (${items.length} of ${data.total})`}
+            </Button>
+          </Box>
+        )}
+      </DialogContent>
+      <DialogActions><Button onClick={onClose}>Close</Button></DialogActions>
+    </Dialog>
+  );
+}
+
 function ProofMetricsTab({ onAdminError, canManage }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -4690,6 +4807,7 @@ function ProofMetricsTab({ onAdminError, canManage }) {
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [drill, setDrill] = useState(null);  // { metric, label } when a card is opened
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -4787,12 +4905,25 @@ function ProofMetricsTab({ onAdminError, canManage }) {
       )}
 
       <Grid container spacing={2} mb={2}>
-        {(data?.metrics || []).map((m) => (
+        {(data?.metrics || []).map((m) => {
+          const drillable = PROOF_DRILLABLE.has(m.key);
+          return (
           <Grid item xs={6} sm={4} md={3} key={m.key}>
             <Card sx={{ height: '100%', position: 'relative', borderColor: publicKeys.has(m.key) ? 'success.main' : 'divider' }}>
               <CardContent sx={{ pb: '12px !important' }}>
                 <Stack direction="row" alignItems="flex-start" justifyContent="space-between">
-                  <Typography variant="h5" fontWeight={700}>{(m.value ?? 0).toLocaleString()}</Typography>
+                  <Box
+                    onClick={drillable ? () => setDrill({ metric: m.key, label: m.label }) : undefined}
+                    sx={drillable ? { cursor: 'pointer' } : undefined}
+                  >
+                    <Typography variant="h5" fontWeight={700}
+                      sx={drillable ? { '&:hover': { textDecoration: 'underline' } } : undefined}>
+                      {(m.value ?? 0).toLocaleString()}
+                    </Typography>
+                    {drillable && (
+                      <Typography variant="caption" color="primary.main" display="block">View details →</Typography>
+                    )}
+                  </Box>
                   <Tooltip
                     arrow
                     title={
@@ -4819,8 +4950,13 @@ function ProofMetricsTab({ onAdminError, canManage }) {
               </CardContent>
             </Card>
           </Grid>
-        ))}
+          );
+        })}
       </Grid>
+
+      {drill && (
+        <ProofDrilldownDialog metric={drill.metric} label={drill.label} onClose={() => setDrill(null)} />
+      )}
 
       <Alert severity="info">
         The <strong>Public</strong> toggle only controls whether a metric appears on the public landing page

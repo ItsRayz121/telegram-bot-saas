@@ -2629,6 +2629,198 @@ def proof_metrics_sync_members():
     return jsonify(summary)
 
 
+@admin_bp.route("/proof-metrics/drilldown", methods=["GET"])
+@require_permission(rbac.P_ANALYTICS_VIEW)
+@rate_limit(requests_per_minute=60)
+def proof_metrics_drilldown():
+    """Row-level backing data for a clickable proof-metric card.
+
+    `metric` selects the dataset; all datasets share search / date-range / paging:
+      • groups, members        → TelegramGroup rows (name, id, bot, members, sync, status)
+      • warnings               → OfficialWarning + member identity
+      • spam_deleted, links_blocked, moderation_actions, commands_handled,
+        ai_checks, muted, banned, kicked → FeatureUsageEvent rows (group, user, action, date)
+    """
+    from sqlalchemy import or_ as _or
+    from ..models import TelegramGroup, OfficialWarning, OfficialMember, FeatureUsageEvent, CustomBot
+
+    metric = (request.args.get("metric") or "groups").lower()
+    search = (request.args.get("search") or "").strip()
+    status = (request.args.get("status") or "").strip().lower()
+    date_from = request.args.get("from")
+    date_to = request.args.get("to")
+    page = max(1, request.args.get("page", 1, type=int) or 1)
+    per_page = min(200, max(1, request.args.get("per_page", 50, type=int) or 50))
+
+    def _parse(d):
+        try:
+            return datetime.fromisoformat(d) if d else None
+        except (TypeError, ValueError):
+            return None
+    dt_from, dt_to = _parse(date_from), _parse(date_to)
+
+    # ── Group / member datasets ────────────────────────────────────────────────
+    if metric in ("groups", "members", "groups_managed", "members_protected"):
+        q = TelegramGroup.query
+        if status == "active":
+            q = q.filter(TelegramGroup.bot_status == "active", TelegramGroup.is_disabled == False)  # noqa: E712
+        elif status == "disabled":
+            q = q.filter(TelegramGroup.is_disabled == True)  # noqa: E712
+        else:
+            # Default to the proof-metric population (active, non-disabled).
+            q = q.filter(TelegramGroup.bot_status == "active", TelegramGroup.is_disabled == False)  # noqa: E712
+        if search:
+            like = f"%{search}%"
+            q = q.filter(_or(TelegramGroup.title.ilike(like), TelegramGroup.telegram_group_id.ilike(like)))
+        if dt_from:
+            q = q.filter(TelegramGroup.created_at >= dt_from)
+        if dt_to:
+            q = q.filter(TelegramGroup.created_at <= dt_to)
+        total = q.count()
+        rows = (q.order_by(TelegramGroup.member_count.desc())
+                .offset((page - 1) * per_page).limit(per_page).all())
+        bot_ids = {g.linked_bot_id for g in rows if g.linked_bot_id}
+        bots = {b.id: b for b in CustomBot.query.filter(CustomBot.id.in_(bot_ids)).all()} if bot_ids else {}
+        items = [{
+            "title": g.title,
+            "telegram_group_id": g.telegram_group_id,
+            "bot": (f"@{bots[g.linked_bot_id].bot_username}" if g.linked_bot_id and g.linked_bot_id in bots
+                    else ("Telegizer (official)" if (g.linked_via_bot_type or "official") == "official" else "custom")),
+            "member_count": g.member_count or 0,
+            "last_sync": g.member_count_synced_at.isoformat() if getattr(g, "member_count_synced_at", None) else None,
+            "status": "disabled" if g.is_disabled else g.bot_status,
+        } for g in rows]
+        columns = ["title", "telegram_group_id", "bot", "member_count", "last_sync", "status"]
+        return jsonify({"metric": metric, "columns": columns, "items": items,
+                        "total": total, "page": page, "per_page": per_page,
+                        "pages": (total + per_page - 1) // per_page})
+
+    # ── Warnings dataset ───────────────────────────────────────────────────────
+    if metric in ("warnings", "warnings_issued"):
+        q = OfficialWarning.query
+        if status == "active":
+            q = q.filter(OfficialWarning.active == True)  # noqa: E712
+        elif status == "inactive":
+            q = q.filter(OfficialWarning.active == False)  # noqa: E712
+        if search:
+            like = f"%{search}%"
+            q = q.filter(_or(
+                OfficialWarning.target_user_id.ilike(like), OfficialWarning.target_username.ilike(like),
+                OfficialWarning.moderator_username.ilike(like), OfficialWarning.reason.ilike(like),
+                OfficialWarning.message_text.ilike(like), OfficialWarning.telegram_group_id.ilike(like),
+            ))
+        if dt_from:
+            q = q.filter(OfficialWarning.created_at >= dt_from)
+        if dt_to:
+            q = q.filter(OfficialWarning.created_at <= dt_to)
+        total = q.count()
+        rows = (q.order_by(OfficialWarning.created_at.desc())
+                .offset((page - 1) * per_page).limit(per_page).all())
+        # Identity + group title maps.
+        pairs = {(w.telegram_group_id, w.target_user_id) for w in rows}
+        members = {}
+        if pairs:
+            gids = {p[0] for p in pairs}
+            uids = {p[1] for p in pairs}
+            for m in OfficialMember.query.filter(
+                OfficialMember.telegram_group_id.in_(gids), OfficialMember.telegram_user_id.in_(uids)
+            ).all():
+                members[(m.telegram_group_id, m.telegram_user_id)] = m
+        gtitles = {g.telegram_group_id: g.title for g in TelegramGroup.query.filter(
+            TelegramGroup.telegram_group_id.in_({w.telegram_group_id for w in rows})).all()} if rows else {}
+        items = []
+        for w in rows:
+            m = members.get((w.telegram_group_id, w.target_user_id))
+            items.append({
+                "member_id": w.target_user_id,
+                "full_name": (m.first_name if m and m.first_name else None),
+                "username": w.target_username or (m.username if m else None),
+                "group": gtitles.get(w.telegram_group_id, w.telegram_group_id),
+                "reason": w.reason,
+                "message_preview": (w.message_text or "")[:140] or None,
+                "issued_by": (f"@{w.moderator_username}" if w.moderator_username else w.moderator_user_id),
+                "date": w.created_at.isoformat(),
+                "status": "active" if w.active else "removed",
+            })
+        columns = ["member_id", "full_name", "username", "group", "reason", "message_preview", "issued_by", "date", "status"]
+        return jsonify({"metric": metric, "columns": columns, "items": items,
+                        "total": total, "page": page, "per_page": per_page,
+                        "pages": (total + per_page - 1) // per_page})
+
+    # ── Event-backed datasets (FeatureUsageEvent) ──────────────────────────────
+    _METRIC_FEATURES = {
+        "spam_deleted": ["spam", "automod"],
+        "links_blocked": ["link"],
+        "moderation_actions": ["spam", "link", "automod", "warn", "mute", "ban", "kick", "nsfw"],
+        "commands_handled": ["command"],
+        "muted": ["mute"], "banned": ["ban"], "kicked": ["kick"],
+    }
+    feats = _METRIC_FEATURES.get(metric)
+    if feats is not None:
+        q = FeatureUsageEvent.query.filter(FeatureUsageEvent.feature.in_(feats))
+        if search:
+            like = f"%{search}%"
+            q = q.filter(_or(FeatureUsageEvent.group_ref.ilike(like),
+                             FeatureUsageEvent.user_ref.ilike(like),
+                             FeatureUsageEvent.action.ilike(like)))
+        if dt_from:
+            q = q.filter(FeatureUsageEvent.created_at >= dt_from)
+        if dt_to:
+            q = q.filter(FeatureUsageEvent.created_at <= dt_to)
+        total = q.count()
+        rows = (q.order_by(FeatureUsageEvent.created_at.desc())
+                .offset((page - 1) * per_page).limit(per_page).all())
+        gtitles = {g.telegram_group_id: g.title for g in TelegramGroup.query.filter(
+            TelegramGroup.telegram_group_id.in_({r.group_ref for r in rows if r.group_ref})).all()} if rows else {}
+        items = [{
+            "feature": r.feature,
+            "group": gtitles.get(r.group_ref, r.group_ref),
+            "user": r.user_ref,
+            "action": r.action,
+            "detail": (r.meta if isinstance(r.meta, dict) else None),
+            "status": r.status,
+            "date": r.created_at.isoformat(),
+        } for r in rows]
+        columns = ["feature", "group", "user", "action", "status", "date"]
+        return jsonify({"metric": metric, "columns": columns, "items": items,
+                        "total": total, "page": page, "per_page": per_page,
+                        "pages": (total + per_page - 1) // per_page,
+                        "note": "AI moderation checks are sampled in the AI Activity tab." if metric == "ai_checks" else None})
+
+    # ── AI moderation checks (AIActivity) ──────────────────────────────────────
+    if metric == "ai_checks":
+        from ..models import AIActivity
+        q = AIActivity.query.filter(AIActivity.category == "moderation")
+        if search:
+            like = f"%{search}%"
+            q = q.filter(_or(AIActivity.group_ref.ilike(like), AIActivity.action.ilike(like),
+                             AIActivity.detail.ilike(like), AIActivity.target.ilike(like)))
+        if dt_from:
+            q = q.filter(AIActivity.created_at >= dt_from)
+        if dt_to:
+            q = q.filter(AIActivity.created_at <= dt_to)
+        total = q.count()
+        rows = (q.order_by(AIActivity.created_at.desc())
+                .offset((page - 1) * per_page).limit(per_page).all())
+        gtitles = {g.telegram_group_id: g.title for g in TelegramGroup.query.filter(
+            TelegramGroup.telegram_group_id.in_({r.group_ref for r in rows if r.group_ref})).all()} if rows else {}
+        items = [{
+            "action": r.action,
+            "group": gtitles.get(r.group_ref, r.group_ref),
+            "target": r.target,
+            "detail": (r.detail or "")[:140] or None,
+            "status": r.status,
+            "date": r.created_at.isoformat(),
+        } for r in rows]
+        columns = ["action", "group", "target", "detail", "status", "date"]
+        return jsonify({"metric": metric, "columns": columns, "items": items,
+                        "total": total, "page": page, "per_page": per_page,
+                        "pages": (total + per_page - 1) // per_page})
+
+    return jsonify({"error": f"No drill-down available for metric '{metric}'",
+                    "available": ["groups", "members", "warnings", "ai_checks", *_METRIC_FEATURES.keys()]}), 400
+
+
 @admin_bp.route("/proof-metrics/public", methods=["PUT"])
 @require_permission(rbac.P_CONFIG_MANAGE)
 @rate_limit(requests_per_minute=20)
