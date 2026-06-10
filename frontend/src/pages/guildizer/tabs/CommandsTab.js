@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Box, Grid, Card, CardContent, Typography, TextField, Button, List, ListItem,
-  ListItemText, IconButton, Switch, FormControlLabel, Chip, Alert, InputAdornment, Stack,
+  ListItemText, IconButton, Switch, FormControlLabel, Alert, InputAdornment, Stack,
 } from '@mui/material';
 import { Edit, Delete } from '@mui/icons-material';
 import guildizerApi from '../../../services/guildizerApi';

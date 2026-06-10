@@ -3493,7 +3493,6 @@ export default function GroupSettings() {
                   const linkType = classifyReason(log.reason);
                   const shortLabel = categorizeReason(log.reason);
                   const msgPreviewRaw = getMessagePreview(log);
-                  const msgPreview = formatMsgPreview(msgPreviewRaw);
                   return (
                     <Box key={log.id}
                       onClick={() => setExpandedLogId(isExpanded ? null : log.id)}

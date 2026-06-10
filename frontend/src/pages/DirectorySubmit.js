@@ -8,7 +8,6 @@ import { Campaign, Groups, Explore, CheckCircle } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { directory as dirApi, channels as chApi, telegramGroups as tgApi } from '../services/api';
-import api from '../services/api';
 
 const CATEGORIES = [
   "Technology & Dev", "Crypto & Web3", "News & Politics",

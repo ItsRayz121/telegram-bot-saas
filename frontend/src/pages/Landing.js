@@ -587,7 +587,7 @@ export default function Landing() {
                       { text: 'Spam removed', color: 'error.main' },
                       { text: 'New member joined', color: 'success.main' },
                       { text: 'Post scheduled', color: 'primary.main' },
-                      { text: 'Raid launched', color: 'warning.main' },
+                      { text: 'Campaign started', color: 'warning.main' },
                     ].map((item, i) => (
                       <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
                         <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: item.color, flexShrink: 0 }} />
@@ -1022,10 +1022,15 @@ export default function Landing() {
             <Grid item xs={12} sm sx={{ textAlign: { xs: 'left', sm: 'center' } }}>
               <Stack direction="row" spacing={1} flexWrap="wrap" justifyContent={{ xs: 'flex-start', sm: 'center' }}>
                 <Button size="small" onClick={() => navigate('/pricing')} sx={{ color: 'text.secondary' }}>Pricing</Button>
+                <Button size="small" onClick={() => navigate('/directory')} sx={{ color: 'text.secondary' }}>Directory</Button>
+                <Button size="small" onClick={() => navigate('/about')} sx={{ color: 'text.secondary' }}>About</Button>
+                <Button size="small" onClick={() => navigate('/contact')} sx={{ color: 'text.secondary' }}>Contact</Button>
                 <Button size="small" onClick={() => navigate('/login')} sx={{ color: 'text.secondary' }}>Sign In</Button>
                 <Button size="small" onClick={() => navigate('/register')} sx={{ color: 'text.secondary' }}>Register</Button>
                 <Button size="small" onClick={() => navigate('/terms')} sx={{ color: 'text.secondary' }}>Terms</Button>
                 <Button size="small" onClick={() => navigate('/privacy')} sx={{ color: 'text.secondary' }}>Privacy</Button>
+                <Button size="small" onClick={() => navigate('/acceptable-use')} sx={{ color: 'text.secondary' }}>Acceptable Use</Button>
+                <Button size="small" onClick={() => navigate('/status')} sx={{ color: 'text.secondary' }}>Status</Button>
               </Stack>
             </Grid>
             <Grid item xs={12} sm="auto" sx={{ textAlign: { xs: 'left', sm: 'right' } }}>

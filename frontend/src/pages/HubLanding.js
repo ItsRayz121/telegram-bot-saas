@@ -7,7 +7,7 @@ import {
 } from '@mui/material';
 import {
   SmartToy, Add, Settings, GroupAdd, Lock, Psychology,
-  Delete, Groups, AutoAwesome, Shield, Schedule,
+  Delete,
 } from '@mui/icons-material';
 import { hub } from '../services/api';
 import BotTokenConnectModal from '../components/shared/BotTokenConnectModal';

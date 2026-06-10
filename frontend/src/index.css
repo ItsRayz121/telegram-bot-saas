@@ -240,3 +240,15 @@ a {
 .Toastify__toast--error   { border-color: rgba(239, 68, 68, 0.35)  !important; }
 .Toastify__toast--info    { border-color: rgba(61, 142, 248, 0.35) !important; }
 .Toastify__progress-bar   { height: 2px !important; }
+
+/* ── Accessibility: respect prefers-reduced-motion ──────────────────────────
+   Disables scroll-reveal slides, animated counters' easing, gradient shifts,
+   and smooth scrolling for users who ask the OS for reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  html { scroll-behavior: auto !important; }
+}

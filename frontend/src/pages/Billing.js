@@ -11,7 +11,7 @@ import {
 import {
   ArrowBack, Upgrade, CheckCircle,
   CurrencyBitcoin, Refresh, ReceiptLong, Cancel, CreditCard, OpenInNew,
-  LocalOffer, CheckCircleOutline,
+  LocalOffer,
 } from '@mui/icons-material';
 import Skeleton from '@mui/material/Skeleton';
 import { useNavigate } from 'react-router-dom';
@@ -134,7 +134,8 @@ export default function Billing() {
   const handleCryptoCheckout = useCallback(async (targetTier, interval = 'monthly') => {
     setCryptoLoading(true);
     try {
-      const payload = { tier: targetTier, interval };
+      // Backend reads the boolean `annual` (not `interval`) to pick the billing period
+      const payload = { tier: targetTier, interval, annual: interval === 'annual' };
       if (promoResult?.valid && promoResult?.code) {
         payload.promo_code = promoResult.code;
       }

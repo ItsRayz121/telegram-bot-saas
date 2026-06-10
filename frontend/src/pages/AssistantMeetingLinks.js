@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box, Typography, Card, CardContent, Chip, IconButton, CircularProgress,
-  Alert, Stack, Tooltip, Select, MenuItem, FormControl, InputLabel, Button,
+  Stack, Tooltip, Select, MenuItem, FormControl, InputLabel, Button,
 } from '@mui/material';
 import {
   VideoCall, Close, OpenInNew, Refresh, CalendarMonth, EventAvailable,
