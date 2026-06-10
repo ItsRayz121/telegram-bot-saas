@@ -313,3 +313,8 @@ code {
 .tag-nsfw, .tag-csam { color: #ffb3b4; border-color: rgba(237,66,69,0.4); background: rgba(237,66,69,0.12); }
 .tag-raid, .tag-manual_lockdown, .tag-lockdown_join { color: #ffd28a; border-color: rgba(250,166,26,0.4); background: rgba(250,166,26,0.12); }
 .tag-invite, .tag-link { color: #9fc6ff; border-color: rgba(88,101,242,0.4); background: rgba(88,101,242,0.12); }
+
+.rank-badge {
+  min-width: 34px; text-align: center;
+  font-size: 12px; font-weight: 700; color: var(--accent);
+}

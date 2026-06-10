@@ -220,6 +220,14 @@ class GuildSettings(Base):
     autorole_enabled = Column(Boolean, default=False)
     autorole_ids = Column(JSON, default=list)
 
+    # Leveling / XP
+    levels_enabled = Column(Boolean, default=False)
+    xp_per_message = Column(Integer, default=10)
+    xp_cooldown_seconds = Column(Integer, default=60)
+    announce_level_up = Column(Boolean, default=True)
+    levelup_channel_id = Column(BigInteger, nullable=True)   # null = post in-channel
+    levelup_message = Column(Text, default="")
+
     # Set true by the API when custom commands change; the bot's resync loop
     # re-registers that guild's slash commands and clears the flag.
     commands_dirty = Column(Boolean, default=False)
@@ -241,6 +249,16 @@ class GuildSettings(Base):
             "leave_message": self.leave_message or "",
             "autorole_enabled": bool(self.autorole_enabled),
             "autorole_ids": [str(r) for r in (self.autorole_ids or [])],
+        }
+
+    def levels_to_dict(self) -> dict:
+        return {
+            "levels_enabled": bool(self.levels_enabled),
+            "xp_per_message": self.xp_per_message or 10,
+            "xp_cooldown_seconds": self.xp_cooldown_seconds or 60,
+            "announce_level_up": bool(self.announce_level_up),
+            "levelup_channel_id": str(self.levelup_channel_id) if self.levelup_channel_id else None,
+            "levelup_message": self.levelup_message or "",
         }
 
 
@@ -360,3 +378,40 @@ class ProtectionEvent(Base):
             "detail": self.detail,
             "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
         }
+
+
+class Member(Base):
+    """A guild member's XP/level state. Composite-keyed per (guild, user)."""
+
+    __tablename__ = "members"
+
+    guild_id = Column(BigInteger, ForeignKey("guilds.id"), primary_key=True)
+    user_id = Column(BigInteger, primary_key=True)        # Discord user id
+    username = Column(String(120))
+    xp = Column(Integer, default=0)
+    level = Column(Integer, default=1)
+    messages = Column(Integer, default=0)
+    last_xp_at = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "user_id": str(self.user_id),
+            "username": self.username,
+            "xp": self.xp or 0,
+            "level": self.level or 1,
+            "messages": self.messages or 0,
+        }
+
+
+class XpEvent(Base):
+    """Append-only XP ledger: every grant (message, campaign, manual) recorded."""
+
+    __tablename__ = "xp_events"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, ForeignKey("guilds.id"), nullable=False)
+    user_id = Column(BigInteger, nullable=False)
+    amount = Column(Integer, default=0)
+    reason = Column(String(64))                           # message | campaign:<id> | manual
+    created_at = Column(DateTime, default=datetime.utcnow)

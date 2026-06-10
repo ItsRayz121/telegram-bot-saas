@@ -20,13 +20,14 @@ import command_registrar
 import content_filter  # noqa: F401  (kept explicit; moderation imports it)
 import governor
 import guild_sync
+import leveling
 import moderation
 import protection
 import raid_guard
 import settings as settings_mod
 from config import Config
 from database import SessionLocal, init_db
-from models import GuildSettings
+from models import GuildSettings, Member
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("guildizer.bot")
@@ -74,6 +75,10 @@ class GuildizerBot(discord.Client):
     async def on_message(self, message: discord.Message) -> None:
         if message.author.bot or message.guild is None:
             return
+
+        # XP applies to everyone (including staff); moderation skips staff.
+        await self._maybe_award_xp(message)
+
         perms = getattr(message.author, "guild_permissions", None)
         if perms and (perms.administrator or perms.manage_guild or perms.manage_messages):
             return  # never moderate staff
@@ -133,6 +138,29 @@ class GuildizerBot(discord.Client):
         channel = guild.get_channel(int(ch_id)) if ch_id else guild.system_channel
         if channel and hasattr(channel, "send"):
             await governor.safe(channel.send(raid_guard.activation_notice(secs)), what="raid notice")
+
+    # --- leveling / XP --------------------------------------------------------
+    async def _maybe_award_xp(self, message: discord.Message) -> None:
+        cfg = await asyncio.to_thread(self._load_leveling, message.guild.id)
+        if not cfg or not cfg.get("levels_enabled"):
+            return
+        result = await asyncio.to_thread(
+            self._do_award_xp, message.guild.id, message.author.id, str(message.author), cfg
+        )
+        if result is None:
+            return
+        leveled_up, new_level = result
+        if leveled_up and cfg.get("announce_level_up", True):
+            text = leveling.render_levelup(
+                cfg.get("levelup_message"),
+                mention=message.author.mention,
+                username=str(message.author),
+                level=new_level,
+            )
+            ch_id = cfg.get("levelup_channel_id")
+            channel = message.guild.get_channel(int(ch_id)) if ch_id else message.channel
+            if channel and hasattr(channel, "send"):
+                await governor.safe(channel.send(text), what="level-up announce")
 
     # --- member events (join gate, lockdown, welcome/leave, auto-roles) -------
     async def on_member_join(self, member: discord.Member) -> None:
@@ -306,6 +334,53 @@ class GuildizerBot(discord.Client):
             SessionLocal.remove()
 
     @staticmethod
+    def _load_leveling(guild_id):
+        db = SessionLocal()
+        try:
+            row = db.get(GuildSettings, guild_id)
+            return row.levels_to_dict() if row is not None else None
+        finally:
+            db.close()
+            SessionLocal.remove()
+
+    @staticmethod
+    def _do_award_xp(guild_id, user_id, username, cfg):
+        db = SessionLocal()
+        try:
+            res = leveling.award_message_xp(db, guild_id, user_id, username, cfg)
+            db.commit()
+            return res
+        except Exception:  # noqa: BLE001
+            db.rollback()
+            log.exception("award_message_xp failed for guild %s", guild_id)
+            return None
+        finally:
+            db.close()
+            SessionLocal.remove()
+
+    @staticmethod
+    def _rank_snapshot(guild_id, user_id):
+        db = SessionLocal()
+        try:
+            m = db.get(Member, {"guild_id": guild_id, "user_id": user_id})
+            if m is None:
+                return None
+            return {"xp": m.xp or 0, "level": m.level or 1, "rank": leveling.rank_of(db, guild_id, user_id)}
+        finally:
+            db.close()
+            SessionLocal.remove()
+
+    @staticmethod
+    def _top_snapshot(guild_id, limit=10):
+        db = SessionLocal()
+        try:
+            return [(m.username or str(m.user_id), m.level or 1, m.xp or 0)
+                    for m in leveling.top_members(db, guild_id, limit)]
+        finally:
+            db.close()
+            SessionLocal.remove()
+
+    @staticmethod
     def _log(guild_id, category, action, user_id=None, username=None, channel_id=None, detail=None):
         db = SessionLocal()
         try:
@@ -331,6 +406,42 @@ async def ping(interaction: discord.Interaction) -> None:
     await interaction.response.send_message(
         f"🟢 Guildizer is online — {latency_ms}ms", ephemeral=True
     )
+
+
+@client.tree.command(name="rank", description="Show your XP and level.")
+async def rank(interaction: discord.Interaction) -> None:
+    if interaction.guild is None:
+        await interaction.response.send_message("Use this in a server.", ephemeral=True)
+        return
+    snap = await asyncio.to_thread(
+        GuildizerBot._rank_snapshot, interaction.guild.id, interaction.user.id
+    )
+    if not snap:
+        await interaction.response.send_message("You have no XP yet — start chatting!", ephemeral=True)
+        return
+    need = leveling.xp_for_level(snap["level"] + 1)
+    await interaction.response.send_message(
+        f"🏅 **Level {snap['level']}** · {snap['xp']} XP · rank #{snap['rank']}\n"
+        f"Next level at {need} XP.",
+        ephemeral=True,
+    )
+
+
+@client.tree.command(name="leaderboard", description="Show the top members by XP.")
+async def leaderboard(interaction: discord.Interaction) -> None:
+    if interaction.guild is None:
+        await interaction.response.send_message("Use this in a server.", ephemeral=True)
+        return
+    rows = await asyncio.to_thread(GuildizerBot._top_snapshot, interaction.guild.id, 10)
+    if not rows:
+        await interaction.response.send_message("No XP yet — start chatting!", ephemeral=True)
+        return
+    medals = ["🥇", "🥈", "🥉"]
+    lines = [
+        f"{medals[i] if i < 3 else f'**{i+1}.**'} {name} — level {lvl} ({xp} XP)"
+        for i, (name, lvl, xp) in enumerate(rows)
+    ]
+    await interaction.response.send_message("🏆 **Leaderboard**\n" + "\n".join(lines))
 
 
 def main() -> None:

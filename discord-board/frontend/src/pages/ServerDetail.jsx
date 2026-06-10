@@ -5,6 +5,7 @@ import TopBar from "../components/TopBar";
 import SettingsPanel from "../components/SettingsPanel";
 import CommandsPanel from "../components/CommandsPanel";
 import ProtectionPanel from "../components/ProtectionPanel";
+import LevelingPanel from "../components/LevelingPanel";
 
 // Discord channel type enum -> label/icon (the common ones).
 const CHANNEL_TYPES = {
@@ -16,7 +17,7 @@ const CHANNEL_TYPES = {
   15: { label: "Forum", glyph: "🗂" },
 };
 
-const TABS = ["Overview", "Settings", "Commands", "Protection"];
+const TABS = ["Overview", "Settings", "Commands", "Protection", "Leveling"];
 
 export default function ServerDetail() {
   const { id } = useParams();
@@ -69,6 +70,7 @@ export default function ServerDetail() {
             )}
             {tab === "Commands" && <CommandsPanel guildId={id} />}
             {tab === "Protection" && <ProtectionPanel guildId={id} channels={guild.channels} />}
+            {tab === "Leveling" && <LevelingPanel guildId={id} channels={guild.channels} />}
           </>
         )}
       </main>

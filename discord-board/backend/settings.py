@@ -22,6 +22,10 @@ _COLUMN_DEFAULTS = {
     "leave_message": DEFAULT_LEAVE,
     "autorole_enabled": False,
     "autorole_ids": list,
+    "levels_enabled": False,
+    "xp_per_message": 10,
+    "xp_cooldown_seconds": 60,
+    "announce_level_up": True,
     "commands_dirty": False,
     "extra": dict,
 }
