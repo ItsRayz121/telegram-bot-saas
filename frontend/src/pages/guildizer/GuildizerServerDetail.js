@@ -6,12 +6,14 @@ import {
 } from '@mui/material';
 import { ArrowBack } from '@mui/icons-material';
 import guildizerApi from '../../services/guildizerApi';
+import SettingsTab from './tabs/SettingsTab';
+import CommandsTab from './tabs/CommandsTab';
 
 // Discord channel type enum → label (common ones).
 const CHANNEL_TYPES = { 0: 'Text', 2: 'Voice', 4: 'Category', 5: 'Announcement', 13: 'Stage', 15: 'Forum' };
 
-// Tabs grow with each integration phase. Phase A ships Overview.
-const TABS = ['Overview'];
+// Tabs grow with each integration phase.
+const TABS = ['Overview', 'Settings', 'Commands'];
 
 export default function GuildizerServerDetail() {
   const { guildId } = useParams();
@@ -49,6 +51,8 @@ export default function GuildizerServerDetail() {
             {TABS.map((t) => <Tab key={t} label={t} />)}
           </Tabs>
           {TABS[tab] === 'Overview' && <Overview guild={state.guild} />}
+          {TABS[tab] === 'Settings' && <SettingsTab guildId={guildId} channels={state.guild.channels} roles={state.guild.roles} />}
+          {TABS[tab] === 'Commands' && <CommandsTab guildId={guildId} />}
         </>
       )}
     </Box>
