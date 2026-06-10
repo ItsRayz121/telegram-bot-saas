@@ -141,6 +141,16 @@ def update_official_settings(group_id):
                 _mark_onboarding_step(user, "automod_enabled")
             except Exception:
                 pass
+        # Record real "configured" usage per module saved (Phase 7) — official scope.
+        try:
+            from ..feature_usage import log_settings_saved
+            log_settings_saved(
+                "official", list(data.keys()),
+                group_ref=str(group_id), bot_ref="official",
+                user_ref=str(user.id), db=db,
+            )
+        except Exception:
+            pass
         return jsonify({"settings": tg.settings, "timezone": tg.timezone or "UTC", "message": "Settings updated"})
     except Exception as e:
         logger.error(f"update_official_settings error: {e}", exc_info=True)

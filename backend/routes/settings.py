@@ -226,6 +226,16 @@ def update_group_settings(bot_id, group_id):
         if "timezone" in data and isinstance(data.get("timezone"), str):
             group.timezone = data["timezone"].strip() or "UTC"
         db.session.commit()
+        # Record real "configured" usage per module saved (Phase 7) — custom scope.
+        try:
+            from ..feature_usage import log_settings_saved
+            log_settings_saved(
+                "custom", list(data.keys()),
+                group_ref=str(group.id), bot_ref=str(bot.id),
+                user_ref=str(user.id), db=db,
+            )
+        except Exception:
+            pass
         return jsonify({"settings": group.settings, "timezone": group.timezone or "UTC", "message": "Settings updated"})
     except Exception as e:
         logger.error(f"update_group_settings error: {e}", exc_info=True)
@@ -745,6 +755,12 @@ def create_scheduled_message(bot_id, group_id):
         )
         db.session.add(msg)
         db.session.commit()
+        try:
+            from ..feature_usage import log_feature_usage
+            log_feature_usage("custom", "scheduler", group_ref=str(group.id),
+                              bot_ref=str(bot.id), user_ref=str(user.id), action="created")
+        except Exception:
+            pass
         return jsonify({"scheduled_message": msg.to_dict(), "message": "Scheduled message created"}), 201
     except Exception as e:
         logger.error(f"create_scheduled_message error for group {group_id}: {e}", exc_info=True)

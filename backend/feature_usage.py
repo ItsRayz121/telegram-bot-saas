@@ -184,6 +184,64 @@ def automod_feature(rule_or_reason) -> str:
     return "automod"
 
 
+# Map a settings-section key (what the dashboard PUTs) to a feature key, so that
+# saving/configuring a module records a real "configured" usage event. This is the
+# single highest-leverage instrumentation point: every module's settings flow
+# through the two settings-save endpoints, so wiring it here lights up active vs
+# dormant honestly for the whole catalog. Unknown sections are simply ignored.
+SETTINGS_SECTION_FEATURE = {
+    "verification": "verification",
+    "welcome": "welcome",
+    "levels": "xp_roles",
+    "xp": "xp_roles",
+    "automod": "automod",
+    "moderation": "automod",
+    "auto_clean": "automod",
+    "reports": "reports",
+    "bot_policy": "spam",
+    "raid_guard": "raid",
+    "content_filter": "content_filter",
+    "knowledge_base": "knowledge",
+    "auto_responses": "auto_reply",
+    "social_replies": "auto_reply",
+    "image_ai": "ai_mod",
+    "escalation": "escalation",
+    "admin_alerts": "escalation",
+    "digest": "digest",
+    "raids": "raid",
+    "invites": "invite",
+    "reactions": "automod",
+    "forwarding": "forwarding",
+    "workflows": "workflow",
+    "webhooks": "webhook",
+    "scheduler": "scheduler",
+    "polls": "poll",
+}
+
+
+def log_settings_saved(scope, sections, *, group_ref=None, bot_ref=None, user_ref=None, db=None):
+    """Record a 'configured' feature event for each known settings section saved.
+
+    Best-effort and de-duplicated per call. Never raises (delegates to
+    log_feature_usage). Pass the iterable of section keys from the PUT payload.
+    """
+    try:
+        seen = set()
+        for section in sections or []:
+            feat = SETTINGS_SECTION_FEATURE.get(str(section))
+            if not feat or feat in seen:
+                continue
+            seen.add(feat)
+            log_feature_usage(
+                scope, feat, group_ref=group_ref, bot_ref=bot_ref, user_ref=user_ref,
+                action="configured", db=db, commit=False,
+            )
+        if seen and db is not None:
+            db.session.commit()
+    except Exception:
+        pass
+
+
 def derive_scope_ref(group=None, telegram_group_id=None, group_id=None):
     """Resolve (scope, group_ref) from whatever a call site has on hand.
 

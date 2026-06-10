@@ -133,6 +133,13 @@ def create_poll(bot_id, group_id):
     db.session.add(poll)
     db.session.commit()
 
+    try:
+        from ..feature_usage import log_feature_usage
+        log_feature_usage("custom", "poll", group_ref=str(group.id),
+                          bot_ref=str(bot_obj.id), user_ref=str(user.id), action="created")
+    except Exception:
+        pass
+
     # Send immediately if no schedule
     if not scheduled_at:
         from ..app import bot_manager
