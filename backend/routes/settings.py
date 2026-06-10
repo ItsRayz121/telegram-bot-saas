@@ -513,22 +513,68 @@ def get_custom_bot_leaderboard(bot_id, group_id):
 @jwt_required()
 @rate_limit(requests_per_minute=60)
 def get_custom_bot_warnings(bot_id, group_id):
-    """Active warnings for custom-bot groups (reads warn entries from AuditLog)."""
+    """Warnings for custom-bot groups (warn entries from AuditLog).
+
+    Mirrors the official endpoint: real total + pagination + server-side search +
+    member identity enrichment (not just the raw target_user_id).
+    """
     try:
+        from sqlalchemy import or_ as _or
+        from ..models import Member
+
         user = _get_current_user()
         if not user:
             return jsonify({"error": "User not found"}), 404
         bot, group, err = _get_bot_and_group(user, bot_id, group_id)
         if err:
             return err
-        target_user_id = request.args.get("user_id")
+
         q = AuditLog.query.filter_by(group_id=group.id, action_type="warn")
+        target_user_id = request.args.get("user_id")
         if target_user_id:
             q = q.filter_by(target_user_id=str(target_user_id))
-        logs = q.order_by(AuditLog.timestamp.desc()).limit(200).all()
-        # Shape into the same structure the frontend expects from OfficialWarning
-        warnings = [
-            {
+
+        search = (request.args.get("search") or "").strip()
+        if search:
+            like = f"%{search}%"
+            q = q.filter(_or(
+                AuditLog.target_user_id.ilike(like),
+                AuditLog.target_username.ilike(like),
+                AuditLog.moderator_username.ilike(like),
+                AuditLog.reason.ilike(like),
+            ))
+
+        total = q.count()
+        try:
+            page = max(1, int(request.args.get("page", 1)))
+        except (TypeError, ValueError):
+            page = 1
+        try:
+            per_page = min(200, max(1, int(request.args.get("per_page", 50))))
+        except (TypeError, ValueError):
+            per_page = 50
+
+        logs = (
+            q.order_by(AuditLog.timestamp.desc())
+            .offset((page - 1) * per_page).limit(per_page).all()
+        )
+
+        # Identity enrichment from the custom-bot Member table (one lookup map).
+        uid_set = {log.target_user_id for log in logs if log.target_user_id}
+        members = {}
+        if uid_set:
+            for m in Member.query.filter(
+                Member.group_id == group.id, Member.telegram_user_id.in_(uid_set)
+            ).all():
+                members[m.telegram_user_id] = m
+
+        warnings = []
+        for log in logs:
+            m = members.get(log.target_user_id)
+            full_name = None
+            if m:
+                full_name = (" ".join(p for p in [m.first_name, m.last_name] if p) or None)
+            warnings.append({
                 "id": log.id,
                 "telegram_group_id": str(group.telegram_group_id),
                 "target_user_id": log.target_user_id,
@@ -540,10 +586,18 @@ def get_custom_bot_warnings(bot_id, group_id):
                 "active": True,
                 "created_at": log.timestamp.isoformat(),
                 "total_warnings": (log.extra_data or {}).get("total_warnings"),
-            }
-            for log in logs
-        ]
-        return jsonify({"warnings": warnings})
+                "full_name": full_name,
+                "resolved_username": log.target_username or (m.username if m else None),
+            })
+
+        return jsonify({
+            "warnings": warnings,
+            "total": total,
+            "active_total": total,
+            "page": page,
+            "per_page": per_page,
+            "pages": (total + per_page - 1) // per_page if per_page else 1,
+        })
     except Exception as e:
         logger.error(f"get_custom_bot_warnings error: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500

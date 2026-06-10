@@ -426,7 +426,16 @@ def get_pending_groups():
 @jwt_required()
 @rate_limit(requests_per_minute=30)
 def list_warnings(group_id):
-    """List all active warnings in a group, optionally filtered by user."""
+    """List warnings in a group with pagination, search and identity enrichment.
+
+    Previously capped at 200 rows with no total, so "Active Warnings" appeared
+    stuck at 200 for busy groups. Now returns the real total plus a paginated
+    page, and enriches each row with the member's name/username (not just the
+    raw target_user_id).
+    """
+    from sqlalchemy import or_ as _or
+    from ..models import OfficialMember
+
     user = _current_user()
     if not user:
         return jsonify({"error": "User not found"}), 404
@@ -435,8 +444,9 @@ def list_warnings(group_id):
     if not tg:
         return jsonify({"error": "Group not found"}), 404
 
-    target_user_id = request.args.get("user_id")
     q = OfficialWarning.query.filter_by(telegram_group_id=group_id)
+
+    target_user_id = request.args.get("user_id")
     if target_user_id:
         q = q.filter_by(target_user_id=str(target_user_id))
 
@@ -444,8 +454,64 @@ def list_warnings(group_id):
     if not include_inactive:
         q = q.filter_by(active=True)
 
-    warnings = q.order_by(OfficialWarning.created_at.desc()).limit(200).all()
-    return jsonify({"warnings": [w.to_dict() for w in warnings]}), 200
+    search = (request.args.get("search") or "").strip()
+    if search:
+        like = f"%{search}%"
+        q = q.filter(_or(
+            OfficialWarning.target_user_id.ilike(like),
+            OfficialWarning.target_username.ilike(like),
+            OfficialWarning.moderator_username.ilike(like),
+            OfficialWarning.reason.ilike(like),
+            OfficialWarning.message_text.ilike(like),
+        ))
+
+    # Honest total (drives the count badge) + page slice.
+    total = q.count()
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+    except (TypeError, ValueError):
+        page = 1
+    try:
+        per_page = min(200, max(1, int(request.args.get("per_page", 50))))
+    except (TypeError, ValueError):
+        per_page = 50
+
+    rows = (
+        q.order_by(OfficialWarning.created_at.desc())
+        .offset((page - 1) * per_page).limit(per_page).all()
+    )
+
+    # Enrich with member identity (one lookup map, not N queries).
+    uid_set = {w.target_user_id for w in rows}
+    members = {}
+    if uid_set:
+        for m in OfficialMember.query.filter(
+            OfficialMember.telegram_group_id == group_id,
+            OfficialMember.telegram_user_id.in_(uid_set),
+        ).all():
+            members[m.telegram_user_id] = m
+
+    out = []
+    for w in rows:
+        d = w.to_dict()
+        m = members.get(w.target_user_id)
+        d["full_name"] = (m.first_name if m and m.first_name else None)
+        d["resolved_username"] = (w.target_username or (m.username if m else None))
+        out.append(d)
+
+    # Active-warning total (separate from the filtered list) for the count badge.
+    active_total = OfficialWarning.query.filter_by(
+        telegram_group_id=group_id, active=True
+    ).count()
+
+    return jsonify({
+        "warnings": out,
+        "total": total,
+        "active_total": active_total,
+        "page": page,
+        "per_page": per_page,
+        "pages": (total + per_page - 1) // per_page if per_page else 1,
+    }), 200
 
 
 @tg_groups_bp.route("/<group_id>/warnings/<int:warning_id>", methods=["DELETE"])

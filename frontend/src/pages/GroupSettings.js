@@ -341,6 +341,10 @@ export default function GroupSettings() {
   const [warnings, setWarnings] = useState([]);
   const [warningsLoading, setWarningsLoading] = useState(false);
   const [warningsSearch, setWarningsSearch] = useState('');
+  const [warningsTotal, setWarningsTotal] = useState(0);
+  const [warningsActiveTotal, setWarningsActiveTotal] = useState(0);
+  const [warningsPage, setWarningsPage] = useState(1);
+  const WARN_PER_PAGE = 50;
 
   const [raidOpen, setRaidOpen] = useState(false);
 
@@ -521,17 +525,34 @@ export default function GroupSettings() {
     }
   }, [botId, groupId]);
 
-  const fetchWarnings = useCallback(async () => {
+  const fetchWarnings = useCallback(async (opts = {}) => {
+    const page = opts.page || 1;
+    const search = opts.search !== undefined ? opts.search : warningsSearch;
     setWarningsLoading(true);
     try {
-      const res = await settings.listWarnings(botId, groupId);
-      setWarnings(res.data.warnings || []);
+      const res = await settings.listWarnings(botId, groupId, {
+        search: search || undefined, page, per_page: WARN_PER_PAGE,
+      });
+      const rows = res.data.warnings || [];
+      setWarnings((prev) => (page > 1 ? [...prev, ...rows] : rows));
+      setWarningsTotal(res.data.total ?? rows.length);
+      setWarningsActiveTotal(res.data.active_total ?? res.data.total ?? rows.length);
+      setWarningsPage(page);
     } catch {
       toast.error('Failed to load warnings');
     } finally {
       setWarningsLoading(false);
     }
-  }, [botId, groupId]);
+  }, [botId, groupId, warningsSearch]);
+
+  // Server-side search: debounce the query so it searches ALL warnings (every
+  // page), not just the rows currently loaded client-side.
+  useEffect(() => {
+    if (!(cat === 'analytics' && subTab === warningsSubTabIdx)) return undefined;
+    const t = setTimeout(() => { fetchWarnings({ page: 1, search: warningsSearch }); }, 350);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [warningsSearch]);
 
   const handleRemoveWarning = async (warningId) => {
     try {
@@ -3556,15 +3577,9 @@ export default function GroupSettings() {
 
         {/* ANALYTICS › Warnings */}
         {cat === 'analytics' && subTab === warningsSubTabIdx && (() => {
-          const filteredWarnings = warningsSearch.trim()
-            ? warnings.filter(w => {
-                const q = warningsSearch.toLowerCase();
-                return (w.target_username || '').toLowerCase().includes(q)
-                  || String(w.target_user_id || '').includes(q)
-                  || (w.reason || '').toLowerCase().includes(q)
-                  || (w.moderator_username || '').toLowerCase().includes(q);
-              })
-            : warnings;
+          // Search + pagination are server-side now, so the loaded rows ARE the
+          // result set (no client-side cap that made the count stick at 200).
+          const filteredWarnings = warnings;
           return (
           <Card>
             <CardContent>
@@ -3572,25 +3587,23 @@ export default function GroupSettings() {
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <WarningIcon color="warning" />
                   <Typography variant="h6" fontWeight={600}>Active Warnings</Typography>
-                  <Chip label={warnings.length} size="small" color="warning" variant="outlined" />
+                  <Chip label={warningsActiveTotal} size="small" color="warning" variant="outlined" />
                 </Box>
-                <Button size="small" onClick={fetchWarnings} disabled={warningsLoading}>Refresh</Button>
+                <Button size="small" onClick={() => fetchWarnings({ page: 1 })} disabled={warningsLoading}>Refresh</Button>
               </Box>
               <Typography variant="body2" color="text.secondary" mb={1.5}>
                 Active warnings issued by admins via <code>/warn</code>. Click any row to see full details.
               </Typography>
-              {warnings.length > 0 && (
-                <TextField
-                  size="small" fullWidth
-                  placeholder="Search member, reason, moderator…"
-                  value={warningsSearch}
-                  onChange={(e) => setWarningsSearch(e.target.value)}
-                  sx={{ mb: 1.5 }}
-                />
-              )}
-              {warningsLoading ? (
+              <TextField
+                size="small" fullWidth
+                placeholder="Search member id, name, username, reason, moderator, message…"
+                value={warningsSearch}
+                onChange={(e) => setWarningsSearch(e.target.value)}
+                sx={{ mb: 1.5 }}
+              />
+              {warningsLoading && warnings.length === 0 ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}><CircularProgress size={24} /></Box>
-              ) : warnings.length === 0 ? (
+              ) : warnings.length === 0 && !warningsSearch.trim() ? (
                 <Alert severity="success" icon={<CheckCircle />}>No active warnings in this group.</Alert>
               ) : filteredWarnings.length === 0 ? (
                 <Typography variant="body2" color="text.secondary">No warnings match your search.</Typography>
@@ -3607,9 +3620,18 @@ export default function GroupSettings() {
                         sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.5, p: 1.5, cursor: 'pointer' }}
                       >
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
-                          <Typography variant="body2" fontWeight={600}>
-                            {warning.target_username ? `@${warning.target_username}` : warning.target_user_id}
-                          </Typography>
+                          <Box sx={{ minWidth: 0 }}>
+                            <Typography variant="body2" fontWeight={600} noWrap>
+                              {warning.full_name
+                                || (warning.resolved_username ? `@${warning.resolved_username}` : null)
+                                || (warning.target_username ? `@${warning.target_username}` : warning.target_user_id)}
+                            </Typography>
+                            {(warning.full_name || warning.resolved_username) && (
+                              <Typography variant="caption" color="text.disabled" noWrap>
+                                {warning.resolved_username ? `@${warning.resolved_username} · ` : ''}id {warning.target_user_id}
+                              </Typography>
+                            )}
+                          </Box>
                           <Tooltip title="Remove warning">
                             <IconButton size="small" color="error" onClick={(e) => { e.stopPropagation(); handleRemoveWarning(warning.id); }}>
                               <Delete sx={{ fontSize: 16 }} />
@@ -3672,9 +3694,16 @@ export default function GroupSettings() {
                               sx={{ cursor: 'pointer', '& td': { borderBottom: isExpanded ? 'none' : undefined } }}
                             >
                               <TableCell sx={cellSx}>
-                                <Typography variant="caption" fontWeight={600} noWrap>
-                                  {warning.target_username ? `@${warning.target_username}` : warning.target_user_id}
+                                <Typography variant="caption" fontWeight={600} noWrap title={warning.target_user_id || ''}>
+                                  {warning.full_name
+                                    || (warning.resolved_username ? `@${warning.resolved_username}` : null)
+                                    || (warning.target_username ? `@${warning.target_username}` : warning.target_user_id)}
                                 </Typography>
+                                {(warning.full_name || warning.resolved_username) && (
+                                  <Typography variant="caption" color="text.disabled" display="block" noWrap>
+                                    {warning.resolved_username ? `@${warning.resolved_username} · ` : ''}id {warning.target_user_id}
+                                  </Typography>
+                                )}
                               </TableCell>
                               <TableCell sx={cellSx}>
                                 <Typography variant="caption" color="text.secondary" noWrap title={warning.reason || ''}>
@@ -3734,6 +3763,14 @@ export default function GroupSettings() {
                     </TableBody>
                   </Table>
                 </TableContainer>
+              )}
+              {warnings.length > 0 && warnings.length < warningsTotal && (
+                <Box sx={{ display: 'flex', justifyContent: 'center', mt: 1.5 }}>
+                  <Button size="small" variant="outlined" disabled={warningsLoading}
+                    onClick={() => fetchWarnings({ page: warningsPage + 1 })}>
+                    {warningsLoading ? 'Loading…' : `Load more (${warnings.length} of ${warningsTotal})`}
+                  </Button>
+                </Box>
               )}
             </CardContent>
           </Card>
