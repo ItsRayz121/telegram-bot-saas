@@ -352,6 +352,21 @@ _DEFAULTS: dict = {
         "auto_delete_action_seconds": 30, # raised from 10
     },
 
+    # ── Warning escalation (FOUNDATION — disabled, NOT enforced) ───────────────
+    # A clean, owner-configurable auto-escalation policy scaffold. Intentionally
+    # separate from moderation.escalation_steps (which is the live 3-strike
+    # ladder) so the owner can design the final auto-mute rules here without any
+    # of these values taking effect yet. No handler reads `warning_escalation`;
+    # `enabled` stays False until the owner decides the final rules. Both bot
+    # lineages inherit this block automatically via the shared defaults.
+    "warning_escalation": {
+        "enabled": False,                 # master switch — keep False until finalised
+        "warning_threshold": 3,           # warnings before the action triggers
+        "time_window_hours": 24,          # only count warnings within this window (null = all-time)
+        "action_type": "mute",            # mute | kick | ban | none
+        "mute_duration_minutes": 60,      # used when action_type == "mute"
+    },
+
     # ── Auto-clean service messages ───────────────────────────────────────────
     # Disabled by default — admins should consciously opt in to silent joins/leaves.
     "auto_clean": {

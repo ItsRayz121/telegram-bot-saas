@@ -876,6 +876,7 @@ export default function GroupSettings() {
   const mod = settingsData.moderation || {};
   const ac = settingsData.auto_clean || {};
   const rep = settingsData.reports || {};
+  const we = settingsData.warning_escalation || {};
 
   const currentCat = CATEGORIES.find((c) => c.id === cat);
 
@@ -1794,6 +1795,64 @@ export default function GroupSettings() {
                           : 'No duration — user can rejoin'}
                         helperText="Use the Escalation Chain below for a temporary ban with a set duration." />
                     )}
+                  </Grid>
+                </Grid>
+              </CardContent>
+            </Card>
+
+            {/* Warning Escalation foundation — configurable but NOT enforced yet.
+                Disabled by default; the owner finalises the rules before it goes live. */}
+            <Card sx={{ mb: 2 }}>
+              <CardContent>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                  <Typography variant="h6" fontWeight={600}>Warning Escalation</Typography>
+                  <Chip label="Not active yet" size="small" color="default" variant="outlined" />
+                </Box>
+                <Typography variant="body2" color="text.secondary" mb={2}>
+                  Configure an automatic action once a member crosses a warning threshold within a time window.
+                  This is a foundation only — <strong>rules are saved but not enforced</strong> until you turn it on.
+                </Typography>
+                <FormControlLabel
+                  sx={{ mb: 1 }}
+                  control={<Switch
+                    checked={!!we.enabled}
+                    onChange={(e) => updateSetting('warning_escalation.enabled', e.target.checked)} />}
+                  label={we.enabled ? 'Enabled (rules will apply once enforcement ships)' : 'Disabled — rules saved for later'}
+                />
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={3}>
+                    <TextField fullWidth type="number" label="Warning threshold"
+                      value={we.warning_threshold ?? 3}
+                      helperText="Warnings before action"
+                      onChange={(e) => updateSetting('warning_escalation.warning_threshold', parseInt(e.target.value))} />
+                  </Grid>
+                  <Grid item xs={12} sm={3}>
+                    <TextField fullWidth type="number" label="Time window (hours)"
+                      value={we.time_window_hours ?? 24}
+                      helperText="Blank = all-time"
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        updateSetting('warning_escalation.time_window_hours', v === '' ? null : parseInt(v));
+                      }} />
+                  </Grid>
+                  <Grid item xs={12} sm={3}>
+                    <FormControl fullWidth>
+                      <InputLabel>Action</InputLabel>
+                      <Select value={we.action_type || 'mute'} label="Action"
+                        onChange={(e) => updateSetting('warning_escalation.action_type', e.target.value)}>
+                        <MenuItem value="none">None</MenuItem>
+                        <MenuItem value="mute">Mute</MenuItem>
+                        <MenuItem value="kick">Kick</MenuItem>
+                        <MenuItem value="ban">Ban</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={12} sm={3}>
+                    <TextField fullWidth type="number" label="Mute duration (minutes)"
+                      disabled={(we.action_type || 'mute') !== 'mute'}
+                      value={we.mute_duration_minutes ?? 60}
+                      helperText={(we.action_type || 'mute') === 'mute' ? 'Used for Mute' : 'Mute only'}
+                      onChange={(e) => updateSetting('warning_escalation.mute_duration_minutes', parseInt(e.target.value))} />
                   </Grid>
                 </Grid>
               </CardContent>
