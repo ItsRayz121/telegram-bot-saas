@@ -944,6 +944,15 @@ def reconcile_pending_groups_task():
         with app.app_context():
             from .models import db
             from .group_status import reconcile_pending_groups
+            # Custom-bot self-healing first: create missing twins + link/activate
+            # custom-bot groups (attaches the owner the pending-promotion needs).
+            try:
+                from .bot_links import reconcile_custom_bots
+                cb_res = reconcile_custom_bots(db)
+                if any(cb_res.values()):
+                    logger.info("[celery:reconcile_custom_bots] %s", cb_res)
+            except Exception as cb_exc:
+                logger.warning("reconcile_custom_bots error: %s", cb_exc)
             promoted = reconcile_pending_groups(db)
             if promoted:
                 logger.info("[celery:reconcile_pending_groups] promoted=%d", promoted)

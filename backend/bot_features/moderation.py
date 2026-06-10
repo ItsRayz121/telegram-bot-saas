@@ -6,6 +6,11 @@ from telegram import ChatPermissions
 
 logger = logging.getLogger(__name__)
 
+# Cache of legacy Bot.id -> owning CustomBot.id (str), for per-bot feature-usage
+# attribution. Only positive hits are cached so a freshly-created twin (via the
+# reconciler) is picked up on the next event instead of being missed forever.
+_CUSTOM_BOT_REF_CACHE = {}
+
 TELEGRAM_LINK_PATTERN = re.compile(
     r"(t\.me/|telegram\.me/|@[a-zA-Z0-9_]{5,})", re.IGNORECASE
 )
@@ -524,6 +529,36 @@ class ModerationSystem:
 
         return False
 
+    def _custom_bot_ref(self, group):
+        """Resolve the owning CustomBot id (as str) for a legacy Group, cached.
+
+        Lets custom-lineage feature events carry bot_ref so the admin custom-bot
+        detail page can attribute usage per bot. Only positive results are cached
+        (a None means the twin may not exist yet — the reconciler creates it, so
+        we retry next time rather than caching the miss forever).
+        """
+        try:
+            bot_id = getattr(group, "bot_id", None)
+            if bot_id is None:
+                return None
+            cached = _CUSTOM_BOT_REF_CACHE.get(bot_id)
+            if cached is not None:
+                return cached
+            from ..models import db as _db, Bot, CustomBot
+            b = Bot.query.get(bot_id)
+            if b and b.bot_username:
+                cb = CustomBot.query.filter(
+                    CustomBot.owner_user_id == b.user_id,
+                    _db.func.lower(CustomBot.bot_username) == b.bot_username.lstrip("@").lower(),
+                ).first()
+                if cb:
+                    ref = str(cb.id)
+                    _CUSTOM_BOT_REF_CACHE[bot_id] = ref
+                    return ref
+            return None
+        except Exception:
+            return None
+
     def _log_content_filter(self, group, message, reason):
         """Record a Content Filter feature event (custom lineage, best-effort).
 
@@ -535,7 +570,7 @@ class ModerationSystem:
             from ..feature_usage import log_feature_usage
             uid = message.from_user.id if getattr(message, "from_user", None) else None
             log_feature_usage(
-                "custom", "content_filter", group_ref=str(group.id),
+                "custom", "content_filter", group_ref=str(group.id), bot_ref=self._custom_bot_ref(group),
                 user_ref=(str(uid) if uid else None), action=reason, commit=True,
             )
         except Exception:
@@ -1021,16 +1056,17 @@ class ModerationSystem:
             try:
                 from ..feature_usage import log_feature_usage, automod_feature
                 _act = "warn" if (warn or action == "warn") else action
+                _bref = self._custom_bot_ref(group)
                 log_feature_usage(
-                    "custom", automod_feature(reason), group_ref=str(group.id), user_ref=str(user_id),
-                    action=reason, meta={"automod_action": _act}, commit=True,
+                    "custom", automod_feature(reason), group_ref=str(group.id), bot_ref=_bref,
+                    user_ref=str(user_id), action=reason, meta={"automod_action": _act}, commit=True,
                 )
                 # Enforcement actions also get their own feature row (rare events)
                 # so Muting/Bans/Kicks have clean, queryable counts.
                 if _act in ("warn", "mute", "ban", "kick"):
                     log_feature_usage(
-                        "custom", _act, group_ref=str(group.id), user_ref=str(user_id),
-                        action=reason, commit=True,
+                        "custom", _act, group_ref=str(group.id), bot_ref=_bref,
+                        user_ref=str(user_id), action=reason, commit=True,
                     )
             except Exception:
                 pass
@@ -1052,6 +1088,7 @@ class ModerationSystem:
         try:
             from ..feature_usage import log_feature_usage
             log_feature_usage("custom", "raid", group_ref=str(group.id),
+                              bot_ref=self._custom_bot_ref(group),
                               action="raid_mode_activated", commit=True)
         except Exception:
             pass

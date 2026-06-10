@@ -115,6 +115,104 @@ def custom_bot_labels_for_tgids(tgids) -> dict:
         return {}
 
 
+def reconcile_custom_bots(db) -> dict:
+    """Self-healing reconciliation so EVERY custom bot + its groups are fully
+    visible, linked, activated and attributed in admin with zero manual steps.
+
+    This is the automation that guarantees a future custom bot (added by anyone)
+    shows up and counts on its own — no one ever has to run a fix script again.
+
+    Idempotent + best-effort (never raises). Safe to run on startup and on a
+    schedule. Three passes:
+
+      1. twins    — every active legacy ``Bot`` (a custom bot's polling record)
+                    gets a matching ``custom_bots`` row by username+owner, so the
+                    bot appears in the admin Custom Bots list.
+      2. link     — every ``telegram_groups`` row managed by a custom bot (via the
+                    legacy ``bots``/``groups`` lineage) gets
+                    ``linked_via_bot_type='custom'`` + ``linked_bot_id`` + owner.
+      3. activate — such a group stuck ``pending`` under an *active* bot is promoted
+                    to ``active`` (the legacy Group row proves the bot manages it),
+                    so it counts toward members-protected and the drill-downs.
+
+    Returns ``{twins_created, groups_linked, groups_activated}`` for logging.
+    """
+    from datetime import datetime
+    res = {"twins_created": 0, "groups_linked": 0, "groups_activated": 0}
+    try:
+        from .models import Bot, CustomBot, Group, TelegramGroup, BotEvent
+        now = datetime.utcnow()
+
+        # Index existing twins by (owner, lowercased username).
+        existing = {}
+        for cb in CustomBot.query.all():
+            existing[(cb.owner_user_id, (cb.bot_username or "").lstrip("@").lower())] = cb
+
+        # ── Pass 1: ensure a custom_bots twin for every active legacy custom bot ──
+        for b in Bot.query.filter_by(is_active=True).all():
+            uname = (b.bot_username or "").lstrip("@")
+            if not uname:
+                continue
+            key = (b.user_id, uname.lower())
+            if key in existing:
+                continue
+            cb = CustomBot(
+                owner_user_id=b.user_id,
+                bot_name=b.bot_name or uname,
+                bot_username=uname,
+                bot_token_encrypted=b.bot_token,  # same Fernet ciphertext format
+                status="active",
+            )
+            db.session.add(cb)
+            db.session.flush()
+            existing[key] = cb
+            res["twins_created"] += 1
+
+        # ── Pass 2+3: link + activate groups via the legacy lineage ──────────────
+        bots_by_id = {b.id: b for b in Bot.query.all()}
+        for g in Group.query.all():
+            b = bots_by_id.get(g.bot_id)
+            if not b or not b.bot_username:
+                continue
+            cb = existing.get((b.user_id, b.bot_username.lstrip("@").lower()))
+            if not cb:
+                continue
+            tg = TelegramGroup.query.filter_by(telegram_group_id=str(g.telegram_group_id)).first()
+            if not tg:
+                continue
+            changed = False
+            if tg.linked_bot_id != cb.id or (tg.linked_via_bot_type or "") != "custom":
+                tg.linked_via_bot_type = "custom"
+                tg.linked_bot_id = cb.id
+                changed = True
+            if tg.owner_user_id is None:
+                tg.owner_user_id = cb.owner_user_id
+                changed = True
+            if tg.bot_status == "pending" and not tg.is_disabled and b.is_active:
+                tg.bot_status = "active"
+                if not tg.linked_at:
+                    tg.linked_at = now
+                db.session.add(BotEvent(
+                    telegram_group_id=tg.telegram_group_id,
+                    event_type="group_auto_activated",
+                    message=f"Auto-linked + activated under custom bot @{cb.bot_username} (id {cb.id})",
+                ))
+                res["groups_activated"] += 1
+                changed = True
+            if changed:
+                res["groups_linked"] += 1
+
+        db.session.commit()
+    except Exception as exc:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        import logging
+        logging.getLogger("bot_links").warning("reconcile_custom_bots failed: %s", exc)
+    return res
+
+
 def connected_groups_summary(custom_bot) -> dict:
     """Convenience wrapper: groups list + counts for a custom bot."""
     groups = resolve_connected_groups(custom_bot)

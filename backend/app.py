@@ -585,6 +585,16 @@ def create_app():
         _run_telegram_connect_migrations()
         _run_stability_migrations()
         _fix_custom_bot_group_types()
+        # Self-healing custom-bot reconciliation: auto-create missing custom_bots
+        # twins, link + activate custom-bot groups. Guarantees future custom bots
+        # show up and count with no manual fix scripts. Best-effort.
+        try:
+            from .bot_links import reconcile_custom_bots
+            _res = reconcile_custom_bots(db)
+            if any(_res.values()):
+                logging.getLogger("migrations").info("reconcile_custom_bots: %s", _res)
+        except Exception as _e:
+            logging.getLogger("migrations").debug("reconcile_custom_bots skipped: %s", _e)
         _run_phase3_migrations()
         _run_phase4_migrations()
         _run_phase5_migrations()
