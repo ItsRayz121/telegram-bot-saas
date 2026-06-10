@@ -6,6 +6,7 @@ Standalone web service for the dashboard. Runs separately from the Discord bot
 from flask import Flask, jsonify
 from flask_cors import CORS
 
+from admin_api import admin_bp
 from auth import auth_bp
 from billing_api import billing_bp
 from campaigns_api import campaigns_bp
@@ -33,6 +34,7 @@ def create_app() -> Flask:
     app.register_blueprint(leveling_bp)
     app.register_blueprint(campaigns_bp)
     app.register_blueprint(billing_bp)
+    app.register_blueprint(admin_bp)
 
     @app.get("/")
     def root():

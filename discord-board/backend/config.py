@@ -26,6 +26,11 @@ class Config:
     # Database (own DB — never shared with Telegizer)
     DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///instance/guildizer.db")
 
+    # Platform admins — comma-separated Discord user ids with admin-panel access.
+    ADMIN_USER_IDS = {
+        int(x) for x in os.getenv("ADMIN_USER_IDS", "").replace(" ", "").split(",") if x.isdigit()
+    }
+
     # App
     SECRET_KEY = os.getenv("FLASK_SECRET_KEY", "dev-secret-change-me")
     FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")

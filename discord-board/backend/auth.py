@@ -228,7 +228,9 @@ def me():
         user = db.get(User, uid)
         if user is None:
             return jsonify(error="unauthorized"), 401
-        return jsonify(user.to_dict())
+        data = user.to_dict()
+        data["is_admin"] = uid in Config.ADMIN_USER_IDS
+        return jsonify(data)
     finally:
         db.close()
         SessionLocal.remove()

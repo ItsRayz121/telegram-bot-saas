@@ -17,6 +17,9 @@ export default function TopBar() {
       </Link>
       {user && (
         <div className="topbar-user">
+          {user.is_admin && (
+            <Link to="/admin" className="btn-ghost">Admin</Link>
+          )}
           {user.avatar_url && <img src={user.avatar_url} alt="" className="avatar" />}
           <span className="topbar-name">{user.global_name || user.username}</span>
           <button className="btn-ghost" onClick={handleSignOut}>

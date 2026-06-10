@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from "./auth";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import ServerDetail from "./pages/ServerDetail";
+import Admin from "./pages/Admin";
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
@@ -30,6 +31,14 @@ export default function App() {
             element={
               <Protected>
                 <ServerDetail />
+              </Protected>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <Protected>
+                <Admin />
               </Protected>
             }
           />
