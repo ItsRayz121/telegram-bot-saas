@@ -10,6 +10,7 @@ import {
 } from '@mui/icons-material';
 import TelegizerLogo from '../components/TelegizerLogo';
 import { useNavigate } from 'react-router-dom';
+import usePageMeta from '../hooks/usePageMeta';
 
 function PageNav() {
   const navigate = useNavigate();
@@ -87,6 +88,10 @@ const VALUES = [
 ];
 
 export default function About() {
+  usePageMeta(
+    'About Us',
+    'Why we built Telegizer — automation for Telegram community managers: AutoMod, scheduled content, analytics, and AI tools.'
+  );
   const navigate = useNavigate();
 
   return (

@@ -2,8 +2,13 @@ import React from 'react';
 import { Box, Typography, Button, Stack } from '@mui/material';
 import { SmartToy } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import usePageMeta from '../hooks/usePageMeta';
 
 export default function NotFound() {
+  usePageMeta(
+    'Page Not Found',
+    "The page you were looking for doesn't exist."
+  );
   const navigate = useNavigate();
   const token = localStorage.getItem('token');
 

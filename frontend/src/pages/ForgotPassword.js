@@ -5,8 +5,13 @@ import {
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../services/api';
+import usePageMeta from '../hooks/usePageMeta';
 
 export default function ForgotPassword() {
+  usePageMeta(
+    'Reset Password',
+    'Reset your Telegizer account password.'
+  );
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);

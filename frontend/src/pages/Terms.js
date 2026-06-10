@@ -4,6 +4,7 @@ import {
 } from '@mui/material';
 import TelegizerLogo from '../components/TelegizerLogo';
 import { useNavigate } from 'react-router-dom';
+import usePageMeta from '../hooks/usePageMeta';
 
 const LAST_UPDATED = 'May 9, 2026';
 const SUPPORT_EMAIL = 'support@telegizer.com';
@@ -80,6 +81,10 @@ function PageFooter() {
 }
 
 export default function Terms() {
+  usePageMeta(
+    'Terms of Service',
+    'Telegizer Terms of Service: subscriptions, refunds, acceptable use, and your rights when using our Telegram community management platform.'
+  );
   const navigate = useNavigate();
 
   return (

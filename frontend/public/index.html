@@ -95,6 +95,56 @@
     }
     </script>
 
+    <!-- FAQ structured data — mirrors the landing-page FAQ for rich results -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Is it safe to add the Telegizer bot as admin?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. Telegizer only requests the Telegram permissions it needs: delete messages, ban/restrict users, pin messages, and invite links. We never read private messages or access group data outside the scope of bot commands."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What payment methods does Telegizer support?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Payments are processed via NOWPayments and support USDT, BTC, ETH, BNB, TRX, SOL, and 300+ other coins. Plans are one-time payments per billing period and never auto-renew."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What is included in Free vs Pro vs Enterprise?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Free: 1 custom bot (3 groups per bot), basic moderation, welcome messages, XP system, plus unlimited groups on the shared @telegizer_bot. Pro ($9/mo): 3 custom bots, unlimited groups, advanced AutoMod, scheduled messages, analytics, AI knowledge base. Enterprise ($49/mo): 50 custom bots, all Pro features plus API access, dedicated support, SLA. Every new account starts with a free 14-day Pro trial."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Are bot tokens stored securely?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. Bot tokens are encrypted at rest using AES-256 (Fernet) before being written to the database. Tokens are never stored in plain text and never appear in API responses."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What happens if I cancel or my plan expires?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Plans never auto-renew. If you cancel, any paid time stays active until its expiry date. After expiry, paid features become read-only and free plan features stay active indefinitely. You can renew at any time and everything comes back immediately."
+          }
+        }
+      ]
+    }
+    </script>
+
     <!-- Privacy-first analytics (no cookies, GDPR compliant) -->
     <script defer data-domain="telegizer.com" src="https://plausible.io/js/script.js"></script>
     <!-- Telegram Mini App detection + SDK loader.

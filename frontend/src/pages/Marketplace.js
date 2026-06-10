@@ -14,6 +14,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { marketplace as mktApi } from '../services/api';
 import ComingSoonPage from '../components/ComingSoonPage';
+import usePageMeta from '../hooks/usePageMeta';
 
 // ── FEATURE FLAG: Marketplace is temporarily hidden for future reactivation ───
 // All backend routes, DB schema, and API calls below are fully preserved.
@@ -404,6 +405,10 @@ function MarketplaceFull({ tab: initialTab }) {
 // ── Feature-flagged export ────────────────────────────────────────────────────
 // Temporarily hidden for future reactivation. Swap to MarketplaceFull when ready.
 export default function Marketplace(props) {
+  usePageMeta(
+    'Marketplace — Telegram Community Deals',
+    'The Telegizer marketplace: partnership deals, promos, and growth opportunities for Telegram communities.'
+  );
   if (SHOW_MARKETPLACE) return <MarketplaceFull {...props} />;
   return (
     <ComingSoonPage

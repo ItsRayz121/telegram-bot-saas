@@ -66,18 +66,27 @@ def _is_production() -> bool:
         return False
 
 
+_redis_client = None  # module-level client backed by a connection pool
+
+
 def _get_redis():
+    """Pooled Redis client — runs on every rate-limited request, so it must not
+    open a new TCP connection each time."""
+    global _redis_client
     try:
         import redis as redis_lib
-        r = redis_lib.from_url(
-            current_app.config.get("REDIS_URL", "redis://localhost:6379/0"),
-            socket_connect_timeout=1,
-            socket_timeout=1,
-        )
-        r.ping()
-        return r
+        if _redis_client is None:
+            _redis_client = redis_lib.from_url(
+                current_app.config.get("REDIS_URL", "redis://localhost:6379/0"),
+                socket_connect_timeout=1,
+                socket_timeout=1,
+                health_check_interval=30,
+            )
+        _redis_client.ping()
+        return _redis_client
     except Exception as e:
         logger.warning("[RATE_LIMIT] Redis unavailable: %s", e)
+        _redis_client = None
         return None
 
 

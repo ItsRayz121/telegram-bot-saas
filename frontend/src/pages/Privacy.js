@@ -4,6 +4,7 @@ import {
 } from '@mui/material';
 import TelegizerLogo from '../components/TelegizerLogo';
 import { useNavigate } from 'react-router-dom';
+import usePageMeta from '../hooks/usePageMeta';
 
 const LAST_UPDATED = 'May 9, 2026';
 const SUPPORT_EMAIL = 'support@telegizer.com';
@@ -81,6 +82,10 @@ function PageFooter() {
 }
 
 export default function Privacy() {
+  usePageMeta(
+    'Privacy Policy',
+    'How Telegizer collects, uses, and protects your data. GDPR & CCPA rights, encrypted bot tokens, no data selling.'
+  );
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
       <PageNav />
@@ -193,9 +198,12 @@ export default function Privacy() {
 
         <Section title="6. Cookies & Local Storage">
           <P>
-            Telegizer uses secure HTTP-only cookies to store your authentication tokens. We do not
-            use third-party advertising cookies or tracking pixels. Analytics (Plausible) use no
-            cookies and collect no personal data.
+            Telegizer uses secure HTTP-only cookies to store your authentication tokens. Your
+            browser's local storage also holds a copy of your session token and basic profile
+            data (name, email, plan) so the dashboard and the Telegram Mini App — where
+            cross-site cookies may be blocked — can keep you signed in. We do not use
+            third-party advertising cookies or tracking pixels. Plausible analytics use no
+            cookies; PostHog product analytics run only after you accept the cookie banner.
           </P>
         </Section>
 

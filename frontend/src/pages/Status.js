@@ -9,6 +9,7 @@ import {
 } from '@mui/icons-material';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
+import usePageMeta from '../hooks/usePageMeta';
 
 const darkTheme = createTheme({
   palette: {
@@ -49,6 +50,10 @@ function overallStatus(statuses) {
 }
 
 export default function Status() {
+  usePageMeta(
+    'System Status',
+    'Live operational status of the Telegizer platform: API, bots, database, and email delivery.'
+  );
   const [statuses, setStatuses] = useState(
     Object.fromEntries(SERVICES.map(s => [s.key, 'loading']))
   );

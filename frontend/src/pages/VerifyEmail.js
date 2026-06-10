@@ -7,6 +7,7 @@ import { CheckCircle, ErrorOutline, Email, MarkEmailRead, Logout } from '@mui/ic
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { auth } from '../services/api';
 import { track } from '../services/analytics';
+import usePageMeta from '../hooks/usePageMeta';
 
 const SpamTip = () => (
   <Alert severity="info" sx={{ mt: 2, textAlign: 'left', fontSize: '0.8rem' }}>
@@ -38,6 +39,10 @@ function LogoutButton() {
 }
 
 export default function VerifyEmail() {
+  usePageMeta(
+    'Verify Your Email',
+    'Verify your email address to activate your Telegizer account.'
+  );
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token') || '';

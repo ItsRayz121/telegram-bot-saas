@@ -10,14 +10,20 @@ import { toast } from 'react-toastify';
 import { auth } from '../services/api';
 import { generateFingerprint } from '../utils/fingerprint';
 import { track, identify } from '../services/analytics';
+import usePageMeta from '../hooks/usePageMeta';
 
 export default function Register() {
+  usePageMeta(
+    'Create Your Free Account',
+    'Create a free Telegizer account — includes a 14-day Pro trial. Connect your Telegram bot and automate moderation in minutes.'
+  );
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const refCode = searchParams.get('ref') || '';
   const [form, setForm] = useState({ email: '', password: '', full_name: '' });
-  const [tosAccepted, setTosAccepted] = useState(false);
-  const [aupAccepted, setAupAccepted] = useState(false);
+  // One checkbox covers ToS + Privacy + AUP (less signup friction); the backend
+  // still receives both explicit acceptance flags.
+  const [legalAccepted, setLegalAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   // Device fingerprint — generated once on mount, sent with registration payload
@@ -36,12 +42,8 @@ export default function Register() {
       setError('Password must be at least 8 characters.');
       return;
     }
-    if (!tosAccepted) {
-      setError('You must accept the Terms of Service to continue.');
-      return;
-    }
-    if (!aupAccepted) {
-      setError('You must accept the Acceptable Use Policy to continue.');
+    if (!legalAccepted) {
+      setError('You must accept the Terms of Service, Privacy Policy, and Acceptable Use Policy to continue.');
       return;
     }
     setLoading(true);
@@ -151,8 +153,8 @@ export default function Register() {
               sx={{ mb: 2, alignItems: 'flex-start' }}
               control={
                 <Checkbox
-                  checked={tosAccepted}
-                  onChange={(e) => setTosAccepted(e.target.checked)}
+                  checked={legalAccepted}
+                  onChange={(e) => setLegalAccepted(e.target.checked)}
                   size="small"
                   sx={{ pt: 0.5 }}
                   required
@@ -160,33 +162,17 @@ export default function Register() {
               }
               label={
                 <Typography variant="caption" color="text.secondary">
+                  {/* target=_blank so reading a policy never destroys the half-filled form */}
                   I agree to the{' '}
-                  <Link component="button" type="button" onClick={() => navigate('/terms')} sx={{ color: 'primary.main', cursor: 'pointer', fontSize: 'inherit' }}>
+                  <Link href="/terms" target="_blank" rel="noopener" sx={{ color: 'primary.main', fontSize: 'inherit' }}>
                     Terms of Service
                   </Link>
-                  {' '}and{' '}
-                  <Link component="button" type="button" onClick={() => navigate('/privacy')} sx={{ color: 'primary.main', cursor: 'pointer', fontSize: 'inherit' }}>
+                  {', '}
+                  <Link href="/privacy" target="_blank" rel="noopener" sx={{ color: 'primary.main', fontSize: 'inherit' }}>
                     Privacy Policy
                   </Link>
-                  {' '}*
-                </Typography>
-              }
-            />
-            <FormControlLabel
-              sx={{ mb: 2, alignItems: 'flex-start' }}
-              control={
-                <Checkbox
-                  checked={aupAccepted}
-                  onChange={(e) => setAupAccepted(e.target.checked)}
-                  size="small"
-                  sx={{ pt: 0.5 }}
-                  required
-                />
-              }
-              label={
-                <Typography variant="caption" color="text.secondary">
-                  I agree to the{' '}
-                  <Link component="button" type="button" onClick={() => navigate('/acceptable-use')} sx={{ color: 'primary.main', cursor: 'pointer', fontSize: 'inherit' }}>
+                  {' '}and{' '}
+                  <Link href="/acceptable-use" target="_blank" rel="noopener" sx={{ color: 'primary.main', fontSize: 'inherit' }}>
                     Acceptable Use Policy
                   </Link>
                   {' '}*
@@ -198,7 +184,7 @@ export default function Register() {
               fullWidth
               variant="contained"
               size="large"
-              disabled={loading || !tosAccepted || !aupAccepted}
+              disabled={loading || !legalAccepted}
               sx={{ mb: 2 }}
             >
               {loading ? <CircularProgress size={24} color="inherit" /> : 'Create Account'}

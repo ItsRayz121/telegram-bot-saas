@@ -86,14 +86,32 @@ _DEV_SIGNUP_LIMIT = 2   # max new accounts per device in 24h before flagging
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
+_redis_client = None  # module-level client backed by a connection pool
+
+
 def _get_redis():
-    """Return a Redis client or None if unavailable."""
+    """Return a pooled Redis client or None if unavailable.
+
+    This runs on EVERY authenticated request (token_in_blocklist_loader), so it
+    must reuse a connection pool — previously it opened and pinged a brand-new
+    TCP connection per request, adding latency and connection churn.
+    """
+    global _redis_client
     try:
         import redis
-        r = redis.from_url(Config.REDIS_URL, decode_responses=True, socket_connect_timeout=2)
-        r.ping()
-        return r
+        if _redis_client is None:
+            _redis_client = redis.from_url(
+                Config.REDIS_URL,
+                decode_responses=True,
+                socket_connect_timeout=2,
+                socket_timeout=2,
+                health_check_interval=30,
+            )
+        _redis_client.ping()
+        return _redis_client
     except Exception:
+        # Drop the client so the next call rebuilds it (e.g. Redis restarted)
+        _redis_client = None
         return None
 
 

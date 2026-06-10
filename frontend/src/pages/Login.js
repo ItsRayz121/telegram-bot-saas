@@ -8,8 +8,13 @@ import TelegizerLogo from '../components/TelegizerLogo';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { auth } from '../services/api';
+import usePageMeta from '../hooks/usePageMeta';
 
 export default function Login() {
+  usePageMeta(
+    'Sign In',
+    'Sign in to your Telegizer dashboard to manage your Telegram bots, groups, and automations.'
+  );
   const navigate = useNavigate();
   const [form, setForm] = useState({ email: '', password: '' });
   const [showPassword, setShowPassword] = useState(false);

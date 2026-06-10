@@ -12,6 +12,7 @@ import {
 import { useNavigate, useLocation } from 'react-router-dom';
 import { directory as dirApi } from '../services/api';
 import ComingSoonPage from '../components/ComingSoonPage';
+import usePageMeta from '../hooks/usePageMeta';
 
 // ── FEATURE FLAG: Directory is temporarily hidden for future reactivation ──────
 // All backend routes, DB schema, and API calls below are fully preserved.
@@ -315,6 +316,10 @@ function DirectoryFull() {
 // ── Feature-flagged export ────────────────────────────────────────────────────
 // Temporarily hidden for future reactivation. Swap to DirectoryFull when ready.
 export default function Directory() {
+  usePageMeta(
+    'Community Directory — Discover Telegram Groups',
+    'Browse the Telegizer community directory: discover active, moderated Telegram groups across crypto, tech, gaming, and more.'
+  );
   if (SHOW_DIRECTORY) return <DirectoryFull />;
   return (
     <ComingSoonPage

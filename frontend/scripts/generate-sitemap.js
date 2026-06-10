@@ -16,12 +16,15 @@ const TODAY = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
  * changefreq: how often Google should re-crawl
  */
 const PAGES = [
-  { loc: '/',        changefreq: 'weekly',  priority: '1.0' },
-  { loc: '/pricing', changefreq: 'weekly',  priority: '0.9' },
-  { loc: '/about',   changefreq: 'monthly', priority: '0.8' },
-  { loc: '/contact', changefreq: 'monthly', priority: '0.7' },
-  { loc: '/privacy', changefreq: 'monthly', priority: '0.5' },
-  { loc: '/terms',   changefreq: 'monthly', priority: '0.5' },
+  { loc: '/',               changefreq: 'weekly',  priority: '1.0' },
+  { loc: '/pricing',        changefreq: 'weekly',  priority: '0.9' },
+  { loc: '/directory',      changefreq: 'daily',   priority: '0.8' },
+  { loc: '/marketplace',    changefreq: 'weekly',  priority: '0.7' },
+  { loc: '/about',          changefreq: 'monthly', priority: '0.8' },
+  { loc: '/contact',        changefreq: 'monthly', priority: '0.7' },
+  { loc: '/privacy',        changefreq: 'monthly', priority: '0.5' },
+  { loc: '/terms',          changefreq: 'monthly', priority: '0.5' },
+  { loc: '/acceptable-use', changefreq: 'monthly', priority: '0.4' },
 ];
 
 function buildSitemap(pages) {

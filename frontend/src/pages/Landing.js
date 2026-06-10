@@ -14,6 +14,7 @@ import {
 } from '@mui/icons-material';
 import TelegizerLogo from '../components/TelegizerLogo';
 import { useNavigate } from 'react-router-dom';
+import usePageMeta from '../hooks/usePageMeta';
 
 const PAIN_POINTS = [
   {
@@ -382,6 +383,7 @@ function loadCachedStats() {
 }
 
 export default function Landing() {
+  usePageMeta();
   const navigate = useNavigate();
   const token = localStorage.getItem('token');
 

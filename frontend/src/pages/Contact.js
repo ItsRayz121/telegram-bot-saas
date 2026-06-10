@@ -10,6 +10,7 @@ import {
 import TelegizerLogo from '../components/TelegizerLogo';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
+import usePageMeta from '../hooks/usePageMeta';
 
 function PageNav() {
   const navigate = useNavigate();
@@ -182,6 +183,10 @@ function ContactForm() {
 }
 
 export default function Contact() {
+  usePageMeta(
+    'Contact Support',
+    'Get help with Telegizer. Contact our support team about bots, groups, billing, or anything else — we respond within 2 business days.'
+  );
   const navigate = useNavigate();
 
   return (

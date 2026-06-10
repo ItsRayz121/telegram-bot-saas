@@ -6,6 +6,7 @@ import {
 import { Block, CheckCircle, OpenInNew } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import TelegizerLogo from '../components/TelegizerLogo';
+import usePageMeta from '../hooks/usePageMeta';
 
 const PROHIBITED = [
   'Sending unsolicited bulk messages (spam) to Telegram users or groups',
@@ -29,6 +30,10 @@ const PERMITTED = [
 ];
 
 export default function AcceptableUse() {
+  usePageMeta(
+    'Acceptable Use Policy',
+    "Telegizer Acceptable Use Policy: what is and isn't allowed when running bots and communities on our platform."
+  );
   const navigate = useNavigate();
 
   return (

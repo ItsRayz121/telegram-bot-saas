@@ -56,6 +56,16 @@ export default function PaymentSuccess() {
       return false;
     };
 
+    // Recovery path: ask the backend to re-check the invoice directly with
+    // NOWPayments — catches the case where the IPN webhook was never delivered.
+    const tryRecovery = async () => {
+      try {
+        const res = await billing.verifyPayment();
+        if (res.data?.upgraded) return check();
+      } catch { /* ignore */ }
+      return false;
+    };
+
     // First check immediately
     check().then((done) => {
       if (done) return;
@@ -66,7 +76,11 @@ export default function PaymentSuccess() {
         const confirmed = await check();
         if (confirmed || count >= MAX_ATTEMPTS) {
           clearInterval(intervalRef.current);
-          if (!confirmed) setStatus('pending');
+          if (!confirmed) {
+            // Last resort before giving up: server-side invoice re-check
+            const recovered = await tryRecovery();
+            if (!recovered) setStatus('pending');
+          }
         }
       }, POLL_INTERVAL);
     });
@@ -174,7 +188,15 @@ export default function PaymentSuccess() {
                 <Button variant="contained" fullWidth onClick={() => navigate('/dashboard')}>
                   Go to Dashboard
                 </Button>
-                <Button variant="outlined" fullWidth onClick={() => window.location.reload()}>
+                <Button
+                  variant="outlined"
+                  fullWidth
+                  onClick={async () => {
+                    // Server-side invoice re-check first, then restart the poll
+                    try { await billing.verifyPayment(); } catch { /* ignore */ }
+                    window.location.reload();
+                  }}
+                >
                   Check Again
                 </Button>
               </Stack>

@@ -11,6 +11,7 @@ import Switch from '@mui/material/Switch';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { billing } from '../services/api';
+import usePageMeta from '../hooks/usePageMeta';
 
 const PLANS = [
   {
@@ -114,6 +115,10 @@ const COMPARISON = [
 ];
 
 export default function Pricing() {
+  usePageMeta(
+    'Pricing — Free, Pro & Enterprise plans',
+    'Telegizer pricing: start free, Pro from $9/month, Enterprise $49/month. 14-day Pro trial, crypto payments, no auto-renew, 14-day money-back guarantee.'
+  );
   const navigate = useNavigate();
   const [loading] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
