@@ -6,7 +6,7 @@ import {
   DialogTitle, DialogContent, DialogActions, MenuItem, Select,
   FormControl, InputLabel, Pagination, InputAdornment,
   Alert, Tooltip, LinearProgress, Stack, Divider, Switch, FormControlLabel,
-  Breadcrumbs, Link as MuiLink,
+  Breadcrumbs, Link as MuiLink, ToggleButton, ToggleButtonGroup,
 } from '@mui/material';
 import {
   Search, Block, CheckCircle, Delete, Groups, SmartToy,
@@ -3819,6 +3819,91 @@ const ENV_LABELS = {
   nowpayments: 'NOWPayments', lemonsqueezy: 'Lemon Squeezy', google_oauth: 'Google OAuth',
 };
 
+function CriticalActionsPanel({ onAdminError }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState('open');
+  const [busyId, setBusyId] = useState(null);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await admin.getCriticalActions({ status, per_page: 50 });
+      setData(res.data);
+    } catch (err) { onAdminError(err, 'Failed to load critical actions'); }
+    finally { setLoading(false); }
+  }, [status, onAdminError]);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const toggleResolve = async (row) => {
+    setBusyId(row.id);
+    try {
+      await admin.resolveCriticalAction(row.id, row.status === 'resolved');
+      toast.success(row.status === 'resolved' ? 'Reopened' : 'Marked resolved');
+      fetchData();
+    } catch (err) { toast.error(err.response?.data?.error || 'Action failed'); }
+    finally { setBusyId(null); }
+  };
+
+  const actions = data?.actions || [];
+  return (
+    <Card><CardContent>
+      <Stack direction="row" alignItems="center" spacing={1} mb={1.5} flexWrap="wrap" useFlexGap>
+        <Typography variant="subtitle1" fontWeight={700}>Critical Actions</Typography>
+        <Chip size="small" color="error" variant="outlined" label={`${data?.open_count ?? 0} open`} />
+        <Chip size="small" variant="outlined" label={`${data?.resolved_count ?? 0} resolved`} />
+        <Box flex={1} />
+        <ToggleButtonGroup size="small" exclusive value={status} onChange={(e, v) => v && setStatus(v)}>
+          <ToggleButton value="open">Open</ToggleButton>
+          <ToggleButton value="resolved">Resolved</ToggleButton>
+          <ToggleButton value="all">All</ToggleButton>
+        </ToggleButtonGroup>
+        <Tooltip title="Refresh"><IconButton size="small" onClick={fetchData}><Refresh fontSize="small" /></IconButton></Tooltip>
+      </Stack>
+      {loading ? (
+        <Box display="flex" justifyContent="center" py={3}><CircularProgress size={22} /></Box>
+      ) : actions.length === 0 ? (
+        <Typography variant="body2" color="text.secondary" py={2}>
+          {status === 'open' ? 'No open critical actions — all clear.' : 'No critical actions to show.'}
+        </Typography>
+      ) : (
+        <TableContainer sx={{ overflowX: 'auto' }}>
+          <Table size="small">
+            <TableHead><TableRow sx={{ '& th': { fontWeight: 700, fontSize: 12 } }}>
+              <TableCell>Action</TableCell><TableCell>Target</TableCell><TableCell>Admin</TableCell>
+              <TableCell>When</TableCell><TableCell>Status</TableCell><TableCell align="right">—</TableCell>
+            </TableRow></TableHead>
+            <TableBody>
+              {actions.map((r) => (
+                <TableRow key={r.id} hover>
+                  <TableCell sx={{ fontSize: 12 }}>{r.action}<br /><Typography variant="caption" color="text.disabled">{r.method} {r.path}</Typography></TableCell>
+                  <TableCell sx={{ fontSize: 12 }}>{r.target_type ? `${r.target_type}:${r.target_id}` : '—'}</TableCell>
+                  <TableCell sx={{ fontSize: 12 }}>{r.admin_email || `#${r.admin_id}`}</TableCell>
+                  <TableCell sx={{ fontSize: 12 }}>{fmtDateTime(r.created_at)}</TableCell>
+                  <TableCell>
+                    <Chip size="small" color={r.status === 'resolved' ? 'success' : 'error'}
+                      variant={r.status === 'resolved' ? 'filled' : 'outlined'}
+                      label={r.status === 'resolved' ? 'Resolved' : 'Open'} />
+                    {r.status === 'resolved' && r.resolved_by_email && (
+                      <Typography variant="caption" color="text.disabled" display="block">by {r.resolved_by_email}</Typography>
+                    )}
+                  </TableCell>
+                  <TableCell align="right">
+                    <Button size="small" disabled={busyId === r.id} onClick={() => toggleResolve(r)}>
+                      {r.status === 'resolved' ? 'Reopen' : 'Resolve'}
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
+    </CardContent></Card>
+  );
+}
+
 function SystemTab({ onAdminError }) {
   const [sys, setSys] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -3911,10 +3996,18 @@ function SystemTab({ onAdminError }) {
             <Typography variant="subtitle1" fontWeight={700} mb={1.5}>Last 24 hours</Typography>
             <Grid container spacing={2}>
               <Grid item xs={6}><StatCard label="Bot/AI errors" value={sys.errors?.bot_health_24h} color="#ff9f0a" /></Grid>
-              <Grid item xs={6}><StatCard label="Critical admin actions" value={sys.errors?.critical_admin_actions_24h} color="#ff453a" /></Grid>
+              <Grid item xs={6}>
+                <StatCard label="Open critical actions" value={sys.errors?.critical_admin_actions_open ?? sys.errors?.critical_admin_actions_24h} color="#ff453a" />
+              </Grid>
             </Grid>
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+              "Open" counts unresolved critical actions only — resolve them below to clear the badge.
+            </Typography>
           </CardContent></Card>
         </Grid>
+
+        {/* Critical admin actions — open/resolved triage */}
+        <Grid item xs={12}><CriticalActionsPanel onAdminError={onAdminError} /></Grid>
 
         {/* Scheduled jobs */}
         <Grid item xs={12}>

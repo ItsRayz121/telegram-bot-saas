@@ -1518,6 +1518,11 @@ def _run_migrations():
         "ALTER TABLE groups ADD COLUMN telegram_member_count INTEGER DEFAULT 0",
         # Live Telegram member-count reconciliation timestamp
         "ALTER TABLE telegram_groups ADD COLUMN member_count_synced_at TIMESTAMP",
+        # Critical-admin-action resolution tracking (Phase 8) — so a resolved
+        # critical action stops counting against the dashboard "needs attention".
+        "ALTER TABLE admin_audit_logs ADD COLUMN resolved_at TIMESTAMP",
+        "ALTER TABLE admin_audit_logs ADD COLUMN resolved_by INTEGER",
+        "CREATE INDEX IF NOT EXISTS ix_admin_audit_sev_resolved ON admin_audit_logs (severity, resolved_at)",
         # Platform-admin free-text notes on the user detail page
         "ALTER TABLE users ADD COLUMN admin_notes TEXT",
         # Invite link creator tracking

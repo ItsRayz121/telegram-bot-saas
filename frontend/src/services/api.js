@@ -668,6 +668,8 @@ export const admin = {
   getProofMetrics: () => api.get('/api/admin/proof-metrics'),
   updateProofPublic: (keys) => api.put('/api/admin/proof-metrics/public', { keys }),
   syncProofMembers: () => api.post('/api/admin/proof-metrics/sync-members'),
+  getCriticalActions: (params) => api.get('/api/admin/critical-actions', { params }),
+  resolveCriticalAction: (id, reopen) => api.post(`/api/admin/critical-actions/${id}/resolve`, { reopen: !!reopen }),
   getEventLog: (params) => api.get('/api/admin/event-log', { params }),
   clearBotHealth: (scope, ref) => api.post(`/api/admin/bot-health/clear/${scope}/${ref}`),
   // Fraud Detection

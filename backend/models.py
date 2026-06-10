@@ -2954,6 +2954,11 @@ class AdminAuditLog(db.Model):
     old_value = db.Column(db.Text, nullable=True)        # safe (never secret) prior value
     new_value = db.Column(db.Text, nullable=True)        # safe (never secret) new value
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    # Critical-action resolution (Phase 8). The row itself stays immutable history;
+    # these only flag that the operational concern it raised has been handled, so a
+    # resolved critical action stops counting toward the dashboard attention badge.
+    resolved_at = db.Column(db.DateTime, nullable=True)
+    resolved_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
 
     def to_dict(self):
         return {
@@ -2969,6 +2974,9 @@ class AdminAuditLog(db.Model):
             "old_value": self.old_value,
             "new_value": self.new_value,
             "created_at": self.created_at.isoformat(),
+            "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None,
+            "resolved_by": self.resolved_by,
+            "status": "resolved" if self.resolved_at else "open",
         }
 
 

@@ -2524,6 +2524,77 @@ def feature_usage():
     return jsonify({"view": "bot", **usage_overview(["official", "custom"])})
 
 
+# ── Critical admin actions (open/resolved triage) ──────────────────────────────
+
+@admin_bp.route("/critical-actions", methods=["GET"])
+@require_permission(rbac.P_AUDIT_VIEW)
+@rate_limit(requests_per_minute=30)
+def list_critical_actions():
+    """Recent critical admin actions with open/resolved status.
+
+    `status` ∈ {open, resolved, all} (default open). Returns counts so the
+    dashboard badge can show unresolved-only while the tab can show everything.
+    """
+    status = (request.args.get("status") or "open").lower()
+    page = max(1, request.args.get("page", 1, type=int) or 1)
+    per_page = min(100, max(1, request.args.get("per_page", 50, type=int) or 50))
+
+    base = AdminAuditLog.query.filter(AdminAuditLog.severity == "critical")
+    q = base
+    if status == "open":
+        q = q.filter(AdminAuditLog.resolved_at.is_(None))
+    elif status == "resolved":
+        q = q.filter(AdminAuditLog.resolved_at.isnot(None))
+
+    total = q.count()
+    rows = (q.order_by(AdminAuditLog.created_at.desc())
+            .offset((page - 1) * per_page).limit(per_page).all())
+
+    admin_ids = {r.admin_id for r in rows} | {r.resolved_by for r in rows if r.resolved_by}
+    emails = {u.id: u.email for u in User.query.filter(User.id.in_(admin_ids)).all()} if admin_ids else {}
+
+    items = []
+    for r in rows:
+        d = r.to_dict()
+        d["admin_email"] = emails.get(r.admin_id)
+        d["resolved_by_email"] = emails.get(r.resolved_by) if r.resolved_by else None
+        items.append(d)
+
+    return jsonify({
+        "actions": items,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "pages": (total + per_page - 1) // per_page,
+        "open_count": base.filter(AdminAuditLog.resolved_at.is_(None)).count(),
+        "resolved_count": base.filter(AdminAuditLog.resolved_at.isnot(None)).count(),
+    })
+
+
+@admin_bp.route("/critical-actions/<int:action_id>/resolve", methods=["POST"])
+@require_permission(rbac.P_AUDIT_VIEW)
+@rate_limit(requests_per_minute=30)
+def resolve_critical_action(action_id):
+    """Mark a critical action resolved (or reopen it with ?reopen=true)."""
+    row = AdminAuditLog.query.get(action_id)
+    if not row or (row.severity != "critical"):
+        return jsonify({"error": "Critical action not found"}), 404
+
+    body = request.get_json(silent=True) or {}
+    reopen = (request.args.get("reopen") == "true") or (body.get("reopen") is True)
+    user = _get_current_user()
+    if reopen:
+        row.resolved_at = None
+        row.resolved_by = None
+        msg = "Critical action reopened"
+    else:
+        row.resolved_at = datetime.utcnow()
+        row.resolved_by = user.id if user else None
+        msg = "Critical action resolved"
+    db.session.commit()
+    return jsonify({"message": msg, "action": row.to_dict()})
+
+
 # ── Proof Metrics (public-stats source) ─────────────────────────────────────────
 
 @admin_bp.route("/proof-metrics", methods=["GET"])
@@ -3920,8 +3991,16 @@ def admin_system():
     except Exception:
         pass
     try:
+        # Count only UNRESOLVED critical actions — a resolved one is handled and
+        # must not keep inflating the "needs attention" badge.
         errors["critical_admin_actions_24h"] = AdminAuditLog.query.filter(
-            AdminAuditLog.created_at >= since, AdminAuditLog.severity == "critical"
+            AdminAuditLog.created_at >= since,
+            AdminAuditLog.severity == "critical",
+            AdminAuditLog.resolved_at.is_(None),
+        ).count()
+        errors["critical_admin_actions_open"] = AdminAuditLog.query.filter(
+            AdminAuditLog.severity == "critical",
+            AdminAuditLog.resolved_at.is_(None),
         ).count()
     except Exception:
         pass
