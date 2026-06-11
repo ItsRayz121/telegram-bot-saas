@@ -63,15 +63,15 @@
 - [x] 12.5 UI: Scheduler tab, Polls tab, Auto-responses tab
 - [x] 12.6 Tests (recurrence math, trigger matching) + commit
 
-## Phase 13 — Automation Engine
+## Phase 13 — Automation Engine ✅ DONE 2026-06-11 (live mirror check pending)
 
-- [ ] 13.1 DB: `AutomationWorkflow`, `AutomationExecution`, `MirrorRule`, `MirrorLog`, `InboundWebhook`, `OutboundWebhook`
-- [ ] 13.2 Workflow engine port (triggers: message/join/leave/reaction/schedule/webhook; conditions; actions: send/embed/role/timeout/webhook-out)
-- [ ] 13.3 Channel mirroring via webhooks (author name/avatar impersonation, cross-guild)
-- [ ] 13.4 Inbound webhook URLs → channel posts (per-guild secret paths)
-- [ ] 13.5 Outbound event webhooks generalized (all event types, not just campaigns)
-- [ ] 13.6 UI: Workflow builder, Mirroring tab, Webhooks tab
-- [ ] 13.7 Tests (engine unit suite) + live mirror check + commit
+- [x] 13.1 DB: `AutomationWorkflow`, `AutomationExecution`, `MirrorRule`, `MirrorLog`, `InboundWebhook`, `OutboundWebhook`
+- [x] 13.2 Workflow engine port (triggers: message/join/leave/reaction/schedule/webhook; conditions; actions: send/embed/role/timeout/webhook-out)
+- [x] 13.3 Channel mirroring via webhooks (author name/avatar impersonation, cross-guild)
+- [x] 13.4 Inbound webhook URLs → channel posts (per-guild secret paths)
+- [x] 13.5 Outbound event webhooks generalized (all event types, not just campaigns)
+- [x] 13.6 UI: Workflow builder, Mirroring tab, Webhooks tab
+- [x] 13.7 Tests (engine unit suite) + live mirror check + commit
 
 ## Phase 14 — Engagement Parity+ (Growth)
 

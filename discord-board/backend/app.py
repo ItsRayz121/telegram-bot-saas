@@ -8,6 +8,7 @@ from flask_cors import CORS
 
 from admin_api import admin_bp
 from auth import auth_bp
+from automation_api import automation_bp
 from billing_api import billing_bp
 from campaigns_api import campaigns_bp
 from config import Config
@@ -39,6 +40,7 @@ def create_app() -> Flask:
     app.register_blueprint(admin_bp)
     app.register_blueprint(custom_bots_bp)
     app.register_blueprint(content_bp)
+    app.register_blueprint(automation_bp)
 
     @app.get("/")
     def root():

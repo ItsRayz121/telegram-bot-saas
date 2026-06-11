@@ -164,3 +164,43 @@ disable, poll lifecycle incl. failed-post, match semantics exact-vs-contains,
 cooldown) green; frontend production build green.
 
 **Env vars**: none new. **Manual ops**: none.
+
+## Phase 13 — Automation Engine (2026-06-11)
+
+Workflows, channel mirroring, and inbound/outbound webhooks. Both lineages.
+
+**Workflows** (`AutomationWorkflow` + `AutomationExecution`): triggers
+message_contains / member_join / member_leave / reaction_add (new
+on_raw_reaction_add handler), optional channel filter + per-workflow cooldown;
+ordered action list (max 5): send_message (placeholders {user}/{server}/
+{channel}, optional target channel), add_role/remove_role, timeout, webhook.
+Every run recorded with ok/error status; runs_count on the row.
+
+**Channel mirroring** (`MirrorRule`): reposts clean messages (text +
+attachment URLs) to another channel via a Discord webhook with the original
+author's name/avatar. Cross-server works when the bot is in both. Webhook
+created once and cached; deleted webhooks self-heal (recreate next message);
+errors surfaced on the rule.
+
+**Inbound webhooks** (`InboundWebhook`): secret-token URLs
+(POST /webhooks/in/<token> with {"content": …}); payload relayed into the
+channel by enqueuing a one-shot ScheduledMessage — bot/API still coordinate
+only via DB. Counters + last-used tracked.
+
+**Outbound webhooks** (`OutboundWebhook`): member_join / member_leave /
+moderation_action / raid_activated events POSTed as JSON with optional
+HMAC-SHA256 signature (X-Guildizer-Signature); per-hook delivery counters and
+last_error. Wired into join/leave/filter-action/raid paths.
+
+**API** (`automation_api.py`): manage-gated CRUD for all four (+ executions
+list, per-guild limits 25/10/10). **UI**: new Automation tab — workflow
+builder row, mirrors card, webhooks card (copy-URL inbound, event-checkbox
+outbound).
+
+**Validation**: smoke suite (trigger matching incl. channel filter, cooldown,
+render, execution recording, inbound relay 202/404/400 + queue row, outbound
+error capture + event filtering, mirror cache lifecycle) green; frontend
+production build green.
+
+**Env vars**: none new. **Manual ops**: mirroring needs Manage Webhooks on the
+destination (already in the default invite permission set).

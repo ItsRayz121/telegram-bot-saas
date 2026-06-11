@@ -946,3 +946,146 @@ class AutoResponse(Base):
             "cooldown_seconds": self.cooldown_seconds or 30,
             "enabled": bool(self.enabled),
         }
+
+
+class AutomationWorkflow(Base):
+    """Trigger -> actions automation (Phase 13). Actions is an ordered JSON list
+    of {type, ...} steps the bot executes when the trigger fires."""
+
+    __tablename__ = "automation_workflows"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, ForeignKey("guilds.id"), nullable=False, index=True)
+    name = Column(String(120), nullable=False)
+    enabled = Column(Boolean, default=True)
+    # message_contains | member_join | member_leave | reaction_add
+    trigger_type = Column(String(20), nullable=False)
+    trigger_value = Column(String(120))                # keyword / emoji, where applicable
+    channel_filter = Column(BigInteger, nullable=True)  # only fire in this channel
+    # [{type: send_message, channel_id?, text} | {type: add_role|remove_role, role_id}
+    #  | {type: timeout, minutes} | {type: webhook, url}]
+    actions = Column(JSON, default=list)
+    cooldown_seconds = Column(Integer, default=0)
+    runs_count = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "enabled": bool(self.enabled),
+            "trigger_type": self.trigger_type,
+            "trigger_value": self.trigger_value or "",
+            "channel_filter": str(self.channel_filter) if self.channel_filter else None,
+            "actions": list(self.actions or []),
+            "cooldown_seconds": self.cooldown_seconds or 0,
+            "runs_count": self.runs_count or 0,
+        }
+
+
+class AutomationExecution(Base):
+    """One workflow run (audit trail for the dashboard)."""
+
+    __tablename__ = "automation_executions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    workflow_id = Column(Integer, ForeignKey("automation_workflows.id"), nullable=False, index=True)
+    guild_id = Column(BigInteger, nullable=False, index=True)
+    status = Column(String(10), default="ok")          # ok | error
+    detail = Column(String(300))
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "workflow_id": self.workflow_id,
+            "status": self.status,
+            "detail": self.detail,
+            "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
+        }
+
+
+class MirrorRule(Base):
+    """Mirror messages from a source channel to a destination channel via a
+    Discord webhook with author name/avatar impersonation (Phase 13). The
+    destination may be in another server; the bot creates the webhook once and
+    caches its URL here."""
+
+    __tablename__ = "mirror_rules"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, ForeignKey("guilds.id"), nullable=False, index=True)  # source guild
+    source_channel_id = Column(BigInteger, nullable=False, index=True)
+    dest_channel_id = Column(BigInteger, nullable=False)
+    webhook_url = Column(Text)                          # cached after first creation
+    enabled = Column(Boolean, default=True)
+    mirrored_count = Column(Integer, default=0)
+    last_error = Column(String(200))
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "source_channel_id": str(self.source_channel_id),
+            "dest_channel_id": str(self.dest_channel_id),
+            "enabled": bool(self.enabled),
+            "mirrored_count": self.mirrored_count or 0,
+            "last_error": self.last_error,
+            "has_webhook": bool(self.webhook_url),
+        }
+
+
+class InboundWebhook(Base):
+    """A secret URL outsiders can POST to; the bot relays the payload into a
+    channel (Phase 13). The token in the URL is the credential."""
+
+    __tablename__ = "inbound_webhooks"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, ForeignKey("guilds.id"), nullable=False, index=True)
+    channel_id = Column(BigInteger, nullable=False)
+    name = Column(String(120))
+    token = Column(String(64), unique=True, nullable=False, index=True)
+    enabled = Column(Boolean, default=True)
+    received_count = Column(Integer, default=0)
+    last_used_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "channel_id": str(self.channel_id),
+            "token": self.token,
+            "enabled": bool(self.enabled),
+            "received_count": self.received_count or 0,
+            "last_used_at": self.last_used_at.isoformat() + "Z" if self.last_used_at else None,
+        }
+
+
+class OutboundWebhook(Base):
+    """Server events POSTed to an external URL (Phase 13): member_join,
+    member_leave, moderation_action, raid_activated. Optional HMAC secret."""
+
+    __tablename__ = "outbound_webhooks"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, ForeignKey("guilds.id"), nullable=False, index=True)
+    url = Column(String(500), nullable=False)
+    events = Column(JSON, default=list)                 # subset of OUTBOUND_EVENTS
+    secret = Column(String(120))
+    enabled = Column(Boolean, default=True)
+    delivered_count = Column(Integer, default=0)
+    last_error = Column(String(200))
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "url": self.url,
+            "events": list(self.events or []),
+            "has_secret": bool(self.secret),
+            "enabled": bool(self.enabled),
+            "delivered_count": self.delivered_count or 0,
+            "last_error": self.last_error,
+        }

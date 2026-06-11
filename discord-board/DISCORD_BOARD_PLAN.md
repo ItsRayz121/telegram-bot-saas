@@ -160,7 +160,7 @@ V2 status:
 - [x] Phase 10 — Moderation parity pack (2026-06-11: automod matrix in extra JSON, warning ladder, MemberWarning/ModReport/ScheduledModAction, 13 mod commands + report context menu, tempban-expiry loop, reports queue UI. See CHANGELOG.md)
 - [x] Phase 11 — Verification & onboarding parity (2026-06-11: quarantine-role captcha button/math/word w/ auto-setup + timeout sweep, bot policy w/ Trust/Kick buttons, welcome embed/rules/auto-delete. See CHANGELOG.md)
 - [x] Phase 12 — Scheduling, polls & content (2026-06-11: ScheduledMessage w/ recurrence, native Discord polls w/ result capture, AutoResponse w/ cooldowns, content_loop both lineages, Content tab. See CHANGELOG.md)
-- [ ] Phase 13 — Automation engine (workflows, mirroring, webhooks)
+- [x] Phase 13 — Automation engine (2026-06-11: AutomationWorkflow/Execution + 4 triggers/4 actions, webhook mirroring w/ author impersonation + self-heal, inbound token URLs -> queued posts, outbound HMAC events, Automation tab. See CHANGELOG.md)
 - [ ] Phase 14 — Engagement parity+ (referrals/invites/custom fields/proof feed)
 - [ ] Phase 15 — CRM, analytics & usage spine
 - [ ] Phase 16 — Knowledge & applied AI

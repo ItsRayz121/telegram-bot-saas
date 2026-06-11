@@ -23,6 +23,7 @@ from discord.ext import tasks
 
 import ai
 import assistant
+import automation_runtime
 import bot_policy
 import campaign_runtime
 import campaign_views
@@ -238,6 +239,12 @@ class CoreMixin:
                 self._log, message.guild.id, decision["category"], action_taken,
                 message.author.id, str(message.author), message.channel.id, decision["detail"],
             )
+            await asyncio.to_thread(
+                automation_runtime.dispatch_event, message.guild.id, "moderation_action",
+                {"action": action_taken, "category": decision["category"],
+                 "user_id": str(message.author.id), "username": str(message.author),
+                 "detail": decision["detail"]},
+            )
             if raid_guard.note_violation(message.guild.id, message.author.id, cfg):
                 await self._raid_activated(message.guild, cfg)
         else:
@@ -245,6 +252,12 @@ class CoreMixin:
                 await self._raid_activated(message.guild, cfg)
             else:
                 await self._maybe_auto_respond(message)
+                await self._maybe_mirror(message)
+                await self._run_workflows(
+                    "message_contains", message.guild,
+                    member=message.author, channel=message.channel,
+                    text=message.content or "",
+                )
 
     async def _maybe_auto_respond(self, message: discord.Message) -> None:
         responses = await asyncio.to_thread(content_runtime.load_responses, message.guild.id)
@@ -293,6 +306,10 @@ class CoreMixin:
         log.warning("Raid mode activated for guild %s (%ds)", guild.id, secs)
         await asyncio.to_thread(
             self._log, guild.id, "raid", "restricted", None, None, None, "Raid mode activated"
+        )
+        await asyncio.to_thread(
+            automation_runtime.dispatch_event, guild.id, "raid_activated",
+            {"seconds_remaining": secs},
         )
         if not cfg.get("rg_notify"):
             return
@@ -377,6 +394,12 @@ class CoreMixin:
         if cfg["welcome_enabled"] and cfg["welcome_channel_id"]:
             await self._send_welcome(member, cfg)
 
+        await self._run_workflows("member_join", member.guild, member=member)
+        await asyncio.to_thread(
+            automation_runtime.dispatch_event, member.guild.id, "member_join",
+            {"user_id": str(member.id), "username": str(member)},
+        )
+
     async def _start_verification(self, member: discord.Member, vcfg: dict) -> None:
         guild = member.guild
         # lazy setup: create role/channel on first use (admin enabled it in the dashboard)
@@ -449,6 +472,12 @@ class CoreMixin:
     async def on_member_remove(self, member: discord.Member) -> None:
         if not serves(self, member.guild.id):
             return
+        if not member.bot:
+            await self._run_workflows("member_leave", member.guild, member=member)
+            await asyncio.to_thread(
+                automation_runtime.dispatch_event, member.guild.id, "member_leave",
+                {"user_id": str(member.id), "username": str(member)},
+            )
         cfg = await asyncio.to_thread(self._load_member_settings, member.guild.id)
         if not cfg or not (cfg["leave_enabled"] and cfg["leave_channel_id"]):
             return
@@ -456,6 +485,129 @@ class CoreMixin:
             member.guild, cfg["leave_channel_id"],
             settings_mod.render_message(cfg["leave_message"], member=member, guild=member.guild),
         )
+
+    # --- automation engine (Phase 13) -------------------------------------------
+    async def _run_workflows(self, trigger_type: str, guild: discord.Guild, *,
+                             member=None, channel=None, text: str | None = None,
+                             emoji: str | None = None) -> None:
+        flows = await asyncio.to_thread(
+            automation_runtime.load_workflows, guild.id, trigger_type
+        )
+        for wf in flows:
+            if not automation_runtime.matches(
+                wf, text=text, channel_id=channel.id if channel else None, emoji=emoji,
+            ):
+                continue
+            if not automation_runtime.cooldown_ok(wf):
+                continue
+            status, detail = "ok", None
+            try:
+                await self._run_workflow_actions(wf, guild, member=member, channel=channel)
+            except Exception as exc:  # noqa: BLE001
+                status, detail = "error", str(exc)[:300]
+                log.exception("workflow %s failed", wf["id"])
+            await asyncio.to_thread(
+                automation_runtime.record_execution, wf["id"], guild.id, status, detail
+            )
+
+    async def _run_workflow_actions(self, wf: dict, guild: discord.Guild, *,
+                                    member=None, channel=None) -> None:
+        username = str(member) if member is not None else ""
+        for action in (wf.get("actions") or [])[:5]:
+            atype = action.get("type")
+            if atype == "send_message":
+                target = None
+                if action.get("channel_id"):
+                    target = guild.get_channel(int(action["channel_id"]))
+                if target is None:
+                    target = channel
+                text = automation_runtime.render(
+                    action.get("text") or "", username=username,
+                    server=guild.name or "", channel=getattr(channel, "name", "") or "",
+                )
+                if target is not None and hasattr(target, "send") and text:
+                    await governor.safe(target.send(text), what="workflow send")
+            elif atype in ("add_role", "remove_role") and member is not None:
+                role = guild.get_role(int(action.get("role_id") or 0))
+                if role is not None:
+                    coro = (member.add_roles if atype == "add_role" else member.remove_roles)(
+                        role, reason=f"Guildizer workflow: {wf['name']}"
+                    )
+                    await governor.safe(coro, what=f"workflow {atype}")
+            elif atype == "timeout" and member is not None:
+                mins = max(1, min(40320, int(action.get("minutes") or 10)))
+                await governor.safe(
+                    member.timeout(timedelta(minutes=mins),
+                                   reason=f"Guildizer workflow: {wf['name']}"),
+                    what="workflow timeout",
+                )
+            elif atype == "webhook" and action.get("url"):
+                await asyncio.to_thread(
+                    automation_runtime.dispatch_event, guild.id, "workflow_fired",
+                    {"workflow": wf["name"], "user": username},
+                )
+
+    async def _maybe_mirror(self, message: discord.Message) -> None:
+        rules = await asyncio.to_thread(
+            automation_runtime.mirrors_for_channel, message.guild.id, message.channel.id
+        )
+        if not rules:
+            return
+        content = message.content or ""
+        for att in message.attachments:
+            content = content + ("\n" if content else "") + att.url
+        if not content:
+            return
+        for rule in rules:
+            url = rule["webhook_url"]
+            if not url:
+                dest = self.get_channel(int(rule["dest_channel_id"]))
+                if dest is None or not hasattr(dest, "create_webhook"):
+                    await asyncio.to_thread(
+                        automation_runtime.save_mirror_webhook, rule["id"], None,
+                        "Destination channel not reachable by this bot.",
+                    )
+                    continue
+                try:
+                    hook = await dest.create_webhook(name="Guildizer Mirror")
+                    url = hook.url
+                    await asyncio.to_thread(
+                        automation_runtime.save_mirror_webhook, rule["id"], url
+                    )
+                except (discord.Forbidden, discord.HTTPException) as exc:
+                    await asyncio.to_thread(
+                        automation_runtime.save_mirror_webhook, rule["id"], None, str(exc)[:200]
+                    )
+                    continue
+            try:
+                webhook = discord.Webhook.from_url(url, client=self)
+                await webhook.send(
+                    content[:2000],
+                    username=message.author.display_name[:80],
+                    avatar_url=message.author.display_avatar.url,
+                )
+                await asyncio.to_thread(automation_runtime.bump_mirror, rule["id"])
+            except (discord.NotFound, discord.Forbidden):
+                # webhook was deleted on the destination side; recreate next time
+                await asyncio.to_thread(
+                    automation_runtime.save_mirror_webhook, rule["id"], None,
+                    "Webhook missing - will recreate.",
+                )
+            except discord.HTTPException as exc:
+                log.warning("mirror send failed for rule %s: %s", rule["id"], exc)
+
+    async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent) -> None:
+        if payload.guild_id is None or not serves(self, payload.guild_id):
+            return
+        guild = self.get_guild(payload.guild_id)
+        if guild is None:
+            return
+        member = payload.member or guild.get_member(payload.user_id)
+        if member is None or member.bot:
+            return
+        channel = guild.get_channel(payload.channel_id)
+        await self._run_workflows("reaction_add", guild, member=member, channel=channel,
+                                  emoji=str(payload.emoji))
 
     async def _send_to_channel(self, guild: discord.Guild, channel_id: int, content: str) -> None:
         if not content:
