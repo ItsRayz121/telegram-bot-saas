@@ -226,6 +226,25 @@ def update_moderation(guild_id: int):
                 })
             wl["steps"] = sorted(steps, key=lambda s: s["at"])
         extra["warn_ladder"] = wl
+    if isinstance(body.get("anti_nuke"), dict):
+        an_in = body["anti_nuke"]
+        an = dict(extra.get("anti_nuke") or {})
+        if "enabled" in an_in:
+            an["enabled"] = bool(an_in["enabled"])
+        if "window_seconds" in an_in:
+            an["window_seconds"] = _as_int(an_in["window_seconds"], 300, 30, 3600)
+        for key in ("max_bans", "max_kicks", "max_channel_deletes", "max_role_deletes"):
+            if key in an_in:
+                an[key] = _as_int(an_in[key], 0, 0, 100)
+        if an_in.get("action") in ("strip_roles", "ban", "alert_only"):
+            an["action"] = an_in["action"]
+        if "whitelist_user_ids" in an_in:
+            an["whitelist_user_ids"] = [str(u).strip() for u in (an_in["whitelist_user_ids"] or [])
+                                        if str(u).strip().isdigit()][:50]
+        if "alert_channel_id" in an_in:
+            ch = an_in["alert_channel_id"]
+            an["alert_channel_id"] = str(ch) if ch and str(ch).isdigit() else None
+        extra["anti_nuke"] = an
     if isinstance(body.get("kb_replies"), dict):
         kb_in = body["kb_replies"]
         kb = dict(extra.get("kb_replies") or {})

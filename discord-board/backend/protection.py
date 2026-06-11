@@ -72,6 +72,15 @@ EXTRA_DEFAULTS = {
     # Escalating punishment ladder: steps = [{"at", "action", "minutes", "window_hours"}]
     "warn_ladder": {"enabled": False, "steps": []},
     # AI knowledge-base auto-reply behaviour (consumed by knowledge.py /ask layer)
+    # Anti-nuke guard: per-executor sliding windows over destructive admin
+    # actions (audit-log attributed). 0 disables a single threshold.
+    "anti_nuke": {
+        "enabled": False, "window_seconds": 300,
+        "max_bans": 5, "max_kicks": 5,
+        "max_channel_deletes": 3, "max_role_deletes": 3,
+        "action": "strip_roles",   # strip_roles | ban | alert_only
+        "whitelist_user_ids": [], "alert_channel_id": None,
+    },
     "kb_replies": {
         "enabled": False, "mention_only": True, "low_confidence_fallback": False,
         "min_words": 3, "reply_length": "medium",   # short | medium | long

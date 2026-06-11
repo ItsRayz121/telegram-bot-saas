@@ -23,6 +23,7 @@ from discord import app_commands
 from discord.ext import tasks
 
 import ai
+import anti_nuke
 import assistant
 import automation_runtime
 import bot_policy
@@ -993,9 +994,28 @@ class CoreMixin:
             what="lockdown timeout",
         ) else "none"
 
+    # --- anti-nuke guard (destructive admin actions, audit-log attributed) ------
+    async def on_guild_channel_delete(self, channel) -> None:
+        guild = getattr(channel, "guild", None)
+        if guild is None or not serves(self, guild.id):
+            return
+        await anti_nuke.handle(self, guild, "channel_delete", channel.id)
+
+    async def on_guild_role_delete(self, role: discord.Role) -> None:
+        if not serves(self, role.guild.id):
+            return
+        await anti_nuke.handle(self, role.guild, "role_delete", role.id)
+
+    async def on_member_ban(self, guild: discord.Guild, user) -> None:
+        if not serves(self, guild.id):
+            return
+        await anti_nuke.handle(self, guild, "ban", user.id)
+
     async def on_member_remove(self, member: discord.Member) -> None:
         if not serves(self, member.guild.id):
             return
+        # a removal may be a kick — anti_nuke checks the audit log to find out
+        await anti_nuke.handle(self, member.guild, "kick", member.id)
         if not member.bot:
             await asyncio.to_thread(stats_runtime.bump_daily, member.guild.id, leaves=1)
             await self._run_workflows("member_leave", member.guild, member=member)

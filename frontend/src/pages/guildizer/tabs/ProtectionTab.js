@@ -18,9 +18,10 @@ const CAT_LABEL = {
   attachment: 'Attachment', sticker: 'Sticker', voice_message: 'Voice message',
   warning: 'Warning', moderation: 'Moderation', report: 'Report',
   smart_mod: 'Smart mod', image_ai: 'Image AI', bot_policy: 'Bot policy',
+  anti_nuke: 'Anti-nuke',
 };
 const SCRIPTS = ['cyrillic', 'chinese', 'korean', 'arabic', 'japanese'];
-const CAT_COLOR = { nsfw: 'error', csam: 'error', raid: 'warning', manual_lockdown: 'warning', lockdown_join: 'warning', invite: 'info', link: 'info' };
+const CAT_COLOR = { nsfw: 'error', csam: 'error', raid: 'warning', manual_lockdown: 'warning', lockdown_join: 'warning', invite: 'info', link: 'info', anti_nuke: 'error' };
 const ESCALATION_TYPES = [
   { key: 'ai_kb', label: '🤖 AI knowledge base — escalate when /ask confidence is low' },
   { key: 'ai_image', label: '🖼️ AI image review — escalate low-confidence image results' },
@@ -78,6 +79,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
   const setEsc = setSection('escalation');
   const setBp = setSection('bot_policy');
   const setEr = setSection('emoji_reactions');
+  const setAn = setSection('anti_nuke');
   const setCp = setSection('command_permissions');
   const setWl = setSection('warn_ladder');
   const setRp = setSection('reports');
@@ -256,6 +258,43 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                   </Stack>
                 </>
               )}
+            </CardContent></Card>
+          </Grid>
+
+          <Grid item xs={12} md={6}>
+            <Card variant="outlined"><CardContent>
+              <Typography variant="subtitle1" fontWeight={700} mb={1}>🧨 Anti-nuke guard</Typography>
+              <FormControlLabel control={<Switch checked={!!cfg.anti_nuke?.enabled} onChange={(e) => setAn({ enabled: e.target.checked })} />} label="Contain a compromised admin account" />
+              <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+                Counts destructive actions per admin (from the audit log). Crossing a threshold inside
+                the window triggers the response below. Needs the View Audit Log permission. 0 disables a threshold.
+              </Typography>
+              <TextField type="number" size="small" margin="dense" fullWidth label="Window (seconds)"
+                value={cfg.anti_nuke?.window_seconds ?? 300} inputProps={{ min: 30, max: 3600 }}
+                onChange={(e) => setAn({ window_seconds: Number(e.target.value) })} />
+              <Grid container spacing={1}>
+                {[['max_bans', 'Max bans'], ['max_kicks', 'Max kicks'],
+                  ['max_channel_deletes', 'Max channel deletes'], ['max_role_deletes', 'Max role deletes']]
+                  .map(([key, label]) => (
+                    <Grid item xs={6} key={key}>
+                      <TextField type="number" size="small" margin="dense" fullWidth label={label}
+                        value={cfg.anti_nuke?.[key] ?? 0} inputProps={{ min: 0, max: 100 }}
+                        onChange={(e) => setAn({ [key]: Number(e.target.value) })} />
+                    </Grid>
+                  ))}
+              </Grid>
+              <TextField select size="small" margin="dense" fullWidth label="Response when triggered"
+                value={cfg.anti_nuke?.action || 'strip_roles'} onChange={(e) => setAn({ action: e.target.value })}>
+                <MenuItem value="strip_roles">Strip their elevated roles</MenuItem>
+                <MenuItem value="ban">Ban them</MenuItem>
+                <MenuItem value="alert_only">Alert admins only</MenuItem>
+              </TextField>
+              {channelSelect('Alert channel', cfg.anti_nuke?.alert_channel_id, (v) => setAn({ alert_channel_id: v }))}
+              <TextField size="small" margin="dense" fullWidth label="Whitelisted admin IDs"
+                placeholder="123456789, 987654321"
+                value={(cfg.anti_nuke?.whitelist_user_ids || []).join(', ')}
+                onChange={(e) => setAn({ whitelist_user_ids: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })}
+                helperText="Comma-separated user IDs the guard never acts on. The server owner and the bot are always exempt." />
             </CardContent></Card>
           </Grid>
 
