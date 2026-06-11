@@ -8,6 +8,7 @@ import { Add, Delete } from '@mui/icons-material';
 import guildizerApi from '../../../services/guildizerApi';
 
 const TEXT_TYPES = new Set([0, 5]);
+const VOICE_TYPE = 2;
 
 export default function LevelingTab({ guildId, channels = [], roles = [] }) {
   const [cfg, setCfg] = useState(null);
@@ -18,6 +19,7 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
   const [error, setError] = useState(null);
 
   const textChannels = channels.filter((c) => TEXT_TYPES.has(c.type));
+  const voiceChannels = channels.filter((c) => c.type === VOICE_TYPE);
   const assignableRoles = roles.filter((r) => !r.managed && r.name !== '@everyone');
   const roleName = (id) => assignableRoles.find((r) => r.id === id)?.name || id;
 
@@ -32,6 +34,7 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
 
   const set = (patch) => setCfg((c) => ({ ...c, ...patch }));
   const setL2 = (patch) => setCfg((c) => ({ ...c, leveling2: { ...c.leveling2, ...patch } }));
+  const setVoice = (patch) => setCfg((c) => ({ ...c, voice: { ...c.voice, ...patch } }));
 
   async function save() {
     setSaving(true); setError(null);
@@ -113,6 +116,40 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
             onClick={() => setL2({ role_rewards: [...rewards, { level: (rewards[rewards.length - 1]?.level || 0) + 5, role_id: assignableRoles[0]?.id }] })}>
             Add reward
           </Button>
+        </CardContent></Card>
+      </Grid>
+
+      <Grid item xs={12} md={6}>
+        <Card variant="outlined"><CardContent>
+          <Typography variant="subtitle1" fontWeight={700} mb={1}>🎙️ Voice</Typography>
+          <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+            Voice XP is granted every 5 minutes to members actively in voice (AFK channel,
+            deafened members and near-empty channels don't count). Needs XP enabled above.
+          </Typography>
+          <TextField type="number" size="small" margin="dense" fullWidth label="XP per voice minute (0 = off)"
+            value={cfg.voice?.xp_per_minute ?? 0} inputProps={{ min: 0, max: 100 }}
+            onChange={(e) => setVoice({ xp_per_minute: Number(e.target.value) })} />
+          <TextField type="number" size="small" margin="dense" fullWidth label="Minimum people in the channel"
+            value={cfg.voice?.min_humans ?? 2} inputProps={{ min: 1, max: 20 }}
+            onChange={(e) => setVoice({ min_humans: Number(e.target.value) })} />
+          <FormControlLabel control={<Switch checked={!!cfg.voice?.j2c_enabled} onChange={(e) => setVoice({ j2c_enabled: e.target.checked })} />}
+            label="Join-to-create voice rooms" />
+          <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+            Members joining the lobby get their own temporary voice room (deleted when empty).
+            Needs Manage Channels + Move Members.
+          </Typography>
+          <TextField select size="small" margin="dense" fullWidth label="Lobby voice channel"
+            value={cfg.voice?.j2c_lobby_channel_id || ''} onChange={(e) => setVoice({ j2c_lobby_channel_id: e.target.value || null })}>
+            <MenuItem value="">— pick a voice channel —</MenuItem>
+            {voiceChannels.map((c) => <MenuItem key={c.id} value={c.id}>🔊 {c.name}</MenuItem>)}
+          </TextField>
+          <TextField size="small" margin="dense" fullWidth label="Room name template" placeholder="{user}'s room"
+            value={cfg.voice?.j2c_name_template ?? ''} inputProps={{ maxLength: 100 }}
+            onChange={(e) => setVoice({ j2c_name_template: e.target.value })}
+            helperText="Placeholder: {user}" />
+          <TextField type="number" size="small" margin="dense" fullWidth label="Room user limit (0 = unlimited)"
+            value={cfg.voice?.j2c_user_limit ?? 0} inputProps={{ min: 0, max: 99 }}
+            onChange={(e) => setVoice({ j2c_user_limit: Number(e.target.value) })} />
         </CardContent></Card>
       </Grid>
 

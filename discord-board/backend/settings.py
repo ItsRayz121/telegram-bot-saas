@@ -58,6 +58,18 @@ LEVELING2_DEFAULTS = {
 }
 
 
+# Voice features, stored in GuildSettings.extra["voice"] (deep-merged on read).
+# Voice XP rides the leveling system: levels_enabled must be on too.
+VOICE_DEFAULTS = {
+    "xp_per_minute": 0,             # 0 = voice XP off
+    "min_humans": 2,                # no XP for idling alone in a channel
+    "j2c_enabled": False,           # join-to-create temp voice rooms
+    "j2c_lobby_channel_id": None,
+    "j2c_name_template": "{user}'s room",
+    "j2c_user_limit": 0,            # 0 = unlimited
+}
+
+
 def get_or_create(db, guild_id: int) -> GuildSettings:
     """Return the guild's settings row, creating a defaulted one if missing."""
     row = db.get(GuildSettings, guild_id)

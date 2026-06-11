@@ -46,6 +46,7 @@ import self_roles
 import settings as settings_mod
 import stats_runtime
 import verification
+import voice_features
 from database import SessionLocal
 from models import BotHealthEvent, CustomBot, Guild, GuildSettings, Member
 
@@ -1229,6 +1230,52 @@ class CoreMixin:
             return
         await governor.safe(channel.send(content), what="send channel message")
 
+    # --- voice: join-to-create rooms + voice XP ----------------------------------
+    async def on_voice_state_update(self, member: discord.Member,
+                                    before: discord.VoiceState,
+                                    after: discord.VoiceState) -> None:
+        if not serves(self, member.guild.id):
+            return
+        cfg = await asyncio.to_thread(self._load_leveling, member.guild.id)
+        if not cfg:
+            return
+        await voice_features.handle_voice_state(self, member, before, after,
+                                                cfg.get("voice") or {})
+
+    @tasks.loop(seconds=300)
+    async def voice_loop(self) -> None:
+        """Every 5 minutes: award voice XP to active voice members and sweep
+        empty temp rooms that event handling missed (e.g. across a restart)."""
+        for gd in list(self.guilds):
+            if not serves(self, gd.id):
+                continue
+            cfg = await asyncio.to_thread(self._load_leveling, gd.id)
+            if not cfg:
+                continue
+            voice = cfg.get("voice") or {}
+            if voice.get("j2c_enabled"):
+                await voice_features.sweep_empty_rooms(self, gd)
+            per_min = int(voice.get("xp_per_minute") or 0)
+            if not cfg.get("levels_enabled") or per_min <= 0:
+                continue
+            members = voice_features.eligible_members(gd, voice)
+            if not members:
+                continue
+            minutes = 5   # loop cadence
+            ups = await asyncio.to_thread(
+                voice_features.award_minutes, gd.id, members,
+                per_min * minutes, minutes,
+            )
+            for uid, new_level, ch_id in ups:
+                member = gd.get_member(uid)
+                if member is not None:
+                    await self._announce_level_up(gd, member, new_level, cfg,
+                                                  gd.get_channel(ch_id))
+
+    @voice_loop.before_loop
+    async def _before_voice(self) -> None:
+        await self.wait_until_ready()
+
     # --- periodic resync of dashboard command changes + routing refresh ---------
     @tasks.loop(seconds=30)
     async def resync_commands(self) -> None:
@@ -1525,6 +1572,8 @@ class CoreMixin:
             cfg = row.levels_to_dict()
             cfg["leveling2"] = {**settings_mod.LEVELING2_DEFAULTS,
                                 **((row.extra or {}).get("leveling2") or {})}
+            cfg["voice"] = {**settings_mod.VOICE_DEFAULTS,
+                            **((row.extra or {}).get("voice") or {})}
             return cfg
         finally:
             db.close()

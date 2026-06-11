@@ -40,6 +40,11 @@ def _leveling2(row) -> dict:
             **((row.extra or {}).get("leveling2") or {})}
 
 
+def _voice(row) -> dict:
+    return {**settings_mod.VOICE_DEFAULTS,
+            **((row.extra or {}).get("voice") or {})}
+
+
 @leveling_bp.get("/api/guilds/<int:guild_id>/leveling")
 @login_required
 def get_leveling(guild_id: int):
@@ -48,7 +53,8 @@ def get_leveling(guild_id: int):
         return err
     row = settings_mod.get_or_create(g.db, guild_id)
     g.db.commit()
-    return jsonify({**row.levels_to_dict(), "leveling2": _leveling2(row)})
+    return jsonify({**row.levels_to_dict(), "leveling2": _leveling2(row),
+                    "voice": _voice(row)})
 
 
 @leveling_bp.put("/api/guilds/<int:guild_id>/leveling")
@@ -96,9 +102,31 @@ def update_leveling(guild_id: int):
         extra["leveling2"] = l2
         row.extra = extra
 
+    # Voice features (extra JSON, merged over VOICE_DEFAULTS on read)
+    if isinstance(body.get("voice"), dict):
+        v_in = body["voice"]
+        extra = dict(row.extra or {})
+        v = dict(extra.get("voice") or {})
+        if "xp_per_minute" in v_in:
+            v["xp_per_minute"] = _as_int(v_in["xp_per_minute"], 0, 0, 100)
+        if "min_humans" in v_in:
+            v["min_humans"] = _as_int(v_in["min_humans"], 2, 1, 20)
+        if "j2c_enabled" in v_in:
+            v["j2c_enabled"] = bool(v_in["j2c_enabled"])
+        if "j2c_lobby_channel_id" in v_in:
+            ch = v_in["j2c_lobby_channel_id"]
+            v["j2c_lobby_channel_id"] = str(ch) if ch and str(ch).isdigit() else None
+        if "j2c_name_template" in v_in:
+            v["j2c_name_template"] = str(v_in["j2c_name_template"] or "")[:100]
+        if "j2c_user_limit" in v_in:
+            v["j2c_user_limit"] = _as_int(v_in["j2c_user_limit"], 0, 0, 99)
+        extra["voice"] = v
+        row.extra = extra
+
     row.updated_at = datetime.utcnow()
     g.db.commit()
-    return jsonify({**row.levels_to_dict(), "leveling2": _leveling2(row)})
+    return jsonify({**row.levels_to_dict(), "leveling2": _leveling2(row),
+                    "voice": _voice(row)})
 
 
 @leveling_bp.get("/api/guilds/<int:guild_id>/leaderboard")

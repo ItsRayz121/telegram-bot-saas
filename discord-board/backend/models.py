@@ -415,6 +415,8 @@ class Member(Base):
     last_seen = Column(DateTime, nullable=True)
     wallet = Column(String(120), nullable=True)
     admin_notes = Column(Text, nullable=True)
+    # Voice XP (healed): total minutes counted by the voice loop
+    voice_minutes = Column(Integer, nullable=True)
 
     def to_dict(self) -> dict:
         return {
@@ -426,6 +428,7 @@ class Member(Base):
             "last_seen": self.last_seen.isoformat() + "Z" if self.last_seen else None,
             "wallet": self.wallet,
             "admin_notes": self.admin_notes,
+            "voice_minutes": self.voice_minutes or 0,
         }
 
 

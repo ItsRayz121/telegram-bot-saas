@@ -36,6 +36,8 @@ _HEAL_COLUMNS = [
     ("members", "last_seen", "TIMESTAMP"),
     ("members", "wallet", "VARCHAR(120)"),
     ("members", "admin_notes", "TEXT"),
+    # Voice XP (Discord-native phase 2)
+    ("members", "voice_minutes", "INTEGER"),
 ]
 
 
