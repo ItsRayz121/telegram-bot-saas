@@ -147,6 +147,15 @@
 
     <!-- Privacy-first analytics (no cookies, GDPR compliant) -->
     <script defer data-domain="telegizer.com" src="https://plausible.io/js/script.js"></script>
+
+    <!-- Google Analytics 4 -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-9WBC9137VQ"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-9WBC9137VQ');
+    </script>
     <!-- Telegram Mini App detection + SDK loader.
          Self-hosted synchronous script (NOT inline) so the production CSP
          (script-src 'self') allows it — see public/tg-boot.js for details. -->
