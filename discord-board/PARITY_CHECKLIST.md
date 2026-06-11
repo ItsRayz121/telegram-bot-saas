@@ -33,16 +33,16 @@
 - [ ] 9.11 **(USER)** Live test: connect a second Discord app as a custom bot, invite it,
       see it answer /ping under its own name
 
-## Phase 10 — Moderation Parity Pack
+## Phase 10 — Moderation Parity Pack ✅ DONE 2026-06-11 (10.9 native AutoMod = deferred stretch)
 
-- [ ] 10.1 DB: `Warning` model, `ReportedMessage` model, `ScheduledModAction` (temp-ban/unban timers); ModerationSettings widened (links whitelist, emoji/caps thresholds, language filter, media toggles, warning ladder config)
-- [ ] 10.2 Filter engine parity: external links + whitelist, excessive emojis, caps-lock, language/script filter, media-type toggles (attachments/stickers/voice), Discord-invite filter hardening
-- [ ] 10.3 Warnings ladder: /warn → counted → max-warnings action (timeout/kick/ban), /removewarning, /warnings list
-- [ ] 10.4 Mod command suite: /mute /unmute (native timeout), /ban /unban /tempban, /kick, /purge, /userinfo, /auditlog, /report + right-click message → Report context command
-- [ ] 10.5 Reports queue: API + bot capture + review actions
-- [ ] 10.6 Auto-clean: delete join/leave system messages (configurable)
-- [ ] 10.7 UI: Moderation tab — full matrix editor, warnings view, reports queue
-- [ ] 10.8 Tests: filter unit cases, ladder math, e2e API; build; commit
+- [x] 10.1 DB: `Warning` model, `ReportedMessage` model, `ScheduledModAction` (temp-ban/unban timers); ModerationSettings widened (links whitelist, emoji/caps thresholds, language filter, media toggles, warning ladder config)
+- [x] 10.2 Filter engine parity: external links + whitelist, excessive emojis, caps-lock, language/script filter, media-type toggles (attachments/stickers/voice), Discord-invite filter hardening
+- [x] 10.3 Warnings ladder: /warn → counted → max-warnings action (timeout/kick/ban), /removewarning, /warnings list
+- [x] 10.4 Mod command suite: /mute /unmute (native timeout), /ban /unban /tempban, /kick, /purge, /userinfo, /auditlog, /report + right-click message → Report context command
+- [x] 10.5 Reports queue: API + bot capture + review actions
+- [x] 10.6 Auto-clean: delete join/leave system messages (configurable)
+- [x] 10.7 UI: Moderation tab — full matrix editor, warnings view, reports queue
+- [x] 10.8 Tests: filter unit cases, ladder math, e2e API; build; commit
 - [ ] 10.9 (Stretch) Native Discord AutoMod managed rules (keyword/invite presets via REST)
 
 ## Phase 11 — Verification & Onboarding Parity

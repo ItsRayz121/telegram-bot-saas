@@ -50,6 +50,7 @@ class CustomBotClient(bot_core.CoreMixin, discord.Client):
         self.resync_commands.start()
         self.post_campaigns.start()
         self.deliver_reminders.start()
+        self.process_mod_actions.start()
 
     async def on_ready(self) -> None:
         log.info("Custom bot #%s online as %s (id=%s, %d guild(s))",

@@ -29,7 +29,9 @@ import command_registrar
 import governor
 import guild_sync
 import leveling
+import mod_commands
 import moderation
+import moderation_runtime
 import protection
 import raid_guard
 import settings as settings_mod
@@ -188,7 +190,16 @@ class CoreMixin:
 
     # --- moderation: message-level content filter + raid signals ---------------
     async def on_message(self, message: discord.Message) -> None:
-        if message.author.bot or message.guild is None:
+        if message.guild is None:
+            return
+        # auto-clean: delete system join messages when configured (Phase 10)
+        if message.type == discord.MessageType.new_member:
+            if serves(self, message.guild.id):
+                cfg = await asyncio.to_thread(self._load_moderation, message.guild.id)
+                if cfg and (cfg.get("auto_clean") or {}).get("join_messages"):
+                    await governor.safe(message.delete(), what="auto-clean join message")
+            return
+        if message.author.bot:
             return
         if not serves(self, message.guild.id):
             return
@@ -209,6 +220,15 @@ class CoreMixin:
             text += " " + (emb.title or "") + " " + (emb.description or "")
 
         decision = moderation.evaluate(text, cfg)
+        if decision is None:
+            decision = moderation.evaluate_automod(text, cfg)
+        if decision is None:
+            flags = {
+                "attachments": bool(message.attachments),
+                "stickers": bool(message.stickers),
+                "voice": bool(getattr(message.flags, "voice", False)),
+            }
+            decision = moderation.evaluate_media(flags, cfg)
         if decision:
             action_taken = await self._execute_action(message, decision)
             await asyncio.to_thread(
@@ -231,7 +251,17 @@ class CoreMixin:
                 message.channel.send(moderation.warning_text(decision["category"]), delete_after=8),
                 what="post warning",
             )
-            return "warned"
+            escalation = await asyncio.to_thread(
+                self._record_automod_warning, message.guild.id, member.id,
+                str(member), decision["detail"],
+            )
+            if escalation == "timeout":
+                await governor.safe(member.timeout(timedelta(minutes=30), reason=reason), what="ladder timeout")
+            elif escalation == "kick":
+                await governor.safe(member.kick(reason=reason), what="ladder kick")
+            elif escalation == "ban":
+                await governor.safe(member.ban(reason=reason, delete_message_days=0), what="ladder ban")
+            return f"warned+{escalation}" if escalation else "warned"
         if action == "timeout":
             await governor.safe(member.timeout(timedelta(minutes=10), reason=reason), what="timeout")
             return "timeout"
@@ -408,6 +438,29 @@ class CoreMixin:
 
     @deliver_reminders.before_loop
     async def _before_reminders(self) -> None:
+        await self.wait_until_ready()
+
+    # --- execute due scheduled moderation work (tempban expiry) ------------------
+    @tasks.loop(seconds=60)
+    async def process_mod_actions(self) -> None:
+        rows = await asyncio.to_thread(self._fetch_due_mod_actions)
+        for aid, gid, uid, action, reason in rows:
+            if not serves(self, gid):
+                continue
+            guild = self.get_guild(gid)
+            if guild is not None and action == "unban":
+                ok = await governor.safe(
+                    guild.unban(discord.Object(id=uid), reason=f"Guildizer: tempban expired ({reason or 'no reason'})"),
+                    what="tempban expiry unban",
+                )
+                await asyncio.to_thread(
+                    self._log, gid, "moderation", "unban" if ok else "unban_failed",
+                    uid, None, None, "tempban expired",
+                )
+            await asyncio.to_thread(self._mark_mod_action_done, aid)
+
+    @process_mod_actions.before_loop
+    async def _before_mod_actions(self) -> None:
         await self.wait_until_ready()
 
     # --- sync DB writes/reads (run off the event loop via to_thread) ------------
@@ -619,6 +672,49 @@ class CoreMixin:
             SessionLocal.remove()
 
     @staticmethod
+    def _record_automod_warning(guild_id, user_id, username, detail):
+        """Automod warning (moderator NULL). Returns the ladder escalation action
+        (and resets the count) when the member hits max warnings, else None."""
+        db = SessionLocal()
+        try:
+            snap = protection.load_snapshot(db, guild_id) or {}
+            ladder = snap.get("warnings") or {}
+            count, escalation = moderation_runtime.add_warning(
+                db, guild_id, user_id, username, None, "automod", detail, ladder,
+            )
+            if escalation:
+                moderation_runtime.clear_warnings(db, guild_id, user_id)
+            db.commit()
+            return escalation
+        except Exception:  # noqa: BLE001
+            db.rollback()
+            log.exception("automod warning failed for guild %s", guild_id)
+            return None
+        finally:
+            db.close()
+            SessionLocal.remove()
+
+    @staticmethod
+    def _fetch_due_mod_actions():
+        db = SessionLocal()
+        try:
+            return [(a.id, a.guild_id, a.user_id, a.action, a.reason)
+                    for a in moderation_runtime.due_actions(db)]
+        finally:
+            db.close()
+            SessionLocal.remove()
+
+    @staticmethod
+    def _mark_mod_action_done(action_id):
+        db = SessionLocal()
+        try:
+            moderation_runtime.mark_done(db, action_id)
+            db.commit()
+        finally:
+            db.close()
+            SessionLocal.remove()
+
+    @staticmethod
     def _log(guild_id, category, action, user_id=None, username=None, channel_id=None, detail=None):
         db = SessionLocal()
         try:
@@ -639,6 +735,7 @@ class CoreMixin:
 def attach_builtin_commands(client) -> None:
     """Register the built-in command set on a client's tree. White-label bots
     answer under their own name/avatar — same engine underneath."""
+    mod_commands.attach_mod_commands(client)
 
     @client.tree.command(name="ping", description="Check that the bot is alive.")
     async def ping(interaction: discord.Interaction) -> None:

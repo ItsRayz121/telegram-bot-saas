@@ -29,6 +29,38 @@ _COLUMN_DEFAULTS = {
 }
 
 
+# Phase 10 automod matrix + warning ladder + auto-clean. Stored in the `extra`
+# JSON column (deep-merged per section, so new keys self-heal without ALTERs).
+EXTRA_DEFAULTS = {
+    "automod": {
+        "external_links": {"enabled": False, "whitelist": [], "action": "delete"},
+        "excessive_emojis": {"enabled": False, "max_emojis": 15, "action": "delete"},
+        "caps_lock": {"enabled": False, "threshold_percent": 80, "min_length": 15, "action": "delete"},
+        "language_filter": {"enabled": False, "scripts": [], "action": "delete"},
+        "media": {"block_attachments": False, "block_stickers": False,
+                  "block_voice": False, "action": "delete"},
+    },
+    "warnings": {"max_warnings": 3, "action": "timeout", "timeout_minutes": 30},
+    "auto_clean": {"join_messages": False},
+}
+
+
+def _merged_extra(row: ModerationSettings) -> dict:
+    """extra deep-merged over EXTRA_DEFAULTS (two levels: section -> sub-section)."""
+    stored = row.extra or {}
+    out = {}
+    for section, sect_default in EXTRA_DEFAULTS.items():
+        sect_stored = stored.get(section) or {}
+        merged = {}
+        for key, val in sect_default.items():
+            if isinstance(val, dict):
+                merged[key] = {**val, **(sect_stored.get(key) or {})}
+            else:
+                merged[key] = sect_stored.get(key, val)
+        out[section] = merged
+    return out
+
+
 def get_or_create(db, guild_id: int) -> ModerationSettings:
     row = db.get(ModerationSettings, guild_id)
     if row is None:
@@ -80,6 +112,7 @@ def load_snapshot(db, guild_id: int) -> dict | None:
         "rg_notify_channel_id": row.rg_notify_channel_id,
         "manual_lockdown_until": row.manual_lockdown_until,
         "jg_min_account_age_days": row.jg_min_account_age_days or 0,
+        **_merged_extra(row),
     }
 
 

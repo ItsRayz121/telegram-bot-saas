@@ -157,3 +157,54 @@ def find_discord_invite(text: str):
     """Return the first foreign Discord invite in the text, or None."""
     m = _DISCORD_INVITE_RE.search(text or "")
     return m.group(0) if m else None
+
+
+# --- Phase 10 automod heuristics (pure text analysis) --------------------------
+# Unicode emoji + Discord custom emoji (<:name:id> / animated <a:name:id>).
+_EMOJI_RE = re.compile(
+    "[\U0001F300-\U0001FAFF\U00002600-\U000027BF\U0001F000-\U0001F02F"
+    "\U0001F900-\U0001F9FF\U00002700-\U000027BF\U0001F1E6-\U0001F1FF]"
+)
+_CUSTOM_EMOJI_RE = re.compile(r"<a?:\w{2,32}:\d{15,21}>")
+
+_SCRIPT_RANGES = {
+    "cyrillic": re.compile(r"[Ѐ-ӿ]"),
+    "chinese": re.compile(r"[一-鿿㐀-䶿]"),
+    "korean": re.compile(r"[가-힯ᄀ-ᇿ]"),
+    "arabic": re.compile(r"[؀-ۿݐ-ݿ]"),
+    "japanese": re.compile(r"[぀-ヿ]"),
+}
+
+
+def count_emojis(text: str) -> int:
+    if not text:
+        return 0
+    return len(_EMOJI_RE.findall(text)) + len(_CUSTOM_EMOJI_RE.findall(text))
+
+
+def caps_percent(text: str) -> tuple[int, int]:
+    """(percent_upper, letter_count) over alphabetic chars only."""
+    letters = [c for c in (text or "") if c.isalpha()]
+    if not letters:
+        return 0, 0
+    upper = sum(1 for c in letters if c.isupper())
+    return round(upper * 100 / len(letters)), len(letters)
+
+
+def script_hit(text: str, scripts: list[str]) -> str | None:
+    """First configured foreign script found in the text, else None."""
+    for name in scripts or []:
+        rx = _SCRIPT_RANGES.get(str(name).lower())
+        if rx and rx.search(text or ""):
+            return str(name).lower()
+    return None
+
+
+def domain_allowed(url: str, whitelist: list[str]) -> bool:
+    """True if the URL's domain matches a whitelist entry (subdomains count)."""
+    dom = _domain(url)
+    for entry in whitelist or []:
+        e = str(entry).lower().strip().lstrip("*.")
+        if e and (dom == e or dom.endswith("." + e)):
+            return True
+    return False

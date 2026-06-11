@@ -53,3 +53,46 @@ self-heal, init_db idempotency) all green; frontend CI build green.
 
 **Manual ops**: none beyond the existing V1 launch checklist. Custom bots are
 invisible until a user connects one.
+
+## Phase 10 — Moderation Parity Pack (2026-06-11)
+
+Closes the automod-matrix gap with Telegizer and ships the full moderation
+command suite. Both lineages (official + white-label) inherit everything.
+
+**Engine**
+- `content_filter.py`: emoji counting (unicode + custom Discord emoji), caps
+  percentage, foreign-script detection (cyrillic/chinese/korean/arabic/japanese),
+  domain whitelist matching.
+- `moderation.py`: `evaluate_automod()` (external-link whitelist, emoji flood,
+  caps lock, language filter) + `evaluate_media()` (attachments/stickers/voice
+  toggles); per-category warning texts.
+- Config lives in `ModerationSettings.extra` JSON, deep-merged over
+  `protection.EXTRA_DEFAULTS` — self-heals, no migration.
+- Warning ladder: /warn and automod warnings count up; at max_warnings the
+  configured action fires (timeout/kick/ban) and the count resets.
+- Auto-clean: optional deletion of system "X joined" messages.
+
+**Models**: `MemberWarning`, `ModReport`, `ScheduledModAction` (tempban expiry).
+
+**Commands** (`mod_commands.py`, attached to every bot identity): /warn
+/warnings /removewarning /mute /unmute /kick /ban /unban /tempban /purge
+/userinfo /auditlog /report + right-click "Report Message" context command.
+Hidden by default_permissions AND runtime-checked; role-hierarchy + owner/self
+guards; every action logs a ProtectionEvent.
+
+**Bot loops**: `process_mod_actions` (60s) executes due tempban unbans, both
+lineages, serves()-filtered.
+
+**API** (`protection_api.py`): PUT /moderation accepts `automod`, `warnings`,
+`auto_clean` sections (validated); GET returns merged config; new
+GET/DELETE /warnings, GET /reports, POST /reports/<id>/review.
+
+**UI** (`ProtectionTab.js`): Automod links & text card, media + warning-ladder
+card, open-reports queue with Actioned/Dismiss, recent-warnings list, new
+event-category labels.
+
+**Validation**: backend compileall + smoke suite (automod decision matrix,
+ladder math incl. reset, reports lifecycle, scheduled-unban due flow, merged
+snapshot defaults, wiring imports) green; frontend production build green.
+
+**Env vars**: none new. **Manual ops**: none.

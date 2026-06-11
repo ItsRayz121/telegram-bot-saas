@@ -754,3 +754,84 @@ class BotHealthEvent(Base):
             "detail": self.detail,
             "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
         }
+
+
+class MemberWarning(Base):
+    """A moderator-issued warning. Counted toward the guild's warning ladder
+    (max warnings -> escalation action, configured in ModerationSettings.extra)."""
+
+    __tablename__ = "warnings"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, ForeignKey("guilds.id"), nullable=False, index=True)
+    user_id = Column(BigInteger, nullable=False, index=True)
+    username = Column(String(120))
+    moderator_id = Column(BigInteger, nullable=True)    # NULL = automod
+    moderator_name = Column(String(120))
+    reason = Column(String(300))
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "user_id": str(self.user_id),
+            "username": self.username,
+            "moderator_id": str(self.moderator_id) if self.moderator_id else None,
+            "moderator_name": self.moderator_name,
+            "reason": self.reason,
+            "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
+        }
+
+
+class ModReport(Base):
+    """A member-filed report (/report or right-click message -> Report) feeding
+    the dashboard review queue."""
+
+    __tablename__ = "mod_reports"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, ForeignKey("guilds.id"), nullable=False, index=True)
+    reporter_id = Column(BigInteger, nullable=False)
+    reporter_name = Column(String(120))
+    target_id = Column(BigInteger, nullable=True)
+    target_name = Column(String(120))
+    channel_id = Column(BigInteger, nullable=True)
+    message_id = Column(BigInteger, nullable=True)
+    message_excerpt = Column(String(500))
+    reason = Column(String(300))
+    status = Column(String(16), default="open", nullable=False)  # open|actioned|dismissed
+    reviewed_by = Column(BigInteger, nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "reporter_id": str(self.reporter_id),
+            "reporter_name": self.reporter_name,
+            "target_id": str(self.target_id) if self.target_id else None,
+            "target_name": self.target_name,
+            "channel_id": str(self.channel_id) if self.channel_id else None,
+            "message_id": str(self.message_id) if self.message_id else None,
+            "message_excerpt": self.message_excerpt,
+            "reason": self.reason,
+            "status": self.status,
+            "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
+        }
+
+
+class ScheduledModAction(Base):
+    """Deferred moderation work the bot executes when due — today: tempban
+    expiry (unban). Timeouts expire natively on Discord, so they need no row."""
+
+    __tablename__ = "scheduled_mod_actions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, ForeignKey("guilds.id"), nullable=False, index=True)
+    user_id = Column(BigInteger, nullable=False)
+    username = Column(String(120))
+    action = Column(String(16), nullable=False)          # unban
+    reason = Column(String(300))
+    due_at = Column(DateTime, nullable=False, index=True)
+    done = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)

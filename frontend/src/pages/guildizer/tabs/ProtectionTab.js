@@ -11,13 +11,20 @@ const RG_ACTIONS = ['timeout', 'kick'];
 const CAT_LABEL = {
   nsfw: 'NSFW', csam: 'CSAM', invite: 'Invite', link: 'Link', custom: 'Blocked word',
   spam: 'Spam', raid: 'Raid', lockdown_join: 'Lockdown join', join_gate: 'Join gate', manual_lockdown: 'Lockdown',
+  external_link: 'External link', emoji_flood: 'Emoji flood', caps_lock: 'Caps lock', language: 'Language',
+  attachment: 'Attachment', sticker: 'Sticker', voice_message: 'Voice message',
+  warning: 'Warning', moderation: 'Moderation', report: 'Report',
 };
+const SCRIPTS = ['cyrillic', 'chinese', 'korean', 'arabic', 'japanese'];
 const CAT_COLOR = { nsfw: 'error', csam: 'error', raid: 'warning', manual_lockdown: 'warning', lockdown_join: 'warning', invite: 'info', link: 'info' };
 
 export default function ProtectionTab({ guildId, channels = [] }) {
   const [cfg, setCfg] = useState(null);
   const [wordsText, setWordsText] = useState('');
   const [events, setEvents] = useState([]);
+  const [wlText, setWlText] = useState('');
+  const [reports, setReports] = useState([]);
+  const [recentWarnings, setRecentWarnings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -27,23 +34,56 @@ export default function ProtectionTab({ guildId, channels = [] }) {
 
   const loadEvents = () => guildizerApi.get(`/api/guilds/${guildId}/protection/events?limit=50`)
     .then(({ data }) => setEvents(data.events)).catch(() => {});
+  const loadReports = () => guildizerApi.get(`/api/guilds/${guildId}/reports?status=open`)
+    .then(({ data }) => setReports(data.reports)).catch(() => {});
+  const loadWarnings = () => guildizerApi.get(`/api/guilds/${guildId}/warnings?limit=15`)
+    .then(({ data }) => setRecentWarnings(data.warnings)).catch(() => {});
 
   useEffect(() => {
     guildizerApi.get(`/api/guilds/${guildId}/moderation`)
-      .then(({ data }) => { setCfg(data); setWordsText((data.cf_custom_words || []).join(', ')); })
+      .then(({ data }) => {
+        setCfg(data);
+        setWordsText((data.cf_custom_words || []).join(', '));
+        setWlText(((data.automod?.external_links?.whitelist) || []).join(', '));
+      })
       .catch(() => setError('Failed to load protection settings.'))
       .finally(() => setLoading(false));
-    loadEvents(); /* eslint-disable-next-line */
+    loadEvents(); loadReports(); loadWarnings(); /* eslint-disable-next-line */
   }, [guildId]);
 
   const set = (patch) => setCfg((c) => ({ ...c, ...patch }));
+  const setAm = (section, patch) => setCfg((c) => ({
+    ...c, automod: { ...c.automod, [section]: { ...c.automod?.[section], ...patch } },
+  }));
+  const setW = (patch) => setCfg((c) => ({ ...c, warnings: { ...c.warnings, ...patch } }));
+  const setAc = (patch) => setCfg((c) => ({ ...c, auto_clean: { ...c.auto_clean, ...patch } }));
+
+  async function reviewReport(id, status) {
+    try {
+      await guildizerApi.post(`/api/guilds/${guildId}/reports/${id}/review`, { status });
+      loadReports();
+    } catch { setError('Could not update the report.'); }
+  }
 
   async function save() {
     setSaving(true); setError(null);
     try {
-      const payload = { ...cfg, cf_custom_words: wordsText.split(',').map((w) => w.trim()).filter(Boolean) };
+      const payload = {
+        ...cfg,
+        cf_custom_words: wordsText.split(',').map((w) => w.trim()).filter(Boolean),
+        automod: {
+          ...cfg.automod,
+          external_links: {
+            ...cfg.automod?.external_links,
+            whitelist: wlText.split(',').map((w) => w.trim()).filter(Boolean),
+          },
+        },
+      };
       const { data } = await guildizerApi.put(`/api/guilds/${guildId}/moderation`, payload);
-      setCfg(data); setWordsText((data.cf_custom_words || []).join(', ')); setSaved(true);
+      setCfg(data);
+      setWordsText((data.cf_custom_words || []).join(', '));
+      setWlText(((data.automod?.external_links?.whitelist) || []).join(', '));
+      setSaved(true);
     } catch { setError('Save failed.'); } finally { setSaving(false); }
   }
 
@@ -128,6 +168,93 @@ export default function ProtectionTab({ guildId, channels = [] }) {
               </Stack>
             </>
           )}
+        </CardContent></Card>
+      </Grid>
+
+      <Grid item xs={12} md={6}>
+        <Card variant="outlined"><CardContent>
+          <Typography variant="subtitle1" fontWeight={700} mb={1}>Automod — links & text</Typography>
+          <FormControlLabel control={<Switch checked={!!cfg.automod?.external_links?.enabled} onChange={(e) => setAm('external_links', { enabled: e.target.checked })} />} label="Block all external links except the whitelist" />
+          <TextField size="small" margin="dense" fullWidth label="Whitelisted domains" placeholder="youtube.com, x.com"
+            value={wlText} onChange={(e) => setWlText(e.target.value)} helperText="Comma-separated. Subdomains are allowed automatically." />
+          <FormControlLabel control={<Switch checked={!!cfg.automod?.excessive_emojis?.enabled} onChange={(e) => setAm('excessive_emojis', { enabled: e.target.checked })} />} label="Limit emojis per message" />
+          <TextField type="number" size="small" margin="dense" fullWidth label="Max emojis"
+            value={cfg.automod?.excessive_emojis?.max_emojis ?? 15} inputProps={{ min: 1, max: 100 }}
+            onChange={(e) => setAm('excessive_emojis', { max_emojis: Number(e.target.value) })} />
+          <FormControlLabel control={<Switch checked={!!cfg.automod?.caps_lock?.enabled} onChange={(e) => setAm('caps_lock', { enabled: e.target.checked })} />} label="Remove ALL-CAPS shouting" />
+          <FormControlLabel control={<Switch checked={!!cfg.automod?.language_filter?.enabled} onChange={(e) => setAm('language_filter', { enabled: e.target.checked })} />} label="Filter foreign scripts" />
+          <TextField select size="small" margin="dense" fullWidth label="Filtered scripts"
+            SelectProps={{ multiple: true }} value={cfg.automod?.language_filter?.scripts || []}
+            onChange={(e) => setAm('language_filter', { scripts: e.target.value })}>
+            {SCRIPTS.map((s) => <MenuItem key={s} value={s}>{s}</MenuItem>)}
+          </TextField>
+        </CardContent></Card>
+      </Grid>
+
+      <Grid item xs={12} md={6}>
+        <Card variant="outlined"><CardContent>
+          <Typography variant="subtitle1" fontWeight={700} mb={1}>Automod — media & warnings</Typography>
+          <FormControlLabel control={<Switch checked={!!cfg.automod?.media?.block_attachments} onChange={(e) => setAm('media', { block_attachments: e.target.checked })} />} label="Block file / image attachments" />
+          <FormControlLabel control={<Switch checked={!!cfg.automod?.media?.block_stickers} onChange={(e) => setAm('media', { block_stickers: e.target.checked })} />} label="Block stickers" />
+          <FormControlLabel control={<Switch checked={!!cfg.automod?.media?.block_voice} onChange={(e) => setAm('media', { block_voice: e.target.checked })} />} label="Block voice messages" />
+          <Typography variant="subtitle2" fontWeight={700} mt={2} mb={0.5}>Warning ladder</Typography>
+          <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+            /warn and automod warnings count up; at the limit the action fires and the count resets.
+          </Typography>
+          <TextField type="number" size="small" margin="dense" fullWidth label="Max warnings"
+            value={cfg.warnings?.max_warnings ?? 3} inputProps={{ min: 1, max: 20 }}
+            onChange={(e) => setW({ max_warnings: Number(e.target.value) })} />
+          <TextField select size="small" margin="dense" fullWidth label="Action at the limit"
+            value={cfg.warnings?.action || 'timeout'} onChange={(e) => setW({ action: e.target.value })}>
+            {['timeout', 'kick', 'ban', 'none'].map((a) => <MenuItem key={a} value={a}>{a}</MenuItem>)}
+          </TextField>
+          {(cfg.warnings?.action || 'timeout') === 'timeout' && (
+            <TextField type="number" size="small" margin="dense" fullWidth label="Timeout minutes"
+              value={cfg.warnings?.timeout_minutes ?? 30} inputProps={{ min: 1, max: 40320 }}
+              onChange={(e) => setW({ timeout_minutes: Number(e.target.value) })} />
+          )}
+          <FormControlLabel control={<Switch checked={!!cfg.auto_clean?.join_messages} onChange={(e) => setAc({ join_messages: e.target.checked })} />} label={'Auto-delete "X joined the server" messages'} />
+        </CardContent></Card>
+      </Grid>
+
+      <Grid item xs={12} md={6}>
+        <Card variant="outlined"><CardContent>
+          <Typography variant="subtitle1" fontWeight={700} mb={1}>Open reports ({reports.length})</Typography>
+          {reports.length === 0 && <Typography variant="body2" color="text.secondary">No open reports. 🎉</Typography>}
+          <List dense>
+            {reports.map((r) => (
+              <ListItem key={r.id} disableGutters
+                secondaryAction={(
+                  <Stack direction="row" spacing={1}>
+                    <Button size="small" onClick={() => reviewReport(r.id, 'actioned')}>Actioned</Button>
+                    <Button size="small" color="inherit" onClick={() => reviewReport(r.id, 'dismissed')}>Dismiss</Button>
+                  </Stack>
+                )}>
+                <ListItemText
+                  primary={`${r.target_name || r.target_id || 'unknown'} — ${r.reason || 'no reason'}`}
+                  secondary={`by ${r.reporter_name} · ${new Date(r.created_at).toLocaleString()}${r.message_excerpt ? ` · "${r.message_excerpt.slice(0, 80)}"` : ''}`}
+                  primaryTypographyProps={{ variant: 'body2', noWrap: true }} />
+              </ListItem>
+            ))}
+          </List>
+        </CardContent></Card>
+      </Grid>
+
+      <Grid item xs={12} md={6}>
+        <Card variant="outlined"><CardContent>
+          <Typography variant="subtitle1" fontWeight={700} mb={1}>Recent warnings</Typography>
+          {recentWarnings.length === 0 && <Typography variant="body2" color="text.secondary">No warnings yet.</Typography>}
+          <List dense>
+            {recentWarnings.map((w) => (
+              <ListItem key={w.id} disableGutters
+                secondaryAction={<Typography variant="caption" color="text.disabled">{new Date(w.created_at).toLocaleString()}</Typography>}>
+                <ListItemText
+                  primary={`${w.username || w.user_id} — ${w.reason || 'no reason'}`}
+                  secondary={`by ${w.moderator_name || 'automod'}`}
+                  primaryTypographyProps={{ variant: 'body2', noWrap: true }} />
+              </ListItem>
+            ))}
+          </List>
         </CardContent></Card>
       </Grid>
 
