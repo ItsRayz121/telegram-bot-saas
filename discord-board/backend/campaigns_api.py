@@ -24,6 +24,7 @@ from flask import Blueprint, g, jsonify, request
 from sqlalchemy import func
 
 import leveling
+import access
 from auth import login_required
 from models import (
     CAMPAIGN_STATUSES,
@@ -43,8 +44,7 @@ FREE_ACTIVE_LIMIT = 1
 
 def _ctx(guild_id: int):
     """Return (guild, None) if the user manages it, else (None, error-response)."""
-    membership = g.db.get(UserGuild, {"user_id": g.user_id, "guild_id": guild_id})
-    if membership is None or not membership.can_manage:
+    if not access.can_manage_guild(g.db, g.user_id, guild_id):
         return None, (jsonify(error="forbidden"), 403)
     guild = g.db.get(Guild, guild_id)
     if guild is None:

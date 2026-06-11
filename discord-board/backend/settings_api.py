@@ -17,6 +17,7 @@ import re
 from flask import Blueprint, g, jsonify, request
 
 import settings as settings_mod
+import access
 from auth import login_required
 from models import CustomCommand, Guild, UserGuild
 
@@ -28,13 +29,12 @@ _RESERVED = {"ping"}  # built-in commands the bot owns
 
 def _manage_or_403(guild_id: int):
     """Return (membership, guild) if the user manages it, else a 403/404 response."""
-    membership = g.db.get(UserGuild, {"user_id": g.user_id, "guild_id": guild_id})
-    if membership is None or not membership.can_manage:
+    if not access.can_manage_guild(g.db, g.user_id, guild_id):
         return None, (jsonify(error="forbidden"), 403)
     guild = g.db.get(Guild, guild_id)
     if guild is None:
         return None, (jsonify(error="not_found"), 404)
-    return (membership, guild), None
+    return (None, guild), None
 
 
 # --- settings -----------------------------------------------------------------

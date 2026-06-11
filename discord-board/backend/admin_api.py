@@ -178,3 +178,45 @@ def events():
         .all()
     )
     return jsonify(events=[{**e.to_dict(), "guild_id": str(e.guild_id)} for e in rows])
+
+
+@admin_bp.get("/api/admin/promo-codes")
+@admin_required
+def admin_list_promos():
+    from models import PromoCode
+    rows = g.db.query(PromoCode).order_by(PromoCode.created_at.desc()).limit(100).all()
+    return jsonify(codes=[r.to_dict() for r in rows])
+
+
+@admin_bp.post("/api/admin/promo-codes")
+@admin_required
+def admin_create_promo():
+    import secrets as _secrets
+
+    from models import PromoCode
+    body = request.get_json(silent=True) or {}
+    code = (str(body.get("code") or "").strip().upper()
+            or f"GZ-{_secrets.token_hex(4).upper()}")[:40]
+    if g.db.query(PromoCode).filter(PromoCode.code == code).first() is not None:
+        return jsonify(error="code_exists"), 409
+    try:
+        days = max(1, min(365, int(body.get("days_free", 30))))
+        max_uses = max(1, min(10000, int(body.get("max_uses", 1))))
+    except (TypeError, ValueError):
+        return jsonify(error="invalid_numbers"), 400
+    row = PromoCode(code=code, days_free=days, max_uses=max_uses)
+    g.db.add(row)
+    g.db.commit()
+    return jsonify(code=row.to_dict()), 201
+
+
+@admin_bp.delete("/api/admin/promo-codes/<int:pid>")
+@admin_required
+def admin_delete_promo(pid: int):
+    from models import PromoCode
+    row = g.db.get(PromoCode, pid)
+    if row is None:
+        return jsonify(error="not_found"), 404
+    row.enabled = False
+    g.db.commit()
+    return jsonify(ok=True)

@@ -2,9 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Box, Typography, Button, Card, CardContent, Grid, Avatar,
-  CircularProgress, Alert, Chip, Stack,
+  CircularProgress, Alert, Chip, Stack, IconButton, Badge, Menu, MenuItem,
+  ListItemText, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
 } from '@mui/material';
-import { Forum, Add, OpenInNew, AdminPanelSettings, SmartToy } from '@mui/icons-material';
+import {
+  Forum, Add, OpenInNew, AdminPanelSettings, SmartToy, Notifications, Redeem,
+} from '@mui/icons-material';
 import guildizerApi, { guildizerLoginUrl } from '../../services/guildizerApi';
 
 const OAUTH_ERRORS = {
@@ -19,6 +22,7 @@ export default function GuildizerServers() {
   const [state, setState] = useState({ loading: true, connected: false, guilds: [], inviteUrl: null });
   const [error, setError] = useState(OAUTH_ERRORS[params.get('error')] || null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [redeemOpen, setRedeemOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -81,6 +85,10 @@ export default function GuildizerServers() {
             <Button variant="outlined" startIcon={<SmartToy />} onClick={() => navigate('/guildizer/bots')}>
               My Bots
             </Button>
+            <Button variant="outlined" startIcon={<Redeem />} onClick={() => setRedeemOpen(true)}>
+              Redeem code
+            </Button>
+            <NotificationsBell />
             {state.inviteUrl && (
               <Button variant="contained" startIcon={<Add />} href={state.inviteUrl} target="_blank" rel="noreferrer">
                 Add to a server
@@ -102,7 +110,77 @@ export default function GuildizerServers() {
           )}
         </>
       )}
+      <RedeemDialog open={redeemOpen} onClose={() => setRedeemOpen(false)} />
     </Box>
+  );
+}
+
+function NotificationsBell() {
+  const [anchor, setAnchor] = useState(null);
+  const [items, setItems] = useState([]);
+  const [unread, setUnread] = useState(0);
+
+  useEffect(() => {
+    guildizerApi.get('/api/notifications')
+      .then(({ data }) => { setItems(data.notifications); setUnread(data.unread); })
+      .catch(() => {});
+  }, []);
+
+  const openMenu = (e) => {
+    setAnchor(e.currentTarget);
+    if (unread > 0) {
+      guildizerApi.post('/api/notifications/read').then(() => setUnread(0)).catch(() => {});
+    }
+  };
+
+  return (
+    <>
+      <IconButton onClick={openMenu}>
+        <Badge badgeContent={unread} color="error"><Notifications /></Badge>
+      </IconButton>
+      <Menu anchorEl={anchor} open={!!anchor} onClose={() => setAnchor(null)}>
+        {items.length === 0 && <MenuItem disabled>No notifications</MenuItem>}
+        {items.map((n) => (
+          <MenuItem key={n.id} sx={{ whiteSpace: 'normal', maxWidth: 360 }} onClick={() => setAnchor(null)}>
+            <ListItemText primary={n.title} secondary={n.body}
+              primaryTypographyProps={{ fontWeight: n.read ? 400 : 700, variant: 'body2' }} />
+          </MenuItem>
+        ))}
+      </Menu>
+    </>
+  );
+}
+
+function RedeemDialog({ open, onClose }) {
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  async function redeem() {
+    setBusy(true); setMsg(null);
+    try {
+      const { data } = await guildizerApi.post('/api/team/redeem', { code: code.trim() });
+      setMsg({ ok: true, text: `You now have dashboard access to ${data.guild.name}. Reload to see it.` });
+      setCode('');
+    } catch (e) {
+      setMsg({ ok: false, text: e?.response?.status === 404 ? 'That code is invalid, used, or expired.' : 'Something went wrong.' });
+    }
+    setBusy(false);
+  }
+
+  return (
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
+      <DialogTitle>Redeem a team invite</DialogTitle>
+      <DialogContent>
+        {msg && <Alert severity={msg.ok ? 'success' : 'error'} sx={{ mb: 1.5 }}>{msg.text}</Alert>}
+        <TextField autoFocus fullWidth size="small" label="Invite code" value={code}
+          onChange={(e) => setCode(e.target.value)} />
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Close</Button>
+        <Button variant="contained" disabled={busy || !code.trim()} onClick={redeem}>Redeem</Button>
+      </DialogActions>
+    </Dialog>
   );
 }
 

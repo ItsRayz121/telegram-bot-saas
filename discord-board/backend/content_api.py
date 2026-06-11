@@ -16,6 +16,8 @@ from datetime import datetime
 
 from flask import Blueprint, g, jsonify, request
 
+import access
+import plan_limits
 from auth import login_required
 from models import AutoResponse, Guild, Poll, ScheduledMessage, UserGuild
 
@@ -25,12 +27,7 @@ RECURRENCES = {"none", "hourly", "daily", "weekly"}
 
 
 def _manage_or_403(guild_id: int):
-    membership = g.db.get(UserGuild, {"user_id": g.user_id, "guild_id": guild_id})
-    if membership is None or not membership.can_manage:
-        return False, (jsonify(error="forbidden"), 403)
-    if g.db.get(Guild, guild_id) is None:
-        return False, (jsonify(error="not_found"), 404)
-    return True, None
+    return access.manage_or_403(g.db, g.user_id, guild_id)
 
 
 def _parse_dt(value):
@@ -63,6 +60,11 @@ def create_scheduled(guild_id: int):
     ok, err = _manage_or_403(guild_id)
     if not ok:
         return err
+    count = (g.db.query(ScheduledMessage)
+             .filter(ScheduledMessage.guild_id == guild_id).count())
+    cap = plan_limits.limit(g.db, guild_id, "scheduled_messages")
+    if count >= cap:
+        return plan_limits.limit_response("scheduled_messages", cap)
     body = request.get_json(silent=True) or {}
     content = str(body.get("content") or "").strip()[:2000]
     channel_id = body.get("channel_id")
@@ -201,6 +203,11 @@ def create_response(guild_id: int):
     ok, err = _manage_or_403(guild_id)
     if not ok:
         return err
+    count = (g.db.query(AutoResponse)
+             .filter(AutoResponse.guild_id == guild_id).count())
+    cap = plan_limits.limit(g.db, guild_id, "auto_responses")
+    if count >= cap:
+        return plan_limits.limit_response("auto_responses", cap)
     body = request.get_json(silent=True) or {}
     trigger = str(body.get("trigger") or "").strip()[:120]
     response = str(body.get("response") or "").strip()[:2000]

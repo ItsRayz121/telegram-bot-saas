@@ -119,16 +119,16 @@
 - [ ] 17.7 **(USER)** If calendar sync wanted: add `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` to **GUILDIZER-WEB**
 - [x] 17.8 Tests + commit
 
-## Phase 18 — Teams, Notifications & Billing Depth
+## Phase 18 — Teams, Notifications & Billing Depth ✅ DONE 2026-06-11
 
-- [ ] 18.1 DB: `Team`, `TeamMember`, `TeamInvite`, `UserNotification`, `PromoCode`(+usage), `PendingInvoice`, `PaymentHistory`, `SubscriptionRenewal`
-- [ ] 18.2 Team seats: invite by Discord tag/email, role-scoped dashboard access to guilds
-- [ ] 18.3 Notifications center (dashboard bell + optional bot DM)
-- [ ] 18.4 Promo codes (create/redeem/limits)
-- [ ] 18.5 Renewal flow, payment history page, pending-invoice recovery
-- [ ] 18.6 Full plan-limit matrix (per-feature gates, free/pro/agency; custom bots = top tier)
-- [ ] 18.7 UI: Team page, notifications, billing history, promo redemption
-- [ ] 18.8 Tests (gating matrix, promo math, renewal stacking) + commit
+- [x] 18.1 DB: GuildTeamMember, TeamInvite, UserNotification, PromoCode(+usage). PaymentHistory/PendingInvoice/Renewals = the existing Subscription ledger (exposed, not duplicated)
+- [x] 18.2 Team seats via one-use invite codes (Discord-first; email N/A in OAuth-only auth)
+- [x] 18.3 Notifications center (dashboard bell + optional bot DM)
+- [x] 18.4 Promo codes (create/redeem/limits)
+- [x] 18.5 Renewal flow, payment history page, pending-invoice recovery
+- [x] 18.6 Full plan-limit matrix (per-feature gates, free/pro/agency; custom bots = top tier)
+- [x] 18.7 UI: Team page, notifications, billing history, promo redemption
+- [x] 18.8 Tests (gating matrix, promo math, renewal stacking) + commit
 
 ## Phase 19 — Admin Panel Parity
 

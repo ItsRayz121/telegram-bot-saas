@@ -17,18 +17,18 @@ from flask import Blueprint, g, jsonify, request
 
 import billing
 import nowpayments
+import access
 from auth import login_required
 from config import Config
 from database import SessionLocal
-from models import Guild, Subscription, UserGuild
+from models import Guild, PromoCode, PromoCodeUsage, Subscription, UserGuild
 
 log = logging.getLogger("guildizer.billing")
 billing_bp = Blueprint("billing", __name__)
 
 
 def _ctx(guild_id: int):
-    membership = g.db.get(UserGuild, {"user_id": g.user_id, "guild_id": guild_id})
-    if membership is None or not membership.can_manage:
+    if not access.can_manage_guild(g.db, g.user_id, guild_id):
         return None, (jsonify(error="forbidden"), 403)
     guild = g.db.get(Guild, guild_id)
     if guild is None:
@@ -137,3 +137,71 @@ def nowpayments_ipn():
     finally:
         db.close()
         SessionLocal.remove()
+
+
+@billing_bp.get("/api/guilds/<int:guild_id>/billing/history")
+@login_required
+def billing_history(guild_id: int):
+    """Payment history + pending-invoice recovery (Phase 18). Subscriptions are
+    the ledger: pending rows still expose their checkout for recovery."""
+    guild, err = _ctx(guild_id)
+    if err:
+        return err
+    rows = (
+        g.db.query(Subscription)
+        .filter(Subscription.guild_id == guild_id)
+        .order_by(Subscription.created_at.desc())
+        .limit(25)
+        .all()
+    )
+    out = []
+    for s in rows:
+        out.append({
+            "id": s.id,
+            "plan": s.plan,
+            "status": s.status,
+            "amount": s.amount,
+            "currency": (s.currency or "usd").upper(),
+            "order_id": s.order_id,
+            "created_at": s.created_at.isoformat() + "Z" if s.created_at else None,
+        })
+    return jsonify(history=out)
+
+
+@billing_bp.post("/api/guilds/<int:guild_id>/billing/promo")
+@login_required
+def redeem_promo(guild_id: int):
+    """Redeem a promo code -> free Pro days for this guild (Phase 18)."""
+    from datetime import datetime, timedelta
+
+    guild, err = _ctx(guild_id)
+    if err:
+        return err
+    code = ((request.get_json(silent=True) or {}).get("code") or "").strip()
+    if not code:
+        return jsonify(error="code_required"), 400
+    promo = g.db.query(PromoCode).filter(PromoCode.code == code).one_or_none()
+    if (promo is None or not promo.enabled
+            or (promo.expires_at and promo.expires_at <= datetime.utcnow())
+            or (promo.used_count or 0) >= (promo.max_uses or 1)):
+        return jsonify(error="invalid_code"), 404
+    already = (
+        g.db.query(PromoCodeUsage)
+        .filter(PromoCodeUsage.promo_code_id == promo.id,
+                PromoCodeUsage.guild_id == guild_id)
+        .first()
+    )
+    if already is not None:
+        return jsonify(error="already_redeemed_here"), 409
+
+    days = max(1, promo.days_free or 0)
+    base = guild.plan_expires_at if (guild.is_pro and guild.plan_expires_at) else datetime.utcnow()
+    guild.plan = "pro"
+    guild.plan_expires_at = base + timedelta(days=days)
+    promo.used_count = (promo.used_count or 0) + 1
+    g.db.add(PromoCodeUsage(promo_code_id=promo.id, guild_id=guild_id, user_id=g.user_id))
+    access.notify(g.db, g.user_id, "Promo applied",
+                  f"{days} days of Pro added to {guild.name}.", "info")
+    g.db.commit()
+    return jsonify(ok=True, days_added=days,
+                   plan_expires_at=guild.plan_expires_at.isoformat() + "Z")

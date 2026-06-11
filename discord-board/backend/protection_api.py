@@ -16,6 +16,7 @@ from flask import Blueprint, g, jsonify, request
 
 import moderation_runtime
 import protection
+import access
 from auth import login_required
 from models import Guild, MemberWarning, ProtectionEvent, UserGuild
 
@@ -26,12 +27,7 @@ _LOCKDOWN_ACTIONS = {"timeout", "kick"}
 
 
 def _manage_or_403(guild_id: int):
-    membership = g.db.get(UserGuild, {"user_id": g.user_id, "guild_id": guild_id})
-    if membership is None or not membership.can_manage:
-        return False, (jsonify(error="forbidden"), 403)
-    if g.db.get(Guild, guild_id) is None:
-        return False, (jsonify(error="not_found"), 404)
-    return True, None
+    return access.manage_or_403(g.db, g.user_id, guild_id)
 
 
 def _as_int(value, default, lo, hi):

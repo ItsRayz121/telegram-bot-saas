@@ -99,12 +99,17 @@ class FleetManager:
 
     @staticmethod
     def _mark_error(bot_id: int, detail: str) -> None:
+        import access
+
         db = SessionLocal()
         try:
             row = db.get(CustomBot, bot_id)
             if row is not None:
                 row.status = "error"
                 row.error_detail = detail[:300]
+                access.notify(db, row.owner_user_id,
+                              f"Custom bot @{row.bot_username} needs attention",
+                              detail[:300], "error")
                 db.commit()
         except Exception:  # noqa: BLE001
             db.rollback()

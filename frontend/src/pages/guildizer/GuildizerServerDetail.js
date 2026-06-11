@@ -17,12 +17,13 @@ import AutomationTab from './tabs/AutomationTab';
 import MembersTab from './tabs/MembersTab';
 import AnalyticsTab from './tabs/AnalyticsTab';
 import KnowledgeTab from './tabs/KnowledgeTab';
+import TeamTab from './tabs/TeamTab';
 
 // Discord channel type enum → label (common ones).
 const CHANNEL_TYPES = { 0: 'Text', 2: 'Voice', 4: 'Category', 5: 'Announcement', 13: 'Stage', 15: 'Forum' };
 
 // Tabs grow with each integration phase.
-const TABS = ['Overview', 'Settings', 'Commands', 'Content', 'Automation', 'Protection', 'Leveling', 'Campaigns', 'Members', 'Analytics', 'Knowledge', 'Billing'];
+const TABS = ['Overview', 'Settings', 'Commands', 'Content', 'Automation', 'Protection', 'Leveling', 'Campaigns', 'Members', 'Analytics', 'Knowledge', 'Team', 'Billing'];
 
 export default function GuildizerServerDetail() {
   const { guildId } = useParams();
@@ -70,6 +71,7 @@ export default function GuildizerServerDetail() {
           {TABS[tab] === 'Members' && <MembersTab guildId={guildId} />}
           {TABS[tab] === 'Analytics' && <AnalyticsTab guildId={guildId} />}
           {TABS[tab] === 'Knowledge' && <KnowledgeTab guildId={guildId} />}
+          {TABS[tab] === 'Team' && <TeamTab guildId={guildId} />}
           {TABS[tab] === 'Billing' && <BillingTab guildId={guildId} />}
         </>
       )}

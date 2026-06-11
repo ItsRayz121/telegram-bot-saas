@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 
 from flask import Blueprint, g, jsonify, request
 
+import access
 from auth import login_required
 from models import Guild, GuildDailyStat, Member, UserGuild
 
@@ -23,12 +24,7 @@ SORTS = {
 
 
 def _manage_or_403(guild_id: int):
-    membership = g.db.get(UserGuild, {"user_id": g.user_id, "guild_id": guild_id})
-    if membership is None or not membership.can_manage:
-        return False, (jsonify(error="forbidden"), 403)
-    if g.db.get(Guild, guild_id) is None:
-        return False, (jsonify(error="not_found"), 404)
-    return True, None
+    return access.manage_or_403(g.db, g.user_id, guild_id)
 
 
 @crm_bp.get("/api/guilds/<int:guild_id>/members")

@@ -12,6 +12,8 @@ from __future__ import annotations
 from flask import Blueprint, g, jsonify, request
 from sqlalchemy import func
 
+import access
+import plan_limits
 from auth import login_required
 from database import SessionLocal
 from models import (
@@ -30,12 +32,7 @@ MAX_FIELDS = 4
 
 
 def _manage_or_403(guild_id: int):
-    membership = g.db.get(UserGuild, {"user_id": g.user_id, "guild_id": guild_id})
-    if membership is None or not membership.can_manage:
-        return False, (jsonify(error="forbidden"), 403)
-    if g.db.get(Guild, guild_id) is None:
-        return False, (jsonify(error="not_found"), 404)
-    return True, None
+    return access.manage_or_403(g.db, g.user_id, guild_id)
 
 
 def _own_campaign(guild_id: int, cid: int) -> Campaign | None:
@@ -70,8 +67,9 @@ def create_field(guild_id: int, cid: int):
     if _own_campaign(guild_id, cid) is None:
         return jsonify(error="not_found"), 404
     count = g.db.query(CampaignCustomField).filter(CampaignCustomField.campaign_id == cid).count()
-    if count >= MAX_FIELDS:
-        return jsonify(error="field_limit_reached", limit=MAX_FIELDS), 403
+    cap = min(MAX_FIELDS, plan_limits.limit(g.db, guild_id, "campaign_fields"))
+    if count >= cap:
+        return plan_limits.limit_response("campaign_fields", cap)
     body = request.get_json(silent=True) or {}
     label = str(body.get("label") or "").strip()[:45]
     if not label:

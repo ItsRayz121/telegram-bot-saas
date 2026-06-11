@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Box, Grid, Card, CardContent, Typography, Button, Chip, List, ListItem,
-  ListItemIcon, ListItemText, CircularProgress, Alert,
+  ListItemIcon, ListItemText, CircularProgress, Alert, Stack, TextField,
 } from '@mui/material';
 import { CheckCircle } from '@mui/icons-material';
 import guildizerApi from '../../../services/guildizerApi';
@@ -74,6 +74,78 @@ export default function BillingTab({ guildId }) {
           </Typography>
         </CardContent></Card>
       </Grid>
+
+      <Grid item xs={12} md={6}>
+        <PromoCard guildId={guildId} />
+      </Grid>
+      <Grid item xs={12} md={6}>
+        <HistoryCard guildId={guildId} />
+      </Grid>
     </Grid>
+  );
+}
+
+function PromoCard({ guildId }) {
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  async function redeem() {
+    setBusy(true); setMsg(null);
+    try {
+      const { data } = await guildizerApi.post(`/api/guilds/${guildId}/billing/promo`, { code: code.trim() });
+      setMsg({ ok: true, text: `${data.days_added} days of Pro added! Active until ${new Date(data.plan_expires_at).toLocaleDateString()}.` });
+      setCode('');
+    } catch (e) {
+      const err = e?.response?.data?.error;
+      setMsg({ ok: false, text: err === 'already_redeemed_here' ? 'This server already used that code.' : err === 'invalid_code' ? 'That code is invalid or exhausted.' : 'Something went wrong.' });
+    }
+    setBusy(false);
+  }
+
+  return (
+    <Card variant="outlined"><CardContent>
+      <Typography variant="subtitle1" fontWeight={700} mb={1}>Promo code</Typography>
+      {msg && <Alert severity={msg.ok ? 'success' : 'error'} sx={{ mb: 1 }}>{msg.text}</Alert>}
+      <Stack direction="row" spacing={1}>
+        <TextField size="small" fullWidth label="Code" value={code} onChange={(e) => setCode(e.target.value)} />
+        <Button variant="contained" size="small" disabled={busy || !code.trim()} onClick={redeem}>Redeem</Button>
+      </Stack>
+    </CardContent></Card>
+  );
+}
+
+function HistoryCard({ guildId }) {
+  const [rows, setRows] = useState(null);
+
+  useEffect(() => {
+    guildizerApi.get(`/api/guilds/${guildId}/billing/history`)
+      .then(({ data }) => setRows(data.history)).catch(() => setRows([]));
+  }, [guildId]);
+
+  if (rows === null) return null;
+  return (
+    <Card variant="outlined"><CardContent>
+      <Typography variant="subtitle1" fontWeight={700} mb={1}>Payment history</Typography>
+      {rows.length === 0 && <Typography variant="body2" color="text.secondary">No payments yet.</Typography>}
+      <List dense>
+        {rows.map((r) => (
+          <ListItem key={r.id} disableGutters
+            secondaryAction={<Chip size="small" variant="outlined"
+              color={r.status === 'active' ? 'success' : r.status === 'pending' ? 'warning' : 'default'}
+              label={r.status} />}>
+            <ListItemText
+              primary={`$${r.amount} ${r.currency} — ${r.plan}`}
+              secondary={r.created_at ? new Date(r.created_at).toLocaleString() : ''} />
+          </ListItem>
+        ))}
+      </List>
+      {rows.some((r) => r.status === 'pending') && (
+        <Typography variant="caption" color="text.secondary">
+          Pending rows mean a checkout was started but not finished — start a new
+          checkout above to complete the upgrade.
+        </Typography>
+      )}
+    </CardContent></Card>
   );
 }

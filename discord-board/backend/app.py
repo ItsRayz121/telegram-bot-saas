@@ -22,6 +22,7 @@ from knowledge_api import knowledge_bp
 from leveling_api import leveling_bp
 from protection_api import protection_bp
 from settings_api import settings_bp
+from team_api import team_bp
 
 
 def create_app() -> Flask:
@@ -47,6 +48,7 @@ def create_app() -> Flask:
     app.register_blueprint(growth_bp)
     app.register_blueprint(crm_bp)
     app.register_blueprint(knowledge_bp)
+    app.register_blueprint(team_bp)
 
     @app.get("/")
     def root():

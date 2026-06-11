@@ -21,6 +21,8 @@ from flask import Blueprint, g, jsonify, request
 
 import crypto
 import discord_api
+import access
+import plan_limits
 from auth import login_required
 from models import CustomBot, Guild, UserGuild
 
@@ -67,6 +69,19 @@ def connect_bot():
     count = g.db.query(CustomBot).filter(CustomBot.owner_user_id == g.user_id).count()
     if count >= MAX_BOTS_PER_USER:
         return jsonify(error="bot_limit_reached", limit=MAX_BOTS_PER_USER), 403
+    # White-label bots are the top-tier feature (Phase 18): the user must
+    # manage at least one Pro server.
+    if plan_limits.CUSTOM_BOTS_REQUIRE_PRO:
+        pro = (
+            g.db.query(Guild)
+            .join(UserGuild, UserGuild.guild_id == Guild.id)
+            .filter(UserGuild.user_id == g.user_id, UserGuild.can_manage.is_(True),
+                    Guild.plan == "pro")
+            .first()
+        )
+        if pro is None or not pro.is_pro:
+            return jsonify(error="pro_required",
+                           message="Custom bots need at least one Pro server."), 403
 
     try:
         info = discord_api.validate_bot_token(token)
@@ -191,8 +206,7 @@ def bot_invite(bot_id: int):
 
 
 def _manageable_guild(guild_id: int) -> Guild | None:
-    membership = g.db.get(UserGuild, {"user_id": g.user_id, "guild_id": guild_id})
-    if membership is None or not membership.can_manage:
+    if not access.can_manage_guild(g.db, g.user_id, guild_id):
         return None
     return g.db.get(Guild, guild_id)
 

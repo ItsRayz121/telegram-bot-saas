@@ -13,6 +13,7 @@ from urllib.parse import urlencode
 from flask import Blueprint, g, jsonify
 
 import discord_api
+import access
 from auth import login_required
 from config import Config
 from models import Channel, Guild, Role, UserGuild
@@ -43,11 +44,24 @@ def list_guilds():
         .all()
     )
     out = []
+    seen = set()
     for membership, guild in rows:
         data = guild.to_dict()
         data["is_owner"] = bool(membership.is_owner)
         if not guild.bot_present:
             data["invite_url"] = _build_invite_url(guild.id)
+        out.append(data)
+        seen.add(guild.id)
+    # guilds granted via a team seat (Phase 18)
+    for gid in access.team_guild_ids(g.db, g.user_id):
+        if gid in seen:
+            continue
+        guild = g.db.get(Guild, gid)
+        if guild is None:
+            continue
+        data = guild.to_dict()
+        data["is_owner"] = False
+        data["via_team"] = True
         out.append(data)
     # bot-present servers first, then alphabetical
     out.sort(key=lambda d: (not d["bot_present"], (d["name"] or "").lower()))
@@ -57,8 +71,7 @@ def list_guilds():
 @guilds_bp.get("/api/guilds/<int:guild_id>")
 @login_required
 def guild_detail(guild_id: int):
-    membership = g.db.get(UserGuild, {"user_id": g.user_id, "guild_id": guild_id})
-    if membership is None or not membership.can_manage:
+    if not access.can_manage_guild(g.db, g.user_id, guild_id):
         return jsonify(error="forbidden"), 403
 
     guild = g.db.get(Guild, guild_id)
@@ -90,7 +103,6 @@ def guild_detail(guild_id: int):
 @guilds_bp.get("/api/guilds/<int:guild_id>/invite")
 @login_required
 def guild_invite(guild_id: int):
-    membership = g.db.get(UserGuild, {"user_id": g.user_id, "guild_id": guild_id})
-    if membership is None or not membership.can_manage:
+    if not access.can_manage_guild(g.db, g.user_id, guild_id):
         return jsonify(error="forbidden"), 403
     return jsonify(invite_url=_build_invite_url(guild_id))

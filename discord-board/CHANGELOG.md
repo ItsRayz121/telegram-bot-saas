@@ -364,3 +364,41 @@ Owner-requested full review of the V2 codebase before Phase 18.
 - Command-name collision check across the 28-command tree: none.
 - Strict CI build: zero warnings from V2 files (only pre-existing
   Sidebar/Dashboard/GroupCRM/CommandsTab remain).
+
+## Phase 18 — Teams, Notifications & Billing Depth (2026-06-11)
+
+**Team seats** (`GuildTeamMember`, `TeamInvite`, `access.py`): grant dashboard
+access to people without Manage Server on Discord. One-use invite codes
+(7-day TTL, 10 seats/server) redeemed from the Discord page; every guild API
+now routes through `access.can_manage_guild` (Discord perms OR team seat), and
+the server list includes team-granted guilds (via_team badge in data).
+
+**Notifications** (`UserNotification`): bell on the Discord page with unread
+badge + mark-all-read. Generated on: team invite redeemed, team access
+removed, custom-bot errors (fleet manager notifies the owner).
+
+**Plan-limit matrix** (`plan_limits.py`): free/pro caps for campaigns fields,
+workflows (3/25), mirrors (1/10), webhooks (2/10 each way), scheduled
+messages (3/25), auto-responses (5/50), knowledge docs (5/50) — enforced at
+create-time in every API; safety features never limited. **White-label custom
+bots now require managing at least one Pro server.**
+
+**Billing depth**: payment history endpoint (Subscription ledger incl.
+pending-checkout recovery hint) + promo codes (free Pro days, per-guild
+single redemption, admin CRUD at /api/admin/promo-codes).
+
+**UI**: Team tab (invites w/ copy, members w/ remove), notifications bell +
+"Redeem code" dialog on the servers page, Promo + Payment history cards on
+the Billing tab.
+
+**Fix during build**: the access-refactor initially left a stale `membership`
+reference in settings_api's checker (caught by the authorized suite — 500 on
+team-seat access); also a malformed MUI import from the codemod.
+
+**Validation**: authorized two-user suite — seat lifecycle (forbidden ->
+invite -> redeem -> full access across 6 APIs -> remove -> forbidden), one-use
++ bad codes, notification flow incl. unread/mark-read, free caps enforce
+(docs/workflows), Pro gate on custom bots, promo redeem + 409 on re-use, caps
+lift with Pro and re-lock on expiry. All green; frontend build green.
+
+**Env vars**: none new. **Manual ops**: none.

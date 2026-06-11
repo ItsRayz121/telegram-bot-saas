@@ -9,6 +9,8 @@ from __future__ import annotations
 from flask import Blueprint, g, jsonify, request
 
 import digest_runtime
+import access
+import plan_limits
 from auth import login_required
 from models import Guild, GuildSettings, KnowledgeDocument, UserGuild
 
@@ -18,12 +20,7 @@ MAX_DOCS = 50
 
 
 def _manage_or_403(guild_id: int):
-    membership = g.db.get(UserGuild, {"user_id": g.user_id, "guild_id": guild_id})
-    if membership is None or not membership.can_manage:
-        return False, (jsonify(error="forbidden"), 403)
-    if g.db.get(Guild, guild_id) is None:
-        return False, (jsonify(error="not_found"), 404)
-    return True, None
+    return access.manage_or_403(g.db, g.user_id, guild_id)
 
 
 @knowledge_bp.get("/api/guilds/<int:guild_id>/knowledge")
@@ -47,8 +44,9 @@ def create_doc(guild_id: int):
     ok, err = _manage_or_403(guild_id)
     if not ok:
         return err
-    if g.db.query(KnowledgeDocument).filter(KnowledgeDocument.guild_id == guild_id).count() >= MAX_DOCS:
-        return jsonify(error="doc_limit_reached", limit=MAX_DOCS), 403
+    cap = plan_limits.limit(g.db, guild_id, "knowledge_docs")
+    if g.db.query(KnowledgeDocument).filter(KnowledgeDocument.guild_id == guild_id).count() >= cap:
+        return plan_limits.limit_response("knowledge_docs", cap)
     body = request.get_json(silent=True) or {}
     title = str(body.get("title") or "").strip()[:200]
     content = str(body.get("content") or "").strip()[:8000]

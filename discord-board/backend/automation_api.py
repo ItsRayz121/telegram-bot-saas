@@ -23,6 +23,8 @@ from datetime import datetime
 from flask import Blueprint, g, jsonify, request
 
 import automation_runtime
+import access
+import plan_limits
 from auth import login_required
 from config import Config
 from database import SessionLocal
@@ -45,12 +47,7 @@ MAX_HOOKS = 10
 
 
 def _manage_or_403(guild_id: int):
-    membership = g.db.get(UserGuild, {"user_id": g.user_id, "guild_id": guild_id})
-    if membership is None or not membership.can_manage:
-        return False, (jsonify(error="forbidden"), 403)
-    if g.db.get(Guild, guild_id) is None:
-        return False, (jsonify(error="not_found"), 404)
-    return True, None
+    return access.manage_or_403(g.db, g.user_id, guild_id)
 
 
 def _clean_actions(raw) -> list[dict]:
@@ -110,8 +107,9 @@ def create_workflow(guild_id: int):
     if not ok:
         return err
     count = g.db.query(AutomationWorkflow).filter(AutomationWorkflow.guild_id == guild_id).count()
-    if count >= MAX_WORKFLOWS:
-        return jsonify(error="workflow_limit_reached", limit=MAX_WORKFLOWS), 403
+    cap = plan_limits.limit(g.db, guild_id, "workflows")
+    if count >= cap:
+        return plan_limits.limit_response("workflows", cap)
     body = request.get_json(silent=True) or {}
     name = str(body.get("name") or "").strip()[:120]
     trigger_type = body.get("trigger_type")
@@ -220,8 +218,9 @@ def create_mirror(guild_id: int):
     ok, err = _manage_or_403(guild_id)
     if not ok:
         return err
-    if g.db.query(MirrorRule).filter(MirrorRule.guild_id == guild_id).count() >= MAX_MIRRORS:
-        return jsonify(error="mirror_limit_reached", limit=MAX_MIRRORS), 403
+    cap = plan_limits.limit(g.db, guild_id, "mirrors")
+    if g.db.query(MirrorRule).filter(MirrorRule.guild_id == guild_id).count() >= cap:
+        return plan_limits.limit_response("mirrors", cap)
     body = request.get_json(silent=True) or {}
     src_id, dest_id = body.get("source_channel_id"), body.get("dest_channel_id")
     if not (src_id and str(src_id).isdigit() and dest_id and str(dest_id).isdigit()):
@@ -287,8 +286,9 @@ def create_inbound(guild_id: int):
     ok, err = _manage_or_403(guild_id)
     if not ok:
         return err
-    if g.db.query(InboundWebhook).filter(InboundWebhook.guild_id == guild_id).count() >= MAX_HOOKS:
-        return jsonify(error="hook_limit_reached", limit=MAX_HOOKS), 403
+    cap = plan_limits.limit(g.db, guild_id, "inbound_webhooks")
+    if g.db.query(InboundWebhook).filter(InboundWebhook.guild_id == guild_id).count() >= cap:
+        return plan_limits.limit_response("inbound_webhooks", cap)
     body = request.get_json(silent=True) or {}
     channel_id = body.get("channel_id")
     if not (channel_id and str(channel_id).isdigit()):
@@ -336,8 +336,9 @@ def create_outbound(guild_id: int):
     ok, err = _manage_or_403(guild_id)
     if not ok:
         return err
-    if g.db.query(OutboundWebhook).filter(OutboundWebhook.guild_id == guild_id).count() >= MAX_HOOKS:
-        return jsonify(error="hook_limit_reached", limit=MAX_HOOKS), 403
+    cap = plan_limits.limit(g.db, guild_id, "outbound_webhooks")
+    if g.db.query(OutboundWebhook).filter(OutboundWebhook.guild_id == guild_id).count() >= cap:
+        return plan_limits.limit_response("outbound_webhooks", cap)
     body = request.get_json(silent=True) or {}
     url = str(body.get("url") or "").strip()[:500]
     if not url.startswith(("http://", "https://")):

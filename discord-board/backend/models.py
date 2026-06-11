@@ -1248,3 +1248,116 @@ class Task(Base):
             "done": bool(self.done),
             "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
         }
+
+
+class GuildTeamMember(Base):
+    """Dashboard access granted to a user who lacks Manage Server on Discord
+    (Phase 18). Redeeming a TeamInvite creates one of these; access checks
+    treat it like UserGuild.can_manage."""
+
+    __tablename__ = "guild_team_members"
+
+    guild_id = Column(BigInteger, ForeignKey("guilds.id"), primary_key=True)
+    user_id = Column(BigInteger, primary_key=True)
+    username = Column(String(120))
+    role = Column(String(12), default="manager")    # manager (viewer reserved)
+    invited_by = Column(BigInteger, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "user_id": str(self.user_id),
+            "username": self.username,
+            "role": self.role or "manager",
+            "invited_by": str(self.invited_by) if self.invited_by else None,
+            "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
+        }
+
+
+class TeamInvite(Base):
+    """A one-use code that grants dashboard access to a guild (Phase 18)."""
+
+    __tablename__ = "team_invites"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, ForeignKey("guilds.id"), nullable=False, index=True)
+    code = Column(String(32), unique=True, nullable=False, index=True)
+    role = Column(String(12), default="manager")
+    created_by = Column(BigInteger, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    used_by = Column(BigInteger, nullable=True)
+    used_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "code": self.code,
+            "role": self.role or "manager",
+            "expires_at": self.expires_at.isoformat() + "Z" if self.expires_at else None,
+            "used_by": str(self.used_by) if self.used_by else None,
+        }
+
+
+class UserNotification(Base):
+    """Dashboard notification for a user (Phase 18): bot health problems,
+    team changes, billing events."""
+
+    __tablename__ = "user_notifications"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, nullable=False, index=True)
+    kind = Column(String(20), default="info")       # info | warning | error
+    title = Column(String(120), nullable=False)
+    body = Column(String(500))
+    read = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "kind": self.kind or "info",
+            "title": self.title,
+            "body": self.body or "",
+            "read": bool(self.read),
+            "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
+        }
+
+
+class PromoCode(Base):
+    """A promo code granting free Pro days to a guild (Phase 18). Created by
+    platform admins; redeemed on the Billing tab."""
+
+    __tablename__ = "promo_codes"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code = Column(String(40), unique=True, nullable=False, index=True)
+    days_free = Column(Integer, default=30)
+    max_uses = Column(Integer, default=1)
+    used_count = Column(Integer, default=0)
+    enabled = Column(Boolean, default=True)
+    expires_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "code": self.code,
+            "days_free": self.days_free or 0,
+            "max_uses": self.max_uses or 1,
+            "used_count": self.used_count or 0,
+            "enabled": bool(self.enabled),
+            "expires_at": self.expires_at.isoformat() + "Z" if self.expires_at else None,
+        }
+
+
+class PromoCodeUsage(Base):
+    """One redemption of a promo code (per guild, prevents re-use)."""
+
+    __tablename__ = "promo_code_usages"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    promo_code_id = Column(Integer, ForeignKey("promo_codes.id"), nullable=False, index=True)
+    guild_id = Column(BigInteger, nullable=False, index=True)
+    user_id = Column(BigInteger, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)

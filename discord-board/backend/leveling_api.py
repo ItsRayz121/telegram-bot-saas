@@ -12,6 +12,7 @@ from flask import Blueprint, g, jsonify, request
 
 import leveling
 import settings as settings_mod
+import access
 from auth import login_required
 from models import Guild, UserGuild
 
@@ -19,8 +20,7 @@ leveling_bp = Blueprint("leveling", __name__)
 
 
 def _manage_or_403(guild_id: int):
-    membership = g.db.get(UserGuild, {"user_id": g.user_id, "guild_id": guild_id})
-    if membership is None or not membership.can_manage:
+    if not access.can_manage_guild(g.db, g.user_id, guild_id):
         return False, (jsonify(error="forbidden"), 403)
     if g.db.get(Guild, guild_id) is None:
         return False, (jsonify(error="not_found"), 404)
