@@ -334,3 +334,33 @@ personal-context grounding + isolation between users) green. No frontend
 changes this phase.
 
 **Env vars**: uses existing `ANTHROPIC_API_KEY`. **Manual ops**: none.
+
+## Cross-check Audit — Phases 9–17 (2026-06-11)
+
+Owner-requested full review of the V2 codebase before Phase 18.
+
+**Bugs found & fixed**
+1. **Staff messages skipped content features** (introduced Phase 3 design,
+   exposed by 12/13): the early staff `return` in on_message also skipped
+   auto-responses, mirroring and message workflows for admins/mods. Staff now
+   skip only moderation + AI layers; content features run for everyone. Same
+   fix covers guilds with a missing moderation row.
+2. **Workflow `webhook` action ignored its URL** (Phase 13): it dispatched to
+   the guild's outbound-webhook subscribers instead of POSTing to the action's
+   own configured URL. New `automation_runtime.post_workflow_webhook`.
+3. **DM assistant rate-limit key** (Phase 17): keyed globally, so DMing two
+   different bots within 5s silently dropped the second. Now per bot identity.
+4. **4 new eslint react-hooks warnings** in AnalyticsTab/MembersTab/
+   CampaignsTab (misplaced disable comments) — fixed properly; as a bonus the
+   2 pre-existing CampaignsTab warnings from V1 are fixed too.
+
+**Verified clean**
+- New authorized end-to-end API suite (session-cookie auth): 40+ requests
+  across every V2 endpoint — moderation PUT round-trip incl. every new config
+  section + sanitizers, CRM sorts (incl. nullslast paths), analytics series,
+  content/automation/growth/knowledge CRUD, public inbound + proof feed,
+  cross-guild 403s. All green.
+- Loop parity: both lineages start all 5 background loops.
+- Command-name collision check across the 28-command tree: none.
+- Strict CI build: zero warnings from V2 files (only pre-existing
+  Sidebar/Dashboard/GroupCRM/CommandsTab remain).

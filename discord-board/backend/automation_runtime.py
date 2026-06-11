@@ -203,6 +203,16 @@ def dispatch_event(guild_id: int, event: str, data: dict) -> None:
         _record_delivery(hook_id, error)
 
 
+def post_workflow_webhook(url: str, payload: dict) -> None:
+    """POST a workflow's own webhook action to ITS configured URL (distinct from
+    the guild-level outbound subscriptions). Sync; never raises."""
+    try:
+        requests.post(url, json=payload, timeout=_DISPATCH_TIMEOUT,
+                      headers={"X-Guildizer-Event": "workflow_fired"})
+    except requests.RequestException:
+        log.warning("workflow webhook POST failed: %s", url)
+
+
 def _record_delivery(hook_id: int, error: str | None) -> None:
     db = SessionLocal()
     try:

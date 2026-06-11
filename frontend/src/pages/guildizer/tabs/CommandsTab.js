@@ -19,7 +19,10 @@ export default function CommandsTab({ guildId }) {
     try { const { data } = await guildizerApi.get(`/api/guilds/${guildId}/commands`); setCommands(data.commands); }
     catch { setError('Failed to load commands.'); }
   }
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [guildId]);
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guildId]);
 
   const cancel = () => { setEditingId(null); setDraft(BLANK); setError(null); };
   const startEdit = (c) => { setEditingId(c.id); setDraft({ name: c.name, description: c.description, response: c.response, enabled: c.enabled }); setError(null); };

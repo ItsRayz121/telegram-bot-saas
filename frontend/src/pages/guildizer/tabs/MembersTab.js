@@ -30,7 +30,10 @@ export default function MembersTab({ guildId }) {
     setLoading(false);
   }, [guildId, search, sort]);
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [guildId, sort]);
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guildId, sort]);
 
   if (loading) return <Box sx={{ display: 'grid', placeItems: 'center', py: 4 }}><CircularProgress /></Box>;
 

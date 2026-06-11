@@ -25,7 +25,10 @@ export default function CampaignsTab({ guildId, channels = [] }) {
     try { const { data } = await guildizerApi.get(`/api/guilds/${guildId}/campaigns`); setCampaigns(data.campaigns); setPlan(data.plan); }
     finally { setLoading(false); }
   }
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [guildId]);
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guildId]);
 
   if (selected) return <CampaignDetail guildId={guildId} campaignId={selected} channels={textChannels} plan={plan} onBack={() => { setSelected(null); load(); }} />;
 
@@ -70,7 +73,10 @@ function ReferralsCard({ guildId }) {
       setData(d); setXp(d.xp_per_referral);
     } catch { /* quietly empty */ }
   }
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [guildId]);
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guildId]);
 
   if (!data) return null;
   return (
@@ -148,7 +154,10 @@ function CampaignDetail({ guildId, campaignId, channels, plan, onBack }) {
     const { data } = await guildizerApi.get(base); setC(data);
     const s = await guildizerApi.get(`${base}/submissions?status=pending`); setSubs(s.data.submissions);
   }
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [campaignId]);
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campaignId]);
 
   async function patch(body) {
     try { const { data } = await guildizerApi.put(base, body); setC((p) => ({ ...p, ...data })); setMsg(null); }
@@ -285,7 +294,10 @@ function FieldsCard({ guildId, campaignId }) {
       setFields(data.fields);
     } catch { /* quietly empty */ }
   }
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [campaignId]);
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campaignId]);
 
   return (
     <Card variant="outlined"><CardContent>

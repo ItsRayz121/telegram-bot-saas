@@ -240,12 +240,21 @@ class CoreMixin:
         counted = await self._maybe_award_xp(message)
         _note_activity(message.guild.id, message.author.id, str(message.author), counted)
 
+        # Staff skip moderation + AI layers, but content features (auto-responses,
+        # mirrors, workflows) still run for them.
         perms = getattr(message.author, "guild_permissions", None)
-        if perms and (perms.administrator or perms.manage_guild or perms.manage_messages):
-            return  # never moderate staff
+        is_staff = bool(perms and (perms.administrator or perms.manage_guild
+                                   or perms.manage_messages))
 
         cfg = await asyncio.to_thread(self._load_moderation, message.guild.id)
-        if not cfg:
+        if is_staff or not cfg:
+            await self._maybe_auto_respond(message)
+            await self._maybe_mirror(message)
+            await self._run_workflows(
+                "message_contains", message.guild,
+                member=message.author, channel=message.channel,
+                text=message.content or "",
+            )
             return
 
         text = message.content or ""
@@ -302,7 +311,7 @@ class CoreMixin:
                 "there. DM chat needs the AI assistant, which isn't configured yet."
             ), what="dm fallback")
             return
-        key = (0, message.author.id)
+        key = (self.custom_bot_id or 0, message.author.id)
         if time.monotonic() - _dm_last.get(key, 0.0) < 5:
             return
         _dm_last[key] = time.monotonic()
@@ -762,8 +771,9 @@ class CoreMixin:
                 )
             elif atype == "webhook" and action.get("url"):
                 await asyncio.to_thread(
-                    automation_runtime.dispatch_event, guild.id, "workflow_fired",
-                    {"workflow": wf["name"], "user": username},
+                    automation_runtime.post_workflow_webhook, action["url"],
+                    {"event": "workflow_fired", "workflow": wf["name"],
+                     "guild_id": str(guild.id), "user": username},
                 )
 
     async def _maybe_mirror(self, message: discord.Message) -> None:

@@ -19,7 +19,7 @@ export default function AnalyticsTab({ guildId }) {
     setLoading(false);
   }, [guildId, days]);
 
-  useEffect(() => { load(days); /* eslint-disable-next-line */ }, [guildId, days]);
+  useEffect(() => { load(); }, [load]);
 
   if (loading) return <Box sx={{ display: 'grid', placeItems: 'center', py: 4 }}><CircularProgress /></Box>;
   if (!data) return <Alert severity="warning">{error || 'No data.'}</Alert>;
