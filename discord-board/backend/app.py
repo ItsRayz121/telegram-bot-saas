@@ -11,6 +11,7 @@ from auth import auth_bp
 from billing_api import billing_bp
 from campaigns_api import campaigns_bp
 from config import Config
+from custom_bots_api import custom_bots_bp
 from database import init_db
 from guilds_api import guilds_bp
 from leveling_api import leveling_bp
@@ -35,6 +36,7 @@ def create_app() -> Flask:
     app.register_blueprint(campaigns_bp)
     app.register_blueprint(billing_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(custom_bots_bp)
 
     @app.get("/")
     def root():

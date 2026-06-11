@@ -1,6 +1,6 @@
 """SQLAlchemy engine/session for Guildizer. Self-contained — no Telegizer imports."""
 import os
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import declarative_base, sessionmaker, scoped_session
 
 from config import Config
@@ -24,3 +24,23 @@ def init_db() -> None:
     import models  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
+    _self_heal_columns()
+
+
+# Columns added to EXISTING tables after their first release. create_all only
+# creates missing tables, so these are healed with additive ALTERs (the same
+# self-heal pattern the settings layer uses for rows). Additive-only, idempotent.
+_HEAL_COLUMNS = [
+    ("guilds", "custom_bot_id", "INTEGER"),
+]
+
+
+def _self_heal_columns() -> None:
+    insp = inspect(engine)
+    for table, column, ddl_type in _HEAL_COLUMNS:
+        if not insp.has_table(table):
+            continue
+        existing = {c["name"] for c in insp.get_columns(table)}
+        if column not in existing:
+            with engine.begin() as conn:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl_type}"))

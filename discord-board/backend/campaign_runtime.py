@@ -12,7 +12,9 @@ from database import SessionLocal
 from models import Campaign, CampaignSubmission, CampaignTask
 
 
-def campaigns_to_post() -> list[int]:
+def campaigns_to_post() -> list[tuple[int, int]]:
+    """(campaign_id, guild_id) pairs so each bot identity posts only for the
+    guilds it serves (official bot vs white-label custom bots)."""
     db = SessionLocal()
     try:
         rows = (
@@ -20,7 +22,7 @@ def campaigns_to_post() -> list[int]:
             .filter(Campaign.needs_post.is_(True), Campaign.status == "active")
             .all()
         )
-        return [c.id for c in rows]
+        return [(c.id, c.guild_id) for c in rows]
     finally:
         db.close()
         SessionLocal.remove()

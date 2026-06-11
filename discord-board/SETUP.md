@@ -83,6 +83,7 @@ and Discord credentials. Set these on each:
 | `ADMIN_USER_IDS` | ✅ | comma-separated Discord ids with `/admin` access |
 | `NOWPAYMENTS_API_KEY` / `NOWPAYMENTS_IPN_SECRET` | for billing | IPN URL = `<BACKEND_URL>/webhooks/nowpayments` |
 | `ANTHROPIC_API_KEY` | optional | enables the `/ask` assistant |
+| `GUILDIZER_ENCRYPTION_KEY` | ✅ prod | Fernet key for white-label bot tokens at rest. Generate: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. Dev falls back to a key derived from FLASK_SECRET_KEY. |
 
 Frontend (Vercel): `VITE_API_URL` = the Railway web URL.
 

@@ -93,10 +93,16 @@ async def register_all(bot, guild_ids: list[int]) -> None:
             log.exception("Failed to register commands for guild %s", gid)
 
 
-async def resync_dirty(bot) -> None:
-    """Re-register any guilds the API flagged as dirty, then clear the flag."""
+async def resync_dirty(bot, allow=None) -> None:
+    """Re-register any guilds the API flagged as dirty, then clear the flag.
+
+    `allow(gid)` lets each bot identity (official vs white-label) skip guilds it
+    doesn't serve — the serving bot picks the flag up on its own loop.
+    """
     ids = await asyncio.to_thread(_dirty_guild_ids)
     for gid in ids:
+        if allow is not None and not allow(gid):
+            continue
         try:
             n = await register_guild_commands(bot, gid)
             await asyncio.to_thread(_clear_dirty, gid)

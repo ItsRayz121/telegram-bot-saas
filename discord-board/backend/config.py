@@ -36,6 +36,11 @@ class Config:
         int(x) for x in os.getenv("ADMIN_USER_IDS", "").replace(" ", "").split(",") if x.isdigit()
     }
 
+    # Fernet key for encrypting custom-bot tokens at rest (crypto.py).
+    # Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    # If unset, crypto.py derives a key from SECRET_KEY (dev fallback only).
+    ENCRYPTION_KEY = os.getenv("GUILDIZER_ENCRYPTION_KEY", "")
+
     # App
     SECRET_KEY = os.getenv("FLASK_SECRET_KEY", "dev-secret-change-me")
     FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")

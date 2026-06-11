@@ -146,3 +146,63 @@ def get_guild_roles(guild_id: int) -> list[dict]:
     )
     resp.raise_for_status()
     return resp.json()
+
+
+# --- White-label custom bot validation (arbitrary bot token) -------------------
+# Application flags that report whether the privileged-intent toggles are ON in
+# the app owner's Developer Portal. The *_LIMITED variants are what unverified
+# apps (<100 servers) get — they are fully functional, so both bits count.
+APP_FLAG_GATEWAY_GUILD_MEMBERS = 1 << 14
+APP_FLAG_GATEWAY_GUILD_MEMBERS_LIMITED = 1 << 15
+APP_FLAG_GATEWAY_MESSAGE_CONTENT = 1 << 18
+APP_FLAG_GATEWAY_MESSAGE_CONTENT_LIMITED = 1 << 19
+
+
+class InvalidBotToken(Exception):
+    """The supplied token was rejected by Discord (401)."""
+
+
+def _custom_bot_headers(token: str) -> dict:
+    return {"Authorization": f"Bot {token}"}
+
+
+def validate_bot_token(token: str) -> dict:
+    """Validate a customer-supplied bot token and describe the bot behind it.
+
+    Returns {bot_user_id, bot_username, bot_avatar, application_id,
+             intents_members, intents_message_content}.
+    Raises InvalidBotToken on a 401; lets network errors bubble for a 502.
+    """
+    me = requests.get(
+        f"{API_BASE}/users/@me",
+        headers=_custom_bot_headers(token),
+        timeout=_TIMEOUT,
+    )
+    if me.status_code == 401:
+        raise InvalidBotToken("Discord rejected this token.")
+    me.raise_for_status()
+    bot_user = me.json()
+
+    app_resp = requests.get(
+        f"{API_BASE}/oauth2/applications/@me",
+        headers=_custom_bot_headers(token),
+        timeout=_TIMEOUT,
+    )
+    if app_resp.status_code == 401:
+        raise InvalidBotToken("Discord rejected this token.")
+    app_resp.raise_for_status()
+    app = app_resp.json()
+    flags = int(app.get("flags") or 0)
+
+    return {
+        "bot_user_id": int(bot_user["id"]),
+        "bot_username": bot_user.get("username"),
+        "bot_avatar": bot_user.get("avatar"),
+        "application_id": int(app["id"]),
+        "intents_members": bool(
+            flags & (APP_FLAG_GATEWAY_GUILD_MEMBERS | APP_FLAG_GATEWAY_GUILD_MEMBERS_LIMITED)
+        ),
+        "intents_message_content": bool(
+            flags & (APP_FLAG_GATEWAY_MESSAGE_CONTENT | APP_FLAG_GATEWAY_MESSAGE_CONTENT_LIMITED)
+        ),
+    }

@@ -4,7 +4,7 @@ import {
   Box, Typography, Button, Card, CardContent, Grid, Avatar,
   CircularProgress, Alert, Chip, Stack,
 } from '@mui/material';
-import { Forum, Add, OpenInNew, AdminPanelSettings } from '@mui/icons-material';
+import { Forum, Add, OpenInNew, AdminPanelSettings, SmartToy } from '@mui/icons-material';
 import guildizerApi, { guildizerLoginUrl } from '../../services/guildizerApi';
 
 const OAUTH_ERRORS = {
@@ -78,6 +78,9 @@ export default function GuildizerServers() {
                 Admin
               </Button>
             )}
+            <Button variant="outlined" startIcon={<SmartToy />} onClick={() => navigate('/guildizer/bots')}>
+              My Bots
+            </Button>
             {state.inviteUrl && (
               <Button variant="contained" startIcon={<Add />} href={state.inviteUrl} target="_blank" rel="noreferrer">
                 Add to a server

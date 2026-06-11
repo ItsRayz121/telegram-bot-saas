@@ -73,6 +73,9 @@ class Guild(Base):
     icon = Column(String(255))
     owner_id = Column(BigInteger, ForeignKey("users.id"), nullable=True)
     bot_present = Column(Boolean, default=False)
+    # Which bot identity serves this guild. NULL = the official Guildizer bot.
+    # Set when a white-label custom bot joins (auto-link) or via the dashboard.
+    custom_bot_id = Column(Integer, nullable=True)
     member_count = Column(Integer, default=0)
     plan = Column(String(16), default="free")          # free | pro (set by billing)
     plan_expires_at = Column(DateTime, nullable=True)  # null = no expiry
@@ -120,6 +123,7 @@ class Guild(Base):
             "name": self.name,
             "icon_url": self.icon_url(),
             "bot_present": bool(self.bot_present),
+            "custom_bot_id": self.custom_bot_id,
             "member_count": self.member_count or 0,
             "plan": self.plan or "free",
             "is_pro": self.is_pro,
@@ -667,3 +671,86 @@ class AITokenUsage(Base):
     input_tokens = Column(Integer, default=0)
     output_tokens = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class CustomBot(Base):
+    """A white-label ("bring your own token") Discord bot powered by the
+    Guildizer engine. The token is Fernet-encrypted at rest (crypto.py) and is
+    only ever decrypted inside the bot worker; it is never returned to the
+    frontend after save and never logged.
+
+    Status: active   — fleet worker should run a gateway client for it
+            disabled — owner turned it off (kept for re-enable)
+            error    — token rejected (401) or decrypt failed; needs a new token
+    """
+
+    __tablename__ = "custom_bots"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    owner_user_id = Column(BigInteger, ForeignKey("users.id"), nullable=False, index=True)
+    application_id = Column(BigInteger, nullable=False)      # Discord app id (client_id for invites)
+    bot_user_id = Column(BigInteger, nullable=False, unique=True)
+    bot_username = Column(String(120))
+    bot_avatar = Column(String(255))
+    token_encrypted = Column(Text, nullable=False)
+    status = Column(String(16), default="active", nullable=False)
+    error_detail = Column(String(300))
+    # Privileged-intent toggles read from the app's flags at validation time.
+    # Both must be on in the owner's Developer Portal or the gateway login fails.
+    intents_members = Column(Boolean, default=False)
+    intents_message_content = Column(Boolean, default=False)
+    # Dirty flag: API -> worker. Set on token change / re-enable; worker restarts
+    # the client and clears it.
+    needs_restart = Column(Boolean, default=False)
+    last_online_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    owner = relationship("User")
+
+    def avatar_url(self) -> str | None:
+        if not self.bot_avatar:
+            return None
+        return f"https://cdn.discordapp.com/avatars/{self.bot_user_id}/{self.bot_avatar}.png"
+
+    @property
+    def intents_ok(self) -> bool:
+        return bool(self.intents_members and self.intents_message_content)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "application_id": str(self.application_id),
+            "bot_user_id": str(self.bot_user_id),
+            "bot_username": self.bot_username,
+            "avatar_url": self.avatar_url(),
+            "status": self.status,
+            "error_detail": self.error_detail,
+            "intents_members": bool(self.intents_members),
+            "intents_message_content": bool(self.intents_message_content),
+            "intents_ok": self.intents_ok,
+            "last_online_at": self.last_online_at.isoformat() + "Z" if self.last_online_at else None,
+            "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
+        }
+
+
+class BotHealthEvent(Base):
+    """Connect/disconnect/error history per bot identity, for the dashboard and
+    the admin fleet view. custom_bot_id NULL = the official bot."""
+
+    __tablename__ = "bot_health_events"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    custom_bot_id = Column(Integer, nullable=True, index=True)
+    event = Column(String(20), nullable=False)   # connect | disconnect | error | auth_failed
+    detail = Column(String(300))
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "custom_bot_id": self.custom_bot_id,
+            "event": self.event,
+            "detail": self.detail,
+            "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
+        }

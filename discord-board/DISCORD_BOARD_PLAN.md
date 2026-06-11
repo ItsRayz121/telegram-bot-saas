@@ -156,7 +156,7 @@ Authoritative V2 docs (in `docs/`):
 
 V2 status:
 - [x] Audit, architecture, roadmap docs written (2026-06-11)
-- [ ] Phase 9 — White-label custom bot foundation
+- [x] Phase 9 — White-label custom bot foundation (2026-06-11: bot_core.py shared engine, CustomBot + fleet manager, token vault, custom_bots_api, My Bots UI w/ connect wizard, bot-resolution rule. See CHANGELOG.md)
 - [ ] Phase 10 — Moderation parity pack
 - [ ] Phase 11 — Verification & onboarding parity
 - [ ] Phase 12 — Scheduling, polls & content
