@@ -167,19 +167,24 @@ Final tab bar: `Overview · Moderation · Members · Engagement · AI & Integrat
 ## Server-level tabs kept (no Telegizer group equivalent)
 - Overview (channels/roles) · Commands (custom slash commands) · Team (seats/invites) · Billing (plan, checkout, history, promo)
 
-## Discord-native additions (beyond Telegizer parity — proposed, not yet approved)
+## Discord-native additions (beyond Telegizer parity)
 
-Features Telegram simply doesn't have; these would make Guildizer feel native rather than ported.
+Features Telegram simply doesn't have; these make Guildizer feel native rather than ported.
 Ranked by impact-per-effort:
 
-1. **Reaction roles / button roles** (Members › new "Self-roles" subtab) — the single most
-   expected Discord bot feature; pairs with the existing autorole + role-rewards plumbing.
-2. **Anti-nuke guard** (Moderation › AutoMod) — alert/revert on mass channel/role deletions or
-   mass bans by a compromised admin account; natural extension of bot_policy + raid guard.
+1. ✅ **Reaction roles / button roles** (Members › Self-roles, 2026-06-11) — menus in
+   `GuildSettings.extra["self_roles"]`, persistent `SelfRoleButton` DynamicItem +
+   reaction add/remove handling, post/unpost queue in the 20s post loop, dangerous
+   permissions never self-assignable. `self_roles.py` + `self_roles_api.py`.
+2. ✅ **Anti-nuke guard** (Moderation › AutoMod, 2026-06-11) — per-executor sliding windows
+   over bans/kicks/channel+role deletions, audit-log attribution, strip-roles/ban/alert
+   response, owner+bot+whitelist exempt. `anti_nuke.py`, settings in `extra.anti_nuke`.
 3. **Ticket system** (new Engagement or server-level subtab) — button → private support thread,
    with transcript on close; Discord-native support flow.
-4. **Join-to-create voice channels + voice XP** (Members › XP & Roles) — temp voice rooms;
-   award XP for voice minutes (leveling2 already has the storage pattern).
+4. ✅ **Join-to-create voice channels + voice XP** (Members › XP & Roles, 2026-06-11) —
+   temp rooms registered in `extra.voice_temp` (restart-safe sweep), voice XP via the
+   5-min voice loop (ledger reason "voice", `Member.voice_minutes` healed column).
+   `voice_features.py`, settings in `extra.voice` via the leveling API.
 5. **Starboard** (Engagement) — ⭐-threshold reposts to a best-of channel.
 6. **Discord native AutoMod sync** (Moderation › AutoMod) — push banned words/links into
    Discord's built-in AutoMod via API so filtering happens even when the bot is down.
