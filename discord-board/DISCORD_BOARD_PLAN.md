@@ -139,3 +139,32 @@ All 9 phases (0–8) built, cross-checked, and pushed to `main`. Remaining work 
 operational: provision the Railway services + Vercel project (subfolder roots),
 set env vars (SETUP.md §C), enable privileged intents, apply for Discord
 verification, and run the live smoke test (SETUP.md §D).
+
+---
+
+## 8. V2 — Full Telegizer Parity Program (started 2026-06-11)
+
+V1 (phases 0–8) covers ~25% of Telegizer's audited feature surface. V2 closes the
+gap with **Phases 9–20**, including the white-label custom-bot lineage. §4's
+"drop custom bots" decision is **reversed** — owner requested full two-lineage
+parity, and the analysis confirms it works on Discord.
+
+Authoritative V2 docs (in `docs/`):
+- `docs/TELEGIZER_FEATURE_AUDIT.md` — ~140-feature inventory + Discord compatibility matrix
+- `docs/WHITE_LABEL_ARCHITECTURE.md` — custom/BYO-token bot architecture (Phase 9)
+- `docs/PARITY_ROADMAP.md` — Phases 9–20 specs, commit strategy, risk plan
+
+V2 status:
+- [x] Audit, architecture, roadmap docs written (2026-06-11)
+- [ ] Phase 9 — White-label custom bot foundation
+- [ ] Phase 10 — Moderation parity pack
+- [ ] Phase 11 — Verification & onboarding parity
+- [ ] Phase 12 — Scheduling, polls & content
+- [ ] Phase 13 — Automation engine (workflows, mirroring, webhooks)
+- [ ] Phase 14 — Engagement parity+ (referrals/invites/custom fields/proof feed)
+- [ ] Phase 15 — CRM, analytics & usage spine
+- [ ] Phase 16 — Knowledge & applied AI
+- [ ] Phase 17 — Assistant hub (Echo parity)
+- [ ] Phase 18 — Teams, notifications & billing depth
+- [ ] Phase 19 — Admin panel parity
+- [ ] Phase 20 — Hardening, verification & launch
