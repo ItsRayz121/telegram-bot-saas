@@ -2,6 +2,7 @@ import bcrypt
 import hashlib
 import hmac
 import logging
+import secrets
 import threading
 from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify, current_app
@@ -72,11 +73,47 @@ def _set_auth_cookies(response, access_token: str, refresh_token: str = None):
 
 def _clear_auth_cookies(response):
     """Expire all auth cookies on logout."""
-    for name, path in [("access_token", "/"), ("refresh_token", "/api/auth/refresh"), ("csrf_token", "/")]:
+    for name, path in [("access_token", "/"), ("refresh_token", "/api/auth/refresh"), ("csrf_token", "/"), ("totp_trusted", "/")]:
         response.set_cookie(name, "", expires=0, path=path)
     return response
 
 _MAX_FAILED_ATTEMPTS = 10
+
+_TOTP_TRUSTED_TTL = 48 * 3600  # 48 hours in seconds
+
+
+def _set_totp_trusted_cookie(response, user_id: int):
+    """After successful 2FA, stamp this browser as trusted for 48 hours."""
+    token = secrets.token_urlsafe(32)
+    _r = _get_redis()
+    if _r:
+        _r.setex(f"totp_trusted:{user_id}", _TOTP_TRUSTED_TTL, token)
+    secure = _is_secure()
+    response.set_cookie(
+        "totp_trusted", f"{user_id}:{token}",
+        httponly=True, secure=secure, samesite="Strict",
+        max_age=_TOTP_TRUSTED_TTL,
+    )
+
+
+def _check_totp_trusted(user_id: int) -> bool:
+    """Return True if this browser has a valid 48-hour trusted-device token."""
+    cookie = request.cookies.get("totp_trusted", "")
+    if not cookie:
+        return False
+    parts = cookie.split(":", 1)
+    if len(parts) != 2:
+        return False
+    cookie_uid, token = parts
+    if cookie_uid != str(user_id):
+        return False
+    _r = _get_redis()
+    if not _r:
+        return False
+    stored = _r.get(f"totp_trusted:{user_id}")
+    return stored == token
+
+
 _LOCKOUT_MINUTES = 15
 
 # Anti-abuse thresholds
@@ -505,12 +542,11 @@ def login():
         except Exception:
             db.session.rollback()
 
-    # 2FA check
-    if user.totp_enabled and user.totp_secret:
+    # 2FA check — skip entirely if browser carries a valid 48-hour trusted-device token
+    if user.totp_enabled and user.totp_secret and not _check_totp_trusted(user.id):
         if not totp_code:
             # Return indicator that 2FA is required; do NOT issue full JWT yet
-            import secrets as _s
-            nonce = _s.token_hex(16)
+            nonce = secrets.token_hex(16)
             _r = _get_redis()
             if _r:
                 _r.setex(f"totp_nonce:{user.id}", 90, nonce)
@@ -598,6 +634,7 @@ def verify_totp_login():
     _attach_admin_fields(user_data, user)
     resp = jsonify({"token": token, "user": user_data})
     _set_auth_cookies(resp, token, refresh_token)
+    _set_totp_trusted_cookie(resp, user.id)  # trust this browser for 48 hours
     return resp, 200
 
 

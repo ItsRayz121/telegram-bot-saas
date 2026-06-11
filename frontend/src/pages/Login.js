@@ -105,8 +105,11 @@ export default function Login() {
               <Lock color="primary" />
               <Typography variant="h5" fontWeight={700} sx={{ fontSize: { xs: '1.1rem', sm: '1.5rem' } }}>Two-Factor Auth</Typography>
             </Box>
-            <Typography variant="body2" color="text.secondary" textAlign="center" mb={3}>
+            <Typography variant="body2" color="text.secondary" textAlign="center" mb={1}>
               Enter the 6-digit code from your authenticator app, or one of your backup codes.
+            </Typography>
+            <Typography variant="caption" color="text.disabled" textAlign="center" display="block" mb={3}>
+              This browser will be trusted for 48 hours after verification.
             </Typography>
 
             {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
