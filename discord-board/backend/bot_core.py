@@ -27,6 +27,7 @@ import bot_policy
 import campaign_runtime
 import campaign_views
 import command_registrar
+import content_runtime
 import governor
 import guild_sync
 import leveling
@@ -242,6 +243,18 @@ class CoreMixin:
         else:
             if raid_guard.note_message(message.guild.id, message.author.id, text, cfg):
                 await self._raid_activated(message.guild, cfg)
+            else:
+                await self._maybe_auto_respond(message)
+
+    async def _maybe_auto_respond(self, message: discord.Message) -> None:
+        responses = await asyncio.to_thread(content_runtime.load_responses, message.guild.id)
+        if not responses:
+            return
+        hit = content_runtime.match_response(message.content or "", responses)
+        if hit is None or not content_runtime.cooldown_ok(message.guild.id, hit):
+            return
+        await governor.safe(message.reply(hit["response"], mention_author=False),
+                            what="auto-response")
 
     async def _execute_action(self, message: discord.Message, decision: dict) -> str:
         action = decision["action"]
@@ -545,6 +558,56 @@ class CoreMixin:
 
     @process_mod_actions.before_loop
     async def _before_mod_actions(self) -> None:
+        await self.wait_until_ready()
+
+    # --- scheduled messages + polls (Phase 12) ---------------------------------
+    @tasks.loop(seconds=30)
+    async def content_loop(self) -> None:
+        served = [gd.id for gd in self.guilds if serves(self, gd.id)]
+
+        for item in await asyncio.to_thread(content_runtime.due_messages, served):
+            guild = self.get_guild(item["guild_id"])
+            channel = guild.get_channel(int(item["channel_id"])) if guild else None
+            sent = False
+            if channel is not None and hasattr(channel, "send") and item["content"]:
+                sent = bool(await governor.safe(channel.send(item["content"]),
+                                                what="scheduled message"))
+            await asyncio.to_thread(content_runtime.advance_schedule, item["id"], sent)
+
+        for item in await asyncio.to_thread(content_runtime.polls_to_post, served):
+            guild = self.get_guild(item["guild_id"])
+            channel = guild.get_channel(int(item["channel_id"])) if guild else None
+            message_id = None
+            if channel is not None and hasattr(channel, "send"):
+                try:
+                    poll = discord.Poll(
+                        question=item["question"],
+                        duration=timedelta(hours=item["duration_hours"]),
+                        multiple=item["multiselect"],
+                    )
+                    for ans in item["answers"]:
+                        poll.add_answer(text=ans)
+                    msg = await channel.send(poll=poll)
+                    message_id = msg.id
+                except (discord.HTTPException, AttributeError, TypeError):
+                    log.exception("poll post failed for %s", item["id"])
+            await asyncio.to_thread(content_runtime.mark_poll_posted, item["id"], message_id)
+
+        for item in await asyncio.to_thread(content_runtime.polls_to_finalize, served):
+            results = None
+            guild = self.get_guild(item["guild_id"])
+            channel = guild.get_channel(int(item["channel_id"])) if guild else None
+            if channel is not None and item["message_id"]:
+                try:
+                    msg = await channel.fetch_message(int(item["message_id"]))
+                    if msg.poll is not None:
+                        results = {a.text: a.vote_count for a in msg.poll.answers}
+                except (discord.HTTPException, AttributeError):
+                    pass
+            await asyncio.to_thread(content_runtime.record_poll_results, item["id"], results)
+
+    @content_loop.before_loop
+    async def _before_content(self) -> None:
         await self.wait_until_ready()
 
     # --- sync DB writes/reads (run off the event loop via to_thread) ------------

@@ -855,3 +855,94 @@ class PendingVerification(Base):
     message_id = Column(BigInteger, nullable=True)    # the challenge message
     expires_at = Column(DateTime, nullable=False, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ScheduledMessage(Base):
+    """A dashboard-scheduled message the bot posts when due, with optional
+    recurrence (Phase 12). Bot/API coordinate via next_run_at only."""
+
+    __tablename__ = "scheduled_messages"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, ForeignKey("guilds.id"), nullable=False, index=True)
+    channel_id = Column(BigInteger, nullable=False)
+    content = Column(Text, default="")
+    recurrence = Column(String(10), default="none")    # none | hourly | daily | weekly
+    next_run_at = Column(DateTime, nullable=False, index=True)
+    last_sent_at = Column(DateTime, nullable=True)
+    enabled = Column(Boolean, default=True)
+    created_by = Column(BigInteger, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "channel_id": str(self.channel_id),
+            "content": self.content or "",
+            "recurrence": self.recurrence or "none",
+            "next_run_at": self.next_run_at.isoformat() + "Z" if self.next_run_at else None,
+            "last_sent_at": self.last_sent_at.isoformat() + "Z" if self.last_sent_at else None,
+            "enabled": bool(self.enabled),
+        }
+
+
+class Poll(Base):
+    """A native Discord poll created from the dashboard (Phase 12). The bot
+    posts it (needs_post), then finalizes the vote counts after it closes."""
+
+    __tablename__ = "polls"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, ForeignKey("guilds.id"), nullable=False, index=True)
+    channel_id = Column(BigInteger, nullable=False)
+    question = Column(String(300), nullable=False)
+    answers = Column(JSON, default=list)               # list[str] (2-10)
+    duration_hours = Column(Integer, default=24)       # 1-768 (Discord cap: 32 days)
+    multiselect = Column(Boolean, default=False)
+    needs_post = Column(Boolean, default=True)
+    message_id = Column(BigInteger, nullable=True)
+    status = Column(String(12), default="pending")     # pending | open | ended | failed
+    ends_at = Column(DateTime, nullable=True)
+    results = Column(JSON, default=dict)               # {answer_text: votes}
+    created_by = Column(BigInteger, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "channel_id": str(self.channel_id),
+            "question": self.question,
+            "answers": list(self.answers or []),
+            "duration_hours": self.duration_hours or 24,
+            "multiselect": bool(self.multiselect),
+            "status": self.status,
+            "ends_at": self.ends_at.isoformat() + "Z" if self.ends_at else None,
+            "results": dict(self.results or {}),
+            "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
+        }
+
+
+class AutoResponse(Base):
+    """Keyword trigger -> bot reply (Phase 12). Cooldown is enforced in-memory
+    by the bot (per guild+trigger)."""
+
+    __tablename__ = "auto_responses"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, ForeignKey("guilds.id"), nullable=False, index=True)
+    trigger = Column(String(120), nullable=False)
+    match_type = Column(String(10), default="contains")  # contains | exact
+    response = Column(Text, default="")
+    cooldown_seconds = Column(Integer, default=30)
+    enabled = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "trigger": self.trigger,
+            "match_type": self.match_type or "contains",
+            "response": self.response or "",
+            "cooldown_seconds": self.cooldown_seconds or 30,
+            "enabled": bool(self.enabled),
+        }

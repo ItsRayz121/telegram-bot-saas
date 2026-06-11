@@ -133,3 +133,34 @@ snapshot defaults, wiring imports) green; frontend build green.
 
 **Env vars**: none new. **Manual ops**: bot needs Manage Roles + Manage
 Channels for auto-setup (already in the default invite permission set).
+
+## Phase 12 — Scheduling, Polls & Content (2026-06-11)
+
+**Scheduled messages**: dashboard-created, with hourly/daily/weekly recurrence
+(missed slots roll forward; one-shots disable after sending). Bot posts via the
+new 30s `content_loop`, scoped per bot identity (serves()) so the fleet never
+double-posts. Model: `ScheduledMessage`.
+
+**Native Discord polls**: created from the dashboard (2-10 answers, duration up
+to 32 days, multi-choice). Bot posts via discord.py's native Poll API, then
+finalizes vote counts into the DB after close (status pending->open->ended,
+failed on post errors). Model: `Poll`.
+
+**Auto-responses**: keyword triggers (contains / exact, case-insensitive) ->
+bot reply, with per-trigger in-memory cooldowns. Runs on the clean-message path
+after moderation so filtered messages never trigger replies. Model:
+`AutoResponse`.
+
+**API** (`content_api.py`): full CRUD for all three (manage-gated); live polls
+cannot be deleted. **Runtime** (`content_runtime.py`): pure DB helpers, all due
+queries scoped to served guilds.
+
+**UI**: new **Content** tab in the server detail page — scheduler card
+(datetime + recurrence + enable/delete), polls card (results shown after
+close), auto-responses table.
+
+**Validation**: smoke suite (due scoping, recurrence roll-forward, one-shot
+disable, poll lifecycle incl. failed-post, match semantics exact-vs-contains,
+cooldown) green; frontend production build green.
+
+**Env vars**: none new. **Manual ops**: none.

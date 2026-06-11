@@ -54,14 +54,14 @@
 - [x] 11.5 UI: Verification + Bot Policy sections in server Settings tab
 - [x] 11.6 Tests + live join-flow check with alt account; commit
 
-## Phase 12 — Scheduling, Polls & Content
+## Phase 12 — Scheduling, Polls & Content ✅ DONE 2026-06-11 (single Content tab w/ 3 sections)
 
-- [ ] 12.1 DB: `ScheduledMessage` (recurrence, embed JSON), `Poll`, `AutoResponse`
-- [ ] 12.2 Scheduler loop in bot worker (due-scan + jitter, both lineages via serves())
-- [ ] 12.3 Native Discord polls: create from dashboard, results back to DB
-- [ ] 12.4 Auto-responses: keyword/regex triggers → reply/react (cooldowns)
-- [ ] 12.5 UI: Scheduler tab, Polls tab, Auto-responses tab
-- [ ] 12.6 Tests (recurrence math, trigger matching) + commit
+- [x] 12.1 DB: `ScheduledMessage` (recurrence, embed JSON), `Poll`, `AutoResponse`
+- [x] 12.2 Scheduler loop in bot worker (due-scan + jitter, both lineages via serves())
+- [x] 12.3 Native Discord polls: create from dashboard, results back to DB
+- [x] 12.4 Auto-responses: keyword/regex triggers → reply/react (cooldowns)
+- [x] 12.5 UI: Scheduler tab, Polls tab, Auto-responses tab
+- [x] 12.6 Tests (recurrence math, trigger matching) + commit
 
 ## Phase 13 — Automation Engine
 
