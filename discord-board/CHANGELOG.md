@@ -402,3 +402,37 @@ invite -> redeem -> full access across 6 APIs -> remove -> forbidden), one-use
 lift with Pro and re-lock on expiry. All green; frontend build green.
 
 **Env vars**: none new. **Manual ops**: none.
+
+## Phase 19 — Admin Panel Parity (2026-06-11)
+
+**DB-backed admin RBAC** (`AdminRole`): ADMIN_USER_IDS stays the tamper-proof
+super-admin bootstrap; super admins can grant support/super seats from the
+panel without redeploys. Support staff get the read surface; role grants,
+revokes, plan changes, promo changes and purges need super.
+
+**Admin audit log** (`AdminAuditLog`): every mutating admin action recorded
+(role_grant/revoke, plan_set, promo_create/disable, user_purge) and shown in
+the panel.
+
+**Operational endpoints**: /api/admin/fleet (every white-label bot + linked
+counts + recent BotHealthEvents), /feature-usage (Phase 15 spine aggregated by
+feature), /ai-usage (token totals + top guilds from the AITokenUsage ledger),
+/audit-log, /roles CRUD, and **/users/<id>/purge** — GDPR compliance deletion
+of all personal data (reminders/notes/tasks/notifications/seats/memberships/
+member rows; custom bots deleted with their guilds reverted to the official
+bot). Guild-owned data stays with the guild.
+
+**UI** (GuildizerAdmin): five new cards — White-label fleet, Feature + AI
+usage, Promo codes (generate/disable), Admin roles (grant/revoke), Audit log.
+
+**Route-gating audit (19.9)**: automated test walks app.url_map — all 19
+/api/admin routes return 401 anonymous and 403 for non-admins.
+
+**Deferred** (tracked): secret vault (env vars are the vault at this scale),
+feature flags, announcements.
+
+**Validation**: suite covers gating audit, support-vs-super separation, role
+lifecycle, fleet/usage/AI aggregates, purge incl. bot unlink, audit capture.
+All green; frontend build green.
+
+**Env vars**: none new. **Manual ops**: none.

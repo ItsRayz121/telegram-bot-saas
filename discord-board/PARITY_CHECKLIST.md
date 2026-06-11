@@ -130,18 +130,18 @@
 - [x] 18.7 UI: Team page, notifications, billing history, promo redemption
 - [x] 18.8 Tests (gating matrix, promo math, renewal stacking) + commit
 
-## Phase 19 — Admin Panel Parity
+## Phase 19 — Admin Panel Parity ✅ DONE 2026-06-11 (vault/flags/announcements deferred)
 
-- [ ] 19.1 RBAC roles in DB (not just env IDs) + invite-by-email; keep `ADMIN_USER_IDS` as super-admin bootstrap
-- [ ] 19.2 Secret vault (encrypted platform secrets, test handlers)
-- [ ] 19.3 Feature flags + admin announcements
-- [ ] 19.4 Compliance queue (GDPR deletion) + admin audit log
-- [ ] 19.5 AI management center (provider config, balances, usage/cost dashboards)
-- [ ] 19.6 Bot fleet health tab (official + every custom bot, from `BotHealthEvent`)
-- [ ] 19.7 Feature-usage analytics tab (from Phase 15 spine), proof metrics, unified event log
-- [ ] 19.8 Full drill-down detail pages (user/guild/custom-bot)
-- [ ] 19.9 Route-gating audit: every admin route behind RBAC
-- [ ] 19.10 Tests + commit
+- [x] 19.1 RBAC roles in DB (grant by Discord ID; email N/A in OAuth-only auth); env stays super bootstrap
+- [ ] 19.2 Secret vault — DEFERRED (env vars are the vault at this scale)
+- [ ] 19.3 Feature flags + announcements — DEFERRED
+- [x] 19.4 GDPR purge endpoint (super-only, audited) + AdminAuditLog on every mutation
+- [x] 19.5 AI usage dashboard (token totals + top guilds); provider config stays env-based
+- [x] 19.6 Bot fleet health tab (official + every custom bot, from `BotHealthEvent`)
+- [x] 19.7 Feature-usage analytics tab (from Phase 15 spine), proof metrics, unified event log
+- [x] 19.8 Drill-downs: existing user/guild endpoints + new fleet card (dedicated routed pages deferred)
+- [x] 19.9 Route-gating audit: every admin route behind RBAC
+- [x] 19.10 Tests + commit
 
 ## Phase 20 — Hardening, Verification & Launch
 

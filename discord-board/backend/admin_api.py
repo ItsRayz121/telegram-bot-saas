@@ -104,6 +104,8 @@ def set_plan(guild_id: int):
     plan = body.get("plan")
     if plan not in ("free", "pro"):
         return jsonify(error="plan must be free or pro"), 400
+    from admin import audit
+    audit(g.db, g.user_id, "plan_set", str(guild_id), f"plan={plan}")
     gd.plan = plan
     if plan == "pro":
         days = _as_int(body.get("days", 30), 30, 1, 3650)
@@ -206,6 +208,8 @@ def admin_create_promo():
         return jsonify(error="invalid_numbers"), 400
     row = PromoCode(code=code, days_free=days, max_uses=max_uses)
     g.db.add(row)
+    from admin import audit
+    audit(g.db, g.user_id, "promo_create", code, f"days={days} uses={max_uses}")
     g.db.commit()
     return jsonify(code=row.to_dict()), 201
 
@@ -218,5 +222,175 @@ def admin_delete_promo(pid: int):
     if row is None:
         return jsonify(error="not_found"), 404
     row.enabled = False
+    from admin import audit
+    audit(g.db, g.user_id, "promo_disable", row.code)
     g.db.commit()
     return jsonify(ok=True)
+
+
+# --- Phase 19: roles, audit log, fleet health, usage & AI analytics, GDPR purge ---
+@admin_bp.get("/api/admin/roles")
+@admin_required
+def admin_roles():
+    from models import AdminRole
+    rows = g.db.query(AdminRole).order_by(AdminRole.created_at).all()
+    return jsonify(roles=[r.to_dict() for r in rows],
+                   env_super_ids=[str(i) for i in sorted(__import__("config").Config.ADMIN_USER_IDS)])
+
+
+@admin_bp.post("/api/admin/roles")
+@admin_required
+def grant_role():
+    from admin import audit, is_super
+    from models import AdminRole, User
+    if not is_super(g.user_id):
+        return jsonify(error="super_admin_required"), 403
+    body = request.get_json(silent=True) or {}
+    uid = str(body.get("user_id") or "").strip()
+    role = body.get("role") if body.get("role") in ("support", "super") else "support"
+    if not uid.isdigit():
+        return jsonify(error="discord_user_id_required"), 400
+    uid = int(uid)
+    row = g.db.get(AdminRole, uid)
+    if row is None:
+        user = g.db.get(User, uid)
+        row = AdminRole(user_id=uid, username=(user.username if user else None),
+                        role=role, granted_by=g.user_id)
+        g.db.add(row)
+    else:
+        row.role = role
+    audit(g.db, g.user_id, "role_grant", str(uid), f"role={role}")
+    g.db.commit()
+    return jsonify(role=row.to_dict()), 201
+
+
+@admin_bp.delete("/api/admin/roles/<int:user_id>")
+@admin_required
+def revoke_role(user_id: int):
+    from admin import audit, is_super
+    from models import AdminRole
+    if not is_super(g.user_id):
+        return jsonify(error="super_admin_required"), 403
+    row = g.db.get(AdminRole, user_id)
+    if row is None:
+        return jsonify(error="not_found"), 404
+    g.db.delete(row)
+    audit(g.db, g.user_id, "role_revoke", str(user_id))
+    g.db.commit()
+    return jsonify(ok=True)
+
+
+@admin_bp.get("/api/admin/audit-log")
+@admin_required
+def audit_log():
+    from models import AdminAuditLog
+    rows = (
+        g.db.query(AdminAuditLog)
+        .order_by(AdminAuditLog.created_at.desc())
+        .limit(100)
+        .all()
+    )
+    return jsonify(entries=[r.to_dict() for r in rows])
+
+
+@admin_bp.get("/api/admin/fleet")
+@admin_required
+def fleet():
+    """White-label fleet health: every custom bot + recent health events."""
+    from models import BotHealthEvent, CustomBot, Guild
+    bots = g.db.query(CustomBot).order_by(CustomBot.created_at).limit(100).all()
+    out = []
+    for b in bots:
+        linked = g.db.query(Guild).filter(Guild.custom_bot_id == b.id).count()
+        data = b.to_dict()
+        data["linked_guild_count"] = linked
+        out.append(data)
+    events = (
+        g.db.query(BotHealthEvent)
+        .order_by(BotHealthEvent.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    return jsonify(bots=out, events=[e.to_dict() for e in events])
+
+
+@admin_bp.get("/api/admin/feature-usage")
+@admin_required
+def feature_usage():
+    from models import FeatureUsageEvent
+    days = _as_int(request.args.get("days", 14), 14, 1, 90)
+    since = datetime.utcnow() - timedelta(days=days)
+    by_feature = (
+        g.db.query(FeatureUsageEvent.feature, func.count(FeatureUsageEvent.id))
+        .filter(FeatureUsageEvent.created_at >= since)
+        .group_by(FeatureUsageEvent.feature)
+        .order_by(func.count(FeatureUsageEvent.id).desc())
+        .limit(40)
+        .all()
+    )
+    total = (
+        g.db.query(FeatureUsageEvent)
+        .filter(FeatureUsageEvent.created_at >= since)
+        .count()
+    )
+    return jsonify(days=days, total=total,
+                   features=[{"feature": f, "count": c} for f, c in by_feature])
+
+
+@admin_bp.get("/api/admin/ai-usage")
+@admin_required
+def ai_usage():
+    from models import AITokenUsage
+    days = _as_int(request.args.get("days", 30), 30, 1, 90)
+    since = datetime.utcnow() - timedelta(days=days)
+    totals = (
+        g.db.query(func.coalesce(func.sum(AITokenUsage.input_tokens), 0),
+                   func.coalesce(func.sum(AITokenUsage.output_tokens), 0),
+                   func.count(AITokenUsage.id))
+        .filter(AITokenUsage.created_at >= since)
+        .one()
+    )
+    top_guilds = (
+        g.db.query(AITokenUsage.guild_id,
+                   func.sum(AITokenUsage.input_tokens + AITokenUsage.output_tokens))
+        .filter(AITokenUsage.created_at >= since, AITokenUsage.guild_id.isnot(None))
+        .group_by(AITokenUsage.guild_id)
+        .order_by(func.sum(AITokenUsage.input_tokens + AITokenUsage.output_tokens).desc())
+        .limit(10)
+        .all()
+    )
+    return jsonify(days=days, input_tokens=int(totals[0]), output_tokens=int(totals[1]),
+                   calls=int(totals[2]),
+                   top_guilds=[{"guild_id": str(gid), "tokens": int(t)} for gid, t in top_guilds])
+
+
+@admin_bp.post("/api/admin/users/<int:user_id>/purge")
+@admin_required
+def purge_user(user_id: int):
+    """GDPR purge (Phase 19 compliance): delete the user's personal data.
+    Guild-level rows they administered stay (they belong to the server)."""
+    from admin import audit, is_super
+    from models import (CustomBot, Guild, GuildTeamMember, Member, Note,
+                        Reminder, Task, User, UserGuild, UserNotification)
+    if not is_super(g.user_id):
+        return jsonify(error="super_admin_required"), 403
+
+    counts = {}
+    for model, col in ((Reminder, Reminder.user_id), (Note, Note.user_id),
+                       (Task, Task.user_id), (UserNotification, UserNotification.user_id),
+                       (GuildTeamMember, GuildTeamMember.user_id),
+                       (UserGuild, UserGuild.user_id), (Member, Member.user_id)):
+        counts[model.__tablename__] = g.db.query(model).filter(col == user_id).delete()
+    bots = g.db.query(CustomBot).filter(CustomBot.owner_user_id == user_id).all()
+    for b in bots:
+        g.db.query(Guild).filter(Guild.custom_bot_id == b.id).update({"custom_bot_id": None})
+        g.db.delete(b)
+    counts["custom_bots"] = len(bots)
+    user = g.db.get(User, user_id)
+    if user is not None:
+        g.db.delete(user)
+        counts["users"] = 1
+    audit(g.db, g.user_id, "user_purge", str(user_id),
+          ", ".join(f"{k}={v}" for k, v in counts.items() if v))
+    g.db.commit()
+    return jsonify(ok=True, purged=counts)

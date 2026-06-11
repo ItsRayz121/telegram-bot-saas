@@ -166,5 +166,5 @@ V2 status:
 - [x] Phase 16 — Knowledge & applied AI (2026-06-11: KB-grounded /ask, smart-mod AI, image AI, escalation alerts, AI welcome, daily digest. See CHANGELOG.md)
 - [x] Phase 17 — Assistant v1 (2026-06-11: Task + /task /tasks /done, DM AI assistant grounded on personal items, white-label assistant bots free via fleet. Full hub engine deferred. See CHANGELOG.md)
 - [x] Phase 18 — Teams, notifications & billing depth (2026-06-11: team seats via invite codes + access.py everywhere, notifications bell, plan-limit matrix w/ Pro gate on custom bots, promo codes, payment history. See CHANGELOG.md)
-- [ ] Phase 19 — Admin panel parity
+- [x] Phase 19 — Admin panel parity (2026-06-11: DB AdminRole RBAC w/ super/support, AdminAuditLog on all mutations, fleet/feature-usage/AI-usage endpoints + cards, GDPR user purge, 19/19 routes gated. Vault/flags/announcements deferred. See CHANGELOG.md)
 - [ ] Phase 20 — Hardening, verification & launch

@@ -1361,3 +1361,48 @@ class PromoCodeUsage(Base):
     guild_id = Column(BigInteger, nullable=False, index=True)
     user_id = Column(BigInteger, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class AdminRole(Base):
+    """A DB-granted platform-admin seat (Phase 19). ADMIN_USER_IDS env stays the
+    super-admin bootstrap; rows here add support staff without redeploys."""
+
+    __tablename__ = "admin_roles"
+
+    user_id = Column(BigInteger, primary_key=True)
+    username = Column(String(120))
+    role = Column(String(12), default="support")    # support | super
+    granted_by = Column(BigInteger, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "user_id": str(self.user_id),
+            "username": self.username,
+            "role": self.role or "support",
+            "granted_by": str(self.granted_by) if self.granted_by else None,
+            "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
+        }
+
+
+class AdminAuditLog(Base):
+    """Every mutating platform-admin action (Phase 19)."""
+
+    __tablename__ = "admin_audit_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    admin_id = Column(BigInteger, nullable=False, index=True)
+    action = Column(String(40), nullable=False)
+    target = Column(String(80))
+    detail = Column(String(300))
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "admin_id": str(self.admin_id),
+            "action": self.action,
+            "target": self.target,
+            "detail": self.detail,
+            "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
+        }
