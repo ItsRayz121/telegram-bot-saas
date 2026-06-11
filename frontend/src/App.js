@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom';
+import { trackGAPageView } from './index';
 import { Box, CircularProgress, Typography, Button } from '@mui/material';
 import { ThemeProvider } from '@mui/material/styles';
 import telegizer from './theme';
@@ -120,6 +121,14 @@ function _storedUser() {
   try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; }
 }
 
+function GATracker() {
+  const location = useLocation();
+  useEffect(() => {
+    trackGAPageView(location.pathname + location.search);
+  }, [location]);
+  return null;
+}
+
 // Forces GroupSettings remount when groupId (or botId) changes, preventing stale state/race conditions
 function KeyedGroupSettings() {
   const params = useParams();
@@ -218,6 +227,7 @@ export default function App() {
       )}
       <ErrorBoundary>
         <BrowserRouter>
+          <GATracker />
           <Routes>
 
             {/* ── Public (no sidebar) ─────────────────────────────────────── */}

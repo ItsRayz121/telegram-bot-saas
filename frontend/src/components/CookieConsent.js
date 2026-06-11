@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Button, Typography, Stack, Link } from '@mui/material';
-import { initPostHog } from '../index';
+import { initPostHog, initGA } from '../index';
 
 const STORAGE_KEY = 'telegizer_cookie_consent';
 
-// Called once at startup — if the user already accepted in a previous session,
-// boot PostHog immediately (before the banner renders) so no session is lost.
 function bootIfPreviouslyAccepted() {
   if (localStorage.getItem(STORAGE_KEY) === 'accepted') {
     initPostHog();
+    initGA();
   }
 }
 bootIfPreviouslyAccepted();
@@ -26,13 +25,12 @@ export default function CookieConsent() {
     localStorage.setItem(STORAGE_KEY, 'accepted');
     setVisible(false);
     initPostHog();
+    initGA();
   };
 
   const decline = () => {
     localStorage.setItem(STORAGE_KEY, 'declined');
     setVisible(false);
-    // PostHog was never initialized so there is nothing to opt out of.
-    // If it was somehow already running, opt it out explicitly.
     if (window.__posthog_initialized && window.posthog) {
       window.posthog.opt_out_capturing();
     }
@@ -64,8 +62,8 @@ export default function CookieConsent() {
         Analytics cookies
       </Typography>
       <Typography variant="caption" color="text.secondary" display="block" mb={2} lineHeight={1.6}>
-        We use Plausible (cookieless, no personal data) and PostHog (anonymised usage) to improve
-        the product. No data is sold or shared with advertisers.{' '}
+        We use Google Analytics and PostHog (anonymised usage) to improve the product.
+        No data is sold or shared with advertisers.{' '}
         <Link href="/privacy" color="primary.light" underline="hover">
           Privacy Policy
         </Link>
