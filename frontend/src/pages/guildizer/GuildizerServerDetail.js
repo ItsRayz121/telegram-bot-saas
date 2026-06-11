@@ -21,6 +21,7 @@ import {
 } from './tabs/AutomationSubtabs';
 import { RaidsSubtab, InviteLinksSubtab } from './tabs/EngagementSubtabs';
 import { KnowledgeBaseSubtab } from './tabs/AiSubtabs';
+import SelfRolesSubtab from './tabs/SelfRolesSubtab';
 import {
   LeaderboardSubtab, AuditLogSubtab, WarningsSubtab, DigestSubtab, AIActivitySubtab,
 } from './tabs/AnalyticsSubtabs';
@@ -34,7 +35,7 @@ const CHANNEL_TYPES = { 0: 'Text', 2: 'Voice', 4: 'Category', 5: 'Announcement',
 const AREAS = [
   { label: 'Overview' },
   { label: 'Moderation', subs: ['AutoMod', 'Behavior', 'Reports'] },
-  { label: 'Members', subs: ['Verification', 'Welcome', 'XP & Roles'] },
+  { label: 'Members', subs: ['Verification', 'Welcome', 'XP & Roles', 'Self-roles'] },
   { label: 'Engagement', subs: ['Raids', 'Invite Links', 'Campaigns'] },
   { label: 'AI & Integrations', subs: ['Knowledge Base', 'Escalation'] },
   { label: 'Automation', subs: ['Scheduler', 'Auto Reply', 'Polls', 'Forwarding', 'Workflows', 'Webhooks'] },
@@ -129,6 +130,7 @@ export default function GuildizerServerDetail() {
           {key === 'Members/Verification' && <ProtectionTab guildId={guildId} channels={channels} section="verification" />}
           {key === 'Members/Welcome' && <SettingsTab guildId={guildId} channels={channels} roles={roles} />}
           {key === 'Members/XP & Roles' && <LevelingTab guildId={guildId} channels={channels} roles={roles} />}
+          {key === 'Members/Self-roles' && <SelfRolesSubtab guildId={guildId} channels={channels} roles={roles} />}
 
           {/* ENGAGEMENT */}
           {key === 'Engagement/Raids' && <RaidsSubtab guildId={guildId} channels={channels} />}

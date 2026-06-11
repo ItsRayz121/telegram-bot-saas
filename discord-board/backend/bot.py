@@ -18,6 +18,7 @@ from discord import app_commands
 import bot_core
 import bot_policy
 import campaign_views
+import self_roles
 import verification
 import custom_bot_manager
 from config import Config
@@ -45,6 +46,7 @@ class GuildizerBot(bot_core.CoreMixin, discord.AutoShardedClient):
         self.add_dynamic_items(campaign_views.ProofButton)
         self.add_dynamic_items(verification.VerifyButton,
                                bot_policy.TrustBotButton, bot_policy.KickBotButton)
+        self.add_dynamic_items(self_roles.SelfRoleButton)
         self.resync_commands.start()
         self.post_campaigns.start()
         self.deliver_reminders.start()

@@ -41,6 +41,7 @@ import moderation
 import moderation_runtime
 import protection
 import raid_guard
+import self_roles
 import settings as settings_mod
 import stats_runtime
 import verification
@@ -1154,9 +1155,22 @@ class CoreMixin:
         if member is None or member.bot:
             return
         channel = guild.get_channel(payload.channel_id)
+        await self_roles.handle_reaction(self, payload, member, add=True)
         await self._maybe_award_reaction_xp(guild, payload, channel)
         await self._run_workflows("reaction_add", guild, member=member, channel=channel,
                                   emoji=str(payload.emoji))
+
+    async def on_raw_reaction_remove(self, payload: discord.RawReactionActionEvent) -> None:
+        if payload.guild_id is None or not serves(self, payload.guild_id):
+            return
+        guild = self.get_guild(payload.guild_id)
+        if guild is None:
+            return
+        # raw remove events never carry .member; resolve from the cache instead
+        member = guild.get_member(payload.user_id)
+        if member is None or member.bot:
+            return
+        await self_roles.handle_reaction(self, payload, member, add=False)
 
     async def _maybe_award_reaction_xp(self, guild: discord.Guild,
                                        payload: discord.RawReactionActionEvent,
@@ -1207,7 +1221,7 @@ class CoreMixin:
     async def _before_resync(self) -> None:
         await self.wait_until_ready()
 
-    # --- post campaigns the dashboard flagged (needs_post) ----------------------
+    # --- post campaigns + self-role menus the dashboard flagged -----------------
     @tasks.loop(seconds=20)
     async def post_campaigns(self) -> None:
         pairs = await asyncio.to_thread(campaign_runtime.campaigns_to_post)
@@ -1218,6 +1232,10 @@ class CoreMixin:
                 await campaign_views.post_campaign(self, cid)
             except Exception:  # noqa: BLE001
                 log.exception("post_campaign failed for %s", cid)
+        try:
+            await self_roles.process_pending(self)
+        except Exception:  # noqa: BLE001
+            log.exception("self-role post processing failed")
 
     @post_campaigns.before_loop
     async def _before_post(self) -> None:

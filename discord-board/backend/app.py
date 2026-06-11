@@ -23,6 +23,7 @@ from guilds_api import guilds_bp
 from knowledge_api import knowledge_bp
 from leveling_api import leveling_bp
 from protection_api import protection_bp
+from self_roles_api import self_roles_bp
 from settings_api import settings_bp
 from team_api import team_bp
 
@@ -56,6 +57,7 @@ def create_app() -> Flask:
     app.register_blueprint(guilds_bp)
     app.register_blueprint(settings_bp)
     app.register_blueprint(protection_bp)
+    app.register_blueprint(self_roles_bp)
     app.register_blueprint(leveling_bp)
     app.register_blueprint(campaigns_bp)
     app.register_blueprint(billing_bp)
