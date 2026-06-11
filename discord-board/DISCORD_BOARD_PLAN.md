@@ -167,4 +167,4 @@ V2 status:
 - [x] Phase 17 — Assistant v1 (2026-06-11: Task + /task /tasks /done, DM AI assistant grounded on personal items, white-label assistant bots free via fleet. Full hub engine deferred. See CHANGELOG.md)
 - [x] Phase 18 — Teams, notifications & billing depth (2026-06-11: team seats via invite codes + access.py everywhere, notifications bell, plan-limit matrix w/ Pro gate on custom bots, promo codes, payment history. See CHANGELOG.md)
 - [x] Phase 19 — Admin panel parity (2026-06-11: DB AdminRole RBAC w/ super/support, AdminAuditLog on all mutations, fleet/feature-usage/AI-usage endpoints + cards, GDPR user purge, 19/19 routes gated. Vault/flags/announcements deferred. See CHANGELOG.md)
-- [ ] Phase 20 — Hardening, verification & launch
+- [x] Phase 20 — Hardening & launch prep (2026-06-11: full-surface auth audit 114 routes, SETUP.md ops overhaul w/ per-phase live smoke scripts + runbook. Live items owner-side; public landing section deferred pending approval. V2 COMPLETE.)

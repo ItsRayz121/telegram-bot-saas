@@ -436,3 +436,26 @@ lifecycle, fleet/usage/AI aggregates, purge incl. bot unlink, audit capture.
 All green; frontend build green.
 
 **Env vars**: none new. **Manual ops**: none.
+
+## Phase 20 — Hardening & Launch Prep (2026-06-11)
+
+**Full-surface auth audit** (new, automated): walks the entire url_map — all
+114 API/webhook routes verified; every private route rejects anonymous
+(401/403); only the intentional public surface (proof feed, inbound webhook
+tokens, NOWPayments IPN, OAuth endpoints) is open.
+
+**SETUP.md operations overhaul**: corrected the frontend note (production UI =
+embedded telegizer.com pillar + REACT_APP_GUILDIZER_API_URL, Vite app is
+dev-only), pointed to the PARITY_CHECKLIST env matrix as source of truth, and
+rebuilt §D into a real launch program — one-time setup, the V1 core smoke
+test, a per-phase V2 smoke script (P9-P19, each with concrete pass criteria),
+and an operations runbook (fleet memory expectations, custom-bot error
+recovery, no-migration deploys, SIGTERM behavior).
+
+**Remaining for launch (owner-side, in SETUP.md §D)**: provision the Railway/
+Vercel services, set env vars, run the live smoke scripts, apply for Discord
+bot verification. **Deferred pending owner approval**: a public Guildizer
+landing/pricing section on telegizer.com (public-site structure change —
+needs sign-off per the design rules).
+
+V2 PARITY PROGRAM COMPLETE: phases 9-20 all shipped 2026-06-11.

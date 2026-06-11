@@ -143,12 +143,12 @@
 - [x] 19.9 Route-gating audit: every admin route behind RBAC
 - [x] 19.10 Tests + commit
 
-## Phase 20 — Hardening, Verification & Launch
+## Phase 20 — Hardening, Verification & Launch ✅ code-side DONE 2026-06-11 (live items = USER)
 
-- [ ] 20.1 Fleet load/soak test (N custom bots, memory profile, cache tuning)
-- [ ] 20.2 Full live regression in a test server (every tab, every command)
-- [ ] 20.3 Guildizer landing/pricing section on telegizer.com + status + product tour
-- [ ] 20.4 SETUP.md final pass (all env vars, all three services, runbooks)
+- [x] 20.1 Fleet hardening code-side (stagger/caches/health done in P9); live soak = part of the (USER) smoke
+- [ ] 20.2 **(USER)** Full live regression — scripted per phase in SETUP.md §D
+- [ ] 20.3 Public landing/pricing section — DEFERRED pending owner approval (public-site structure change)
+- [x] 20.4 SETUP.md final pass: env matrix pointer, per-phase smoke scripts, ops runbook
 - [ ] 20.5 **(USER)** Apply for **Discord bot verification** for the OFFICIAL bot (Developer Portal → App → "Get verified"). Slow process — start as soon as Phase 14 ships. Needed past 100 servers.
 - [ ] 20.6 **(USER)** Final go-live smoke test together
 - [ ] 20.7 Launch 🚀

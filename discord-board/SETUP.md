@@ -85,23 +85,73 @@ and Discord credentials. Set these on each:
 | `ANTHROPIC_API_KEY` | optional | enables the `/ask` assistant |
 | `GUILDIZER_ENCRYPTION_KEY` | ✅ prod | Fernet key for white-label bot tokens at rest. Generate: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. Dev falls back to a key derived from FLASK_SECRET_KEY. |
 
-Frontend (Vercel): `VITE_API_URL` = the Railway web URL.
+Frontend: the production dashboard is the **embedded Guildizer section inside the
+telegizer.com app** — set `REACT_APP_GUILDIZER_API_URL=https://guild-api.telegizer.com`
+on the **Telegizer Vercel project** and redeploy (baked at build time). The
+standalone Vite app under `discord-board/frontend` is dev-only.
+
+> The full per-service env-var matrix (TELEGIZER / GUILDIZER-WEB / GUILDIZER-BOT)
+> lives in `PARITY_CHECKLIST.md` — that table is the source of truth.
 
 ---
 
-## D. Launch checklist
+## D. Launch checklist (V2 — phases 9-19 included)
+
+**One-time setup**
 - [ ] Enable **Server Members** + **Message Content** privileged intents in the
       Developer Portal (welcome/roles/raid need members; content filter needs
       message content).
 - [ ] Apply for **Discord bot verification** EARLY (required at 100 servers to
       keep privileged intents; approval is slow).
 - [ ] Set the NOWPayments IPN callback URL to `<BACKEND_URL>/webhooks/nowpayments`.
-- [ ] Set the OAuth2 redirect + Web App URL to the production domain.
-- [ ] Smoke test: login → invite bot → `/ping`, welcome, a custom command,
-      content-filter delete, `/rank`, a campaign with a proof button, an
-      upgrade, `/remind`.
-- [ ] Confirm graceful redeploys (worker handles SIGTERM) and that the bot is
-      `AutoShardedClient` (scales past ~2,500 servers automatically).
+- [ ] Set the OAuth2 redirect to `https://guild-api.telegizer.com/auth/discord/callback`
+      (portal + DISCORD_REDIRECT_URI must match exactly).
+- [ ] Generate `GUILDIZER_ENCRYPTION_KEY` once; set the SAME value on
+      GUILDIZER-WEB and GUILDIZER-BOT.
+- [ ] Set `ADMIN_USER_IDS` (your Discord id) on GUILDIZER-WEB.
+
+**Core smoke test** (V1 surface)
+- [ ] Login → invite bot → `/ping`, welcome message, a custom command,
+      content-filter delete, `/rank`, a campaign with a proof button,
+      an upgrade, `/remind`.
+
+**V2 smoke test** (one pass through each phase)
+- [ ] P9: connect a second Discord app as a custom bot via /guildizer/bots;
+      invite it; it answers /ping under its own name; the server shows as
+      served by it; the official bot stops acting there.
+- [ ] P10: /warn ×3 triggers the ladder action; /mute /purge work; right-click
+      → Apps → Report Message lands in the reports queue.
+- [ ] P11: enable verification → join with an alt → Unverified role +
+      #verify challenge → button verifies; invite a scrap bot → policy alert
+      with Trust/Kick buttons.
+- [ ] P12: schedule a message 2 min out (posts within 30s of due); create a
+      native poll; add an auto-response and trigger it.
+- [ ] P13: workflow member_join → welcome DM/message fires; mirror a channel
+      (author name/avatar preserved); POST to an inbound webhook URL →
+      message appears; outbound webhook receives a member_join JSON.
+- [ ] P14: /invitelink → join via it with an alt → referral attributed (+XP if
+      configured); campaign custom field appears in the proof popup.
+- [ ] P15: Members tab shows the alt with last_seen; Analytics bars move;
+      /wallet saves and shows in CRM.
+- [ ] P16: add a knowledge doc → /ask answers from it; enable the daily digest
+      (hour = current UTC hour, posts within a minute).
+- [ ] P17: DM the bot → AI reply referencing your /task items.
+- [ ] P18: create a team invite → redeem on a second account → that account
+      sees the server; promo code grants Pro; caps lift.
+- [ ] P19: /guildizer/admin shows fleet/usage/audit cards; grant a support
+      role; the audit log shows it.
+
+**Operations runbook**
+- [ ] Confirm graceful redeploys (worker handles SIGTERM; fleet clients close
+      cleanly) and `AutoShardedClient` on the official bot.
+- [ ] Custom bot stuck in error → owner gets a notification; fix = paste a
+      fresh token in My Bots (Replace token) or Re-check after enabling
+      intents. Worker picks changes up within ~30s.
+- [ ] DB: schema is create_all + additive column self-heal — deploys never
+      need a migration step.
+- [ ] Watch the worker logs for `guildizer.fleet` lines after adding custom
+      bots (staggered connects, ~20-50 MB RAM each; scale the worker when
+      you approach memory limits).
 
 ---
 
