@@ -16,9 +16,10 @@ def _terms(text: str) -> set[str]:
     return set(_WORD_RE.findall((text or "").lower()))
 
 
-def grounded_system(guild_id: int, question: str) -> str | None:
-    """System prompt grounded on this guild's best-matching docs, or None when
-    the guild has no usable knowledge base."""
+def grounded_with_confidence(guild_id: int, question: str) -> tuple[str | None, bool]:
+    """(system_prompt_or_None, confident). Confident means at least one doc
+    actually overlapped the question's terms — when False the prompt still
+    carries the best-guess doc, but callers may prefer a fallback/escalation."""
     db = SessionLocal()
     try:
         docs = (
@@ -29,7 +30,7 @@ def grounded_system(guild_id: int, question: str) -> str | None:
             .all()
         )
         if not docs:
-            return None
+            return None, False
         q_terms = _terms(question)
         scored = []
         for d in docs:
@@ -45,6 +46,7 @@ def grounded_system(guild_id: int, question: str) -> str | None:
                     overlap += 1   # prefix match: refund ~ refunds, launch ~ launches
             scored.append((overlap, d))
         scored.sort(key=lambda x: x[0], reverse=True)
+        confident = scored[0][0] > 0
         top = [d for score, d in scored[:3] if score > 0] or [scored[0][1]]
         context = ""
         for d in top:
@@ -57,7 +59,7 @@ def grounded_system(guild_id: int, question: str) -> str | None:
             "question using ONLY the server knowledge below when relevant; if the "
             "answer isn't covered, say so briefly. Be concise.\n\n"
             f"SERVER KNOWLEDGE:\n{context.strip()}"
-        )
+        ), confident
     finally:
         db.close()
         SessionLocal.remove()

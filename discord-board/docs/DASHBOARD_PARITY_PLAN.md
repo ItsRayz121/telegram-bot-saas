@@ -208,5 +208,15 @@ Telegram concepts intentionally NOT ported (no Discord equivalent / natively cov
 4. New subtab UIs for every 🆕/🟡 item, persisting via existing PUT endpoints.
 5. Backend: new `EXTRA_DEFAULTS` sections + PUT acceptance (`emoji_reactions`, `command_permissions`,
    `warn_ladder`, `auto_clean` extensions, `kb_replies`, `escalation.types`, welcome DM, leveling keys).
-6. Bot enforcement for new sections (separate phase — UI ships first, marked where enforcement is pending).
+6. ✅ Bot enforcement for new sections (2026-06-11): emoji_reactions (admin 👍 +
+   sentiment reactions w/ per-member cooldown), command_permissions (text-style
+   command deletion), warnings.window_hours, warn_ladder (multi-step, per-step
+   windows, no reset between steps), auto_clean warn/action timers (automod +
+   mod-command confirmations), welcome2 DM, leveling2 (reaction XP via
+   message_author_id, level-up template delete-after, warn/timeout/kick/ban XP
+   penalties floored at 0, level→role rewards), kb_replies auto-replies
+   (mention/question gating, tone prompt, low-confidence fallback), escalation
+   types (ai_kb, ai_image, automation, command), reports.alert_channel_id.
+   Drive-by fix: governor.safe now returns the coroutine result, repairing the
+   verification challenge-message id capture.
 7. Cross-check + lint + push.

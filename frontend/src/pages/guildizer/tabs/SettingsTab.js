@@ -93,7 +93,7 @@ export default function SettingsTab({ guildId, channels = [], roles = [] }) {
           <TextField fullWidth multiline minRows={2} size="small" margin="dense" label="DM message"
             value={cfg.welcome2?.dm_message || ''} inputProps={{ maxLength: 2000 }}
             onChange={(e) => setW2({ dm_message: e.target.value })}
-            helperText="Placeholders: {user} {server} {member_count}. Members with DMs closed are skipped. Saves now; bot rollout is staged." />
+            helperText="Placeholders: {user} {server} {member_count}. Members with DMs closed are skipped." />
         </CardContent></Card>
       </Grid>
 

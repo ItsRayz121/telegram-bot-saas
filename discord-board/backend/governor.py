@@ -21,12 +21,13 @@ import discord
 log = logging.getLogger("guildizer.governor")
 
 
-async def safe(coro, *, what: str = "discord action") -> bool:
+async def safe(coro, *, what: str = "discord action"):
     """Await a discord.py coroutine, absorbing the expected permission/HTTP
-    errors. Returns True on success, False otherwise."""
+    errors. Returns the coroutine's result on success (True when the result is
+    None, so the return value is always truthy), False otherwise."""
     try:
-        await coro
-        return True
+        result = await coro
+        return True if result is None else result
     except discord.Forbidden:
         log.warning("Missing permission for %s", what)
     except discord.HTTPException as exc:

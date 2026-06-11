@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from datetime import datetime, timedelta
 
@@ -109,8 +110,11 @@ def serves(client, guild_id: int) -> bool:
 # ── AI-layer rate limits (Phase 16) ─────────────────────────────────────────────
 _smartmod_last: dict[tuple[int, int], float] = {}   # (gid, uid) -> monotonic ts
 _imageai_last: dict[int, float] = {}                # gid -> monotonic ts
-_escalation_last: dict[tuple[int, int], float] = {}
+_escalation_last: dict[tuple, float] = {}           # (gid, uid) / (gid, uid, type)
 _dm_last: dict[tuple[int, int], float] = {}
+_emoji_react_last: dict[tuple[int, int], float] = {}     # sentiment reactions
+_reaction_xp_last: dict[tuple[int, int], float] = {}     # reaction XP per author
+_kb_reply_last: dict[tuple[int, int], float] = {}        # KB auto-replies
 
 _RATE_MAP_MAX_AGE = 3600  # entries older than this are dead weight
 
@@ -118,9 +122,43 @@ _RATE_MAP_MAX_AGE = 3600  # entries older than this are dead weight
 def _sweep_rate_maps() -> None:
     """Drop stale per-user rate-limit entries so the maps stay bounded."""
     cutoff = time.monotonic() - _RATE_MAP_MAX_AGE
-    for m in (_smartmod_last, _imageai_last, _escalation_last, _dm_last):
+    for m in (_smartmod_last, _imageai_last, _escalation_last, _dm_last,
+              _emoji_react_last, _reaction_xp_last, _kb_reply_last):
         for key in [k for k, ts in m.items() if ts < cutoff]:
             m.pop(key, None)
+
+
+# ── Emoji-reaction sentiment + text-command heuristics (dashboard parity) ───────
+# Cheap keyword buckets — no AI cost; ordering = first matching bucket wins.
+_SENTIMENT_BUCKETS = (
+    ("😂", ("lol", "lmao", "rofl", "haha", "😂", "🤣")),
+    ("🔥", ("fire", "hype", "let's go", "lets go", "lfg", "🔥", "insane", "crazy good")),
+    ("🎉", ("congrat", "shipped", "released", "launched", "we won", "milestone", "🎉", "finally")),
+    ("❤️", ("thank", "love", "appreciate", "awesome", "amazing", "great", "nice",
+            "well done", "good job", "welcome", "glad")),
+)
+
+# Text-style command invocation: "!ban", "?rank", "$tip", ".kick", "/warn" as the
+# first whitespace token. Slash commands sent through Discord's picker are
+# interactions, not messages, so they never hit this.
+_TEXT_CMD_RE = re.compile(r"^[!?$./][A-Za-z][\w-]{0,31}$")
+
+_ESCALATION_LABELS = {
+    "ai_kb": "AI knowledge base",
+    "ai_image": "AI image review",
+    "automation": "Automation error",
+    "command": "Unknown command",
+}
+
+
+def _sentiment_emoji(text: str) -> str | None:
+    low = (text or "").lower()
+    if len(low) < 3:
+        return None
+    for emoji, needles in _SENTIMENT_BUCKETS:
+        if any(n in low for n in needles):
+            return emoji
+    return None
 
 # ── Activity buffers (Phase 15) — flushed every ~60s by process_mod_actions ────
 _activity_buffer: dict[tuple[int, int], list] = {}   # (gid, uid) -> [add_msgs, username]
@@ -298,6 +336,8 @@ class CoreMixin:
 
         cfg = await asyncio.to_thread(self._load_moderation, message.guild.id)
         if is_staff or not cfg:
+            if cfg:
+                await self._maybe_emoji_react(message, cfg, is_staff=True)
             await self._maybe_auto_respond(message)
             await self._maybe_mirror(message)
             await self._run_workflows(
@@ -322,7 +362,7 @@ class CoreMixin:
             }
             decision = moderation.evaluate_media(flags, cfg)
         if decision:
-            action_taken = await self._execute_action(message, decision)
+            action_taken = await self._execute_action(message, decision, cfg)
             await asyncio.to_thread(
                 self._log, message.guild.id, decision["category"], action_taken,
                 message.author.id, str(message.author), message.channel.id, decision["detail"],
@@ -339,11 +379,16 @@ class CoreMixin:
             if raid_guard.note_message(message.guild.id, message.author.id, text, cfg):
                 await self._raid_activated(message.guild, cfg)
             else:
+                if await self._command_permissions_check(message, cfg):
+                    return  # unauthorized command invocation deleted
                 if await self._smart_mod_check(message, cfg):
                     return  # message acted on by the AI layer
                 await self._image_ai_check(message, cfg)
                 await self._escalation_check(message, cfg)
-                await self._maybe_auto_respond(message)
+                await self._maybe_emoji_react(message, cfg, is_staff=False)
+                responded = await self._maybe_auto_respond(message)
+                if not responded:
+                    await self._maybe_kb_reply(message, cfg)
                 await self._maybe_mirror(message)
                 await self._run_workflows(
                     "message_contains", message.guild,
@@ -447,7 +492,7 @@ class CoreMixin:
             return False
         decision = {"category": "smart_mod", "action": sm.get("action", "delete"),
                     "matched": "ai", "detail": "AI flagged as unsolicited promotion"}
-        action_taken = await self._execute_action(message, decision)
+        action_taken = await self._execute_action(message, decision, cfg)
         await asyncio.to_thread(
             self._log, message.guild.id, "smart_mod", action_taken,
             message.author.id, str(message.author), message.channel.id, decision["detail"],
@@ -472,10 +517,19 @@ class CoreMixin:
         verdict, usage = outcome
         await asyncio.to_thread(self._log_ai, message.guild.id, message.author.id, usage)
         if verdict != "nsfw":
+            # neither NSFW nor a clean OK = inconclusive — surface it if asked to
+            first_word = (usage.text or "").strip().upper().strip(".,!\"'").split()[:1]
+            if first_word != ["OK"]:
+                await self._escalate_type(
+                    message.guild, "ai_image",
+                    f"Image review was inconclusive for a post by {message.author.mention} "
+                    f"in {message.channel.mention} — {message.jump_url}",
+                    user_id=message.author.id,
+                )
             return
         decision = {"category": "image_nsfw", "action": ia.get("action", "delete"),
                     "matched": "image", "detail": "AI flagged image as NSFW"}
-        action_taken = await self._execute_action(message, decision)
+        action_taken = await self._execute_action(message, decision, cfg)
         await asyncio.to_thread(
             self._log, message.guild.id, "image_ai", action_taken,
             message.author.id, str(message.author), message.channel.id, decision["detail"],
@@ -507,47 +561,210 @@ class CoreMixin:
                 f"mentioned \"{hit}\" — {message.jump_url}"
             ), what="escalation alert")
 
-    async def _maybe_auto_respond(self, message: discord.Message) -> None:
+    async def _escalate_type(self, guild: discord.Guild, type_key: str, text: str,
+                             *, user_id: int | None = None) -> None:
+        """Per-type escalation (escalation.types): alert the configured channel.
+        Independent of the keyword toggle — the checkbox itself is the opt-in.
+        One alert per (member, type) per 10 minutes."""
+        cfg = await asyncio.to_thread(self._load_moderation, guild.id)
+        esc = (cfg or {}).get("escalation") or {}
+        if type_key not in (esc.get("types") or []):
+            return
+        key = (guild.id, user_id or 0, type_key)
+        if time.monotonic() - _escalation_last.get(key, 0.0) < 600:
+            return
+        _escalation_last[key] = time.monotonic()
+        await asyncio.to_thread(
+            self._log, guild.id, "escalation", type_key, user_id, None, None, text[:200],
+        )
+        ch_id = esc.get("alert_channel_id")
+        channel = guild.get_channel(int(ch_id)) if ch_id else None
+        if channel is not None and hasattr(channel, "send"):
+            label = _ESCALATION_LABELS.get(type_key, type_key)
+            await governor.safe(channel.send(f"🚨 **{label}**: {text}"[:1900]),
+                                what="type escalation alert")
+
+    async def _maybe_emoji_react(self, message: discord.Message, cfg: dict,
+                                 *, is_staff: bool) -> None:
+        """Dashboard-parity emoji reactions: 👍 on admin messages, sentiment
+        reactions (with a per-member cooldown) on member messages."""
+        er = cfg.get("emoji_reactions") or {}
+        if not er.get("enabled"):
+            return
+        if is_staff:
+            if er.get("admin_thumbs_up"):
+                await governor.safe(message.add_reaction("👍"), what="admin thumbs-up")
+            return
+        if not er.get("sentiment_reactions"):
+            return
+        emoji = _sentiment_emoji(message.content or "")
+        if emoji is None:
+            return
+        cooldown = max(1, int(er.get("cooldown_minutes") or 10)) * 60
+        key = (message.guild.id, message.author.id)
+        if time.monotonic() - _emoji_react_last.get(key, 0.0) < cooldown:
+            return
+        _emoji_react_last[key] = time.monotonic()
+        await governor.safe(message.add_reaction(emoji), what="sentiment reaction")
+
+    async def _command_permissions_check(self, message: discord.Message, cfg: dict) -> bool:
+        """Text-style command misuse ("!ban", ".kick" … from non-staff). Deletes
+        the message when command_permissions.delete_unauthorized is on; also
+        feeds the 'command' escalation type. Returns True when deleted."""
+        text = (message.content or "").strip()
+        first = text.split()[0] if text else ""
+        if not _TEXT_CMD_RE.match(first):
+            return False
+        deleted = False
+        if (cfg.get("command_permissions") or {}).get("delete_unauthorized"):
+            deleted = bool(await governor.safe(message.delete(),
+                                               what="delete unauthorized command"))
+            if deleted:
+                await asyncio.to_thread(
+                    self._log, message.guild.id, "command_permissions", "deleted",
+                    message.author.id, str(message.author), message.channel.id,
+                    f"unauthorized command {first}",
+                )
+        await self._escalate_type(
+            message.guild, "command",
+            f"{message.author.mention} used unrecognised command `{first}` "
+            f"in {message.channel.mention}",
+            user_id=message.author.id,
+        )
+        return deleted
+
+    async def _maybe_kb_reply(self, message: discord.Message, cfg: dict) -> bool:
+        """KB auto-replies (kb_replies): answer member questions from the
+        knowledge base with the configured tone. Returns True when replied."""
+        kb = cfg.get("kb_replies") or {}
+        if not kb.get("enabled") or not ai.is_configured():
+            return False
+        text = (message.content or "").strip()
+        mentioned = bool(self.user and self.user in message.mentions)
+        ref = message.reference.resolved if message.reference else None
+        replied_to_me = bool(
+            self.user and getattr(getattr(ref, "author", None), "id", None) == self.user.id
+        )
+        addressed = mentioned or replied_to_me
+        if kb.get("mention_only", True):
+            if not addressed:
+                return False
+        elif not addressed and "?" not in text:
+            return False   # unaddressed statements aren't questions to answer
+        question = re.sub(r"<@!?\d+>", "", text).strip()
+        if len(question.split()) < max(1, int(kb.get("min_words") or 3)):
+            return False
+        key = (message.guild.id, message.author.id)
+        if time.monotonic() - _kb_reply_last.get(key, 0.0) < 30:
+            return False
+        _kb_reply_last[key] = time.monotonic()
+
+        system, confident = await asyncio.to_thread(
+            knowledge.grounded_with_confidence, message.guild.id, question
+        )
+        if system is None:
+            return False   # no knowledge base yet
+        if not confident:
+            await self._escalate_type(
+                message.guild, "ai_kb",
+                f"KB couldn't answer {message.author.mention} in "
+                f"{message.channel.mention}: “{question[:120]}” — {message.jump_url}",
+                user_id=message.author.id,
+            )
+            if kb.get("low_confidence_fallback"):
+                await governor.safe(message.reply(
+                    "I'm not sure about that one — a moderator can help. 🙏",
+                    mention_author=False,
+                ), what="kb fallback reply")
+                return True
+            return False
+
+        length = {"short": "Answer in one or two sentences.",
+                  "medium": "Answer in a short paragraph.",
+                  "long": "Answer thoroughly, but stay on topic."}
+        emoji_use = {"none": "Do not use emojis.",
+                     "some": "An emoji or two is fine.",
+                     "lots": "Use plenty of fitting emojis."}
+        formality = {"casual": "Keep the tone casual and friendly.",
+                     "neutral": "Keep the tone neutral.",
+                     "formal": "Keep the tone professional and polite."}
+        tone = " ".join((
+            length.get(kb.get("reply_length") or "medium", length["medium"]),
+            emoji_use.get(kb.get("emoji_usage") or "some", emoji_use["some"]),
+            formality.get(kb.get("formality") or "casual", formality["casual"]),
+        ))
+        result = await asyncio.to_thread(ai.complete, f"{system}\n\n{tone}", question)
+        if result is None or not result.text:
+            return False
+        await asyncio.to_thread(self._log_ai, message.guild.id, message.author.id, result)
+        await governor.safe(message.reply(result.text[:1950], mention_author=False),
+                            what="kb auto-reply")
+        return True
+
+    async def _maybe_auto_respond(self, message: discord.Message) -> bool:
         responses = await asyncio.to_thread(content_runtime.load_responses, message.guild.id)
         if not responses:
-            return
+            return False
         hit = content_runtime.match_response(message.content or "", responses)
         if hit is None or not content_runtime.cooldown_ok(message.guild.id, hit):
-            return
+            return False
         await governor.safe(message.reply(hit["response"], mention_author=False),
                             what="auto-response")
+        return True
 
-    async def _execute_action(self, message: discord.Message, decision: dict) -> str:
+    async def _execute_action(self, message: discord.Message, decision: dict,
+                              cfg: dict | None = None) -> str:
         action = decision["action"]
         member = message.author
+        guild_id = message.guild.id
         reason = f"Guildizer: {decision['detail']}"
+        # auto_clean: how long the bot's own warning text stays up (0 = keep)
+        warn_secs = int(((cfg or {}).get("auto_clean") or {}).get("warn_messages_seconds") or 0)
         await governor.safe(message.delete(), what="delete flagged message")
         if action == "warn":
             await governor.safe(
-                message.channel.send(moderation.warning_text(decision["category"]), delete_after=8),
+                message.channel.send(moderation.warning_text(decision["category"]),
+                                     delete_after=warn_secs or None),
                 what="post warning",
             )
+            await self._apply_xp_penalty(guild_id, member.id, str(member), "warn")
             escalation = await asyncio.to_thread(
-                self._record_automod_warning, message.guild.id, member.id,
+                self._record_automod_warning, guild_id, member.id,
                 str(member), decision["detail"],
             )
-            if escalation == "timeout":
-                await governor.safe(member.timeout(timedelta(minutes=30), reason=reason), what="ladder timeout")
-            elif escalation == "kick":
+            if not escalation:
+                return "warned"
+            esc_action = escalation["action"]
+            if esc_action == "timeout":
+                await governor.safe(
+                    member.timeout(timedelta(minutes=escalation["minutes"]), reason=reason),
+                    what="ladder timeout",
+                )
+            elif esc_action == "kick":
                 await governor.safe(member.kick(reason=reason), what="ladder kick")
-            elif escalation == "ban":
+            elif esc_action == "ban":
                 await governor.safe(member.ban(reason=reason, delete_message_days=0), what="ladder ban")
-            return f"warned+{escalation}" if escalation else "warned"
+            await self._apply_xp_penalty(guild_id, member.id, str(member), esc_action)
+            return f"warned+{esc_action}"
         if action == "timeout":
             await governor.safe(member.timeout(timedelta(minutes=10), reason=reason), what="timeout")
+            await self._apply_xp_penalty(guild_id, member.id, str(member), "timeout")
             return "timeout"
         if action == "kick":
             await governor.safe(member.kick(reason=reason), what="kick")
+            await self._apply_xp_penalty(guild_id, member.id, str(member), "kick")
             return "kick"
         if action == "ban":
             await governor.safe(member.ban(reason=reason, delete_message_days=1), what="ban")
+            await self._apply_xp_penalty(guild_id, member.id, str(member), "ban")
             return "ban"
         return "deleted"
+
+    async def _apply_xp_penalty(self, guild_id: int, user_id: int, username: str,
+                                kind: str) -> None:
+        """Moderation XP penalty (leveling2.penalty_*). No-op when disabled."""
+        if kind in ("warn", "timeout", "kick", "ban"):
+            await asyncio.to_thread(self._do_apply_penalty, guild_id, user_id, username, kind)
 
     async def _raid_activated(self, guild: discord.Guild, cfg: dict) -> None:
         secs = raid_guard.seconds_remaining(guild.id)
@@ -578,18 +795,38 @@ class CoreMixin:
         if result is None:
             return True
         leveled_up, new_level = result
-        if leveled_up and cfg.get("announce_level_up", True):
+        if leveled_up:
+            await self._announce_level_up(message.guild, message.author, new_level,
+                                          cfg, message.channel)
+        return True
+
+    async def _announce_level_up(self, guild: discord.Guild, member, new_level: int,
+                                 cfg: dict, fallback_channel) -> None:
+        """Level-up announce (template + auto-delete) and level→role rewards."""
+        l2 = cfg.get("leveling2") or {}
+        if cfg.get("announce_level_up", True):
             text = leveling.render_levelup(
                 cfg.get("levelup_message"),
-                mention=message.author.mention,
-                username=str(message.author),
-                level=new_level,
+                mention=member.mention, username=str(member), level=new_level,
             )
+            delete_after = int(l2.get("levelup_delete_after_seconds") or 0) or None
             ch_id = cfg.get("levelup_channel_id")
-            channel = message.guild.get_channel(int(ch_id)) if ch_id else message.channel
+            channel = guild.get_channel(int(ch_id)) if ch_id else fallback_channel
             if channel and hasattr(channel, "send"):
-                await governor.safe(channel.send(text), what="level-up announce")
-        return True
+                await governor.safe(channel.send(text, delete_after=delete_after),
+                                    what="level-up announce")
+        rewards = l2.get("role_rewards") or []
+        due = []
+        for r in rewards:
+            if int(r.get("level") or 0) <= new_level and r.get("role_id"):
+                role = guild.get_role(int(r["role_id"]))
+                if role is not None and role not in member.roles:
+                    due.append(role)
+        if due:
+            await governor.safe(
+                member.add_roles(*due, reason=f"Guildizer level {new_level} reward"),
+                what="level role reward",
+            )
 
     # --- member events (join gate, lockdown, welcome/leave, auto-roles) ---------
     async def on_member_join(self, member: discord.Member) -> None:
@@ -643,6 +880,15 @@ class CoreMixin:
                 )
         if cfg["welcome_enabled"] and cfg["welcome_channel_id"]:
             await self._send_welcome(member, cfg)
+
+        # optional private welcome DM (independent of the channel welcome)
+        w2 = cfg.get("welcome2") or {}
+        if w2.get("dm_enabled") and w2.get("dm_message"):
+            await governor.safe(
+                member.send(settings_mod.render_message(
+                    w2["dm_message"], member=member, guild=member.guild)[:2000]),
+                what="welcome DM",
+            )
 
         await asyncio.to_thread(stats_runtime.bump_daily, member.guild.id, joins=1)
         attribution = await invite_tracking.attribute_join(member.guild)
@@ -787,6 +1033,10 @@ class CoreMixin:
             await asyncio.to_thread(
                 automation_runtime.record_execution, wf["id"], guild.id, status, detail
             )
+            if status == "error":
+                await self._escalate_type(
+                    guild, "automation", f"Workflow “{wf['name']}” failed: {detail}"
+                )
 
     async def _run_workflow_actions(self, wf: dict, guild: discord.Guild, *,
                                     member=None, channel=None) -> None:
@@ -904,8 +1154,38 @@ class CoreMixin:
         if member is None or member.bot:
             return
         channel = guild.get_channel(payload.channel_id)
+        await self._maybe_award_reaction_xp(guild, payload, channel)
         await self._run_workflows("reaction_add", guild, member=member, channel=channel,
                                   emoji=str(payload.emoji))
+
+    async def _maybe_award_reaction_xp(self, guild: discord.Guild,
+                                       payload: discord.RawReactionActionEvent,
+                                       channel) -> None:
+        """leveling2: XP for the author of a message that received a reaction,
+        with its own per-author cooldown. Self-reactions never count."""
+        author_id = getattr(payload, "message_author_id", None)
+        if not author_id or author_id == payload.user_id:
+            return
+        cfg = await asyncio.to_thread(self._load_leveling, guild.id)
+        if not cfg or not cfg.get("levels_enabled"):
+            return
+        l2 = cfg.get("leveling2") or {}
+        amount = int(l2.get("xp_per_reaction") or 0)
+        if amount <= 0:
+            return
+        author = guild.get_member(author_id)
+        if author is None or author.bot:
+            return
+        cooldown = max(0, int(l2.get("reaction_cooldown_seconds") or 0))
+        key = (guild.id, author_id)
+        if time.monotonic() - _reaction_xp_last.get(key, 0.0) < cooldown:
+            return
+        _reaction_xp_last[key] = time.monotonic()
+        result = await asyncio.to_thread(
+            self._do_add_xp, guild.id, author_id, str(author), amount, "reaction"
+        )
+        if result and result[0]:
+            await self._announce_level_up(guild, author, result[1], cfg, channel)
 
     async def _send_to_channel(self, guild: discord.Guild, channel_id: int, content: str) -> None:
         if not content:
@@ -1042,6 +1322,12 @@ class CoreMixin:
                 sent = bool(await governor.safe(channel.send(item["content"]),
                                                 what="scheduled message"))
             await asyncio.to_thread(content_runtime.advance_schedule, item["id"], sent)
+            if not sent and guild is not None:
+                await self._escalate_type(
+                    guild, "automation",
+                    f"Scheduled message could not be sent (channel missing or no "
+                    f"permission): “{(item['content'] or '')[:80]}”",
+                )
 
         for item in await asyncio.to_thread(content_runtime.polls_to_post, served):
             guild = self.get_guild(item["guild_id"])
@@ -1196,7 +1482,12 @@ class CoreMixin:
         db = SessionLocal()
         try:
             row = db.get(GuildSettings, guild_id)
-            return row.levels_to_dict() if row is not None else None
+            if row is None:
+                return None
+            cfg = row.levels_to_dict()
+            cfg["leveling2"] = {**settings_mod.LEVELING2_DEFAULTS,
+                                **((row.extra or {}).get("leveling2") or {})}
+            return cfg
         finally:
             db.close()
             SessionLocal.remove()
@@ -1313,22 +1604,55 @@ class CoreMixin:
 
     @staticmethod
     def _record_automod_warning(guild_id, user_id, username, detail):
-        """Automod warning (moderator NULL). Returns the ladder escalation action
-        (and resets the count) when the member hits max warnings, else None."""
+        """Automod warning (moderator NULL). Returns the escalation dict
+        ({"action", "minutes", "at", "reset"}) when a threshold/ladder step
+        fires, else None. Legacy single-threshold escalations reset the count."""
         db = SessionLocal()
         try:
             snap = protection.load_snapshot(db, guild_id) or {}
-            ladder = snap.get("warnings") or {}
             count, escalation = moderation_runtime.add_warning(
-                db, guild_id, user_id, username, None, "automod", detail, ladder,
+                db, guild_id, user_id, username, None, "automod", detail,
+                snap.get("warnings") or {}, snap.get("warn_ladder") or {},
             )
-            if escalation:
+            if escalation and escalation.get("reset"):
                 moderation_runtime.clear_warnings(db, guild_id, user_id)
             db.commit()
             return escalation
         except Exception:  # noqa: BLE001
             db.rollback()
             log.exception("automod warning failed for guild %s", guild_id)
+            return None
+        finally:
+            db.close()
+            SessionLocal.remove()
+
+    @staticmethod
+    def _do_apply_penalty(guild_id, user_id, username, kind):
+        db = SessionLocal()
+        try:
+            removed = leveling.apply_penalty(db, guild_id, user_id, username, kind)
+            db.commit()
+            return removed
+        except Exception:  # noqa: BLE001
+            db.rollback()
+            log.exception("xp penalty failed for guild %s", guild_id)
+            return 0
+        finally:
+            db.close()
+            SessionLocal.remove()
+
+    @staticmethod
+    def _do_add_xp(guild_id, user_id, username, amount, reason):
+        """Returns (leveled_up, new_level) or None on failure."""
+        db = SessionLocal()
+        try:
+            _, leveled_up, new_level = leveling.add_xp(
+                db, guild_id, user_id, amount, username, reason=reason)
+            db.commit()
+            return leveled_up, new_level
+        except Exception:  # noqa: BLE001
+            db.rollback()
+            log.exception("add_xp failed for guild %s", guild_id)
             return None
         finally:
             db.close()
@@ -1501,10 +1825,17 @@ def attach_builtin_commands(client) -> None:
             )
             return
         await interaction.response.defer(ephemeral=True, thinking=True)
-        system = None
+        system, confident = None, True
         if interaction.guild_id:
-            system = await asyncio.to_thread(knowledge.grounded_system,
-                                             interaction.guild_id, question)
+            system, confident = await asyncio.to_thread(
+                knowledge.grounded_with_confidence, interaction.guild_id, question)
+        if system and not confident and interaction.guild is not None:
+            await client._escalate_type(
+                interaction.guild, "ai_kb",
+                f"/ask had low KB confidence for {interaction.user.mention}: "
+                f"“{question[:120]}”",
+                user_id=interaction.user.id,
+            )
         if system:
             result = await asyncio.to_thread(ai.complete, system, question)
         else:

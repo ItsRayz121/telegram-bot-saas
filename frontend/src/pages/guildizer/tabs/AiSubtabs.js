@@ -57,7 +57,7 @@ function KbRepliesCard({ guildId }) {
       <Typography variant="subtitle1" fontWeight={700} mb={1}>AI reply behaviour</Typography>
       <Typography variant="caption" color="text.secondary" display="block" mb={1}>
         Controls how the bot answers from the knowledge base. /ask always works; automatic
-        replies follow these rules. Settings save now; bot rollout is staged.
+        replies follow these rules (one auto-reply per member per 30 seconds).
       </Typography>
       <FormControlLabel control={<Switch checked={!!cfg.enabled} onChange={(e) => set({ enabled: e.target.checked })} />}
         label="Answer member questions automatically from the KB" />

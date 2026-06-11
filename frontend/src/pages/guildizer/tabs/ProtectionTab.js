@@ -263,7 +263,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
             <Card variant="outlined"><CardContent>
               <Typography variant="subtitle1" fontWeight={700} mb={1}>Emoji reactions</Typography>
               <Typography variant="caption" color="text.secondary" display="block" mb={1}>
-                The bot reacts to messages to keep the community warm. Settings save now; bot rollout is staged.
+                The bot reacts to messages to keep the community warm. Member reactions follow the cooldown below.
               </Typography>
               <FormControlLabel control={<Switch checked={!!cfg.emoji_reactions?.enabled} onChange={(e) => setEr({ enabled: e.target.checked })} />} label="Enable emoji reactions" />
               <FormControlLabel control={<Switch checked={!!cfg.emoji_reactions?.admin_thumbs_up} onChange={(e) => setEr({ admin_thumbs_up: e.target.checked })} />} label="👍 Thumbs-up on every admin message" />
@@ -352,7 +352,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
               <Typography variant="subtitle1" fontWeight={700} mb={1}>Escalating punishments</Typography>
               <FormControlLabel control={<Switch checked={!!cfg.warn_ladder?.enabled} onChange={(e) => setWl({ enabled: e.target.checked })} />} label="Enable an escalating punishment ladder" />
               <Typography variant="caption" color="text.secondary" display="block" mb={1}>
-                Each step fires when a member reaches that warning count. Steps save now; bot rollout is staged.
+                Each step fires when a member reaches that warning count (counted within the step's window). Warnings aren't reset between steps, so higher steps stay reachable.
               </Typography>
               {(cfg.warn_ladder?.steps || []).map((s, i) => (
                 <Stack key={i} direction="row" spacing={1} alignItems="center" mb={1} useFlexGap flexWrap="wrap">

@@ -19,6 +19,7 @@ from discord import app_commands
 
 import assistant
 import governor
+import leveling
 import moderation_runtime as modrt
 import protection
 from database import SessionLocal
@@ -45,14 +46,30 @@ def _db_call(fn, *args, **kwargs):
         SessionLocal.remove()
 
 
-def _ladder_cfg(guild_id: int) -> dict:
+def _mod_cfg(guild_id: int) -> dict:
+    """The moderation-snapshot sections the command suite consumes."""
     db = SessionLocal()
     try:
         snap = protection.load_snapshot(db, guild_id) or {}
-        return snap.get("warnings") or {"max_warnings": 3, "action": "timeout", "timeout_minutes": 30}
+        return {
+            "warnings": snap.get("warnings") or {"max_warnings": 3, "action": "timeout",
+                                                 "timeout_minutes": 30, "window_hours": 0},
+            "warn_ladder": snap.get("warn_ladder") or {},
+            "auto_clean": snap.get("auto_clean") or {},
+            "reports": snap.get("reports") or {},
+        }
     finally:
         db.close()
         SessionLocal.remove()
+
+
+def _clean_seconds(cfg: dict, key: str) -> int | None:
+    """auto_clean timer for the bot's own warn/action messages (None = keep)."""
+    return int((cfg.get("auto_clean") or {}).get(key) or 0) or None
+
+
+def _xp_penalty(guild_id: int, user_id: int, username: str, kind: str) -> None:
+    _db_call(leveling.apply_penalty, guild_id, user_id, username, kind)
 
 
 def _log_event(guild_id, category, action, user_id=None, username=None, detail=None):
@@ -121,11 +138,13 @@ async def _check_target(interaction: discord.Interaction, member: discord.Member
 
 
 async def _apply_ladder(interaction: discord.Interaction, member: discord.Member,
-                        action: str, ladder: dict) -> str:
-    """Execute the escalation action when a member hits max warnings."""
-    reason = f"Guildizer: reached {ladder.get('max_warnings', 3)} warnings"
+                        esc: dict) -> str:
+    """Execute an escalation ({"action", "minutes", "at", "reset"}) when a member
+    hits a warning threshold or ladder step."""
+    action = esc.get("action")
+    reason = f"Guildizer: reached {esc.get('at', '?')} warnings"
     if action == "timeout":
-        mins = max(1, int(ladder.get("timeout_minutes", 30)))
+        mins = max(1, int(esc.get("minutes") or 30))
         ok = await governor.safe(member.timeout(timedelta(minutes=mins), reason=reason),
                                  what="ladder timeout")
         return f"timed out {mins}m" if ok else "timeout failed"
@@ -136,6 +155,22 @@ async def _apply_ladder(interaction: discord.Interaction, member: discord.Member
         ok = await governor.safe(member.ban(reason=reason, delete_message_days=0), what="ladder ban")
         return "banned" if ok else "ban failed"
     return "no action"
+
+
+async def _report_alert(interaction: discord.Interaction, target_name: str,
+                        detail: str) -> None:
+    """Mirror a new /report into the configured alert channel (reports section)."""
+    cfg = await asyncio.to_thread(_mod_cfg, interaction.guild.id)
+    ch_id = (cfg.get("reports") or {}).get("alert_channel_id")
+    if not ch_id:
+        return
+    channel = interaction.guild.get_channel(int(ch_id))
+    if channel is None or not hasattr(channel, "send"):
+        return
+    await governor.safe(channel.send(
+        f"📣 **New report** from {interaction.user.mention} about **{target_name}**: "
+        f"{detail}"[:1900]
+    ), what="report alert")
 
 
 # --- registration -----------------------------------------------------------------
@@ -151,22 +186,36 @@ def attach_mod_commands(client) -> None:  # noqa: C901  (a flat list of commands
         problem = await _check_target(interaction, member)
         if problem:
             return await _deny(interaction, problem)
-        ladder = await asyncio.to_thread(_ladder_cfg, interaction.guild.id)
+        cfg = await asyncio.to_thread(_mod_cfg, interaction.guild.id)
+        ladder = cfg["warnings"]
         result = await asyncio.to_thread(
             _db_call, modrt.add_warning, interaction.guild.id, member.id, str(member),
-            interaction.user.id, str(interaction.user), reason, ladder,
+            interaction.user.id, str(interaction.user), reason, ladder, cfg["warn_ladder"],
         )
         if result is None:
             return await _deny(interaction, "Couldn't record the warning — try again.")
         count, escalation = result
-        msg = f"⚠️ Warned {member.mention} ({count}/{ladder.get('max_warnings', 3)}): {reason}"
+        await asyncio.to_thread(_xp_penalty, interaction.guild.id, member.id,
+                                str(member), "warn")
+        if cfg["warn_ladder"].get("enabled"):
+            msg = f"⚠️ Warned {member.mention} (warning #{count}): {reason}"
+        else:
+            msg = f"⚠️ Warned {member.mention} ({count}/{ladder.get('max_warnings', 3)}): {reason}"
         if escalation:
-            outcome = await _apply_ladder(interaction, member, escalation, ladder)
-            await asyncio.to_thread(_db_call, modrt.clear_warnings, interaction.guild.id, member.id)
-            msg += f"\n🚨 Warning limit reached — {outcome}; warnings reset."
+            outcome = await _apply_ladder(interaction, member, escalation)
+            await asyncio.to_thread(_xp_penalty, interaction.guild.id, member.id,
+                                    str(member), escalation["action"])
+            if escalation.get("reset"):
+                await asyncio.to_thread(_db_call, modrt.clear_warnings,
+                                        interaction.guild.id, member.id)
+                msg += f"\n🚨 Warning limit reached — {outcome}; warnings reset."
+            else:
+                msg += f"\n🚨 Ladder step (warning #{escalation['at']}) — {outcome}."
         await asyncio.to_thread(_log_event, interaction.guild.id, "warning",
-                                escalation or "warned", member.id, str(member), reason)
-        await interaction.response.send_message(msg)
+                                escalation["action"] if escalation else "warned",
+                                member.id, str(member), reason)
+        await interaction.response.send_message(
+            msg, delete_after=_clean_seconds(cfg, "warn_messages_seconds"))
 
     @tree.command(name="warnings", description="List a member's warnings.")
     @app_commands.default_permissions(moderate_members=True)
@@ -219,9 +268,14 @@ def attach_mod_commands(client) -> None:  # noqa: C901  (a flat list of commands
         )
         if not ok:
             return await _deny(interaction, "Timeout failed — check my role position and permissions.")
+        await asyncio.to_thread(_xp_penalty, interaction.guild.id, member.id,
+                                str(member), "timeout")
         await asyncio.to_thread(_log_event, interaction.guild.id, "moderation", "timeout",
                                 member.id, str(member), f"{duration} — {reason}")
-        await interaction.response.send_message(f"🔇 Muted {member.mention} for {duration}: {reason}")
+        cfg = await asyncio.to_thread(_mod_cfg, interaction.guild.id)
+        await interaction.response.send_message(
+            f"🔇 Muted {member.mention} for {duration}: {reason}",
+            delete_after=_clean_seconds(cfg, "action_messages_seconds"))
 
     @tree.command(name="unmute", description="Remove a member's timeout.")
     @app_commands.default_permissions(moderate_members=True)
@@ -248,9 +302,14 @@ def attach_mod_commands(client) -> None:  # noqa: C901  (a flat list of commands
         ok = await governor.safe(member.kick(reason=f"Guildizer ({interaction.user}): {reason}"), what="kick")
         if not ok:
             return await _deny(interaction, "Kick failed — check my role position and permissions.")
+        await asyncio.to_thread(_xp_penalty, interaction.guild.id, member.id,
+                                str(member), "kick")
         await asyncio.to_thread(_log_event, interaction.guild.id, "moderation", "kick",
                                 member.id, str(member), reason)
-        await interaction.response.send_message(f"👢 Kicked **{member.display_name}**: {reason}")
+        cfg = await asyncio.to_thread(_mod_cfg, interaction.guild.id)
+        await interaction.response.send_message(
+            f"👢 Kicked **{member.display_name}**: {reason}",
+            delete_after=_clean_seconds(cfg, "action_messages_seconds"))
 
     @tree.command(name="ban", description="Ban a member.")
     @app_commands.describe(member="Who", reason="Why", delete_days="Delete their messages from the last N days (0–7)")
@@ -269,9 +328,14 @@ def attach_mod_commands(client) -> None:  # noqa: C901  (a flat list of commands
         )
         if not ok:
             return await _deny(interaction, "Ban failed — check my role position and permissions.")
+        await asyncio.to_thread(_xp_penalty, interaction.guild.id, member.id,
+                                str(member), "ban")
         await asyncio.to_thread(_log_event, interaction.guild.id, "moderation", "ban",
                                 member.id, str(member), reason)
-        await interaction.response.send_message(f"🔨 Banned **{member.display_name}**: {reason}")
+        cfg = await asyncio.to_thread(_mod_cfg, interaction.guild.id)
+        await interaction.response.send_message(
+            f"🔨 Banned **{member.display_name}**: {reason}",
+            delete_after=_clean_seconds(cfg, "action_messages_seconds"))
 
     @tree.command(name="unban", description="Unban a user by their Discord user ID.")
     @app_commands.default_permissions(ban_members=True)
@@ -316,11 +380,14 @@ def attach_mod_commands(client) -> None:  # noqa: C901  (a flat list of commands
             _db_call, modrt.schedule_unban, interaction.guild.id, member.id, str(member),
             seconds, reason,
         )
+        await asyncio.to_thread(_xp_penalty, interaction.guild.id, member.id,
+                                str(member), "ban")
         await asyncio.to_thread(_log_event, interaction.guild.id, "moderation", "tempban",
                                 member.id, str(member), f"{duration} — {reason}")
+        cfg = await asyncio.to_thread(_mod_cfg, interaction.guild.id)
         await interaction.response.send_message(
-            f"⏳ Temp-banned **{member.display_name}** for {duration}: {reason}"
-        )
+            f"⏳ Temp-banned **{member.display_name}** for {duration}: {reason}",
+            delete_after=_clean_seconds(cfg, "action_messages_seconds"))
 
     @tree.command(name="purge", description="Bulk-delete recent messages in this channel.")
     @app_commands.describe(count="How many to scan (1–100)", member="Only delete messages from this member")
@@ -397,6 +464,7 @@ def attach_mod_commands(client) -> None:  # noqa: C901  (a flat list of commands
         await interaction.response.send_message(
             "✅ Report filed — the moderators will review it. Thank you.", ephemeral=True
         )
+        await _report_alert(interaction, str(member), reason)
 
     @tree.context_menu(name="Report Message")
     async def report_message(interaction: discord.Interaction, message: discord.Message) -> None:
@@ -415,3 +483,5 @@ def attach_mod_commands(client) -> None:  # noqa: C901  (a flat list of commands
         await interaction.response.send_message(
             "✅ Message reported — the moderators will review it. Thank you.", ephemeral=True
         )
+        await _report_alert(interaction, str(message.author),
+                            f"message report — {message.jump_url}")

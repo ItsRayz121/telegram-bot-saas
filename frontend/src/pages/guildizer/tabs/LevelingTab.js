@@ -78,7 +78,7 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
         <Card variant="outlined"><CardContent>
           <Typography variant="subtitle1" fontWeight={700} mb={1}>Moderation XP penalties</Typography>
           <Typography variant="caption" color="text.secondary" display="block" mb={1}>
-            XP removed when a member is moderated. 0 disables a penalty. Saves now; bot rollout is staged.
+            XP removed when a member is moderated (XP never drops below 0). 0 disables a penalty.
           </Typography>
           {numL2('Warn penalty', 'penalty_warn', 10000)}
           {numL2('Timeout penalty', 'penalty_timeout', 10000)}

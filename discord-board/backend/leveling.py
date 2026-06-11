@@ -38,9 +38,9 @@ def get_or_create_member(db, guild_id: int, user_id: int, username: str | None =
 
 def _apply_xp(db, member: Member, amount: int, reason: str):
     """Add XP to an already-resolved member, recompute level, log the ledger row.
-    Returns (leveled_up, new_level)."""
+    Negative amounts (penalties) floor at 0 XP. Returns (leveled_up, new_level)."""
     old_level = member.level or 1
-    member.xp = (member.xp or 0) + int(amount)
+    member.xp = max(0, (member.xp or 0) + int(amount))
     member.level = level_from_xp(member.xp)
     member.updated_at = datetime.utcnow()
     db.add(XpEvent(
@@ -75,6 +75,24 @@ def award_message_xp(db, guild_id: int, user_id: int, username, cfg: dict):
     m.messages = (m.messages or 0) + 1
     leveled_up, new_level = _apply_xp(db, m, amount, reason="message")
     return (leveled_up, new_level)
+
+
+def apply_penalty(db, guild_id: int, user_id: int, username, kind: str) -> int:
+    """Deduct the configured moderation XP penalty (leveling2.penalty_<kind>,
+    kind in warn/timeout/kick/ban). Returns the amount removed (0 = disabled or
+    leveling off). Caller commits."""
+    import settings as settings_mod
+    from models import GuildSettings
+
+    row = db.get(GuildSettings, guild_id)
+    if row is None or not row.levels_enabled:
+        return 0
+    l2 = {**settings_mod.LEVELING2_DEFAULTS, **((row.extra or {}).get("leveling2") or {})}
+    amount = int(l2.get(f"penalty_{kind}") or 0)
+    if amount <= 0:
+        return 0
+    add_xp(db, guild_id, user_id, -amount, username, reason=f"penalty_{kind}")
+    return amount
 
 
 def top_members(db, guild_id: int, limit: int = 10):
