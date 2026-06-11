@@ -25,6 +25,7 @@ export default function SettingsTab({ guildId, channels = [], roles = [] }) {
   }, [guildId]);
 
   const set = (patch) => setCfg((c) => ({ ...c, ...patch }));
+  const setW2 = (patch) => setCfg((c) => ({ ...c, welcome2: { ...c.welcome2, ...patch } }));
   const toggleRole = (id) => {
     const has = cfg.autorole_ids.includes(id);
     set({ autorole_ids: has ? cfg.autorole_ids.filter((r) => r !== id) : [...cfg.autorole_ids, id] });
@@ -60,6 +61,21 @@ export default function SettingsTab({ guildId, channels = [], roles = [] }) {
             value={cfg.welcome_message} inputProps={{ maxLength: 2000 }}
             onChange={(e) => set({ welcome_message: e.target.value })}
             helperText="Placeholders: {user} {server} {member_count}" />
+          <FormControlLabel
+            control={<Switch checked={!!cfg.welcome2?.use_embed} onChange={(e) => setW2({ use_embed: e.target.checked })} />}
+            label="Send as a rich embed (avatar + image)"
+          />
+          <TextField fullWidth multiline minRows={2} size="small" margin="dense" label="Rules text (optional)"
+            value={cfg.welcome2?.rules_text || ''} inputProps={{ maxLength: 1024 }}
+            onChange={(e) => setW2({ rules_text: e.target.value })}
+            helperText="Shown under the welcome message." />
+          <TextField fullWidth size="small" margin="dense" label="Image URL (embed only)"
+            value={cfg.welcome2?.image_url || ''}
+            onChange={(e) => setW2({ image_url: e.target.value })} />
+          <TextField type="number" fullWidth size="small" margin="dense"
+            label="Auto-delete after seconds (0 = keep)"
+            value={cfg.welcome2?.delete_after_seconds ?? 0} inputProps={{ min: 0, max: 3600 }}
+            onChange={(e) => setW2({ delete_after_seconds: Number(e.target.value) })} />
         </CardContent></Card>
       </Grid>
 

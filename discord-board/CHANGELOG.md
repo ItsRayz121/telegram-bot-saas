@@ -96,3 +96,40 @@ ladder math incl. reset, reports lifecycle, scheduled-unban due flow, merged
 snapshot defaults, wiring imports) green; frontend production build green.
 
 **Env vars**: none new. **Manual ops**: none.
+
+## Phase 11 — Verification & Onboarding Parity (2026-06-11)
+
+Join captcha, foreign-bot policy, and welcome-message depth. Both lineages.
+
+**Verification (`verification.py` + bot_core)**
+- Quarantine-role captcha: on join the bot assigns an Unverified role and posts
+  a challenge in #verify. Methods: button click, math question, typed word
+  (modal). Success removes the role + challenge; wrong answers count attempts
+  (live max_attempts config); at the limit the member is kicked.
+- Auto-setup on first use: creates the Unverified role + #verify channel
+  (overwrites: hidden from everyone, visible to Unverified) and hides other
+  channels from the role (capped, governor-safe).
+- Timeout sweep in the 60s loop (kick/keep per config), scoped per bot identity
+  so the fleet never double-acts. Buttons survive restarts via DynamicItem.
+- Model: `PendingVerification`.
+
+**Bot policy (`bot_policy.py`)**
+- Untrusted bot joins -> kick (kick_untrusted) or alert-only; alert message with
+  one-click admin Trust / Kick buttons (DynamicItems, admin-gated). Trusted ids
+  persist so re-invites pass.
+
+**Welcome depth**
+- `welcome2` extras in GuildSettings.extra (deep-merged defaults): rich-embed
+  mode (author avatar + image), rules text, auto-delete after N seconds.
+
+**Config/API**: `verification` + `bot_policy` sections in ModerationSettings
+extra (validated on PUT /moderation); `welcome2` on GET/PUT /settings.
+**UI**: Verification + Bot policy cards (ProtectionTab); embed/rules/auto-delete
+fields (SettingsTab).
+
+**Validation**: smoke suite (challenge gen, attempt ladder w/ live config,
+pass paths incl. whitespace tolerance, expiry-sweep scoping, trust list,
+snapshot defaults, wiring imports) green; frontend build green.
+
+**Env vars**: none new. **Manual ops**: bot needs Manage Roles + Manage
+Channels for auto-setup (already in the default invite permission set).

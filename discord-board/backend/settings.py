@@ -31,6 +31,16 @@ _COLUMN_DEFAULTS = {
 }
 
 
+# Phase 11 welcome extensions, stored in GuildSettings.extra["welcome2"]
+# (deep-merged on read - self-heals without a migration).
+WELCOME2_DEFAULTS = {
+    "use_embed": False,
+    "rules_text": "",
+    "image_url": "",
+    "delete_after_seconds": 0,
+}
+
+
 def get_or_create(db, guild_id: int) -> GuildSettings:
     """Return the guild's settings row, creating a defaulted one if missing."""
     row = db.get(GuildSettings, guild_id)

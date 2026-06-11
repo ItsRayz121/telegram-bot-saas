@@ -158,7 +158,7 @@ V2 status:
 - [x] Audit, architecture, roadmap docs written (2026-06-11)
 - [x] Phase 9 — White-label custom bot foundation (2026-06-11: bot_core.py shared engine, CustomBot + fleet manager, token vault, custom_bots_api, My Bots UI w/ connect wizard, bot-resolution rule. See CHANGELOG.md)
 - [x] Phase 10 — Moderation parity pack (2026-06-11: automod matrix in extra JSON, warning ladder, MemberWarning/ModReport/ScheduledModAction, 13 mod commands + report context menu, tempban-expiry loop, reports queue UI. See CHANGELOG.md)
-- [ ] Phase 11 — Verification & onboarding parity
+- [x] Phase 11 — Verification & onboarding parity (2026-06-11: quarantine-role captcha button/math/word w/ auto-setup + timeout sweep, bot policy w/ Trust/Kick buttons, welcome embed/rules/auto-delete. See CHANGELOG.md)
 - [ ] Phase 12 — Scheduling, polls & content
 - [ ] Phase 13 — Automation engine (workflows, mirroring, webhooks)
 - [ ] Phase 14 — Engagement parity+ (referrals/invites/custom fields/proof feed)

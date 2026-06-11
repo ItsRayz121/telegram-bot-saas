@@ -57,6 +57,8 @@ export default function ProtectionTab({ guildId, channels = [] }) {
   }));
   const setW = (patch) => setCfg((c) => ({ ...c, warnings: { ...c.warnings, ...patch } }));
   const setAc = (patch) => setCfg((c) => ({ ...c, auto_clean: { ...c.auto_clean, ...patch } }));
+  const setV = (patch) => setCfg((c) => ({ ...c, verification: { ...c.verification, ...patch } }));
+  const setBp = (patch) => setCfg((c) => ({ ...c, bot_policy: { ...c.bot_policy, ...patch } }));
 
   async function reviewReport(id, status) {
     try {
@@ -255,6 +257,56 @@ export default function ProtectionTab({ guildId, channels = [] }) {
               </ListItem>
             ))}
           </List>
+        </CardContent></Card>
+      </Grid>
+
+      <Grid item xs={12} md={6}>
+        <Card variant="outlined"><CardContent>
+          <Typography variant="subtitle1" fontWeight={700} mb={1}>Join verification (captcha)</Typography>
+          <FormControlLabel control={<Switch checked={!!cfg.verification?.enabled} onChange={(e) => setV({ enabled: e.target.checked })} />} label="Require new members to verify before they can see the server" />
+          <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+            On first use the bot creates an Unverified role and a #verify channel, and hides
+            other channels from unverified members. Needs Manage Roles + Manage Channels.
+          </Typography>
+          <TextField select size="small" margin="dense" fullWidth label="Challenge type"
+            value={cfg.verification?.method || 'button'} onChange={(e) => setV({ method: e.target.value })}>
+            <MenuItem value="button">Button click</MenuItem>
+            <MenuItem value="math">Math question</MenuItem>
+            <MenuItem value="word">Type a word</MenuItem>
+          </TextField>
+          <TextField type="number" size="small" margin="dense" fullWidth label="Timeout (seconds)"
+            value={cfg.verification?.timeout_seconds ?? 300} inputProps={{ min: 60, max: 3600 }}
+            onChange={(e) => setV({ timeout_seconds: Number(e.target.value) })} />
+          <TextField type="number" size="small" margin="dense" fullWidth label="Max attempts"
+            value={cfg.verification?.max_attempts ?? 3} inputProps={{ min: 1, max: 10 }}
+            onChange={(e) => setV({ max_attempts: Number(e.target.value) })} />
+          <TextField select size="small" margin="dense" fullWidth label="On timeout"
+            value={cfg.verification?.on_timeout || 'kick'} onChange={(e) => setV({ on_timeout: e.target.value })}>
+            <MenuItem value="kick">Kick the member</MenuItem>
+            <MenuItem value="keep">Keep them unverified</MenuItem>
+          </TextField>
+        </CardContent></Card>
+      </Grid>
+
+      <Grid item xs={12} md={6}>
+        <Card variant="outlined"><CardContent>
+          <Typography variant="subtitle1" fontWeight={700} mb={1}>Bot policy</Typography>
+          <FormControlLabel control={<Switch checked={!!cfg.bot_policy?.enabled} onChange={(e) => setBp({ enabled: e.target.checked })} />} label="Guard against unknown bots being added" />
+          <TextField select size="small" margin="dense" fullWidth label="When an untrusted bot joins"
+            value={cfg.bot_policy?.policy || 'kick_untrusted'} onChange={(e) => setBp({ policy: e.target.value })}>
+            <MenuItem value="kick_untrusted">Kick it and alert admins</MenuItem>
+            <MenuItem value="alert_only">Alert admins only</MenuItem>
+          </TextField>
+          <TextField select size="small" margin="dense" fullWidth label="Alert channel"
+            value={cfg.bot_policy?.alert_channel_id || ''} onChange={(e) => setBp({ alert_channel_id: e.target.value || null })}>
+            <MenuItem value="">- system channel -</MenuItem>
+            {textChannels.map((c) => <MenuItem key={c.id} value={c.id}># {c.name}</MenuItem>)}
+          </TextField>
+          <TextField size="small" margin="dense" fullWidth label="Trusted bot IDs"
+            placeholder="123456789, 987654321"
+            value={(cfg.bot_policy?.trusted_bot_ids || []).join(', ')}
+            onChange={(e) => setBp({ trusted_bot_ids: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })}
+            helperText="Comma-separated Discord user IDs. The alert message also has a one-click Trust button." />
         </CardContent></Card>
       </Grid>
 

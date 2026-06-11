@@ -137,6 +137,34 @@ def update_moderation(guild_id: int):
         if "timeout_minutes" in w_in:
             w["timeout_minutes"] = _as_int(w_in["timeout_minutes"], 30, 1, 40320)
         extra["warnings"] = w
+    if isinstance(body.get("verification"), dict):
+        v_in = body["verification"]
+        v = dict(extra.get("verification") or {})
+        if "enabled" in v_in:
+            v["enabled"] = bool(v_in["enabled"])
+        if v_in.get("method") in ("button", "math", "word"):
+            v["method"] = v_in["method"]
+        if "timeout_seconds" in v_in:
+            v["timeout_seconds"] = _as_int(v_in["timeout_seconds"], 300, 60, 3600)
+        if "max_attempts" in v_in:
+            v["max_attempts"] = _as_int(v_in["max_attempts"], 3, 1, 10)
+        if v_in.get("on_timeout") in ("kick", "keep"):
+            v["on_timeout"] = v_in["on_timeout"]
+        extra["verification"] = v
+    if isinstance(body.get("bot_policy"), dict):
+        b_in = body["bot_policy"]
+        b = dict(extra.get("bot_policy") or {})
+        if "enabled" in b_in:
+            b["enabled"] = bool(b_in["enabled"])
+        if b_in.get("policy") in ("kick_untrusted", "alert_only"):
+            b["policy"] = b_in["policy"]
+        if "trusted_bot_ids" in b_in:
+            b["trusted_bot_ids"] = [str(t).strip() for t in (b_in["trusted_bot_ids"] or [])
+                                    if str(t).strip().isdigit()][:50]
+        if "alert_channel_id" in b_in:
+            ch = b_in["alert_channel_id"]
+            b["alert_channel_id"] = str(ch) if ch and str(ch).isdigit() else None
+        extra["bot_policy"] = b
     if isinstance(body.get("auto_clean"), dict):
         ac = dict(extra.get("auto_clean") or {})
         if "join_messages" in body["auto_clean"]:

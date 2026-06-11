@@ -46,7 +46,9 @@ def get_settings(guild_id: int):
         return err
     row = settings_mod.get_or_create(g.db, guild_id)
     g.db.commit()
-    return jsonify(row.to_dict())
+    return jsonify({**row.to_dict(),
+                    "welcome2": {**settings_mod.WELCOME2_DEFAULTS,
+                                 **((row.extra or {}).get("welcome2") or {})}})
 
 
 @settings_bp.put("/api/guilds/<int:guild_id>/settings")
@@ -72,13 +74,34 @@ def update_settings(guild_id: int):
         row.leave_message = str(body["leave_message"] or "")[:2000]
     if "autorole_enabled" in body:
         row.autorole_enabled = bool(body["autorole_enabled"])
+    # Phase 11 welcome extensions (extra JSON, merged over WELCOME2_DEFAULTS on read)
+    if isinstance(body.get("welcome2"), dict):
+        w_in = body["welcome2"]
+        extra = dict(row.extra or {})
+        w2 = dict(extra.get("welcome2") or {})
+        if "use_embed" in w_in:
+            w2["use_embed"] = bool(w_in["use_embed"])
+        if "rules_text" in w_in:
+            w2["rules_text"] = str(w_in["rules_text"] or "")[:1024]
+        if "image_url" in w_in:
+            url = str(w_in["image_url"] or "").strip()[:300]
+            w2["image_url"] = url if url.startswith(("http://", "https://")) or not url else ""
+        if "delete_after_seconds" in w_in:
+            try:
+                w2["delete_after_seconds"] = max(0, min(3600, int(w_in["delete_after_seconds"])))
+            except (TypeError, ValueError):
+                pass
+        extra["welcome2"] = w2
+        row.extra = extra
     if "autorole_ids" in body:
         ids = body["autorole_ids"] or []
         row.autorole_ids = [str(int(x)) for x in ids if str(x).isdigit()][:10]
 
     settings_mod.touch(row)
     g.db.commit()
-    return jsonify(row.to_dict())
+    return jsonify({**row.to_dict(),
+                    "welcome2": {**settings_mod.WELCOME2_DEFAULTS,
+                                 **((row.extra or {}).get("welcome2") or {})}})
 
 
 def _as_id(value):

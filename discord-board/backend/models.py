@@ -835,3 +835,23 @@ class ScheduledModAction(Base):
     due_at = Column(DateTime, nullable=False, index=True)
     done = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class PendingVerification(Base):
+    """A join-captcha challenge awaiting the member's response (Phase 11).
+    Expired rows are swept by the bot loop (kick/keep per config)."""
+
+    __tablename__ = "pending_verifications"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, ForeignKey("guilds.id"), nullable=False, index=True)
+    user_id = Column(BigInteger, nullable=False, index=True)
+    username = Column(String(120))
+    method = Column(String(10), default="button")     # button | math | word
+    answer = Column(String(40))                       # expected modal answer (math/word)
+    prompt = Column(String(120))                      # shown in the modal (question/word)
+    attempts = Column(Integer, default=0)
+    channel_id = Column(BigInteger, nullable=True)    # where the challenge was posted
+    message_id = Column(BigInteger, nullable=True)    # the challenge message
+    expires_at = Column(DateTime, nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)

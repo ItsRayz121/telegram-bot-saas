@@ -23,6 +23,7 @@ from discord.ext import tasks
 
 import ai
 import assistant
+import bot_policy
 import campaign_runtime
 import campaign_views
 import command_registrar
@@ -35,6 +36,7 @@ import moderation_runtime
 import protection
 import raid_guard
 import settings as settings_mod
+import verification
 from database import SessionLocal
 from models import BotHealthEvent, CustomBot, Guild, GuildSettings, Member
 
@@ -313,6 +315,9 @@ class CoreMixin:
     async def on_member_join(self, member: discord.Member) -> None:
         if not serves(self, member.guild.id):
             return
+        if member.bot:
+            await bot_policy.handle_bot_join(self, member)
+            return
         mod = await asyncio.to_thread(self._load_moderation, member.guild.id)
         if mod:
             # account-age join gate
@@ -340,6 +345,11 @@ class CoreMixin:
                 if taken == "kick":
                     return
 
+        # join captcha: quarantine role + challenge in #verify (Phase 11)
+        vcfg = (mod or {}).get("verification") or {}
+        if vcfg.get("enabled"):
+            await self._start_verification(member, vcfg)
+
         # welcome message + auto-roles
         cfg = await asyncio.to_thread(self._load_member_settings, member.guild.id)
         if not cfg:
@@ -352,10 +362,65 @@ class CoreMixin:
                     member.add_roles(*roles, reason="Guildizer auto-role"), what="auto-role"
                 )
         if cfg["welcome_enabled"] and cfg["welcome_channel_id"]:
-            await self._send_to_channel(
-                member.guild, cfg["welcome_channel_id"],
-                settings_mod.render_message(cfg["welcome_message"], member=member, guild=member.guild),
-            )
+            await self._send_welcome(member, cfg)
+
+    async def _start_verification(self, member: discord.Member, vcfg: dict) -> None:
+        guild = member.guild
+        # lazy setup: create role/channel on first use (admin enabled it in the dashboard)
+        if not (vcfg.get("role_id") and guild.get_role(int(vcfg["role_id"]))):
+            ids = await verification.ensure_setup(guild, vcfg)
+            if ids is None:
+                return
+            await asyncio.to_thread(verification.save_setup_ids, guild.id,
+                                    ids["role_id"], ids["channel_id"])
+            vcfg = {**vcfg, "role_id": str(ids["role_id"]), "channel_id": str(ids["channel_id"])}
+        role = guild.get_role(int(vcfg["role_id"]))
+        channel = guild.get_channel(int(vcfg["channel_id"])) if vcfg.get("channel_id") else None
+        if role is None or channel is None:
+            return
+        if not await governor.safe(
+            member.add_roles(role, reason="Guildizer: verification pending"), what="verify role"
+        ):
+            return
+        await asyncio.to_thread(verification.create_pending, guild.id, member.id,
+                                str(member), vcfg)
+        mins = max(1, int(vcfg.get("timeout_seconds", 300)) // 60)
+        msg = await governor.safe(
+            channel.send(
+                f"👋 {member.mention} — verify within {mins} min to unlock the server.",
+                view=verification.challenge_view(guild.id, member.id),
+            ),
+            what="post verification challenge",
+        )
+        if msg:
+            await asyncio.to_thread(verification.set_challenge_message, guild.id,
+                                    member.id, channel.id, msg.id)
+
+    async def _send_welcome(self, member: discord.Member, cfg: dict) -> None:
+        guild = member.guild
+        channel = guild.get_channel(int(cfg["welcome_channel_id"]))
+        if channel is None or not hasattr(channel, "send"):
+            return
+        text = settings_mod.render_message(cfg["welcome_message"], member=member, guild=guild)
+        w2 = cfg.get("welcome2") or {}
+        delete_after = int(w2.get("delete_after_seconds") or 0) or None
+        rules_emoji = "📜"
+        if w2.get("use_embed"):
+            embed = discord.Embed(description=text or None, color=0x5865F2)
+            embed.set_author(name=f"Welcome, {member.display_name}!",
+                             icon_url=member.display_avatar.url)
+            if w2.get("rules_text"):
+                embed.add_field(name=f"{rules_emoji} Rules", value=str(w2["rules_text"])[:1024], inline=False)
+            if w2.get("image_url"):
+                embed.set_image(url=w2["image_url"])
+            await governor.safe(channel.send(embed=embed, delete_after=delete_after),
+                                what="welcome embed")
+        else:
+            if w2.get("rules_text"):
+                rules = f"{rules_emoji} {w2['rules_text']}"
+                text = f"{text}\n\n{rules}" if text else rules
+            if text:
+                await governor.safe(channel.send(text, delete_after=delete_after), what="welcome")
 
     async def _lockdown_joiner(self, member: discord.Member, cfg: dict) -> str:
         if cfg.get("rg_lockdown_action") == "kick":
@@ -459,6 +524,25 @@ class CoreMixin:
                 )
             await asyncio.to_thread(self._mark_mod_action_done, aid)
 
+        # expired join-captcha challenges (kick/keep per config)
+        served = [gd.id for gd in self.guilds if serves(self, gd.id)]
+        expired = await asyncio.to_thread(verification.expired_rows, served)
+        for row in expired:
+            guild = self.get_guild(row["guild_id"])
+            if guild is None:
+                continue
+            vcfg = ((await asyncio.to_thread(self._load_moderation, guild.id)) or {}).get("verification") or {}
+            member = guild.get_member(row["user_id"])
+            await verification._delete_challenge_message(guild, row)
+            if member is not None and vcfg.get("on_timeout", "kick") == "kick":
+                if await governor.safe(member.kick(reason="Guildizer: verification timed out"),
+                                       what="verification timeout kick"):
+                    await asyncio.to_thread(self._log, guild.id, "verification", "kick",
+                                            row["user_id"], row["username"], "verification timed out")
+            else:
+                await asyncio.to_thread(self._log, guild.id, "verification", "expired",
+                                        row["user_id"], row["username"], "challenge expired (kept)")
+
     @process_mod_actions.before_loop
     async def _before_mod_actions(self) -> None:
         await self.wait_until_ready()
@@ -537,6 +621,8 @@ class CoreMixin:
                 "leave_message": row.leave_message or "",
                 "autorole_enabled": bool(row.autorole_enabled),
                 "autorole_ids": list(row.autorole_ids or []),
+                "welcome2": {**settings_mod.WELCOME2_DEFAULTS,
+                             **((row.extra or {}).get("welcome2") or {})},
             }
         finally:
             db.close()

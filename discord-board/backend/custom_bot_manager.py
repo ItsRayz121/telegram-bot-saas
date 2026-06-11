@@ -20,7 +20,9 @@ import discord
 from discord import app_commands
 
 import bot_core
+import bot_policy
 import campaign_views
+import verification
 import crypto
 from database import SessionLocal
 from models import CustomBot
@@ -47,6 +49,8 @@ class CustomBotClient(bot_core.CoreMixin, discord.Client):
         # answers /ping, /rank, etc. under their own name and avatar.
         await self.tree.sync()
         self.add_dynamic_items(campaign_views.ProofButton)
+        self.add_dynamic_items(verification.VerifyButton,
+                               bot_policy.TrustBotButton, bot_policy.KickBotButton)
         self.resync_commands.start()
         self.post_campaigns.start()
         self.deliver_reminders.start()

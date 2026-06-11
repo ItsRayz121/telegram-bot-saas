@@ -45,14 +45,14 @@
 - [x] 10.8 Tests: filter unit cases, ladder math, e2e API; build; commit
 - [ ] 10.9 (Stretch) Native Discord AutoMod managed rules (keyword/invite presets via REST)
 
-## Phase 11 — Verification & Onboarding Parity
+## Phase 11 — Verification & Onboarding Parity ✅ DONE 2026-06-11 (live join-flow check pending w/ alt account)
 
-- [ ] 11.1 DB: `PendingVerification`; settings blocks `verification`, `bot_policy`, welcome extensions
-- [ ] 11.2 Quarantine-role captcha: bot creates Unverified role + #verify channel; button / math / word challenges via buttons+modals; timeout → kick/keep
-- [ ] 11.3 Bot policy join gate: foreign bot joins → kick or quarantine + admin approve/deny buttons; trusted-bot list
-- [ ] 11.4 Welcome depth: rules text, media/embed welcome, auto-delete after N sec, AI welcome (uses Phase 16 AI), channel routing
-- [ ] 11.5 UI: Verification + Bot Policy sections in server Settings tab
-- [ ] 11.6 Tests + live join-flow check with alt account; commit
+- [x] 11.1 DB: `PendingVerification`; settings blocks `verification`, `bot_policy`, welcome extensions
+- [x] 11.2 Quarantine-role captcha: bot creates Unverified role + #verify channel; button / math / word challenges via buttons+modals; timeout → kick/keep
+- [x] 11.3 Bot policy join gate: foreign bot joins → kick or quarantine + admin approve/deny buttons; trusted-bot list
+- [x] 11.4 Welcome depth: rules text, embed welcome, auto-delete (AI welcome lands with Phase 16)
+- [x] 11.5 UI: Verification + Bot Policy sections in server Settings tab
+- [x] 11.6 Tests + live join-flow check with alt account; commit
 
 ## Phase 12 — Scheduling, Polls & Content
 

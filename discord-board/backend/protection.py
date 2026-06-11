@@ -42,7 +42,31 @@ EXTRA_DEFAULTS = {
     },
     "warnings": {"max_warnings": 3, "action": "timeout", "timeout_minutes": 30},
     "auto_clean": {"join_messages": False},
+    # Phase 11 — join captcha (quarantine-role pattern) + foreign-bot policy
+    "verification": {
+        "enabled": False, "method": "button",        # button | math | word
+        "timeout_seconds": 300, "max_attempts": 3,
+        "on_timeout": "kick",                         # kick | keep
+        "role_id": None, "channel_id": None,          # filled by the bot at setup
+    },
+    "bot_policy": {
+        "enabled": False, "policy": "kick_untrusted",  # kick_untrusted | alert_only
+        "trusted_bot_ids": [], "alert_channel_id": None,
+    },
 }
+
+
+def update_extra_section(db, guild_id: int, section: str, patch: dict) -> None:
+    """Bot-side helper: persist keys into one extra section (e.g. the verification
+    role/channel ids created at setup, or a newly trusted bot id)."""
+    row = db.get(ModerationSettings, guild_id)
+    if row is None:
+        return
+    extra = dict(row.extra or {})
+    sect = dict(extra.get(section) or {})
+    sect.update(patch)
+    extra[section] = sect
+    row.extra = extra
 
 
 def _merged_extra(row: ModerationSettings) -> dict:
