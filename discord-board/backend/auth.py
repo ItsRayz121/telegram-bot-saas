@@ -13,7 +13,7 @@ stored in an httpOnly cookie. No server-side session store needed.
 from __future__ import annotations
 
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime
 from functools import wraps
 from urllib.parse import urlencode
 
@@ -161,10 +161,12 @@ def discord_callback():
         user.username = profile.get("username")
         user.global_name = profile.get("global_name")
         user.avatar = profile.get("avatar")
-        user.access_token = access_token
-        user.refresh_token = token.get("refresh_token")
-        expires_in = int(token.get("expires_in", 0) or 0)
-        user.token_expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
+        # OAuth tokens are used in-hand above and NOT persisted (nothing reads
+        # them back; storing them at rest was an unnecessary liability). Null
+        # out any value stored by earlier builds.
+        user.access_token = None
+        user.refresh_token = None
+        user.token_expires_at = None
         user.last_login_at = datetime.utcnow()
         db.add(user)
 
@@ -176,7 +178,9 @@ def discord_callback():
 
     resp = make_response(redirect(return_to))
     _set_session_cookie(resp, user_id)
-    resp.delete_cookie(_STATE_COOKIE)
+    # Match the attributes the cookie was set with, or some browsers keep it.
+    resp.delete_cookie(_STATE_COOKIE, samesite=Config.SESSION_COOKIE_SAMESITE,
+                       secure=Config.SESSION_COOKIE_SECURE)
     return resp
 
 
@@ -232,7 +236,8 @@ def me():
         if user is None:
             return jsonify(error="unauthorized"), 401
         data = user.to_dict()
-        data["is_admin"] = uid in Config.ADMIN_USER_IDS
+        from admin import is_admin as _is_admin  # env super-admins + DB roles
+        data["is_admin"] = _is_admin(uid)
         return jsonify(data)
     finally:
         db.close()

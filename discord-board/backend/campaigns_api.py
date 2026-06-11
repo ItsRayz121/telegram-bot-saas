@@ -194,7 +194,7 @@ def update_campaign(guild_id: int, cid: int):
         new_status = body["status"]
         if new_status == "active" and c.status != "active":
             if not guild.is_pro and _active_count(guild_id, exclude_id=cid) >= FREE_ACTIVE_LIMIT:
-                return jsonify(error="plan_limit",
+                return jsonify(error="plan_limit_reached",
                                message="Free plan allows one active campaign. Upgrade to Pro for more."), 402
             c.status = "active"
             if c.channel_id:

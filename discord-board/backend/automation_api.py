@@ -25,12 +25,14 @@ from flask import Blueprint, g, jsonify, request
 import automation_runtime
 import access
 import plan_limits
+import urlguard
 from auth import login_required
 from config import Config
 from database import SessionLocal
 from models import (
     AutomationExecution,
     AutomationWorkflow,
+    Channel,
     Guild,
     InboundWebhook,
     MirrorRule,
@@ -76,7 +78,7 @@ def _clean_actions(raw) -> list[dict]:
                 item["minutes"] = 10
         elif atype == "webhook":
             url = str(a.get("url") or "").strip()[:500]
-            if not url.startswith(("http://", "https://")):
+            if not url.startswith(("http://", "https://")) or not urlguard.is_public_url(url):
                 continue
             item["url"] = url
         out.append(item)
@@ -165,6 +167,11 @@ def update_workflow(guild_id: int, wid: int):
             pass
     if "enabled" in body:
         row.enabled = bool(body["enabled"])
+    # Never leave a keyword trigger without its keyword — it would silently
+    # never fire.
+    if row.trigger_type == "message_contains" and not (row.trigger_value or "").strip():
+        g.db.rollback()
+        return jsonify(error="trigger_value_required"), 400
     g.db.commit()
     return jsonify(workflow=row.to_dict())
 
@@ -227,6 +234,15 @@ def create_mirror(guild_id: int):
         return jsonify(error="source_and_dest_channel_required"), 400
     if str(src_id) == str(dest_id):
         return jsonify(error="source_equals_dest"), 400
+    # Cross-guild mirrors need the user's consent on BOTH ends: the destination
+    # channel must belong to this guild or to another guild the user manages.
+    dest = g.db.get(Channel, int(dest_id))
+    if dest is None:
+        return jsonify(error="dest_channel_unknown",
+                       message="Destination channel not found — the bot must be in that server."), 400
+    if dest.guild_id != guild_id and not access.can_manage_guild(g.db, g.user_id, dest.guild_id):
+        return jsonify(error="dest_not_managed",
+                       message="You can only mirror into servers you manage."), 403
     row = MirrorRule(guild_id=guild_id, source_channel_id=int(src_id),
                      dest_channel_id=int(dest_id))
     g.db.add(row)
@@ -343,6 +359,9 @@ def create_outbound(guild_id: int):
     url = str(body.get("url") or "").strip()[:500]
     if not url.startswith(("http://", "https://")):
         return jsonify(error="valid_url_required"), 400
+    if not urlguard.is_public_url(url):
+        return jsonify(error="url_not_public",
+                       message="Webhook URLs must point to a public host."), 400
     events = [e for e in (body.get("events") or []) if e in automation_runtime.OUTBOUND_EVENTS]
     row = OutboundWebhook(
         guild_id=guild_id, url=url, events=events,

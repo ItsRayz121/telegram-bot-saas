@@ -11,6 +11,8 @@ import re
 
 import requests
 
+import urlguard
+
 log = logging.getLogger("guildizer.linkcheck")
 
 _TIMEOUT = 6
@@ -45,7 +47,9 @@ def check_link(url: str) -> str:
                 return "unknown"
             except requests.RequestException:
                 return "unknown"
-    # generic: does the page exist at all?
+    # generic: does the page exist at all? (never probe non-public hosts)
+    if not urlguard.is_public_url(url):
+        return "unknown"
     try:
         resp = requests.head(url, timeout=_TIMEOUT, allow_redirects=True)
         if resp.status_code == 405:  # HEAD not allowed — page likely exists

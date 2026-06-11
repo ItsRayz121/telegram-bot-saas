@@ -120,7 +120,8 @@ function CreateForm({ guildId, channels, onCreated }) {
   async function create() {
     setSaving(true); setError(null);
     try { await guildizerApi.post(`/api/guilds/${guildId}/campaigns`, d); onCreated(); }
-    catch { setError('Could not create campaign.'); } finally { setSaving(false); }
+    catch (e) { setError(e?.response?.data?.message || e?.response?.data?.error || 'Could not create campaign.'); }
+    finally { setSaving(false); }
   }
 
   return (
@@ -156,12 +157,22 @@ function CampaignDetail({ guildId, campaignId, channels, plan, onBack }) {
   }
   useEffect(() => {
     load();
+    if (plan === 'pro') loadBoard(); // auto-load; free plans see the Pro chip
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campaignId]);
 
   async function patch(body) {
     try { const { data } = await guildizerApi.put(base, body); setC((p) => ({ ...p, ...data })); setMsg(null); }
-    catch (e) { setMsg(e?.response?.status === 402 ? 'Free plan allows 1 active campaign — upgrade to Pro.' : 'Update failed.'); }
+    catch (e) {
+      setMsg(e?.response?.status === 402
+        ? (e?.response?.data?.message || 'Free plan allows 1 active campaign — upgrade to Pro.')
+        : (e?.response?.data?.message || 'Update failed.'));
+    }
+  }
+  async function remove() {
+    if (!window.confirm(`Delete "${c.title}"? Its tasks and submissions are removed too.`)) return;
+    try { await guildizerApi.delete(base); onBack(); }
+    catch { setMsg('Delete failed.'); }
   }
   async function addTask() {
     if (!task.title.trim()) return;
@@ -200,6 +211,9 @@ function CampaignDetail({ guildId, campaignId, channels, plan, onBack }) {
               {c.status === 'active' && <Button size="small" variant="outlined" onClick={() => patch({ status: 'paused' })}>Pause</Button>}
               {c.status === 'active' && <Button size="small" variant="outlined" onClick={post}>Re-post</Button>}
               <Button size="small" variant="outlined" color="inherit" onClick={() => patch({ status: 'closed' })}>Close</Button>
+              {c.status !== 'active' && (
+                <Button size="small" variant="outlined" color="error" onClick={remove}>Delete</Button>
+              )}
             </Stack>
             {c.post_status === 'posted' && <Typography variant="caption" color="success.main" display="block" mt={1}>Posted ✓</Typography>}
             {c.post_status === 'failed' && <Typography variant="caption" color="error" display="block" mt={1}>Post failed: {c.post_error}</Typography>}
@@ -262,7 +276,7 @@ function CampaignDetail({ guildId, campaignId, channels, plan, onBack }) {
           <Card variant="outlined"><CardContent>
             <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
               <Typography variant="subtitle1" fontWeight={700}>Leaderboard {plan !== 'pro' && <Chip size="small" label="Pro" sx={{ ml: 1 }} />}</Typography>
-              <Button size="small" variant="outlined" onClick={loadBoard}>Load</Button>
+              <Button size="small" variant="outlined" onClick={loadBoard}>{board ? 'Refresh' : 'Load'}</Button>
             </Stack>
             {board && board.length === 0 && <Typography variant="body2" color="text.secondary">No verified submissions yet.</Typography>}
             {board && (

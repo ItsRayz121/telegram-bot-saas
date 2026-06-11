@@ -15,6 +15,7 @@ from datetime import datetime
 
 import requests
 
+import urlguard
 from database import SessionLocal
 from models import AutomationExecution, AutomationWorkflow, InboundWebhook, MirrorRule, OutboundWebhook
 
@@ -188,6 +189,9 @@ def dispatch_event(guild_id: int, event: str, data: dict) -> None:
     for hook_id, url, secret, events in hooks:
         if events and event not in events:
             continue
+        if not urlguard.is_public_url(url):
+            _record_delivery(hook_id, "blocked: non-public URL")
+            continue
         headers = {"Content-Type": "application/json", "X-Guildizer-Event": event}
         if secret:
             headers["X-Guildizer-Signature"] = hmac.new(
@@ -206,6 +210,9 @@ def dispatch_event(guild_id: int, event: str, data: dict) -> None:
 def post_workflow_webhook(url: str, payload: dict) -> None:
     """POST a workflow's own webhook action to ITS configured URL (distinct from
     the guild-level outbound subscriptions). Sync; never raises."""
+    if not urlguard.is_public_url(url):
+        log.warning("workflow webhook blocked (non-public URL): %s", url)
+        return
     try:
         requests.post(url, json=payload, timeout=_DISPATCH_TIMEOUT,
                       headers={"X-Guildizer-Event": "workflow_fired"})

@@ -66,13 +66,20 @@ _routing_loaded_at: float = 0.0
 
 
 def _load_routing() -> None:
-    """Sync DB read — call off-loop via to_thread."""
+    """Sync DB read — call off-loop via to_thread.
+
+    Only links to RUNNING custom bots count: if a custom bot is disabled or in
+    error (dead token), its guilds fall back to the official bot so the server
+    keeps working. Both lineages run in one process and share this map, so the
+    hand-off flips atomically for both identities — no double-handling window.
+    """
     global _routing_map, _routing_loaded_at
     db = SessionLocal()
     try:
         rows = (
             db.query(Guild.id, Guild.custom_bot_id)
-            .filter(Guild.custom_bot_id.isnot(None))
+            .join(CustomBot, CustomBot.id == Guild.custom_bot_id)
+            .filter(Guild.custom_bot_id.isnot(None), CustomBot.status == "active")
             .all()
         )
         _routing_map = {gid: cbid for gid, cbid in rows}
@@ -105,6 +112,16 @@ _imageai_last: dict[int, float] = {}                # gid -> monotonic ts
 _escalation_last: dict[tuple[int, int], float] = {}
 _dm_last: dict[tuple[int, int], float] = {}
 
+_RATE_MAP_MAX_AGE = 3600  # entries older than this are dead weight
+
+
+def _sweep_rate_maps() -> None:
+    """Drop stale per-user rate-limit entries so the maps stay bounded."""
+    cutoff = time.monotonic() - _RATE_MAP_MAX_AGE
+    for m in (_smartmod_last, _imageai_last, _escalation_last, _dm_last):
+        for key in [k for k, ts in m.items() if ts < cutoff]:
+            m.pop(key, None)
+
 # ── Activity buffers (Phase 15) — flushed every ~60s by process_mod_actions ────
 _activity_buffer: dict[tuple[int, int], list] = {}   # (gid, uid) -> [add_msgs, username]
 _daily_msg_buffer: dict[int, int] = {}                # gid -> messages
@@ -116,6 +133,39 @@ def _note_activity(guild_id: int, user_id: int, username: str, counted_by_leveli
     if not counted_by_leveling:
         entry[0] += 1
     entry[1] = username
+
+
+# ── Data retention (append-only tables would otherwise grow forever) ───────────
+_RETENTION = (
+    ("feature_usage_events", 180),
+    ("bot_health_events", 90),
+    ("automation_executions", 90),
+)
+_last_prune_day: str | None = None
+
+
+def prune_old_rows() -> None:
+    """Sync — call off-loop. Runs the deletes at most once per UTC day."""
+    global _last_prune_day
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    if _last_prune_day == today:
+        return
+    _last_prune_day = today
+    from sqlalchemy import text as _text
+
+    db = SessionLocal()
+    try:
+        for table, days in _RETENTION:
+            cutoff = datetime.utcnow() - timedelta(days=days)
+            db.execute(_text(f"DELETE FROM {table} WHERE created_at < :cutoff"),
+                       {"cutoff": cutoff})
+        db.commit()
+    except Exception:  # noqa: BLE001
+        db.rollback()
+        log.exception("retention prune failed")
+    finally:
+        db.close()
+        SessionLocal.remove()
 
 
 # ── Health events (dashboard + admin fleet view) ───────────────────────────────
@@ -937,6 +987,11 @@ class CoreMixin:
                 )
             await asyncio.to_thread(self._mark_mod_action_done, aid)
 
+        # housekeeping: bounded rate maps + daily retention prune
+        _sweep_rate_maps()
+        if self.custom_bot_id is None:   # one identity owns the prune
+            await asyncio.to_thread(prune_old_rows)
+
         # flush activity buffers (Phase 15)
         if _activity_buffer:
             items = [(gid, uid, entry[1], entry[0])
@@ -963,10 +1018,12 @@ class CoreMixin:
                 if await governor.safe(member.kick(reason="Guildizer: verification timed out"),
                                        what="verification timeout kick"):
                     await asyncio.to_thread(self._log, guild.id, "verification", "kick",
-                                            row["user_id"], row["username"], "verification timed out")
+                                            row["user_id"], row["username"], None,
+                                            "verification timed out")
             else:
                 await asyncio.to_thread(self._log, guild.id, "verification", "expired",
-                                        row["user_id"], row["username"], "challenge expired (kept)")
+                                        row["user_id"], row["username"], None,
+                                        "challenge expired (kept)")
 
     @process_mod_actions.before_loop
     async def _before_mod_actions(self) -> None:
@@ -1377,8 +1434,7 @@ def attach_builtin_commands(client) -> None:
         due = await asyncio.to_thread(
             CoreMixin._add_reminder, gid, interaction.user.id, text, seconds
         )
-        ts = int(due.replace(tzinfo=None).timestamp()) if hasattr(due, "timestamp") else None
-        when_str = f"<t:{int(due.timestamp())}:R>" if ts else "soon"
+        when_str = f"<t:{assistant.utc_ts(due)}:R>" if hasattr(due, "timestamp") else "soon"
         await interaction.response.send_message(f"⏰ Okay! I'll remind you {when_str}: {text}", ephemeral=True)
 
     @client.tree.command(name="reminders", description="List your pending reminders.")
@@ -1387,7 +1443,7 @@ def attach_builtin_commands(client) -> None:
         if not rows:
             await interaction.response.send_message("You have no pending reminders.", ephemeral=True)
             return
-        lines = [f"• {text} — <t:{int(due.timestamp())}:R>" for text, due in rows]
+        lines = [f"• {text} — <t:{assistant.utc_ts(due)}:R>" for text, due in rows]
         await interaction.response.send_message("⏰ **Your reminders**\n" + "\n".join(lines), ephemeral=True)
 
     @client.tree.command(name="note", description="Save a personal note.")

@@ -32,8 +32,9 @@ class User(Base):
     global_name = Column(String(120))                  # Discord display name
     avatar = Column(String(255))
 
-    # OAuth2 tokens — used to re-fetch the user's guild list later.
-    # Lives only in Guildizer's own DB (never shared with Telegizer).
+    # Legacy OAuth2 token columns — no longer written (tokens are used in-hand
+    # during the OAuth callback and never persisted). Kept for schema compat;
+    # values are nulled on each login.
     access_token = Column(String(255))
     refresh_token = Column(String(255))
     token_expires_at = Column(DateTime)

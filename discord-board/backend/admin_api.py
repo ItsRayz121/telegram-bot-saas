@@ -368,10 +368,13 @@ def ai_usage():
 @admin_required
 def purge_user(user_id: int):
     """GDPR purge (Phase 19 compliance): delete the user's personal data.
-    Guild-level rows they administered stay (they belong to the server)."""
+    Guild-level rows they administered stay (they belong to the server), but
+    their username is anonymized wherever it appears in those rows."""
     from admin import audit, is_super
-    from models import (CustomBot, Guild, GuildTeamMember, Member, Note,
-                        Reminder, Task, User, UserGuild, UserNotification)
+    from models import (CampaignSubmission, CustomBot, Guild, GuildTeamMember,
+                        InviteJoin, Member, MemberWarning, ModReport, Note,
+                        ProtectionEvent, Reminder, Task, User, UserGuild,
+                        UserNotification)
     if not is_super(g.user_id):
         return jsonify(error="super_admin_required"), 403
 
@@ -381,6 +384,23 @@ def purge_user(user_id: int):
                        (GuildTeamMember, GuildTeamMember.user_id),
                        (UserGuild, UserGuild.user_id), (Member, Member.user_id)):
         counts[model.__tablename__] = g.db.query(model).filter(col == user_id).delete()
+
+    # Guild-owned records stay, but usernames are personal data — anonymize.
+    anonymized = 0
+    for model, id_col, name_col in (
+        (MemberWarning, MemberWarning.user_id, "username"),
+        (MemberWarning, MemberWarning.moderator_id, "moderator_name"),
+        (CampaignSubmission, CampaignSubmission.user_id, "username"),
+        (ProtectionEvent, ProtectionEvent.user_id, "username"),
+        (InviteJoin, InviteJoin.inviter_id, "inviter_name"),
+        (InviteJoin, InviteJoin.joiner_id, "joiner_name"),
+        (ModReport, ModReport.reporter_id, "reporter_name"),
+        (ModReport, ModReport.target_id, "target_name"),
+    ):
+        anonymized += g.db.query(model).filter(id_col == user_id).update(
+            {name_col: None}, synchronize_session=False)
+    counts["usernames_anonymized"] = anonymized
+
     bots = g.db.query(CustomBot).filter(CustomBot.owner_user_id == user_id).all()
     for b in bots:
         g.db.query(Guild).filter(Guild.custom_bot_id == b.id).update({"custom_bot_id": None})

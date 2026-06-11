@@ -48,5 +48,6 @@ def limit(db, guild_id: int, key: str) -> int:
 
 def limit_response(key: str, value: int):
     from flask import jsonify
+    # 402 everywhere a plan limit blocks an action (campaigns set the precedent).
     return jsonify(error="plan_limit_reached", limit_key=key, limit=value,
-                   message="Upgrade to Pro for more."), 403
+                   message="Upgrade to Pro for more."), 402

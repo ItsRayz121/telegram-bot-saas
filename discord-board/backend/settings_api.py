@@ -24,7 +24,16 @@ from models import CustomCommand, Guild, UserGuild
 settings_bp = Blueprint("settings", __name__)
 
 _NAME_RE = re.compile(r"^[a-z0-9_-]{1,32}$")
-_RESERVED = {"ping"}  # built-in commands the bot owns
+# Built-in commands every bot identity registers globally. Guild commands
+# override globals in Discord, so a custom command with one of these names
+# would silently hijack the built-in.
+_RESERVED = {
+    "ping", "rank", "leaderboard",
+    "remind", "reminders", "note", "notes", "task", "tasks", "done", "ask",
+    "wallet", "mywallet", "invitelink",
+    "warn", "warnings", "removewarning", "mute", "unmute", "kick", "ban",
+    "unban", "tempban", "purge", "userinfo", "auditlog", "report",
+}
 
 
 def _manage_or_403(guild_id: int):

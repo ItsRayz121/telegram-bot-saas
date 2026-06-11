@@ -3,7 +3,9 @@
 Standalone web service for the dashboard. Runs separately from the Discord bot
 (see bot.py). Zero imports from the Telegizer codebase.
 """
-from flask import Flask, jsonify
+from urllib.parse import urlparse
+
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 from admin_api import admin_bp
@@ -31,6 +33,22 @@ def create_app() -> Flask:
 
     # Allow the Vite dev server + (later) the production dashboard.
     CORS(app, resources={r"/*": {"origins": [Config.FRONTEND_URL]}}, supports_credentials=True)
+
+    # CSRF defense-in-depth: state-changing requests from a browser must come
+    # from our own frontend. Server-to-server callers (NOWPayments IPN, inbound
+    # webhooks) send no Origin header, so they pass untouched.
+    _allowed_origin = urlparse(Config.FRONTEND_URL).netloc.lower()
+
+    @app.before_request
+    def _reject_cross_site_writes():
+        if request.method in ("GET", "HEAD", "OPTIONS"):
+            return None
+        origin = request.headers.get("Origin")
+        if not origin:
+            return None
+        if urlparse(origin).netloc.lower() != _allowed_origin:
+            return jsonify(error="cross_origin_rejected"), 403
+        return None
 
     init_db()
 

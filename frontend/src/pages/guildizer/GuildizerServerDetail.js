@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Box, Typography, Tabs, Tab, Card, CardContent, Grid, Avatar, Stack,
   List, ListItem, ListItemText, Chip, CircularProgress, Alert, Button,
@@ -28,7 +28,11 @@ const TABS = ['Overview', 'Settings', 'Commands', 'Content', 'Automation', 'Prot
 export default function GuildizerServerDetail() {
   const { guildId } = useParams();
   const navigate = useNavigate();
-  const [tab, setTab] = useState(0);
+  // Deep-linkable tabs: /guildizer/servers/<id>?tab=Protection
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = TABS.indexOf(searchParams.get('tab'));
+  const tab = tabParam >= 0 ? tabParam : 0;
+  const setTab = (v) => setSearchParams(v === 0 ? {} : { tab: TABS[v] }, { replace: true });
   const [state, setState] = useState({ loading: true, guild: null, error: null });
 
   useEffect(() => {

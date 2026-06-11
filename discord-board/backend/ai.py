@@ -33,18 +33,37 @@ def is_configured() -> bool:
     return bool(Config.ANTHROPIC_API_KEY)
 
 
+_client = None
+
+
+def _get_client():
+    """Shared Anthropic client (lazy; None if the SDK isn't installed)."""
+    global _client
+    if _client is None:
+        try:
+            import anthropic  # lazy: optional dependency
+        except ImportError:
+            log.warning("anthropic SDK not installed; AI features disabled")
+            return None
+        _client = anthropic.Anthropic(api_key=Config.ANTHROPIC_API_KEY)
+    return _client
+
+
+def _verdict(text: str, positive: str) -> str | None:
+    """Strict one-word classifier parse: the reply must BE the positive label
+    (not merely contain it — 'NOT PROMO' must read as ok)."""
+    first = (text or "").strip().upper().strip(".,!\"'")
+    return positive if first.split()[:1] == [positive] else None
+
+
 def ask(prompt: str) -> AIResult | None:
     """Return an AIResult, or None if AI is unavailable/errored."""
     if not is_configured():
         return None
-    try:
-        import anthropic  # lazy: optional dependency
-    except ImportError:
-        log.warning("anthropic SDK not installed; /ask disabled")
+    client = _get_client()
+    if client is None:
         return None
-
     try:
-        client = anthropic.Anthropic(api_key=Config.ANTHROPIC_API_KEY)
         resp = client.messages.create(
             model=Config.AI_MODEL,
             max_tokens=Config.AI_MAX_TOKENS,
@@ -69,12 +88,10 @@ def complete(system: str, prompt: str, max_tokens: int | None = None) -> AIResul
     degradation as ask()."""
     if not is_configured():
         return None
-    try:
-        import anthropic
-    except ImportError:
+    client = _get_client()
+    if client is None:
         return None
     try:
-        client = anthropic.Anthropic(api_key=Config.ANTHROPIC_API_KEY)
         resp = client.messages.create(
             model=Config.AI_MODEL,
             max_tokens=max_tokens or Config.AI_MAX_TOKENS,
@@ -106,7 +123,7 @@ def classify_promo(text: str, group_topic: str) -> tuple[str, AIResult] | None:
     result = complete(system, text, max_tokens=5)
     if result is None:
         return None
-    verdict = "promo" if "PROMO" in result.text.upper() else "ok"
+    verdict = "promo" if _verdict(result.text, "PROMO") else "ok"
     return verdict, result
 
 
@@ -114,12 +131,10 @@ def check_image(image_url: str) -> tuple[str, AIResult] | None:
     """Vision moderation: 'nsfw' | 'ok'. Returns None when AI unavailable."""
     if not is_configured():
         return None
-    try:
-        import anthropic
-    except ImportError:
+    client = _get_client()
+    if client is None:
         return None
     try:
-        client = anthropic.Anthropic(api_key=Config.ANTHROPIC_API_KEY)
         resp = client.messages.create(
             model=Config.AI_MODEL,
             max_tokens=5,
@@ -136,7 +151,7 @@ def check_image(image_url: str) -> tuple[str, AIResult] | None:
         result = AIResult(text=text.strip(), model=Config.AI_MODEL,
                           input_tokens=getattr(usage, "input_tokens", 0) or 0,
                           output_tokens=getattr(usage, "output_tokens", 0) or 0)
-        return ("nsfw" if "NSFW" in text.upper() else "ok"), result
+        return ("nsfw" if _verdict(text, "NSFW") else "ok"), result
     except Exception:  # noqa: BLE001
         log.exception("AI image check failed")
         return None

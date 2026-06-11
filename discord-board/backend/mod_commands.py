@@ -177,7 +177,7 @@ def attach_mod_commands(client) -> None:  # noqa: C901  (a flat list of commands
         if not rows:
             return await _deny(interaction, f"{member.display_name} has no warnings. ✨")
         lines = [
-            f"• <t:{int(created.timestamp())}:R> by {mod_name or 'automod'} — {reason or 'no reason'}"
+            f"• <t:{assistant.utc_ts(created)}:R> by {mod_name or 'automod'} — {reason or 'no reason'}"
             for created, mod_name, reason in rows
         ]
         await interaction.response.send_message(
@@ -374,7 +374,7 @@ def attach_mod_commands(client) -> None:  # noqa: C901  (a flat list of commands
         if not rows:
             return await _deny(interaction, "No moderation activity recorded yet.")
         lines = [
-            f"• <t:{int(ts.timestamp())}:R> `{cat}/{act}`"
+            f"• <t:{assistant.utc_ts(ts)}:R> `{cat}/{act}`"
             + (f" {who}" if who else "") + (f" — {detail}" if detail else "")
             for ts, cat, act, who, detail in rows
         ]

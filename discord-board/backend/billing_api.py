@@ -84,8 +84,9 @@ def checkout(guild_id: int):
             amount=Config.PRO_PRICE_USD,
             currency="usd",
             ipn_url=f"{Config.BACKEND_URL}/webhooks/nowpayments",
-            success_url=f"{Config.FRONTEND_URL}/servers/{guild_id}",
-            cancel_url=f"{Config.FRONTEND_URL}/servers/{guild_id}",
+            # The dashboard lives under the Guildizer section of the main frontend.
+            success_url=f"{Config.FRONTEND_URL}{Config.GUILDIZER_FRONTEND_PATH}/servers/{guild_id}",
+            cancel_url=f"{Config.FRONTEND_URL}{Config.GUILDIZER_FRONTEND_PATH}/servers/{guild_id}",
         )
     except requests.RequestException:
         log.exception("NOWPayments invoice creation failed")
@@ -125,10 +126,20 @@ def nowpayments_ipn():
             sub.payment_id = payment_id
 
         if status in nowpayments.PAID_STATUSES and sub.status != "active":
-            guild = db.get(Guild, sub.guild_id)
-            if guild is not None:
-                billing.activate_pro(db, guild, sub)
-                log.info("Activated Pro for guild %s via order %s", sub.guild_id, order_id)
+            # Defense-in-depth: the signature already authenticates the IPN, but
+            # never activate on a price below what the subscription charges.
+            try:
+                paid = float(data.get("price_amount") or 0)
+            except (TypeError, ValueError):
+                paid = 0.0
+            if paid and paid < (sub.amount or 0) * 0.99:
+                log.warning("IPN for order %s reports price %.2f below expected %s — not activating",
+                            order_id, paid, sub.amount)
+            else:
+                guild = db.get(Guild, sub.guild_id)
+                if guild is not None:
+                    billing.activate_pro(db, guild, sub)
+                    log.info("Activated Pro for guild %s via order %s", sub.guild_id, order_id)
         elif status in ("failed", "expired", "refunded"):
             if sub.status != "active":
                 sub.status = "failed"

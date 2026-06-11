@@ -78,6 +78,9 @@ def guild_detail(guild_id: int):
     if guild is None:
         return jsonify(error="not_found"), 404
 
+    # Team-seat users have no UserGuild row — they're never the owner.
+    membership = g.db.get(UserGuild, {"user_id": g.user_id, "guild_id": guild_id})
+
     channels = (
         g.db.query(Channel)
         .filter(Channel.guild_id == guild_id)
@@ -92,7 +95,7 @@ def guild_detail(guild_id: int):
     )
 
     data = guild.to_dict()
-    data["is_owner"] = bool(membership.is_owner)
+    data["is_owner"] = bool(membership.is_owner) if membership is not None else False
     data["channels"] = [c.to_dict() for c in channels]
     data["roles"] = [r.to_dict() for r in roles]
     if not guild.bot_present:

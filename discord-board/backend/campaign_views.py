@@ -93,7 +93,7 @@ class ProofButton(discord.ui.DynamicItem[discord.ui.Button], template=r"gz:proof
             )
 
 
-def build_embed(data: dict) -> discord.Embed:
+def build_embed(data: dict, brand: str = "Guildizer") -> discord.Embed:
     embed = discord.Embed(title=data["title"][:256], description=(data["description"] or None), color=ACCENT)
     if data["tasks"]:
         for t in data["tasks"]:
@@ -111,7 +111,8 @@ def build_embed(data: dict) -> discord.Embed:
             reward = (reward + " · " if reward else "") + data["reward_label"]
         if reward:
             embed.add_field(name="Reward", value=reward[:1024], inline=False)
-    embed.set_footer(text="Guildizer • tap a button below to submit proof")
+    # White-label bots brand the footer with their own name, not ours.
+    embed.set_footer(text=f"{brand} • tap a button below to submit proof")
     return embed
 
 
@@ -150,8 +151,9 @@ async def post_campaign(bot, cid: int) -> None:
         except Exception:  # noqa: BLE001 — old message may be gone; ignore
             pass
 
+    brand = (bot.user.name if bot.user else None) or "Guildizer"
     try:
-        msg = await channel.send(embed=build_embed(data), view=build_view(data))
+        msg = await channel.send(embed=build_embed(data, brand=brand), view=build_view(data))
         await asyncio.to_thread(cr.mark_posted, cid, msg.id)
         log.info("Posted campaign %s to channel %s", cid, data["channel_id"])
     except discord.Forbidden:

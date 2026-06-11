@@ -4,12 +4,20 @@ and the AI-usage ledger. No discord.py; the bot owns delivery.
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from models import AITokenUsage, Note, Reminder
 
 _DUR_RE = re.compile(r"(\d+)\s*([smhdw])", re.I)
 _UNIT_SECONDS = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
+
+
+def utc_ts(dt) -> int:
+    """Epoch seconds for a naive-UTC DB datetime. Naive .timestamp() would
+    interpret it in the server's local zone — wrong anywhere but UTC."""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return int(dt.timestamp())
 
 
 def parse_duration(text: str) -> int | None:

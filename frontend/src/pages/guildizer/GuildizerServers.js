@@ -28,11 +28,12 @@ export default function GuildizerServers() {
     let alive = true;
     (async () => {
       try {
-        await guildizerApi.get('/auth/me'); // 401 → not connected
+        const { data: me } = await guildizerApi.get('/auth/me'); // 401 → not connected
         const { data } = await guildizerApi.get('/api/guilds');
-        if (alive) setState({ loading: false, connected: true, guilds: data.guilds, inviteUrl: data.invite_url });
-        // probe admin access (200 only for Guildizer admins) — quietly ignore 403
-        guildizerApi.get('/api/admin/overview').then(() => alive && setIsAdmin(true)).catch(() => {});
+        if (alive) {
+          setState({ loading: false, connected: true, guilds: data.guilds, inviteUrl: data.invite_url });
+          setIsAdmin(!!me.is_admin);
+        }
       } catch (e) {
         if (!alive) return;
         if (e?.response?.status === 401) setState({ loading: false, connected: false, guilds: [], inviteUrl: null });
