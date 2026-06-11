@@ -167,6 +167,40 @@ Final tab bar: `Overview · Moderation · Members · Engagement · AI & Integrat
 ## Server-level tabs kept (no Telegizer group equivalent)
 - Overview (channels/roles) · Commands (custom slash commands) · Team (seats/invites) · Billing (plan, checkout, history, promo)
 
+## Discord-native additions (beyond Telegizer parity — proposed, not yet approved)
+
+Features Telegram simply doesn't have; these would make Guildizer feel native rather than ported.
+Ranked by impact-per-effort:
+
+1. **Reaction roles / button roles** (Members › new "Self-roles" subtab) — the single most
+   expected Discord bot feature; pairs with the existing autorole + role-rewards plumbing.
+2. **Anti-nuke guard** (Moderation › AutoMod) — alert/revert on mass channel/role deletions or
+   mass bans by a compromised admin account; natural extension of bot_policy + raid guard.
+3. **Ticket system** (new Engagement or server-level subtab) — button → private support thread,
+   with transcript on close; Discord-native support flow.
+4. **Join-to-create voice channels + voice XP** (Members › XP & Roles) — temp voice rooms;
+   award XP for voice minutes (leveling2 already has the storage pattern).
+5. **Starboard** (Engagement) — ⭐-threshold reposts to a best-of channel.
+6. **Discord native AutoMod sync** (Moderation › AutoMod) — push banned words/links into
+   Discord's built-in AutoMod via API so filtering happens even when the bot is down.
+7. **Embed builder for Scheduler** (Automation › Scheduler) — title/color/image embeds, the
+   Discord-native equivalent of Telegram rich posts.
+8. **Auto-publish announcements** (Automation) — auto-publish posts in announcement channels
+   to follower servers.
+9. **Boost tracking** (Engagement) — thank-you message + booster role + XP on server boost.
+10. **Scheduled events integration** (Engagement) — create Discord server events from the
+    dashboard; remind attendees.
+11. **Thread auto-management** (Automation) — auto-thread on posts in chosen channels,
+    auto-archive policy.
+12. **Server settings backup/restore** (server-level) — snapshot roles/channels/permissions.
+
+Telegram concepts intentionally NOT ported (no Discord equivalent / natively covered):
+- "Admin must start the bot" DM-readiness checks — Discord DMs work by default
+- Forum-topic routing — replaced by per-channel selects throughout
+- Contact/location-share blocking — Discord has no such message types
+- Mini App / TMA — nearest future analog is Discord Activities (out of scope)
+- Slow mode, native spoiler blocking — Discord has these built into channel settings
+
 ## Build order
 1. ✅ This plan.
 2. Frontend shell: 6 grouped tabs + subtab bars in `GuildizerServerDetail.js` (URL-driven `?tab=&sub=`).
