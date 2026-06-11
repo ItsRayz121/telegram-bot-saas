@@ -44,7 +44,9 @@ import protection
 import raid_guard
 import self_roles
 import settings as settings_mod
+import starboard
 import stats_runtime
+import tickets
 import verification
 import voice_features
 from database import SessionLocal
@@ -1002,6 +1004,12 @@ class CoreMixin:
             return
         await anti_nuke.handle(self, guild, "channel_delete", channel.id)
 
+    async def on_raw_thread_delete(self, payload: discord.RawThreadDeleteEvent) -> None:
+        if payload.guild_id is None or not serves(self, payload.guild_id):
+            return
+        # an admin hand-deleted a ticket thread — drop its open-ticket record
+        await asyncio.to_thread(tickets.forget_thread, payload.guild_id, payload.thread_id)
+
     async def on_guild_role_delete(self, role: discord.Role) -> None:
         if not serves(self, role.guild.id):
             return
@@ -1172,6 +1180,7 @@ class CoreMixin:
         guild = self.get_guild(payload.guild_id)
         if guild is None:
             return
+        await starboard.handle_reaction(self, payload, guild, add=True)
         member = payload.member or guild.get_member(payload.user_id)
         if member is None or member.bot:
             return
@@ -1187,6 +1196,7 @@ class CoreMixin:
         guild = self.get_guild(payload.guild_id)
         if guild is None:
             return
+        await starboard.handle_reaction(self, payload, guild, add=False)
         # raw remove events never carry .member; resolve from the cache instead
         member = guild.get_member(payload.user_id)
         if member is None or member.bot:
@@ -1303,6 +1313,10 @@ class CoreMixin:
             await self_roles.process_pending(self)
         except Exception:  # noqa: BLE001
             log.exception("self-role post processing failed")
+        try:
+            await tickets.process_pending(self)
+        except Exception:  # noqa: BLE001
+            log.exception("ticket panel processing failed")
 
     @post_campaigns.before_loop
     async def _before_post(self) -> None:

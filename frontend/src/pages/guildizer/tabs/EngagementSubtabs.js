@@ -1,13 +1,14 @@
 /**
- * Engagement area subtabs (Telegizer-parity IA): Raids · Invite Links.
- * (The Campaigns subtab reuses CampaignsTab directly.)
+ * Engagement area subtabs (Telegizer-parity IA): Raids · Invite Links ·
+ * Tickets · Starboard. (The Campaigns subtab reuses CampaignsTab directly.)
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   Box, Grid, Card, CardContent, Typography, TextField, MenuItem, Button, Chip,
   CircularProgress, Alert, List, ListItem, ListItemText, Stack,
+  FormControlLabel, Switch,
 } from '@mui/material';
-import { RocketLaunch } from '@mui/icons-material';
+import { RocketLaunch, Send, DeleteOutline } from '@mui/icons-material';
 import guildizerApi from '../../../services/guildizerApi';
 
 const TEXT_TYPES = new Set([0, 5]);
@@ -209,6 +210,224 @@ export function InviteLinksSubtab({ guildId }) {
           </List>
         </CardContent></Card>
       </Grid>
+    </Grid>
+  );
+}
+
+// ── Tickets: button → private support thread, transcript on close ─────────────
+export function TicketsSubtab({ guildId, channels = [], roles = [] }) {
+  const textChannels = channels.filter((c) => TEXT_TYPES.has(c.type));
+  const assignableRoles = roles.filter((r) => !r.managed && r.name !== '@everyone');
+  const [cfg, setCfg] = useState(null);
+  const [error, setError] = useState(null);
+  const [saved, setSaved] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const reload = useCallback(async () => {
+    try {
+      const { data } = await guildizerApi.get(`/api/guilds/${guildId}/tickets`);
+      setCfg(data); setError(null);
+    } catch { setError('Failed to load ticket settings.'); }
+  }, [guildId]);
+
+  useEffect(() => { reload(); }, [reload]);
+
+  const set = (patch) => { setSaved(false); setCfg((c) => ({ ...c, ...patch })); };
+
+  async function save() {
+    setBusy(true);
+    try {
+      const { data } = await guildizerApi.put(`/api/guilds/${guildId}/tickets`, cfg);
+      setCfg(data); setSaved(true); setError(null);
+    } catch { setError('Save failed.'); }
+    setBusy(false);
+  }
+
+  async function postPanel() {
+    setBusy(true);
+    try {
+      await guildizerApi.put(`/api/guilds/${guildId}/tickets`, cfg);
+      await guildizerApi.post(`/api/guilds/${guildId}/tickets/panel`);
+      await reload();
+    } catch (e) { setError(e?.response?.data?.message || 'Could not queue the panel.'); }
+    setBusy(false);
+  }
+
+  async function removePanel() {
+    setBusy(true);
+    try {
+      await guildizerApi.delete(`/api/guilds/${guildId}/tickets/panel`);
+      await reload();
+    } catch { setError('Could not queue the removal.'); }
+    setBusy(false);
+  }
+
+  if (cfg === null) return <Box sx={{ display: 'grid', placeItems: 'center', py: 4 }}><CircularProgress /></Box>;
+
+  const panelStatus = cfg.needs_post ? { label: 'posting…', color: 'warning' }
+    : cfg.needs_delete ? { label: 'removing…', color: 'warning' }
+    : cfg.post_error ? { label: cfg.post_error, color: 'error' }
+    : cfg.panel_message_id ? { label: 'panel posted', color: 'success' }
+    : { label: 'not posted', color: 'default' };
+
+  return (
+    <Grid container spacing={2}>
+      {error && <Grid item xs={12}><Alert severity="warning" onClose={() => setError(null)}>{error}</Alert></Grid>}
+
+      <Grid item xs={12} md={7}>
+        <Card variant="outlined"><CardContent>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
+            <Typography variant="subtitle1" fontWeight={700}>Ticket system</Typography>
+            <FormControlLabel sx={{ mr: 0 }} label="Enabled"
+              control={<Switch checked={!!cfg.enabled} onChange={(e) => set({ enabled: e.target.checked })} />} />
+          </Stack>
+          <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+            Members click a button on the panel to open a private support thread.
+            Closing a ticket posts its transcript to the channel you pick below.
+          </Typography>
+          <TextField select fullWidth size="small" margin="dense" label="Panel channel"
+            value={cfg.panel_channel_id || ''} onChange={(e) => set({ panel_channel_id: e.target.value || null })}>
+            <MenuItem value="">— pick a channel —</MenuItem>
+            {textChannels.map((c) => <MenuItem key={c.id} value={c.id}># {c.name}</MenuItem>)}
+          </TextField>
+          <TextField fullWidth size="small" margin="dense" label="Panel title"
+            value={cfg.panel_title} inputProps={{ maxLength: 256 }} onChange={(e) => set({ panel_title: e.target.value })} />
+          <TextField fullWidth multiline minRows={2} size="small" margin="dense" label="Panel message"
+            value={cfg.panel_message} inputProps={{ maxLength: 2000 }} onChange={(e) => set({ panel_message: e.target.value })} />
+          <TextField fullWidth size="small" margin="dense" label="Button label"
+            value={cfg.button_label} inputProps={{ maxLength: 80 }} onChange={(e) => set({ button_label: e.target.value })} />
+          <TextField select fullWidth size="small" margin="dense" label="Support role (pinged into each ticket)"
+            value={cfg.support_role_id || ''} onChange={(e) => set({ support_role_id: e.target.value || null })}>
+            <MenuItem value="">— none —</MenuItem>
+            {assignableRoles.map((r) => <MenuItem key={r.id} value={r.id}>{r.name}</MenuItem>)}
+          </TextField>
+          <TextField select fullWidth size="small" margin="dense" label="Transcript channel"
+            value={cfg.transcript_channel_id || ''} onChange={(e) => set({ transcript_channel_id: e.target.value || null })}>
+            <MenuItem value="">— don't keep transcripts —</MenuItem>
+            {textChannels.map((c) => <MenuItem key={c.id} value={c.id}># {c.name}</MenuItem>)}
+          </TextField>
+          <TextField fullWidth multiline minRows={2} size="small" margin="dense"
+            label="First message inside a new ticket (optional)"
+            value={cfg.welcome_message} inputProps={{ maxLength: 1500 }} onChange={(e) => set({ welcome_message: e.target.value })} />
+          <TextField type="number" size="small" margin="dense" label="Max open tickets per member"
+            value={cfg.max_open_per_member} inputProps={{ min: 1, max: 10 }}
+            onChange={(e) => set({ max_open_per_member: Number(e.target.value) })} sx={{ width: 220 }} />
+          <Stack direction="row" spacing={1} alignItems="center" mt={1} flexWrap="wrap" useFlexGap>
+            <Button variant="contained" size="small" disabled={busy} onClick={save}>
+              {saved ? 'Saved ✓' : 'Save'}
+            </Button>
+            <Button startIcon={<Send />} variant="outlined" size="small"
+              disabled={busy || !cfg.panel_channel_id} onClick={postPanel}>
+              {cfg.panel_message_id ? 'Re-post panel' : 'Post panel'}
+            </Button>
+            {cfg.panel_message_id && (
+              <Button startIcon={<DeleteOutline />} color="inherit" size="small"
+                disabled={busy} onClick={removePanel}>
+                Remove panel
+              </Button>
+            )}
+            <Chip size="small" variant="outlined" label={panelStatus.label} color={panelStatus.color} />
+          </Stack>
+        </CardContent></Card>
+      </Grid>
+
+      <Grid item xs={12} md={5}>
+        <Card variant="outlined"><CardContent>
+          <Typography variant="subtitle1" fontWeight={700} mb={1}>
+            Open tickets {cfg.open?.length ? `(${cfg.open.length})` : ''}
+          </Typography>
+          {(!cfg.open || cfg.open.length === 0) &&
+            <Typography variant="body2" color="text.secondary">No open tickets. {cfg.counter > 0 ? `${cfg.counter} handled so far.` : ''}</Typography>}
+          <List dense>
+            {(cfg.open || []).map((t) => (
+              <ListItem key={t.thread_id} disableGutters
+                secondaryAction={<Typography variant="caption" color="text.disabled">
+                  {t.opened_at ? new Date(t.opened_at + 'Z').toLocaleString() : ''}
+                </Typography>}>
+                <Chip size="small" variant="outlined" label={`#${String(t.number).padStart(4, '0')}`} sx={{ mr: 1 }} />
+                <ListItemText primary={t.username || t.user_id}
+                  primaryTypographyProps={{ variant: 'body2', noWrap: true }} />
+              </ListItem>
+            ))}
+          </List>
+        </CardContent></Card>
+      </Grid>
+    </Grid>
+  );
+}
+
+// ── Starboard: ⭐-threshold reposts to a best-of channel ───────────────────────
+export function StarboardSubtab({ guildId, channels = [] }) {
+  const textChannels = channels.filter((c) => TEXT_TYPES.has(c.type));
+  const [cfg, setCfg] = useState(null);
+  const [error, setError] = useState(null);
+  const [saved, setSaved] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    guildizerApi.get(`/api/guilds/${guildId}/starboard`)
+      .then(({ data }) => { if (alive) setCfg(data); })
+      .catch(() => { if (alive) setError('Failed to load starboard settings.'); });
+    return () => { alive = false; };
+  }, [guildId]);
+
+  const set = (patch) => { setSaved(false); setCfg((c) => ({ ...c, ...patch })); };
+
+  async function save() {
+    setBusy(true);
+    try {
+      const { data } = await guildizerApi.put(`/api/guilds/${guildId}/starboard`, cfg);
+      setCfg(data); setSaved(true); setError(null);
+    } catch { setError('Save failed.'); }
+    setBusy(false);
+  }
+
+  if (cfg === null && !error) return <Box sx={{ display: 'grid', placeItems: 'center', py: 4 }}><CircularProgress /></Box>;
+
+  return (
+    <Grid container spacing={2}>
+      {error && <Grid item xs={12}><Alert severity="warning" onClose={() => setError(null)}>{error}</Alert></Grid>}
+
+      {cfg && (
+        <Grid item xs={12} md={7}>
+          <Card variant="outlined"><CardContent>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
+              <Typography variant="subtitle1" fontWeight={700}>Starboard</Typography>
+              <FormControlLabel sx={{ mr: 0 }} label="Enabled"
+                control={<Switch checked={!!cfg.enabled} onChange={(e) => set({ enabled: e.target.checked })} />} />
+            </Stack>
+            <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+              When a message collects enough reactions, the bot reposts it to your
+              best-of channel and keeps the count updated.
+            </Typography>
+            <TextField select fullWidth size="small" margin="dense" label="Starboard channel"
+              value={cfg.channel_id || ''} onChange={(e) => set({ channel_id: e.target.value || null })}>
+              <MenuItem value="">— pick a channel —</MenuItem>
+              {textChannels.map((c) => <MenuItem key={c.id} value={c.id}># {c.name}</MenuItem>)}
+            </TextField>
+            <Stack direction="row" spacing={1}>
+              <TextField size="small" margin="dense" label="Emoji" value={cfg.emoji}
+                inputProps={{ maxLength: 64 }} onChange={(e) => set({ emoji: e.target.value })} sx={{ flex: 1 }} />
+              <TextField type="number" size="small" margin="dense" label="Stars needed"
+                value={cfg.threshold} inputProps={{ min: 1, max: 100 }}
+                onChange={(e) => set({ threshold: Number(e.target.value) })} sx={{ flex: 1 }} />
+            </Stack>
+            <FormControlLabel sx={{ display: 'block', mt: 0.5 }} label="Let authors star their own messages"
+              control={<Switch checked={!!cfg.allow_self_star} onChange={(e) => set({ allow_self_star: e.target.checked })} />} />
+            <Stack direction="row" spacing={1} alignItems="center" mt={1}>
+              <Button variant="contained" size="small" disabled={busy} onClick={save}>
+                {saved ? 'Saved ✓' : 'Save'}
+              </Button>
+              {cfg.posted_count > 0 && (
+                <Typography variant="caption" color="text.secondary">
+                  {cfg.posted_count} message{cfg.posted_count === 1 ? '' : 's'} on the board
+                </Typography>
+              )}
+            </Stack>
+          </CardContent></Card>
+        </Grid>
+      )}
     </Grid>
   );
 }

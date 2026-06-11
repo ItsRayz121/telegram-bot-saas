@@ -70,6 +70,41 @@ VOICE_DEFAULTS = {
 }
 
 
+# Ticket system, stored in GuildSettings.extra["tickets"] (deep-merged on read).
+# panel_message_id / needs_post / needs_delete / post_error / counter / open are
+# bot-owned — the dashboard PUT must preserve them.
+TICKETS_DEFAULTS = {
+    "enabled": False,
+    "panel_channel_id": None,        # where the "open a ticket" panel lives
+    "panel_title": "Need help?",
+    "panel_message": "Click the button below to open a private support ticket.",
+    "button_label": "🎫 Open a ticket",
+    "support_role_id": None,         # pinged into each ticket thread
+    "transcript_channel_id": None,   # closing posts the transcript here
+    "welcome_message": "",           # extra first message inside a new ticket
+    "max_open_per_member": 1,
+    # bot-owned
+    "panel_message_id": None,
+    "needs_post": False,
+    "needs_delete": False,
+    "post_error": None,
+    "counter": 0,                    # lifetime ticket number
+    "open": {},                      # thread_id -> {user_id, username, number, opened_at}
+}
+
+
+# Starboard, stored in GuildSettings.extra["starboard"] (deep-merged on read).
+# "posted" is bot-owned: source message id -> {star_message_id, count}, pruned.
+STARBOARD_DEFAULTS = {
+    "enabled": False,
+    "channel_id": None,
+    "emoji": "⭐",
+    "threshold": 3,
+    "allow_self_star": False,
+    "posted": {},
+}
+
+
 def get_or_create(db, guild_id: int) -> GuildSettings:
     """Return the guild's settings row, creating a defaulted one if missing."""
     row = db.get(GuildSettings, guild_id)

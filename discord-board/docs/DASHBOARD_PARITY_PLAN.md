@@ -179,13 +179,19 @@ Ranked by impact-per-effort:
 2. ✅ **Anti-nuke guard** (Moderation › AutoMod, 2026-06-11) — per-executor sliding windows
    over bans/kicks/channel+role deletions, audit-log attribution, strip-roles/ban/alert
    response, owner+bot+whitelist exempt. `anti_nuke.py`, settings in `extra.anti_nuke`.
-3. **Ticket system** (new Engagement or server-level subtab) — button → private support thread,
-   with transcript on close; Discord-native support flow.
+3. ✅ **Ticket system** (Engagement › Tickets, 2026-06-11) — dashboard-configured panel with
+   a persistent `TicketOpenButton` DynamicItem → private thread (support role pinged in),
+   `TicketCloseButton` posts a .txt transcript to the configured channel then locks+archives.
+   Open tickets tracked in `extra.tickets.open` (no table); hand-deleted threads forgotten
+   via `on_raw_thread_delete`. `tickets.py` + `tickets_api.py`.
 4. ✅ **Join-to-create voice channels + voice XP** (Members › XP & Roles, 2026-06-11) —
    temp rooms registered in `extra.voice_temp` (restart-safe sweep), voice XP via the
    5-min voice loop (ledger reason "voice", `Member.voice_minutes` healed column).
    `voice_features.py`, settings in `extra.voice` via the leveling API.
-5. **Starboard** (Engagement) — ⭐-threshold reposts to a best-of channel.
+5. ✅ **Starboard** (Engagement › Starboard, 2026-06-11) — configurable emoji + threshold,
+   embed reposts with live count edits (throttled per message), self-star opt-in, NSFW and
+   starboard-channel sources excluded. Source→repost map pruned in `extra.starboard.posted`.
+   `starboard.py` + `starboard_api.py`.
 6. **Discord native AutoMod sync** (Moderation › AutoMod) — push banned words/links into
    Discord's built-in AutoMod via API so filtering happens even when the bot is down.
 7. **Embed builder for Scheduler** (Automation › Scheduler) — title/color/image embeds, the

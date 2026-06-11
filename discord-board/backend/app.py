@@ -25,7 +25,9 @@ from leveling_api import leveling_bp
 from protection_api import protection_bp
 from self_roles_api import self_roles_bp
 from settings_api import settings_bp
+from starboard_api import starboard_bp
 from team_api import team_bp
+from tickets_api import tickets_bp
 
 
 def create_app() -> Flask:
@@ -58,6 +60,8 @@ def create_app() -> Flask:
     app.register_blueprint(settings_bp)
     app.register_blueprint(protection_bp)
     app.register_blueprint(self_roles_bp)
+    app.register_blueprint(tickets_bp)
+    app.register_blueprint(starboard_bp)
     app.register_blueprint(leveling_bp)
     app.register_blueprint(campaigns_bp)
     app.register_blueprint(billing_bp)
