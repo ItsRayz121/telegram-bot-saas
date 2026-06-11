@@ -102,6 +102,10 @@ def update_settings(guild_id: int):
                 w2["delete_after_seconds"] = max(0, min(3600, int(w_in["delete_after_seconds"])))
             except (TypeError, ValueError):
                 pass
+        if "dm_enabled" in w_in:
+            w2["dm_enabled"] = bool(w_in["dm_enabled"])
+        if "dm_message" in w_in:
+            w2["dm_message"] = str(w_in["dm_message"] or "")[:2000]
         extra["welcome2"] = w2
         row.extra = extra
     if "autorole_ids" in body:

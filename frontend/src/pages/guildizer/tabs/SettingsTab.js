@@ -85,6 +85,20 @@ export default function SettingsTab({ guildId, channels = [], roles = [] }) {
 
       <Grid item xs={12} md={6}>
         <Card variant="outlined"><CardContent>
+          <Typography variant="subtitle1" fontWeight={700} mb={1}>DM new members</Typography>
+          <FormControlLabel
+            control={<Switch checked={!!cfg.welcome2?.dm_enabled} onChange={(e) => setW2({ dm_enabled: e.target.checked })} />}
+            label="Send a private DM when a member joins"
+          />
+          <TextField fullWidth multiline minRows={2} size="small" margin="dense" label="DM message"
+            value={cfg.welcome2?.dm_message || ''} inputProps={{ maxLength: 2000 }}
+            onChange={(e) => setW2({ dm_message: e.target.value })}
+            helperText="Placeholders: {user} {server} {member_count}. Members with DMs closed are skipped. Saves now; bot rollout is staged." />
+        </CardContent></Card>
+      </Grid>
+
+      <Grid item xs={12} md={6}>
+        <Card variant="outlined"><CardContent>
           <Typography variant="subtitle1" fontWeight={700} mb={1}>Leave message</Typography>
           <FormControlLabel
             control={<Switch checked={cfg.leave_enabled} onChange={(e) => set({ leave_enabled: e.target.checked })} />}

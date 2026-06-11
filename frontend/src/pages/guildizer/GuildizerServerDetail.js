@@ -12,27 +12,67 @@ import ProtectionTab from './tabs/ProtectionTab';
 import LevelingTab from './tabs/LevelingTab';
 import CampaignsTab from './tabs/CampaignsTab';
 import BillingTab from './tabs/BillingTab';
-import ContentTab from './tabs/ContentTab';
-import AutomationTab from './tabs/AutomationTab';
 import MembersTab from './tabs/MembersTab';
 import AnalyticsTab from './tabs/AnalyticsTab';
-import KnowledgeTab from './tabs/KnowledgeTab';
 import TeamTab from './tabs/TeamTab';
+import {
+  SchedulerSubtab, AutoReplySubtab, PollsSubtab, ForwardingSubtab,
+  WorkflowsSubtab, WebhooksSubtab,
+} from './tabs/AutomationSubtabs';
+import { RaidsSubtab, InviteLinksSubtab } from './tabs/EngagementSubtabs';
+import { KnowledgeBaseSubtab } from './tabs/AiSubtabs';
+import {
+  LeaderboardSubtab, AuditLogSubtab, WarningsSubtab, DigestSubtab, AIActivitySubtab,
+} from './tabs/AnalyticsSubtabs';
 
 // Discord channel type enum → label (common ones).
 const CHANNEL_TYPES = { 0: 'Text', 2: 'Voice', 4: 'Category', 5: 'Announcement', 13: 'Stage', 15: 'Forum' };
 
-// Tabs grow with each integration phase.
-const TABS = ['Overview', 'Settings', 'Commands', 'Content', 'Automation', 'Protection', 'Leveling', 'Campaigns', 'Members', 'Analytics', 'Knowledge', 'Team', 'Billing'];
+// Telegizer-parity IA: 6 grouped management tabs (Moderation … Analytics) with
+// the exact subtab structure of the Telegram group dashboard, plus the
+// server-level extras (Overview / Commands / Team / Billing).
+const AREAS = [
+  { label: 'Overview' },
+  { label: 'Moderation', subs: ['AutoMod', 'Behavior', 'Reports'] },
+  { label: 'Members', subs: ['Verification', 'Welcome', 'XP & Roles'] },
+  { label: 'Engagement', subs: ['Raids', 'Invite Links', 'Campaigns'] },
+  { label: 'AI & Integrations', subs: ['Knowledge Base', 'Escalation'] },
+  { label: 'Automation', subs: ['Scheduler', 'Auto Reply', 'Polls', 'Forwarding', 'Workflows', 'Webhooks'] },
+  { label: 'Analytics', subs: ['Overview', 'Members', 'Leaderboard', 'Audit Log', 'Warnings', 'Digest', 'AI Activity'] },
+  { label: 'Commands' },
+  { label: 'Team' },
+  { label: 'Billing' },
+];
+
+// Old flat-tab deep links → new area/subtab so saved URLs keep working.
+const LEGACY_TABS = {
+  Settings: ['Members', 'Welcome'],
+  Content: ['Automation', 'Scheduler'],
+  Protection: ['Moderation', 'AutoMod'],
+  Leveling: ['Members', 'XP & Roles'],
+  Campaigns: ['Engagement', 'Campaigns'],
+  Knowledge: ['AI & Integrations', 'Knowledge Base'],
+};
 
 export default function GuildizerServerDetail() {
   const { guildId } = useParams();
   const navigate = useNavigate();
-  // Deep-linkable tabs: /guildizer/servers/<id>?tab=Protection
+  // Deep-linkable: /guildizer/servers/<id>?tab=Moderation&sub=Behavior
   const [searchParams, setSearchParams] = useSearchParams();
-  const tabParam = TABS.indexOf(searchParams.get('tab'));
-  const tab = tabParam >= 0 ? tabParam : 0;
-  const setTab = (v) => setSearchParams(v === 0 ? {} : { tab: TABS[v] }, { replace: true });
+
+  let tabName = searchParams.get('tab') || 'Overview';
+  let subName = searchParams.get('sub') || '';
+  if (LEGACY_TABS[tabName]) [tabName, subName] = LEGACY_TABS[tabName];
+
+  const areaIdx = Math.max(0, AREAS.findIndex((a) => a.label === tabName));
+  const area = AREAS[areaIdx];
+  const subs = area.subs || null;
+  const subIdx = subs ? Math.max(0, subs.indexOf(subName)) : 0;
+  const sub = subs ? subs[subIdx] : null;
+
+  const setTab = (v) => setSearchParams(v === 0 ? {} : { tab: AREAS[v].label }, { replace: true });
+  const setSub = (v) => setSearchParams({ tab: area.label, sub: subs[v] }, { replace: true });
+
   const [state, setState] = useState({ loading: true, guild: null, error: null });
 
   useEffect(() => {
@@ -49,6 +89,11 @@ export default function GuildizerServerDetail() {
     return () => { alive = false; };
   }, [guildId]);
 
+  const guild = state.guild;
+  const channels = guild?.channels || [];
+  const roles = guild?.roles || [];
+  const key = sub ? `${area.label}/${sub}` : area.label;
+
   return (
     <Box sx={{ maxWidth: 1000, mx: 'auto', px: { xs: 2, md: 3 }, py: 3 }}>
       <Button startIcon={<ArrowBack />} onClick={() => navigate('/guildizer')} sx={{ mb: 2 }} color="inherit">
@@ -58,25 +103,63 @@ export default function GuildizerServerDetail() {
       {state.loading && <Box sx={{ display: 'grid', placeItems: 'center', minHeight: 240 }}><CircularProgress /></Box>}
       {state.error && <Alert severity="warning">{state.error}</Alert>}
 
-      {state.guild && (
+      {guild && (
         <>
-          <Header guild={state.guild} />
-          <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" allowScrollButtonsMobile sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}>
-            {TABS.map((t) => <Tab key={t} label={t} />)}
+          <Header guild={guild} />
+          <Tabs value={areaIdx} onChange={(_, v) => setTab(v)} variant="scrollable" allowScrollButtonsMobile
+            sx={{ borderBottom: 1, borderColor: 'divider' }}>
+            {AREAS.map((a) => <Tab key={a.label} label={a.label} />)}
           </Tabs>
-          {TABS[tab] === 'Overview' && <Overview guild={state.guild} />}
-          {TABS[tab] === 'Settings' && <SettingsTab guildId={guildId} channels={state.guild.channels} roles={state.guild.roles} />}
-          {TABS[tab] === 'Commands' && <CommandsTab guildId={guildId} />}
-          {TABS[tab] === 'Content' && <ContentTab guildId={guildId} channels={state.guild.channels} />}
-          {TABS[tab] === 'Automation' && <AutomationTab guildId={guildId} channels={state.guild.channels} roles={state.guild.roles} />}
-          {TABS[tab] === 'Protection' && <ProtectionTab guildId={guildId} channels={state.guild.channels} />}
-          {TABS[tab] === 'Leveling' && <LevelingTab guildId={guildId} channels={state.guild.channels} />}
-          {TABS[tab] === 'Campaigns' && <CampaignsTab guildId={guildId} channels={state.guild.channels} />}
-          {TABS[tab] === 'Members' && <MembersTab guildId={guildId} />}
-          {TABS[tab] === 'Analytics' && <AnalyticsTab guildId={guildId} />}
-          {TABS[tab] === 'Knowledge' && <KnowledgeTab guildId={guildId} />}
-          {TABS[tab] === 'Team' && <TeamTab guildId={guildId} />}
-          {TABS[tab] === 'Billing' && <BillingTab guildId={guildId} />}
+          {subs && (
+            <Tabs value={subIdx} onChange={(_, v) => setSub(v)} variant="scrollable" allowScrollButtonsMobile
+              sx={{ mb: 3, minHeight: 38, '& .MuiTab-root': { minHeight: 38, fontSize: '0.82rem', py: 0, textTransform: 'none' } }}>
+              {subs.map((s) => <Tab key={s} label={s} />)}
+            </Tabs>
+          )}
+          {!subs && <Box sx={{ mb: 3 }} />}
+
+          {key === 'Overview' && <Overview guild={guild} />}
+
+          {/* MODERATION */}
+          {key === 'Moderation/AutoMod' && <ProtectionTab guildId={guildId} channels={channels} section="automod" />}
+          {key === 'Moderation/Behavior' && <ProtectionTab guildId={guildId} channels={channels} section="behavior" />}
+          {key === 'Moderation/Reports' && <ProtectionTab guildId={guildId} channels={channels} section="reports" />}
+
+          {/* MEMBERS */}
+          {key === 'Members/Verification' && <ProtectionTab guildId={guildId} channels={channels} section="verification" />}
+          {key === 'Members/Welcome' && <SettingsTab guildId={guildId} channels={channels} roles={roles} />}
+          {key === 'Members/XP & Roles' && <LevelingTab guildId={guildId} channels={channels} roles={roles} />}
+
+          {/* ENGAGEMENT */}
+          {key === 'Engagement/Raids' && <RaidsSubtab guildId={guildId} channels={channels} />}
+          {key === 'Engagement/Invite Links' && <InviteLinksSubtab guildId={guildId} />}
+          {key === 'Engagement/Campaigns' && <CampaignsTab guildId={guildId} channels={channels} />}
+
+          {/* AI & INTEGRATIONS */}
+          {key === 'AI & Integrations/Knowledge Base' && <KnowledgeBaseSubtab guildId={guildId} />}
+          {key === 'AI & Integrations/Escalation' && <ProtectionTab guildId={guildId} channels={channels} section="escalation" />}
+
+          {/* AUTOMATION */}
+          {key === 'Automation/Scheduler' && <SchedulerSubtab guildId={guildId} channels={channels} />}
+          {key === 'Automation/Auto Reply' && <AutoReplySubtab guildId={guildId} />}
+          {key === 'Automation/Polls' && <PollsSubtab guildId={guildId} channels={channels} />}
+          {key === 'Automation/Forwarding' && <ForwardingSubtab guildId={guildId} channels={channels} />}
+          {key === 'Automation/Workflows' && <WorkflowsSubtab guildId={guildId} channels={channels} roles={roles} />}
+          {key === 'Automation/Webhooks' && <WebhooksSubtab guildId={guildId} channels={channels} />}
+
+          {/* ANALYTICS */}
+          {key === 'Analytics/Overview' && <AnalyticsTab guildId={guildId} />}
+          {key === 'Analytics/Members' && <MembersTab guildId={guildId} />}
+          {key === 'Analytics/Leaderboard' && <LeaderboardSubtab guildId={guildId} />}
+          {key === 'Analytics/Audit Log' && <AuditLogSubtab guildId={guildId} />}
+          {key === 'Analytics/Warnings' && <WarningsSubtab guildId={guildId} />}
+          {key === 'Analytics/Digest' && <DigestSubtab guildId={guildId} channels={channels} />}
+          {key === 'Analytics/AI Activity' && <AIActivitySubtab guildId={guildId} />}
+
+          {/* SERVER-LEVEL */}
+          {key === 'Commands' && <CommandsTab guildId={guildId} />}
+          {key === 'Team' && <TeamTab guildId={guildId} />}
+          {key === 'Billing' && <BillingTab guildId={guildId} />}
         </>
       )}
     </Box>

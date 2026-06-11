@@ -70,7 +70,7 @@ export default function AutomationTab({ guildId, channels = [], roles = [] }) {
   );
 }
 
-function WorkflowsCard({ guildId, workflows, channels, roles, onChanged }) {
+export function WorkflowsCard({ guildId, workflows, channels, roles, onChanged }) {
   const [name, setName] = useState('');
   const [trigger, setTrigger] = useState('message_contains');
   const [triggerValue, setTriggerValue] = useState('');
@@ -180,7 +180,7 @@ function WorkflowsCard({ guildId, workflows, channels, roles, onChanged }) {
   );
 }
 
-function MirrorsCard({ guildId, mirrors, channels, onChanged }) {
+export function MirrorsCard({ guildId, mirrors, channels, onChanged }) {
   const [sourceId, setSourceId] = useState('');
   const [destId, setDestId] = useState('');
   const [busy, setBusy] = useState(false);
@@ -238,7 +238,7 @@ function MirrorsCard({ guildId, mirrors, channels, onChanged }) {
   );
 }
 
-function WebhooksCard({ guildId, inbound, outbound, channels, onChanged }) {
+export function WebhooksCard({ guildId, inbound, outbound, channels, onChanged }) {
   const [inName, setInName] = useState('');
   const [inChannel, setInChannel] = useState('');
   const [outUrl, setOutUrl] = useState('');

@@ -39,6 +39,22 @@ WELCOME2_DEFAULTS = {
     "rules_text": "",
     "image_url": "",
     "delete_after_seconds": 0,
+    # Dashboard-parity: optional DM to new members (bot enforcement separate)
+    "dm_enabled": False,
+    "dm_message": "",
+}
+
+# Dashboard-parity leveling extensions, stored in GuildSettings.extra["leveling2"]
+# (deep-merged on read — same self-heal pattern as welcome2).
+LEVELING2_DEFAULTS = {
+    "xp_per_reaction": 0,
+    "reaction_cooldown_seconds": 60,
+    "levelup_delete_after_seconds": 0,
+    "penalty_warn": 0,      # XP removed when the member is warned
+    "penalty_timeout": 0,   # … timed out
+    "penalty_kick": 0,      # … kicked
+    "penalty_ban": 0,       # … banned
+    "role_rewards": [],     # [{"level": int, "role_id": str}]
 }
 
 

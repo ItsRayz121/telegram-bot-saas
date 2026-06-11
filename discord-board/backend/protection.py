@@ -45,9 +45,12 @@ EXTRA_DEFAULTS = {
         "image_ai": {"enabled": False, "action": "delete",
                      "rate_limit_seconds": 30},
     },
-    "warnings": {"max_warnings": 3, "action": "timeout", "timeout_minutes": 30},
-    "auto_clean": {"join_messages": False},
-    "escalation": {"enabled": False, "keywords": [], "alert_channel_id": None},
+    "warnings": {"max_warnings": 3, "action": "timeout", "timeout_minutes": 30,
+                 "window_hours": 0},
+    "auto_clean": {"join_messages": False,
+                   "warn_messages_seconds": 0, "action_messages_seconds": 0},
+    "escalation": {"enabled": False, "keywords": [], "alert_channel_id": None,
+                   "types": []},
     # Phase 11 — join captcha (quarantine-role pattern) + foreign-bot policy
     "verification": {
         "enabled": False, "method": "button",        # button | math | word
@@ -59,6 +62,23 @@ EXTRA_DEFAULTS = {
         "enabled": False, "policy": "kick_untrusted",  # kick_untrusted | alert_only
         "trusted_bot_ids": [], "alert_channel_id": None,
     },
+    # Dashboard-parity sections (UI + persistence first; bot enforcement rolls
+    # out per section — keys self-heal like every other extra section).
+    "emoji_reactions": {
+        "enabled": False, "admin_thumbs_up": False,
+        "sentiment_reactions": False, "cooldown_minutes": 10,
+    },
+    "command_permissions": {"delete_unauthorized": False},
+    # Escalating punishment ladder: steps = [{"at", "action", "minutes", "window_hours"}]
+    "warn_ladder": {"enabled": False, "steps": []},
+    # AI knowledge-base auto-reply behaviour (consumed by knowledge.py /ask layer)
+    "kb_replies": {
+        "enabled": False, "mention_only": True, "low_confidence_fallback": False,
+        "min_words": 3, "reply_length": "medium",   # short | medium | long
+        "emoji_usage": "some",                       # none | some | lots
+        "formality": "casual",                       # casual | neutral | formal
+    },
+    "reports": {"alert_channel_id": None},
 }
 
 

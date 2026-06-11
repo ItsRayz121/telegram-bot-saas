@@ -137,6 +137,8 @@ def update_moderation(guild_id: int):
             w["action"] = w_in["action"]
         if "timeout_minutes" in w_in:
             w["timeout_minutes"] = _as_int(w_in["timeout_minutes"], 30, 1, 40320)
+        if "window_hours" in w_in:
+            w["window_hours"] = _as_int(w_in["window_hours"], 0, 0, 720)
         extra["warnings"] = w
     if isinstance(body.get("escalation"), dict):
         e_in = body["escalation"]
@@ -149,6 +151,9 @@ def update_moderation(guild_id: int):
         if "alert_channel_id" in e_in:
             ch = e_in["alert_channel_id"]
             e["alert_channel_id"] = str(ch) if ch and str(ch).isdigit() else None
+        if "types" in e_in:
+            e["types"] = [t for t in (e_in["types"] or [])
+                          if t in ("ai_kb", "ai_image", "automation", "command")]
         extra["escalation"] = e
     if isinstance(body.get("verification"), dict):
         v_in = body["verification"]
@@ -179,10 +184,69 @@ def update_moderation(guild_id: int):
             b["alert_channel_id"] = str(ch) if ch and str(ch).isdigit() else None
         extra["bot_policy"] = b
     if isinstance(body.get("auto_clean"), dict):
+        ac_in = body["auto_clean"]
         ac = dict(extra.get("auto_clean") or {})
-        if "join_messages" in body["auto_clean"]:
-            ac["join_messages"] = bool(body["auto_clean"]["join_messages"])
+        if "join_messages" in ac_in:
+            ac["join_messages"] = bool(ac_in["join_messages"])
+        if "warn_messages_seconds" in ac_in:
+            ac["warn_messages_seconds"] = _as_int(ac_in["warn_messages_seconds"], 0, 0, 86400)
+        if "action_messages_seconds" in ac_in:
+            ac["action_messages_seconds"] = _as_int(ac_in["action_messages_seconds"], 0, 0, 86400)
         extra["auto_clean"] = ac
+    if isinstance(body.get("emoji_reactions"), dict):
+        er_in = body["emoji_reactions"]
+        er = dict(extra.get("emoji_reactions") or {})
+        for key in ("enabled", "admin_thumbs_up", "sentiment_reactions"):
+            if key in er_in:
+                er[key] = bool(er_in[key])
+        if "cooldown_minutes" in er_in:
+            er["cooldown_minutes"] = _as_int(er_in["cooldown_minutes"], 10, 1, 1440)
+        extra["emoji_reactions"] = er
+    if isinstance(body.get("command_permissions"), dict):
+        cp = dict(extra.get("command_permissions") or {})
+        if "delete_unauthorized" in body["command_permissions"]:
+            cp["delete_unauthorized"] = bool(body["command_permissions"]["delete_unauthorized"])
+        extra["command_permissions"] = cp
+    if isinstance(body.get("warn_ladder"), dict):
+        wl_in = body["warn_ladder"]
+        wl = dict(extra.get("warn_ladder") or {})
+        if "enabled" in wl_in:
+            wl["enabled"] = bool(wl_in["enabled"])
+        if isinstance(wl_in.get("steps"), list):
+            steps = []
+            for s in wl_in["steps"][:5]:
+                if not isinstance(s, dict):
+                    continue
+                action = s.get("action") if s.get("action") in ("timeout", "kick", "ban") else "timeout"
+                steps.append({
+                    "at": _as_int(s.get("at"), 2, 1, 20),
+                    "action": action,
+                    "minutes": _as_int(s.get("minutes"), 30, 1, 40320),
+                    "window_hours": _as_int(s.get("window_hours"), 0, 0, 720),
+                })
+            wl["steps"] = sorted(steps, key=lambda s: s["at"])
+        extra["warn_ladder"] = wl
+    if isinstance(body.get("kb_replies"), dict):
+        kb_in = body["kb_replies"]
+        kb = dict(extra.get("kb_replies") or {})
+        for key in ("enabled", "mention_only", "low_confidence_fallback"):
+            if key in kb_in:
+                kb[key] = bool(kb_in[key])
+        if "min_words" in kb_in:
+            kb["min_words"] = _as_int(kb_in["min_words"], 3, 1, 50)
+        if kb_in.get("reply_length") in ("short", "medium", "long"):
+            kb["reply_length"] = kb_in["reply_length"]
+        if kb_in.get("emoji_usage") in ("none", "some", "lots"):
+            kb["emoji_usage"] = kb_in["emoji_usage"]
+        if kb_in.get("formality") in ("casual", "neutral", "formal"):
+            kb["formality"] = kb_in["formality"]
+        extra["kb_replies"] = kb
+    if isinstance(body.get("reports"), dict):
+        rp = dict(extra.get("reports") or {})
+        if "alert_channel_id" in body["reports"]:
+            ch = body["reports"]["alert_channel_id"]
+            rp["alert_channel_id"] = str(ch) if ch and str(ch).isdigit() else None
+        extra["reports"] = rp
     row.extra = extra
 
     row.updated_at = datetime.utcnow()

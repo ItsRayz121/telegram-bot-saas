@@ -56,7 +56,7 @@ export default function ContentTab({ guildId, channels = [] }) {
   );
 }
 
-function DigestCard({ guildId, channels }) {
+export function DigestCard({ guildId, channels }) {
   const [cfg, setCfg] = useState(null);
   const [busy, setBusy] = useState(false);
 
@@ -93,7 +93,7 @@ function DigestCard({ guildId, channels }) {
   );
 }
 
-function SchedulerCard({ guildId, messages, channels, onChanged }) {
+export function SchedulerCard({ guildId, messages, channels, onChanged }) {
   const [content, setContent] = useState('');
   const [channelId, setChannelId] = useState('');
   const [when, setWhen] = useState('');
@@ -158,7 +158,7 @@ function SchedulerCard({ guildId, messages, channels, onChanged }) {
   );
 }
 
-function PollsCard({ guildId, polls, channels, onChanged }) {
+export function PollsCard({ guildId, polls, channels, onChanged }) {
   const [question, setQuestion] = useState('');
   const [answersText, setAnswersText] = useState('');
   const [channelId, setChannelId] = useState('');
@@ -225,7 +225,7 @@ function PollsCard({ guildId, polls, channels, onChanged }) {
   );
 }
 
-function AutoResponsesCard({ guildId, responses, onChanged }) {
+export function AutoResponsesCard({ guildId, responses, onChanged }) {
   const [trigger, setTrigger] = useState('');
   const [response, setResponse] = useState('');
   const [matchType, setMatchType] = useState('contains');
