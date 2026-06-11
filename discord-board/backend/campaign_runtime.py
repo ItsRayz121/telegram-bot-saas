@@ -9,7 +9,7 @@ from datetime import datetime
 
 import leveling
 from database import SessionLocal
-from models import Campaign, CampaignSubmission, CampaignTask
+from models import Campaign, CampaignCustomField, CampaignSubmission, CampaignTask
 
 
 def campaigns_to_post() -> list[tuple[int, int]]:
@@ -94,18 +94,28 @@ def submit_context(cid: int, tid: int) -> dict | None:
         c = db.get(Campaign, cid)
         if c is None or not c.is_open:
             return None
+        fields = [
+            f.to_dict() for f in (
+                db.query(CampaignCustomField)
+                .filter(CampaignCustomField.campaign_id == cid)
+                .order_by(CampaignCustomField.position)
+                .limit(4)
+                .all()
+            )
+        ]
         if tid:
             t = db.get(CampaignTask, tid)
             if t is None or t.campaign_id != cid:
                 return None
-            return {"verification_mode": t.verification_mode, "title": t.title}
-        return {"verification_mode": c.verification_mode, "title": c.title}
+            return {"verification_mode": t.verification_mode, "title": t.title, "fields": fields}
+        return {"verification_mode": c.verification_mode, "title": c.title, "fields": fields}
     finally:
         db.close()
         SessionLocal.remove()
 
 
-def create_submission(cid: int, tid: int, user_id: int, username: str, value: str | None):
+def create_submission(cid: int, tid: int, user_id: int, username: str, value: str | None,
+                      extra_fields: dict | None = None):
     """Create a proof submission. Returns (status, reward):
        verified | pending | duplicate | closed."""
     db = SessionLocal()
@@ -138,9 +148,18 @@ def create_submission(cid: int, tid: int, user_id: int, username: str, value: st
             if existing is not None:
                 return ("duplicate", 0)
 
+        proof = {"value": value} if value else {}
+        if extra_fields:
+            proof["fields"] = {str(k)[:45]: str(v)[:300] for k, v in extra_fields.items()}
+        if value:
+            # annotate (never auto-reject): does the first proof URL resolve?
+            import link_checks
+            verdict = link_checks.check_proof_text(value)
+            if verdict is not None:
+                proof["link_check"] = verdict
         sub = CampaignSubmission(
             campaign_id=cid, task_id=task_key, user_id=user_id,
-            username=(username or "")[:120], proof={"value": value} if value else {},
+            username=(username or "")[:120], proof=proof,
         )
         if vmode == "honor":
             sub.status = "verified"

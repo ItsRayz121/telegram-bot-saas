@@ -31,6 +31,7 @@ import command_registrar
 import content_runtime
 import governor
 import guild_sync
+import invite_tracking
 import leveling
 import mod_commands
 import moderation
@@ -139,6 +140,9 @@ class CoreMixin:
         await asyncio.to_thread(_load_routing)
         served = [gid for gid in ids if serves(self, gid)]
         await command_registrar.register_all(self, served)
+        for gd in guilds:
+            if serves(self, gd.id):
+                await invite_tracking.refresh_guild(gd)
 
     def _auto_link_guilds(self, guild_ids) -> None:
         db = SessionLocal()
@@ -394,6 +398,21 @@ class CoreMixin:
         if cfg["welcome_enabled"] and cfg["welcome_channel_id"]:
             await self._send_welcome(member, cfg)
 
+        attribution = await invite_tracking.attribute_join(member.guild)
+        if attribution is not None:
+            code, inviter_id, inviter_name = attribution
+            if inviter_id != member.id:
+                xp = await asyncio.to_thread(
+                    invite_tracking.record_join, member.guild.id, code,
+                    inviter_id, inviter_name, member.id, str(member),
+                )
+                await asyncio.to_thread(
+                    self._log, member.guild.id, "referral", "join", member.id,
+                    str(member), None,
+                    f"invited by {inviter_name or inviter_id} via {code}"
+                    + (f" (+{xp} XP)" if xp else ""),
+                )
+
         await self._run_workflows("member_join", member.guild, member=member)
         await asyncio.to_thread(
             automation_runtime.dispatch_event, member.guild.id, "member_join",
@@ -595,6 +614,18 @@ class CoreMixin:
                 )
             except discord.HTTPException as exc:
                 log.warning("mirror send failed for rule %s: %s", rule["id"], exc)
+
+    async def on_invite_create(self, invite: discord.Invite) -> None:
+        if invite.guild is not None and serves(self, invite.guild.id):
+            guild = self.get_guild(invite.guild.id)
+            if guild is not None:
+                await invite_tracking.refresh_guild(guild)
+
+    async def on_invite_delete(self, invite: discord.Invite) -> None:
+        if invite.guild is not None and serves(self, invite.guild.id):
+            guild = self.get_guild(invite.guild.id)
+            if guild is not None:
+                await invite_tracking.refresh_guild(guild)
 
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent) -> None:
         if payload.guild_id is None or not serves(self, payload.guild_id):
@@ -1037,6 +1068,7 @@ def attach_builtin_commands(client) -> None:
     """Register the built-in command set on a client's tree. White-label bots
     answer under their own name/avatar — same engine underneath."""
     mod_commands.attach_mod_commands(client)
+    invite_tracking.attach_invite_command(client)
 
     @client.tree.command(name="ping", description="Check that the bot is alive.")
     async def ping(interaction: discord.Interaction) -> None:

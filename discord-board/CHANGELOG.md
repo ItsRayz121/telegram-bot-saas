@@ -204,3 +204,42 @@ production build green.
 
 **Env vars**: none new. **Manual ops**: mirroring needs Manage Webhooks on the
 destination (already in the default invite permission set).
+
+## Phase 14 — Engagement Parity+ (2026-06-11)
+
+Growth tooling: tracked invites/referrals, campaign custom fields, proof link
+checks, public proof feed. Both lineages.
+
+**Referrals** (`invite_tracking.py`, `InviteLink` + `InviteJoin`): the serving
+bot caches each guild's invite uses (boot + on_invite_create/delete); on join
+the invite whose use-count rose attributes the inviter. /invitelink gives every
+member a personal tracked invite. Optional XP per referral (GuildSettings
+extra, default 0/off); attribution logged as a protection event; self-invites
+ignored. Needs Manage Guild to list invites — degrades silently.
+
+**Campaign custom fields** (`CampaignCustomField`): up to 4 admin-defined
+inputs injected into the proof modal (Discord's 5-component cap); values stored
+in submission proof JSON. Honor-mode campaigns with fields still open the
+modal (the fields are the point).
+
+**Proof link checks** (`link_checks.py`): keyless oEmbed validation for
+YouTube/X links + generic reachability for other URLs; verdict
+(valid/invalid/unknown) annotated on the submission — informs review, never
+auto-rejects.
+
+**Public proof feed**: GET /api/public/guilds/<id>/proof-feed — recent
+verified submissions with masked usernames (no auth).
+
+**API** (`growth_api.py`): fields CRUD, referrals leaderboard/recent/config,
+PUT referral XP setting. **UI** (CampaignsTab): Proof-form-fields card in the
+campaign detail, link-check chips + field values on pending submissions,
+Referrals card with XP setting + leaderboard on the campaigns list.
+
+**Deferred**: guild-join auto-verify task type (14.6) — needs target-guild
+membership semantics; tracked for a later pass.
+
+**Validation**: smoke suite (attribution + XP + idempotent link registration,
+custom fields in context + proof JSON, link-check shapes, API gates, open
+public feed) green; frontend production build green.
+
+**Env vars**: none new (oEmbed is keyless — YOUTUBE/X keys no longer needed).

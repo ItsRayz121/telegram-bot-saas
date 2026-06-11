@@ -30,6 +30,7 @@ export default function CampaignsTab({ guildId, channels = [] }) {
   if (selected) return <CampaignDetail guildId={guildId} campaignId={selected} channels={textChannels} plan={plan} onBack={() => { setSelected(null); load(); }} />;
 
   return (
+    <>
     <Card variant="outlined"><CardContent>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
         <Typography variant="subtitle1" fontWeight={700}>Campaigns</Typography>
@@ -53,6 +54,54 @@ export default function CampaignsTab({ guildId, channels = [] }) {
           {plan !== 'pro' && <Typography variant="caption" color="text.disabled" display="block" mt={1}>Free plan: 1 active campaign. Campaign leaderboards are Pro.</Typography>}
         </>
       )}
+    </CardContent></Card>
+    <ReferralsCard guildId={guildId} />
+    </>
+  );
+}
+
+function ReferralsCard({ guildId }) {
+  const [data, setData] = useState(null);
+  const [xp, setXp] = useState(0);
+
+  async function load() {
+    try {
+      const { data: d } = await guildizerApi.get(`/api/guilds/${guildId}/referrals`);
+      setData(d); setXp(d.xp_per_referral);
+    } catch { /* quietly empty */ }
+  }
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [guildId]);
+
+  if (!data) return null;
+  return (
+    <Card variant="outlined" sx={{ mt: 2 }}><CardContent>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
+        <Typography variant="subtitle1" fontWeight={700}>Referrals</Typography>
+        <Stack direction="row" spacing={1} alignItems="center">
+          <TextField type="number" size="small" label="XP per referral" value={xp}
+            inputProps={{ min: 0, max: 1000 }} onChange={(e) => setXp(Number(e.target.value))} sx={{ width: 140 }} />
+          <Button size="small" variant="outlined"
+            onClick={() => guildizerApi.put(`/api/guilds/${guildId}/referrals/settings`, { xp_per_referral: xp }).then(load)}>
+            Save
+          </Button>
+        </Stack>
+      </Stack>
+      <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+        Members get a personal tracked invite with /invitelink. Joins are attributed automatically.
+      </Typography>
+      {data.leaderboard.length === 0
+        ? <Typography variant="body2" color="text.secondary">No attributed joins yet.</Typography>
+        : (
+          <List dense>
+            {data.leaderboard.map((r, i) => (
+              <ListItem key={r.inviter_id} disableGutters
+                secondaryAction={<Chip size="small" label={`${r.joins} joins`} />}>
+                <Typography variant="body2" fontWeight={700} color="primary.main" sx={{ width: 34 }}>#{i + 1}</Typography>
+                <ListItemText primary={r.inviter_name || r.inviter_id} />
+              </ListItem>
+            ))}
+          </List>
+        )}
     </CardContent></Card>
   );
 }
@@ -170,6 +219,10 @@ function CampaignDetail({ guildId, campaignId, channels, plan, onBack }) {
           </CardContent></Card>
         </Grid>
 
+        <Grid item xs={12} md={6}>
+          <FieldsCard guildId={guildId} campaignId={campaignId} />
+        </Grid>
+
         <Grid item xs={12}>
           <Card variant="outlined"><CardContent>
             <Typography variant="subtitle1" fontWeight={700} mb={1}>Pending submissions ({subs.length})</Typography>
@@ -181,7 +234,15 @@ function CampaignDetail({ guildId, campaignId, channels, plan, onBack }) {
                     <Button size="small" onClick={() => review(s.id, 'verify')}>Verify</Button>
                     <Button size="small" color="error" onClick={() => review(s.id, 'reject')}>Reject</Button>
                   </Stack>}>
-                  <ListItemText primary={s.username || s.user_id} secondary={s.proof?.value || '(no proof text)'} secondaryTypographyProps={{ noWrap: true }} />
+                  {s.proof?.link_check && (
+                    <Chip size="small" sx={{ mr: 1 }} variant="outlined"
+                      color={s.proof.link_check === 'valid' ? 'success' : s.proof.link_check === 'invalid' ? 'error' : 'default'}
+                      label={`link ${s.proof.link_check}`} />
+                  )}
+                  <ListItemText
+                    primary={s.username || s.user_id}
+                    secondary={[s.proof?.value, s.proof?.fields && Object.entries(s.proof.fields).map(([k, v]) => `${k}: ${v}`).join(' · ')].filter(Boolean).join(' — ') || '(no proof text)'}
+                    secondaryTypographyProps={{ noWrap: true }} />
                 </ListItem>
               ))}
             </List>
@@ -210,5 +271,50 @@ function CampaignDetail({ guildId, campaignId, channels, plan, onBack }) {
         </Grid>
       </Grid>
     </Box>
+  );
+}
+
+
+function FieldsCard({ guildId, campaignId }) {
+  const [fields, setFields] = useState([]);
+  const [label, setLabel] = useState('');
+
+  async function load() {
+    try {
+      const { data } = await guildizerApi.get(`/api/guilds/${guildId}/campaigns/${campaignId}/fields`);
+      setFields(data.fields);
+    } catch { /* quietly empty */ }
+  }
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [campaignId]);
+
+  return (
+    <Card variant="outlined"><CardContent>
+      <Typography variant="subtitle1" fontWeight={700} mb={1}>Proof form fields</Typography>
+      <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+        Extra inputs shown in the proof popup (max 4) — e.g. wallet address, username on X.
+      </Typography>
+      <Stack direction="row" spacing={1} alignItems="center">
+        <TextField size="small" label="Field label" value={label} inputProps={{ maxLength: 45 }}
+          onChange={(e) => setLabel(e.target.value)} sx={{ flex: 1 }} />
+        <Button size="small" variant="outlined" disabled={!label.trim() || fields.length >= 4}
+          onClick={() => guildizerApi.post(`/api/guilds/${guildId}/campaigns/${campaignId}/fields`, { label }).then(() => { setLabel(''); load(); })}>
+          Add
+        </Button>
+      </Stack>
+      <List dense>
+        {fields.map((f) => (
+          <ListItem key={f.id} disableGutters
+            secondaryAction={(
+              <IconButton size="small" color="error"
+                onClick={() => guildizerApi.delete(`/api/guilds/${guildId}/campaigns/${campaignId}/fields/${f.id}`).then(load)}>
+                <Delete fontSize="small" />
+              </IconButton>
+            )}>
+            <ListItemText primary={f.label} secondary={f.required ? 'required' : 'optional'} />
+          </ListItem>
+        ))}
+        {fields.length === 0 && <Typography variant="body2" color="text.secondary">No extra fields.</Typography>}
+      </List>
+    </CardContent></Card>
   );
 }

@@ -28,7 +28,7 @@ def _result_text(status: str, reward: int) -> str:
 
 
 class ProofModal(discord.ui.Modal):
-    def __init__(self, cid: int, tid: int, title: str) -> None:
+    def __init__(self, cid: int, tid: int, title: str, fields: list[dict] | None = None) -> None:
         super().__init__(title=f"Submit proof · {title}"[:45])
         self.cid = cid
         self.tid = tid
@@ -39,11 +39,22 @@ class ProofModal(discord.ui.Modal):
             max_length=500,
         )
         self.add_item(self.value)
+        # up to 4 admin-defined inputs (modal cap is 5 components total)
+        self.custom_inputs: list[tuple[str, discord.ui.TextInput]] = []
+        for f in (fields or [])[:4]:
+            inp = discord.ui.TextInput(
+                label=str(f["label"])[:45],
+                required=bool(f.get("required", True)),
+                max_length=300,
+            )
+            self.add_item(inp)
+            self.custom_inputs.append((str(f["label"])[:45], inp))
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
+        extra = {label: str(inp.value) for label, inp in self.custom_inputs if str(inp.value).strip()}
         status, reward = await asyncio.to_thread(
             cr.create_submission, self.cid, self.tid,
-            interaction.user.id, str(interaction.user), str(self.value),
+            interaction.user.id, str(interaction.user), str(self.value), extra or None,
         )
         await interaction.response.send_message(_result_text(status, reward), ephemeral=True)
 
@@ -69,14 +80,17 @@ class ProofButton(discord.ui.DynamicItem[discord.ui.Button], template=r"gz:proof
         if ctx is None:
             await interaction.response.send_message("This campaign is closed.", ephemeral=True)
             return
-        if ctx["verification_mode"] == "honor":
+        fields = ctx.get("fields") or []
+        if ctx["verification_mode"] == "honor" and not fields:
             status, reward = await asyncio.to_thread(
                 cr.create_submission, self.cid, self.tid,
                 interaction.user.id, str(interaction.user), None,
             )
             await interaction.response.send_message(_result_text(status, reward), ephemeral=True)
         else:
-            await interaction.response.send_modal(ProofModal(self.cid, self.tid, ctx["title"]))
+            await interaction.response.send_modal(
+                ProofModal(self.cid, self.tid, ctx["title"], fields)
+            )
 
 
 def build_embed(data: dict) -> discord.Embed:

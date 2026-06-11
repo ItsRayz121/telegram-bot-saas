@@ -1089,3 +1089,75 @@ class OutboundWebhook(Base):
             "delivered_count": self.delivered_count or 0,
             "last_error": self.last_error,
         }
+
+
+class InviteLink(Base):
+    """A tracked server invite (created via /invitelink or synced from the
+    guild) used for referral attribution (Phase 14)."""
+
+    __tablename__ = "invite_links"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, ForeignKey("guilds.id"), nullable=False, index=True)
+    code = Column(String(20), unique=True, nullable=False, index=True)
+    creator_id = Column(BigInteger, nullable=True)
+    creator_name = Column(String(120))
+    uses = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "code": self.code,
+            "url": f"https://discord.gg/{self.code}",
+            "creator_id": str(self.creator_id) if self.creator_id else None,
+            "creator_name": self.creator_name,
+            "uses": self.uses or 0,
+        }
+
+
+class InviteJoin(Base):
+    """One attributed join: which invite (and inviter) brought the member in."""
+
+    __tablename__ = "invite_joins"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, ForeignKey("guilds.id"), nullable=False, index=True)
+    code = Column(String(20), index=True)
+    inviter_id = Column(BigInteger, nullable=True, index=True)
+    inviter_name = Column(String(120))
+    joiner_id = Column(BigInteger, nullable=False)
+    joiner_name = Column(String(120))
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "code": self.code,
+            "inviter_id": str(self.inviter_id) if self.inviter_id else None,
+            "inviter_name": self.inviter_name,
+            "joiner_id": str(self.joiner_id),
+            "joiner_name": self.joiner_name,
+            "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
+        }
+
+
+class CampaignCustomField(Base):
+    """An extra input collected in the proof modal (Phase 14). Up to 4 per
+    campaign (Discord modals cap at 5 components incl. the proof field)."""
+
+    __tablename__ = "campaign_custom_fields"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    campaign_id = Column(Integer, ForeignKey("campaigns.id"), nullable=False, index=True)
+    label = Column(String(45), nullable=False)
+    required = Column(Boolean, default=True)
+    position = Column(Integer, default=0)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "label": self.label,
+            "required": bool(self.required),
+            "position": self.position or 0,
+        }

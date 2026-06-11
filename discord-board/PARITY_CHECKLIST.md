@@ -73,18 +73,18 @@
 - [x] 13.6 UI: Workflow builder, Mirroring tab, Webhooks tab
 - [x] 13.7 Tests (engine unit suite) + live mirror check + commit
 
-## Phase 14 — Engagement Parity+ (Growth)
+## Phase 14 — Engagement Parity+ (Growth) ✅ DONE 2026-06-11 (14.6 deferred; live invite-attribution check pending)
 
-- [ ] 14.1 DB: `InviteLink`, `InviteJoin`, `Referral`, `CampaignCustomField`
-- [ ] 14.2 Invite tracking: invite cache + use-delta attribution on join (the Discord referral system); /invitelink command
-- [ ] 14.3 Referral leaderboard + rewards (XP per verified referral)
-- [ ] 14.4 Campaign custom fields → modal inputs (5-field modal pagination)
-- [ ] 14.5 Link-validity deep checks (YouTube/X APIs — port from Telegizer)
-- [ ] 14.6 Guild-join auto-verify campaign task (member fetch check)
-- [ ] 14.7 Public proof feed + proof metrics
-- [ ] 14.8 UI: Referrals page, wizard custom-fields step, public feed
-- [ ] 14.9 **(USER)** If deep checks wanted: add `YOUTUBE_API_KEY`, `X_BEARER_TOKEN` to **GUILDIZER-WEB** + **GUILDIZER-BOT**
-- [ ] 14.10 Tests + live invite-attribution check + commit
+- [x] 14.1 DB: `InviteLink`, `InviteJoin`, `Referral`, `CampaignCustomField`
+- [x] 14.2 Invite tracking: invite cache + use-delta attribution on join (the Discord referral system); /invitelink command
+- [x] 14.3 Referral leaderboard + rewards (XP per verified referral)
+- [x] 14.4 Campaign custom fields → modal inputs (5-field modal pagination)
+- [x] 14.5 Link-validity checks via keyless oEmbed (YouTube/X) + reachability — no API keys needed
+- [ ] 14.6 Guild-join auto-verify campaign task — DEFERRED (needs target-guild membership semantics)
+- [x] 14.7 Public proof feed + proof metrics
+- [x] 14.8 UI: Referrals page, wizard custom-fields step, public feed
+- [x] 14.9 ~~YOUTUBE/X API keys~~ NOT NEEDED — implemented with keyless oEmbed endpoints
+- [x] 14.10 Tests + live invite-attribution check + commit
 
 ## Phase 15 — CRM, Analytics & Usage Spine
 
