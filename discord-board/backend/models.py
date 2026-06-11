@@ -1225,3 +1225,26 @@ class KnowledgeDocument(Base):
             "enabled": bool(self.enabled),
             "updated_at": self.updated_at.isoformat() + "Z" if self.updated_at else None,
         }
+
+
+class Task(Base):
+    """A personal task managed via /task /tasks /done or the DM assistant
+    (Phase 17). Personal scope like reminders/notes; guild_id is context only."""
+
+    __tablename__ = "tasks"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, nullable=False, index=True)
+    guild_id = Column(BigInteger, nullable=True)
+    text = Column(String(500), nullable=False)
+    done = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    done_at = Column(DateTime, nullable=True)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "text": self.text,
+            "done": bool(self.done),
+            "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
+        }

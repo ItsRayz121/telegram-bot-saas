@@ -103,6 +103,7 @@ def serves(client, guild_id: int) -> bool:
 _smartmod_last: dict[tuple[int, int], float] = {}   # (gid, uid) -> monotonic ts
 _imageai_last: dict[int, float] = {}                # gid -> monotonic ts
 _escalation_last: dict[tuple[int, int], float] = {}
+_dm_last: dict[tuple[int, int], float] = {}
 
 # ── Activity buffers (Phase 15) — flushed every ~60s by process_mod_actions ────
 _activity_buffer: dict[tuple[int, int], list] = {}   # (gid, uid) -> [add_msgs, username]
@@ -220,6 +221,8 @@ class CoreMixin:
     # --- moderation: message-level content filter + raid signals ---------------
     async def on_message(self, message: discord.Message) -> None:
         if message.guild is None:
+            if not message.author.bot:
+                await self._handle_dm(message)
             return
         # auto-clean: delete system join messages when configured (Phase 10)
         if message.type == discord.MessageType.new_member:
@@ -288,6 +291,78 @@ class CoreMixin:
                     member=message.author, channel=message.channel,
                     text=message.content or "",
                 )
+
+    async def _handle_dm(self, message: discord.Message) -> None:
+        """DM assistant (Phase 17): AI replies grounded on the member's own
+        tasks/reminders/notes. White-label bots answer as themselves — the
+        custom-assistant lineage rides the same fleet."""
+        if not ai.is_configured():
+            await governor.safe(message.channel.send(
+                "Hi! I can track things for you in servers — try /remind, /note or /task "
+                "there. DM chat needs the AI assistant, which isn't configured yet."
+            ), what="dm fallback")
+            return
+        key = (0, message.author.id)
+        if time.monotonic() - _dm_last.get(key, 0.0) < 5:
+            return
+        _dm_last[key] = time.monotonic()
+        context = await asyncio.to_thread(self._personal_context, message.author.id)
+        name = self.user.name if self.user else "Assistant"
+        system = (
+            f"You are {name}, a personal Discord assistant. Be brief, warm and useful. "
+            "You can see the member's saved items below. You cannot take actions in DMs - "
+            "tell them to use /task, /remind or /note in a server to add items.\n\n"
+            + (f"MEMBER'S ITEMS:\n{context}" if context else "The member has no saved items yet.")
+        )
+        async with message.channel.typing():
+            result = await asyncio.to_thread(ai.complete, system, message.content or "hi")
+        if result is None or not result.text:
+            await governor.safe(message.channel.send(
+                "Sorry, I couldn't think of a reply just now - try again in a moment."
+            ), what="dm error")
+            return
+        await asyncio.to_thread(self._log_ai, None, message.author.id, result)
+        await governor.safe(message.channel.send(result.text[:1950]), what="dm reply")
+
+    @staticmethod
+    def _personal_context(user_id):
+        db = SessionLocal()
+        try:
+            return assistant.personal_context(db, user_id)
+        finally:
+            db.close()
+            SessionLocal.remove()
+
+    @staticmethod
+    def _add_task(user_id, guild_id, text):
+        db = SessionLocal()
+        try:
+            t = assistant.add_task(db, user_id, guild_id, text)
+            db.commit()
+            return t.id
+        finally:
+            db.close()
+            SessionLocal.remove()
+
+    @staticmethod
+    def _list_tasks(user_id):
+        db = SessionLocal()
+        try:
+            return [(t.id, t.text) for t in assistant.list_tasks(db, user_id)]
+        finally:
+            db.close()
+            SessionLocal.remove()
+
+    @staticmethod
+    def _complete_task(user_id, task_id):
+        db = SessionLocal()
+        try:
+            ok = assistant.complete_task(db, user_id, task_id)
+            db.commit()
+            return ok
+        finally:
+            db.close()
+            SessionLocal.remove()
 
     async def _smart_mod_check(self, message: discord.Message, cfg: dict) -> bool:
         """AI promo/spam layer. Returns True when the message was acted on."""
@@ -1319,6 +1394,37 @@ def attach_builtin_commands(client) -> None:
             return
         lines = [f"• {content}" for content, _ in rows]
         await interaction.response.send_message("📝 **Your notes**\n" + "\n".join(lines)[:1900], ephemeral=True)
+
+    @client.tree.command(name="task", description="Add a personal task. e.g. /task ship the update")
+    @app_commands.describe(text="The task")
+    async def task(interaction: discord.Interaction, text: str) -> None:
+        task_id = await asyncio.to_thread(
+            CoreMixin._add_task, interaction.user.id, interaction.guild_id, text
+        )
+        await interaction.response.send_message(f"✅ Task [{task_id}] added: {text}", ephemeral=True)
+
+    @client.tree.command(name="tasks", description="List your open tasks.")
+    async def tasks_cmd(interaction: discord.Interaction) -> None:
+        rows = await asyncio.to_thread(CoreMixin._list_tasks, interaction.user.id)
+        if not rows:
+            await interaction.response.send_message("No open tasks. 🎉", ephemeral=True)
+            return
+        lines = [f"• [{tid}] {text}" for tid, text in rows]
+        await interaction.response.send_message(
+            "🗒️ **Your open tasks**\n" + "\n".join(lines)[:1900]
+            + "\nFinish one with /done <id>.", ephemeral=True,
+        )
+
+    @client.tree.command(name="done", description="Mark one of your tasks as done. e.g. /done 3")
+    @app_commands.describe(task_id="The task number from /tasks")
+    async def done(interaction: discord.Interaction, task_id: int) -> None:
+        ok = await asyncio.to_thread(CoreMixin._complete_task, interaction.user.id, task_id)
+        if ok:
+            await interaction.response.send_message(f"✅ Task [{task_id}] done — nice.", ephemeral=True)
+        else:
+            await interaction.response.send_message(
+                "I couldn't find that open task of yours — check /tasks.", ephemeral=True
+            )
 
     @client.tree.command(name="ask", description="Ask the AI assistant a question.")
     @app_commands.describe(question="Your question")

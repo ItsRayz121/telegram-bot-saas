@@ -108,16 +108,16 @@
 - [x] 16.9 **(USER)** Confirm `ANTHROPIC_API_KEY` set on **GUILDIZER-WEB** + **GUILDIZER-BOT** (already a V1 var; AI features stay gracefully off without it)
 - [x] 16.10 Tests + commit
 
-## Phase 17 — Assistant Hub (Echo Parity)
+## Phase 17 — Assistant Hub (Echo Parity) ✅ v1 DONE 2026-06-11 (full hub engine deferred — see items)
 
-- [ ] 17.1 DB: hub tables (tasks, reminders, decisions, meetings, notes, digests, knowledge cards, memory, suggestions, follow-ups)
-- [ ] 17.2 DM message router (assistant conversations over Discord DMs)
-- [ ] 17.3 Hub engine port: extraction, digests, memory, suggestions, retention, consent, plan limits
-- [ ] 17.4 Custom ASSISTANT bots (white-label Echo) on the Phase 9 fleet runtime
-- [ ] 17.5 Meeting links + Google Calendar sync
-- [ ] 17.6 UI: Assistant hub pages (tasks/notes/reminders/digests/memory)
+- [x] 17.1 DB: tasks (+ reminders/notes from V1). Decisions/meetings/memory/suggestions/follow-ups DEFERRED
+- [x] 17.2 DM message router — AI grounded on personal tasks/reminders/notes, rate-limited
+- [ ] 17.3 Hub engine port (extraction/memory/suggestions/retention/consent) — DEFERRED
+- [x] 17.4 Custom ASSISTANT bots — free via CoreMixin: every white-label bot answers DMs as itself
+- [ ] 17.5 Meeting links + Google Calendar sync — DEFERRED
+- [ ] 17.6 UI: Assistant hub pages — DEFERRED (bot-surface first)
 - [ ] 17.7 **(USER)** If calendar sync wanted: add `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` to **GUILDIZER-WEB**
-- [ ] 17.8 Tests + commit
+- [x] 17.8 Tests + commit
 
 ## Phase 18 — Teams, Notifications & Billing Depth
 

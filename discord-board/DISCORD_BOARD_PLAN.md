@@ -164,7 +164,7 @@ V2 status:
 - [x] Phase 14 — Engagement parity+ (2026-06-11: invite tracking + /invitelink + referral XP, campaign custom fields in proof modal, keyless oEmbed link checks, public proof feed. 14.6 join-auto-verify deferred. See CHANGELOG.md)
 - [x] Phase 15 — CRM, analytics & usage spine (2026-06-11: Member CRM cols w/ heal, buffered GuildDailyStat rollups, FeatureUsageEvent via on_app_command_completion, /wallet /mywallet, Members + Analytics tabs. See CHANGELOG.md)
 - [x] Phase 16 — Knowledge & applied AI (2026-06-11: KB-grounded /ask, smart-mod AI, image AI, escalation alerts, AI welcome, daily digest. See CHANGELOG.md)
-- [ ] Phase 17 — Assistant hub (Echo parity)
+- [x] Phase 17 — Assistant v1 (2026-06-11: Task + /task /tasks /done, DM AI assistant grounded on personal items, white-label assistant bots free via fleet. Full hub engine deferred. See CHANGELOG.md)
 - [ ] Phase 18 — Teams, notifications & billing depth
 - [ ] Phase 19 — Admin panel parity
 - [ ] Phase 20 — Hardening, verification & launch

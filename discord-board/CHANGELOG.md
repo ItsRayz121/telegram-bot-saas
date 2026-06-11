@@ -310,3 +310,27 @@ green; frontend build green.
 
 **Env vars**: uses existing `ANTHROPIC_API_KEY` (GUILDIZER-WEB + GUILDIZER-BOT;
 all AI features stay off without it).
+
+## Phase 17 — Assistant (Echo Parity, v1) (2026-06-11)
+
+The personal-assistant surface, riding the white-label fleet: every custom bot
+is automatically a custom ASSISTANT bot answering under its own identity.
+
+**Tasks** (`Task` model): /task add, /tasks list, /done <id> — personal scope
+like reminders/notes, ownership-checked.
+
+**DM assistant**: DMing any Guildizer-powered bot now gets an AI reply
+grounded on the member's own open tasks, pending reminders and recent notes
+(`assistant.personal_context`). Typing indicator, 5s per-user rate limit,
+token usage ledgered. Without an AI key the bot answers with a helpful
+pointer to /task /remind /note instead.
+
+**Deferred to a later pass** (tracked in checklist): the full Telegizer hub
+engine — memory (person/project), suggestion engine, meeting links + Google
+Calendar sync, hub dashboard pages, retention/consent plumbing.
+
+**Validation**: smoke suite (task lifecycle incl. ownership + double-complete,
+personal-context grounding + isolation between users) green. No frontend
+changes this phase.
+
+**Env vars**: uses existing `ANTHROPIC_API_KEY`. **Manual ops**: none.
