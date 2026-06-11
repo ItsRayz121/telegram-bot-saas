@@ -28,6 +28,8 @@ import bot_policy
 import campaign_runtime
 import campaign_views
 import command_registrar
+import digest_runtime
+import knowledge
 import content_runtime
 import governor
 import guild_sync
@@ -96,6 +98,11 @@ def serves(client, guild_id: int) -> bool:
         return linked is None
     return linked == client.custom_bot_id
 
+
+# ── AI-layer rate limits (Phase 16) ─────────────────────────────────────────────
+_smartmod_last: dict[tuple[int, int], float] = {}   # (gid, uid) -> monotonic ts
+_imageai_last: dict[int, float] = {}                # gid -> monotonic ts
+_escalation_last: dict[tuple[int, int], float] = {}
 
 # ── Activity buffers (Phase 15) — flushed every ~60s by process_mod_actions ────
 _activity_buffer: dict[tuple[int, int], list] = {}   # (gid, uid) -> [add_msgs, username]
@@ -270,6 +277,10 @@ class CoreMixin:
             if raid_guard.note_message(message.guild.id, message.author.id, text, cfg):
                 await self._raid_activated(message.guild, cfg)
             else:
+                if await self._smart_mod_check(message, cfg):
+                    return  # message acted on by the AI layer
+                await self._image_ai_check(message, cfg)
+                await self._escalation_check(message, cfg)
                 await self._maybe_auto_respond(message)
                 await self._maybe_mirror(message)
                 await self._run_workflows(
@@ -277,6 +288,90 @@ class CoreMixin:
                     member=message.author, channel=message.channel,
                     text=message.content or "",
                 )
+
+    async def _smart_mod_check(self, message: discord.Message, cfg: dict) -> bool:
+        """AI promo/spam layer. Returns True when the message was acted on."""
+        sm = (cfg.get("automod") or {}).get("smart_mod") or {}
+        if not sm.get("enabled") or not ai.is_configured():
+            return False
+        if str(message.author.id) in [str(t) for t in (sm.get("trusted_user_ids") or [])]:
+            return False
+        text = message.content or ""
+        if len(text) < 20:   # too short to be meaningful promo
+            return False
+        key = (message.guild.id, message.author.id)
+        limit = max(5, int(sm.get("ai_rate_limit_seconds", 30)))
+        if time.monotonic() - _smartmod_last.get(key, 0.0) < limit:
+            return False
+        _smartmod_last[key] = time.monotonic()
+        outcome = await asyncio.to_thread(ai.classify_promo, text, sm.get("group_topic") or "")
+        if outcome is None:
+            return False
+        verdict, usage = outcome
+        await asyncio.to_thread(self._log_ai, message.guild.id, message.author.id, usage)
+        if verdict != "promo":
+            return False
+        decision = {"category": "smart_mod", "action": sm.get("action", "delete"),
+                    "matched": "ai", "detail": "AI flagged as unsolicited promotion"}
+        action_taken = await self._execute_action(message, decision)
+        await asyncio.to_thread(
+            self._log, message.guild.id, "smart_mod", action_taken,
+            message.author.id, str(message.author), message.channel.id, decision["detail"],
+        )
+        return True
+
+    async def _image_ai_check(self, message: discord.Message, cfg: dict) -> None:
+        ia = (cfg.get("automod") or {}).get("image_ai") or {}
+        if not ia.get("enabled") or not ai.is_configured() or not message.attachments:
+            return
+        limit = max(10, int(ia.get("rate_limit_seconds", 30)))
+        if time.monotonic() - _imageai_last.get(message.guild.id, 0.0) < limit:
+            return
+        image = next((a for a in message.attachments
+                      if (a.content_type or "").startswith("image/")), None)
+        if image is None:
+            return
+        _imageai_last[message.guild.id] = time.monotonic()
+        outcome = await asyncio.to_thread(ai.check_image, image.url)
+        if outcome is None:
+            return
+        verdict, usage = outcome
+        await asyncio.to_thread(self._log_ai, message.guild.id, message.author.id, usage)
+        if verdict != "nsfw":
+            return
+        decision = {"category": "image_nsfw", "action": ia.get("action", "delete"),
+                    "matched": "image", "detail": "AI flagged image as NSFW"}
+        action_taken = await self._execute_action(message, decision)
+        await asyncio.to_thread(
+            self._log, message.guild.id, "image_ai", action_taken,
+            message.author.id, str(message.author), message.channel.id, decision["detail"],
+        )
+
+    async def _escalation_check(self, message: discord.Message, cfg: dict) -> None:
+        """Frustration keywords -> alert admins (heuristic, no AI cost)."""
+        esc = cfg.get("escalation") or {}
+        keywords = esc.get("keywords") or []
+        if not esc.get("enabled") or not keywords:
+            return
+        low = (message.content or "").lower()
+        hit = next((k for k in keywords if k and k in low), None)
+        if hit is None:
+            return
+        key = (message.guild.id, message.author.id)
+        if time.monotonic() - _escalation_last.get(key, 0.0) < 600:   # 10 min per member
+            return
+        _escalation_last[key] = time.monotonic()
+        await asyncio.to_thread(
+            self._log, message.guild.id, "escalation", "alerted",
+            message.author.id, str(message.author), message.channel.id, f"keyword: {hit}",
+        )
+        ch_id = esc.get("alert_channel_id")
+        channel = message.guild.get_channel(int(ch_id)) if ch_id else None
+        if channel is not None and hasattr(channel, "send"):
+            await governor.safe(channel.send(
+                f"🚨 **Attention needed**: {message.author.mention} in {message.channel.mention} "
+                f"mentioned \"{hit}\" — {message.jump_url}"
+            ), what="escalation alert")
 
     async def _maybe_auto_respond(self, message: discord.Message) -> None:
         responses = await asyncio.to_thread(content_runtime.load_responses, message.guild.id)
@@ -476,6 +571,17 @@ class CoreMixin:
             return
         text = settings_mod.render_message(cfg["welcome_message"], member=member, guild=guild)
         w2 = cfg.get("welcome2") or {}
+        if w2.get("ai_welcome") and ai.is_configured():
+            result = await asyncio.to_thread(
+                ai.complete,
+                "Write ONE short, warm, original welcome sentence for a new Discord "
+                "member. No emojis spam, no quotes around it.",
+                f"Member name: {member.display_name}. Server: {guild.name}.",
+                60,
+            )
+            if result is not None and result.text:
+                await asyncio.to_thread(self._log_ai, guild.id, member.id, result)
+                text = f"{text}\n{result.text}" if text else result.text
         delete_after = int(w2.get("delete_after_seconds") or 0) or None
         rules_emoji = "📜"
         if w2.get("use_embed"):
@@ -813,6 +919,28 @@ class CoreMixin:
                 except (discord.HTTPException, AttributeError, TypeError):
                     log.exception("poll post failed for %s", item["id"])
             await asyncio.to_thread(content_runtime.mark_poll_posted, item["id"], message_id)
+
+        for item in await asyncio.to_thread(digest_runtime.due_guilds, served):
+            guild = self.get_guild(item["guild_id"])
+            channel = guild.get_channel(item["channel_id"]) if guild else None
+            if guild is None or channel is None or not hasattr(channel, "send"):
+                await asyncio.to_thread(digest_runtime.mark_posted, item["guild_id"])
+                continue
+            body = await asyncio.to_thread(
+                digest_runtime.build_stats_text, guild.id, guild.name or "this server"
+            )
+            if ai.is_configured():
+                result = await asyncio.to_thread(
+                    ai.complete,
+                    "Rewrite this Discord server daily digest as a short, upbeat "
+                    "community update. Keep ALL the numbers. Max 5 lines.",
+                    body, 250,
+                )
+                if result is not None and result.text:
+                    await asyncio.to_thread(self._log_ai, guild.id, None, result)
+                    body = result.text
+            await governor.safe(channel.send(body[:1900]), what="daily digest")
+            await asyncio.to_thread(digest_runtime.mark_posted, guild.id)
 
         for item in await asyncio.to_thread(content_runtime.polls_to_finalize, served):
             results = None
@@ -1201,7 +1329,14 @@ def attach_builtin_commands(client) -> None:
             )
             return
         await interaction.response.defer(ephemeral=True, thinking=True)
-        result = await asyncio.to_thread(ai.ask, question)
+        system = None
+        if interaction.guild_id:
+            system = await asyncio.to_thread(knowledge.grounded_system,
+                                             interaction.guild_id, question)
+        if system:
+            result = await asyncio.to_thread(ai.complete, system, question)
+        else:
+            result = await asyncio.to_thread(ai.ask, question)
         if result is None:
             await interaction.followup.send("Sorry, I couldn't answer that right now.", ephemeral=True)
             return

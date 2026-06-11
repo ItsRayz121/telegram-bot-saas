@@ -46,10 +46,50 @@ export default function ContentTab({ guildId, channels = [] }) {
       <Grid item xs={12} md={6}>
         <PollsCard guildId={guildId} polls={polls} channels={textChannels} onChanged={reload} />
       </Grid>
+      <Grid item xs={12} md={6}>
+        <DigestCard guildId={guildId} channels={textChannels} />
+      </Grid>
       <Grid item xs={12}>
         <AutoResponsesCard guildId={guildId} responses={responses} onChanged={reload} />
       </Grid>
     </Grid>
+  );
+}
+
+function DigestCard({ guildId, channels }) {
+  const [cfg, setCfg] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    guildizerApi.get(`/api/guilds/${guildId}/digest`).then(({ data }) => setCfg(data)).catch(() => {});
+  }, [guildId]);
+
+  if (!cfg) return null;
+  const save = async (patch) => {
+    setBusy(true);
+    try {
+      const { data } = await guildizerApi.put(`/api/guilds/${guildId}/digest`, { ...cfg, ...patch });
+      setCfg(data);
+    } catch { /* leave as-is */ }
+    setBusy(false);
+  };
+
+  return (
+    <Card variant="outlined"><CardContent>
+      <Typography variant="subtitle1" fontWeight={700} mb={1}>Daily digest</Typography>
+      <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+        Posts a daily activity summary (AI-polished when an AI key is configured).
+      </Typography>
+      <FormControlLabel control={<Switch checked={!!cfg.enabled} disabled={busy}
+        onChange={(e) => save({ enabled: e.target.checked })} />} label="Enable daily digest" />
+      <TextField select fullWidth size="small" margin="dense" label="Channel"
+        value={cfg.channel_id || ''} onChange={(e) => save({ channel_id: e.target.value || null })}>
+        {channels.map((c) => <MenuItem key={c.id} value={c.id}># {c.name}</MenuItem>)}
+      </TextField>
+      <TextField type="number" fullWidth size="small" margin="dense" label="Post after (UTC hour)"
+        value={cfg.hour_utc ?? 18} inputProps={{ min: 0, max: 23 }}
+        onChange={(e) => save({ hour_utc: Number(e.target.value) })} />
+    </CardContent></Card>
   );
 }
 

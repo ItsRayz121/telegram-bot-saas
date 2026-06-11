@@ -81,6 +81,8 @@ def update_settings(guild_id: int):
         w2 = dict(extra.get("welcome2") or {})
         if "use_embed" in w_in:
             w2["use_embed"] = bool(w_in["use_embed"])
+        if "ai_welcome" in w_in:
+            w2["ai_welcome"] = bool(w_in["ai_welcome"])
         if "rules_text" in w_in:
             w2["rules_text"] = str(w_in["rules_text"] or "")[:1024]
         if "image_url" in w_in:

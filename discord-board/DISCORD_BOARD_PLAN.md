@@ -163,7 +163,7 @@ V2 status:
 - [x] Phase 13 — Automation engine (2026-06-11: AutomationWorkflow/Execution + 4 triggers/4 actions, webhook mirroring w/ author impersonation + self-heal, inbound token URLs -> queued posts, outbound HMAC events, Automation tab. See CHANGELOG.md)
 - [x] Phase 14 — Engagement parity+ (2026-06-11: invite tracking + /invitelink + referral XP, campaign custom fields in proof modal, keyless oEmbed link checks, public proof feed. 14.6 join-auto-verify deferred. See CHANGELOG.md)
 - [x] Phase 15 — CRM, analytics & usage spine (2026-06-11: Member CRM cols w/ heal, buffered GuildDailyStat rollups, FeatureUsageEvent via on_app_command_completion, /wallet /mywallet, Members + Analytics tabs. See CHANGELOG.md)
-- [ ] Phase 16 — Knowledge & applied AI
+- [x] Phase 16 — Knowledge & applied AI (2026-06-11: KB-grounded /ask, smart-mod AI, image AI, escalation alerts, AI welcome, daily digest. See CHANGELOG.md)
 - [ ] Phase 17 — Assistant hub (Echo parity)
 - [ ] Phase 18 — Teams, notifications & billing depth
 - [ ] Phase 19 — Admin panel parity

@@ -65,6 +65,10 @@ export default function SettingsTab({ guildId, channels = [], roles = [] }) {
             control={<Switch checked={!!cfg.welcome2?.use_embed} onChange={(e) => setW2({ use_embed: e.target.checked })} />}
             label="Send as a rich embed (avatar + image)"
           />
+          <FormControlLabel
+            control={<Switch checked={!!cfg.welcome2?.ai_welcome} onChange={(e) => setW2({ ai_welcome: e.target.checked })} />}
+            label="Add an AI-personalized welcome line (needs AI key)"
+          />
           <TextField fullWidth multiline minRows={2} size="small" margin="dense" label="Rules text (optional)"
             value={cfg.welcome2?.rules_text || ''} inputProps={{ maxLength: 1024 }}
             onChange={(e) => setW2({ rules_text: e.target.value })}

@@ -117,6 +117,11 @@ def update_moderation(guild_id: int):
                 if key == "action":
                     if val in _ACTIONS:
                         cur[key] = val
+                elif key == "group_topic":
+                    cur[key] = str(val or "")[:120]
+                elif key == "trusted_user_ids":
+                    cur[key] = [str(t).strip() for t in (val or [])
+                                if str(t).strip().isdigit()][:50]
                 elif key == "whitelist":
                     cur[key] = [str(d).strip().lower()[:100] for d in (val or []) if str(d).strip()][:50]
                 elif key == "scripts":
@@ -137,6 +142,18 @@ def update_moderation(guild_id: int):
         if "timeout_minutes" in w_in:
             w["timeout_minutes"] = _as_int(w_in["timeout_minutes"], 30, 1, 40320)
         extra["warnings"] = w
+    if isinstance(body.get("escalation"), dict):
+        e_in = body["escalation"]
+        e = dict(extra.get("escalation") or {})
+        if "enabled" in e_in:
+            e["enabled"] = bool(e_in["enabled"])
+        if "keywords" in e_in:
+            e["keywords"] = [str(k).strip().lower()[:40] for k in (e_in["keywords"] or [])
+                             if str(k).strip()][:30]
+        if "alert_channel_id" in e_in:
+            ch = e_in["alert_channel_id"]
+            e["alert_channel_id"] = str(ch) if ch and str(ch).isdigit() else None
+        extra["escalation"] = e
     if isinstance(body.get("verification"), dict):
         v_in = body["verification"]
         v = dict(extra.get("verification") or {})

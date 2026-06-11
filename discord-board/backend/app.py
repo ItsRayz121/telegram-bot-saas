@@ -18,6 +18,7 @@ from custom_bots_api import custom_bots_bp
 from database import init_db
 from growth_api import growth_bp
 from guilds_api import guilds_bp
+from knowledge_api import knowledge_bp
 from leveling_api import leveling_bp
 from protection_api import protection_bp
 from settings_api import settings_bp
@@ -45,6 +46,7 @@ def create_app() -> Flask:
     app.register_blueprint(automation_bp)
     app.register_blueprint(growth_bp)
     app.register_blueprint(crm_bp)
+    app.register_blueprint(knowledge_bp)
 
     @app.get("/")
     def root():

@@ -273,3 +273,40 @@ chart lib). Tab bar switched to scrollable (mobile-safe).
 upserts, feature spine, wallet set/clear/trim) green; frontend build green.
 
 **Env vars**: none new. **Manual ops**: none.
+
+## Phase 16 — Knowledge & Applied AI (2026-06-11)
+
+All AI layers run through ai.py + the AITokenUsage ledger and degrade to
+no-ops without ANTHROPIC_API_KEY. Both lineages.
+
+**Knowledge base** (`KnowledgeDocument`, `knowledge.py`): per-server docs
+ground /ask — prefix-tolerant keyword retrieval picks the top 3 docs into the
+system prompt; /ask falls back to the generic assistant when the KB is empty.
+
+**Smart mod**: AI promo/spam classifier on clean messages (community-topic
+aware, trusted users skipped, per-user rate limit, min length 20); acts with
+the configured automod action and logs as smart_mod.
+
+**Image AI**: vision NSFW check on image attachments (per-guild rate limit),
+configured action on flagged images.
+
+**Escalation alerts** (heuristic, zero AI cost): configurable frustration
+keywords -> alert channel ping with a jump link; 10-min per-member cooldown.
+
+**AI welcome**: optional one-line personalized welcome appended to the welcome
+message. **Daily digest**: per-guild daily activity summary (messages/actives/
+joins/leaves/top chatter) posted after a configurable UTC hour, AI-polished
+when configured; fixed an hour-0 falsy bug found by tests.
+
+**API** (`knowledge_api.py`): knowledge CRUD + digest config; smart_mod /
+image_ai / escalation validated on PUT /moderation; ai_welcome on /settings.
+**UI**: Knowledge tab (docs CRUD w/ inline editing), AI moderation +
+Escalation cards (ProtectionTab), Daily digest card (ContentTab), AI welcome
+switch (SettingsTab).
+
+**Validation**: smoke suite (grounded retrieval incl. prefix matching, digest
+due/mark lifecycle incl. hour-0, config sections, AI graceful degradation)
+green; frontend build green.
+
+**Env vars**: uses existing `ANTHROPIC_API_KEY` (GUILDIZER-WEB + GUILDIZER-BOT;
+all AI features stay off without it).

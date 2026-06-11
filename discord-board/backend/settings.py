@@ -34,6 +34,7 @@ _COLUMN_DEFAULTS = {
 # Phase 11 welcome extensions, stored in GuildSettings.extra["welcome2"]
 # (deep-merged on read - self-heals without a migration).
 WELCOME2_DEFAULTS = {
+    "ai_welcome": False,
     "use_embed": False,
     "rules_text": "",
     "image_url": "",

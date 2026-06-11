@@ -39,9 +39,15 @@ EXTRA_DEFAULTS = {
         "language_filter": {"enabled": False, "scripts": [], "action": "delete"},
         "media": {"block_attachments": False, "block_stickers": False,
                   "block_voice": False, "action": "delete"},
+        # Phase 16 — AI layers (graceful no-ops without ANTHROPIC_API_KEY)
+        "smart_mod": {"enabled": False, "group_topic": "", "trusted_user_ids": [],
+                      "ai_rate_limit_seconds": 30, "action": "delete"},
+        "image_ai": {"enabled": False, "action": "delete",
+                     "rate_limit_seconds": 30},
     },
     "warnings": {"max_warnings": 3, "action": "timeout", "timeout_minutes": 30},
     "auto_clean": {"join_messages": False},
+    "escalation": {"enabled": False, "keywords": [], "alert_channel_id": None},
     # Phase 11 — join captcha (quarantine-role pattern) + foreign-bot policy
     "verification": {
         "enabled": False, "method": "button",        # button | math | word

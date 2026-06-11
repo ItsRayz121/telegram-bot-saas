@@ -1202,3 +1202,26 @@ class FeatureUsageEvent(Base):
     user_id = Column(BigInteger, nullable=True)
     feature = Column(String(40), nullable=False, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+class KnowledgeDocument(Base):
+    """Per-server knowledge base content that grounds /ask answers (Phase 16)."""
+
+    __tablename__ = "knowledge_documents"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, ForeignKey("guilds.id"), nullable=False, index=True)
+    title = Column(String(200), nullable=False)
+    content = Column(Text, default="")
+    enabled = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "title": self.title,
+            "content": self.content or "",
+            "enabled": bool(self.enabled),
+            "updated_at": self.updated_at.isoformat() + "Z" if self.updated_at else None,
+        }

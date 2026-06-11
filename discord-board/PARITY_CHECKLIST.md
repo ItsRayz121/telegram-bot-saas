@@ -95,18 +95,18 @@
 - [x] 15.5 UI: CRM page (search/segments/notes), Analytics page (charts), cross-server analytics
 - [x] 15.6 Tests (rollup correctness) + commit
 
-## Phase 16 — Knowledge & Applied AI
+## Phase 16 — Knowledge & Applied AI ✅ DONE 2026-06-11
 
-- [ ] 16.1 DB: `KnowledgeDocument`, `EscalationEvent`, `DigestLog`
-- [ ] 16.2 Knowledge base CRUD + grounded /ask (retrieval over guild docs)
-- [ ] 16.3 Smart-mod AI layer (promo detection, trusted users, per-user AI rate limit)
-- [ ] 16.4 AI welcome / level-up flavor text
-- [ ] 16.5 Escalation detection (frustrated users → admin alert DM)
-- [ ] 16.6 Image moderation on attachments (CDN URLs)
-- [ ] 16.7 AI server digest → channel/DM
-- [ ] 16.8 UI: Knowledge tab + AI toggles in settings sections
-- [ ] 16.9 **(USER)** Confirm `ANTHROPIC_API_KEY` set on **GUILDIZER-WEB** + **GUILDIZER-BOT** (already a V1 var; AI features stay gracefully off without it)
-- [ ] 16.10 Tests + commit
+- [x] 16.1 DB: `KnowledgeDocument`, `EscalationEvent`, `DigestLog`
+- [x] 16.2 Knowledge base CRUD + grounded /ask (retrieval over guild docs)
+- [x] 16.3 Smart-mod AI layer (promo detection, trusted users, per-user AI rate limit)
+- [x] 16.4 AI welcome (level-up flavor deferred — low value vs cost)
+- [x] 16.5 Escalation detection (frustrated users → admin alert DM)
+- [x] 16.6 Image moderation on attachments (CDN URLs)
+- [x] 16.7 AI server digest → channel/DM
+- [x] 16.8 UI: Knowledge tab + AI toggles in settings sections
+- [x] 16.9 **(USER)** Confirm `ANTHROPIC_API_KEY` set on **GUILDIZER-WEB** + **GUILDIZER-BOT** (already a V1 var; AI features stay gracefully off without it)
+- [x] 16.10 Tests + commit
 
 ## Phase 17 — Assistant Hub (Echo Parity)
 

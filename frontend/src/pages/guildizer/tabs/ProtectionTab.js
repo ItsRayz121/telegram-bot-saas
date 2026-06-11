@@ -58,6 +58,7 @@ export default function ProtectionTab({ guildId, channels = [] }) {
   const setW = (patch) => setCfg((c) => ({ ...c, warnings: { ...c.warnings, ...patch } }));
   const setAc = (patch) => setCfg((c) => ({ ...c, auto_clean: { ...c.auto_clean, ...patch } }));
   const setV = (patch) => setCfg((c) => ({ ...c, verification: { ...c.verification, ...patch } }));
+  const setEsc = (patch) => setCfg((c) => ({ ...c, escalation: { ...c.escalation, ...patch } }));
   const setBp = (patch) => setCfg((c) => ({ ...c, bot_policy: { ...c.bot_policy, ...patch } }));
 
   async function reviewReport(id, status) {
@@ -307,6 +308,41 @@ export default function ProtectionTab({ guildId, channels = [] }) {
             value={(cfg.bot_policy?.trusted_bot_ids || []).join(', ')}
             onChange={(e) => setBp({ trusted_bot_ids: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })}
             helperText="Comma-separated Discord user IDs. The alert message also has a one-click Trust button." />
+        </CardContent></Card>
+      </Grid>
+
+      <Grid item xs={12} md={6}>
+        <Card variant="outlined"><CardContent>
+          <Typography variant="subtitle1" fontWeight={700} mb={1}>AI moderation</Typography>
+          <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+            Needs an AI key configured on the backend; switches do nothing without it.
+          </Typography>
+          <FormControlLabel control={<Switch checked={!!cfg.automod?.smart_mod?.enabled} onChange={(e) => setAm('smart_mod', { enabled: e.target.checked })} />} label="Smart mod — AI flags unsolicited promotion/spam" />
+          <TextField size="small" margin="dense" fullWidth label="Community topic (helps the AI judge)"
+            placeholder="e.g. CreatorX — creator economy tools"
+            value={cfg.automod?.smart_mod?.group_topic || ''} onChange={(e) => setAm('smart_mod', { group_topic: e.target.value })} />
+          <TextField select size="small" margin="dense" fullWidth label="Action on promo"
+            value={cfg.automod?.smart_mod?.action || 'delete'} onChange={(e) => setAm('smart_mod', { action: e.target.value })}>
+            {CF_ACTIONS.map((a) => <MenuItem key={a} value={a}>{a}</MenuItem>)}
+          </TextField>
+          <FormControlLabel control={<Switch checked={!!cfg.automod?.image_ai?.enabled} onChange={(e) => setAm('image_ai', { enabled: e.target.checked })} />} label="Image AI — remove NSFW images" />
+        </CardContent></Card>
+      </Grid>
+
+      <Grid item xs={12} md={6}>
+        <Card variant="outlined"><CardContent>
+          <Typography variant="subtitle1" fontWeight={700} mb={1}>Escalation alerts</Typography>
+          <FormControlLabel control={<Switch checked={!!cfg.escalation?.enabled} onChange={(e) => setEsc({ enabled: e.target.checked })} />} label="Alert admins when members sound frustrated" />
+          <TextField size="small" margin="dense" fullWidth label="Trigger keywords"
+            placeholder="refund, scam, not working"
+            value={(cfg.escalation?.keywords || []).join(', ')}
+            onChange={(e) => setEsc({ keywords: e.target.value.split(',').map((k) => k.trim()).filter(Boolean) })}
+            helperText="Comma-separated. One alert per member per 10 minutes." />
+          <TextField select size="small" margin="dense" fullWidth label="Alert channel"
+            value={cfg.escalation?.alert_channel_id || ''} onChange={(e) => setEsc({ alert_channel_id: e.target.value || null })}>
+            <MenuItem value="">- none -</MenuItem>
+            {textChannels.map((c) => <MenuItem key={c.id} value={c.id}># {c.name}</MenuItem>)}
+          </TextField>
         </CardContent></Card>
       </Grid>
 
