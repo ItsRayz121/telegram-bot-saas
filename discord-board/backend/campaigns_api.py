@@ -66,6 +66,16 @@ def _as_int(value, default, lo, hi):
         return default
 
 
+def _parse_iso(value):
+    """ISO-8601 string (optionally with trailing Z) -> naive UTC datetime, or None."""
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).replace(tzinfo=None)
+    except (TypeError, ValueError):
+        return None
+
+
 def _counts(cid: int) -> dict:
     rows = (
         g.db.query(CampaignSubmission.status, func.count(CampaignSubmission.id))
@@ -189,6 +199,10 @@ def update_campaign(guild_id: int, cid: int):
     if "channel_id" in body:
         v = body["channel_id"]
         c.channel_id = int(v) if str(v or "").isdigit() else None
+    if "ends_at" in body:
+        c.ends_at = _parse_iso(body["ends_at"])
+    if "starts_at" in body:
+        c.starts_at = _parse_iso(body["starts_at"])
 
     if "status" in body and body["status"] in CAMPAIGN_STATUSES:
         new_status = body["status"]

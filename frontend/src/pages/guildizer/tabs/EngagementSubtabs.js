@@ -120,7 +120,7 @@ export function RaidsSubtab({ guildId, channels = [] }) {
                 <Chip size="small" variant="outlined" label={r.status} color={STATUS_COLOR[r.status] || 'default'} sx={{ mr: 1 }} />
                 <ListItemText
                   primary={r.title}
-                  secondary={`${r.reward_xp} XP · ${r.submission_count ?? 0} participants${r.ends_at ? ` · ends ${new Date(r.ends_at).toLocaleString()}` : ''}`}
+                  secondary={`${r.reward_xp} XP · ${r.counts?.total ?? 0} participants${r.ends_at ? ` · ends ${new Date(r.ends_at).toLocaleString()}` : ''}`}
                   primaryTypographyProps={{ variant: 'body2', noWrap: true }} />
               </ListItem>
             ))}
@@ -201,8 +201,8 @@ export function InviteLinksSubtab({ guildId }) {
               <ListItem key={j.id} disableGutters
                 secondaryAction={<Typography variant="caption" color="text.disabled">{new Date(j.created_at).toLocaleString()}</Typography>}>
                 <ListItemText
-                  primary={`${j.member_name || j.member_id} joined`}
-                  secondary={j.inviter_name ? `invited by ${j.inviter_name}${j.invite_code ? ` · ${j.invite_code}` : ''}` : (j.invite_code || 'unknown invite')}
+                  primary={`${j.joiner_name || j.joiner_id} joined`}
+                  secondary={j.inviter_name ? `invited by ${j.inviter_name}${j.code ? ` · ${j.code}` : ''}` : (j.code || 'unknown invite')}
                   primaryTypographyProps={{ variant: 'body2', noWrap: true }} />
               </ListItem>
             ))}
