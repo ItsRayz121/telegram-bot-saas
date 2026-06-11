@@ -86,14 +86,14 @@
 - [x] 14.9 ~~YOUTUBE/X API keys~~ NOT NEEDED — implemented with keyless oEmbed endpoints
 - [x] 14.10 Tests + live invite-attribution check + commit
 
-## Phase 15 — CRM, Analytics & Usage Spine
+## Phase 15 — CRM, Analytics & Usage Spine ✅ DONE 2026-06-11 (cross-server analytics hub lands with Phase 19 admin)
 
-- [ ] 15.1 DB: widen `Member` (last_seen, message_count, wallet, admin notes), `GuildDailyStat`, `FeatureUsageEvent`
-- [ ] 15.2 Gateway rollups: daily message/join/leave/active counts per guild
-- [ ] 15.3 Member CRM API + /wallet /mywallet commands (modal input)
-- [ ] 15.4 Feature-usage recorder wired into every feature path
-- [ ] 15.5 UI: CRM page (search/segments/notes), Analytics page (charts), cross-server analytics
-- [ ] 15.6 Tests (rollup correctness) + commit
+- [x] 15.1 DB: widen `Member` (last_seen, message_count, wallet, admin notes), `GuildDailyStat`, `FeatureUsageEvent`
+- [x] 15.2 Gateway rollups: daily message/join/leave/active counts per guild
+- [x] 15.3 Member CRM API + /wallet /mywallet commands (modal input)
+- [x] 15.4 Feature-usage recorder wired into every feature path
+- [x] 15.5 UI: CRM page (search/segments/notes), Analytics page (charts), cross-server analytics
+- [x] 15.6 Tests (rollup correctness) + commit
 
 ## Phase 16 — Knowledge & Applied AI
 

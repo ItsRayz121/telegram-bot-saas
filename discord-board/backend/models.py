@@ -410,6 +410,10 @@ class Member(Base):
     messages = Column(Integer, default=0)
     last_xp_at = Column(DateTime, nullable=True)
     updated_at = Column(DateTime, default=datetime.utcnow)
+    # Phase 15 CRM fields (healed via database._HEAL_COLUMNS on live DBs)
+    last_seen = Column(DateTime, nullable=True)
+    wallet = Column(String(120), nullable=True)
+    admin_notes = Column(Text, nullable=True)
 
     def to_dict(self) -> dict:
         return {
@@ -418,6 +422,9 @@ class Member(Base):
             "xp": self.xp or 0,
             "level": self.level or 1,
             "messages": self.messages or 0,
+            "last_seen": self.last_seen.isoformat() + "Z" if self.last_seen else None,
+            "wallet": self.wallet,
+            "admin_notes": self.admin_notes,
         }
 
 
@@ -1161,3 +1168,37 @@ class CampaignCustomField(Base):
             "required": bool(self.required),
             "position": self.position or 0,
         }
+
+
+class GuildDailyStat(Base):
+    """Per-day activity rollup (Phase 15): message/join/leave counts buffered
+    in the bot and flushed every minute. day = 'YYYY-MM-DD' (UTC)."""
+
+    __tablename__ = "guild_daily_stats"
+
+    guild_id = Column(BigInteger, ForeignKey("guilds.id"), primary_key=True)
+    day = Column(String(10), primary_key=True)
+    messages = Column(Integer, default=0)
+    joins = Column(Integer, default=0)
+    leaves = Column(Integer, default=0)
+
+    def to_dict(self) -> dict:
+        return {
+            "day": self.day,
+            "messages": self.messages or 0,
+            "joins": self.joins or 0,
+            "leaves": self.leaves or 0,
+        }
+
+
+class FeatureUsageEvent(Base):
+    """One feature interaction (Phase 15 usage spine) — today: every completed
+    slash command. Feeds the admin usage analytics later."""
+
+    __tablename__ = "feature_usage_events"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=True, index=True)
+    user_id = Column(BigInteger, nullable=True)
+    feature = Column(String(40), nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)

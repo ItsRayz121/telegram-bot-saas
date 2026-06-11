@@ -243,3 +243,33 @@ custom fields in context + proof JSON, link-check shapes, API gates, open
 public feed) green; frontend production build green.
 
 **Env vars**: none new (oEmbed is keyless — YOUTUBE/X keys no longer needed).
+
+## Phase 15 — CRM, Analytics & Usage Spine (2026-06-11)
+
+**Member CRM**: members table gains last_seen / wallet / admin_notes (additive
+column self-heal — no migration). Activity is buffered in-memory by the bot
+and flushed every ~60s (no per-message writes); message counts stay accurate
+whether leveling is on (leveling counts) or off (tracker counts).
+
+**Daily analytics** (`GuildDailyStat`): per-day message/join/leave rollups,
+upserted from buffers + join/leave events. API fills missing days with zeros;
+"active today" derived from Member.last_seen.
+
+**Feature-usage spine** (`FeatureUsageEvent`): every completed slash command
+recorded via a single on_app_command_completion hook (both lineages) — the
+data backbone for Phase 19's admin usage analytics.
+
+**Wallet collection**: /wallet (modal input, ephemeral) + /mywallet (masked
+display). Wallets visible to admins in the CRM.
+
+**API** (`crm_api.py`): GET /members (search by name/ID, sort xp/messages/
+last_seen), PUT /members/<uid> (notes/wallet), GET /analytics?days=7|14|30.
+
+**UI**: new **Members** tab (search/sort list, expandable rows with wallet +
+admin notes) and **Analytics** tab (totals cards + per-day bar charts, no
+chart lib). Tab bar switched to scrollable (mobile-safe).
+
+**Validation**: smoke suite (flush semantics incl. dual counting modes, rollup
+upserts, feature spine, wallet set/clear/trim) green; frontend build green.
+
+**Env vars**: none new. **Manual ops**: none.

@@ -14,12 +14,14 @@ import CampaignsTab from './tabs/CampaignsTab';
 import BillingTab from './tabs/BillingTab';
 import ContentTab from './tabs/ContentTab';
 import AutomationTab from './tabs/AutomationTab';
+import MembersTab from './tabs/MembersTab';
+import AnalyticsTab from './tabs/AnalyticsTab';
 
 // Discord channel type enum → label (common ones).
 const CHANNEL_TYPES = { 0: 'Text', 2: 'Voice', 4: 'Category', 5: 'Announcement', 13: 'Stage', 15: 'Forum' };
 
 // Tabs grow with each integration phase.
-const TABS = ['Overview', 'Settings', 'Commands', 'Content', 'Automation', 'Protection', 'Leveling', 'Campaigns', 'Billing'];
+const TABS = ['Overview', 'Settings', 'Commands', 'Content', 'Automation', 'Protection', 'Leveling', 'Campaigns', 'Members', 'Analytics', 'Billing'];
 
 export default function GuildizerServerDetail() {
   const { guildId } = useParams();
@@ -53,7 +55,7 @@ export default function GuildizerServerDetail() {
       {state.guild && (
         <>
           <Header guild={state.guild} />
-          <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}>
+          <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" allowScrollButtonsMobile sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}>
             {TABS.map((t) => <Tab key={t} label={t} />)}
           </Tabs>
           {TABS[tab] === 'Overview' && <Overview guild={state.guild} />}
@@ -64,6 +66,8 @@ export default function GuildizerServerDetail() {
           {TABS[tab] === 'Protection' && <ProtectionTab guildId={guildId} channels={state.guild.channels} />}
           {TABS[tab] === 'Leveling' && <LevelingTab guildId={guildId} channels={state.guild.channels} />}
           {TABS[tab] === 'Campaigns' && <CampaignsTab guildId={guildId} channels={state.guild.channels} />}
+          {TABS[tab] === 'Members' && <MembersTab guildId={guildId} />}
+          {TABS[tab] === 'Analytics' && <AnalyticsTab guildId={guildId} />}
           {TABS[tab] === 'Billing' && <BillingTab guildId={guildId} />}
         </>
       )}

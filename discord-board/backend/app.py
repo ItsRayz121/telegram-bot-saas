@@ -13,6 +13,7 @@ from billing_api import billing_bp
 from campaigns_api import campaigns_bp
 from config import Config
 from content_api import content_bp
+from crm_api import crm_bp
 from custom_bots_api import custom_bots_bp
 from database import init_db
 from growth_api import growth_bp
@@ -43,6 +44,7 @@ def create_app() -> Flask:
     app.register_blueprint(content_bp)
     app.register_blueprint(automation_bp)
     app.register_blueprint(growth_bp)
+    app.register_blueprint(crm_bp)
 
     @app.get("/")
     def root():

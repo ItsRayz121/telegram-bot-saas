@@ -162,7 +162,7 @@ V2 status:
 - [x] Phase 12 — Scheduling, polls & content (2026-06-11: ScheduledMessage w/ recurrence, native Discord polls w/ result capture, AutoResponse w/ cooldowns, content_loop both lineages, Content tab. See CHANGELOG.md)
 - [x] Phase 13 — Automation engine (2026-06-11: AutomationWorkflow/Execution + 4 triggers/4 actions, webhook mirroring w/ author impersonation + self-heal, inbound token URLs -> queued posts, outbound HMAC events, Automation tab. See CHANGELOG.md)
 - [x] Phase 14 — Engagement parity+ (2026-06-11: invite tracking + /invitelink + referral XP, campaign custom fields in proof modal, keyless oEmbed link checks, public proof feed. 14.6 join-auto-verify deferred. See CHANGELOG.md)
-- [ ] Phase 15 — CRM, analytics & usage spine
+- [x] Phase 15 — CRM, analytics & usage spine (2026-06-11: Member CRM cols w/ heal, buffered GuildDailyStat rollups, FeatureUsageEvent via on_app_command_completion, /wallet /mywallet, Members + Analytics tabs. See CHANGELOG.md)
 - [ ] Phase 16 — Knowledge & applied AI
 - [ ] Phase 17 — Assistant hub (Echo parity)
 - [ ] Phase 18 — Teams, notifications & billing depth

@@ -32,6 +32,10 @@ def init_db() -> None:
 # self-heal pattern the settings layer uses for rows). Additive-only, idempotent.
 _HEAL_COLUMNS = [
     ("guilds", "custom_bot_id", "INTEGER"),
+    # Phase 15 CRM columns on members
+    ("members", "last_seen", "TIMESTAMP"),
+    ("members", "wallet", "VARCHAR(120)"),
+    ("members", "admin_notes", "TEXT"),
 ]
 
 

@@ -39,6 +39,7 @@ import moderation_runtime
 import protection
 import raid_guard
 import settings as settings_mod
+import stats_runtime
 import verification
 from database import SessionLocal
 from models import BotHealthEvent, CustomBot, Guild, GuildSettings, Member
@@ -94,6 +95,19 @@ def serves(client, guild_id: int) -> bool:
     if getattr(client, "custom_bot_id", None) is None:   # official bot
         return linked is None
     return linked == client.custom_bot_id
+
+
+# ── Activity buffers (Phase 15) — flushed every ~60s by process_mod_actions ────
+_activity_buffer: dict[tuple[int, int], list] = {}   # (gid, uid) -> [add_msgs, username]
+_daily_msg_buffer: dict[int, int] = {}                # gid -> messages
+
+
+def _note_activity(guild_id: int, user_id: int, username: str, counted_by_leveling: bool) -> None:
+    _daily_msg_buffer[guild_id] = _daily_msg_buffer.get(guild_id, 0) + 1
+    entry = _activity_buffer.setdefault((guild_id, user_id), [0, username])
+    if not counted_by_leveling:
+        entry[0] += 1
+    entry[1] = username
 
 
 # ── Health events (dashboard + admin fleet view) ───────────────────────────────
@@ -213,7 +227,8 @@ class CoreMixin:
             return
 
         # XP applies to everyone (including staff); moderation skips staff.
-        await self._maybe_award_xp(message)
+        counted = await self._maybe_award_xp(message)
+        _note_activity(message.guild.id, message.author.id, str(message.author), counted)
 
         perms = getattr(message.author, "guild_permissions", None)
         if perms and (perms.administrator or perms.manage_guild or perms.manage_messages):
@@ -323,15 +338,16 @@ class CoreMixin:
             await governor.safe(channel.send(raid_guard.activation_notice(secs)), what="raid notice")
 
     # --- leveling / XP ----------------------------------------------------------
-    async def _maybe_award_xp(self, message: discord.Message) -> None:
+    async def _maybe_award_xp(self, message: discord.Message) -> bool:
+        """Returns True when leveling counted this message (levels enabled)."""
         cfg = await asyncio.to_thread(self._load_leveling, message.guild.id)
         if not cfg or not cfg.get("levels_enabled"):
-            return
+            return False
         result = await asyncio.to_thread(
             self._do_award_xp, message.guild.id, message.author.id, str(message.author), cfg
         )
         if result is None:
-            return
+            return True
         leveled_up, new_level = result
         if leveled_up and cfg.get("announce_level_up", True):
             text = leveling.render_levelup(
@@ -344,6 +360,7 @@ class CoreMixin:
             channel = message.guild.get_channel(int(ch_id)) if ch_id else message.channel
             if channel and hasattr(channel, "send"):
                 await governor.safe(channel.send(text), what="level-up announce")
+        return True
 
     # --- member events (join gate, lockdown, welcome/leave, auto-roles) ---------
     async def on_member_join(self, member: discord.Member) -> None:
@@ -398,6 +415,7 @@ class CoreMixin:
         if cfg["welcome_enabled"] and cfg["welcome_channel_id"]:
             await self._send_welcome(member, cfg)
 
+        await asyncio.to_thread(stats_runtime.bump_daily, member.guild.id, joins=1)
         attribution = await invite_tracking.attribute_join(member.guild)
         if attribution is not None:
             code, inviter_id, inviter_name = attribution
@@ -492,6 +510,7 @@ class CoreMixin:
         if not serves(self, member.guild.id):
             return
         if not member.bot:
+            await asyncio.to_thread(stats_runtime.bump_daily, member.guild.id, leaves=1)
             await self._run_workflows("member_leave", member.guild, member=member)
             await asyncio.to_thread(
                 automation_runtime.dispatch_event, member.guild.id, "member_leave",
@@ -615,6 +634,13 @@ class CoreMixin:
             except discord.HTTPException as exc:
                 log.warning("mirror send failed for rule %s: %s", rule["id"], exc)
 
+    async def on_app_command_completion(self, interaction: discord.Interaction, command) -> None:
+        await asyncio.to_thread(
+            stats_runtime.record_feature, interaction.guild_id,
+            interaction.user.id if interaction.user else None,
+            getattr(command, "qualified_name", None) or getattr(command, "name", "unknown"),
+        )
+
     async def on_invite_create(self, invite: discord.Invite) -> None:
         if invite.guild is not None and serves(self, invite.guild.id):
             guild = self.get_guild(invite.guild.id)
@@ -719,6 +745,18 @@ class CoreMixin:
                     uid, None, None, "tempban expired",
                 )
             await asyncio.to_thread(self._mark_mod_action_done, aid)
+
+        # flush activity buffers (Phase 15)
+        if _activity_buffer:
+            items = [(gid, uid, entry[1], entry[0])
+                     for (gid, uid), entry in _activity_buffer.items()]
+            _activity_buffer.clear()
+            await asyncio.to_thread(stats_runtime.flush_activity, items)
+        if _daily_msg_buffer:
+            pending = dict(_daily_msg_buffer)
+            _daily_msg_buffer.clear()
+            for gid, n in pending.items():
+                await asyncio.to_thread(stats_runtime.bump_daily, gid, messages=n)
 
         # expired join-captcha challenges (kick/keep per config)
         served = [gd.id for gd in self.guilds if serves(self, gd.id)]
@@ -1069,6 +1107,7 @@ def attach_builtin_commands(client) -> None:
     answer under their own name/avatar — same engine underneath."""
     mod_commands.attach_mod_commands(client)
     invite_tracking.attach_invite_command(client)
+    stats_runtime.attach_wallet_commands(client)
 
     @client.tree.command(name="ping", description="Check that the bot is alive.")
     async def ping(interaction: discord.Interaction) -> None:
