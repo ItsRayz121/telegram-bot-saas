@@ -44,6 +44,13 @@ EXTRA_DEFAULTS = {
                       "ai_rate_limit_seconds": 30, "action": "delete"},
         "image_ai": {"enabled": False, "action": "delete",
                      "rate_limit_seconds": 30},
+        # Phase 4 native: mirror cf_custom_words into a Discord AutoMod rule so
+        # the words stay blocked when the bot is down. Bot-owned state keys
+        # (dirty, rule_id, last_synced_at, last_error) live in the stored
+        # section but are intentionally NOT defaults — the dashboard PUT only
+        # accepts keys listed here.
+        "native_sync": {"enabled": False, "block_invites": False,
+                        "alert_channel_id": None},
     },
     "warnings": {"max_warnings": 3, "action": "timeout", "timeout_minutes": 30,
                  "window_hours": 0},

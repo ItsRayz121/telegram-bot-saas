@@ -178,6 +178,30 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
 
           <Grid item xs={12} md={6}>
             <Card variant="outlined"><CardContent>
+              <Typography variant="subtitle1" fontWeight={700} mb={1}>⚡ Native AutoMod sync</Typography>
+              <FormControlLabel control={<Switch checked={!!cfg.automod?.native_sync?.enabled} onChange={(e) => setAm('native_sync', { enabled: e.target.checked })} />} label="Mirror the custom blocked words into Discord AutoMod" />
+              <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+                Discord enforces these words natively, so they stay blocked even while the bot is
+                offline. Needs the Manage Server permission; syncs within a minute of saving.
+              </Typography>
+              <FormControlLabel control={<Switch checked={!!cfg.automod?.native_sync?.block_invites} onChange={(e) => setAm('native_sync', { block_invites: e.target.checked })} />} label="Also block discord.gg invite links natively" />
+              {channelSelect('Alert channel for blocked messages', cfg.automod?.native_sync?.alert_channel_id, (v) => setAm('native_sync', { alert_channel_id: v }), '— no alerts —')}
+              {cfg.automod?.native_sync?.last_error ? (
+                <Alert severity="warning" sx={{ mt: 1 }}>{cfg.automod.native_sync.last_error}</Alert>
+              ) : (
+                <Typography variant="caption" color="text.disabled" display="block" mt={1}>
+                  {cfg.automod?.native_sync?.dirty
+                    ? 'Sync queued…'
+                    : cfg.automod?.native_sync?.last_synced_at
+                      ? `Last synced ${new Date(cfg.automod.native_sync.last_synced_at).toLocaleString()}`
+                      : 'Not synced yet.'}
+                </Typography>
+              )}
+            </CardContent></Card>
+          </Grid>
+
+          <Grid item xs={12} md={6}>
+            <Card variant="outlined"><CardContent>
               <Typography variant="subtitle1" fontWeight={700} mb={1}>Automod — media</Typography>
               <FormControlLabel control={<Switch checked={!!cfg.automod?.media?.block_attachments} onChange={(e) => setAm('media', { block_attachments: e.target.checked })} />} label="Block file / image attachments" />
               <FormControlLabel control={<Switch checked={!!cfg.automod?.media?.block_stickers} onChange={(e) => setAm('media', { block_stickers: e.target.checked })} />} label="Block stickers" />

@@ -192,8 +192,11 @@ Ranked by impact-per-effort:
    embed reposts with live count edits (throttled per message), self-star opt-in, NSFW and
    starboard-channel sources excluded. Source→repost map pruned in `extra.starboard.posted`.
    `starboard.py` + `starboard_api.py`.
-6. **Discord native AutoMod sync** (Moderation › AutoMod) — push banned words/links into
-   Discord's built-in AutoMod via API so filtering happens even when the bot is down.
+6. ✅ **Discord native AutoMod sync** (Moderation › AutoMod, 2026-06-12) — mirrors
+   `cf_custom_words` (+ optional invite links) into one managed Discord AutoMod keyword
+   rule ("Guildizer · Banned words") so words stay blocked while the bot is down. Dirty
+   flag set by the moderation PUT, reconciled in the 20s post loop; rule_id/last_synced_at/
+   last_error state in `extra.automod.native_sync`. `automod_sync.py`.
 7. **Embed builder for Scheduler** (Automation › Scheduler) — title/color/image embeds, the
    Discord-native equivalent of Telegram rich posts.
 8. **Auto-publish announcements** (Automation) — auto-publish posts in announcement channels

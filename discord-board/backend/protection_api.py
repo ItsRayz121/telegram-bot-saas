@@ -122,6 +122,8 @@ def update_moderation(guild_id: int):
                     cur[key] = [str(d).strip().lower()[:100] for d in (val or []) if str(d).strip()][:50]
                 elif key == "scripts":
                     cur[key] = [str(s).strip().lower() for s in (val or []) if str(s).strip()][:10]
+                elif key == "alert_channel_id":
+                    cur[key] = str(val) if val and str(val).isdigit() else None
                 elif isinstance(default_val, bool):
                     cur[key] = bool(val)
                 elif isinstance(default_val, int):
@@ -266,6 +268,17 @@ def update_moderation(guild_id: int):
             ch = body["reports"]["alert_channel_id"]
             rp["alert_channel_id"] = str(ch) if ch and str(ch).isdigit() else None
         extra["reports"] = rp
+
+    # Native AutoMod sync: any change to the blocked words or the sync settings
+    # queues a reconcile — the bot's 20s loop pushes the rule to Discord and
+    # clears the flag (automod_sync.py).
+    am_body = body.get("automod") if isinstance(body.get("automod"), dict) else {}
+    if "cf_custom_words" in body or isinstance(am_body.get("native_sync"), dict):
+        am = dict(extra.get("automod") or {})
+        ns = dict(am.get("native_sync") or {})
+        ns["dirty"] = True
+        am["native_sync"] = ns
+        extra["automod"] = am
     row.extra = extra
 
     row.updated_at = datetime.utcnow()

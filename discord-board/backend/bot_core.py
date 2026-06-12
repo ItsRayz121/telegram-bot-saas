@@ -37,6 +37,7 @@ import governor
 import guild_sync
 import invite_tracking
 import leveling
+import automod_sync
 import mod_commands
 import moderation
 import moderation_runtime
@@ -1317,6 +1318,10 @@ class CoreMixin:
             await tickets.process_pending(self)
         except Exception:  # noqa: BLE001
             log.exception("ticket panel processing failed")
+        try:
+            await automod_sync.process_pending(self)
+        except Exception:  # noqa: BLE001
+            log.exception("native automod sync failed")
 
     @post_campaigns.before_loop
     async def _before_post(self) -> None:
