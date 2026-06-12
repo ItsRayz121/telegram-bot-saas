@@ -1605,11 +1605,12 @@ class CoreMixin:
         end = item["end_at"].replace(tzinfo=timezone.utc) if item["end_at"] else None
         kwargs = {
             "name": item["name"][:100],
-            "description": (item["description"] or "")[:1000],
             "start_time": start,
             "privacy_level": discord.PrivacyLevel.guild_only,
             "reason": "Guildizer: scheduled from the dashboard",
         }
+        if item["description"]:
+            kwargs["description"] = item["description"][:1000]
         try:
             if item["entity_type"] in ("voice", "stage"):
                 channel = guild.get_channel(int(item["channel_id"] or 0))
