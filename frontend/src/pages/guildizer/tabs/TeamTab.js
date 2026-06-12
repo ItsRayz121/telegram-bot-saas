@@ -35,7 +35,7 @@ export default function TeamTab({ guildId }) {
   return (
     <Card variant="outlined"><CardContent>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={0.5}>
-        <Typography variant="subtitle1" fontWeight={700}>Team access</Typography>
+        <Typography variant="h6" fontWeight={600}>Team access</Typography>
         <Button startIcon={<Add />} variant="contained" size="small" disabled={busy} onClick={createInvite}>
           New invite code
         </Button>

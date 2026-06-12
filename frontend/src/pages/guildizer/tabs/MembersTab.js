@@ -40,7 +40,7 @@ export default function MembersTab({ guildId }) {
   return (
     <Card variant="outlined"><CardContent>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
-        <Typography variant="subtitle1" fontWeight={700}>Members ({total} tracked)</Typography>
+        <Typography variant="h6" fontWeight={600}>Members ({total} tracked)</Typography>
         <Stack direction="row" spacing={1}>
           <TextField size="small" label="Search name or ID" value={search}
             onChange={(e) => setSearch(e.target.value)}

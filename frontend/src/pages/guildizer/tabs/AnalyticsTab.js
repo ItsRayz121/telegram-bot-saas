@@ -68,7 +68,10 @@ function BarsCard({ title, series, field, color }) {
   const max = Math.max(1, ...series.map((d) => d[field]));
   return (
     <Card variant="outlined"><CardContent>
-      <Typography variant="subtitle1" fontWeight={700} mb={1.5}>{title}</Typography>
+      <Typography variant="h6" fontWeight={600} mb={1}>{title}</Typography>
+      <Typography variant="body2" color="text.secondary" mb={2}>
+        Daily activity over the selected window. Hover a bar to see its date and exact count.
+      </Typography>
       <Stack direction="row" spacing={0.5} alignItems="flex-end" sx={{ height: 120 }}>
         {series.map((d) => (
           <Tooltip key={d.day} title={`${d.day}: ${d[field]}`}>

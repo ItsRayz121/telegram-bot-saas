@@ -79,7 +79,7 @@ export function RaidsSubtab({ guildId, channels = [] }) {
 
       <Grid item xs={12} md={6}>
         <Card variant="outlined"><CardContent>
-          <Typography variant="subtitle1" fontWeight={700} mb={1}>Launch a raid</Typography>
+          <Typography variant="h6" fontWeight={600} mb={1}>Launch a raid</Typography>
           <Typography variant="caption" color="text.secondary" display="block" mb={1}>
             Rally the server on a post — members who take part earn XP. Announced in the chosen channel.
           </Typography>
@@ -110,7 +110,8 @@ export function RaidsSubtab({ guildId, channels = [] }) {
 
       <Grid item xs={12} md={6}>
         <Card variant="outlined"><CardContent>
-          <Typography variant="subtitle1" fontWeight={700} mb={1}>Raids</Typography>
+          <Typography variant="h6" fontWeight={600} mb={1}>Raids</Typography>
+          <Typography variant="body2" color="text.secondary" mb={2}>Active and past raids, with participant counts and end times.</Typography>
           {raids.length === 0 && <Typography variant="body2" color="text.secondary">No raids yet.</Typography>}
           <List dense>
             {raids.map((r) => (
@@ -164,7 +165,7 @@ export function InviteLinksSubtab({ guildId }) {
 
       <Grid item xs={12} md={5}>
         <Card variant="outlined"><CardContent>
-          <Typography variant="subtitle1" fontWeight={700} mb={1}>Referral rewards</Typography>
+          <Typography variant="h6" fontWeight={600} mb={1}>Referral rewards</Typography>
           <Typography variant="caption" color="text.secondary" display="block" mb={1}>
             The bot tracks which invite each member joined through. Members create their own tracked
             link with /invitelink.
@@ -179,7 +180,8 @@ export function InviteLinksSubtab({ guildId }) {
 
       <Grid item xs={12} md={7}>
         <Card variant="outlined"><CardContent>
-          <Typography variant="subtitle1" fontWeight={700} mb={1}>Top inviters</Typography>
+          <Typography variant="h6" fontWeight={600} mb={1}>Top inviters</Typography>
+          <Typography variant="body2" color="text.secondary" mb={2}>Members ranked by how many people joined through their tracked invites.</Typography>
           {data.leaderboard.length === 0 && <Typography variant="body2" color="text.secondary">No tracked invites yet.</Typography>}
           <List dense>
             {data.leaderboard.map((r, i) => (
@@ -195,7 +197,8 @@ export function InviteLinksSubtab({ guildId }) {
 
       <Grid item xs={12}>
         <Card variant="outlined"><CardContent>
-          <Typography variant="subtitle1" fontWeight={700} mb={1}>Recent joins via invites</Typography>
+          <Typography variant="h6" fontWeight={600} mb={1}>Recent joins via invites</Typography>
+          <Typography variant="body2" color="text.secondary" mb={2}>The latest members to join and which invite brought them in.</Typography>
           {data.recent.length === 0 && <Typography variant="body2" color="text.secondary">Nothing yet.</Typography>}
           <List dense>
             {data.recent.map((j) => (
@@ -277,7 +280,7 @@ export function TicketsSubtab({ guildId, channels = [], roles = [] }) {
       <Grid item xs={12} md={7}>
         <Card variant="outlined"><CardContent>
           <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
-            <Typography variant="subtitle1" fontWeight={700}>Ticket system</Typography>
+            <Typography variant="h6" fontWeight={600}>Ticket system</Typography>
             <FormControlLabel sx={{ mr: 0 }} label="Enabled"
               control={<Switch checked={!!cfg.enabled} onChange={(e) => set({ enabled: e.target.checked })} />} />
           </Stack>
@@ -333,9 +336,10 @@ export function TicketsSubtab({ guildId, channels = [], roles = [] }) {
 
       <Grid item xs={12} md={5}>
         <Card variant="outlined"><CardContent>
-          <Typography variant="subtitle1" fontWeight={700} mb={1}>
+          <Typography variant="h6" fontWeight={600} mb={1}>
             Open tickets {cfg.open?.length ? `(${cfg.open.length})` : ''}
           </Typography>
+          <Typography variant="body2" color="text.secondary" mb={2}>Currently open support threads members have opened from the panel.</Typography>
           {(!cfg.open || cfg.open.length === 0) &&
             <Typography variant="body2" color="text.secondary">No open tickets. {cfg.counter > 0 ? `${cfg.counter} handled so far.` : ''}</Typography>}
           <List dense>
@@ -393,7 +397,7 @@ export function StarboardSubtab({ guildId, channels = [] }) {
         <Grid item xs={12} md={7}>
           <Card variant="outlined"><CardContent>
             <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
-              <Typography variant="subtitle1" fontWeight={700}>Starboard</Typography>
+              <Typography variant="h6" fontWeight={600}>Starboard</Typography>
               <FormControlLabel sx={{ mr: 0 }} label="Enabled"
                 control={<Switch checked={!!cfg.enabled} onChange={(e) => set({ enabled: e.target.checked })} />} />
             </Stack>
@@ -488,7 +492,7 @@ export function EventsSubtab({ guildId, channels = [] }) {
 
       <Grid item xs={12} md={6}>
         <Card variant="outlined"><CardContent>
-          <Typography variant="subtitle1" fontWeight={700} mb={1}>📅 New server event</Typography>
+          <Typography variant="h6" fontWeight={600} mb={1}>📅 New server event</Typography>
           <Typography variant="caption" color="text.secondary" display="block" mb={1}>
             Creates a native Discord scheduled event members can mark interest in.
             The bot needs the Manage Events permission.
@@ -537,7 +541,8 @@ export function EventsSubtab({ guildId, channels = [] }) {
 
       <Grid item xs={12} md={6}>
         <Card variant="outlined"><CardContent>
-          <Typography variant="subtitle1" fontWeight={700} mb={1}>Upcoming & recent</Typography>
+          <Typography variant="h6" fontWeight={600} mb={1}>Upcoming & recent</Typography>
+          <Typography variant="body2" color="text.secondary" mb={2}>Scheduled events with their status — cancel or remove them here.</Typography>
           {events.length === 0 && <Typography variant="body2" color="text.secondary">No events yet.</Typography>}
           <List dense>
             {events.map((ev) => (
@@ -600,7 +605,7 @@ export function BoostsSubtab({ guildId, channels = [], roles = [] }) {
         <Grid item xs={12} md={7}>
           <Card variant="outlined"><CardContent>
             <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
-              <Typography variant="subtitle1" fontWeight={700}>🚀 Boost tracking</Typography>
+              <Typography variant="h6" fontWeight={600}>🚀 Boost tracking</Typography>
               <FormControlLabel sx={{ mr: 0 }} label="Enabled"
                 control={<Switch checked={!!cfg.enabled} onChange={(e) => set({ enabled: e.target.checked })} />} />
             </Stack>

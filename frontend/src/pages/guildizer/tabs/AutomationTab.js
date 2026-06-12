@@ -107,7 +107,7 @@ export function WorkflowsCard({ guildId, workflows, channels, roles, onChanged }
 
   return (
     <Card variant="outlined"><CardContent>
-      <Typography variant="subtitle1" fontWeight={700} mb={1}>Workflows</Typography>
+      <Typography variant="h6" fontWeight={600} mb={1}>Workflows</Typography>
       <Typography variant="caption" color="text.secondary" display="block" mb={1}>
         When a trigger fires, the bot runs the action. Placeholders in messages: {'{user} {server} {channel}'}
       </Typography>
@@ -199,7 +199,7 @@ export function MirrorsCard({ guildId, mirrors, channels, onChanged }) {
 
   return (
     <Card variant="outlined"><CardContent>
-      <Typography variant="subtitle1" fontWeight={700} mb={1}>Channel mirroring</Typography>
+      <Typography variant="h6" fontWeight={600} mb={1}>Channel mirroring</Typography>
       <Typography variant="caption" color="text.secondary" display="block" mb={1}>
         Reposts messages to another channel via webhook, keeping the author's name and avatar.
         The destination can be in another server the bot is in (paste its channel ID).
@@ -270,7 +270,10 @@ export function WebhooksCard({ guildId, inbound, outbound, channels, onChanged }
 
   return (
     <Card variant="outlined"><CardContent>
-      <Typography variant="subtitle1" fontWeight={700} mb={1}>Webhooks</Typography>
+      <Typography variant="h6" fontWeight={600} mb={1}>Webhooks</Typography>
+      <Typography variant="body2" color="text.secondary" mb={2}>
+        Receive external POSTs into a channel, or forward server events to your own URL.
+      </Typography>
 
       <Typography variant="subtitle2" fontWeight={700}>Inbound (POST → channel)</Typography>
       <Stack direction="row" spacing={1} alignItems="center">

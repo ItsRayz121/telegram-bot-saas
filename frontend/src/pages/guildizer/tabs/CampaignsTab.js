@@ -36,9 +36,10 @@ export default function CampaignsTab({ guildId, channels = [] }) {
     <>
     <Card variant="outlined"><CardContent>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
-        <Typography variant="subtitle1" fontWeight={700}>Campaigns</Typography>
+        <Typography variant="h6" fontWeight={600}>Campaigns</Typography>
         <Button variant="contained" startIcon={<Add />} onClick={() => setCreating((v) => !v)}>{creating ? 'Close' : 'New campaign'}</Button>
       </Stack>
+      <Typography variant="body2" color="text.secondary" mb={2}>Run proof, content, social, and raid campaigns that reward members with XP for completing tasks.</Typography>
 
       {creating && <CreateForm guildId={guildId} channels={textChannels} onCreated={() => { setCreating(false); load(); }} />}
 
@@ -82,7 +83,7 @@ function ReferralsCard({ guildId }) {
   return (
     <Card variant="outlined" sx={{ mt: 2 }}><CardContent>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
-        <Typography variant="subtitle1" fontWeight={700}>Referrals</Typography>
+        <Typography variant="h6" fontWeight={600}>Referrals</Typography>
         <Stack direction="row" spacing={1} alignItems="center">
           <TextField type="number" size="small" label="XP per referral" value={xp}
             inputProps={{ min: 0, max: 1000 }} onChange={(e) => setXp(Number(e.target.value))} sx={{ width: 140 }} />
@@ -222,7 +223,8 @@ function CampaignDetail({ guildId, campaignId, channels, plan, onBack }) {
 
         <Grid item xs={12} md={6}>
           <Card variant="outlined"><CardContent>
-            <Typography variant="subtitle1" fontWeight={700} mb={1}>Tasks</Typography>
+            <Typography variant="h6" fontWeight={600} mb={1}>Tasks</Typography>
+            <Typography variant="body2" color="text.secondary" mb={2}>Break the campaign into individual tasks, each with its own XP reward and verification.</Typography>
             {c.tasks.length === 0 && <Typography variant="body2" color="text.secondary">No tasks — single-task campaign.</Typography>}
             <List dense>
               {c.tasks.map((t) => (
@@ -248,7 +250,8 @@ function CampaignDetail({ guildId, campaignId, channels, plan, onBack }) {
 
         <Grid item xs={12}>
           <Card variant="outlined"><CardContent>
-            <Typography variant="subtitle1" fontWeight={700} mb={1}>Pending submissions ({subs.length})</Typography>
+            <Typography variant="h6" fontWeight={600} mb={1}>Pending submissions ({subs.length})</Typography>
+            <Typography variant="body2" color="text.secondary" mb={2}>Review member proof submissions and verify or reject each one.</Typography>
             {subs.length === 0 && <Typography variant="body2" color="text.secondary">Nothing to review.</Typography>}
             <List dense>
               {subs.map((s) => (
@@ -275,9 +278,10 @@ function CampaignDetail({ guildId, campaignId, channels, plan, onBack }) {
         <Grid item xs={12}>
           <Card variant="outlined"><CardContent>
             <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
-              <Typography variant="subtitle1" fontWeight={700}>Leaderboard {plan !== 'pro' && <Chip size="small" label="Pro" sx={{ ml: 1 }} />}</Typography>
+              <Typography variant="h6" fontWeight={600}>Leaderboard {plan !== 'pro' && <Chip size="small" label="Pro" sx={{ ml: 1 }} />}</Typography>
               <Button size="small" variant="outlined" onClick={loadBoard}>{board ? 'Refresh' : 'Load'}</Button>
             </Stack>
+            <Typography variant="body2" color="text.secondary" mb={2}>Members ranked by the XP they have earned from verified submissions in this campaign.</Typography>
             {board && board.length === 0 && <Typography variant="body2" color="text.secondary">No verified submissions yet.</Typography>}
             {board && (
               <List dense>
@@ -315,7 +319,7 @@ function FieldsCard({ guildId, campaignId }) {
 
   return (
     <Card variant="outlined"><CardContent>
-      <Typography variant="subtitle1" fontWeight={700} mb={1}>Proof form fields</Typography>
+      <Typography variant="h6" fontWeight={600} mb={1}>Proof form fields</Typography>
       <Typography variant="caption" color="text.secondary" display="block" mb={1}>
         Extra inputs shown in the proof popup (max 4) — e.g. wallet address, username on X.
       </Typography>

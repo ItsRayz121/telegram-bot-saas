@@ -39,7 +39,10 @@ export default function BillingTab({ guildId }) {
     <Grid container spacing={2}>
       <Grid item xs={12} md={6}>
         <Card variant="outlined"><CardContent>
-          <Typography variant="subtitle1" fontWeight={700} mb={1}>Plan</Typography>
+          <Typography variant="h6" fontWeight={600} mb={1}>Plan</Typography>
+          <Typography variant="body2" color="text.secondary" mb={2}>
+            Your current subscription tier and renewal date for this server.
+          </Typography>
           <Typography mb={1}>Current plan: <Chip label={data.is_pro ? 'Pro' : 'Free'} color={data.is_pro ? 'success' : 'default'} size="small" /></Typography>
           {data.is_pro && data.plan_expires_at && (
             <Typography variant="caption" color="text.secondary" display="block" mb={1}>
@@ -60,7 +63,10 @@ export default function BillingTab({ guildId }) {
 
       <Grid item xs={12} md={6}>
         <Card variant="outlined"><CardContent>
-          <Typography variant="subtitle1" fontWeight={700} mb={1}>{pro.name} includes</Typography>
+          <Typography variant="h6" fontWeight={600} mb={1}>{pro.name} includes</Typography>
+          <Typography variant="body2" color="text.secondary" mb={2}>
+            Everything you unlock by upgrading this server to Pro.
+          </Typography>
           <List dense>
             {pro.features.map((f) => (
               <ListItem key={f} disableGutters>
@@ -105,7 +111,10 @@ function PromoCard({ guildId }) {
 
   return (
     <Card variant="outlined"><CardContent>
-      <Typography variant="subtitle1" fontWeight={700} mb={1}>Promo code</Typography>
+      <Typography variant="h6" fontWeight={600} mb={1}>Promo code</Typography>
+      <Typography variant="body2" color="text.secondary" mb={2}>
+        Have a promo code? Redeem it here to add Pro days to this server.
+      </Typography>
       {msg && <Alert severity={msg.ok ? 'success' : 'error'} sx={{ mb: 1 }}>{msg.text}</Alert>}
       <Stack direction="row" spacing={1}>
         <TextField size="small" fullWidth label="Code" value={code} onChange={(e) => setCode(e.target.value)} />
@@ -126,7 +135,10 @@ function HistoryCard({ guildId }) {
   if (rows === null) return null;
   return (
     <Card variant="outlined"><CardContent>
-      <Typography variant="subtitle1" fontWeight={700} mb={1}>Payment history</Typography>
+      <Typography variant="h6" fontWeight={600} mb={1}>Payment history</Typography>
+      <Typography variant="body2" color="text.secondary" mb={2}>
+        A record of past and pending checkouts for this server.
+      </Typography>
       {rows.length === 0 && <Typography variant="body2" color="text.secondary">No payments yet.</Typography>}
       <List dense>
         {rows.map((r) => (

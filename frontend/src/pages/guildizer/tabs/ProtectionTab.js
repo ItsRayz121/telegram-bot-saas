@@ -688,7 +688,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
         <Grid container spacing={2}>
           <Grid item xs={12} md={6}>
             <Card variant="outlined"><CardContent>
-              <Typography variant="subtitle1" fontWeight={700} mb={1}>Warning thresholds</Typography>
+              <Typography variant="h6" fontWeight={600} mb={1}>Warning thresholds</Typography>
               <Typography variant="caption" color="text.secondary" display="block" mb={1}>
                 /warn and automod warnings count up; at the limit the action fires and the count resets.
               </Typography>
@@ -713,7 +713,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
 
           <Grid item xs={12} md={6}>
             <Card variant="outlined"><CardContent>
-              <Typography variant="subtitle1" fontWeight={700} mb={1}>Auto clean</Typography>
+              <Typography variant="h6" fontWeight={600} mb={1}>Auto clean</Typography>
               <FormControlLabel control={<Switch checked={!!cfg.auto_clean?.join_messages} onChange={(e) => setAc({ join_messages: e.target.checked })} />} label={'Auto-delete "X joined the server" messages'} />
               <TextField type="number" size="small" margin="dense" fullWidth
                 label="Delete warning messages after (seconds, 0 = never)"
@@ -728,7 +728,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
 
           <Grid item xs={12}>
             <Card variant="outlined"><CardContent>
-              <Typography variant="subtitle1" fontWeight={700} mb={1}>Escalating punishments</Typography>
+              <Typography variant="h6" fontWeight={600} mb={1}>Escalating punishments</Typography>
               <FormControlLabel control={<Switch checked={!!cfg.warn_ladder?.enabled} onChange={(e) => setWl({ enabled: e.target.checked })} />} label="Enable an escalating punishment ladder" />
               <Typography variant="caption" color="text.secondary" display="block" mb={1}>
                 Each step fires when a member reaches that warning count (counted within the step's window). Warnings aren't reset between steps, so higher steps stay reachable.
@@ -765,7 +765,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
 
           <Grid item xs={12}>
             <Card variant="outlined"><CardContent>
-              <Typography variant="subtitle1" fontWeight={700} mb={1}>Recent warnings</Typography>
+              <Typography variant="h6" fontWeight={600} mb={1}>Recent warnings</Typography>
               {recentWarnings.length === 0 && <Typography variant="body2" color="text.secondary">No warnings yet.</Typography>}
               <List dense>
                 {recentWarnings.map((w) => (
@@ -788,7 +788,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
         <Grid container spacing={2}>
           <Grid item xs={12} md={6}>
             <Card variant="outlined"><CardContent>
-              <Typography variant="subtitle1" fontWeight={700} mb={1}>Report settings</Typography>
+              <Typography variant="h6" fontWeight={600} mb={1}>Report settings</Typography>
               <Typography variant="caption" color="text.secondary" display="block" mb={1}>
                 Members use /report to flag messages or members. Reports land here and (optionally) in a channel.
               </Typography>
@@ -799,7 +799,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
 
           <Grid item xs={12}>
             <Card variant="outlined"><CardContent>
-              <Typography variant="subtitle1" fontWeight={700} mb={1}>Open reports ({reports.length})</Typography>
+              <Typography variant="h6" fontWeight={600} mb={1}>Open reports ({reports.length})</Typography>
               {reports.length === 0 && <Typography variant="body2" color="text.secondary">No open reports. 🎉</Typography>}
               <List dense>
                 {reports.map((r) => (
@@ -827,7 +827,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
         <Grid container spacing={2}>
           <Grid item xs={12} md={6}>
             <Card variant="outlined"><CardContent>
-              <Typography variant="subtitle1" fontWeight={700} mb={1}>Join verification (captcha)</Typography>
+              <Typography variant="h6" fontWeight={600} mb={1}>Join verification (captcha)</Typography>
               <FormControlLabel control={<Switch checked={!!cfg.verification?.enabled} onChange={(e) => setV({ enabled: e.target.checked })} />} label="Require new members to verify before they can see the server" />
               <Typography variant="caption" color="text.secondary" display="block" mb={1}>
                 On first use the bot creates an Unverified role and a #verify channel, and hides
@@ -855,7 +855,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
 
           <Grid item xs={12} md={6}>
             <Card variant="outlined"><CardContent>
-              <Typography variant="subtitle1" fontWeight={700} mb={1}>Join gate</Typography>
+              <Typography variant="h6" fontWeight={600} mb={1}>Join gate</Typography>
               {num('Minimum account age (days, 0 = off)', 'jg_min_account_age_days', 0, 365)}
               <Typography variant="caption" color="text.disabled">Newer accounts are kicked on join. Useful during raids.</Typography>
             </CardContent></Card>
@@ -868,7 +868,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
         <Grid container spacing={2}>
           <Grid item xs={12} md={8}>
             <Card variant="outlined"><CardContent>
-              <Typography variant="subtitle1" fontWeight={700} mb={1}>Escalation alerts</Typography>
+              <Typography variant="h6" fontWeight={600} mb={1}>Escalation alerts</Typography>
               <FormControlLabel control={<Switch checked={!!cfg.escalation?.enabled} onChange={(e) => setEsc({ enabled: e.target.checked })} />} label="Alert admins when members sound frustrated" />
               <TextField size="small" margin="dense" fullWidth label="Trigger keywords"
                 placeholder="refund, scam, not working"

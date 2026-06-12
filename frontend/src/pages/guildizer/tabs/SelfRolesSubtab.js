@@ -87,7 +87,7 @@ export default function SelfRolesSubtab({ guildId, channels = [], roles = [] }) 
         <Grid item xs={12} key={m.id ?? `new-${i}`}>
           <Card variant="outlined"><CardContent>
             <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1} useFlexGap flexWrap="wrap">
-              <Typography variant="subtitle1" fontWeight={700}>Menu — {m.title || 'untitled'}</Typography>
+              <Typography variant="h6" fontWeight={600}>Menu — {m.title || 'untitled'}</Typography>
               <Stack direction="row" spacing={1} alignItems="center">
                 {m.message_id && <Chip size="small" color="success" variant="outlined" label="Posted" />}
                 {m.needs_post && <Chip size="small" color="info" variant="outlined" label="Post queued" />}

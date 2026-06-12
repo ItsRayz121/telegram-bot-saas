@@ -59,7 +59,7 @@ function AutoPublishCard({ guildId, channels = [] }) {
   if (!cfg) return error ? <Alert severity="warning" sx={{ mt: 2 }}>{error}</Alert> : null;
   return (
     <Card variant="outlined" sx={{ mt: 2 }}><CardContent>
-      <Typography variant="subtitle1" fontWeight={700} mb={1}>📣 Auto-publish announcements</Typography>
+      <Typography variant="h6" fontWeight={600} mb={1}>📣 Auto-publish announcements</Typography>
       <FormControlLabel control={<Switch checked={!!cfg.enabled} onChange={(e) => setCfg((c) => ({ ...c, enabled: e.target.checked }))} />}
         label="Publish posts in announcement channels to follower servers automatically" />
       <Typography variant="caption" color="text.secondary" display="block" mb={1}>
@@ -135,7 +135,7 @@ export function ThreadsSubtab({ guildId, channels = [] }) {
   if (!cfg) return error ? <Alert severity="warning">{error}</Alert> : <Loading />;
   return (
     <Card variant="outlined"><CardContent>
-      <Typography variant="subtitle1" fontWeight={700} mb={1}>🧵 Thread auto-management</Typography>
+      <Typography variant="h6" fontWeight={600} mb={1}>🧵 Thread auto-management</Typography>
       <FormControlLabel control={<Switch checked={!!cfg.enabled} onChange={(e) => setCfg((c) => ({ ...c, enabled: e.target.checked }))} />}
         label="Open a discussion thread on every new post in the channels below" />
       <Typography variant="caption" color="text.secondary" display="block" mb={1}>

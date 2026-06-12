@@ -54,7 +54,7 @@ function KbRepliesCard({ guildId }) {
 
   return (
     <Card variant="outlined"><CardContent>
-      <Typography variant="subtitle1" fontWeight={700} mb={1}>AI reply behaviour</Typography>
+      <Typography variant="h6" fontWeight={600} mb={1}>AI reply behaviour</Typography>
       <Typography variant="caption" color="text.secondary" display="block" mb={1}>
         Controls how the bot answers from the knowledge base. /ask always works; automatic
         replies follow these rules (one auto-reply per member per 30 seconds).

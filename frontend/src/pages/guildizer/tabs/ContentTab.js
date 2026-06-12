@@ -76,7 +76,7 @@ export function DigestCard({ guildId, channels }) {
 
   return (
     <Card variant="outlined"><CardContent>
-      <Typography variant="subtitle1" fontWeight={700} mb={1}>Daily digest</Typography>
+      <Typography variant="h6" fontWeight={600} mb={1}>Daily digest</Typography>
       <Typography variant="caption" color="text.secondary" display="block" mb={1}>
         Posts a daily activity summary (AI-polished when an AI key is configured).
       </Typography>
@@ -124,7 +124,10 @@ export function SchedulerCard({ guildId, messages, channels, onChanged }) {
 
   return (
     <Card variant="outlined"><CardContent>
-      <Typography variant="subtitle1" fontWeight={700} mb={1}>Scheduled messages</Typography>
+      <Typography variant="h6" fontWeight={600} mb={1}>Scheduled messages</Typography>
+      <Typography variant="body2" color="text.secondary" mb={2}>
+        Queue one-off or recurring posts to a channel, optionally with a rich embed.
+      </Typography>
       <TextField fullWidth multiline minRows={2} size="small" margin="dense" label="Message"
         value={content} inputProps={{ maxLength: 2000 }} onChange={(e) => setContent(e.target.value)} />
       <TextField select fullWidth size="small" margin="dense" label="Channel"
@@ -210,7 +213,10 @@ export function PollsCard({ guildId, polls, channels, onChanged }) {
 
   return (
     <Card variant="outlined"><CardContent>
-      <Typography variant="subtitle1" fontWeight={700} mb={1}>Polls (native)</Typography>
+      <Typography variant="h6" fontWeight={600} mb={1}>Polls (native)</Typography>
+      <Typography variant="body2" color="text.secondary" mb={2}>
+        Post a native Discord poll with timed voting and optional multiple choice.
+      </Typography>
       <TextField fullWidth size="small" margin="dense" label="Question"
         value={question} inputProps={{ maxLength: 300 }} onChange={(e) => setQuestion(e.target.value)} />
       <TextField fullWidth multiline minRows={2} size="small" margin="dense"
@@ -274,7 +280,10 @@ export function AutoResponsesCard({ guildId, responses, onChanged }) {
 
   return (
     <Card variant="outlined"><CardContent>
-      <Typography variant="subtitle1" fontWeight={700} mb={1}>Auto-responses</Typography>
+      <Typography variant="h6" fontWeight={600} mb={1}>Auto-responses</Typography>
+      <Typography variant="body2" color="text.secondary" mb={2}>
+        Automatically reply when a message matches a trigger phrase.
+      </Typography>
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
         <TextField size="small" margin="dense" label="Trigger" value={trigger}
           inputProps={{ maxLength: 120 }} onChange={(e) => setTrigger(e.target.value)} sx={{ flex: 1 }} />

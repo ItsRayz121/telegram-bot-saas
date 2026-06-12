@@ -45,7 +45,10 @@ export function LeaderboardSubtab({ guildId }) {
 
   return (
     <Card variant="outlined"><CardContent>
-      <Typography variant="subtitle1" fontWeight={700} mb={1}>XP leaderboard (top 50)</Typography>
+      <Typography variant="h6" fontWeight={600} mb={1}>XP leaderboard (top 50)</Typography>
+      <Typography variant="body2" color="text.secondary" mb={2}>
+        Your most active members ranked by XP earned from chatting and voice activity.
+      </Typography>
       {error && <Alert severity="warning" sx={{ mb: 1 }}>{error}</Alert>}
       {board.length === 0 && <Typography variant="body2" color="text.secondary">No XP earned yet.</Typography>}
       <List dense>
@@ -91,7 +94,10 @@ function EventFeed({ guildId, title, limit, filter, emptyText = 'No events yet.'
 
   return (
     <Card variant="outlined"><CardContent>
-      <Typography variant="subtitle1" fontWeight={700} mb={1}>{title}</Typography>
+      <Typography variant="h6" fontWeight={600} mb={1}>{title}</Typography>
+      <Typography variant="body2" color="text.secondary" mb={2}>
+        A read-only feed of recent moderation and protection events on this server.
+      </Typography>
       {error && <Alert severity="warning" sx={{ mb: 1 }}>{error}</Alert>}
       {events.length === 0 && <Typography variant="body2" color="text.secondary">{emptyText}</Typography>}
       <List dense>
@@ -130,7 +136,10 @@ export function WarningsSubtab({ guildId }) {
 
   return (
     <Card variant="outlined"><CardContent>
-      <Typography variant="subtitle1" fontWeight={700} mb={1}>Warnings</Typography>
+      <Typography variant="h6" fontWeight={600} mb={1}>Warnings</Typography>
+      <Typography variant="body2" color="text.secondary" mb={2}>
+        Active warnings issued to members. Remove any that no longer apply.
+      </Typography>
       {error && <Alert severity="warning" sx={{ mb: 1 }} onClose={() => setError(null)}>{error}</Alert>}
       {warnings.length === 0 && <Typography variant="body2" color="text.secondary">No warnings on record. 🎉</Typography>}
       <List dense>

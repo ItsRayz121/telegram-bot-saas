@@ -49,7 +49,7 @@ export default function CommandsTab({ guildId }) {
     <Grid container spacing={2}>
       <Grid item xs={12} md={6}>
         <Card variant="outlined"><CardContent>
-          <Typography variant="subtitle1" fontWeight={700}>Slash commands</Typography>
+          <Typography variant="h6" fontWeight={600}>Slash commands</Typography>
           <Typography variant="caption" color="text.secondary" display="block" mb={1}>
             Members run these as <code>/name</code>. Changes go live within ~30s.
           </Typography>
@@ -72,7 +72,10 @@ export default function CommandsTab({ guildId }) {
 
       <Grid item xs={12} md={6}>
         <Card variant="outlined"><CardContent>
-          <Typography variant="subtitle1" fontWeight={700} mb={1}>{editingId ? 'Edit command' : 'New command'}</Typography>
+          <Typography variant="h6" fontWeight={600} mb={1}>{editingId ? 'Edit command' : 'New command'}</Typography>
+          <Typography variant="body2" color="text.secondary" mb={2}>
+            Define a name, description and the reply Guildizer sends when the command runs.
+          </Typography>
           {error && <Alert severity="error" sx={{ mb: 1 }}>{error}</Alert>}
           <TextField fullWidth size="small" margin="dense" label="Name"
             value={draft.name} inputProps={{ maxLength: 32 }}

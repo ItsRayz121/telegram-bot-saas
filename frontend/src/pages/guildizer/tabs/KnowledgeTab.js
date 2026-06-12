@@ -38,7 +38,7 @@ export default function KnowledgeTab({ guildId }) {
 
   return (
     <Card variant="outlined"><CardContent>
-      <Typography variant="subtitle1" fontWeight={700} mb={0.5}>Knowledge base</Typography>
+      <Typography variant="h6" fontWeight={600} mb={0.5}>Knowledge base</Typography>
       <Typography variant="caption" color="text.secondary" display="block" mb={2}>
         Documents here ground the /ask command — the AI answers from your server's own
         FAQ, rules and guides instead of guessing.
