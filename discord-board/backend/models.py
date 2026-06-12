@@ -878,6 +878,9 @@ class ScheduledMessage(Base):
     guild_id = Column(BigInteger, ForeignKey("guilds.id"), nullable=False, index=True)
     channel_id = Column(BigInteger, nullable=False)
     content = Column(Text, default="")
+    # Optional rich embed: {title, description, color, image_url, thumbnail_url,
+    # footer} — sanitized by the API, rendered by the bot (Phase 4 native).
+    embed = Column(JSON, nullable=True)
     recurrence = Column(String(10), default="none")    # none | hourly | daily | weekly
     next_run_at = Column(DateTime, nullable=False, index=True)
     last_sent_at = Column(DateTime, nullable=True)
@@ -890,6 +893,7 @@ class ScheduledMessage(Base):
             "id": self.id,
             "channel_id": str(self.channel_id),
             "content": self.content or "",
+            "embed": dict(self.embed) if self.embed else None,
             "recurrence": self.recurrence or "none",
             "next_run_at": self.next_run_at.isoformat() + "Z" if self.next_run_at else None,
             "last_sent_at": self.last_sent_at.isoformat() + "Z" if self.last_sent_at else None,

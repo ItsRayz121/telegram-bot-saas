@@ -38,6 +38,8 @@ _HEAL_COLUMNS = [
     ("members", "admin_notes", "TEXT"),
     # Voice XP (Discord-native phase 2)
     ("members", "voice_minutes", "INTEGER"),
+    # Scheduler embed builder (Discord-native phase 4)
+    ("scheduled_messages", "embed", "JSON"),
 ]
 
 

@@ -166,6 +166,28 @@ def _sentiment_emoji(text: str) -> str | None:
             return emoji
     return None
 
+
+def _build_scheduled_embed(cfg: dict) -> discord.Embed:
+    """Render a sanitized scheduler embed dict (content_api._clean_embed)."""
+    try:
+        color = int(str(cfg.get("color") or "#5865F2").lstrip("#"), 16)
+    except ValueError:
+        color = 0x5865F2
+    embed = discord.Embed(
+        title=cfg.get("title") or None,
+        description=cfg.get("description") or None,
+        color=color,
+    )
+    if cfg.get("image_url"):
+        embed.set_image(url=cfg["image_url"])
+    if cfg.get("thumbnail_url"):
+        embed.set_thumbnail(url=cfg["thumbnail_url"])
+    if cfg.get("footer"):
+        embed.set_footer(text=cfg["footer"])
+    # The API guarantees at least one renderable field; a bad legacy dict just
+    # fails the send, which governor.safe absorbs.
+    return embed
+
 # ── Activity buffers (Phase 15) — flushed every ~60s by process_mod_actions ────
 _activity_buffer: dict[tuple[int, int], list] = {}   # (gid, uid) -> [add_msgs, username]
 _daily_msg_buffer: dict[int, int] = {}                # gid -> messages
@@ -1422,9 +1444,11 @@ class CoreMixin:
             guild = self.get_guild(item["guild_id"])
             channel = guild.get_channel(int(item["channel_id"])) if guild else None
             sent = False
-            if channel is not None and hasattr(channel, "send") and item["content"]:
-                sent = bool(await governor.safe(channel.send(item["content"]),
-                                                what="scheduled message"))
+            if channel is not None and hasattr(channel, "send") and (item["content"] or item["embed"]):
+                embed = _build_scheduled_embed(item["embed"]) if item["embed"] else None
+                sent = bool(await governor.safe(
+                    channel.send(item["content"] or None, embed=embed),
+                    what="scheduled message"))
             await asyncio.to_thread(content_runtime.advance_schedule, item["id"], sent)
             if not sent and guild is not None:
                 await self._escalate_type(

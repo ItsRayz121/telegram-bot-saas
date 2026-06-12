@@ -33,7 +33,8 @@ def due_messages(served_guild_ids: list[int]) -> list[dict]:
             .all()
         )
         return [{"id": r.id, "guild_id": r.guild_id, "channel_id": r.channel_id,
-                 "content": r.content or ""} for r in rows]
+                 "content": r.content or "", "embed": dict(r.embed) if r.embed else None}
+                for r in rows]
     finally:
         db.close()
         SessionLocal.remove()

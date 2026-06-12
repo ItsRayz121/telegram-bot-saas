@@ -197,8 +197,10 @@ Ranked by impact-per-effort:
    rule ("Guildizer · Banned words") so words stay blocked while the bot is down. Dirty
    flag set by the moderation PUT, reconciled in the 20s post loop; rule_id/last_synced_at/
    last_error state in `extra.automod.native_sync`. `automod_sync.py`.
-7. **Embed builder for Scheduler** (Automation › Scheduler) — title/color/image embeds, the
-   Discord-native equivalent of Telegram rich posts.
+7. ✅ **Embed builder for Scheduler** (Automation › Scheduler, 2026-06-12) — optional
+   embed (title/text/color/image/thumbnail/footer) on scheduled messages, embed-only
+   posts allowed. `ScheduledMessage.embed` JSON column (startup self-heal), sanitized
+   in `content_api._clean_embed`, rendered by `_build_scheduled_embed` in the content loop.
 8. **Auto-publish announcements** (Automation) — auto-publish posts in announcement channels
    to follower servers.
 9. **Boost tracking** (Engagement) — thank-you message + booster role + XP on server boost.

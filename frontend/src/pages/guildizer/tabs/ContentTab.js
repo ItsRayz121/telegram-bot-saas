@@ -93,12 +93,20 @@ export function DigestCard({ guildId, channels }) {
   );
 }
 
+const EMPTY_EMBED = { title: '', description: '', color: '#5865F2', image_url: '', thumbnail_url: '', footer: '' };
+
 export function SchedulerCard({ guildId, messages, channels, onChanged }) {
   const [content, setContent] = useState('');
   const [channelId, setChannelId] = useState('');
   const [when, setWhen] = useState('');
   const [recurrence, setRecurrence] = useState('none');
+  const [withEmbed, setWithEmbed] = useState(false);
+  const [embed, setEmbed] = useState(EMPTY_EMBED);
   const [busy, setBusy] = useState(false);
+
+  const setEm = (patch) => setEmbed((e) => ({ ...e, ...patch }));
+  const embedHasContent = !!(embed.title.trim() || embed.description.trim()
+    || embed.image_url.trim() || embed.thumbnail_url.trim() || embed.footer.trim());
 
   async function add() {
     setBusy(true);
@@ -106,8 +114,9 @@ export function SchedulerCard({ guildId, messages, channels, onChanged }) {
       await guildizerApi.post(`/api/guilds/${guildId}/scheduled-messages`, {
         content, channel_id: channelId, recurrence,
         next_run_at: new Date(when).toISOString(),
+        embed: withEmbed && embedHasContent ? embed : null,
       });
-      setContent(''); setWhen('');
+      setContent(''); setWhen(''); setEmbed(EMPTY_EMBED); setWithEmbed(false);
       await onChanged();
     } catch { /* parent shows errors on reload */ }
     setBusy(false);
@@ -130,8 +139,28 @@ export function SchedulerCard({ guildId, messages, channels, onChanged }) {
           {['none', 'hourly', 'daily', 'weekly'].map((r) => <MenuItem key={r} value={r}>{r}</MenuItem>)}
         </TextField>
       </Stack>
+      <FormControlLabel control={<Switch size="small" checked={withEmbed} onChange={(e) => setWithEmbed(e.target.checked)} />}
+        label={<Typography variant="body2">Add a rich embed</Typography>} />
+      {withEmbed && (
+        <Box sx={{ pl: 1, borderLeft: '3px solid', borderColor: 'divider', mb: 1 }}>
+          <TextField fullWidth size="small" margin="dense" label="Embed title"
+            value={embed.title} inputProps={{ maxLength: 256 }} onChange={(e) => setEm({ title: e.target.value })} />
+          <TextField fullWidth multiline minRows={2} size="small" margin="dense" label="Embed text"
+            value={embed.description} inputProps={{ maxLength: 4000 }} onChange={(e) => setEm({ description: e.target.value })} />
+          <Stack direction="row" spacing={1} alignItems="center">
+            <TextField type="color" size="small" margin="dense" label="Accent" value={embed.color}
+              onChange={(e) => setEm({ color: e.target.value })} sx={{ width: 90 }} InputLabelProps={{ shrink: true }} />
+            <TextField size="small" margin="dense" label="Footer" value={embed.footer}
+              inputProps={{ maxLength: 2048 }} onChange={(e) => setEm({ footer: e.target.value })} sx={{ flex: 1 }} />
+          </Stack>
+          <TextField fullWidth size="small" margin="dense" label="Image URL (https://…)"
+            value={embed.image_url} onChange={(e) => setEm({ image_url: e.target.value })} />
+          <TextField fullWidth size="small" margin="dense" label="Thumbnail URL (https://…)"
+            value={embed.thumbnail_url} onChange={(e) => setEm({ thumbnail_url: e.target.value })} />
+        </Box>
+      )}
       <Button startIcon={<Add />} variant="contained" size="small" sx={{ mt: 1 }}
-        disabled={busy || !content.trim() || !channelId || !when} onClick={add}>
+        disabled={busy || (!content.trim() && !(withEmbed && embedHasContent)) || !channelId || !when} onClick={add}>
         Schedule
       </Button>
       <List dense sx={{ mt: 1 }}>
@@ -147,8 +176,8 @@ export function SchedulerCard({ guildId, messages, channels, onChanged }) {
               </Stack>
             )}>
             <ListItemText
-              primary={m.content}
-              secondary={`${m.recurrence !== 'none' ? `${m.recurrence} · ` : ''}next: ${m.next_run_at ? new Date(m.next_run_at).toLocaleString() : '—'}`}
+              primary={m.content || m.embed?.title || m.embed?.description || '(embed)'}
+              secondary={`${m.embed ? 'embed · ' : ''}${m.recurrence !== 'none' ? `${m.recurrence} · ` : ''}next: ${m.next_run_at ? new Date(m.next_run_at).toLocaleString() : '—'}`}
               primaryTypographyProps={{ variant: 'body2', noWrap: true }} />
           </ListItem>
         ))}

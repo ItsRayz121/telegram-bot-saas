@@ -37,6 +37,37 @@ def _parse_dt(value):
         return None
 
 
+def _clean_url(value) -> str | None:
+    url = str(value or "").strip()[:512]
+    return url if url.startswith(("http://", "https://")) else None
+
+
+def _clean_embed(value) -> dict | None:
+    """Sanitize the optional embed dict (Phase 4 embed builder). Returns None
+    when no renderable field survives, so empty builders store nothing."""
+    if not isinstance(value, dict):
+        return None
+    out = {}
+    if str(value.get("title") or "").strip():
+        out["title"] = str(value["title"]).strip()[:256]
+    if str(value.get("description") or "").strip():
+        out["description"] = str(value["description"]).strip()[:4000]
+    color = str(value.get("color") or "").strip().lstrip("#")
+    if len(color) == 6:
+        try:
+            out["color"] = f"#{int(color, 16):06x}"
+        except ValueError:
+            pass
+    for key in ("image_url", "thumbnail_url"):
+        url = _clean_url(value.get(key))
+        if url:
+            out[key] = url
+    if str(value.get("footer") or "").strip():
+        out["footer"] = str(value["footer"]).strip()[:2048]
+    # color alone renders as an invisible sliver — require real content
+    return out if set(out) - {"color"} else None
+
+
 # --- scheduled messages -------------------------------------------------------------
 @content_bp.get("/api/guilds/<int:guild_id>/scheduled-messages")
 @login_required
@@ -67,13 +98,14 @@ def create_scheduled(guild_id: int):
         return plan_limits.limit_response("scheduled_messages", cap)
     body = request.get_json(silent=True) or {}
     content = str(body.get("content") or "").strip()[:2000]
+    embed = _clean_embed(body.get("embed"))
     channel_id = body.get("channel_id")
     next_run = _parse_dt(body.get("next_run_at"))
-    if not content or not (channel_id and str(channel_id).isdigit()) or next_run is None:
+    if (not content and not embed) or not (channel_id and str(channel_id).isdigit()) or next_run is None:
         return jsonify(error="content_channel_and_time_required"), 400
     recurrence = body.get("recurrence") if body.get("recurrence") in RECURRENCES else "none"
     row = ScheduledMessage(
-        guild_id=guild_id, channel_id=int(channel_id), content=content,
+        guild_id=guild_id, channel_id=int(channel_id), content=content, embed=embed,
         recurrence=recurrence, next_run_at=next_run, created_by=g.user_id,
     )
     g.db.add(row)
@@ -93,6 +125,10 @@ def update_scheduled(guild_id: int, mid: int):
     body = request.get_json(silent=True) or {}
     if "content" in body:
         row.content = str(body["content"] or "").strip()[:2000]
+    if "embed" in body:
+        row.embed = _clean_embed(body["embed"])
+    if not (row.content or row.embed):
+        return jsonify(error="content_or_embed_required"), 400
     if body.get("channel_id") and str(body["channel_id"]).isdigit():
         row.channel_id = int(body["channel_id"])
     if body.get("recurrence") in RECURRENCES:
