@@ -208,3 +208,80 @@ def domain_allowed(url: str, whitelist: list[str]) -> bool:
         if e and (dom == e or dom.endswith("." + e)):
             return True
     return False
+
+
+# --- Phase 18: Smart-mod pattern layer (rule-based, no AI) + extended content --
+# Promotional / solicitation patterns — the cheap Layer-2 net under the AI layer.
+_PROMO_PATTERNS = [
+    r"\bdm\s+me\b", r"\bpm\s+me\b", r"\bcheck\s+(out\s+)?my\b", r"\bjoin\s+my\b",
+    r"\buse\s+(promo\s+)?code\b", r"\bpromo\s*code\b", r"\bdiscount\s*code\b",
+    r"\bmake\s+\$?\d{2,}", r"\bearn\s+\$?\d{2,}", r"\bguaranteed\s+(profit|returns?)\b",
+    r"\b(crypto|forex|nft)\s+(signals?|pump|giveaway|investment)\b",
+    r"\bfollow\s+me\s+on\b", r"\bsubscribe\s+to\s+my\b", r"\blink\s+in\s+bio\b",
+    r"\bcash\s*app\b", r"\bpaypal\.me\b", r"\bbuy\s+followers\b",
+]
+_PROMO_RE = [re.compile(p, re.I) for p in _PROMO_PATTERNS]
+# A referral mention on its own — exempted when allow_referral_codes is on.
+_REFERRAL_RE = re.compile(r"\b(referral|ref)\s*(code|link)?\b", re.I)
+
+
+def promo_match(text: str, allow_referral: bool = False):
+    """First promotional/solicitation pattern in the text, or None.
+
+    When allow_referral is set, a bare referral mention does not count."""
+    if not text:
+        return None
+    for rx in _PROMO_RE:
+        m = rx.search(text)
+        if m:
+            term = m.group(0).strip()
+            if allow_referral and _REFERRAL_RE.fullmatch(term):
+                continue
+            return term
+    if not allow_referral:
+        m = _REFERRAL_RE.search(text)
+        if m:
+            return m.group(0).strip()
+    return None
+
+
+# Obfuscated URLs the plain http(s) regex misses (cloaking to dodge link filters).
+_HIDDEN_URL_PATTERNS = [
+    r"\bhxxps?://",                                          # hxxp(s):// cloaking
+    r"\b[\w-]+\s*[\[(]?\s*dot\s*[\])]?\s*(com|net|org|io|gg|me|ru|xyz|info)\b",  # "site dot com"
+    r"\b[\w-]+_(com|net|org|io|gg|me)\b",                    # example_com
+    r"\bt\s*[\[(]?\.?[\])]?\s*me\s*/\s*\w+",                 # t . me / x
+]
+_HIDDEN_URL_RE = [re.compile(p, re.I) for p in _HIDDEN_URL_PATTERNS]
+
+
+def hidden_url_match(text: str):
+    """First obfuscated/hidden URL in the text, or None."""
+    for rx in _HIDDEN_URL_RE:
+        m = rx.search(text or "")
+        if m:
+            return m.group(0).strip()
+    return None
+
+
+_EMAIL_RE = re.compile(r"\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b", re.I)
+# Phone numbers: require a leading + or separated digit groups so raw Discord
+# snowflake IDs (one long digit run) don't trip it.
+_PHONE_RE = re.compile(
+    r"(\+\d[\d\s().-]{7,16}\d|\b\d{3}[\s().-]\d{3}[\s().-]\d{3,4}\b)"
+)
+_SPOILER_RE = re.compile(r"\|\|.+?\|\|", re.S)
+
+
+def email_match(text: str):
+    m = _EMAIL_RE.search(text or "")
+    return m.group(0) if m else None
+
+
+def phone_match(text: str):
+    m = _PHONE_RE.search(text or "")
+    return m.group(0).strip() if m else None
+
+
+def spoiler_match(text: str):
+    return "spoiler" if _SPOILER_RE.search(text or "") else None

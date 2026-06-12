@@ -434,42 +434,93 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
             </CardContent>
           </Card>
 
-          {/* 6 ── Smart Moderation (Pro) ───────────────────────────────────── */}
+          {/* 6 ── Smart Moderation — 3-layer system (Pro) ─────────────────── */}
           <Card variant="outlined" sx={{ mt: 2, mb: 2 }}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                 <Typography variant="h6" fontWeight={600}>Smart Moderation</Typography>
                 <Chip
-                  label={am.smart_mod?.enabled ? 'AI Active' : 'AI optional'}
+                  label={am.smart_mod?.ai_enabled ? 'AI Active' : 'Rule-based · AI optional'}
                   size="small"
-                  color={am.smart_mod?.enabled ? 'primary' : 'default'}
+                  color={am.smart_mod?.ai_enabled ? 'primary' : 'default'}
                   variant="outlined"
                 />
                 <ProBadge />
               </Box>
               <Typography variant="body2" color="text.secondary" mb={2}>
-                AI flags unsolicited promotion and spam, and can remove NSFW images. Needs an AI key
-                configured on the backend — the switches do nothing without it.
+                Three-layer system: fast rules → obfuscated-URL detection → optional AI relevance
+                check. Layers 1 &amp; 2 run with no AI cost; Layer 3 runs only when enabled below
+                <b> and</b> an AI key is configured on the backend.
               </Typography>
               <FormControlLabel
                 control={<Switch checked={!!am.smart_mod?.enabled} onChange={(e) => setAm('smart_mod', { enabled: e.target.checked })} />}
-                label="Smart mod — AI flags unsolicited promotion / spam"
+                label="Enable Smart Moderation"
               />
               <TextField fullWidth label="Community topic (helps the AI judge)" sx={{ mt: 2 }}
                 placeholder="e.g. CreatorX — creator economy tools"
-                value={am.smart_mod?.group_topic || ''} onChange={(e) => setAm('smart_mod', { group_topic: e.target.value })} />
-              <FormControl fullWidth size="small" sx={{ mt: 2 }}>
-                <InputLabel>Action on promo</InputLabel>
-                <Select label="Action on promo"
-                  value={am.smart_mod?.action || 'delete'} onChange={(e) => setAm('smart_mod', { action: e.target.value })}>
-                  {CF_ACTIONS.map((a) => <MenuItem key={a} value={a}>{a}</MenuItem>)}
-                </Select>
-              </FormControl>
+                value={am.smart_mod?.group_topic || ''} onChange={(e) => setAm('smart_mod', { group_topic: e.target.value })}
+                helperText="Describe what this server is about. Used by Layer 3 AI to judge relevance." />
+
               <Divider sx={{ my: 2 }} />
+              <Typography variant="subtitle2" fontWeight={600} mb={1}>Layer 2 — Pattern Detection</Typography>
+              <Grid container spacing={1}>
+                <Grid item xs={12} sm={6}>
+                  <FormControlLabel
+                    control={<Switch checked={!!am.smart_mod?.promotional_detection} onChange={(e) => setAm('smart_mod', { promotional_detection: e.target.checked })} />}
+                    label="Detect promotional content"
+                  />
+                  <Typography variant="caption" color="text.secondary" display="block" ml={4}>
+                    DM-me spam, referral/promo codes, fake earnings, crypto shilling
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <FormControlLabel
+                    control={<Switch checked={!!am.smart_mod?.hidden_url_detection} onChange={(e) => setAm('smart_mod', { hidden_url_detection: e.target.checked })} />}
+                    label="Detect hidden / obfuscated URLs"
+                  />
+                  <Typography variant="caption" color="text.secondary" display="block" ml={4}>
+                    "site dot com", hxxps://, example_com, t . me / x, etc.
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <FormControlLabel
+                    control={<Switch checked={!!am.smart_mod?.allow_referral_codes} onChange={(e) => setAm('smart_mod', { allow_referral_codes: e.target.checked })} />}
+                    label="Allow referral codes"
+                  />
+                  <Typography variant="caption" color="text.secondary" display="block" ml={4}>
+                    Exempts bare referral mentions from promotional detection
+                  </Typography>
+                </Grid>
+              </Grid>
+
+              <Divider sx={{ my: 2 }} />
+              <Typography variant="subtitle2" fontWeight={600} mb={1}>Layer 3 — AI Relevance Check</Typography>
+              <FormControlLabel
+                control={<Switch checked={am.smart_mod?.ai_enabled !== false} onChange={(e) => setAm('smart_mod', { ai_enabled: e.target.checked })} />}
+                label="AI flags off-topic / unsolicited promotion"
+              />
+              <Typography variant="caption" color="text.secondary" display="block" ml={4} mb={1}>
+                Uses your backend AI key. Only runs after Layers 1 &amp; 2 pass. Skips very short messages.
+              </Typography>
               <FormControlLabel
                 control={<Switch checked={!!am.image_ai?.enabled} onChange={(e) => setAm('image_ai', { enabled: e.target.checked })} />}
                 label="Image AI — remove NSFW images"
               />
+
+              <Divider sx={{ my: 2 }} />
+              <Typography variant="subtitle2" fontWeight={600} mb={1}>Action &amp; trusted users</Typography>
+              <FormControl fullWidth size="small">
+                <InputLabel>Action on a flagged message</InputLabel>
+                <Select label="Action on a flagged message"
+                  value={am.smart_mod?.action || 'delete'} onChange={(e) => setAm('smart_mod', { action: e.target.value })}>
+                  {CF_ACTIONS.map((a) => <MenuItem key={a} value={a}>{a}</MenuItem>)}
+                </Select>
+              </FormControl>
+              <TextField size="small" fullWidth sx={{ mt: 2 }} label="Trusted user IDs (bypass smart moderation)"
+                placeholder="123456789, 987654321"
+                value={(am.smart_mod?.trusted_user_ids || []).join(', ')}
+                onChange={(e) => setAm('smart_mod', { trusted_user_ids: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })}
+                helperText="Comma-separated Discord user IDs whose messages skip all smart-moderation checks." />
             </CardContent>
           </Card>
 
@@ -482,23 +533,69 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
               </Box>
             </AccordionSummary>
             <AccordionDetails>
-              <Typography variant="body2" color="text.secondary" mb={1}>
-                Block specific media types outright. These are removed on sight.
-              </Typography>
+              {/* Media types — share one action; toggled individually */}
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, mb: 1 }}>
+                <Typography variant="subtitle2" fontWeight={600}>Media types</Typography>
+                <FormControl size="small" sx={{ minWidth: 150 }}>
+                  <InputLabel>Action for media</InputLabel>
+                  <Select label="Action for media"
+                    value={am.media?.action || 'delete'} onChange={(e) => setAm('media', { action: e.target.value })}>
+                    {CF_ACTIONS.map((a) => <MenuItem key={a} value={a}>{a}</MenuItem>)}
+                  </Select>
+                </FormControl>
+              </Box>
               <Grid container spacing={1}>
                 {[
-                  ['Block File / Image Attachments', !!am.media?.block_attachments, (v) => setAm('media', { block_attachments: v })],
-                  ['Block Stickers', !!am.media?.block_stickers, (v) => setAm('media', { block_stickers: v })],
-                  ['Block Voice Messages', !!am.media?.block_voice, (v) => setAm('media', { block_voice: v })],
-                ].map(([label, checked, onChange]) => (
-                  <Grid item xs={12} key={label}>
+                  ['Block File / Image Attachments', 'block_attachments'],
+                  ['Block Photos', 'block_photos'],
+                  ['Block Videos', 'block_videos'],
+                  ['Block GIFs / Animations', 'block_gifs'],
+                  ['Block Stickers', 'block_stickers'],
+                  ['Block Voice Messages', 'block_voice'],
+                ].map(([label, key]) => (
+                  <Grid item xs={12} sm={6} key={key}>
                     <FormControlLabel
-                      sx={{ minWidth: 280 }}
-                      control={<Switch checked={checked} onChange={(e) => onChange(e.target.checked)} />}
+                      control={<Switch checked={!!am.media?.[key]} onChange={(e) => setAm('media', { [key]: e.target.checked })} />}
                       label={label}
                     />
                   </Grid>
                 ))}
+              </Grid>
+
+              <Divider sx={{ my: 2 }} />
+              <Typography variant="subtitle2" fontWeight={600} mb={1}>Content rules</Typography>
+              <Typography variant="body2" color="text.secondary" mb={1}>
+                Each rule has its own action. Enable a rule to choose what happens.
+              </Typography>
+              <Grid container spacing={1}>
+                {[
+                  ['Block Email Addresses', 'email_detection'],
+                  ['Block Phone Numbers', 'contact_sharing'],
+                  ['Block Spoiler Content', 'spoiler_content'],
+                  ['Block Bot Mentions', 'bot_mentions'],
+                ].map(([label, key]) => {
+                  const rule = am[key] || {};
+                  return (
+                    <Grid item xs={12} key={key}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', py: 0.5 }}>
+                        <FormControlLabel
+                          sx={{ minWidth: 240 }}
+                          control={<Switch checked={!!rule.enabled} onChange={(e) => setAm(key, { enabled: e.target.checked })} />}
+                          label={label}
+                        />
+                        {rule.enabled && (
+                          <FormControl size="small" sx={{ minWidth: 120 }}>
+                            <InputLabel>Action</InputLabel>
+                            <Select label="Action" value={rule.action || 'delete'}
+                              onChange={(e) => setAm(key, { action: e.target.value })}>
+                              {CF_ACTIONS.map((a) => <MenuItem key={a} value={a}>{a}</MenuItem>)}
+                            </Select>
+                          </FormControl>
+                        )}
+                      </Box>
+                    </Grid>
+                  );
+                })}
               </Grid>
             </AccordionDetails>
           </Accordion>

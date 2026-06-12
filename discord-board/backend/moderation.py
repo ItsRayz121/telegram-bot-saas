@@ -86,8 +86,18 @@ def warning_text(category: str) -> str:
         return "🚫 That message was removed — please don't shout in all caps."
     if category == "language":
         return "🚫 That message was removed by the server's language filter."
-    if category in ("attachment", "sticker", "voice_message"):
+    if category in ("attachment", "sticker", "voice_message", "photo", "video", "gif"):
         return "🚫 That content type isn't allowed in this server."
+    if category == "email_detection":
+        return "🚫 That message was removed — please don't share email addresses here."
+    if category == "contact_sharing":
+        return "🚫 That message was removed — please don't share phone numbers here."
+    if category == "spoiler_content":
+        return "🚫 Spoiler content isn't allowed here."
+    if category == "bot_mentions":
+        return "🚫 Mentioning bots isn't allowed here."
+    if category == "smart_mod":
+        return "🚫 That message looked like unsolicited promotion and was removed."
     return "🚫 That message was removed by the content filter."
 
 
@@ -130,17 +140,69 @@ def evaluate_automod(text: str, cfg: dict) -> dict | None:
 
 
 def evaluate_media(flags: dict, cfg: dict) -> dict | None:
-    """Media-type toggles. flags = {attachments, stickers, voice} booleans the
-    bot derives from the message; config decides which types get removed."""
+    """Media-type toggles. flags = {attachments, stickers, voice, photos, videos,
+    gifs} booleans the bot derives from the message; config decides which types
+    get removed."""
     media = ((cfg or {}).get("automod") or {}).get("media") or {}
     action = _norm_action(media.get("action", "delete"))
-    if media.get("block_attachments") and flags.get("attachments"):
-        return {"category": "attachment", "action": action, "matched": "attachment",
-                "detail": "File/image attachments are blocked here"}
-    if media.get("block_stickers") and flags.get("stickers"):
-        return {"category": "sticker", "action": action, "matched": "sticker",
-                "detail": "Stickers are blocked here"}
-    if media.get("block_voice") and flags.get("voice"):
-        return {"category": "voice_message", "action": action, "matched": "voice",
-                "detail": "Voice messages are blocked here"}
+    flags = flags or {}
+    # (config key, message flag, category, detail) — first match wins.
+    rules = (
+        ("block_attachments", "attachments", "attachment", "File/image attachments are blocked here"),
+        ("block_photos", "photos", "photo", "Photos are blocked here"),
+        ("block_videos", "videos", "video", "Videos are blocked here"),
+        ("block_gifs", "gifs", "gif", "GIFs are blocked here"),
+        ("block_stickers", "stickers", "sticker", "Stickers are blocked here"),
+        ("block_voice", "voice", "voice_message", "Voice messages are blocked here"),
+    )
+    for cfg_key, flag_key, category, detail in rules:
+        if media.get(cfg_key) and flags.get(flag_key):
+            return {"category": category, "action": action, "matched": category, "detail": detail}
+    return None
+
+
+def evaluate_content(text: str, flags: dict, cfg: dict) -> dict | None:
+    """Extended content rules (Phase 18): email / phone / spoiler text patterns
+    and bot mentions. Each rule is its own automod sub-section {enabled, action}."""
+    am = (cfg or {}).get("automod") or {}
+    text = text or ""
+    flags = flags or {}
+    text_rules = (
+        ("email_detection", cf.email_match, "Email address shared"),
+        ("contact_sharing", cf.phone_match, "Phone number shared"),
+        ("spoiler_content", cf.spoiler_match, "Spoiler content"),
+    )
+    for key, detector, detail in text_rules:
+        rule = am.get(key) or {}
+        if rule.get("enabled"):
+            hit = detector(text)
+            if hit:
+                return {"category": key, "action": _norm_action(rule.get("action", "delete")),
+                        "matched": str(hit), "detail": detail}
+    bm = am.get("bot_mentions") or {}
+    if bm.get("enabled") and flags.get("mentions_bot"):
+        return {"category": "bot_mentions", "action": _norm_action(bm.get("action", "delete")),
+                "matched": "bot", "detail": "Bot mention"}
+    return None
+
+
+def evaluate_smart_patterns(text: str, cfg: dict) -> dict | None:
+    """Smart Moderation Layer 2 — rule-based promo / obfuscated-URL detection.
+    Runs with no AI cost; the AI relevance layer (Layer 3) is handled by the bot
+    only when smart_mod.ai_enabled. trusted_user_ids bypass is applied upstream."""
+    sm = ((cfg or {}).get("automod") or {}).get("smart_mod") or {}
+    if not sm.get("enabled"):
+        return None
+    text = text or ""
+    action = _norm_action(sm.get("action", "delete"))
+    if sm.get("promotional_detection"):
+        hit = cf.promo_match(text, allow_referral=bool(sm.get("allow_referral_codes")))
+        if hit:
+            return {"category": "smart_mod", "action": action, "matched": hit,
+                    "detail": f"Promotional pattern: {hit}"}
+    if sm.get("hidden_url_detection"):
+        hit = cf.hidden_url_match(text)
+        if hit:
+            return {"category": "smart_mod", "action": action, "matched": hit,
+                    "detail": f"Hidden/obfuscated URL: {hit}"}
     return None

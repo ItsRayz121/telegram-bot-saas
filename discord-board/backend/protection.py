@@ -38,10 +38,22 @@ EXTRA_DEFAULTS = {
         "caps_lock": {"enabled": False, "threshold_percent": 80, "min_length": 15, "action": "delete"},
         "language_filter": {"enabled": False, "scripts": [], "action": "delete"},
         "media": {"block_attachments": False, "block_stickers": False,
-                  "block_voice": False, "action": "delete"},
-        # Phase 16 — AI layers (graceful no-ops without ANTHROPIC_API_KEY)
+                  "block_voice": False, "block_photos": False,
+                  "block_videos": False, "block_gifs": False, "action": "delete"},
+        # Phase 18 — Extended content rules (each its own {enabled, action} so the
+        # data-driven PUT validator + 2-level merge accept them automatically).
+        "email_detection": {"enabled": False, "action": "delete"},
+        "contact_sharing": {"enabled": False, "action": "delete"},   # phone numbers
+        "spoiler_content": {"enabled": False, "action": "delete"},
+        "bot_mentions": {"enabled": False, "action": "delete"},
+        # Phase 16/18 — Smart Moderation. Layer 2 = rule-based pattern detection
+        # (promotional_detection / hidden_url_detection); Layer 3 = AI relevance
+        # (ai_enabled, default True so guilds that already turned smart_mod on keep
+        # their AI behaviour). Graceful no-ops without ANTHROPIC_API_KEY.
         "smart_mod": {"enabled": False, "group_topic": "", "trusted_user_ids": [],
-                      "ai_rate_limit_seconds": 30, "action": "delete"},
+                      "ai_rate_limit_seconds": 30, "action": "delete",
+                      "promotional_detection": False, "hidden_url_detection": False,
+                      "allow_referral_codes": False, "ai_enabled": True},
         "image_ai": {"enabled": False, "action": "delete",
                      "rate_limit_seconds": 30},
         # Phase 4 native: mirror cf_custom_words into a Discord AutoMod rule so

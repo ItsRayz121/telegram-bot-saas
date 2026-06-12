@@ -413,16 +413,19 @@ class CoreMixin:
         for emb in message.embeds:
             text += " " + (emb.title or "") + " " + (emb.description or "")
 
+        flags = self._media_flags(message)
         decision = moderation.evaluate(text, cfg)
         if decision is None:
             decision = moderation.evaluate_automod(text, cfg)
         if decision is None:
-            flags = {
-                "attachments": bool(message.attachments),
-                "stickers": bool(message.stickers),
-                "voice": bool(getattr(message.flags, "voice", False)),
-            }
             decision = moderation.evaluate_media(flags, cfg)
+        if decision is None:
+            decision = moderation.evaluate_content(text, flags, cfg)
+        if decision is None:
+            # Smart Moderation Layer 2 (rule-based) — trusted admins bypass it.
+            sm = (cfg.get("automod") or {}).get("smart_mod") or {}
+            if str(message.author.id) not in [str(t) for t in (sm.get("trusted_user_ids") or [])]:
+                decision = moderation.evaluate_smart_patterns(text, cfg)
         if decision:
             action_taken = await self._execute_action(message, decision, cfg)
             await asyncio.to_thread(
@@ -530,10 +533,38 @@ class CoreMixin:
             db.close()
             SessionLocal.remove()
 
+    @staticmethod
+    def _media_flags(message: discord.Message) -> dict:
+        """Per-message media booleans the moderation matrix consumes. Photos /
+        videos / GIFs are split out of raw attachments via content-type so the
+        Extended Rules can block them individually."""
+        photos = videos = gifs = False
+        for a in message.attachments:
+            ct = (a.content_type or "").lower()
+            name = (a.filename or "").lower()
+            if ct == "image/gif" or name.endswith((".gif", ".gifv")):
+                gifs = True
+            elif ct.startswith("image/"):
+                photos = True
+            elif ct.startswith("video/"):
+                videos = True
+        # Tenor/Giphy embeds count as GIFs even without an attachment.
+        low = (message.content or "").lower()
+        if "tenor.com" in low or "giphy.com" in low:
+            gifs = True
+        return {
+            "attachments": bool(message.attachments),
+            "stickers": bool(message.stickers),
+            "voice": bool(getattr(message.flags, "voice", False)),
+            "photos": photos, "videos": videos, "gifs": gifs,
+            "mentions_bot": any(getattr(u, "bot", False) for u in message.mentions),
+        }
+
     async def _smart_mod_check(self, message: discord.Message, cfg: dict) -> bool:
-        """AI promo/spam layer. Returns True when the message was acted on."""
+        """AI promo/spam layer (Smart Moderation Layer 3). Returns True when the
+        message was acted on. Gated by ai_enabled (default on for legacy guilds)."""
         sm = (cfg.get("automod") or {}).get("smart_mod") or {}
-        if not sm.get("enabled") or not ai.is_configured():
+        if not sm.get("enabled") or not sm.get("ai_enabled", True) or not ai.is_configured():
             return False
         if str(message.author.id) in [str(t) for t in (sm.get("trusted_user_ids") or [])]:
             return False
