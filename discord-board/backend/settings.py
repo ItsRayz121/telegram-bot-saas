@@ -114,6 +114,16 @@ AUTO_PUBLISH_DEFAULTS = {
 }
 
 
+# Thread auto-management (Phase 4 native): auto-thread new posts in chosen
+# channels. Stored in GuildSettings.extra["auto_threads"].
+AUTO_THREADS_DEFAULTS = {
+    "enabled": False,
+    "channel_ids": [],          # explicit opt-in per channel — never "all"
+    "archive_minutes": 1440,    # 60 | 1440 | 4320 | 10080
+    "include_bots": False,      # also thread bot/webhook posts
+}
+
+
 # Boost tracking (Phase 4 native): thank-you post + extra reward role + XP when
 # a member boosts. Stored in GuildSettings.extra["boosts"].
 BOOSTS_DEFAULTS = {

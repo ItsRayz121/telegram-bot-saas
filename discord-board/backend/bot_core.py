@@ -38,6 +38,7 @@ import guild_sync
 import invite_tracking
 import leveling
 import automod_sync
+import auto_threads
 import boosts
 import mod_commands
 import moderation
@@ -373,6 +374,12 @@ class CoreMixin:
                 and not message.flags.crossposted
                 and serves(self, message.guild.id)):
             await self._maybe_auto_publish(message)
+        # Thread auto-management (Phase 4 native): also before the bot skip so
+        # bot posts can be threaded when include_bots is on. TTL-cached gate.
+        if (isinstance(message.channel, discord.TextChannel)
+                and message.type in (discord.MessageType.default, discord.MessageType.reply)
+                and serves(self, message.guild.id)):
+            await auto_threads.handle_message(self, message)
         if message.author.bot:
             return
         if not serves(self, message.guild.id):

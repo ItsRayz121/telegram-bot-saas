@@ -216,8 +216,11 @@ Ranked by impact-per-effort:
     queue table (create_all, no migration); the content loop creates/cancels them and
     posts an optional channel reminder N minutes before start. `content_api` events
     endpoints + `content_runtime` queue helpers + `_create_guild_event` in bot_core.
-11. **Thread auto-management** (Automation) — auto-thread on posts in chosen channels,
-    auto-archive policy.
+11. ✅ **Thread auto-management** (Automation › Threads, 2026-06-12) — auto-creates a
+    discussion thread on new posts in explicitly chosen channels (named from author +
+    first line), 1h/24h/3d/1w auto-archive policy, optional bot/webhook posts. Config
+    in `GuildSettings.extra["auto_threads"]`, TTL-cached gate in `auto_threads.py`
+    (on_message hook before the bot skip), GET/PUT `/auto-threads`.
 12. **Server settings backup/restore** (server-level) — snapshot roles/channels/permissions.
 
 Telegram concepts intentionally NOT ported (no Discord equivalent / natively covered):

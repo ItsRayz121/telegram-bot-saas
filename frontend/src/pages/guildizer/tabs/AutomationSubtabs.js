@@ -103,6 +103,69 @@ export function SchedulerSubtab({ guildId, channels = [] }) {
   );
 }
 
+// ── Threads: auto-thread new posts in chosen channels ─────────────────────────
+const ARCHIVE_OPTIONS = [
+  { value: 60, label: '1 hour' },
+  { value: 1440, label: '24 hours' },
+  { value: 4320, label: '3 days' },
+  { value: 10080, label: '1 week' },
+];
+
+export function ThreadsSubtab({ guildId, channels = [] }) {
+  const textChannels = channels.filter((c) => TEXT_TYPES.has(c.type));
+  const [cfg, setCfg] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    guildizerApi.get(`/api/guilds/${guildId}/auto-threads`)
+      .then(({ data }) => setCfg(data))
+      .catch(() => setError('Failed to load thread settings.'));
+  }, [guildId]);
+
+  async function save() {
+    setSaving(true); setError(null);
+    try {
+      const { data } = await guildizerApi.put(`/api/guilds/${guildId}/auto-threads`, cfg);
+      setCfg(data); setSaved(true);
+    } catch { setError('Save failed.'); } finally { setSaving(false); }
+  }
+
+  if (!cfg) return error ? <Alert severity="warning">{error}</Alert> : <Loading />;
+  return (
+    <Card variant="outlined"><CardContent>
+      <Typography variant="subtitle1" fontWeight={700} mb={1}>🧵 Thread auto-management</Typography>
+      <FormControlLabel control={<Switch checked={!!cfg.enabled} onChange={(e) => setCfg((c) => ({ ...c, enabled: e.target.checked }))} />}
+        label="Open a discussion thread on every new post in the channels below" />
+      <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+        Threads are named after the author and the first line of the post. The bot
+        needs the Create Public Threads permission.
+      </Typography>
+      <TextField select fullWidth size="small" margin="dense" label="Channels"
+        SelectProps={{ multiple: true }} value={cfg.channel_ids || []}
+        onChange={(e) => setCfg((c) => ({ ...c, channel_ids: e.target.value }))}>
+        {textChannels.map((c) => <MenuItem key={c.id} value={c.id}># {c.name}</MenuItem>)}
+      </TextField>
+      <TextField select fullWidth size="small" margin="dense" label="Auto-archive after inactivity"
+        value={cfg.archive_minutes || 1440}
+        onChange={(e) => setCfg((c) => ({ ...c, archive_minutes: Number(e.target.value) }))}>
+        {ARCHIVE_OPTIONS.map((o) => <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}
+      </TextField>
+      <FormControlLabel control={<Switch checked={!!cfg.include_bots} onChange={(e) => setCfg((c) => ({ ...c, include_bots: e.target.checked }))} />}
+        label="Also thread bot & webhook posts (e.g. scheduled announcements)" />
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+        {error && <Alert severity="error" sx={{ py: 0, mr: 2 }}>{error}</Alert>}
+        <Button variant="contained" size="small" onClick={save} disabled={saving}>
+          {saving ? 'Saving…' : 'Save'}
+        </Button>
+      </Box>
+      <Snackbar open={saved} autoHideDuration={2000} onClose={() => setSaved(false)} message="Saved"
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }} />
+    </CardContent></Card>
+  );
+}
+
 export function AutoReplySubtab({ guildId }) {
   const [responses, reload, error] = useList(guildId, 'auto-responses', 'responses');
   if (responses === null) return <Loading />;

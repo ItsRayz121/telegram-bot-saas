@@ -127,6 +127,56 @@ def update_auto_publish(guild_id: int):
     return jsonify(cfg)
 
 
+# --- thread auto-management (Phase 4 native) ----------------------------------------
+def _auto_threads_public(extra: dict | None) -> dict:
+    return {**settings_mod.AUTO_THREADS_DEFAULTS,
+            **((extra or {}).get("auto_threads") or {})}
+
+
+@automation_bp.get("/api/guilds/<int:guild_id>/auto-threads")
+@login_required
+def get_auto_threads(guild_id: int):
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return err
+    row = settings_mod.get_or_create(g.db, guild_id)
+    g.db.commit()
+    return jsonify(_auto_threads_public(row.extra))
+
+
+@automation_bp.put("/api/guilds/<int:guild_id>/auto-threads")
+@login_required
+def update_auto_threads(guild_id: int):
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return err
+    body = request.get_json(silent=True) or {}
+    row = settings_mod.get_or_create(g.db, guild_id)
+    cfg = _auto_threads_public(row.extra)
+
+    if "enabled" in body:
+        cfg["enabled"] = bool(body["enabled"])
+    if "channel_ids" in body:
+        cfg["channel_ids"] = [str(c).strip() for c in (body["channel_ids"] or [])
+                              if str(c).strip().isdigit()][:25]
+    if "archive_minutes" in body:
+        try:
+            v = int(body["archive_minutes"])
+            if v in (60, 1440, 4320, 10080):
+                cfg["archive_minutes"] = v
+        except (TypeError, ValueError):
+            pass
+    if "include_bots" in body:
+        cfg["include_bots"] = bool(body["include_bots"])
+
+    extra = dict(row.extra or {})
+    extra["auto_threads"] = cfg
+    row.extra = extra
+    settings_mod.touch(row)
+    g.db.commit()
+    return jsonify(cfg)
+
+
 # --- workflows ---------------------------------------------------------------------
 @automation_bp.get("/api/guilds/<int:guild_id>/workflows")
 @login_required
