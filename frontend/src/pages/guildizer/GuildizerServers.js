@@ -54,21 +54,14 @@ const DISCORD_PERMISSIONS = [
 
 export default function GuildizerServers() {
   const navigate = useNavigate();
-  const [params, setSearchParams] = useSearchParams();
+  const [params] = useSearchParams();
   const [state, setState] = useState({ loading: true, connected: false, guilds: [], inviteUrl: null });
   const [bots, setBots] = useState([]);
   const [error, setError] = useState(OAUTH_ERRORS[params.get('error')] || null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [redeemOpen, setRedeemOpen] = useState(false);
-  const [permsModalGuild, setPermsModalGuild] = useState(null);
-  const [unlinkTarget, setUnlinkTarget] = useState(null);
-  const [guideOpen, setGuideOpen] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   const [addBotOpen, setAddBotOpen] = useState(false);
   const [botSearch, setBotSearch] = useState('');
-
-  // Scoped view — the hero card's "Manage Servers" button filters to installed servers.
-  const filter = params.get('filter'); // 'installed' | null
 
   // Custom (white-label) bots are best-effort: a failure here must never block the
   // servers page, so it has its own try/catch and never sets the page error.
@@ -79,21 +72,11 @@ export default function GuildizerServers() {
     } catch { /* leave bots as-is; the official bot card still renders */ }
   };
 
-  const load = async ({ silent = false } = {}) => {
-    if (silent) setRefreshing(true);
-    try {
-      const { data: me } = await guildizerApi.get('/auth/me'); // 401 → not connected
-      const { data } = await guildizerApi.get('/api/guilds');
-      setState({ loading: false, connected: true, guilds: data.guilds, inviteUrl: data.invite_url });
-      setIsAdmin(!!me.is_admin);
-      await loadBots();
-    } catch (e) {
-      if (e?.response?.status === 401) setState({ loading: false, connected: false, guilds: [], inviteUrl: null });
-      else { setError('Failed to load your Discord servers.'); setState((s) => ({ ...s, loading: false })); }
-    } finally {
-      setRefreshing(false);
-    }
-  };
+  // Old in-page "Manage Servers" used ?filter=installed; that now lives on its own
+  // route (/guildizer/servers). Redirect saved links/bookmarks so they keep working.
+  useEffect(() => {
+    if (params.get('filter') === 'installed') navigate('/guildizer/servers', { replace: true });
+  }, [params, navigate]);
 
   useEffect(() => {
     let alive = true;
@@ -118,11 +101,6 @@ export default function GuildizerServers() {
   const installedCount = useMemo(
     () => state.guilds.filter((g) => g.bot_present).length,
     [state.guilds],
-  );
-
-  const visibleGuilds = useMemo(
-    () => (filter === 'installed' ? state.guilds.filter((g) => g.bot_present) : state.guilds),
-    [state.guilds, filter],
   );
 
   // Custom bots are a Pro feature (custom_bots_api.py): gate "Add Bot" on owning
@@ -174,7 +152,7 @@ export default function GuildizerServers() {
           <OfficialBotCard
             installedCount={installedCount}
             inviteUrl={state.inviteUrl}
-            onManage={() => setSearchParams({ filter: 'installed' }, { replace: true })}
+            onManage={() => navigate('/guildizer/servers')}
           />
 
           {/* Secondary controls row (Guildizer-specific) */}
@@ -190,35 +168,19 @@ export default function GuildizerServers() {
             <NotificationsBell />
           </Box>
 
-          {filter === 'installed' ? (
-            /* ── "Manage Servers" view: the linked servers, only reachable from the
-                  hero card's Manage Servers button ── */
-            <ManageServersView
-              visibleGuilds={visibleGuilds}
-              inviteUrl={state.inviteUrl}
-              refreshing={refreshing}
-              guideOpen={guideOpen}
-              onToggleGuide={() => setGuideOpen((o) => !o)}
-              onRefresh={() => load({ silent: true })}
-              onBack={() => setSearchParams({}, { replace: true })}
-              navigate={navigate}
-              onViewPerms={setPermsModalGuild}
-              onUnlink={setUnlinkTarget}
-            />
-          ) : (
-            /* ── Default view: Community (custom) bots, mirroring the Telegizer
-                  dashboard's Community Bots section ── */
-            <CommunityBotsSection
-              bots={bots}
-              filteredBots={filteredBots}
-              hasPro={hasPro}
-              search={botSearch}
-              onSearch={setBotSearch}
-              onAdd={() => setAddBotOpen(true)}
-              onChanged={loadBots}
-              navigate={navigate}
-            />
-          )}
+          {/* ── Default view: Community (custom) bots, mirroring the Telegizer
+                dashboard's Community Bots section. The linked servers now live on
+                their own page (/guildizer/servers) via the hero card's button. ── */}
+          <CommunityBotsSection
+            bots={bots}
+            filteredBots={filteredBots}
+            hasPro={hasPro}
+            search={botSearch}
+            onSearch={setBotSearch}
+            onAdd={() => setAddBotOpen(true)}
+            onChanged={loadBots}
+            navigate={navigate}
+          />
         </>
       )}
 
@@ -228,8 +190,6 @@ export default function GuildizerServers() {
         onConnected={() => { setAddBotOpen(false); loadBots(); }}
       />
       <RedeemDialog open={redeemOpen} onClose={() => setRedeemOpen(false)} />
-      <PermissionsDialog guild={permsModalGuild} onClose={() => setPermsModalGuild(null)} />
-      <UnlinkDialog guild={unlinkTarget} onClose={() => setUnlinkTarget(null)} />
     </Container>
   );
 }
@@ -286,7 +246,7 @@ function OfficialBotCard({ installedCount, inviteUrl, onManage }) {
 
 // ── "Manage Servers" view — the linked-server cards, shown only after the user
 //    clicks "Manage Servers" on the hero card (mirrors Telegizer's Manage Groups) ──
-function ManageServersView({
+export function ManageServersView({
   visibleGuilds, inviteUrl, refreshing, guideOpen,
   onToggleGuide, onRefresh, onBack, navigate, onViewPerms, onUnlink,
 }) {
@@ -800,7 +760,7 @@ const cardBtn = (primary) => ({
 });
 
 // ── Permissions detail modal (mirrors Telegizer's bot-permissions modal) ──────
-function PermissionsDialog({ guild, onClose }) {
+export function PermissionsDialog({ guild, onClose }) {
   return (
     <Dialog open={!!guild} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -842,7 +802,7 @@ function PermissionsDialog({ guild, onClose }) {
 }
 
 // ── Unlink helper (Discord has no dashboard unlink — explain the real flow) ────
-function UnlinkDialog({ guild, onClose }) {
+export function UnlinkDialog({ guild, onClose }) {
   return (
     <Dialog open={!!guild} onClose={onClose} fullWidth maxWidth="xs">
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>

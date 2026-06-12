@@ -2,13 +2,13 @@ import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Box, Typography, Tabs, Tab, Card, CardContent, Grid, Avatar, Stack,
-  List, ListItem, ListItemText, Chip, CircularProgress, Alert, Button,
-  IconButton, Tooltip,
+  List, ListItem, ListItemText, ListItemIcon, Chip, CircularProgress, Alert, Button,
+  IconButton, Tooltip, Menu, MenuItem,
 } from '@mui/material';
 import {
   ArrowBack, Save, Schedule, Shield, People, Forum as ForumIcon,
   SmartToy, Bolt, Assessment, Dashboard as DashboardIcon, Terminal,
-  GroupAdd, Payments,
+  GroupAdd, Payments, MoreHoriz, ExpandMore,
 } from '@mui/icons-material';
 import guildizerApi from '../../services/guildizerApi';
 import { SaveBarContext } from './tabs/saveBar';
@@ -55,6 +55,13 @@ const AREAS = [
   { label: 'Billing', icon: Payments },
 ];
 
+// The 6 Telegizer-parity category pills (Moderation … Analytics) + Overview stay
+// visible; the server-admin tabs below are tucked into a "More ▾" overflow pill so
+// the nav doesn't sprawl past ~7 items (matches the Telegram dashboard's pill count).
+const MORE_LABELS = ['Commands', 'Team', 'Billing'];
+const PRIMARY_AREAS = AREAS.filter((a) => !MORE_LABELS.includes(a.label));
+const MORE_AREAS = AREAS.filter((a) => MORE_LABELS.includes(a.label));
+
 // Old flat-tab deep links → new area/subtab so saved URLs keep working.
 const LEGACY_TABS = {
   Settings: ['Members', 'Welcome'],
@@ -85,6 +92,8 @@ export default function GuildizerServerDetail() {
   const setSub = (v) => setSearchParams({ tab: area.label, sub: subs[v] }, { replace: true });
 
   const [state, setState] = useState({ loading: true, guild: null, error: null });
+  const [moreAnchor, setMoreAnchor] = useState(null); // "More ▾" overflow menu
+  const moreActive = MORE_LABELS.includes(area.label);
 
   // ── Single sticky Save bar wiring (Telegizer parity) ────────────────────────
   const saveRef = useRef(null);
@@ -194,7 +203,7 @@ export default function GuildizerServerDetail() {
                 display: 'flex', gap: 0.75, py: 1, overflowX: 'auto',
                 '::-webkit-scrollbar': { display: 'none' }, scrollBehavior: 'smooth', WebkitOverflowScrolling: 'touch',
               }}>
-                {AREAS.map(({ label, icon: Icon }) => {
+                {PRIMARY_AREAS.map(({ label, icon: Icon }) => {
                   const active = label === area.label;
                   return (
                     <Box
@@ -217,7 +226,49 @@ export default function GuildizerServerDetail() {
                     </Box>
                   );
                 })}
+
+                {/* "More ▾" overflow pill — Commands / Team / Billing. Shows the
+                    active item's name when one is selected so it never feels hidden. */}
+                <Box
+                  onClick={(e) => setMoreAnchor(e.currentTarget)}
+                  sx={{
+                    display: 'flex', alignItems: 'center', gap: 0.5,
+                    px: 1.5, py: 0.6, borderRadius: 2, cursor: 'pointer',
+                    whiteSpace: 'nowrap', userSelect: 'none',
+                    bgcolor: moreActive ? 'primary.main' : 'rgba(255,255,255,0.05)',
+                    color: moreActive ? 'white' : 'text.secondary',
+                    border: '1px solid',
+                    borderColor: moreActive ? 'primary.main' : 'rgba(255,255,255,0.12)',
+                    transition: 'all 0.15s ease',
+                    '&:hover': { bgcolor: moreActive ? 'primary.dark' : 'rgba(255,255,255,0.09)' },
+                  }}
+                >
+                  <MoreHoriz sx={{ fontSize: 15 }} />
+                  <Typography variant="body2" fontWeight={moreActive ? 700 : 500} fontSize="0.78rem">
+                    {moreActive ? area.label : 'More'}
+                  </Typography>
+                  <ExpandMore sx={{ fontSize: 14 }} />
+                </Box>
               </Box>
+
+              <Menu
+                anchorEl={moreAnchor}
+                open={!!moreAnchor}
+                onClose={() => setMoreAnchor(null)}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+                transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+              >
+                {MORE_AREAS.map(({ label, icon: Icon }) => (
+                  <MenuItem
+                    key={label}
+                    selected={label === area.label}
+                    onClick={() => { setTab(label); setMoreAnchor(null); }}
+                  >
+                    <ListItemIcon sx={{ minWidth: 34 }}><Icon fontSize="small" /></ListItemIcon>
+                    <ListItemText primaryTypographyProps={{ fontSize: '0.85rem' }}>{label}</ListItemText>
+                  </MenuItem>
+                ))}
+              </Menu>
             </Box>
 
             {/* Sub-tab row */}
