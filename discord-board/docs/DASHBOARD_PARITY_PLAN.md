@@ -221,7 +221,12 @@ Ranked by impact-per-effort:
     first line), 1h/24h/3d/1w auto-archive policy, optional bot/webhook posts. Config
     in `GuildSettings.extra["auto_threads"]`, TTL-cached gate in `auto_threads.py`
     (on_message hook before the bot skip), GET/PUT `/auto-threads`.
-12. **Server settings backup/restore** (server-level) — snapshot roles/channels/permissions.
+12. ✅ **Server settings backup/restore** (Overview, 2026-06-12) — `guild_backups`
+    queue table (create_all): the 20s loop snapshots roles/channels/role-overwrites
+    from the gateway cache; restore is NON-destructive (re-applies drift by stored id,
+    recreates deleted roles/channels with overwrite remapping, never deletes; member
+    overwrites never captured). Max 5 kept. `backups.py` + `backups_api.py`, card on
+    the server Overview tab.
 
 Telegram concepts intentionally NOT ported (no Discord equivalent / natively covered):
 - "Admin must start the bot" DM-readiness checks — Discord DMs work by default

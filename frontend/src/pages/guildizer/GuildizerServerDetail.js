@@ -195,6 +195,95 @@ function Header({ guild }) {
   );
 }
 
+// ── Backups: snapshot + non-destructive restore of roles/channels ─────────────
+const BACKUP_STATUS_COLOR = {
+  pending: 'default', done: 'success', failed: 'error',
+  restoring: 'warning', restored: 'info', restore_failed: 'error',
+};
+
+function BackupsCard({ guildId }) {
+  const [backups, setBackups] = useState(null);
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const reload = () => guildizerApi.get(`/api/guilds/${guildId}/backups`)
+    .then(({ data }) => setBackups(data.backups))
+    .catch(() => { setError('Failed to load backups.'); setBackups([]); });
+
+  useEffect(() => { reload(); /* eslint-disable-next-line */ }, [guildId]);
+
+  // Snapshots/restores finish within a loop tick — poll while one is in flight.
+  const inFlight = (backups || []).some((b) => ['pending', 'restoring'].includes(b.status));
+  useEffect(() => {
+    if (!inFlight) return undefined;
+    const t = setInterval(reload, 5000);
+    return () => clearInterval(t);
+    /* eslint-disable-next-line */
+  }, [inFlight, guildId]);
+
+  async function act(fn, failMsg) {
+    setBusy(true); setError(null);
+    try { await fn(); await reload(); } catch { setError(failMsg); }
+    setBusy(false);
+  }
+  const create = () => act(
+    () => guildizerApi.post(`/api/guilds/${guildId}/backups`, {}),
+    'Could not start a backup (one may already be running).',
+  );
+  const restore = (b) => {
+    // eslint-disable-next-line no-alert
+    if (!window.confirm('Re-apply this snapshot? Drifted roles/channels are reset and '
+      + 'deleted ones recreated. Nothing is deleted.')) return;
+    act(() => guildizerApi.post(`/api/guilds/${guildId}/backups/${b.id}/restore`, {}),
+      'Could not start the restore.');
+  };
+  const remove = (b) => act(
+    () => guildizerApi.delete(`/api/guilds/${guildId}/backups/${b.id}`),
+    'Could not delete the backup.',
+  );
+
+  return (
+    <Card variant="outlined">
+      <CardContent>
+        <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
+          <Typography variant="subtitle1" fontWeight={700}>🗄️ Server backups</Typography>
+          <Button size="small" variant="contained" disabled={busy || inFlight} onClick={create}>
+            Back up now
+          </Button>
+        </Stack>
+        <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+          Snapshots roles, channels and permission overwrites (up to 5 kept). Restore
+          re-applies drifted settings and recreates deleted items — it never deletes
+          anything. Useful after a nuke or a bad config change.
+        </Typography>
+        {error && <Alert severity="warning" sx={{ mb: 1 }} onClose={() => setError(null)}>{error}</Alert>}
+        {(backups || []).length === 0 && backups !== null
+          && <Typography variant="body2" color="text.secondary">No backups yet.</Typography>}
+        <List dense disablePadding>
+          {(backups || []).map((b) => (
+            <ListItem key={b.id} disableGutters
+              secondaryAction={(
+                <Stack direction="row" spacing={1}>
+                  {['done', 'restored'].includes(b.status) && (
+                    <Button size="small" disabled={busy || inFlight} onClick={() => restore(b)}>Restore</Button>
+                  )}
+                  <Button size="small" color="inherit" disabled={busy} onClick={() => remove(b)}>Delete</Button>
+                </Stack>
+              )}>
+              <Chip size="small" label={b.status} color={BACKUP_STATUS_COLOR[b.status] || 'default'}
+                variant="outlined" sx={{ mr: 1 }} />
+              <ListItemText
+                primary={b.label || new Date(b.created_at).toLocaleString()}
+                secondary={`${b.roles_count} roles · ${b.channels_count} channels${b.error ? ` · ${b.error}` : ''}`}
+                primaryTypographyProps={{ variant: 'body2', noWrap: true }} />
+            </ListItem>
+          ))}
+        </List>
+      </CardContent>
+    </Card>
+  );
+}
+
 function Overview({ guild }) {
   const channels = (guild.channels || []).filter((c) => c.type !== 4);
   const roles = (guild.roles || []).filter((r) => r.name !== '@everyone');
@@ -230,6 +319,9 @@ function Overview({ guild }) {
             </List>
           </CardContent>
         </Card>
+      </Grid>
+      <Grid item xs={12}>
+        <BackupsCard guildId={guild.id} />
       </Grid>
     </Grid>
   );

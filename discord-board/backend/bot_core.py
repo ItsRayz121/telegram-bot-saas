@@ -39,6 +39,7 @@ import invite_tracking
 import leveling
 import automod_sync
 import auto_threads
+import backups
 import boosts
 import mod_commands
 import moderation
@@ -1386,6 +1387,10 @@ class CoreMixin:
             await automod_sync.process_pending(self)
         except Exception:  # noqa: BLE001
             log.exception("native automod sync failed")
+        try:
+            await backups.process_pending(self)
+        except Exception:  # noqa: BLE001
+            log.exception("backup processing failed")
 
     @post_campaigns.before_loop
     async def _before_post(self) -> None:

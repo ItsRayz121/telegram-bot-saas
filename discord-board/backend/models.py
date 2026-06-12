@@ -984,6 +984,42 @@ class GuildEvent(Base):
         }
 
 
+class GuildBackup(Base):
+    """A snapshot of the server's roles/channels/permission overwrites (Phase 4
+    native). The bot fills `data` from its cache (needs_snapshot) and re-applies
+    it on restore (needs_restore) — restore edits drifted items and recreates
+    missing ones by stored id/name, but never deletes anything."""
+
+    __tablename__ = "guild_backups"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, ForeignKey("guilds.id"), nullable=False, index=True)
+    label = Column(String(100), default="")
+    data = Column(JSON, nullable=True)        # {everyone, roles: [...], channels: [...]}
+    # pending | done | failed | restoring | restored | restore_failed
+    status = Column(String(16), default="pending")
+    needs_snapshot = Column(Boolean, default=True)
+    needs_restore = Column(Boolean, default=False)
+    error = Column(String(200), nullable=True)
+    roles_count = Column(Integer, default=0)
+    channels_count = Column(Integer, default=0)
+    created_by = Column(BigInteger, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    restored_at = Column(DateTime, nullable=True)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "label": self.label or "",
+            "status": self.status,
+            "error": self.error,
+            "roles_count": self.roles_count or 0,
+            "channels_count": self.channels_count or 0,
+            "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
+            "restored_at": self.restored_at.isoformat() + "Z" if self.restored_at else None,
+        }
+
+
 class AutoResponse(Base):
     """Keyword trigger -> bot reply (Phase 12). Cooldown is enforced in-memory
     by the bot (per guild+trigger)."""
