@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   Box, Grid, Card, CardContent, Typography, Switch, FormControlLabel, TextField,
   MenuItem, Button, List, ListItem, ListItemText, Chip, CircularProgress, Alert,
@@ -6,12 +6,14 @@ import {
 } from '@mui/material';
 import { Add, Delete } from '@mui/icons-material';
 import guildizerApi from '../../../services/guildizerApi';
+import { useSaveBar } from './saveBar';
 
 const TEXT_TYPES = new Set([0, 5]);
 const VOICE_TYPE = 2;
 
 export default function LevelingTab({ guildId, channels = [], roles = [] }) {
   const [cfg, setCfg] = useState(null);
+  const [orig, setOrig] = useState(null);
   const [board, setBoard] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -27,7 +29,7 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
     Promise.all([
       guildizerApi.get(`/api/guilds/${guildId}/leveling`),
       guildizerApi.get(`/api/guilds/${guildId}/leaderboard?limit=10`).catch(() => ({ data: { leaderboard: [] } })),
-    ]).then(([s, b]) => { setCfg(s.data); setBoard(b.data.leaderboard || []); })
+    ]).then(([s, b]) => { setCfg(s.data); setOrig(JSON.stringify(s.data)); setBoard(b.data.leaderboard || []); })
       .catch(() => setError('Failed to load leveling.'))
       .finally(() => setLoading(false));
   }, [guildId]);
@@ -38,9 +40,12 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
 
   async function save() {
     setSaving(true); setError(null);
-    try { const { data } = await guildizerApi.put(`/api/guilds/${guildId}/leveling`, cfg); setCfg(data); setSaved(true); }
+    try { const { data } = await guildizerApi.put(`/api/guilds/${guildId}/leveling`, cfg); setCfg(data); setOrig(JSON.stringify(data)); setSaved(true); }
     catch { setError('Save failed.'); } finally { setSaving(false); }
   }
+
+  const dirty = useMemo(() => cfg != null && orig != null && JSON.stringify(cfg) !== orig, [cfg, orig]);
+  const sb = useSaveBar({ save, dirty, saving });
 
   if (loading) return <Box sx={{ display: 'grid', placeItems: 'center', py: 4 }}><CircularProgress /></Box>;
   if (!cfg) return <Alert severity="warning">{error || 'No settings.'}</Alert>;
@@ -169,10 +174,13 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
         </CardContent></Card>
       </Grid>
 
-      <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, alignItems: 'center' }}>
-        {error && <Alert severity="error" sx={{ py: 0 }}>{error}</Alert>}
-        <Button variant="contained" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</Button>
-      </Grid>
+      {!sb && (
+        <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, alignItems: 'center' }}>
+          {error && <Alert severity="error" sx={{ py: 0 }}>{error}</Alert>}
+          <Button variant="contained" onClick={save} disabled={saving || !dirty}>{saving ? 'Saving…' : dirty ? 'Save changes' : 'Saved'}</Button>
+        </Grid>
+      )}
+      {sb && error && <Grid item xs={12}><Alert severity="error">{error}</Alert></Grid>}
 
       <Snackbar open={saved} autoHideDuration={2500} onClose={() => setSaved(false)} message="Saved"
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }} />

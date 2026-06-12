@@ -1,14 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   Box, Grid, Card, CardContent, Typography, Switch, FormControlLabel,
   TextField, MenuItem, Button, Chip, CircularProgress, Alert, Snackbar,
 } from '@mui/material';
 import guildizerApi from '../../../services/guildizerApi';
+import { useSaveBar } from './saveBar';
 
 const TEXT_TYPES = new Set([0, 5]);
 
 export default function SettingsTab({ guildId, channels = [], roles = [] }) {
   const [cfg, setCfg] = useState(null);
+  const [orig, setOrig] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -19,7 +21,7 @@ export default function SettingsTab({ guildId, channels = [], roles = [] }) {
 
   useEffect(() => {
     guildizerApi.get(`/api/guilds/${guildId}/settings`)
-      .then(({ data }) => setCfg(data))
+      .then(({ data }) => { setCfg(data); setOrig(JSON.stringify(data)); })
       .catch(() => setError('Failed to load settings.'))
       .finally(() => setLoading(false));
   }, [guildId]);
@@ -35,10 +37,13 @@ export default function SettingsTab({ guildId, channels = [], roles = [] }) {
     setSaving(true); setError(null);
     try {
       const { data } = await guildizerApi.put(`/api/guilds/${guildId}/settings`, cfg);
-      setCfg(data); setSaved(true);
+      setCfg(data); setOrig(JSON.stringify(data)); setSaved(true);
     } catch { setError('Save failed.'); }
     finally { setSaving(false); }
   }
+
+  const dirty = useMemo(() => cfg != null && orig != null && JSON.stringify(cfg) !== orig, [cfg, orig]);
+  const sb = useSaveBar({ save, dirty, saving });
 
   if (loading) return <Box sx={{ display: 'grid', placeItems: 'center', py: 4 }}><CircularProgress /></Box>;
   if (!cfg) return <Alert severity="warning">{error || 'No settings.'}</Alert>;
@@ -138,12 +143,15 @@ export default function SettingsTab({ guildId, channels = [], roles = [] }) {
         </CardContent></Card>
       </Grid>
 
-      <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, alignItems: 'center' }}>
-        {error && <Alert severity="error" sx={{ py: 0 }}>{error}</Alert>}
-        <Button variant="contained" onClick={save} disabled={saving}>
-          {saving ? 'Saving…' : 'Save changes'}
-        </Button>
-      </Grid>
+      {!sb && (
+        <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, alignItems: 'center' }}>
+          {error && <Alert severity="error" sx={{ py: 0 }}>{error}</Alert>}
+          <Button variant="contained" onClick={save} disabled={saving || !dirty}>
+            {saving ? 'Saving…' : dirty ? 'Save changes' : 'Saved'}
+          </Button>
+        </Grid>
+      )}
+      {sb && error && <Grid item xs={12}><Alert severity="error">{error}</Alert></Grid>}
 
       <Snackbar open={saved} autoHideDuration={2500} onClose={() => setSaved(false)}
         message="Saved" anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }} />

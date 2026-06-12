@@ -1,11 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   Box, Grid, Card, CardContent, Typography, Switch, FormControlLabel, TextField,
   MenuItem, Button, Chip, CircularProgress, Alert, Snackbar, List, ListItem,
-  ListItemText, Stack, IconButton, Checkbox,
+  ListItemText, Stack, IconButton, Checkbox, Divider, FormControl, InputLabel,
+  Select, Accordion, AccordionSummary, AccordionDetails,
 } from '@mui/material';
-import { Delete, Add } from '@mui/icons-material';
+import { Delete, Add, ExpandMore } from '@mui/icons-material';
 import guildizerApi from '../../../services/guildizerApi';
+import { useSaveBar } from './saveBar';
 
 const TEXT_TYPES = new Set([0, 5]);
 const CF_ACTIONS = ['delete', 'warn', 'timeout', 'kick', 'ban'];
@@ -20,7 +22,13 @@ const CAT_LABEL = {
   smart_mod: 'Smart mod', image_ai: 'Image AI', bot_policy: 'Bot policy',
   anti_nuke: 'Anti-nuke',
 };
-const SCRIPTS = ['cyrillic', 'chinese', 'korean', 'arabic', 'japanese'];
+const SCRIPTS = [
+  { value: 'cyrillic', label: 'Cyrillic (Russian, Ukrainian…)' },
+  { value: 'chinese', label: 'Chinese' },
+  { value: 'korean', label: 'Korean' },
+  { value: 'arabic', label: 'Arabic' },
+  { value: 'japanese', label: 'Japanese' },
+];
 const CAT_COLOR = { nsfw: 'error', csam: 'error', raid: 'warning', manual_lockdown: 'warning', lockdown_join: 'warning', invite: 'info', link: 'info', anti_nuke: 'error' };
 const ESCALATION_TYPES = [
   { key: 'ai_kb', label: '🤖 AI knowledge base — escalate when /ask confidence is low' },
@@ -28,6 +36,11 @@ const ESCALATION_TYPES = [
   { key: 'automation', label: '⚙️ Automation errors — escalate failed scheduled posts / workflows' },
   { key: 'command', label: '📌 Unknown commands — escalate unrecognised bot commands' },
 ];
+
+// Pro gating chip — visual parity with Telegizer's ProBadge.
+function ProBadge() {
+  return <Chip label="Pro" color="primary" size="small" sx={{ ml: 1, height: 18, fontSize: '0.65rem', fontWeight: 700 }} />;
+}
 
 // One shared component for every moderation-backed subtab. `section` selects
 // which cards render: automod | behavior | reports | verification | escalation.
@@ -43,11 +56,18 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState(null);
+  const [orig, setOrig] = useState(null);
+  const [eventsLoading, setEventsLoading] = useState(false);
 
   const textChannels = channels.filter((c) => TEXT_TYPES.has(c.type));
 
-  const loadEvents = () => guildizerApi.get(`/api/guilds/${guildId}/protection/events?limit=50`)
-    .then(({ data }) => setEvents(data.events)).catch(() => {});
+  const snapshot = (data, words, wl) => JSON.stringify([data, words, wl]);
+
+  const loadEvents = () => {
+    setEventsLoading(true);
+    return guildizerApi.get(`/api/guilds/${guildId}/protection/events?limit=50`)
+      .then(({ data }) => setEvents(data.events)).catch(() => {}).finally(() => setEventsLoading(false));
+  };
   const loadReports = () => guildizerApi.get(`/api/guilds/${guildId}/reports?status=open`)
     .then(({ data }) => setReports(data.reports)).catch(() => {});
   const loadWarnings = () => guildizerApi.get(`/api/guilds/${guildId}/warnings?limit=15`)
@@ -56,9 +76,12 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
   useEffect(() => {
     guildizerApi.get(`/api/guilds/${guildId}/moderation`)
       .then(({ data }) => {
+        const words = (data.cf_custom_words || []).join(', ');
+        const wl = ((data.automod?.external_links?.whitelist) || []).join(', ');
         setCfg(data);
-        setWordsText((data.cf_custom_words || []).join(', '));
-        setWlText(((data.automod?.external_links?.whitelist) || []).join(', '));
+        setWordsText(words);
+        setWlText(wl);
+        setOrig(snapshot(data, words, wl));
       })
       .catch(() => setError('Failed to load protection settings.'))
       .finally(() => setLoading(false));
@@ -106,9 +129,12 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
         },
       };
       const { data } = await guildizerApi.put(`/api/guilds/${guildId}/moderation`, payload);
+      const words = (data.cf_custom_words || []).join(', ');
+      const wl = ((data.automod?.external_links?.whitelist) || []).join(', ');
       setCfg(data);
-      setWordsText((data.cf_custom_words || []).join(', '));
-      setWlText(((data.automod?.external_links?.whitelist) || []).join(', '));
+      setWordsText(words);
+      setWlText(wl);
+      setOrig(snapshot(data, words, wl));
       setSaved(true);
     } catch { setError('Save failed.'); } finally { setSaving(false); }
   }
@@ -117,6 +143,14 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
     const { data } = await guildizerApi.post(`/api/guilds/${guildId}/moderation/lockdown`, { minutes });
     setCfg(data); loadEvents();
   }
+
+  const dirty = useMemo(
+    () => cfg != null && orig != null && snapshot(cfg, wordsText, wlText) !== orig,
+    [cfg, wordsText, wlText, orig],
+  );
+
+  // Register with the shell's single sticky Save button. Standalone → render own.
+  const sb = useSaveBar({ save, dirty, saving });
 
   if (loading) return <Box sx={{ display: 'grid', placeItems: 'center', py: 4 }}><CircularProgress /></Box>;
   if (!cfg) return <Alert severity="warning">{error || 'No settings.'}</Alert>;
@@ -133,166 +167,198 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
     </TextField>
   );
 
-  return (
-    <Grid container spacing={2}>
+  const am = cfg.automod || {};
 
-      {/* ════════ AUTOMOD ════════ */}
+  // Core Rules grid — Guildizer's real boolean filters, laid out like Telegizer.
+  const coreRules = [
+    ['NSFW / Adult Filter', !!cfg.cf_nsfw, (v) => set({ cf_nsfw: v })],
+    ['Remove Foreign Invites', !!cfg.cf_invites, (v) => set({ cf_invites: v })],
+    ['Suspicious / Shortened Links', !!cfg.cf_links, (v) => set({ cf_links: v })],
+    ['Block External Links', !!am.external_links?.enabled, (v) => setAm('external_links', { enabled: v })],
+    ['Excessive Emojis', !!am.excessive_emojis?.enabled, (v) => setAm('excessive_emojis', { enabled: v })],
+    ['Caps-Lock Shouting', !!am.caps_lock?.enabled, (v) => setAm('caps_lock', { enabled: v })],
+  ];
+
+  return (
+    <Box>
+      {/* ════════════════════════════ AUTOMOD ════════════════════════════ */}
       {section === 'automod' && (
         <>
-          <Grid item xs={12} md={6}>
-            <Card variant="outlined"><CardContent>
-              <Typography variant="subtitle1" fontWeight={700} mb={1}>Content filter</Typography>
-              <FormControlLabel control={<Switch checked={cfg.cf_enabled} onChange={(e) => set({ cf_enabled: e.target.checked })} />} label="Scan messages and act on violations" />
-              <TextField select size="small" margin="dense" fullWidth label="Action on violation"
-                value={cfg.cf_action} onChange={(e) => set({ cf_action: e.target.value })}
-                helperText="CSAM always bans regardless of this setting.">
-                {CF_ACTIONS.map((a) => <MenuItem key={a} value={a}>{a}</MenuItem>)}
-              </TextField>
-              <FormControlLabel control={<Switch checked={cfg.cf_nsfw} onChange={(e) => set({ cf_nsfw: e.target.checked })} />} label="Block NSFW / explicit content" />
-              <FormControlLabel control={<Switch checked={cfg.cf_invites} onChange={(e) => set({ cf_invites: e.target.checked })} />} label="Remove foreign Discord invites" />
-              <FormControlLabel control={<Switch checked={cfg.cf_links} onChange={(e) => set({ cf_links: e.target.checked })} />} label="Remove shortened / suspicious links" />
-              <TextField size="small" margin="dense" fullWidth label="Custom blocked words" placeholder="word1, word2, …"
-                value={wordsText} onChange={(e) => { setWordsText(e.target.value); }} helperText="Comma-separated (leet/spacing aware)." />
-            </CardContent></Card>
-          </Grid>
+          {/* 1 ── AutoMod / Core Rules ─────────────────────────────────────── */}
+          <Card sx={{ mb: 2 }}>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h6" fontWeight={600}>AutoMod</Typography>
+              </Box>
+              <FormControlLabel
+                control={<Switch checked={!!cfg.cf_enabled} onChange={(e) => set({ cf_enabled: e.target.checked })} />}
+                label="Enable content filtering globally"
+              />
 
-          <Grid item xs={12} md={6}>
-            <Card variant="outlined"><CardContent>
-              <Typography variant="subtitle1" fontWeight={700} mb={1}>Automod — links & text</Typography>
-              <FormControlLabel control={<Switch checked={!!cfg.automod?.external_links?.enabled} onChange={(e) => setAm('external_links', { enabled: e.target.checked })} />} label="Block all external links except the whitelist" />
-              <TextField size="small" margin="dense" fullWidth label="Whitelisted domains" placeholder="youtube.com, x.com"
-                value={wlText} onChange={(e) => setWlText(e.target.value)} helperText="Comma-separated. Subdomains are allowed automatically." />
-              <FormControlLabel control={<Switch checked={!!cfg.automod?.excessive_emojis?.enabled} onChange={(e) => setAm('excessive_emojis', { enabled: e.target.checked })} />} label="Limit emojis per message" />
-              <TextField type="number" size="small" margin="dense" fullWidth label="Max emojis"
-                value={cfg.automod?.excessive_emojis?.max_emojis ?? 15} inputProps={{ min: 1, max: 100 }}
-                onChange={(e) => setAm('excessive_emojis', { max_emojis: Number(e.target.value) })} />
-              <FormControlLabel control={<Switch checked={!!cfg.automod?.caps_lock?.enabled} onChange={(e) => setAm('caps_lock', { enabled: e.target.checked })} />} label="Remove ALL-CAPS shouting" />
-              <FormControlLabel control={<Switch checked={!!cfg.automod?.language_filter?.enabled} onChange={(e) => setAm('language_filter', { enabled: e.target.checked })} />} label="Filter foreign scripts" />
-              <TextField select size="small" margin="dense" fullWidth label="Filtered scripts"
-                SelectProps={{ multiple: true }} value={cfg.automod?.language_filter?.scripts || []}
-                onChange={(e) => setAm('language_filter', { scripts: e.target.value })}>
-                {SCRIPTS.map((s) => <MenuItem key={s} value={s}>{s}</MenuItem>)}
-              </TextField>
-            </CardContent></Card>
-          </Grid>
+              <Divider sx={{ my: 2 }} />
+              <Typography variant="subtitle2" fontWeight={600} mb={1}>Core Rules</Typography>
+              <Grid container spacing={1}>
+                {coreRules.map(([label, checked, onChange]) => (
+                  <Grid item xs={12} sm={6} key={label}>
+                    <FormControlLabel
+                      control={<Switch checked={checked} onChange={(e) => onChange(e.target.checked)} />}
+                      label={label}
+                    />
+                  </Grid>
+                ))}
+              </Grid>
 
-          <Grid item xs={12} md={6}>
-            <Card variant="outlined"><CardContent>
-              <Typography variant="subtitle1" fontWeight={700} mb={1}>⚡ Native AutoMod sync</Typography>
-              <FormControlLabel control={<Switch checked={!!cfg.automod?.native_sync?.enabled} onChange={(e) => setAm('native_sync', { enabled: e.target.checked })} />} label="Mirror the custom blocked words into Discord AutoMod" />
-              <Typography variant="caption" color="text.secondary" display="block" mb={1}>
-                Discord enforces these words natively, so they stay blocked even while the bot is
-                offline. Needs the Manage Server permission; syncs within a minute of saving.
+              <Grid container spacing={2} sx={{ mt: 0.5 }}>
+                <Grid item xs={12} sm={6}>
+                  <TextField select size="small" fullWidth label="Action on violation"
+                    value={cfg.cf_action} onChange={(e) => set({ cf_action: e.target.value })}
+                    helperText="CSAM always bans regardless of this setting.">
+                    {CF_ACTIONS.map((a) => <MenuItem key={a} value={a}>{a}</MenuItem>)}
+                  </TextField>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField type="number" size="small" fullWidth label="Max emojis per message"
+                    value={am.excessive_emojis?.max_emojis ?? 15} inputProps={{ min: 1, max: 100 }}
+                    onChange={(e) => setAm('excessive_emojis', { max_emojis: Number(e.target.value) })} />
+                </Grid>
+              </Grid>
+              <TextField fullWidth multiline rows={2} label="Custom Blocked Words (comma separated)" sx={{ mt: 2 }}
+                placeholder="word1, word2, …" helperText="Leet/spacing aware."
+                value={wordsText} onChange={(e) => setWordsText(e.target.value)} />
+              <TextField fullWidth multiline rows={2} label="Whitelisted Domains (for external-link blocking)" sx={{ mt: 2 }}
+                placeholder="youtube.com, x.com" helperText="Comma-separated. Subdomains are allowed automatically."
+                value={wlText} onChange={(e) => setWlText(e.target.value)} />
+
+              <Divider sx={{ my: 2 }} />
+              <Typography variant="subtitle2" fontWeight={600} mb={1}>⚡ Native AutoMod sync</Typography>
+              <Typography variant="body2" color="text.secondary" mb={1}>
+                Mirror your blocked words into Discord's own AutoMod so they stay enforced even
+                while the bot is offline. Needs the Manage Server permission; syncs within a minute of saving.
               </Typography>
-              <FormControlLabel control={<Switch checked={!!cfg.automod?.native_sync?.block_invites} onChange={(e) => setAm('native_sync', { block_invites: e.target.checked })} />} label="Also block discord.gg invite links natively" />
-              {channelSelect('Alert channel for blocked messages', cfg.automod?.native_sync?.alert_channel_id, (v) => setAm('native_sync', { alert_channel_id: v }), '— no alerts —')}
-              {cfg.automod?.native_sync?.last_error ? (
-                <Alert severity="warning" sx={{ mt: 1 }}>{cfg.automod.native_sync.last_error}</Alert>
+              <FormControlLabel control={<Switch checked={!!am.native_sync?.enabled} onChange={(e) => setAm('native_sync', { enabled: e.target.checked })} />} label="Mirror the custom blocked words into Discord AutoMod" />
+              <FormControlLabel control={<Switch checked={!!am.native_sync?.block_invites} onChange={(e) => setAm('native_sync', { block_invites: e.target.checked })} />} label="Also block discord.gg invite links natively" />
+              {channelSelect('Alert channel for blocked messages', am.native_sync?.alert_channel_id, (v) => setAm('native_sync', { alert_channel_id: v }), '— no alerts —')}
+              {am.native_sync?.last_error ? (
+                <Alert severity="warning" sx={{ mt: 1 }}>{am.native_sync.last_error}</Alert>
               ) : (
                 <Typography variant="caption" color="text.disabled" display="block" mt={1}>
-                  {cfg.automod?.native_sync?.dirty
+                  {am.native_sync?.dirty
                     ? 'Sync queued…'
-                    : cfg.automod?.native_sync?.last_synced_at
-                      ? `Last synced ${new Date(cfg.automod.native_sync.last_synced_at).toLocaleString()}`
+                    : am.native_sync?.last_synced_at
+                      ? `Last synced ${new Date(am.native_sync.last_synced_at).toLocaleString()}`
                       : 'Not synced yet.'}
                 </Typography>
               )}
-            </CardContent></Card>
-          </Grid>
+            </CardContent>
+          </Card>
 
-          <Grid item xs={12} md={6}>
-            <Card variant="outlined"><CardContent>
-              <Typography variant="subtitle1" fontWeight={700} mb={1}>Automod — media</Typography>
-              <FormControlLabel control={<Switch checked={!!cfg.automod?.media?.block_attachments} onChange={(e) => setAm('media', { block_attachments: e.target.checked })} />} label="Block file / image attachments" />
-              <FormControlLabel control={<Switch checked={!!cfg.automod?.media?.block_stickers} onChange={(e) => setAm('media', { block_stickers: e.target.checked })} />} label="Block stickers" />
-              <FormControlLabel control={<Switch checked={!!cfg.automod?.media?.block_voice} onChange={(e) => setAm('media', { block_voice: e.target.checked })} />} label="Block voice messages" />
-            </CardContent></Card>
-          </Grid>
-
-          <Grid item xs={12} md={6}>
-            <Card variant="outlined"><CardContent>
-              <Typography variant="subtitle1" fontWeight={700} mb={1}>AI moderation</Typography>
-              <Typography variant="caption" color="text.secondary" display="block" mb={1}>
-                Needs an AI key configured on the backend; switches do nothing without it.
+          {/* 2 ── Bot Protection ───────────────────────────────────────────── */}
+          <Card sx={{ mb: 2 }}>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                <Typography variant="h6" fontWeight={600}>🛡️ Bot Protection</Typography>
+              </Box>
+              <Typography variant="body2" color="text.secondary" mb={2}>
+                Guards against unknown bots being added to your server. New bots can be kicked
+                on join or simply flagged to admins — the alert message has a one-click Trust button.
               </Typography>
-              <FormControlLabel control={<Switch checked={!!cfg.automod?.smart_mod?.enabled} onChange={(e) => setAm('smart_mod', { enabled: e.target.checked })} />} label="Smart mod — AI flags unsolicited promotion/spam" />
-              <TextField size="small" margin="dense" fullWidth label="Community topic (helps the AI judge)"
-                placeholder="e.g. CreatorX — creator economy tools"
-                value={cfg.automod?.smart_mod?.group_topic || ''} onChange={(e) => setAm('smart_mod', { group_topic: e.target.value })} />
-              <TextField select size="small" margin="dense" fullWidth label="Action on promo"
-                value={cfg.automod?.smart_mod?.action || 'delete'} onChange={(e) => setAm('smart_mod', { action: e.target.value })}>
-                {CF_ACTIONS.map((a) => <MenuItem key={a} value={a}>{a}</MenuItem>)}
-              </TextField>
-              <FormControlLabel control={<Switch checked={!!cfg.automod?.image_ai?.enabled} onChange={(e) => setAm('image_ai', { enabled: e.target.checked })} />} label="Image AI — remove NSFW images" />
-            </CardContent></Card>
-          </Grid>
-
-          <Grid item xs={12} md={6}>
-            <Card variant="outlined"><CardContent>
-              <Typography variant="subtitle1" fontWeight={700} mb={1}>🛡️ Bot protection</Typography>
-              <FormControlLabel control={<Switch checked={!!cfg.bot_policy?.enabled} onChange={(e) => setBp({ enabled: e.target.checked })} />} label="Guard against unknown bots being added" />
-              <TextField select size="small" margin="dense" fullWidth label="When an untrusted bot joins"
-                value={cfg.bot_policy?.policy || 'kick_untrusted'} onChange={(e) => setBp({ policy: e.target.value })}>
-                <MenuItem value="kick_untrusted">Kick it and alert admins</MenuItem>
-                <MenuItem value="alert_only">Alert admins only</MenuItem>
-              </TextField>
+              <FormControlLabel
+                control={<Switch checked={!!cfg.bot_policy?.enabled} onChange={(e) => setBp({ enabled: e.target.checked })} />}
+                label="Enable bot protection"
+              />
+              <FormControl fullWidth size="small" sx={{ mt: 2 }}>
+                <InputLabel>When an untrusted bot joins</InputLabel>
+                <Select label="When an untrusted bot joins"
+                  value={cfg.bot_policy?.policy || 'kick_untrusted'} onChange={(e) => setBp({ policy: e.target.value })}>
+                  <MenuItem value="kick_untrusted">Kick it and alert admins</MenuItem>
+                  <MenuItem value="alert_only">Alert admins only</MenuItem>
+                </Select>
+              </FormControl>
               {channelSelect('Alert channel', cfg.bot_policy?.alert_channel_id, (v) => setBp({ alert_channel_id: v }))}
-              <TextField size="small" margin="dense" fullWidth label="Trusted bot IDs"
-                placeholder="123456789, 987654321"
+
+              <Divider sx={{ my: 2 }} />
+              <Typography variant="subtitle2" fontWeight={600} mb={1}>Trusted bots</Typography>
+              <Typography variant="body2" color="text.secondary" mb={1}>
+                These bots are never restricted. Comma-separated Discord user IDs.
+              </Typography>
+              <TextField size="small" fullWidth label="Trusted bot IDs" placeholder="123456789, 987654321"
                 value={(cfg.bot_policy?.trusted_bot_ids || []).join(', ')}
-                onChange={(e) => setBp({ trusted_bot_ids: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })}
-                helperText="Comma-separated Discord user IDs. The alert message also has a one-click Trust button." />
-            </CardContent></Card>
-          </Grid>
+                onChange={(e) => setBp({ trusted_bot_ids: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })} />
+            </CardContent>
+          </Card>
 
-          <Grid item xs={12} md={6}>
-            <Card variant="outlined"><CardContent>
-              <Typography variant="subtitle1" fontWeight={700} mb={1}>🚨 Raid mode</Typography>
-              <FormControlLabel control={<Switch checked={cfg.rg_enabled} onChange={(e) => set({ rg_enabled: e.target.checked })} />} label="Auto-lock on coordinated spam" />
-              <Typography variant="caption" color="text.secondary" display="block" mb={1}>
-                Triggers on many distinct accounts tripping the filter or posting identical text — not raw join rate.
+          {/* 3 ── Raid Mode + Emergency lockdown ───────────────────────────── */}
+          <Card sx={{ mb: 2 }}>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                <Typography variant="h6" fontWeight={600}>🚨 Raid Mode</Typography>
+              </Box>
+              <Typography variant="body2" color="text.secondary" mb={2}>
+                Detects <b>coordinated</b> spam — many distinct accounts tripping the filters or
+                posting identical text in a short burst. It does <b>not</b> lock on raw join rate.
+                Members who join during a raid are auto-restricted until it settles.
               </Typography>
-              {num('Window (seconds)', 'rg_window_seconds', 10, 600)}
-              {num('Violators to trigger', 'rg_trigger_violators', 2, 50)}
-              {num('Duplicate-flood threshold', 'rg_duplicate_threshold', 2, 50)}
-              {num('Lockdown minutes', 'rg_lockdown_minutes', 1, 1440)}
-              <TextField select size="small" margin="dense" fullWidth label="Lockdown action for joiners"
-                value={cfg.rg_lockdown_action} onChange={(e) => set({ rg_lockdown_action: e.target.value })}>
-                {RG_ACTIONS.map((a) => <MenuItem key={a} value={a}>{a}</MenuItem>)}
-              </TextField>
-              <FormControlLabel control={<Switch checked={cfg.rg_notify} onChange={(e) => set({ rg_notify: e.target.checked })} />} label="Announce when raid mode activates" />
+              <FormControlLabel
+                control={<Switch checked={!!cfg.rg_enabled} onChange={(e) => set({ rg_enabled: e.target.checked })} />}
+                label="Enable raid mode"
+              />
+              <Grid container spacing={2} sx={{ mt: 0.5 }}>
+                <Grid item xs={12} sm={6}>{num('Violators to trigger', 'rg_trigger_violators', 2, 50)}</Grid>
+                <Grid item xs={12} sm={6}>{num('Duplicate-flood threshold', 'rg_duplicate_threshold', 2, 50)}</Grid>
+                <Grid item xs={12} sm={6}>{num('Detection window (seconds)', 'rg_window_seconds', 10, 600)}</Grid>
+                <Grid item xs={12} sm={6}>{num('Lockdown duration (minutes)', 'rg_lockdown_minutes', 1, 1440)}</Grid>
+              </Grid>
+              <FormControl fullWidth size="small" sx={{ mt: 2 }}>
+                <InputLabel>Lockdown action for joiners</InputLabel>
+                <Select label="Lockdown action for joiners"
+                  value={cfg.rg_lockdown_action} onChange={(e) => set({ rg_lockdown_action: e.target.value })}>
+                  {RG_ACTIONS.map((a) => <MenuItem key={a} value={a}>{a}</MenuItem>)}
+                </Select>
+              </FormControl>
+              <FormControlLabel sx={{ mt: 1 }}
+                control={<Switch checked={!!cfg.rg_notify} onChange={(e) => set({ rg_notify: e.target.checked })} />}
+                label="Announce when raid mode activates"
+              />
               {channelSelect('Announce in channel', cfg.rg_notify_channel_id, (v) => set({ rg_notify_channel_id: v }))}
-            </CardContent></Card>
-          </Grid>
 
-          <Grid item xs={12} md={6}>
-            <Card variant="outlined"><CardContent>
-              <Typography variant="subtitle1" fontWeight={700} mb={1}>Emergency lockdown</Typography>
+              <Divider sx={{ my: 2 }} />
+              <Typography variant="subtitle2" fontWeight={600} mb={1}>Emergency lockdown</Typography>
               {cfg.manual_lockdown_active ? (
-                <>
-                  <Typography color="error" fontWeight={600} mb={1}>🔒 Active until {new Date(cfg.manual_lockdown_until).toLocaleString()}</Typography>
-                  <Button variant="outlined" onClick={() => lockdown(0)}>Lift lockdown</Button>
-                </>
+                <Alert severity="warning" sx={{ alignItems: 'center' }}
+                  action={<Button color="inherit" size="small" onClick={() => lockdown(0)}>Lift now</Button>}>
+                  🔒 Locked down until <b>{new Date(cfg.manual_lockdown_until).toLocaleString()}</b> —
+                  every new member is being auto-restricted on join.
+                </Alert>
               ) : (
-                <>
-                  <Typography variant="body2" color="text.secondary" mb={1}>Instantly restrict every new joiner (timeout/kick per raid-guard action).</Typography>
+                <Box>
+                  <Typography variant="body2" color="text.secondary" mb={1}>
+                    Instantly restrict every new joiner for a set time — use during an active attack.
+                    Works even if raid detection above is off.
+                  </Typography>
                   <Stack direction="row" spacing={1}>
-                    <Button variant="contained" onClick={() => lockdown(30)}>Lock 30 min</Button>
-                    <Button variant="outlined" onClick={() => lockdown(120)}>Lock 2 h</Button>
+                    <Button variant="contained" color="error" onClick={() => lockdown(30)}>Lock 30 min</Button>
+                    <Button variant="outlined" color="error" onClick={() => lockdown(120)}>Lock 2 h</Button>
                   </Stack>
-                </>
+                </Box>
               )}
-            </CardContent></Card>
-          </Grid>
+            </CardContent>
+          </Card>
 
-          <Grid item xs={12} md={6}>
-            <Card variant="outlined"><CardContent>
-              <Typography variant="subtitle1" fontWeight={700} mb={1}>🧨 Anti-nuke guard</Typography>
-              <FormControlLabel control={<Switch checked={!!cfg.anti_nuke?.enabled} onChange={(e) => setAn({ enabled: e.target.checked })} />} label="Contain a compromised admin account" />
-              <Typography variant="caption" color="text.secondary" display="block" mb={1}>
-                Counts destructive actions per admin (from the audit log). Crossing a threshold inside
-                the window triggers the response below. Needs the View Audit Log permission. 0 disables a threshold.
+          {/* 4 ── Anti-nuke guard (Discord-native extra) ───────────────────── */}
+          <Card sx={{ mb: 2 }}>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                <Typography variant="h6" fontWeight={600}>🧨 Anti-Nuke Guard</Typography>
+              </Box>
+              <Typography variant="body2" color="text.secondary" mb={2}>
+                Contains a compromised admin account. Counts destructive actions per admin from the
+                audit log; crossing a threshold inside the window triggers the response below. Needs
+                the View Audit Log permission. 0 disables a threshold.
               </Typography>
+              <FormControlLabel
+                control={<Switch checked={!!cfg.anti_nuke?.enabled} onChange={(e) => setAn({ enabled: e.target.checked })} />}
+                label="Contain a compromised admin account"
+              />
               <TextField type="number" size="small" margin="dense" fullWidth label="Window (seconds)"
                 value={cfg.anti_nuke?.window_seconds ?? 300} inputProps={{ min: 30, max: 3600 }}
                 onChange={(e) => setAn({ window_seconds: Number(e.target.value) })} />
@@ -307,69 +373,222 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                     </Grid>
                   ))}
               </Grid>
-              <TextField select size="small" margin="dense" fullWidth label="Response when triggered"
-                value={cfg.anti_nuke?.action || 'strip_roles'} onChange={(e) => setAn({ action: e.target.value })}>
-                <MenuItem value="strip_roles">Strip their elevated roles</MenuItem>
-                <MenuItem value="ban">Ban them</MenuItem>
-                <MenuItem value="alert_only">Alert admins only</MenuItem>
-              </TextField>
+              <FormControl fullWidth size="small" sx={{ mt: 2 }}>
+                <InputLabel>Response when triggered</InputLabel>
+                <Select label="Response when triggered"
+                  value={cfg.anti_nuke?.action || 'strip_roles'} onChange={(e) => setAn({ action: e.target.value })}>
+                  <MenuItem value="strip_roles">Strip their elevated roles</MenuItem>
+                  <MenuItem value="ban">Ban them</MenuItem>
+                  <MenuItem value="alert_only">Alert admins only</MenuItem>
+                </Select>
+              </FormControl>
               {channelSelect('Alert channel', cfg.anti_nuke?.alert_channel_id, (v) => setAn({ alert_channel_id: v }))}
               <TextField size="small" margin="dense" fullWidth label="Whitelisted admin IDs"
                 placeholder="123456789, 987654321"
                 value={(cfg.anti_nuke?.whitelist_user_ids || []).join(', ')}
                 onChange={(e) => setAn({ whitelist_user_ids: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })}
                 helperText="Comma-separated user IDs the guard never acts on. The server owner and the bot are always exempt." />
-            </CardContent></Card>
-          </Grid>
+            </CardContent>
+          </Card>
 
-          <Grid item xs={12} md={6}>
-            <Card variant="outlined"><CardContent>
-              <Typography variant="subtitle1" fontWeight={700} mb={1}>Emoji reactions</Typography>
-              <Typography variant="caption" color="text.secondary" display="block" mb={1}>
-                The bot reacts to messages to keep the community warm. Member reactions follow the cooldown below.
+          {/* 5 ── Protection Activity feed ─────────────────────────────────── */}
+          <Card sx={{ mb: 2 }}>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                <Typography variant="h6" fontWeight={600}>📋 Protection Activity</Typography>
+                <Box sx={{ flexGrow: 1 }} />
+                <Button size="small" onClick={loadEvents} disabled={eventsLoading}>
+                  {eventsLoading ? 'Refreshing…' : 'Refresh'}
+                </Button>
+              </Box>
+              <Typography variant="body2" color="text.secondary" mb={2}>
+                What the bot did at <b>join time</b> and during raids — restricting/banning bots,
+                locking down raids and containing nukes. These never appear in the normal moderation log.
               </Typography>
-              <FormControlLabel control={<Switch checked={!!cfg.emoji_reactions?.enabled} onChange={(e) => setEr({ enabled: e.target.checked })} />} label="Enable emoji reactions" />
-              <FormControlLabel control={<Switch checked={!!cfg.emoji_reactions?.admin_thumbs_up} onChange={(e) => setEr({ admin_thumbs_up: e.target.checked })} />} label="👍 Thumbs-up on every admin message" />
-              <FormControlLabel control={<Switch checked={!!cfg.emoji_reactions?.sentiment_reactions} onChange={(e) => setEr({ sentiment_reactions: e.target.checked })} />} label="React to member messages by sentiment (❤️ 🔥 😂 👍 🎉)" />
-              <TextField type="number" size="small" margin="dense" fullWidth label="Cooldown per member (minutes)"
+              {events.length === 0 ? (
+                <Typography variant="body2" color="text.disabled">
+                  {eventsLoading ? 'Loading…' : 'No protection events yet.'}
+                </Typography>
+              ) : (
+                <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                  {events.map((e) => (
+                    <Box key={e.id} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, py: 0.75, borderBottom: '1px solid', borderColor: 'divider' }}>
+                      <Chip size="small" label={CAT_LABEL[e.category] || e.category} color={CAT_COLOR[e.category] || 'default'} variant="outlined" sx={{ mt: 0.25 }} />
+                      <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                        <Typography variant="body2" fontWeight={600} noWrap>
+                          {e.action}{e.username ? ` — ${e.username}` : ''}
+                        </Typography>
+                        {e.detail && (
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', wordBreak: 'break-word' }}>
+                            {e.detail}
+                          </Typography>
+                        )}
+                      </Box>
+                      <Typography variant="caption" color="text.disabled" sx={{ whiteSpace: 'nowrap' }}>
+                        {new Date(e.created_at).toLocaleString()}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Box>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* 6 ── Smart Moderation (Pro) ───────────────────────────────────── */}
+          <Card variant="outlined" sx={{ mt: 2, mb: 2 }}>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                <Typography variant="h6" fontWeight={600}>Smart Moderation</Typography>
+                <Chip
+                  label={am.smart_mod?.enabled ? 'AI Active' : 'AI optional'}
+                  size="small"
+                  color={am.smart_mod?.enabled ? 'primary' : 'default'}
+                  variant="outlined"
+                />
+                <ProBadge />
+              </Box>
+              <Typography variant="body2" color="text.secondary" mb={2}>
+                AI flags unsolicited promotion and spam, and can remove NSFW images. Needs an AI key
+                configured on the backend — the switches do nothing without it.
+              </Typography>
+              <FormControlLabel
+                control={<Switch checked={!!am.smart_mod?.enabled} onChange={(e) => setAm('smart_mod', { enabled: e.target.checked })} />}
+                label="Smart mod — AI flags unsolicited promotion / spam"
+              />
+              <TextField fullWidth label="Community topic (helps the AI judge)" sx={{ mt: 2 }}
+                placeholder="e.g. CreatorX — creator economy tools"
+                value={am.smart_mod?.group_topic || ''} onChange={(e) => setAm('smart_mod', { group_topic: e.target.value })} />
+              <FormControl fullWidth size="small" sx={{ mt: 2 }}>
+                <InputLabel>Action on promo</InputLabel>
+                <Select label="Action on promo"
+                  value={am.smart_mod?.action || 'delete'} onChange={(e) => setAm('smart_mod', { action: e.target.value })}>
+                  {CF_ACTIONS.map((a) => <MenuItem key={a} value={a}>{a}</MenuItem>)}
+                </Select>
+              </FormControl>
+              <Divider sx={{ my: 2 }} />
+              <FormControlLabel
+                control={<Switch checked={!!am.image_ai?.enabled} onChange={(e) => setAm('image_ai', { enabled: e.target.checked })} />}
+                label="Image AI — remove NSFW images"
+              />
+            </CardContent>
+          </Card>
+
+          {/* 7 ── Extended Rules accordion (Media & Content) ───────────────── */}
+          <Accordion>
+            <AccordionSummary expandIcon={<ExpandMore />}>
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <Typography fontWeight={600}>Extended Rules — Media &amp; Content</Typography>
+                <ProBadge />
+              </Box>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Typography variant="body2" color="text.secondary" mb={1}>
+                Block specific media types outright. These are removed on sight.
+              </Typography>
+              <Grid container spacing={1}>
+                {[
+                  ['Block File / Image Attachments', !!am.media?.block_attachments, (v) => setAm('media', { block_attachments: v })],
+                  ['Block Stickers', !!am.media?.block_stickers, (v) => setAm('media', { block_stickers: v })],
+                  ['Block Voice Messages', !!am.media?.block_voice, (v) => setAm('media', { block_voice: v })],
+                ].map(([label, checked, onChange]) => (
+                  <Grid item xs={12} key={label}>
+                    <FormControlLabel
+                      sx={{ minWidth: 280 }}
+                      control={<Switch checked={checked} onChange={(e) => onChange(e.target.checked)} />}
+                      label={label}
+                    />
+                  </Grid>
+                ))}
+              </Grid>
+            </AccordionDetails>
+          </Accordion>
+
+          {/* 8 ── Language Filter accordion ────────────────────────────────── */}
+          <Accordion sx={{ mt: 1 }}>
+            <AccordionSummary expandIcon={<ExpandMore />}>
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <Typography fontWeight={600}>Language Filter</Typography>
+                <ProBadge />
+              </Box>
+            </AccordionSummary>
+            <AccordionDetails>
+              <FormControlLabel
+                control={<Switch checked={!!am.language_filter?.enabled} onChange={(e) => setAm('language_filter', { enabled: e.target.checked })} />}
+                label="Enable language filter"
+              />
+              <Typography variant="body2" color="text.secondary" mt={1} mb={1}>Block messages containing these scripts:</Typography>
+              <Grid container spacing={1}>
+                {SCRIPTS.map(({ value, label }) => {
+                  const scripts = am.language_filter?.scripts || [];
+                  const checked = scripts.includes(value);
+                  return (
+                    <Grid item xs={12} sm={6} key={value}>
+                      <FormControlLabel
+                        control={<Switch checked={checked} onChange={(e) => {
+                          const next = e.target.checked ? [...scripts, value] : scripts.filter((s) => s !== value);
+                          setAm('language_filter', { scripts: next });
+                        }} />}
+                        label={label}
+                      />
+                    </Grid>
+                  );
+                })}
+              </Grid>
+            </AccordionDetails>
+          </Accordion>
+
+          {/* 9 ── Emoji Reactions ──────────────────────────────────────────── */}
+          <Card variant="outlined" sx={{ mt: 2, mb: 2 }}>
+            <CardContent>
+              <Typography variant="h6" fontWeight={600} mb={1}>Emoji Reactions</Typography>
+              <Typography variant="body2" color="text.secondary" mb={2}>
+                The bot reacts to messages to keep the community warm. Admin messages always get 👍.
+                Member messages get ❤️ 🔥 😂 👍 🎉 based on tone, with the cooldown below.
+              </Typography>
+              <FormControlLabel
+                control={<Switch checked={!!cfg.emoji_reactions?.enabled} onChange={(e) => setEr({ enabled: e.target.checked })} />}
+                label="Enable emoji reactions"
+              />
+              <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                <FormControlLabel
+                  control={<Switch checked={!!cfg.emoji_reactions?.admin_thumbs_up} onChange={(e) => setEr({ admin_thumbs_up: e.target.checked })} />}
+                  label="👍 Thumbs-up on every admin message"
+                />
+                <FormControlLabel
+                  control={<Switch checked={!!cfg.emoji_reactions?.sentiment_reactions} onChange={(e) => setEr({ sentiment_reactions: e.target.checked })} />}
+                  label="React to member messages by sentiment (❤️ 🔥 😂 👍 🎉)"
+                />
+              </Box>
+              <TextField type="number" size="small" margin="dense" fullWidth label="Cooldown per member (minutes)" sx={{ mt: 1 }}
                 value={cfg.emoji_reactions?.cooldown_minutes ?? 10} inputProps={{ min: 1, max: 1440 }}
                 onChange={(e) => setEr({ cooldown_minutes: Number(e.target.value) })} />
-            </CardContent></Card>
-          </Grid>
+            </CardContent>
+          </Card>
 
-          <Grid item xs={12} md={6}>
-            <Card variant="outlined"><CardContent>
-              <Typography variant="subtitle1" fontWeight={700} mb={1}>Command permissions</Typography>
-              <FormControlLabel control={<Switch checked={!!cfg.command_permissions?.delete_unauthorized} onChange={(e) => setCp({ delete_unauthorized: e.target.checked })} />} label="Delete messages that invoke commands the member can't use" />
-              <Typography variant="caption" color="text.secondary" display="block" mt={1}>
-                Discord also enforces native slash-command permissions per role — configure those in
-                Server Settings → Integrations. This switch covers text-style command misuse.
+          {/* 10 ── Command Permissions ─────────────────────────────────────── */}
+          <Card sx={{ mt: 2 }}>
+            <CardContent>
+              <Typography variant="subtitle1" fontWeight={600} mb={0.5}>Command Permissions</Typography>
+              <Typography variant="body2" color="text.secondary" mb={2}>
+                Control who can use moderation commands. Default is admins only.
               </Typography>
-            </CardContent></Card>
-          </Grid>
-
-          <Grid item xs={12}>
-            <Card variant="outlined"><CardContent>
-              <Typography variant="subtitle1" fontWeight={700} mb={1}>📋 Protection activity</Typography>
-              {events.length === 0 && <Typography variant="body2" color="text.secondary">No events yet.</Typography>}
-              <List dense>
-                {events.map((e) => (
-                  <ListItem key={e.id} disableGutters
-                    secondaryAction={<Typography variant="caption" color="text.disabled">{new Date(e.created_at).toLocaleString()}</Typography>}>
-                    <Chip size="small" label={CAT_LABEL[e.category] || e.category} color={CAT_COLOR[e.category] || 'default'} variant="outlined" sx={{ mr: 1 }} />
-                    <ListItemText primary={`${e.action} — ${e.username ? e.username + ' · ' : ''}${e.detail || ''}`}
-                      primaryTypographyProps={{ variant: 'body2', noWrap: true }} />
-                  </ListItem>
-                ))}
-              </List>
-            </CardContent></Card>
-          </Grid>
+              <FormControlLabel
+                sx={{ mb: 1 }}
+                control={<Switch checked={!!cfg.command_permissions?.delete_unauthorized} onChange={(e) => setCp({ delete_unauthorized: e.target.checked })} />}
+                label="Delete messages that invoke commands the member can't use"
+              />
+              <Typography variant="caption" color="text.secondary" display="block">
+                Discord also enforces native slash-command permissions per role — configure those in
+                Server Settings → Integrations → Guildizer. This switch covers text-style command misuse.
+              </Typography>
+            </CardContent>
+          </Card>
         </>
       )}
 
-      {/* ════════ BEHAVIOR ════════ */}
+      {/* ════════════════════════════ BEHAVIOR ════════════════════════════ */}
       {section === 'behavior' && (
-        <>
+        <Grid container spacing={2}>
           <Grid item xs={12} md={6}>
             <Card variant="outlined"><CardContent>
               <Typography variant="subtitle1" fontWeight={700} mb={1}>Warning thresholds</Typography>
@@ -464,12 +683,12 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
               </List>
             </CardContent></Card>
           </Grid>
-        </>
+        </Grid>
       )}
 
-      {/* ════════ REPORTS ════════ */}
+      {/* ════════════════════════════ REPORTS ════════════════════════════ */}
       {section === 'reports' && (
-        <>
+        <Grid container spacing={2}>
           <Grid item xs={12} md={6}>
             <Card variant="outlined"><CardContent>
               <Typography variant="subtitle1" fontWeight={700} mb={1}>Report settings</Typography>
@@ -503,12 +722,12 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
               </List>
             </CardContent></Card>
           </Grid>
-        </>
+        </Grid>
       )}
 
-      {/* ════════ VERIFICATION (Members tab) ════════ */}
+      {/* ════════════════════ VERIFICATION (Members tab) ════════════════════ */}
       {section === 'verification' && (
-        <>
+        <Grid container spacing={2}>
           <Grid item xs={12} md={6}>
             <Card variant="outlined"><CardContent>
               <Typography variant="subtitle1" fontWeight={700} mb={1}>Join verification (captcha)</Typography>
@@ -544,47 +763,55 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
               <Typography variant="caption" color="text.disabled">Newer accounts are kicked on join. Useful during raids.</Typography>
             </CardContent></Card>
           </Grid>
-        </>
-      )}
-
-      {/* ════════ ESCALATION (AI & Integrations tab) ════════ */}
-      {section === 'escalation' && (
-        <Grid item xs={12} md={8}>
-          <Card variant="outlined"><CardContent>
-            <Typography variant="subtitle1" fontWeight={700} mb={1}>Escalation alerts</Typography>
-            <FormControlLabel control={<Switch checked={!!cfg.escalation?.enabled} onChange={(e) => setEsc({ enabled: e.target.checked })} />} label="Alert admins when members sound frustrated" />
-            <TextField size="small" margin="dense" fullWidth label="Trigger keywords"
-              placeholder="refund, scam, not working"
-              value={(cfg.escalation?.keywords || []).join(', ')}
-              onChange={(e) => setEsc({ keywords: e.target.value.split(',').map((k) => k.trim()).filter(Boolean) })}
-              helperText="Comma-separated. One alert per member per 10 minutes." />
-            <TextField select size="small" margin="dense" fullWidth label="Alert channel"
-              value={cfg.escalation?.alert_channel_id || ''} onChange={(e) => setEsc({ alert_channel_id: e.target.value || null })}>
-              <MenuItem value="">- none -</MenuItem>
-              {textChannels.map((c) => <MenuItem key={c.id} value={c.id}># {c.name}</MenuItem>)}
-            </TextField>
-            <Typography variant="subtitle2" fontWeight={700} mt={2}>Also escalate</Typography>
-            {ESCALATION_TYPES.map(({ key, label }) => (
-              <FormControlLabel key={key} sx={{ display: 'flex' }} control={(
-                <Checkbox size="small" checked={(cfg.escalation?.types || []).includes(key)}
-                  onChange={(e) => setEsc({
-                    types: e.target.checked
-                      ? [...(cfg.escalation?.types || []), key]
-                      : (cfg.escalation?.types || []).filter((t) => t !== key),
-                  })} />
-              )} label={<Typography variant="body2">{label}</Typography>} />
-            ))}
-          </CardContent></Card>
         </Grid>
       )}
 
-      <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, alignItems: 'center' }}>
-        {error && <Alert severity="error" sx={{ py: 0 }}>{error}</Alert>}
-        <Button variant="contained" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</Button>
-      </Grid>
+      {/* ════════════════ ESCALATION (AI & Integrations tab) ════════════════ */}
+      {section === 'escalation' && (
+        <Grid container spacing={2}>
+          <Grid item xs={12} md={8}>
+            <Card variant="outlined"><CardContent>
+              <Typography variant="subtitle1" fontWeight={700} mb={1}>Escalation alerts</Typography>
+              <FormControlLabel control={<Switch checked={!!cfg.escalation?.enabled} onChange={(e) => setEsc({ enabled: e.target.checked })} />} label="Alert admins when members sound frustrated" />
+              <TextField size="small" margin="dense" fullWidth label="Trigger keywords"
+                placeholder="refund, scam, not working"
+                value={(cfg.escalation?.keywords || []).join(', ')}
+                onChange={(e) => setEsc({ keywords: e.target.value.split(',').map((k) => k.trim()).filter(Boolean) })}
+                helperText="Comma-separated. One alert per member per 10 minutes." />
+              <TextField select size="small" margin="dense" fullWidth label="Alert channel"
+                value={cfg.escalation?.alert_channel_id || ''} onChange={(e) => setEsc({ alert_channel_id: e.target.value || null })}>
+                <MenuItem value="">- none -</MenuItem>
+                {textChannels.map((c) => <MenuItem key={c.id} value={c.id}># {c.name}</MenuItem>)}
+              </TextField>
+              <Typography variant="subtitle2" fontWeight={700} mt={2}>Also escalate</Typography>
+              {ESCALATION_TYPES.map(({ key, label }) => (
+                <FormControlLabel key={key} sx={{ display: 'flex' }} control={(
+                  <Checkbox size="small" checked={(cfg.escalation?.types || []).includes(key)}
+                    onChange={(e) => setEsc({
+                      types: e.target.checked
+                        ? [...(cfg.escalation?.types || []), key]
+                        : (cfg.escalation?.types || []).filter((t) => t !== key),
+                    })} />
+                )} label={<Typography variant="body2">{label}</Typography>} />
+              ))}
+            </CardContent></Card>
+          </Grid>
+        </Grid>
+      )}
+
+      {/* Inline save bar — only when used standalone (no shell sticky Save). */}
+      {!sb && (
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, alignItems: 'center', mt: 2 }}>
+          {error && <Alert severity="error" sx={{ py: 0 }}>{error}</Alert>}
+          <Button variant="contained" onClick={save} disabled={saving || !dirty}>
+            {saving ? 'Saving…' : dirty ? 'Save changes' : 'Saved'}
+          </Button>
+        </Box>
+      )}
+      {sb && error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
 
       <Snackbar open={saved} autoHideDuration={2500} onClose={() => setSaved(false)} message="Saved"
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }} />
-    </Grid>
+    </Box>
   );
 }

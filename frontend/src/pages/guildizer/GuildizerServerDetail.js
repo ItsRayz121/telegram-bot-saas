@@ -1,11 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Box, Typography, Tabs, Tab, Card, CardContent, Grid, Avatar, Stack,
   List, ListItem, ListItemText, Chip, CircularProgress, Alert, Button,
+  IconButton, Tooltip,
 } from '@mui/material';
-import { ArrowBack } from '@mui/icons-material';
+import {
+  ArrowBack, Save, Schedule, Shield, People, Forum as ForumIcon,
+  SmartToy, Bolt, Assessment, Dashboard as DashboardIcon, Terminal,
+  GroupAdd, Payments,
+} from '@mui/icons-material';
 import guildizerApi from '../../services/guildizerApi';
+import { SaveBarContext } from './tabs/saveBar';
 import SettingsTab from './tabs/SettingsTab';
 import CommandsTab from './tabs/CommandsTab';
 import ProtectionTab from './tabs/ProtectionTab';
@@ -34,18 +40,19 @@ const CHANNEL_TYPES = { 0: 'Text', 2: 'Voice', 4: 'Category', 5: 'Announcement',
 
 // Telegizer-parity IA: 6 grouped management tabs (Moderation … Analytics) with
 // the exact subtab structure of the Telegram group dashboard, plus the
-// server-level extras (Overview / Commands / Team / Billing).
+// server-level extras (Overview / Commands / Team / Billing). Each carries an
+// icon so the pill nav matches the Telegizer category pills 1:1.
 const AREAS = [
-  { label: 'Overview' },
-  { label: 'Moderation', subs: ['AutoMod', 'Behavior', 'Reports'] },
-  { label: 'Members', subs: ['Verification', 'Welcome', 'XP & Roles', 'Self-roles'] },
-  { label: 'Engagement', subs: ['Raids', 'Invite Links', 'Campaigns', 'Tickets', 'Starboard', 'Boosts', 'Events'] },
-  { label: 'AI & Integrations', subs: ['Knowledge Base', 'Escalation'] },
-  { label: 'Automation', subs: ['Scheduler', 'Auto Reply', 'Polls', 'Forwarding', 'Threads', 'Workflows', 'Webhooks'] },
-  { label: 'Analytics', subs: ['Overview', 'Members', 'Leaderboard', 'Audit Log', 'Warnings', 'Digest', 'AI Activity'] },
-  { label: 'Commands' },
-  { label: 'Team' },
-  { label: 'Billing' },
+  { label: 'Overview', icon: DashboardIcon },
+  { label: 'Moderation', icon: Shield, subs: ['AutoMod', 'Behavior', 'Reports'] },
+  { label: 'Members', icon: People, subs: ['Verification', 'Welcome', 'XP & Roles', 'Self-roles'] },
+  { label: 'Engagement', icon: ForumIcon, subs: ['Raids', 'Invite Links', 'Campaigns', 'Tickets', 'Starboard', 'Boosts', 'Events'] },
+  { label: 'AI & Integrations', icon: SmartToy, subs: ['Knowledge Base', 'Escalation'] },
+  { label: 'Automation', icon: Bolt, subs: ['Scheduler', 'Auto Reply', 'Polls', 'Forwarding', 'Threads', 'Workflows', 'Webhooks'] },
+  { label: 'Analytics', icon: Assessment, subs: ['Overview', 'Members', 'Leaderboard', 'Audit Log', 'Warnings', 'Digest', 'AI Activity'] },
+  { label: 'Commands', icon: Terminal },
+  { label: 'Team', icon: GroupAdd },
+  { label: 'Billing', icon: Payments },
 ];
 
 // Old flat-tab deep links → new area/subtab so saved URLs keep working.
@@ -74,10 +81,26 @@ export default function GuildizerServerDetail() {
   const subIdx = subs ? Math.max(0, subs.indexOf(subName)) : 0;
   const sub = subs ? subs[subIdx] : null;
 
-  const setTab = (v) => setSearchParams(v === 0 ? {} : { tab: AREAS[v].label }, { replace: true });
+  const setTab = (label) => setSearchParams(label === 'Overview' ? {} : { tab: label }, { replace: true });
   const setSub = (v) => setSearchParams({ tab: area.label, sub: subs[v] }, { replace: true });
 
   const [state, setState] = useState({ loading: true, guild: null, error: null });
+
+  // ── Single sticky Save bar wiring (Telegizer parity) ────────────────────────
+  const saveRef = useRef(null);
+  const [bar, setBar] = useState({ present: false, dirty: false, saving: false });
+  const saveBar = useMemo(() => ({
+    register: (fn) => { saveRef.current = fn; setBar((b) => ({ ...b, present: true })); },
+    unregister: () => { saveRef.current = null; setBar({ present: false, dirty: false, saving: false }); },
+    report: ({ dirty, saving }) => setBar((b) => ({ ...b, present: true, dirty, saving })),
+  }), []);
+  const triggerSave = useCallback(() => { if (saveRef.current) saveRef.current(); }, []);
+
+  // The active tab drives the bar: each editable tab register()s on mount and
+  // unregister()s on unmount, so switching tabs flips the button automatically.
+  // (No eager reset here — a parent effect would run AFTER the new child's
+  // register() and wrongly wipe it.)
+  const key = sub ? `${area.label}/${sub}` : area.label;
 
   useEffect(() => {
     let alive = true;
@@ -96,102 +119,170 @@ export default function GuildizerServerDetail() {
   const guild = state.guild;
   const channels = guild?.channels || [];
   const roles = guild?.roles || [];
-  const key = sub ? `${area.label}/${sub}` : area.label;
 
   return (
-    <Box sx={{ maxWidth: 1000, mx: 'auto', px: { xs: 2, md: 3 }, py: 3 }}>
-      <Button startIcon={<ArrowBack />} onClick={() => navigate('/guildizer')} sx={{ mb: 2 }} color="inherit">
-        All servers
-      </Button>
-
+    <Box sx={{ maxWidth: 1000, mx: 'auto', px: { xs: 2, md: 3 }, py: 0 }}>
       {state.loading && <Box sx={{ display: 'grid', placeItems: 'center', minHeight: 240 }}><CircularProgress /></Box>}
-      {state.error && <Alert severity="warning">{state.error}</Alert>}
+      {state.error && <Alert severity="warning" sx={{ mt: 3 }}>{state.error}</Alert>}
 
       {guild && (
-        <>
-          <Header guild={guild} />
-          <Tabs value={areaIdx} onChange={(_, v) => setTab(v)} variant="scrollable" allowScrollButtonsMobile
-            sx={{ borderBottom: 1, borderColor: 'divider' }}>
-            {AREAS.map((a) => <Tab key={a.label} label={a.label} />)}
-          </Tabs>
-          {subs && (
-            <Tabs value={subIdx} onChange={(_, v) => setSub(v)} variant="scrollable" allowScrollButtonsMobile
-              sx={{ mb: 3, minHeight: 38, '& .MuiTab-root': { minHeight: 38, fontSize: '0.82rem', py: 0, textTransform: 'none' } }}>
-              {subs.map((s) => <Tab key={s} label={s} />)}
-            </Tabs>
-          )}
-          {!subs && <Box sx={{ mb: 3 }} />}
+        <SaveBarContext.Provider value={saveBar}>
+          {/* ── Sticky settings header: breadcrumb · title · UTC chip · Save ── */}
+          <Box
+            sx={{
+              position: 'sticky', top: 0, zIndex: 5,
+              bgcolor: 'background.default',
+              mx: { xs: -2, md: -3 }, px: { xs: 2, md: 3 }, pt: 2,
+              borderBottom: '1px solid', borderColor: 'divider',
+            }}
+          >
+            {/* Breadcrumb + identity + actions */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.25 }}>
+              <IconButton edge="start" size="small" onClick={() => navigate('/guildizer')} sx={{ display: { md: 'none' } }}>
+                <ArrowBack fontSize="small" />
+              </IconButton>
+              <Box sx={{ display: { xs: 'none', md: 'flex' }, alignItems: 'center', gap: 0.5, mr: 0.5 }}>
+                <Button size="small" variant="text" onClick={() => navigate('/dashboard')}
+                  sx={{ fontSize: '0.75rem', px: 1, py: 0.25, minWidth: 0, color: 'text.secondary' }}>
+                  Dashboard
+                </Button>
+                <Box component="span" sx={{ color: 'text.disabled', fontSize: '0.75rem' }}>/</Box>
+                <Button size="small" variant="text" onClick={() => navigate('/guildizer')}
+                  sx={{ fontSize: '0.75rem', px: 1, py: 0.25, minWidth: 0, color: 'text.secondary' }}>
+                  My Servers
+                </Button>
+                <Box component="span" sx={{ color: 'text.disabled', fontSize: '0.75rem' }}>/</Box>
+              </Box>
 
-          {key === 'Overview' && <Overview guild={guild} />}
+              <Avatar src={guild.icon_url || undefined} variant="rounded" sx={{ width: 32, height: 32, fontWeight: 700, fontSize: 14 }}>
+                {(guild.name || '?').slice(0, 2).toUpperCase()}
+              </Avatar>
+              <Typography variant="h6" fontWeight={700} noWrap sx={{ flexGrow: 1 }}>{guild.name}</Typography>
 
-          {/* MODERATION */}
-          {key === 'Moderation/AutoMod' && <ProtectionTab guildId={guildId} channels={channels} section="automod" />}
-          {key === 'Moderation/Behavior' && <ProtectionTab guildId={guildId} channels={channels} section="behavior" />}
-          {key === 'Moderation/Reports' && <ProtectionTab guildId={guildId} channels={channels} section="reports" />}
+              <Tooltip title="Discord schedules and timestamps everywhere in UTC.">
+                <Chip icon={<Schedule sx={{ fontSize: 14 }} />} label="UTC" size="small" variant="outlined"
+                  sx={{ mr: 0.5, fontSize: 11, cursor: 'default', display: { xs: 'none', sm: 'inline-flex' } }} />
+              </Tooltip>
 
-          {/* MEMBERS */}
-          {key === 'Members/Verification' && <ProtectionTab guildId={guildId} channels={channels} section="verification" />}
-          {key === 'Members/Welcome' && <SettingsTab guildId={guildId} channels={channels} roles={roles} />}
-          {key === 'Members/XP & Roles' && <LevelingTab guildId={guildId} channels={channels} roles={roles} />}
-          {key === 'Members/Self-roles' && <SelfRolesSubtab guildId={guildId} channels={channels} roles={roles} />}
+              {bar.present && (
+                <Button
+                  variant="contained"
+                  size="small"
+                  startIcon={bar.saving ? <CircularProgress size={16} color="inherit" /> : <Save />}
+                  onClick={triggerSave}
+                  disabled={bar.saving || !bar.dirty}
+                >
+                  {bar.saving ? 'Saving…' : bar.dirty ? 'Save' : 'Saved'}
+                </Button>
+              )}
+            </Box>
 
-          {/* ENGAGEMENT */}
-          {key === 'Engagement/Raids' && <RaidsSubtab guildId={guildId} channels={channels} />}
-          {key === 'Engagement/Invite Links' && <InviteLinksSubtab guildId={guildId} />}
-          {key === 'Engagement/Campaigns' && <CampaignsTab guildId={guildId} channels={channels} />}
-          {key === 'Engagement/Tickets' && <TicketsSubtab guildId={guildId} channels={channels} roles={roles} />}
-          {key === 'Engagement/Starboard' && <StarboardSubtab guildId={guildId} channels={channels} />}
-          {key === 'Engagement/Boosts' && <BoostsSubtab guildId={guildId} channels={channels} roles={roles} />}
-          {key === 'Engagement/Events' && <EventsSubtab guildId={guildId} channels={channels} />}
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1, ml: { md: 0.5 } }}>
+              {guild.member_count?.toLocaleString?.() || guild.member_count || 0} members ·{' '}
+              {(guild.channels || []).filter((c) => c.type !== 4).length} channels ·{' '}
+              {(guild.roles || []).filter((r) => r.name !== '@everyone').length} roles
+            </Typography>
 
-          {/* AI & INTEGRATIONS */}
-          {key === 'AI & Integrations/Knowledge Base' && <KnowledgeBaseSubtab guildId={guildId} />}
-          {key === 'AI & Integrations/Escalation' && <ProtectionTab guildId={guildId} channels={channels} section="escalation" />}
+            {/* Category pill nav (hand-rolled pills, Telegizer parity) */}
+            <Box sx={{ position: 'relative' }}>
+              <Box sx={{
+                position: 'absolute', right: 0, top: 0, bottom: 0, width: 32, zIndex: 1, pointerEvents: 'none',
+                background: 'linear-gradient(to right, transparent, rgba(11,22,38,0.95))',
+                display: { xs: 'block', md: 'none' },
+              }} />
+              <Box sx={{
+                display: 'flex', gap: 0.75, py: 1, overflowX: 'auto',
+                '::-webkit-scrollbar': { display: 'none' }, scrollBehavior: 'smooth', WebkitOverflowScrolling: 'touch',
+              }}>
+                {AREAS.map(({ label, icon: Icon }) => {
+                  const active = label === area.label;
+                  return (
+                    <Box
+                      key={label}
+                      onClick={() => setTab(label)}
+                      sx={{
+                        display: 'flex', alignItems: 'center', gap: 0.75,
+                        px: 1.5, py: 0.6, borderRadius: 2, cursor: 'pointer',
+                        whiteSpace: 'nowrap', userSelect: 'none',
+                        bgcolor: active ? 'primary.main' : 'rgba(255,255,255,0.05)',
+                        color: active ? 'white' : 'text.secondary',
+                        border: '1px solid',
+                        borderColor: active ? 'primary.main' : 'rgba(255,255,255,0.12)',
+                        transition: 'all 0.15s ease',
+                        '&:hover': { bgcolor: active ? 'primary.dark' : 'rgba(255,255,255,0.09)' },
+                      }}
+                    >
+                      <Icon sx={{ fontSize: 15 }} />
+                      <Typography variant="body2" fontWeight={active ? 700 : 500} fontSize="0.78rem">{label}</Typography>
+                    </Box>
+                  );
+                })}
+              </Box>
+            </Box>
 
-          {/* AUTOMATION */}
-          {key === 'Automation/Scheduler' && <SchedulerSubtab guildId={guildId} channels={channels} />}
-          {key === 'Automation/Auto Reply' && <AutoReplySubtab guildId={guildId} />}
-          {key === 'Automation/Polls' && <PollsSubtab guildId={guildId} channels={channels} />}
-          {key === 'Automation/Forwarding' && <ForwardingSubtab guildId={guildId} channels={channels} />}
-          {key === 'Automation/Threads' && <ThreadsSubtab guildId={guildId} channels={channels} />}
-          {key === 'Automation/Workflows' && <WorkflowsSubtab guildId={guildId} channels={channels} roles={roles} />}
-          {key === 'Automation/Webhooks' && <WebhooksSubtab guildId={guildId} channels={channels} />}
+            {/* Sub-tab row */}
+            {subs && (
+              <Tabs value={subIdx} onChange={(_, v) => setSub(v)} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile
+                sx={{ minHeight: 38, '& .MuiTab-root': { minHeight: 38, fontSize: '0.8rem', py: 0, textTransform: 'none' } }}>
+                {subs.map((s) => <Tab key={s} label={s} />)}
+              </Tabs>
+            )}
+          </Box>
 
-          {/* ANALYTICS */}
-          {key === 'Analytics/Overview' && <AnalyticsTab guildId={guildId} />}
-          {key === 'Analytics/Members' && <MembersTab guildId={guildId} />}
-          {key === 'Analytics/Leaderboard' && <LeaderboardSubtab guildId={guildId} />}
-          {key === 'Analytics/Audit Log' && <AuditLogSubtab guildId={guildId} />}
-          {key === 'Analytics/Warnings' && <WarningsSubtab guildId={guildId} />}
-          {key === 'Analytics/Digest' && <DigestSubtab guildId={guildId} channels={channels} />}
-          {key === 'Analytics/AI Activity' && <AIActivitySubtab guildId={guildId} />}
+          {/* ── Tab content ── */}
+          <Box sx={{ pt: 3, pb: 4 }}>
+            {key === 'Overview' && <Overview guild={guild} />}
 
-          {/* SERVER-LEVEL */}
-          {key === 'Commands' && <CommandsTab guildId={guildId} />}
-          {key === 'Team' && <TeamTab guildId={guildId} />}
-          {key === 'Billing' && <BillingTab guildId={guildId} />}
-        </>
+            {/* MODERATION */}
+            {key === 'Moderation/AutoMod' && <ProtectionTab guildId={guildId} channels={channels} section="automod" />}
+            {key === 'Moderation/Behavior' && <ProtectionTab guildId={guildId} channels={channels} section="behavior" />}
+            {key === 'Moderation/Reports' && <ProtectionTab guildId={guildId} channels={channels} section="reports" />}
+
+            {/* MEMBERS */}
+            {key === 'Members/Verification' && <ProtectionTab guildId={guildId} channels={channels} section="verification" />}
+            {key === 'Members/Welcome' && <SettingsTab guildId={guildId} channels={channels} roles={roles} />}
+            {key === 'Members/XP & Roles' && <LevelingTab guildId={guildId} channels={channels} roles={roles} />}
+            {key === 'Members/Self-roles' && <SelfRolesSubtab guildId={guildId} channels={channels} roles={roles} />}
+
+            {/* ENGAGEMENT */}
+            {key === 'Engagement/Raids' && <RaidsSubtab guildId={guildId} channels={channels} />}
+            {key === 'Engagement/Invite Links' && <InviteLinksSubtab guildId={guildId} />}
+            {key === 'Engagement/Campaigns' && <CampaignsTab guildId={guildId} channels={channels} />}
+            {key === 'Engagement/Tickets' && <TicketsSubtab guildId={guildId} channels={channels} roles={roles} />}
+            {key === 'Engagement/Starboard' && <StarboardSubtab guildId={guildId} channels={channels} />}
+            {key === 'Engagement/Boosts' && <BoostsSubtab guildId={guildId} channels={channels} roles={roles} />}
+            {key === 'Engagement/Events' && <EventsSubtab guildId={guildId} channels={channels} />}
+
+            {/* AI & INTEGRATIONS */}
+            {key === 'AI & Integrations/Knowledge Base' && <KnowledgeBaseSubtab guildId={guildId} />}
+            {key === 'AI & Integrations/Escalation' && <ProtectionTab guildId={guildId} channels={channels} section="escalation" />}
+
+            {/* AUTOMATION */}
+            {key === 'Automation/Scheduler' && <SchedulerSubtab guildId={guildId} channels={channels} />}
+            {key === 'Automation/Auto Reply' && <AutoReplySubtab guildId={guildId} />}
+            {key === 'Automation/Polls' && <PollsSubtab guildId={guildId} channels={channels} />}
+            {key === 'Automation/Forwarding' && <ForwardingSubtab guildId={guildId} channels={channels} />}
+            {key === 'Automation/Threads' && <ThreadsSubtab guildId={guildId} channels={channels} />}
+            {key === 'Automation/Workflows' && <WorkflowsSubtab guildId={guildId} channels={channels} roles={roles} />}
+            {key === 'Automation/Webhooks' && <WebhooksSubtab guildId={guildId} channels={channels} />}
+
+            {/* ANALYTICS */}
+            {key === 'Analytics/Overview' && <AnalyticsTab guildId={guildId} />}
+            {key === 'Analytics/Members' && <MembersTab guildId={guildId} />}
+            {key === 'Analytics/Leaderboard' && <LeaderboardSubtab guildId={guildId} />}
+            {key === 'Analytics/Audit Log' && <AuditLogSubtab guildId={guildId} />}
+            {key === 'Analytics/Warnings' && <WarningsSubtab guildId={guildId} />}
+            {key === 'Analytics/Digest' && <DigestSubtab guildId={guildId} channels={channels} />}
+            {key === 'Analytics/AI Activity' && <AIActivitySubtab guildId={guildId} />}
+
+            {/* SERVER-LEVEL */}
+            {key === 'Commands' && <CommandsTab guildId={guildId} />}
+            {key === 'Team' && <TeamTab guildId={guildId} />}
+            {key === 'Billing' && <BillingTab guildId={guildId} />}
+          </Box>
+        </SaveBarContext.Provider>
       )}
     </Box>
-  );
-}
-
-function Header({ guild }) {
-  const initials = (guild.name || '?').slice(0, 2).toUpperCase();
-  const channelCount = (guild.channels || []).filter((c) => c.type !== 4).length;
-  const roleCount = (guild.roles || []).filter((r) => r.name !== '@everyone').length;
-  return (
-    <Stack direction="row" spacing={2} alignItems="center" mb={2}>
-      <Avatar src={guild.icon_url || undefined} variant="rounded" sx={{ width: 56, height: 56, fontWeight: 700 }}>
-        {initials}
-      </Avatar>
-      <Box>
-        <Typography variant="h5" fontWeight={800}>{guild.name}</Typography>
-        <Typography variant="body2" color="text.secondary">
-          {guild.member_count} members · {channelCount} channels · {roleCount} roles
-        </Typography>
-      </Box>
-    </Stack>
   );
 }
 
@@ -210,7 +301,8 @@ function BackupsCard({ guildId }) {
     .then(({ data }) => setBackups(data.backups))
     .catch(() => { setError('Failed to load backups.'); setBackups([]); });
 
-  useEffect(() => { reload(); /* eslint-disable-next-line */ }, [guildId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { reload(); }, [guildId]);
 
   // Snapshots/restores finish within a loop tick — poll while one is in flight.
   const inFlight = (backups || []).some((b) => ['pending', 'restoring'].includes(b.status));
