@@ -277,7 +277,7 @@ function TokenDialog({ open, title, submit, onClose, onDone }) {
   );
 }
 
-function ConnectWizard({ open, onClose, onConnected }) {
+export function ConnectWizard({ open, onClose, onConnected }) {
   const [step, setStep] = useState(0);
   const [token, setToken] = useState('');
   const [busy, setBusy] = useState(false);

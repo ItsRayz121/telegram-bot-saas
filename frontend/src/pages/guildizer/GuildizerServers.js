@@ -4,14 +4,26 @@ import {
   Box, Container, Typography, Button, Card, CardContent, CardActions, Grid, Avatar,
   CircularProgress, Alert, Chip, Stack, IconButton, Badge, Menu, MenuItem,
   ListItemText, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
-  Divider, Tooltip, Collapse, Paper, List, ListItem, ListItemIcon,
+  Divider, Tooltip, Collapse, Paper, List, ListItem, ListItemIcon, LinearProgress,
+  InputAdornment,
 } from '@mui/material';
 import {
   Forum, Add, OpenInNew, AdminPanelSettings, SmartToy, Notifications, Redeem,
   CheckCircle, Settings, Refresh, BarChart, LinkOff, Security, HelpOutline,
-  ExpandMore, ExpandLess, Groups, ArrowBack, Shield, Lock,
+  ExpandMore, ExpandLess, Groups, ArrowBack, Shield, Lock, Search, Close,
+  Delete, Code,
 } from '@mui/icons-material';
 import guildizerApi, { guildizerLoginUrl } from '../../services/guildizerApi';
+import { ConnectWizard } from './GuildizerBots';
+
+// Mirrors the backend MAX_BOTS_PER_USER (custom_bots_api.py).
+const MAX_CUSTOM_BOTS = 5;
+
+const BOT_STATUS_CHIP = {
+  active: { color: 'success', label: 'Active' },
+  error: { color: 'error', label: 'Needs attention' },
+  disabled: { color: 'default', label: 'Disabled' },
+};
 
 const OAUTH_ERRORS = {
   invalid_state: 'Login session expired — please try connecting again.',
@@ -44,6 +56,7 @@ export default function GuildizerServers() {
   const navigate = useNavigate();
   const [params, setSearchParams] = useSearchParams();
   const [state, setState] = useState({ loading: true, connected: false, guilds: [], inviteUrl: null });
+  const [bots, setBots] = useState([]);
   const [error, setError] = useState(OAUTH_ERRORS[params.get('error')] || null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [redeemOpen, setRedeemOpen] = useState(false);
@@ -51,9 +64,20 @@ export default function GuildizerServers() {
   const [unlinkTarget, setUnlinkTarget] = useState(null);
   const [guideOpen, setGuideOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [addBotOpen, setAddBotOpen] = useState(false);
+  const [botSearch, setBotSearch] = useState('');
 
   // Scoped view — the hero card's "Manage Servers" button filters to installed servers.
   const filter = params.get('filter'); // 'installed' | null
+
+  // Custom (white-label) bots are best-effort: a failure here must never block the
+  // servers page, so it has its own try/catch and never sets the page error.
+  const loadBots = async () => {
+    try {
+      const { data } = await guildizerApi.get('/api/custom-bots');
+      setBots(data.bots || []);
+    } catch { /* leave bots as-is; the official bot card still renders */ }
+  };
 
   const load = async ({ silent = false } = {}) => {
     if (silent) setRefreshing(true);
@@ -62,6 +86,7 @@ export default function GuildizerServers() {
       const { data } = await guildizerApi.get('/api/guilds');
       setState({ loading: false, connected: true, guilds: data.guilds, inviteUrl: data.invite_url });
       setIsAdmin(!!me.is_admin);
+      await loadBots();
     } catch (e) {
       if (e?.response?.status === 401) setState({ loading: false, connected: false, guilds: [], inviteUrl: null });
       else { setError('Failed to load your Discord servers.'); setState((s) => ({ ...s, loading: false })); }
@@ -79,6 +104,7 @@ export default function GuildizerServers() {
         if (alive) {
           setState({ loading: false, connected: true, guilds: data.guilds, inviteUrl: data.invite_url });
           setIsAdmin(!!me.is_admin);
+          await loadBots();
         }
       } catch (e) {
         if (!alive) return;
@@ -98,6 +124,16 @@ export default function GuildizerServers() {
     () => (filter === 'installed' ? state.guilds.filter((g) => g.bot_present) : state.guilds),
     [state.guilds, filter],
   );
+
+  // Custom bots are a Pro feature (custom_bots_api.py): gate "Add Bot" on owning
+  // at least one Pro server, mirroring the backend's pro_required guard.
+  const hasPro = useMemo(() => state.guilds.some((g) => g.is_pro), [state.guilds]);
+
+  const filteredBots = useMemo(() => {
+    const q = botSearch.trim().toLowerCase();
+    if (!q) return bots;
+    return bots.filter((b) => (b.bot_username || '').toLowerCase().includes(q));
+  }, [bots, botSearch]);
 
   if (state.loading) {
     return <Box sx={{ display: 'grid', placeItems: 'center', minHeight: 320 }}><CircularProgress /></Box>;
@@ -148,110 +184,49 @@ export default function GuildizerServers() {
                 Admin
               </Button>
             )}
-            <Button size="small" variant="outlined" startIcon={<SmartToy />} onClick={() => navigate('/guildizer/bots')}>
-              My Bots
-            </Button>
             <Button size="small" variant="outlined" startIcon={<Redeem />} onClick={() => setRedeemOpen(true)}>
               Redeem code
             </Button>
             <NotificationsBell />
           </Box>
 
-          {/* Filter context banner — shown only when scoped to installed servers */}
-          {filter === 'installed' && (
-            <Alert
-              severity="info"
-              icon={<Groups fontSize="small" />}
-              sx={{ mb: 2, borderRadius: 2, alignItems: 'center' }}
-              action={
-                <Button size="small" startIcon={<ArrowBack />} onClick={() => setSearchParams({}, { replace: true })}>
-                  Back
-                </Button>
-              }
-            >
-              Showing servers where <strong>Guildizer is installed</strong> only.{' '}
-              <Button size="small" sx={{ p: 0, minWidth: 0, textTransform: 'none', fontWeight: 600 }} onClick={() => setSearchParams({}, { replace: true })}>
-                View all servers
-              </Button>
-            </Alert>
-          )}
-
-          {/* Compact toolbar row: refresh + collapsible guide + Add to a server */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-            <IconButton size="small" onClick={() => load({ silent: true })} disabled={refreshing}>
-              {refreshing ? <CircularProgress size={16} /> : <Refresh fontSize="small" />}
-            </IconButton>
-            <Button
-              size="small"
-              variant="text"
-              startIcon={<HelpOutline fontSize="small" />}
-              endIcon={guideOpen ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
-              onClick={() => setGuideOpen((o) => !o)}
-              sx={{ color: 'text.secondary', textTransform: 'none', fontSize: '0.8rem' }}
-            >
-              How to link a server?
-            </Button>
-            {state.inviteUrl && (
-              <Button
-                size="small"
-                variant="outlined"
-                startIcon={<Add fontSize="small" />}
-                href={state.inviteUrl}
-                target="_blank"
-                rel="noreferrer"
-                sx={{ ml: 'auto' }}
-              >
-                Add to a server
-              </Button>
-            )}
-          </Box>
-
-          {/* Collapsible guide */}
-          <Collapse in={guideOpen || (visibleGuilds.length === 0)}>
-            <Paper sx={{ px: 2, py: 1.5, mb: 2, background: 'linear-gradient(135deg, rgba(88,101,242,0.07) 0%, rgba(11,22,38,0.9) 100%)', border: '1px solid rgba(88,101,242,0.2)', borderRadius: 2 }}>
-              <Typography variant="body2" color="text.secondary">
-                1. Click <strong>Add to a server</strong> &nbsp;·&nbsp;
-                2. Pick the server &amp; approve Guildizer's permissions &nbsp;·&nbsp;
-                3. It appears below — open <strong>Settings</strong> to configure it
-              </Typography>
-              <Typography variant="caption" color="text.disabled" display="block" mt={0.5}>
-                You need the <b>Manage Server</b> permission, or to own the server.
-              </Typography>
-            </Paper>
-          </Collapse>
-
-          {visibleGuilds.length === 0 ? (
-            <Card variant="outlined"><CardContent sx={{ textAlign: 'center', py: 5 }}>
-              <Groups sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
-              <Typography color="text.secondary" gutterBottom>
-                {filter === 'installed' ? 'Guildizer is not installed on any server yet.' : 'No manageable servers found.'}
-              </Typography>
-              <Typography variant="caption" color="text.disabled" display="block">
-                You need the <b>Manage Server</b> permission, or to own the server.
-              </Typography>
-              {state.inviteUrl && (
-                <Button sx={{ mt: 2 }} variant="contained" startIcon={<Add />} href={state.inviteUrl} target="_blank" rel="noreferrer">
-                  Add Guildizer to a server
-                </Button>
-              )}
-            </CardContent></Card>
+          {filter === 'installed' ? (
+            /* ── "Manage Servers" view: the linked servers, only reachable from the
+                  hero card's Manage Servers button ── */
+            <ManageServersView
+              visibleGuilds={visibleGuilds}
+              inviteUrl={state.inviteUrl}
+              refreshing={refreshing}
+              guideOpen={guideOpen}
+              onToggleGuide={() => setGuideOpen((o) => !o)}
+              onRefresh={() => load({ silent: true })}
+              onBack={() => setSearchParams({}, { replace: true })}
+              navigate={navigate}
+              onViewPerms={setPermsModalGuild}
+              onUnlink={setUnlinkTarget}
+            />
           ) : (
-            <Grid container spacing={2}>
-              {visibleGuilds.map((g) => (
-                <ServerCard
-                  key={g.id}
-                  guild={g}
-                  count={visibleGuilds.length}
-                  navigate={navigate}
-                  onViewPerms={() => setPermsModalGuild(g)}
-                  onUnlink={() => setUnlinkTarget(g)}
-                />
-              ))}
-            </Grid>
+            /* ── Default view: Community (custom) bots, mirroring the Telegizer
+                  dashboard's Community Bots section ── */
+            <CommunityBotsSection
+              bots={bots}
+              filteredBots={filteredBots}
+              hasPro={hasPro}
+              search={botSearch}
+              onSearch={setBotSearch}
+              onAdd={() => setAddBotOpen(true)}
+              onChanged={loadBots}
+              navigate={navigate}
+            />
           )}
         </>
       )}
 
+      <ConnectWizard
+        open={addBotOpen}
+        onClose={() => setAddBotOpen(false)}
+        onConnected={() => { setAddBotOpen(false); loadBots(); }}
+      />
       <RedeemDialog open={redeemOpen} onClose={() => setRedeemOpen(false)} />
       <PermissionsDialog guild={permsModalGuild} onClose={() => setPermsModalGuild(null)} />
       <UnlinkDialog guild={unlinkTarget} onClose={() => setUnlinkTarget(null)} />
@@ -307,6 +282,314 @@ function OfficialBotCard({ installedCount, inviteUrl, onManage }) {
       </CardActions>
     </Card>
   );
+}
+
+// ── "Manage Servers" view — the linked-server cards, shown only after the user
+//    clicks "Manage Servers" on the hero card (mirrors Telegizer's Manage Groups) ──
+function ManageServersView({
+  visibleGuilds, inviteUrl, refreshing, guideOpen,
+  onToggleGuide, onRefresh, onBack, navigate, onViewPerms, onUnlink,
+}) {
+  return (
+    <>
+      {/* Scope banner */}
+      <Alert
+        severity="info"
+        icon={<Groups fontSize="small" />}
+        sx={{ mb: 2, borderRadius: 2, alignItems: 'center' }}
+        action={
+          <Button size="small" startIcon={<ArrowBack />} onClick={onBack}>
+            Back
+          </Button>
+        }
+      >
+        Showing the servers where <strong>Guildizer is installed</strong>.
+      </Alert>
+
+      {/* Compact toolbar row: refresh + collapsible guide + Add to a server */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+        <IconButton size="small" onClick={onRefresh} disabled={refreshing}>
+          {refreshing ? <CircularProgress size={16} /> : <Refresh fontSize="small" />}
+        </IconButton>
+        <Button
+          size="small"
+          variant="text"
+          startIcon={<HelpOutline fontSize="small" />}
+          endIcon={guideOpen ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
+          onClick={onToggleGuide}
+          sx={{ color: 'text.secondary', textTransform: 'none', fontSize: '0.8rem' }}
+        >
+          How to link a server?
+        </Button>
+        {inviteUrl && (
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<Add fontSize="small" />}
+            href={inviteUrl}
+            target="_blank"
+            rel="noreferrer"
+            sx={{ ml: 'auto' }}
+          >
+            Add to a server
+          </Button>
+        )}
+      </Box>
+
+      {/* Collapsible guide */}
+      <Collapse in={guideOpen || visibleGuilds.length === 0}>
+        <Paper sx={{ px: 2, py: 1.5, mb: 2, background: 'linear-gradient(135deg, rgba(88,101,242,0.07) 0%, rgba(11,22,38,0.9) 100%)', border: '1px solid rgba(88,101,242,0.2)', borderRadius: 2 }}>
+          <Typography variant="body2" color="text.secondary">
+            1. Click <strong>Add to a server</strong> &nbsp;·&nbsp;
+            2. Pick the server &amp; approve Guildizer's permissions &nbsp;·&nbsp;
+            3. It appears here — open <strong>Settings</strong> to configure it
+          </Typography>
+          <Typography variant="caption" color="text.disabled" display="block" mt={0.5}>
+            You need the <b>Manage Server</b> permission, or to own the server.
+          </Typography>
+        </Paper>
+      </Collapse>
+
+      {visibleGuilds.length === 0 ? (
+        <Card variant="outlined"><CardContent sx={{ textAlign: 'center', py: 5 }}>
+          <Groups sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
+          <Typography color="text.secondary" gutterBottom>
+            Guildizer is not installed on any server yet.
+          </Typography>
+          <Typography variant="caption" color="text.disabled" display="block">
+            You need the <b>Manage Server</b> permission, or to own the server.
+          </Typography>
+          {inviteUrl && (
+            <Button sx={{ mt: 2 }} variant="contained" startIcon={<Add />} href={inviteUrl} target="_blank" rel="noreferrer">
+              Add Guildizer to a server
+            </Button>
+          )}
+        </CardContent></Card>
+      ) : (
+        <Grid container spacing={2}>
+          {visibleGuilds.map((g) => (
+            <ServerCard
+              key={g.id}
+              guild={g}
+              count={visibleGuilds.length}
+              navigate={navigate}
+              onViewPerms={() => onViewPerms(g)}
+              onUnlink={() => onUnlink(g)}
+            />
+          ))}
+        </Grid>
+      )}
+    </>
+  );
+}
+
+// ── Community Bots section — the default Servers view. White-label custom bots,
+//    laid out to match the Telegizer dashboard's Community Bots section 1:1. ──
+function CommunityBotsSection({ bots, filteredBots, hasPro, search, onSearch, onAdd, onChanged, navigate }) {
+  const count = bots.length;
+  const atLimit = count >= MAX_CUSTOM_BOTS;
+  const slotsFree = MAX_CUSTOM_BOTS - count;
+  const nearLimit = slotsFree <= 1 && !atLimit;
+
+  return (
+    <>
+      {/* Header bar */}
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5, flexWrap: 'wrap', gap: 1 }}>
+        <Avatar
+          sx={{
+            width: 36, height: 36, flexShrink: 0,
+            background: 'linear-gradient(135deg, #9d6cf7, #5b21b6)',
+            boxShadow: '0 0 12px rgba(157,108,247,0.35)',
+          }}
+        >
+          <SmartToy sx={{ fontSize: 18 }} />
+        </Avatar>
+        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+          <Typography variant="subtitle1" fontWeight={700} lineHeight={1.2} letterSpacing="-0.01em">Community Bots</Typography>
+          <Typography variant="caption" color="text.secondary">
+            {count} / {MAX_CUSTOM_BOTS} used · {hasPro ? 'Pro' : 'Free'} plan
+          </Typography>
+        </Box>
+        <Chip
+          label={atLimit ? 'Limit Reached' : `${slotsFree} slot${slotsFree !== 1 ? 's' : ''} free`}
+          color={atLimit ? 'error' : nearLimit ? 'warning' : 'success'}
+          size="small"
+        />
+        <LinearProgress
+          variant="determinate"
+          value={(count / MAX_CUSTOM_BOTS) * 100}
+          color={atLimit ? 'error' : nearLimit ? 'warning' : 'primary'}
+          sx={{ width: '100%', height: 3, borderRadius: 3, mt: 0.25 }}
+        />
+      </Box>
+
+      {/* CTA row */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, flexWrap: 'wrap' }}>
+        <Tooltip title={atLimit ? 'Custom-bot limit reached' : !hasPro ? 'Custom bots need at least one Pro server' : ''}>
+          <span>
+            <Button variant="contained" size="small" startIcon={<Add />} onClick={onAdd} disabled={atLimit}>
+              Add Bot
+            </Button>
+          </span>
+        </Tooltip>
+        <Button
+          variant="text" size="small" component="a"
+          href="https://discord.com/developers/applications" target="_blank" rel="noopener noreferrer"
+          startIcon={<Code />} sx={{ color: 'text.secondary' }}
+        >
+          Developer Portal
+        </Button>
+        {count === 0 && (
+          <Typography variant="caption" color="text.disabled" sx={{ ml: 0.5 }}>
+            Create an app in the Developer Portal → enable intents → copy token → Add Bot
+          </Typography>
+        )}
+        {count > 0 && (
+          <Tooltip title="Create app → enable both privileged intents → Reset Token → Add Bot">
+            <Typography variant="caption" color="text.disabled" sx={{ cursor: 'default', ml: 0.5, '&:hover': { color: 'text.secondary' } }}>
+              How to add a bot?
+            </Typography>
+          </Tooltip>
+        )}
+        {count > 1 && (
+          <TextField
+            size="small"
+            placeholder="Search bots…"
+            value={search}
+            onChange={(e) => onSearch(e.target.value)}
+            InputProps={{
+              startAdornment: <InputAdornment position="start"><Search fontSize="small" /></InputAdornment>,
+              endAdornment: search ? (
+                <InputAdornment position="end">
+                  <IconButton size="small" onClick={() => onSearch('')}><Close fontSize="small" /></IconButton>
+                </InputAdornment>
+              ) : null,
+            }}
+            sx={{ width: { xs: '100%', sm: 180 }, ml: { sm: 'auto' } }}
+          />
+        )}
+      </Box>
+
+      {/* Bot grid */}
+      {count === 0 ? (
+        <Card variant="outlined"><CardContent sx={{ textAlign: 'center', py: 5 }}>
+          <SmartToy sx={{ fontSize: 44, color: 'text.disabled', mb: 1 }} />
+          <Typography color="text.secondary" gutterBottom>No custom bots yet.</Typography>
+          <Typography variant="caption" color="text.disabled" display="block">
+            Run Guildizer under your own brand — connect a Discord bot you created and it
+            inherits every Guildizer feature.
+          </Typography>
+          <Button
+            sx={{ mt: 2 }} variant="contained" startIcon={<Add />}
+            onClick={onAdd}
+          >
+            Connect a bot
+          </Button>
+        </CardContent></Card>
+      ) : filteredBots.length === 0 ? (
+        <Box sx={{ textAlign: 'center', py: 4 }}>
+          <Typography color="text.secondary">No bots match &quot;{search}&quot;</Typography>
+        </Box>
+      ) : (
+        <Grid container spacing={2}>
+          {filteredBots.map((bot) => {
+            const colMd = filteredBots.length === 1 ? 12 : filteredBots.length === 2 ? 6 : 4;
+            const colSm = filteredBots.length === 1 ? 12 : 6;
+            return (
+              <Grid item xs={12} sm={colSm} md={colMd} key={bot.id} sx={{ display: 'flex' }}>
+                <CommunityBotCard bot={bot} navigate={navigate} onChanged={onChanged} />
+              </Grid>
+            );
+          })}
+        </Grid>
+      )}
+    </>
+  );
+}
+
+// ── Compact custom-bot card (matches the Telegizer dashboard bot card) ──
+function CommunityBotCard({ bot, navigate, onChanged }) {
+  const [busy, setBusy] = useState(false);
+  const status = BOT_STATUS_CHIP[bot.status] || BOT_STATUS_CHIP.disabled;
+  const serverCount = bot.linked_guilds?.length ?? 0;
+
+  const disconnect = async () => {
+    if (!window.confirm(`Disconnect @${bot.bot_username}? Its servers revert to the official Guildizer bot.`)) return;
+    setBusy(true);
+    try { await guildizerApi.delete(`/api/custom-bots/${bot.id}`); await onChanged(); }
+    catch { /* surfaced on next reload */ }
+    setBusy(false);
+  };
+
+  return (
+    <Card
+      sx={{
+        flex: 1, display: 'flex', flexDirection: 'column',
+        transition: 'transform 0.2s cubic-bezier(0.22,1,0.36,1), box-shadow 0.2s ease, border-color 0.2s',
+        '&:hover': {
+          transform: 'translateY(-3px)',
+          boxShadow: '0 12px 40px rgba(0,0,0,0.55), 0 0 0 1px rgba(157,108,247,0.25)',
+          borderColor: 'rgba(157,108,247,0.3)',
+        },
+      }}
+    >
+      <CardContent sx={{ flex: 1, pb: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+          <Avatar
+            src={bot.avatar_url || undefined}
+            sx={{
+              mr: 1.5, width: 38, height: 38, flexShrink: 0,
+              background: 'linear-gradient(135deg, #5865f2, #9d6cf7)',
+              boxShadow: '0 0 10px rgba(88,101,242,0.3)',
+            }}
+          >
+            <SmartToy sx={{ fontSize: 18 }} />
+          </Avatar>
+          <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+            <Typography variant="subtitle2" fontWeight={700} noWrap>@{bot.bot_username}</Typography>
+            <Typography variant="caption" color="text.secondary" noWrap>
+              {bot.last_online_at ? `last online ${_relativeTime(bot.last_online_at)}` : 'not seen online yet'}
+            </Typography>
+          </Box>
+          <Chip label={status.label} color={status.color} size="small" variant="outlined" />
+        </Box>
+        <Typography variant="caption" color="text.disabled">
+          {serverCount} server{serverCount !== 1 ? 's' : ''}
+        </Typography>
+        {!bot.intents_ok && (
+          <Typography variant="caption" color="warning.main" display="block" mt={0.5}>
+            Enable both privileged intents — open Manage to fix.
+          </Typography>
+        )}
+      </CardContent>
+      <CardActions sx={{ px: 1.5, pb: 1.5, pt: 0, gap: 0.5, flexWrap: 'wrap' }}>
+        <Button size="small" startIcon={<Settings />} onClick={() => navigate('/guildizer/bots')}>Manage</Button>
+        <Button size="small" startIcon={<BarChart />} onClick={() => navigate('/guildizer/bots')}>Servers</Button>
+        <Box sx={{ flexGrow: 1 }} />
+        <Tooltip title="Disconnect bot">
+          <span>
+            <IconButton size="small" onClick={disconnect} disabled={busy}>
+              <Delete fontSize="small" color="error" />
+            </IconButton>
+          </span>
+        </Tooltip>
+      </CardActions>
+    </Card>
+  );
+}
+
+// Lightweight relative-time helper (mirrors the Telegizer dashboard's _relativeTime).
+function _relativeTime(iso) {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return '';
+  const s = Math.floor((Date.now() - then) / 1000);
+  if (s < 60) return 'just now';
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
 }
 
 function NotificationsBell() {
