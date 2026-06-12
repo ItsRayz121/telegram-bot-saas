@@ -211,8 +211,11 @@ Ranked by impact-per-effort:
    role (dangerous-permission roles refused, removed on unboost), one-time XP via the
    ledger (reason "boost"). Config in `GuildSettings.extra["boosts"]`, `boosts.py` +
    `boosts_api.py`.
-10. **Scheduled events integration** (Engagement) — create Discord server events from the
-    dashboard; remind attendees.
+10. ✅ **Scheduled events integration** (Engagement › Events, 2026-06-12) — dashboard
+    creates native Discord scheduled events (external/voice/stage) via a `guild_events`
+    queue table (create_all, no migration); the content loop creates/cancels them and
+    posts an optional channel reminder N minutes before start. `content_api` events
+    endpoints + `content_runtime` queue helpers + `_create_guild_event` in bot_core.
 11. **Thread auto-management** (Automation) — auto-thread on posts in chosen channels,
     auto-archive policy.
 12. **Server settings backup/restore** (server-level) — snapshot roles/channels/permissions.

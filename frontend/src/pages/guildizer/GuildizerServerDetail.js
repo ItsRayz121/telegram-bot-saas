@@ -21,6 +21,7 @@ import {
 } from './tabs/AutomationSubtabs';
 import {
   RaidsSubtab, InviteLinksSubtab, TicketsSubtab, StarboardSubtab, BoostsSubtab,
+  EventsSubtab,
 } from './tabs/EngagementSubtabs';
 import { KnowledgeBaseSubtab } from './tabs/AiSubtabs';
 import SelfRolesSubtab from './tabs/SelfRolesSubtab';
@@ -38,7 +39,7 @@ const AREAS = [
   { label: 'Overview' },
   { label: 'Moderation', subs: ['AutoMod', 'Behavior', 'Reports'] },
   { label: 'Members', subs: ['Verification', 'Welcome', 'XP & Roles', 'Self-roles'] },
-  { label: 'Engagement', subs: ['Raids', 'Invite Links', 'Campaigns', 'Tickets', 'Starboard', 'Boosts'] },
+  { label: 'Engagement', subs: ['Raids', 'Invite Links', 'Campaigns', 'Tickets', 'Starboard', 'Boosts', 'Events'] },
   { label: 'AI & Integrations', subs: ['Knowledge Base', 'Escalation'] },
   { label: 'Automation', subs: ['Scheduler', 'Auto Reply', 'Polls', 'Forwarding', 'Workflows', 'Webhooks'] },
   { label: 'Analytics', subs: ['Overview', 'Members', 'Leaderboard', 'Audit Log', 'Warnings', 'Digest', 'AI Activity'] },
@@ -141,6 +142,7 @@ export default function GuildizerServerDetail() {
           {key === 'Engagement/Tickets' && <TicketsSubtab guildId={guildId} channels={channels} roles={roles} />}
           {key === 'Engagement/Starboard' && <StarboardSubtab guildId={guildId} channels={channels} />}
           {key === 'Engagement/Boosts' && <BoostsSubtab guildId={guildId} channels={channels} roles={roles} />}
+          {key === 'Engagement/Events' && <EventsSubtab guildId={guildId} channels={channels} />}
 
           {/* AI & INTEGRATIONS */}
           {key === 'AI & Integrations/Knowledge Base' && <KnowledgeBaseSubtab guildId={guildId} />}

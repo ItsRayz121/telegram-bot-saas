@@ -432,6 +432,137 @@ export function StarboardSubtab({ guildId, channels = [] }) {
   );
 }
 
+// ── Events: native Discord scheduled events from the dashboard ────────────────
+const VOICEISH_TYPES = { voice: 2, stage: 13 };
+const EVENT_STATUS_COLOR = { pending: 'default', created: 'info', done: 'success', failed: 'error', cancelled: 'default' };
+
+export function EventsSubtab({ guildId, channels = [] }) {
+  const textChannels = channels.filter((c) => TEXT_TYPES.has(c.type));
+  const [events, setEvents] = useState(null);
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [entityType, setEntityType] = useState('external');
+  const [channelId, setChannelId] = useState('');
+  const [location, setLocation] = useState('');
+  const [startAt, setStartAt] = useState('');
+  const [endAt, setEndAt] = useState('');
+  const [remind, setRemind] = useState(15);
+  const [remindChannel, setRemindChannel] = useState('');
+
+  const voiceChannels = channels.filter((c) => c.type === VOICEISH_TYPES[entityType]);
+
+  const reload = useCallback(() => guildizerApi.get(`/api/guilds/${guildId}/events`)
+    .then(({ data }) => setEvents(data.events))
+    .catch(() => { setError('Failed to load events.'); setEvents([]); }), [guildId]);
+  useEffect(() => { reload(); }, [reload]);
+
+  async function add() {
+    setBusy(true); setError(null);
+    try {
+      await guildizerApi.post(`/api/guilds/${guildId}/events`, {
+        name, description, entity_type: entityType,
+        channel_id: entityType === 'external' ? null : channelId,
+        location: entityType === 'external' ? location : '',
+        start_at: new Date(startAt).toISOString(),
+        end_at: endAt ? new Date(endAt).toISOString() : null,
+        remind_minutes: remind,
+        reminder_channel_id: remindChannel || null,
+      });
+      setName(''); setDescription(''); setLocation(''); setStartAt(''); setEndAt('');
+      await reload();
+    } catch { setError('Could not create the event.'); }
+    setBusy(false);
+  }
+
+  if (events === null) return <Box sx={{ display: 'grid', placeItems: 'center', py: 4 }}><CircularProgress /></Box>;
+
+  const formOk = name.trim() && startAt
+    && (entityType === 'external' ? location.trim() : channelId);
+
+  return (
+    <Grid container spacing={2}>
+      {error && <Grid item xs={12}><Alert severity="warning" onClose={() => setError(null)}>{error}</Alert></Grid>}
+
+      <Grid item xs={12} md={6}>
+        <Card variant="outlined"><CardContent>
+          <Typography variant="subtitle1" fontWeight={700} mb={1}>📅 New server event</Typography>
+          <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+            Creates a native Discord scheduled event members can mark interest in.
+            The bot needs the Manage Events permission.
+          </Typography>
+          <TextField fullWidth size="small" margin="dense" label="Event name"
+            value={name} inputProps={{ maxLength: 100 }} onChange={(e) => setName(e.target.value)} />
+          <TextField fullWidth multiline minRows={2} size="small" margin="dense" label="Description"
+            value={description} inputProps={{ maxLength: 1000 }} onChange={(e) => setDescription(e.target.value)} />
+          <TextField select fullWidth size="small" margin="dense" label="Where"
+            value={entityType} onChange={(e) => { setEntityType(e.target.value); setChannelId(''); }}>
+            <MenuItem value="external">Somewhere else (external)</MenuItem>
+            <MenuItem value="voice">Voice channel</MenuItem>
+            <MenuItem value="stage">Stage channel</MenuItem>
+          </TextField>
+          {entityType === 'external' ? (
+            <TextField fullWidth size="small" margin="dense" label="Location (link or place)"
+              value={location} inputProps={{ maxLength: 200 }} onChange={(e) => setLocation(e.target.value)} />
+          ) : (
+            <TextField select fullWidth size="small" margin="dense" label="Channel"
+              value={channelId} onChange={(e) => setChannelId(e.target.value)}>
+              {voiceChannels.map((c) => <MenuItem key={c.id} value={c.id}>🔊 {c.name}</MenuItem>)}
+            </TextField>
+          )}
+          <Stack direction="row" spacing={1}>
+            <TextField type="datetime-local" size="small" margin="dense" label="Starts"
+              InputLabelProps={{ shrink: true }} value={startAt} onChange={(e) => setStartAt(e.target.value)} sx={{ flex: 1 }} />
+            <TextField type="datetime-local" size="small" margin="dense" label="Ends (optional)"
+              InputLabelProps={{ shrink: true }} value={endAt} onChange={(e) => setEndAt(e.target.value)} sx={{ flex: 1 }} />
+          </Stack>
+          <Stack direction="row" spacing={1}>
+            <TextField type="number" size="small" margin="dense" label="Remind (min before, 0 = off)"
+              value={remind} inputProps={{ min: 0, max: 1440 }}
+              onChange={(e) => setRemind(Number(e.target.value))} sx={{ flex: 1 }} />
+            <TextField select size="small" margin="dense" label="Reminder channel"
+              value={remindChannel} onChange={(e) => setRemindChannel(e.target.value)} sx={{ flex: 1 }}>
+              <MenuItem value="">— none —</MenuItem>
+              {textChannels.map((c) => <MenuItem key={c.id} value={c.id}># {c.name}</MenuItem>)}
+            </TextField>
+          </Stack>
+          <Button startIcon={<RocketLaunch />} variant="contained" size="small" sx={{ mt: 1 }}
+            disabled={busy || !formOk} onClick={add}>
+            Create event
+          </Button>
+        </CardContent></Card>
+      </Grid>
+
+      <Grid item xs={12} md={6}>
+        <Card variant="outlined"><CardContent>
+          <Typography variant="subtitle1" fontWeight={700} mb={1}>Upcoming & recent</Typography>
+          {events.length === 0 && <Typography variant="body2" color="text.secondary">No events yet.</Typography>}
+          <List dense>
+            {events.map((ev) => (
+              <ListItem key={ev.id} disableGutters
+                secondaryAction={(
+                  <Button size="small" color="inherit"
+                    onClick={() => guildizerApi.delete(`/api/guilds/${guildId}/events/${ev.id}`).then(reload)}>
+                    {ev.status === 'created' ? 'Cancel' : 'Remove'}
+                  </Button>
+                )}>
+                <Chip size="small" label={ev.status} color={EVENT_STATUS_COLOR[ev.status] || 'default'}
+                  variant="outlined" sx={{ mr: 1 }} />
+                <ListItemText
+                  primary={ev.name}
+                  secondary={`${new Date(ev.start_at).toLocaleString()}${ev.error ? ` · ${ev.error}` : ''}`}
+                  primaryTypographyProps={{ variant: 'body2', noWrap: true }} />
+              </ListItem>
+            ))}
+          </List>
+        </CardContent></Card>
+      </Grid>
+    </Grid>
+  );
+}
+
 // ── Boosts: thank-you post + reward role + XP on server boost ─────────────────
 export function BoostsSubtab({ guildId, channels = [], roles = [] }) {
   const textChannels = channels.filter((c) => TEXT_TYPES.has(c.type));

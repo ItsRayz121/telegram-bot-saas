@@ -16,7 +16,7 @@ import asyncio
 import logging
 import re
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import discord
 from discord import app_commands
@@ -1545,6 +1545,81 @@ class CoreMixin:
                 except (discord.HTTPException, AttributeError):
                     pass
             await asyncio.to_thread(content_runtime.record_poll_results, item["id"], results)
+
+        # Discord scheduled events (Phase 4 native): create / remind / cancel.
+        for item in await asyncio.to_thread(content_runtime.events_to_create, served):
+            guild = self.get_guild(item["guild_id"])
+            if guild is None:
+                continue
+            event_id, error = await self._create_guild_event(guild, item)
+            await asyncio.to_thread(content_runtime.mark_event_created,
+                                    item["id"], event_id, error)
+            if event_id is None:
+                await self._escalate_type(
+                    guild, "automation",
+                    f"Scheduled event “{item['name'][:60]}” could not be created: {error}",
+                )
+
+        for item in await asyncio.to_thread(content_runtime.events_to_remind, served):
+            guild = self.get_guild(item["guild_id"])
+            channel = guild.get_channel(int(item["reminder_channel_id"])) if guild else None
+            if channel is not None and hasattr(channel, "send"):
+                ts = int(item["start_at"].replace(tzinfo=timezone.utc).timestamp())
+                link = f"https://discord.com/events/{guild.id}/{item['discord_event_id']}"
+                await governor.safe(
+                    channel.send(f"📅 **{item['name']}** starts <t:{ts}:R> — <t:{ts}:f>\n{link}"),
+                    what="event reminder",
+                )
+            await asyncio.to_thread(content_runtime.mark_event_reminded, item["id"])
+
+        for item in await asyncio.to_thread(content_runtime.events_to_delete, served):
+            guild = self.get_guild(item["guild_id"])
+            if guild is not None:
+                try:
+                    ev = await guild.fetch_scheduled_event(int(item["discord_event_id"]))
+                    await ev.delete(reason="Guildizer: cancelled from the dashboard")
+                except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                    pass   # already gone or no permission — forget it either way
+            await asyncio.to_thread(content_runtime.mark_event_deleted, item["id"])
+
+        await asyncio.to_thread(content_runtime.finish_past_events, served)
+
+    async def _create_guild_event(self, guild: discord.Guild, item: dict):
+        """Create a Discord scheduled event from a dashboard row.
+        Returns (discord_event_id | None, error | None)."""
+        start = item["start_at"].replace(tzinfo=timezone.utc)
+        if start <= datetime.now(timezone.utc):
+            return None, "start time is in the past"
+        end = item["end_at"].replace(tzinfo=timezone.utc) if item["end_at"] else None
+        kwargs = {
+            "name": item["name"][:100],
+            "description": (item["description"] or "")[:1000],
+            "start_time": start,
+            "privacy_level": discord.PrivacyLevel.guild_only,
+            "reason": "Guildizer: scheduled from the dashboard",
+        }
+        try:
+            if item["entity_type"] in ("voice", "stage"):
+                channel = guild.get_channel(int(item["channel_id"] or 0))
+                if channel is None:
+                    return None, "voice/stage channel not found"
+                kwargs["entity_type"] = (discord.EntityType.voice
+                                         if item["entity_type"] == "voice"
+                                         else discord.EntityType.stage_instance)
+                kwargs["channel"] = channel
+                if end is not None:
+                    kwargs["end_time"] = end
+            else:
+                kwargs["entity_type"] = discord.EntityType.external
+                kwargs["location"] = (item["location"] or "TBA")[:100]
+                kwargs["end_time"] = end or (start + timedelta(hours=1))
+            ev = await guild.create_scheduled_event(**kwargs)
+            return ev.id, None
+        except discord.Forbidden:
+            return None, "missing the Manage Events permission"
+        except discord.HTTPException as exc:
+            log.warning("event create rejected for guild %s: %s", guild.id, exc)
+            return None, str(getattr(exc, "text", "") or exc)[:200]
 
     @content_loop.before_loop
     async def _before_content(self) -> None:

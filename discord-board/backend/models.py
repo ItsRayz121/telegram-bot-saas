@@ -937,6 +937,53 @@ class Poll(Base):
         }
 
 
+class GuildEvent(Base):
+    """A Discord scheduled event created from the dashboard (Phase 4 native).
+    The bot creates it on Discord (needs_create), optionally posts a channel
+    reminder shortly before start, and deletes it on dashboard cancel
+    (needs_delete). Bot/API coordinate only through this row."""
+
+    __tablename__ = "guild_events"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, ForeignKey("guilds.id"), nullable=False, index=True)
+    name = Column(String(100), nullable=False)
+    description = Column(String(1000), default="")
+    entity_type = Column(String(10), default="external")  # external | voice | stage
+    channel_id = Column(BigInteger, nullable=True)         # voice/stage channel
+    location = Column(String(200), nullable=True)          # external events
+    start_at = Column(DateTime, nullable=False, index=True)
+    end_at = Column(DateTime, nullable=True)               # required for external
+    remind_minutes = Column(Integer, default=15)           # 0 = no reminder
+    reminder_channel_id = Column(BigInteger, nullable=True)
+    needs_create = Column(Boolean, default=True)
+    needs_delete = Column(Boolean, default=False)
+    reminded = Column(Boolean, default=False)
+    discord_event_id = Column(BigInteger, nullable=True)
+    status = Column(String(12), default="pending")  # pending | created | done | failed | cancelled
+    error = Column(String(200), nullable=True)
+    created_by = Column(BigInteger, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description or "",
+            "entity_type": self.entity_type or "external",
+            "channel_id": str(self.channel_id) if self.channel_id else None,
+            "location": self.location,
+            "start_at": self.start_at.isoformat() + "Z" if self.start_at else None,
+            "end_at": self.end_at.isoformat() + "Z" if self.end_at else None,
+            "remind_minutes": self.remind_minutes or 0,
+            "reminder_channel_id": str(self.reminder_channel_id) if self.reminder_channel_id else None,
+            "discord_event_id": str(self.discord_event_id) if self.discord_event_id else None,
+            "status": self.status,
+            "error": self.error,
+            "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
+        }
+
+
 class AutoResponse(Base):
     """Keyword trigger -> bot reply (Phase 12). Cooldown is enforced in-memory
     by the bot (per guild+trigger)."""

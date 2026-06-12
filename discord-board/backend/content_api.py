@@ -19,7 +19,7 @@ from flask import Blueprint, g, jsonify, request
 import access
 import plan_limits
 from auth import login_required
-from models import AutoResponse, Guild, Poll, ScheduledMessage, UserGuild
+from models import AutoResponse, Guild, GuildEvent, Poll, ScheduledMessage, UserGuild
 
 content_bp = Blueprint("content", __name__)
 
@@ -152,6 +152,94 @@ def delete_scheduled(guild_id: int, mid: int):
     row = g.db.get(ScheduledMessage, mid)
     if row is None or row.guild_id != guild_id:
         return jsonify(error="not_found"), 404
+    g.db.delete(row)
+    g.db.commit()
+    return jsonify(ok=True)
+
+
+# --- Discord scheduled events (Phase 4 native) ----------------------------------------
+EVENT_TYPES = {"external", "voice", "stage"}
+
+
+@content_bp.get("/api/guilds/<int:guild_id>/events")
+@login_required
+def list_events(guild_id: int):
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return err
+    rows = (
+        g.db.query(GuildEvent)
+        .filter(GuildEvent.guild_id == guild_id)
+        .order_by(GuildEvent.start_at.desc())
+        .limit(50)
+        .all()
+    )
+    return jsonify(events=[r.to_dict() for r in rows])
+
+
+@content_bp.post("/api/guilds/<int:guild_id>/events")
+@login_required
+def create_event(guild_id: int):
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return err
+    body = request.get_json(silent=True) or {}
+    name = str(body.get("name") or "").strip()[:100]
+    entity_type = body.get("entity_type") if body.get("entity_type") in EVENT_TYPES else "external"
+    start_at = _parse_dt(body.get("start_at"))
+    end_at = _parse_dt(body.get("end_at")) if body.get("end_at") else None
+    channel_id = body.get("channel_id")
+    location = str(body.get("location") or "").strip()[:200]
+
+    if not name or start_at is None:
+        return jsonify(error="name_and_start_required"), 400
+    if start_at <= datetime.utcnow():
+        return jsonify(error="start_must_be_in_future"), 400
+    if entity_type in ("voice", "stage") and not (channel_id and str(channel_id).isdigit()):
+        return jsonify(error="channel_required_for_voice_events"), 400
+    if entity_type == "external" and not location:
+        return jsonify(error="location_required_for_external_events"), 400
+    if end_at is not None and end_at <= start_at:
+        end_at = None
+
+    try:
+        remind = max(0, min(1440, int(body.get("remind_minutes", 15))))
+    except (TypeError, ValueError):
+        remind = 15
+    reminder_channel = body.get("reminder_channel_id")
+
+    row = GuildEvent(
+        guild_id=guild_id, name=name,
+        description=str(body.get("description") or "").strip()[:1000],
+        entity_type=entity_type,
+        channel_id=int(channel_id) if channel_id and str(channel_id).isdigit() else None,
+        location=location or None,
+        start_at=start_at, end_at=end_at,
+        remind_minutes=remind,
+        reminder_channel_id=(int(reminder_channel)
+                             if reminder_channel and str(reminder_channel).isdigit() else None),
+        created_by=g.user_id,
+    )
+    g.db.add(row)
+    g.db.commit()
+    return jsonify(event=row.to_dict()), 201
+
+
+@content_bp.delete("/api/guilds/<int:guild_id>/events/<int:eid>")
+@login_required
+def delete_event(guild_id: int, eid: int):
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return err
+    row = g.db.get(GuildEvent, eid)
+    if row is None or row.guild_id != guild_id:
+        return jsonify(error="not_found"), 404
+    if row.status == "created" and row.discord_event_id:
+        # The bot owns the Discord-side delete; flag it and keep the row until done.
+        row.needs_delete = True
+        row.needs_create = False
+        g.db.commit()
+        return jsonify(event=row.to_dict())
     g.db.delete(row)
     g.db.commit()
     return jsonify(ok=True)

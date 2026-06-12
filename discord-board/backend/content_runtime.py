@@ -9,7 +9,7 @@ import time
 from datetime import datetime, timedelta
 
 from database import SessionLocal
-from models import AutoResponse, Poll, ScheduledMessage
+from models import AutoResponse, GuildEvent, Poll, ScheduledMessage
 
 RECURRENCE_DELTAS = {
     "hourly": timedelta(hours=1),
@@ -132,6 +132,142 @@ def record_poll_results(poll_id: int, results: dict | None) -> None:
             return
         row.status = "ended"
         row.results = results or {}
+        db.commit()
+    finally:
+        db.close()
+        SessionLocal.remove()
+
+
+# --- Discord scheduled events (Phase 4 native) ---------------------------------------
+def _event_dict(r: GuildEvent) -> dict:
+    return {"id": r.id, "guild_id": r.guild_id, "name": r.name or "",
+            "description": r.description or "", "entity_type": r.entity_type or "external",
+            "channel_id": r.channel_id, "location": r.location,
+            "start_at": r.start_at, "end_at": r.end_at,
+            "remind_minutes": r.remind_minutes or 0,
+            "reminder_channel_id": r.reminder_channel_id,
+            "discord_event_id": r.discord_event_id}
+
+
+def events_to_create(served_guild_ids: list[int]) -> list[dict]:
+    if not served_guild_ids:
+        return []
+    db = SessionLocal()
+    try:
+        rows = (
+            db.query(GuildEvent)
+            .filter(GuildEvent.needs_create.is_(True), GuildEvent.status == "pending",
+                    GuildEvent.start_at > datetime.utcnow(),
+                    GuildEvent.guild_id.in_(served_guild_ids))
+            .limit(10)
+            .all()
+        )
+        return [_event_dict(r) for r in rows]
+    finally:
+        db.close()
+        SessionLocal.remove()
+
+
+def events_to_delete(served_guild_ids: list[int]) -> list[dict]:
+    if not served_guild_ids:
+        return []
+    db = SessionLocal()
+    try:
+        rows = (
+            db.query(GuildEvent)
+            .filter(GuildEvent.needs_delete.is_(True),
+                    GuildEvent.discord_event_id.isnot(None),
+                    GuildEvent.guild_id.in_(served_guild_ids))
+            .limit(10)
+            .all()
+        )
+        return [_event_dict(r) for r in rows]
+    finally:
+        db.close()
+        SessionLocal.remove()
+
+
+def events_to_remind(served_guild_ids: list[int]) -> list[dict]:
+    """Created events whose reminder window just opened (start still ahead)."""
+    if not served_guild_ids:
+        return []
+    db = SessionLocal()
+    try:
+        now = datetime.utcnow()
+        rows = (
+            db.query(GuildEvent)
+            .filter(GuildEvent.status == "created", GuildEvent.reminded.is_(False),
+                    GuildEvent.remind_minutes > 0,
+                    GuildEvent.reminder_channel_id.isnot(None),
+                    GuildEvent.start_at > now,
+                    GuildEvent.guild_id.in_(served_guild_ids))
+            .limit(25)
+            .all()
+        )
+        due = [r for r in rows
+               if (r.start_at - now) <= timedelta(minutes=r.remind_minutes or 0)]
+        return [_event_dict(r) for r in due]
+    finally:
+        db.close()
+        SessionLocal.remove()
+
+
+def mark_event_created(event_id: int, discord_event_id, error: str | None = None) -> None:
+    db = SessionLocal()
+    try:
+        row = db.get(GuildEvent, event_id)
+        if row is None:
+            return
+        row.needs_create = False
+        if discord_event_id is None:
+            row.status = "failed"
+            row.error = (error or "could not create the event")[:200]
+        else:
+            row.discord_event_id = int(discord_event_id)
+            row.status = "created"
+            row.error = None
+        db.commit()
+    finally:
+        db.close()
+        SessionLocal.remove()
+
+
+def mark_event_reminded(event_id: int) -> None:
+    db = SessionLocal()
+    try:
+        row = db.get(GuildEvent, event_id)
+        if row is not None:
+            row.reminded = True
+            db.commit()
+    finally:
+        db.close()
+        SessionLocal.remove()
+
+
+def mark_event_deleted(event_id: int) -> None:
+    db = SessionLocal()
+    try:
+        row = db.get(GuildEvent, event_id)
+        if row is not None:
+            row.needs_delete = False
+            row.status = "cancelled"
+            db.commit()
+    finally:
+        db.close()
+        SessionLocal.remove()
+
+
+def finish_past_events(served_guild_ids: list[int]) -> None:
+    """Flip created events whose start time passed to done (no Discord calls)."""
+    if not served_guild_ids:
+        return
+    db = SessionLocal()
+    try:
+        (db.query(GuildEvent)
+         .filter(GuildEvent.status == "created",
+                 GuildEvent.start_at <= datetime.utcnow(),
+                 GuildEvent.guild_id.in_(served_guild_ids))
+         .update({GuildEvent.status: "done"}, synchronize_session=False))
         db.commit()
     finally:
         db.close()
