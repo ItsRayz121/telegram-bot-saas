@@ -114,6 +114,17 @@ AUTO_PUBLISH_DEFAULTS = {
 }
 
 
+# Boost tracking (Phase 4 native): thank-you post + extra reward role + XP when
+# a member boosts. Stored in GuildSettings.extra["boosts"].
+BOOSTS_DEFAULTS = {
+    "enabled": False,
+    "channel_id": None,         # None = system channel
+    "message": "🎉 {user} just boosted the server! We're at {count} boosts — thank you! 💜",
+    "role_id": None,            # extra reward role on top of Discord's native booster role
+    "xp_bonus": 0,              # one-time XP per boost (0 = off; needs leveling enabled)
+}
+
+
 def get_or_create(db, guild_id: int) -> GuildSettings:
     """Return the guild's settings row, creating a defaulted one if missing."""
     row = db.get(GuildSettings, guild_id)

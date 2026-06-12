@@ -38,6 +38,7 @@ import guild_sync
 import invite_tracking
 import leveling
 import automod_sync
+import boosts
 import mod_commands
 import moderation
 import moderation_runtime
@@ -1087,6 +1088,15 @@ class CoreMixin:
             member.guild, cfg["leave_channel_id"],
             settings_mod.render_message(cfg["leave_message"], member=member, guild=member.guild),
         )
+
+    async def on_member_update(self, before: discord.Member,
+                               after: discord.Member) -> None:
+        # Boost tracking (Phase 4 native): premium_since transitions only.
+        if before.premium_since == after.premium_since:
+            return
+        if not serves(self, after.guild.id):
+            return
+        await boosts.handle_member_update(self, before, after)
 
     # --- automation engine (Phase 13) -------------------------------------------
     async def _run_workflows(self, trigger_type: str, guild: discord.Guild, *,

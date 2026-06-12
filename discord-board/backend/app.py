@@ -12,6 +12,7 @@ from admin_api import admin_bp
 from auth import auth_bp
 from automation_api import automation_bp
 from billing_api import billing_bp
+from boosts_api import boosts_bp
 from campaigns_api import campaigns_bp
 from config import Config
 from content_api import content_bp
@@ -62,6 +63,7 @@ def create_app() -> Flask:
     app.register_blueprint(self_roles_bp)
     app.register_blueprint(tickets_bp)
     app.register_blueprint(starboard_bp)
+    app.register_blueprint(boosts_bp)
     app.register_blueprint(leveling_bp)
     app.register_blueprint(campaigns_bp)
     app.register_blueprint(billing_bp)

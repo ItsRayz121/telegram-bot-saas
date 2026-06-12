@@ -206,7 +206,11 @@ Ranked by impact-per-effort:
    servers, sliding 10/hour/channel budget honoring Discord's cap. Config in
    `GuildSettings.extra["auto_publish"]` (empty channel list = all announcement channels),
    GET/PUT `/auto-publish`, hook at the top of on_message before the bot skip.
-9. **Boost tracking** (Engagement) — thank-you message + booster role + XP on server boost.
+9. ✅ **Boost tracking** (Engagement › Boosts, 2026-06-12) — on_member_update
+   premium_since transitions: thank-you post ({user}/{server}/{count}), extra reward
+   role (dangerous-permission roles refused, removed on unboost), one-time XP via the
+   ledger (reason "boost"). Config in `GuildSettings.extra["boosts"]`, `boosts.py` +
+   `boosts_api.py`.
 10. **Scheduled events integration** (Engagement) — create Discord server events from the
     dashboard; remind attendees.
 11. **Thread auto-management** (Automation) — auto-thread on posts in chosen channels,

@@ -1,6 +1,6 @@
 /**
  * Engagement area subtabs (Telegizer-parity IA): Raids · Invite Links ·
- * Tickets · Starboard. (The Campaigns subtab reuses CampaignsTab directly.)
+ * Tickets · Starboard · Boosts. (The Campaigns subtab reuses CampaignsTab directly.)
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import {
@@ -425,6 +425,81 @@ export function StarboardSubtab({ guildId, channels = [] }) {
                 </Typography>
               )}
             </Stack>
+          </CardContent></Card>
+        </Grid>
+      )}
+    </Grid>
+  );
+}
+
+// ── Boosts: thank-you post + reward role + XP on server boost ─────────────────
+export function BoostsSubtab({ guildId, channels = [], roles = [] }) {
+  const textChannels = channels.filter((c) => TEXT_TYPES.has(c.type));
+  const [cfg, setCfg] = useState(null);
+  const [error, setError] = useState(null);
+  const [saved, setSaved] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    guildizerApi.get(`/api/guilds/${guildId}/boosts`)
+      .then(({ data }) => { if (alive) setCfg(data); })
+      .catch(() => { if (alive) setError('Failed to load boost settings.'); });
+    return () => { alive = false; };
+  }, [guildId]);
+
+  const set = (patch) => { setSaved(false); setCfg((c) => ({ ...c, ...patch })); };
+
+  async function save() {
+    setBusy(true);
+    try {
+      const { data } = await guildizerApi.put(`/api/guilds/${guildId}/boosts`, cfg);
+      setCfg(data); setSaved(true); setError(null);
+    } catch { setError('Save failed.'); }
+    setBusy(false);
+  }
+
+  if (cfg === null && !error) return <Box sx={{ display: 'grid', placeItems: 'center', py: 4 }}><CircularProgress /></Box>;
+
+  return (
+    <Grid container spacing={2}>
+      {error && <Grid item xs={12}><Alert severity="warning" onClose={() => setError(null)}>{error}</Alert></Grid>}
+
+      {cfg && (
+        <Grid item xs={12} md={7}>
+          <Card variant="outlined"><CardContent>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
+              <Typography variant="subtitle1" fontWeight={700}>🚀 Boost tracking</Typography>
+              <FormControlLabel sx={{ mr: 0 }} label="Enabled"
+                control={<Switch checked={!!cfg.enabled} onChange={(e) => set({ enabled: e.target.checked })} />} />
+            </Stack>
+            <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+              When someone boosts, the bot says thanks, can grant an extra reward role
+              (on top of Discord's native booster role), and can award bonus XP. The
+              reward role is removed when the boost ends.
+            </Typography>
+            <TextField fullWidth multiline minRows={2} size="small" margin="dense" label="Thank-you message"
+              value={cfg.message || ''} inputProps={{ maxLength: 1500 }}
+              onChange={(e) => set({ message: e.target.value })}
+              helperText="Placeholders: {user} {server} {count}" />
+            <TextField select fullWidth size="small" margin="dense" label="Post in channel"
+              value={cfg.channel_id || ''} onChange={(e) => set({ channel_id: e.target.value || null })}>
+              <MenuItem value="">— system channel —</MenuItem>
+              {textChannels.map((c) => <MenuItem key={c.id} value={c.id}># {c.name}</MenuItem>)}
+            </TextField>
+            <TextField select fullWidth size="small" margin="dense" label="Extra reward role"
+              value={cfg.role_id || ''} onChange={(e) => set({ role_id: e.target.value || null })}
+              helperText="Roles with moderation/management permissions are never granted.">
+              <MenuItem value="">— none —</MenuItem>
+              {roles.map((r) => <MenuItem key={r.id} value={r.id}>@ {r.name}</MenuItem>)}
+            </TextField>
+            <TextField type="number" size="small" margin="dense" fullWidth label="XP bonus per boost (0 = off)"
+              value={cfg.xp_bonus ?? 0} inputProps={{ min: 0, max: 10000 }}
+              onChange={(e) => set({ xp_bonus: Number(e.target.value) })}
+              helperText="Needs leveling enabled (Members → XP & Roles)." />
+            <Button variant="contained" size="small" sx={{ mt: 1 }} disabled={busy} onClick={save}>
+              {saved ? 'Saved ✓' : 'Save'}
+            </Button>
           </CardContent></Card>
         </Grid>
       )}
