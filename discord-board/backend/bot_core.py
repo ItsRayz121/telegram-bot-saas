@@ -167,6 +167,24 @@ def _sentiment_emoji(text: str) -> str | None:
     return None
 
 
+# Discord caps crossposts at 10 per channel per hour; track a sliding window so
+# a chatty announcement channel degrades to "first 10 publish" instead of 429s.
+_publish_times: dict[int, list[float]] = {}
+
+
+def _publish_budget_ok(channel_id: int) -> bool:
+    now = time.monotonic()
+    times = [t for t in _publish_times.get(channel_id, []) if now - t < 3600]
+    if len(times) >= 10:
+        _publish_times[channel_id] = times
+        return False
+    times.append(now)
+    _publish_times[channel_id] = times
+    if len(_publish_times) > 1000:
+        _publish_times.clear()
+    return True
+
+
 def _build_scheduled_embed(cfg: dict) -> discord.Embed:
     """Render a sanitized scheduler embed dict (content_api._clean_embed)."""
     try:
@@ -347,6 +365,13 @@ class CoreMixin:
                 if cfg and (cfg.get("auto_clean") or {}).get("join_messages"):
                     await governor.safe(message.delete(), what="auto-clean join message")
             return
+        # Auto-publish announcement-channel posts to follower servers (Phase 4
+        # native). Runs before the bot skip so our own scheduled posts publish too.
+        if (getattr(message.channel, "type", None) == discord.ChannelType.news
+                and message.type in (discord.MessageType.default, discord.MessageType.reply)
+                and not message.flags.crossposted
+                and serves(self, message.guild.id)):
+            await self._maybe_auto_publish(message)
         if message.author.bot:
             return
         if not serves(self, message.guild.id):
@@ -1604,6 +1629,34 @@ class CoreMixin:
         finally:
             db.close()
             SessionLocal.remove()
+
+    @staticmethod
+    def _load_auto_publish(guild_id):
+        db = SessionLocal()
+        try:
+            row = db.get(GuildSettings, guild_id)
+            if row is None:
+                return None
+            return {**settings_mod.AUTO_PUBLISH_DEFAULTS,
+                    **((row.extra or {}).get("auto_publish") or {})}
+        finally:
+            db.close()
+            SessionLocal.remove()
+
+    async def _maybe_auto_publish(self, message: discord.Message) -> None:
+        """Crosspost an announcement-channel message when configured. News
+        channels are low-traffic, so the per-message config read is fine."""
+        cfg = await asyncio.to_thread(self._load_auto_publish, message.guild.id)
+        if not cfg or not cfg.get("enabled"):
+            return
+        wanted = [str(c) for c in (cfg.get("channel_ids") or [])]
+        if wanted and str(message.channel.id) not in wanted:
+            return
+        if not _publish_budget_ok(message.channel.id):
+            log.warning("auto-publish budget exhausted for channel %s (10/hour)",
+                        message.channel.id)
+            return
+        await governor.safe(message.publish(), what="announcement auto-publish")
 
     @staticmethod
     def _load_leveling(guild_id):

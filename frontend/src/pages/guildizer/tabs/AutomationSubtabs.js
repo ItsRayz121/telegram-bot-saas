@@ -5,7 +5,10 @@
  * independent and deep-linkable.
  */
 import React, { useCallback, useEffect, useState } from 'react';
-import { Box, CircularProgress, Alert } from '@mui/material';
+import {
+  Box, CircularProgress, Alert, Card, CardContent, Typography, Switch,
+  FormControlLabel, TextField, MenuItem, Button, Snackbar,
+} from '@mui/material';
 import guildizerApi from '../../../services/guildizerApi';
 import { SchedulerCard, PollsCard, AutoResponsesCard } from './ContentTab';
 import { WorkflowsCard, MirrorsCard, WebhooksCard } from './AutomationTab';
@@ -29,6 +32,64 @@ function Loading() {
   return <Box sx={{ display: 'grid', placeItems: 'center', py: 4 }}><CircularProgress /></Box>;
 }
 
+// Announcement (news) channels can crosspost to follower servers.
+const ANNOUNCEMENT_TYPE = 5;
+
+function AutoPublishCard({ guildId, channels = [] }) {
+  const announcementChannels = channels.filter((c) => c.type === ANNOUNCEMENT_TYPE);
+  const [cfg, setCfg] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    guildizerApi.get(`/api/guilds/${guildId}/auto-publish`)
+      .then(({ data }) => setCfg(data))
+      .catch(() => setError('Failed to load auto-publish settings.'));
+  }, [guildId]);
+
+  async function save() {
+    setSaving(true); setError(null);
+    try {
+      const { data } = await guildizerApi.put(`/api/guilds/${guildId}/auto-publish`, cfg);
+      setCfg(data); setSaved(true);
+    } catch { setError('Save failed.'); } finally { setSaving(false); }
+  }
+
+  if (!cfg) return error ? <Alert severity="warning" sx={{ mt: 2 }}>{error}</Alert> : null;
+  return (
+    <Card variant="outlined" sx={{ mt: 2 }}><CardContent>
+      <Typography variant="subtitle1" fontWeight={700} mb={1}>📣 Auto-publish announcements</Typography>
+      <FormControlLabel control={<Switch checked={!!cfg.enabled} onChange={(e) => setCfg((c) => ({ ...c, enabled: e.target.checked }))} />}
+        label="Publish posts in announcement channels to follower servers automatically" />
+      <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+        Applies to Announcement-type channels only (Discord caps publishing at 10 posts per
+        channel per hour). Scheduled messages the bot posts there are published too.
+      </Typography>
+      {announcementChannels.length === 0 ? (
+        <Typography variant="body2" color="text.secondary">
+          This server has no announcement channels yet — convert one in Discord via
+          Edit Channel → Announcement Channel.
+        </Typography>
+      ) : (
+        <TextField select fullWidth size="small" margin="dense" label="Channels (empty = all announcement channels)"
+          SelectProps={{ multiple: true }} value={cfg.channel_ids || []}
+          onChange={(e) => setCfg((c) => ({ ...c, channel_ids: e.target.value }))}>
+          {announcementChannels.map((c) => <MenuItem key={c.id} value={c.id}># {c.name}</MenuItem>)}
+        </TextField>
+      )}
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+        {error && <Alert severity="error" sx={{ py: 0, mr: 2 }}>{error}</Alert>}
+        <Button variant="contained" size="small" onClick={save} disabled={saving}>
+          {saving ? 'Saving…' : 'Save'}
+        </Button>
+      </Box>
+      <Snackbar open={saved} autoHideDuration={2000} onClose={() => setSaved(false)} message="Saved"
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }} />
+    </CardContent></Card>
+  );
+}
+
 export function SchedulerSubtab({ guildId, channels = [] }) {
   const textChannels = channels.filter((c) => TEXT_TYPES.has(c.type));
   const [messages, reload, error] = useList(guildId, 'scheduled-messages', 'messages');
@@ -37,6 +98,7 @@ export function SchedulerSubtab({ guildId, channels = [] }) {
     <>
       {error && <Alert severity="warning" sx={{ mb: 2 }}>{error}</Alert>}
       <SchedulerCard guildId={guildId} messages={messages} channels={textChannels} onChanged={reload} />
+      <AutoPublishCard guildId={guildId} channels={channels} />
     </>
   );
 }

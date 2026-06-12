@@ -105,6 +105,15 @@ STARBOARD_DEFAULTS = {
 }
 
 
+# Auto-publish announcement-channel posts to follower servers (Phase 4 native).
+# Stored in GuildSettings.extra["auto_publish"]; empty channel_ids = every
+# announcement channel in the guild.
+AUTO_PUBLISH_DEFAULTS = {
+    "enabled": False,
+    "channel_ids": [],
+}
+
+
 def get_or_create(db, guild_id: int) -> GuildSettings:
     """Return the guild's settings row, creating a defaulted one if missing."""
     row = db.get(GuildSettings, guild_id)

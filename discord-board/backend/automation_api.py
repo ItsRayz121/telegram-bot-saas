@@ -25,6 +25,7 @@ from flask import Blueprint, g, jsonify, request
 import automation_runtime
 import access
 import plan_limits
+import settings as settings_mod
 import urlguard
 from auth import login_required
 from config import Config
@@ -83,6 +84,47 @@ def _clean_actions(raw) -> list[dict]:
             item["url"] = url
         out.append(item)
     return out
+
+
+# --- auto-publish announcements (Phase 4 native) ------------------------------------
+def _auto_publish_public(extra: dict | None) -> dict:
+    return {**settings_mod.AUTO_PUBLISH_DEFAULTS,
+            **((extra or {}).get("auto_publish") or {})}
+
+
+@automation_bp.get("/api/guilds/<int:guild_id>/auto-publish")
+@login_required
+def get_auto_publish(guild_id: int):
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return err
+    row = settings_mod.get_or_create(g.db, guild_id)
+    g.db.commit()
+    return jsonify(_auto_publish_public(row.extra))
+
+
+@automation_bp.put("/api/guilds/<int:guild_id>/auto-publish")
+@login_required
+def update_auto_publish(guild_id: int):
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return err
+    body = request.get_json(silent=True) or {}
+    row = settings_mod.get_or_create(g.db, guild_id)
+    cfg = _auto_publish_public(row.extra)
+
+    if "enabled" in body:
+        cfg["enabled"] = bool(body["enabled"])
+    if "channel_ids" in body:
+        cfg["channel_ids"] = [str(c).strip() for c in (body["channel_ids"] or [])
+                              if str(c).strip().isdigit()][:25]
+
+    extra = dict(row.extra or {})
+    extra["auto_publish"] = cfg
+    row.extra = extra
+    settings_mod.touch(row)
+    g.db.commit()
+    return jsonify(cfg)
 
 
 # --- workflows ---------------------------------------------------------------------

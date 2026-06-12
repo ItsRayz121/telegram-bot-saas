@@ -201,8 +201,11 @@ Ranked by impact-per-effort:
    embed (title/text/color/image/thumbnail/footer) on scheduled messages, embed-only
    posts allowed. `ScheduledMessage.embed` JSON column (startup self-heal), sanitized
    in `content_api._clean_embed`, rendered by `_build_scheduled_embed` in the content loop.
-8. **Auto-publish announcements** (Automation) — auto-publish posts in announcement channels
-   to follower servers.
+8. ✅ **Auto-publish announcements** (Automation › Scheduler, 2026-06-12) — crossposts
+   announcement-channel messages (including the bot's own scheduled posts) to follower
+   servers, sliding 10/hour/channel budget honoring Discord's cap. Config in
+   `GuildSettings.extra["auto_publish"]` (empty channel list = all announcement channels),
+   GET/PUT `/auto-publish`, hook at the top of on_message before the bot skip.
 9. **Boost tracking** (Engagement) — thank-you message + booster role + XP on server boost.
 10. **Scheduled events integration** (Engagement) — create Discord server events from the
     dashboard; remind attendees.
