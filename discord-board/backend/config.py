@@ -52,8 +52,10 @@ class Config:
     # panel using their existing telegizer.com email login (NO Discord login).
     # We trust the main site as the identity provider by validating the caller's
     # token against its own /api/auth/me — so we never import Telegizer code or
-    # share a database; we just call its public endpoint. TELEGIZER_API_URL is
-    # that site's API base (e.g. https://telegizer.com). Empty = bridge disabled.
+    # share a database; we just call its public endpoint. TELEGIZER_API_URL must
+    # be the main BACKEND API base, i.e. https://api.telegizer.com — NOT the
+    # www/frontend host https://telegizer.com (that's Vercel, which has no /api
+    # route and will 404, silently disabling the bridge). Empty = bridge disabled.
     TELEGIZER_API_URL = os.getenv("TELEGIZER_API_URL", "").rstrip("/")
 
     # Fernet key for encrypting custom-bot tokens at rest (crypto.py).
