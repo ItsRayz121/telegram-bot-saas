@@ -1,19 +1,25 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, Navigate } from 'react-router-dom';
+import { useParams, Navigate, useNavigate } from 'react-router-dom';
 import {
   Box, Grid, Card, CardContent, Typography, Button, Chip, Stack, Alert,
   Table, TableHead, TableBody, TableRow, TableCell, TextField, List, ListItem, ListItemText,
+  LinearProgress, ToggleButtonGroup, ToggleButton,
 } from '@mui/material';
 import {
   Groups, SmartToy, WorkspacePremium, People, Campaign, Verified,
-  Shield, Bolt, ConstructionRounded,
+  Shield, Bolt, ConstructionRounded, AttachMoney, Flag,
 } from '@mui/icons-material';
+import {
+  ResponsiveContainer, LineChart, Line, AreaChart, Area,
+  XAxis, YAxis, CartesianGrid, Tooltip as ReTooltip, Legend,
+} from 'recharts';
 import guildizerApi from '../../../services/guildizerApi';
 import {
-  StatCard, SectionTitle, EmptyRow, fmtDateTime,
+  StatCard, SectionTitle, EmptyRow, StatusChip, fmtDateTime, fmtDate, usd,
 } from '../../../components/guildizer/GuildizerAdminKit';
 import {
   GUILDIZER_ADMIN_CATEGORIES, findGuildizerAdminItem, DEFAULT_GUILDIZER_ADMIN_KEY,
+  guildizerAdminPath,
 } from '../../../config/guildizerAdminNav';
 import { useGuildizerAdmin } from '../../../contexts/GuildizerAdminContext';
 import { PALETTE } from '../../../theme';
@@ -21,43 +27,150 @@ import { PALETTE } from '../../../theme';
 const PAGE_SX = { maxWidth: 1400, mx: 'auto', px: { xs: 2, md: 3 }, py: 2.5 };
 
 // ── Overview / Dashboard ─────────────────────────────────────────────────────
+// `to` = drill-down section key (canonical path resolved via guildizerAdminPath).
 const STAT_TILES = [
-  { key: 'guilds_total', label: 'Servers', icon: Groups, color: PALETTE.blue },
-  { key: 'guilds_with_bot', label: 'Bot installed', icon: SmartToy, color: PALETTE.cyan },
-  { key: 'guilds_pro', label: 'Pro servers', icon: WorkspacePremium, color: PALETTE.green },
-  { key: 'users_total', label: 'Users', icon: People, color: PALETTE.purple },
-  { key: 'members_total', label: 'Members', icon: People, color: PALETTE.blue },
-  { key: 'campaigns_active', label: 'Active campaigns', icon: Campaign, color: PALETTE.amber },
-  { key: 'submissions_verified', label: 'Verified proofs', icon: Verified, color: PALETTE.green },
-  { key: 'protection_events_total', label: 'Protection events', icon: Shield, color: PALETTE.red },
+  { key: 'guilds_total', label: 'Servers', icon: Groups, color: PALETTE.blue, to: 'servers' },
+  { key: 'guilds_with_bot', label: 'Bot installed', icon: SmartToy, color: PALETTE.cyan, to: 'servers' },
+  { key: 'guilds_pro', label: 'Pro servers', icon: WorkspacePremium, color: PALETTE.green, to: 'servers' },
+  { key: 'users_total', label: 'Users', icon: People, color: PALETTE.purple, to: 'users' },
+  { key: 'members_total', label: 'Members', icon: People, color: PALETTE.blue, to: 'users' },
+  { key: 'campaigns_active', label: 'Active campaigns', icon: Campaign, color: PALETTE.amber, to: 'campaigns' },
+  { key: 'submissions_verified', label: 'Verified proofs', icon: Verified, color: PALETTE.green, to: 'proof' },
+  { key: 'protection_events_total', label: 'Protection events', icon: Shield, color: PALETTE.red, to: 'event-log' },
   { key: 'subscriptions_active', label: 'Active subs', icon: WorkspacePremium, color: PALETTE.green },
   { key: 'xp_events_total', label: 'XP grants', icon: Bolt, color: PALETTE.cyan },
 ];
 
+const REVENUE_TILES = [
+  { key: 'mrr', label: 'MRR', color: PALETTE.green, money: true },
+  { key: 'arr', label: 'ARR', color: PALETTE.green, money: true },
+  { key: 'this_month', label: 'This month', color: PALETTE.blue, money: true },
+  { key: 'last_month', label: 'Last month', color: PALETTE.purple, money: true },
+  { key: 'total_all_time', label: 'All time', color: PALETTE.cyan, money: true },
+  { key: 'active_count', label: 'Active subs', color: PALETTE.amber },
+];
+
+function ChartCard({ title, action, children, height = 240 }) {
+  return (
+    <Card variant="outlined" sx={{ height: '100%' }}>
+      <CardContent>
+        <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>
+          <Typography variant="subtitle1" fontWeight={700}>{title}</Typography>
+          {action}
+        </Stack>
+        <Box sx={{ height }}>{children}</Box>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ChartEmpty({ label }) {
+  return (
+    <Box sx={{ height: '100%', display: 'grid', placeItems: 'center' }}>
+      <Typography variant="body2" color="text.secondary">{label}</Typography>
+    </Box>
+  );
+}
+
 function DashboardSection() {
+  const navigate = useNavigate();
   const [overview, setOverview] = useState(null);
   const [guilds, setGuilds] = useState([]);
   const [events, setEvents] = useState([]);
+  const [revenue, setRevenue] = useState(null);
+  const [growth, setGrowth] = useState(null);
+  const [growthDays, setGrowthDays] = useState(30);
   const [days, setDays] = useState(30);
 
   const loadGuilds = () => guildizerApi.get('/api/admin/guilds').then(({ data }) => setGuilds(data.guilds)).catch(() => {});
   useEffect(() => {
     guildizerApi.get('/api/admin/overview').then(({ data }) => setOverview(data)).catch(() => {});
     guildizerApi.get('/api/admin/events?limit=30').then(({ data }) => setEvents(data.events)).catch(() => {});
+    guildizerApi.get('/api/admin/revenue').then(({ data }) => setRevenue(data)).catch(() => {});
     loadGuilds();
   }, []);
 
+  useEffect(() => {
+    guildizerApi.get(`/api/admin/growth?days=${growthDays}`).then(({ data }) => setGrowth(data)).catch(() => {});
+  }, [growthDays]);
+
   const setPlan = (guildId, plan) =>
     guildizerApi.post(`/api/admin/guilds/${guildId}/plan`, { plan, days }).then(loadGuilds).catch(() => {});
+
+  const go = (key) => key && navigate(guildizerAdminPath(key));
 
   return (
     <>
       <Grid container spacing={1.5} mb={3}>
         {STAT_TILES.map((t) => (
           <Grid item xs={6} sm={4} md={2.4} key={t.key}>
-            <StatCard value={overview?.[t.key] ?? 0} label={t.label} icon={t.icon} color={t.color} />
+            <StatCard value={overview?.[t.key] ?? 0} label={t.label} icon={t.icon} color={t.color}
+              onClick={t.to ? () => go(t.to) : undefined} />
           </Grid>
         ))}
+      </Grid>
+
+      {/* Revenue */}
+      <SectionTitle sx={{ mt: 0 }}>Revenue</SectionTitle>
+      <Grid container spacing={1.5} mb={3}>
+        {REVENUE_TILES.map((t) => (
+          <Grid item xs={6} sm={4} md={2} key={t.key}>
+            <StatCard
+              value={revenue ? (t.money ? usd(revenue[t.key]) : revenue[t.key] ?? 0) : '…'}
+              label={t.label} color={t.color} icon={t.money ? AttachMoney : WorkspacePremium} />
+          </Grid>
+        ))}
+      </Grid>
+
+      {/* Charts */}
+      <Grid container spacing={2} mb={3}>
+        <Grid item xs={12} md={5}>
+          <ChartCard title="Monthly revenue" height={240}>
+            {revenue?.monthly_trend?.some((m) => m.revenue > 0) ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={revenue.monthly_trend} margin={{ top: 6, right: 12, bottom: 0, left: -16 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                  <XAxis dataKey="month" tick={{ fontSize: 11 }} stroke="rgba(255,255,255,0.4)" />
+                  <YAxis tick={{ fontSize: 11 }} stroke="rgba(255,255,255,0.4)" />
+                  <ReTooltip formatter={(v) => [usd(v), 'Revenue']}
+                    contentStyle={{ background: '#1a1d29', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }} />
+                  <Line type="monotone" dataKey="revenue" stroke={PALETTE.green} strokeWidth={2} dot={{ r: 3 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : <ChartEmpty label="No revenue recorded yet." />}
+          </ChartCard>
+        </Grid>
+        <Grid item xs={12} md={7}>
+          <ChartCard title="Activity growth" height={240}
+            action={
+              <ToggleButtonGroup size="small" exclusive value={growthDays}
+                onChange={(_, v) => v && setGrowthDays(v)}>
+                {[7, 30, 90].map((d) => <ToggleButton key={d} value={d} sx={{ px: 1.25, py: 0.25 }}>{d}d</ToggleButton>)}
+              </ToggleButtonGroup>
+            }>
+            {growth?.series?.length ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={growth.series} margin={{ top: 6, right: 12, bottom: 0, left: -16 }}>
+                  <defs>
+                    <linearGradient id="gzMsg" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={PALETTE.blue} stopOpacity={0.5} />
+                      <stop offset="95%" stopColor={PALETTE.blue} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                  <XAxis dataKey="day" tick={{ fontSize: 10 }} stroke="rgba(255,255,255,0.4)"
+                    tickFormatter={(d) => d.slice(5)} />
+                  <YAxis tick={{ fontSize: 11 }} stroke="rgba(255,255,255,0.4)" />
+                  <ReTooltip contentStyle={{ background: '#1a1d29', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Area type="monotone" dataKey="messages" stroke={PALETTE.blue} fill="url(#gzMsg)" strokeWidth={2} />
+                  <Area type="monotone" dataKey="joins" stroke={PALETTE.green} fillOpacity={0} strokeWidth={2} />
+                  <Area type="monotone" dataKey="leaves" stroke={PALETTE.red} fillOpacity={0} strokeWidth={2} />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : <ChartEmpty label="No activity recorded yet." />}
+          </ChartCard>
+        </Grid>
       </Grid>
 
       <Card variant="outlined" sx={{ mb: 3 }}><CardContent>
@@ -352,6 +465,118 @@ function AuditSection() {
   );
 }
 
+// ── Overview / Proof Metrics (overview/proof) ────────────────────────────────
+function ProofMetricsSection() {
+  const [pm, setPm] = useState(null);
+  useEffect(() => { guildizerApi.get('/api/admin/proof-metrics?days=30').then(({ data }) => setPm(data)).catch(() => {}); }, []);
+  if (!pm) return null;
+  const reviewed = pm.verified + pm.rejected;
+  return (
+    <>
+      <Grid container spacing={1.5} mb={3}>
+        <Grid item xs={6} sm={4} md={2}><StatCard value={pm.total} label="Submissions" icon={Verified} color={PALETTE.blue} /></Grid>
+        <Grid item xs={6} sm={4} md={2}><StatCard value={pm.verified} label="Verified" icon={Verified} color={PALETTE.green} /></Grid>
+        <Grid item xs={6} sm={4} md={2}><StatCard value={pm.pending} label="Pending" color={PALETTE.amber} /></Grid>
+        <Grid item xs={6} sm={4} md={2}><StatCard value={pm.rejected} label="Rejected" color={PALETTE.red} /></Grid>
+        <Grid item xs={6} sm={4} md={2}><StatCard value={`${pm.approval_rate}%`} label="Approval rate" color={PALETTE.cyan} /></Grid>
+        <Grid item xs={6} sm={4} md={2}><StatCard value={pm.rewards_granted.toLocaleString()} label="Rewards granted" icon={Bolt} color={PALETTE.purple} /></Grid>
+      </Grid>
+
+      <Card variant="outlined" sx={{ mb: 3 }}><CardContent>
+        <Typography variant="subtitle1" fontWeight={700} mb={1}>Review funnel · last {pm.days}d ({pm.submissions_window} new)</Typography>
+        {reviewed === 0
+          ? <Typography variant="body2" color="text.secondary">No reviewed submissions yet.</Typography>
+          : (
+            <>
+              <LinearProgress variant="determinate" value={pm.approval_rate}
+                sx={{ height: 8, borderRadius: 4, mb: 1, '& .MuiLinearProgress-bar': { bgcolor: PALETTE.green } }} />
+              <Typography variant="caption" color="text.secondary">
+                {pm.verified} verified / {reviewed} reviewed
+              </Typography>
+            </>
+          )}
+      </CardContent></Card>
+
+      <Card variant="outlined"><CardContent>
+        <Typography variant="subtitle1" fontWeight={700} mb={1}>Recent submissions</Typography>
+        <Table size="small">
+          <TableHead><TableRow>
+            <TableCell>User</TableCell><TableCell>Campaign</TableCell><TableCell>Status</TableCell>
+            <TableCell align="right">Reward</TableCell><TableCell align="right">When</TableCell>
+          </TableRow></TableHead>
+          <TableBody>
+            {pm.recent.length === 0 && <EmptyRow colSpan={5} label="No submissions yet." />}
+            {pm.recent.map((s) => (
+              <TableRow key={s.id} hover>
+                <TableCell>{s.username || s.user_id}</TableCell>
+                <TableCell>#{s.campaign_id}</TableCell>
+                <TableCell><StatusChip label={s.status} /></TableCell>
+                <TableCell align="right">{s.reward_granted || 0}</TableCell>
+                <TableCell align="right"><Typography variant="caption" color="text.disabled">{fmtDateTime(s.created_at)}</Typography></TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent></Card>
+    </>
+  );
+}
+
+// ── Overview / Reports (overview/reports) ────────────────────────────────────
+function ReportsSection() {
+  const [data, setData] = useState(null);
+  const [filter, setFilter] = useState('');
+  const load = (status) => {
+    const qs = status ? `?status=${status}` : '';
+    guildizerApi.get(`/api/admin/reports${qs}`).then(({ data: d }) => setData(d)).catch(() => {});
+  };
+  useEffect(() => { load(filter); }, [filter]);
+  if (!data) return null;
+  const c = data.counts;
+  return (
+    <>
+      <Grid container spacing={1.5} mb={3}>
+        <Grid item xs={6} sm={3}><StatCard value={c.total} label="Total reports" icon={Flag} color={PALETTE.blue} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard value={c.open} label="Open" color={PALETTE.amber} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard value={c.actioned} label="Actioned" color={PALETTE.green} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard value={c.dismissed} label="Dismissed" color={PALETTE.red} /></Grid>
+      </Grid>
+
+      <Card variant="outlined"><CardContent>
+        <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>
+          <Typography variant="subtitle1" fontWeight={700}>Report queue</Typography>
+          <ToggleButtonGroup size="small" exclusive value={filter} onChange={(_, v) => setFilter(v ?? '')}>
+            <ToggleButton value="" sx={{ px: 1.25, py: 0.25 }}>All</ToggleButton>
+            <ToggleButton value="open" sx={{ px: 1.25, py: 0.25 }}>Open</ToggleButton>
+            <ToggleButton value="actioned" sx={{ px: 1.25, py: 0.25 }}>Actioned</ToggleButton>
+            <ToggleButton value="dismissed" sx={{ px: 1.25, py: 0.25 }}>Dismissed</ToggleButton>
+          </ToggleButtonGroup>
+        </Stack>
+        <Table size="small">
+          <TableHead><TableRow>
+            <TableCell>Reporter</TableCell><TableCell>Target</TableCell><TableCell>Reason</TableCell>
+            <TableCell>Status</TableCell><TableCell align="right">When</TableCell>
+          </TableRow></TableHead>
+          <TableBody>
+            {data.reports.length === 0 && <EmptyRow colSpan={5} label="No reports." />}
+            {data.reports.map((r) => (
+              <TableRow key={r.id} hover>
+                <TableCell>{r.reporter_name || r.reporter_id}</TableCell>
+                <TableCell>{r.target_name || r.target_id || '—'}</TableCell>
+                <TableCell sx={{ maxWidth: 280 }}>
+                  <Typography variant="body2" noWrap title={r.reason || ''}>{r.reason || '—'}</Typography>
+                </TableCell>
+                <TableCell><StatusChip label={r.status} /></TableCell>
+                <TableCell align="right"><Typography variant="caption" color="text.disabled">{fmtDate(r.created_at)}</Typography></TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent></Card>
+    </>
+  );
+}
+
 // ── Placeholder for sections built in later phases ───────────────────────────
 function Placeholder({ label }) {
   return (
@@ -365,6 +590,8 @@ function Placeholder({ label }) {
 
 const SECTION_COMPONENTS = {
   dashboard: DashboardSection,
+  proof: ProofMetricsSection,
+  reports: ReportsSection,
   ai: AiManagementSection,
   bothealth: BotHealthSection,
   'feature-usage': FeatureUsageSection,

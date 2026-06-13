@@ -14,7 +14,9 @@ from models import (
     Campaign,
     CampaignSubmission,
     Guild,
+    GuildDailyStat,
     Member,
+    ModReport,
     ProtectionEvent,
     Subscription,
     User,
@@ -180,6 +182,156 @@ def events():
         .all()
     )
     return jsonify(events=[{**e.to_dict(), "guild_id": str(e.guild_id)} for e in rows])
+
+
+# --- Phase 2 (admin parity): Overview category data ---
+def _month_floor(dt: datetime) -> datetime:
+    return dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+
+def _month_prev(dt: datetime) -> datetime:
+    return dt.replace(year=dt.year - 1, month=12) if dt.month == 1 else dt.replace(month=dt.month - 1)
+
+
+def _month_next(dt: datetime) -> datetime:
+    return dt.replace(year=dt.year + 1, month=1) if dt.month == 12 else dt.replace(month=dt.month + 1)
+
+
+@admin_bp.get("/api/admin/revenue")
+@admin_required
+def revenue():
+    """Subscription revenue rollup. `amount` is whole USD per period; MRR
+    normalizes every active subscription to a 30-day month."""
+    active = g.db.query(Subscription).filter(Subscription.status == "active").all()
+
+    def _mrr(sub) -> float:
+        days = sub.period_days or 30
+        return (sub.amount or 0) * 30.0 / days if days else 0.0
+
+    mrr = sum(_mrr(s) for s in active)
+    total_all_time = int(
+        g.db.query(func.coalesce(func.sum(Subscription.amount), 0))
+        .filter(Subscription.status == "active")
+        .scalar() or 0
+    )
+
+    def _gross(since, until=None) -> int:
+        q = g.db.query(func.coalesce(func.sum(Subscription.amount), 0)).filter(
+            Subscription.status == "active", Subscription.activated_at >= since)
+        if until is not None:
+            q = q.filter(Subscription.activated_at < until)
+        return int(q.scalar() or 0)
+
+    month_start = _month_floor(datetime.utcnow())
+    prev_start = _month_prev(month_start)
+
+    months, cursor = [], month_start
+    for _ in range(6):
+        months.append(cursor)
+        cursor = _month_prev(cursor)
+    trend = [{"month": m.strftime("%b"), "revenue": _gross(m, _month_next(m))}
+             for m in reversed(months)]
+
+    recent = (
+        g.db.query(Subscription)
+        .filter(Subscription.status == "active")
+        .order_by(Subscription.created_at.desc())
+        .limit(10)
+        .all()
+    )
+    return jsonify(
+        mrr=round(mrr, 2), arr=round(mrr * 12, 2),
+        this_month=_gross(month_start), last_month=_gross(prev_start, month_start),
+        total_all_time=total_all_time, active_count=len(active),
+        monthly_trend=trend,
+        recent=[{**s.to_dict(), "guild_id": str(s.guild_id)} for s in recent],
+    )
+
+
+@admin_bp.get("/api/admin/growth")
+@admin_required
+def growth():
+    """Platform-wide daily activity series (messages / joins / leaves) summed
+    across all guilds, for the trailing window."""
+    days = _as_int(request.args.get("days", 30), 30, 1, 180)
+    cutoff = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
+    rows = (
+        g.db.query(
+            GuildDailyStat.day,
+            func.coalesce(func.sum(GuildDailyStat.messages), 0),
+            func.coalesce(func.sum(GuildDailyStat.joins), 0),
+            func.coalesce(func.sum(GuildDailyStat.leaves), 0),
+        )
+        .filter(GuildDailyStat.day >= cutoff)
+        .group_by(GuildDailyStat.day)
+        .order_by(GuildDailyStat.day)
+        .all()
+    )
+    return jsonify(days=days, series=[
+        {"day": d, "messages": int(m), "joins": int(j), "leaves": int(l)}
+        for d, m, j, l in rows
+    ])
+
+
+@admin_bp.get("/api/admin/reports")
+@admin_required
+def reports():
+    """Moderation report queue (ModReport) with per-status counts."""
+    status = request.args.get("status")
+    limit = _as_int(request.args.get("limit", 100), 100, 1, 500)
+    q = g.db.query(ModReport)
+    if status in ("open", "actioned", "dismissed"):
+        q = q.filter(ModReport.status == status)
+    rows = q.order_by(ModReport.created_at.desc()).limit(limit).all()
+    counts = dict(
+        g.db.query(ModReport.status, func.count(ModReport.id))
+        .group_by(ModReport.status).all()
+    )
+    return jsonify(
+        reports=[{**r.to_dict(), "guild_id": str(r.guild_id)} for r in rows],
+        counts={
+            "open": int(counts.get("open", 0)),
+            "actioned": int(counts.get("actioned", 0)),
+            "dismissed": int(counts.get("dismissed", 0)),
+            "total": int(sum(counts.values())),
+        },
+    )
+
+
+@admin_bp.get("/api/admin/proof-metrics")
+@admin_required
+def proof_metrics():
+    """Campaign proof-submission funnel: verified / pending / rejected, approval
+    rate, rewards granted, and the latest submissions."""
+    days = _as_int(request.args.get("days", 30), 30, 1, 180)
+    since = datetime.utcnow() - timedelta(days=days)
+    counts = dict(
+        g.db.query(CampaignSubmission.status, func.count(CampaignSubmission.id))
+        .group_by(CampaignSubmission.status).all()
+    )
+    verified = int(counts.get("verified", 0))
+    rejected = int(counts.get("rejected", 0))
+    pending = int(counts.get("pending", 0))
+    total = int(sum(counts.values()))
+    reviewed = verified + rejected
+    rewards = int(
+        g.db.query(func.coalesce(func.sum(CampaignSubmission.reward_granted), 0)).scalar() or 0
+    )
+    window = int(
+        g.db.query(func.count(CampaignSubmission.id))
+        .filter(CampaignSubmission.created_at >= since).scalar() or 0
+    )
+    recent = (
+        g.db.query(CampaignSubmission)
+        .order_by(CampaignSubmission.created_at.desc())
+        .limit(15).all()
+    )
+    return jsonify(
+        days=days, total=total, verified=verified, rejected=rejected, pending=pending,
+        approval_rate=round(verified / reviewed * 100, 1) if reviewed else 0.0,
+        rewards_granted=rewards, submissions_window=window,
+        recent=[s.to_dict() for s in recent],
+    )
 
 
 @admin_bp.get("/api/admin/promo-codes")
