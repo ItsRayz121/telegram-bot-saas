@@ -354,6 +354,31 @@ function AiUsageSection() {
         <Grid item xs={4}><StatCard value={ai.input_tokens.toLocaleString()} label="Input tokens" /></Grid>
         <Grid item xs={4}><StatCard value={ai.output_tokens.toLocaleString()} label="Output tokens" /></Grid>
       </Grid>
+      {ai.series?.length > 0 && (
+        <Box sx={{ height: 200, mt: 1, mb: 1 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={ai.series} margin={{ top: 6, right: 12, bottom: 0, left: -8 }}>
+              <defs>
+                <linearGradient id="gzAiIn" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={PALETTE.blue} stopOpacity={0.5} />
+                  <stop offset="95%" stopColor={PALETTE.blue} stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="gzAiOut" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={PALETTE.purple} stopOpacity={0.5} />
+                  <stop offset="95%" stopColor={PALETTE.purple} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+              <XAxis dataKey="day" tick={{ fontSize: 10 }} stroke="rgba(255,255,255,0.4)" tickFormatter={(d) => d.slice(5)} />
+              <YAxis tick={{ fontSize: 11 }} stroke="rgba(255,255,255,0.4)" />
+              <ReTooltip contentStyle={{ background: '#1a1d29', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Area type="monotone" dataKey="input" stroke={PALETTE.blue} fill="url(#gzAiIn)" strokeWidth={2} />
+              <Area type="monotone" dataKey="output" stroke={PALETTE.purple} fill="url(#gzAiOut)" strokeWidth={2} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </Box>
+      )}
       <SectionTitle>Top servers by tokens</SectionTitle>
       <List dense>
         {ai.top_guilds.map((g) => (
@@ -833,6 +858,60 @@ function DiagnosticsSection() {
   );
 }
 
+// ── Product Analytics / Campaigns (analytics/campaigns) ──────────────────────
+function CampaignsSection() {
+  const navigate = useNavigate();
+  const [rows, setRows] = useState(null);
+  useEffect(() => { guildizerApi.get('/api/admin/campaigns').then(({ data }) => setRows(data.campaigns)).catch(() => {}); }, []);
+  if (!rows) return null;
+  return (
+    <Card variant="outlined"><CardContent>
+      <Typography variant="subtitle1" fontWeight={700} mb={1}>Campaigns ({rows.length})</Typography>
+      <Table size="small">
+        <TableHead><TableRow>
+          <TableCell>Title</TableCell><TableCell>Type</TableCell><TableCell>Status</TableCell>
+          <TableCell align="right">Submissions</TableCell>
+        </TableRow></TableHead>
+        <TableBody>
+          {rows.length === 0 && <EmptyRow colSpan={4} label="No campaigns." />}
+          {rows.map((c) => (
+            <TableRow key={c.id} hover sx={{ cursor: 'pointer' }}
+              onClick={() => navigate(`/guildizer/admin/analytics/campaigns/${c.id}`)}>
+              <TableCell>{c.title}</TableCell>
+              <TableCell>{c.type}</TableCell>
+              <TableCell><StatusChip label={c.status} /></TableCell>
+              <TableCell align="right">{c.submissions}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </CardContent></Card>
+  );
+}
+
+// ── Product Analytics / Event Log (analytics/event-log) ──────────────────────
+const EVENT_KIND_COLOR = { protection: 'warning', feature: 'info' };
+function EventLogSection() {
+  const [events, setEvents] = useState(null);
+  useEffect(() => { guildizerApi.get('/api/admin/event-log?limit=80').then(({ data }) => setEvents(data.events)).catch(() => {}); }, []);
+  if (!events) return null;
+  return (
+    <Card variant="outlined"><CardContent>
+      <Typography variant="subtitle1" fontWeight={700} mb={1}>Platform event timeline</Typography>
+      {events.length === 0 && <Typography variant="body2" color="text.secondary">No events recorded yet.</Typography>}
+      <List dense>
+        {events.map((e) => (
+          <ListItem key={e.id} disableGutters
+            secondaryAction={<Typography variant="caption" color="text.disabled">{fmtDateTime(e.created_at)}</Typography>}>
+            <Chip size="small" variant="outlined" color={EVENT_KIND_COLOR[e.kind] || 'default'} label={e.label} sx={{ mr: 1 }} />
+            <ListItemText primary={e.detail} primaryTypographyProps={{ variant: 'body2', noWrap: true }} />
+          </ListItem>
+        ))}
+      </List>
+    </CardContent></Card>
+  );
+}
+
 // ── Placeholder for sections built in later phases ───────────────────────────
 function Placeholder({ label }) {
   return (
@@ -857,6 +936,8 @@ const SECTION_COMPONENTS = {
   ai: AiManagementSection,
   bothealth: BotHealthSection,
   'feature-usage': FeatureUsageSection,
+  campaigns: CampaignsSection,
+  'event-log': EventLogSection,
   'ai-usage': AiUsageSection,
   roles: RolesSection,
   promo: PromoSection,

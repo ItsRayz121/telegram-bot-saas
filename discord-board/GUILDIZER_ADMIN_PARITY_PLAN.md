@@ -107,10 +107,10 @@ Roles, Compliance/Purge, Secrets). Backend already enforces super-only on those.
 - [x] Bot Health section (already shipped Phase 1); Diagnostics section
 - [x] Cross-check (py_compile + CI=false build, no new warnings) + commit + push
 
-### Phase 5 — Product Analytics
-- [ ] Feature Usage, AI Usage (charts), Event Log, Audit Log sections
-- [ ] Campaigns table + detail; Backend `GET /api/admin/campaigns/<id>`
-- [ ] Cross-check + commit + push
+### Phase 5 — Product Analytics ✅
+- [x] Feature Usage + Audit Log (shipped Phase 1); AI Usage now has a daily input/output token recharts area (extended `GET /api/admin/ai-usage` with `series`); new Event Log section over merged `GET /api/admin/event-log` (protection + feature-usage timeline)
+- [x] Campaigns table + routed `GuildizerAdminCampaignDetail` (Overview / Tasks / Submissions) at `analytics/campaigns/:campaignId`; Backend `GET /api/admin/campaigns/<id>` (definition + funnel + recent submissions)
+- [x] Cross-check (py_compile + CI=false build, no new warnings) + commit + push
 
 ### Phase 6 — Platform Settings
 - [ ] AI Management (rich, from ai-health + ai-usage), Pricing (read config), Configuration `[api]`, Secrets booleans `[api]`, System health `[api]`

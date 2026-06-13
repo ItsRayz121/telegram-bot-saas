@@ -88,6 +88,7 @@ import GuildizerAdminPanel from './pages/guildizer/admin/GuildizerAdminPanel';
 import GuildizerAdminUserDetail from './pages/guildizer/admin/GuildizerAdminUserDetail';
 import GuildizerAdminServerDetail from './pages/guildizer/admin/GuildizerAdminServerDetail';
 import GuildizerAdminCustomBotDetail from './pages/guildizer/admin/GuildizerAdminCustomBotDetail';
+import GuildizerAdminCampaignDetail from './pages/guildizer/admin/GuildizerAdminCampaignDetail';
 import AdminHub from './pages/AdminHub';
 
 // Pages — lazy loaded
@@ -311,6 +312,7 @@ export default function App() {
               <Route path="access/users/:userId" element={<GuildizerAdminUserDetail />} />
               <Route path="bots/servers/:guildId" element={<GuildizerAdminServerDetail />} />
               <Route path="bots/bot/:botId" element={<GuildizerAdminCustomBotDetail />} />
+              <Route path="analytics/campaigns/:campaignId" element={<GuildizerAdminCampaignDetail />} />
               <Route path=":category/:section" element={<GuildizerAdminPanel />} />
             </Route>
 

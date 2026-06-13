@@ -344,6 +344,71 @@ def campaigns():
     return jsonify(campaigns=out)
 
 
+@admin_bp.get("/api/admin/campaigns/<int:campaign_id>")
+@admin_required
+def campaign_detail(campaign_id: int):
+    """One campaign: definition + submission funnel + recent submissions."""
+    c = g.db.get(Campaign, campaign_id)
+    if c is None:
+        return jsonify(error="not_found"), 404
+    gd = g.db.get(Guild, c.guild_id)
+    counts = dict(
+        g.db.query(CampaignSubmission.status, func.count(CampaignSubmission.id))
+        .filter(CampaignSubmission.campaign_id == campaign_id)
+        .group_by(CampaignSubmission.status).all()
+    )
+    recent = (
+        g.db.query(CampaignSubmission)
+        .filter(CampaignSubmission.campaign_id == campaign_id)
+        .order_by(CampaignSubmission.created_at.desc())
+        .limit(25).all()
+    )
+    return jsonify(
+        campaign=c.to_dict(include_tasks=True),
+        guild={"id": str(c.guild_id), "name": gd.name if gd else None},
+        submissions={
+            "verified": int(counts.get("verified", 0)),
+            "pending": int(counts.get("pending", 0)),
+            "rejected": int(counts.get("rejected", 0)),
+            "total": int(sum(counts.values())),
+        },
+        recent=[s.to_dict() for s in recent],
+    )
+
+
+@admin_bp.get("/api/admin/event-log")
+@admin_required
+def event_log():
+    """Merged platform event timeline: protection actions + feature-usage events."""
+    from models import FeatureUsageEvent
+    limit = _as_int(request.args.get("limit", 60), 60, 10, 200)
+    prot = (
+        g.db.query(ProtectionEvent)
+        .order_by(ProtectionEvent.created_at.desc())
+        .limit(limit).all()
+    )
+    feat = (
+        g.db.query(FeatureUsageEvent)
+        .order_by(FeatureUsageEvent.created_at.desc())
+        .limit(limit).all()
+    )
+    items = [
+        {"kind": "protection", "id": f"p{e.id}", "label": e.category or "event",
+         "detail": f"{e.action or '—'}{' · ' + e.detail if e.detail else ''}",
+         "guild_id": str(e.guild_id),
+         "created_at": e.created_at.isoformat() + "Z" if e.created_at else None}
+        for e in prot
+    ] + [
+        {"kind": "feature", "id": f"f{e.id}", "label": e.feature,
+         "detail": "command run",
+         "guild_id": str(e.guild_id) if e.guild_id else None,
+         "created_at": e.created_at.isoformat() + "Z" if e.created_at else None}
+        for e in feat
+    ]
+    items.sort(key=lambda x: x["created_at"] or "", reverse=True)
+    return jsonify(events=items[:limit])
+
+
 @admin_bp.get("/api/admin/events")
 @admin_required
 def events():
@@ -785,8 +850,23 @@ def ai_usage():
         .limit(10)
         .all()
     )
+    # Daily token series (bucketed in Python to stay DB-agnostic across sqlite/pg).
+    rows = (
+        g.db.query(AITokenUsage.created_at, AITokenUsage.input_tokens, AITokenUsage.output_tokens)
+        .filter(AITokenUsage.created_at >= since)
+        .all()
+    )
+    buckets: dict[str, dict] = {}
+    for created, inp, out in rows:
+        if not created:
+            continue
+        day = created.strftime("%Y-%m-%d")
+        slot = buckets.setdefault(day, {"day": day, "input": 0, "output": 0})
+        slot["input"] += int(inp or 0)
+        slot["output"] += int(out or 0)
+    series = [buckets[d] for d in sorted(buckets)]
     return jsonify(days=days, input_tokens=int(totals[0]), output_tokens=int(totals[1]),
-                   calls=int(totals[2]),
+                   calls=int(totals[2]), series=series,
                    top_guilds=[{"guild_id": str(gid), "tokens": int(t)} for gid, t in top_guilds])
 
 
