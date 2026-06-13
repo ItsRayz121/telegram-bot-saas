@@ -122,11 +122,11 @@ Roles, Compliance/Purge, Secrets). Backend already enforces super-only on those.
 - [x] Announcements: new `AdminAnnouncement` model (auto-created by create_all, no migration) + `GET/POST/DELETE /api/admin/announcements` + `POST .../toggle`; Announcements section (compose w/ level, list, enable/disable, delete)
 - [x] Cross-check (py_compile + CI=false build, no new warnings) + commit + push
 
-### Phase 8 — Parity sweep & cleanup
-- [ ] Visual parity pass vs Telegizer (spacing, glow, StatCard, chips, breadcrumbs)
-- [ ] Mobile/responsive (Drawer, scrollable tabs), per-item permission gating
-- [ ] Retire old `GuildizerAdmin.js` (redirect `/guildizer/admin` → shell) — keep `AiHealthCard` logic folded into AI Management
-- [ ] Final cross-check + commit + push
+### Phase 8 — Parity sweep & cleanup ✅
+- [x] Visual parity: all sections use shared-theme StatCard / StatusChip / Field / chips + the caption breadcrumb; glow + sticky AppBar from the layout. All 24 sidebar sections now resolve to real components — zero Placeholders remain (the Placeholder stays only as a defensive fallback)
+- [x] Mobile/responsive already in place (sidebar mobile Drawer; routed detail pages use scrollable + allowScrollButtonsMobile tabs); per-item permission gating already enforced in the sidebar (`items.filter(i => can(i.superOnly))`) and the panel
+- [x] Retired old `GuildizerAdmin.js` (orphaned — `/guildizer/admin` already routes to the shell; its AI-health logic was folded into the AI Management section)
+- [x] Final cross-check (CI=false build) + commit + push
 
 ---
 
