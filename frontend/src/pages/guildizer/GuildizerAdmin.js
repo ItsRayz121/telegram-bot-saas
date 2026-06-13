@@ -101,6 +101,7 @@ export default function GuildizerAdmin() {
       </CardContent></Card>
 
       <Grid container spacing={2} mb={3}>
+        <Grid item xs={12} md={6}><AiHealthCard /></Grid>
         <Grid item xs={12} md={6}><FleetCard /></Grid>
         <Grid item xs={12} md={6}><UsageCard /></Grid>
         <Grid item xs={12} md={6}><PromoAdminCard /></Grid>
@@ -124,6 +125,63 @@ export default function GuildizerAdmin() {
   );
 }
 
+
+function AiHealthCard() {
+  const [data, setData] = useState(null);
+  const [ping, setPing] = useState(null);
+  const [testing, setTesting] = useState(false);
+
+  const load = () => guildizerApi.get('/api/admin/ai-health')
+    .then(({ data: d }) => setData(d)).catch(() => setData(null));
+  useEffect(() => { load(); }, []);
+
+  const runPing = async () => {
+    setTesting(true); setPing(null);
+    try {
+      const { data: d } = await guildizerApi.get('/api/admin/ai-health?ping=1');
+      setData(d); setPing(d.ping);
+    } catch {
+      setPing({ ok: false, error: 'request failed' });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  if (!data) return null;
+  const provLabel = { openrouter: 'OpenRouter', openai: 'OpenAI', anthropic: 'Anthropic' };
+  return (
+    <Card variant="outlined"><CardContent>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
+        <Typography variant="subtitle1" fontWeight={700}>AI provider health</Typography>
+        <Chip size="small" label={data.configured ? 'Configured' : 'No key'}
+          color={data.configured ? 'success' : 'warning'} variant="outlined" />
+      </Stack>
+      <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+        Rollup order: {data.chain.map((p) => provLabel[p] || p).join(' → ')}
+      </Typography>
+      <Stack direction="row" useFlexGap flexWrap="wrap" spacing={0.5} mb={1}>
+        {Object.entries(data.providers).map(([key, p]) => (
+          <Chip key={key} size="small" variant="outlined"
+            color={p.key_set ? 'success' : 'default'}
+            label={`${provLabel[key] || key}: ${p.key_set ? p.model : 'no key'}`} />
+        ))}
+      </Stack>
+      <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+        Vision (NSFW images): {data.vision.available ? `✓ ${data.vision.model}` : '✗ needs OpenAI key'}
+      </Typography>
+      <Button size="small" variant="contained" onClick={runPing} disabled={testing}>
+        {testing ? 'Testing…' : 'Test now (live ping)'}
+      </Button>
+      {ping && (
+        <Alert severity={ping.ok ? 'success' : 'error'} sx={{ mt: 1 }}>
+          {ping.ok
+            ? `Answered by ${provLabel[ping.provider_used] || ping.provider_used} (${ping.model}) in ${ping.latency_ms}ms · reply: "${ping.text}"`
+            : `Failed: ${ping.error || 'no provider responded'}`}
+        </Alert>
+      )}
+    </CardContent></Card>
+  );
+}
 
 function FleetCard() {
   const [data, setData] = useState(null);

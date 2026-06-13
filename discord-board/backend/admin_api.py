@@ -364,6 +364,23 @@ def ai_usage():
                    top_guilds=[{"guild_id": str(gid), "tokens": int(t)} for gid, t in top_guilds])
 
 
+@admin_bp.get("/api/admin/ai-health")
+@admin_required
+def ai_health():
+    """AI provider health for the admin panel. Returns a config snapshot (which
+    provider/chain/keys/models are active, no network call). Pass ?ping=1 to also
+    fire one live tiny call and report which provider answered + latency.
+
+    NB: this runs in the WEB service, so the AI env vars (GUILDIZER_AI_PROVIDER,
+    OPENROUTER_API_KEY, OPENAI_API_KEY, ...) must also be set here for it to
+    reflect what the bot worker sees."""
+    import ai
+    data = ai.status()
+    if request.args.get("ping") in ("1", "true", "yes"):
+        data["ping"] = ai.probe()
+    return jsonify(data)
+
+
 @admin_bp.post("/api/admin/users/<int:user_id>/purge")
 @admin_required
 def purge_user(user_id: int):

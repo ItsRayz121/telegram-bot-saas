@@ -261,6 +261,56 @@ def classify_promo(text: str, group_topic: str) -> tuple[str, AIResult] | None:
     return verdict, result
 
 
+def status() -> dict:
+    """Non-calling config snapshot for the admin AI-health panel: the active
+    provider, the rollup chain, which keys/models are set, and vision readiness.
+    Makes NO network call (free, instant)."""
+    return {
+        "provider": _provider(),
+        "chain": _provider_chain(),
+        "configured": is_configured(),
+        "max_tokens": Config.AI_MAX_TOKENS,
+        "providers": {
+            "openrouter": {"key_set": bool(Config.OPENROUTER_API_KEY),
+                           "model": _model_for("openrouter")},
+            "openai": {"key_set": bool(Config.OPENAI_API_KEY),
+                       "model": _model_for("openai")},
+            "anthropic": {"key_set": bool(Config.ANTHROPIC_API_KEY),
+                          "model": _model_for("anthropic")},
+        },
+        "vision": {
+            "available": bool(Config.OPENAI_API_KEY)
+            or (_provider() == "anthropic" and bool(Config.ANTHROPIC_API_KEY)),
+            "model": (Config.VISION_MODEL if Config.OPENAI_API_KEY
+                      else _model_for("anthropic") if _provider() == "anthropic" else None),
+        },
+    }
+
+
+def probe() -> dict:
+    """Live one-shot health check: walks the rollup chain and reports which
+    provider actually answered, the model, latency, tokens, and reply text.
+    Cheap (max_tokens=5). Use sparingly — it spends a real (tiny) AI call."""
+    import time
+    chain = _provider_chain()
+    t0 = time.perf_counter()
+    for provider in chain:
+        result = _attempt(provider, "You are a health check.",
+                          "Reply with the single word OK.", 5)
+        if result is not None and result.text:
+            return {
+                "ok": True, "provider_used": provider, "model": result.model,
+                "text": result.text, "chain": chain,
+                "latency_ms": int((time.perf_counter() - t0) * 1000),
+                "input_tokens": result.input_tokens, "output_tokens": result.output_tokens,
+            }
+    return {
+        "ok": False, "provider_used": None, "chain": chain,
+        "latency_ms": int((time.perf_counter() - t0) * 1000),
+        "error": "no_provider_responded — check keys/models in the service env",
+    }
+
+
 def check_image(image_url: str) -> tuple[str, AIResult] | None:
     """Vision moderation: 'nsfw' | 'ok'. Returns None when no vision-capable
     backend is available. Prefers OpenAI (gpt-4o-mini) whenever an OpenAI key is
