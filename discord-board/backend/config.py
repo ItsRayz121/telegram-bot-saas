@@ -17,9 +17,21 @@ class Config:
     # Empty -> a sensible default computed in discord_api.bot_invite_permissions().
     DISCORD_BOT_PERMISSIONS = os.getenv("DISCORD_BOT_PERMISSIONS", "")
 
-    # AI assistant (optional — /ask is graceful when unset)
-    ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-    AI_MODEL = os.getenv("GUILDIZER_AI_MODEL", "claude-haiku-4-5-20251001")
+    # AI assistant (optional — all AI features degrade gracefully when unset).
+    # Provider-agnostic: pick the backend via GUILDIZER_AI_PROVIDER.
+    #   openai      -> OpenAI Chat Completions (default; gpt-4o-mini does text + vision)
+    #   openrouter  -> OpenAI-compatible gateway (e.g. DeepSeek for cheap text)
+    #   anthropic   -> Claude (legacy / fallback)
+    AI_PROVIDER = os.getenv("GUILDIZER_AI_PROVIDER", "openai").strip().lower()
+    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+    OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+    ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")  # legacy provider
+    # Text model. Empty -> a sensible per-provider default (ai._text_model()).
+    AI_MODEL = os.getenv("GUILDIZER_AI_MODEL", "")
+    # Vision/NSFW image moderation always needs a vision-capable model. When an
+    # OpenAI key is present this model is used for images regardless of the text
+    # provider, so DeepSeek-on-OpenRouter users still get working image checks.
+    VISION_MODEL = os.getenv("GUILDIZER_VISION_MODEL", "gpt-4o-mini")
     AI_MAX_TOKENS = int(os.getenv("GUILDIZER_AI_MAX_TOKENS", "600"))
 
     # Billing — NOWPayments (reuse the account; separate webhook endpoint)
