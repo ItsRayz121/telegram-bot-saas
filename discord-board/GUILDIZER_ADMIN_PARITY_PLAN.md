@@ -100,12 +100,12 @@ Roles, Compliance/Purge, Secrets). Backend already enforces super-only on those.
 - [x] Roles & Access section (already shipped Phase 1); `GET /api/admin/referrals` (top inviters + recent joins) + Referrals section; `GET /api/admin/suspicious` (top offenders + category rollup) + Suspicious section
 - [x] Cross-check (py_compile + CI=false build, no new warnings) + commit + push
 
-### Phase 4 — Bots & Servers
-- [ ] `GuildizerAdminServers` table + routed `GuildizerAdminServerDetail` (Tabs: Overview, Members, Protection, Campaigns, Settings, Actions: plan/disable)
-- [ ] `GuildizerAdminCustomBots` table + routed `GuildizerAdminCustomBotDetail` (Tabs: Overview, Owner, Linked Servers, Health, Errors, Actions) — recharts
-- [ ] Backend: `GET /api/admin/custom-bots/<id>` detail
-- [ ] Bot Health section; Diagnostics section
-- [ ] Cross-check + commit + push
+### Phase 4 — Bots & Servers ✅
+- [x] `ServersSection` (searchable table) + routed `GuildizerAdminServerDetail` (Tabs: Overview, Members, Protection, Campaigns, Settings/Actions: plan grant/free) at `bots/servers/:guildId`; enriched `GET /api/admin/guilds/<id>` (owner, top_members, campaign_list)
+- [x] `CustomBotsSection` (fleet table) + routed `GuildizerAdminCustomBotDetail` (Tabs: Overview, Owner, Linked Servers, Health w/ recharts area, Errors, Actions: enable/disable) at `bots/bot/:botId`
+- [x] Backend: `GET /api/admin/custom-bots/<id>` detail (owner, linked guilds, health events + 14d daily series, errors); `POST .../status` enable/disable; `GET /api/admin/diagnostics`
+- [x] Bot Health section (already shipped Phase 1); Diagnostics section
+- [x] Cross-check (py_compile + CI=false build, no new warnings) + commit + push
 
 ### Phase 5 — Product Analytics
 - [ ] Feature Usage, AI Usage (charts), Event Log, Audit Log sections

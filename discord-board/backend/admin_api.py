@@ -88,8 +88,28 @@ def guild_detail(guild_id: int):
         .limit(20)
         .all()
     )
+    top_members = (
+        g.db.query(Member)
+        .filter(Member.guild_id == guild_id)
+        .order_by(Member.xp.desc())
+        .limit(20).all()
+    )
+    campaign_rows = (
+        g.db.query(Campaign)
+        .filter(Campaign.guild_id == guild_id)
+        .order_by(Campaign.created_at.desc())
+        .limit(20).all()
+    )
+    campaign_list = [
+        {"id": c.id, "title": c.title, "type": c.type, "status": c.status,
+         "submissions": _count(CampaignSubmission, CampaignSubmission.campaign_id == c.id)}
+        for c in campaign_rows
+    ]
+    owner = g.db.get(User, gd.owner_id) if gd.owner_id else None
     return jsonify(
         guild={**gd.to_dict(), "owner_id": str(gd.owner_id) if gd.owner_id else None},
+        owner=({"id": str(owner.id), "username": owner.username,
+                "avatar_url": owner.avatar_url()} if owner else None),
         members=_count(Member, Member.guild_id == guild_id),
         campaigns=_count(Campaign, Campaign.guild_id == guild_id),
         submissions=_count(CampaignSubmission, CampaignSubmission.campaign_id.in_(
@@ -97,6 +117,8 @@ def guild_detail(guild_id: int):
         )),
         protection_events=_count(ProtectionEvent, ProtectionEvent.guild_id == guild_id),
         recent_events=[e.to_dict() for e in recent],
+        top_members=[m.to_dict() for m in top_members],
+        campaign_list=campaign_list,
     )
 
 
@@ -615,6 +637,107 @@ def fleet():
         .all()
     )
     return jsonify(bots=out, events=[e.to_dict() for e in events])
+
+
+@admin_bp.get("/api/admin/custom-bots/<int:bot_id>")
+@admin_required
+def custom_bot_detail(bot_id: int):
+    """Full drill-down for one white-label bot: owner, linked servers, health
+    history + a daily connect/disconnect/error series for the chart."""
+    from models import BotHealthEvent, CustomBot, Guild
+    b = g.db.get(CustomBot, bot_id)
+    if b is None:
+        return jsonify(error="not_found"), 404
+    owner = g.db.get(User, b.owner_user_id) if b.owner_user_id else None
+    linked = (
+        g.db.query(Guild).filter(Guild.custom_bot_id == bot_id)
+        .order_by(Guild.member_count.desc()).all()
+    )
+    events = (
+        g.db.query(BotHealthEvent)
+        .filter(BotHealthEvent.custom_bot_id == bot_id)
+        .order_by(BotHealthEvent.created_at.desc())
+        .limit(80).all()
+    )
+    # 14-day daily rollup by event type, for the recharts area/line.
+    since = datetime.utcnow() - timedelta(days=14)
+    daily: dict[str, dict] = {}
+    for e in events:
+        if not e.created_at or e.created_at < since:
+            continue
+        day = e.created_at.strftime("%Y-%m-%d")
+        slot = daily.setdefault(day, {"day": day, "connect": 0, "disconnect": 0, "error": 0})
+        if e.event in ("error", "auth_failed"):
+            slot["error"] += 1
+        elif e.event == "disconnect":
+            slot["disconnect"] += 1
+        elif e.event == "connect":
+            slot["connect"] += 1
+    errors = [e for e in events if e.event in ("error", "auth_failed")]
+    return jsonify(
+        bot=b.to_dict(),
+        owner=({"id": str(owner.id), "username": owner.username,
+                "avatar_url": owner.avatar_url()} if owner else None),
+        linked_guilds=[
+            {"id": str(gd.id), "name": gd.name, "member_count": gd.member_count, "plan": gd.plan}
+            for gd in linked
+        ],
+        events=[e.to_dict() for e in events],
+        errors=[e.to_dict() for e in errors[:25]],
+        daily=[daily[d] for d in sorted(daily)],
+    )
+
+
+@admin_bp.post("/api/admin/custom-bots/<int:bot_id>/status")
+@admin_required
+def set_custom_bot_status(bot_id: int):
+    """Platform-admin enable/disable of a white-label bot. Flags needs_restart so
+    the fleet worker picks up the change."""
+    from admin import audit
+    from models import CustomBot
+    b = g.db.get(CustomBot, bot_id)
+    if b is None:
+        return jsonify(error="not_found"), 404
+    body = request.get_json(silent=True) or {}
+    status = body.get("status")
+    if status not in ("active", "disabled"):
+        return jsonify(error="status must be active or disabled"), 400
+    b.status = status
+    b.needs_restart = True
+    audit(g.db, g.user_id, "custom_bot_status", str(bot_id), f"status={status}")
+    g.db.commit()
+    return jsonify(b.to_dict())
+
+
+@admin_bp.get("/api/admin/diagnostics")
+@admin_required
+def diagnostics():
+    """Connectivity / intents health rollup for the Bots & Servers diagnostics tab."""
+    from models import BotHealthEvent, CustomBot
+    bots = g.db.query(CustomBot).all()
+    by_status = {"active": 0, "disabled": 0, "error": 0}
+    intents_issues = 0
+    for b in bots:
+        by_status[b.status] = by_status.get(b.status, 0) + 1
+        if b.status == "active" and not (b.intents_members and b.intents_message_content):
+            intents_issues += 1
+    since = datetime.utcnow() - timedelta(days=7)
+    recent_errors = (
+        g.db.query(BotHealthEvent)
+        .filter(BotHealthEvent.event.in_(("error", "auth_failed")),
+                BotHealthEvent.created_at >= since)
+        .order_by(BotHealthEvent.created_at.desc())
+        .limit(25).all()
+    )
+    return jsonify(
+        guilds_total=_count(Guild),
+        guilds_with_bot=_count(Guild, Guild.bot_present.is_(True)),
+        guilds_without_bot=_count(Guild, Guild.bot_present.is_(False)),
+        custom_bots_total=len(bots),
+        custom_bots_by_status=by_status,
+        intents_issues=intents_issues,
+        recent_errors=[e.to_dict() for e in recent_errors],
+    )
 
 
 @admin_bp.get("/api/admin/feature-usage")

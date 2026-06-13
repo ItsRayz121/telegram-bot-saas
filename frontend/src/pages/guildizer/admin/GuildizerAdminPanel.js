@@ -720,6 +720,119 @@ function SuspiciousSection() {
   );
 }
 
+// ── Bots & Servers / Servers (bots/servers) ─────────────────────────────────
+function ServersSection() {
+  const navigate = useNavigate();
+  const [guilds, setGuilds] = useState(null);
+  const [q, setQ] = useState('');
+  useEffect(() => { guildizerApi.get('/api/admin/guilds').then(({ data }) => setGuilds(data.guilds)).catch(() => {}); }, []);
+  if (!guilds) return null;
+  const needle = q.trim().toLowerCase();
+  const rows = needle ? guilds.filter((g2) => (g2.name || '').toLowerCase().includes(needle) || String(g2.id).includes(needle)) : guilds;
+  return (
+    <Card variant="outlined"><CardContent>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>
+        <Typography variant="subtitle1" fontWeight={700}>Servers ({rows.length})</Typography>
+        <TextField size="small" placeholder="Search name or ID…" value={q}
+          onChange={(e) => setQ(e.target.value)} sx={{ width: 240 }} />
+      </Stack>
+      <Table size="small">
+        <TableHead><TableRow>
+          <TableCell>Name</TableCell><TableCell align="right">Members</TableCell>
+          <TableCell>Plan</TableCell><TableCell>Bot</TableCell>
+        </TableRow></TableHead>
+        <TableBody>
+          {rows.length === 0 && <EmptyRow colSpan={4} label="No servers." />}
+          {rows.map((g2) => (
+            <TableRow key={g2.id} hover sx={{ cursor: 'pointer' }}
+              onClick={() => navigate(`/guildizer/admin/bots/servers/${g2.id}`)}>
+              <TableCell>{g2.name || g2.id}</TableCell>
+              <TableCell align="right">{g2.member_count}</TableCell>
+              <TableCell><Chip size="small" variant="outlined" label={g2.plan} color={g2.is_pro ? 'success' : 'default'} /></TableCell>
+              <TableCell>{g2.bot_present ? '✓' : '—'}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </CardContent></Card>
+  );
+}
+
+// ── Bots & Servers / Custom Bots (bots/bots) ─────────────────────────────────
+function CustomBotsSection() {
+  const navigate = useNavigate();
+  const [data, setData] = useState(null);
+  useEffect(() => { guildizerApi.get('/api/admin/fleet').then(({ data: d }) => setData(d)).catch(() => {}); }, []);
+  if (!data) return null;
+  return (
+    <Card variant="outlined"><CardContent>
+      <Typography variant="subtitle1" fontWeight={700} mb={1}>White-label fleet ({data.bots.length})</Typography>
+      <Table size="small">
+        <TableHead><TableRow>
+          <TableCell>Bot</TableCell><TableCell align="right">Servers</TableCell>
+          <TableCell>Intents</TableCell><TableCell>Status</TableCell>
+        </TableRow></TableHead>
+        <TableBody>
+          {data.bots.length === 0 && <EmptyRow colSpan={4} label="No custom bots connected." />}
+          {data.bots.map((b) => (
+            <TableRow key={b.id} hover sx={{ cursor: 'pointer' }}
+              onClick={() => navigate(`/guildizer/admin/bots/bot/${b.id}`)}>
+              <TableCell>@{b.bot_username}</TableCell>
+              <TableCell align="right">{b.linked_guild_count}</TableCell>
+              <TableCell>{b.intents_ok ? '✓' : '⚠'}</TableCell>
+              <TableCell><StatusChip label={b.status} /></TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </CardContent></Card>
+  );
+}
+
+// ── Bots & Servers / Diagnostics (bots/diagnostics) ──────────────────────────
+function DiagnosticsSection() {
+  const [d, setD] = useState(null);
+  useEffect(() => { guildizerApi.get('/api/admin/diagnostics').then(({ data }) => setD(data)).catch(() => {}); }, []);
+  if (!d) return null;
+  const bs = d.custom_bots_by_status || {};
+  return (
+    <>
+      <Grid container spacing={1.5} mb={3}>
+        <Grid item xs={6} sm={3}><StatCard value={d.guilds_with_bot} label="Servers with bot" icon={SmartToy} color={PALETTE.green} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard value={d.guilds_without_bot} label="Awaiting bot" color={PALETTE.amber} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard value={d.custom_bots_total} label="Custom bots" icon={SmartToy} color={PALETTE.blue} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard value={d.intents_issues} label="Intent issues" icon={Shield} color={d.intents_issues ? PALETTE.red : PALETTE.green} /></Grid>
+      </Grid>
+
+      <Card variant="outlined" sx={{ mb: 3 }}><CardContent>
+        <Typography variant="subtitle1" fontWeight={700} mb={1}>Fleet status</Typography>
+        <Stack direction="row" useFlexGap flexWrap="wrap" spacing={0.5}>
+          <Chip size="small" variant="outlined" color="success" label={`active · ${bs.active || 0}`} />
+          <Chip size="small" variant="outlined" label={`disabled · ${bs.disabled || 0}`} />
+          <Chip size="small" variant="outlined" color="error" label={`error · ${bs.error || 0}`} />
+        </Stack>
+      </CardContent></Card>
+
+      <Card variant="outlined"><CardContent>
+        <Typography variant="subtitle1" fontWeight={700} mb={1}>Recent connection errors (7d)</Typography>
+        {d.recent_errors.length === 0
+          ? <Typography variant="body2" color="text.secondary">No connection errors. 🎉</Typography>
+          : (
+            <List dense>
+              {d.recent_errors.map((e) => (
+                <ListItem key={e.id} disableGutters
+                  secondaryAction={<Typography variant="caption" color="text.disabled">{fmtDateTime(e.created_at)}</Typography>}>
+                  <Chip size="small" variant="outlined" color="error" label={e.event} sx={{ mr: 1 }} />
+                  <ListItemText primary={e.detail || '—'} primaryTypographyProps={{ variant: 'body2', noWrap: true }} />
+                </ListItem>
+              ))}
+            </List>
+          )}
+      </CardContent></Card>
+    </>
+  );
+}
+
 // ── Placeholder for sections built in later phases ───────────────────────────
 function Placeholder({ label }) {
   return (
@@ -738,6 +851,9 @@ const SECTION_COMPONENTS = {
   users: UsersSection,
   referrals: ReferralsSection,
   suspicious: SuspiciousSection,
+  servers: ServersSection,
+  bots: CustomBotsSection,
+  diagnostics: DiagnosticsSection,
   ai: AiManagementSection,
   bothealth: BotHealthSection,
   'feature-usage': FeatureUsageSection,
