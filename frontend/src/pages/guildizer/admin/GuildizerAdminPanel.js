@@ -15,7 +15,7 @@ import {
 } from 'recharts';
 import guildizerApi from '../../../services/guildizerApi';
 import {
-  StatCard, SectionTitle, EmptyRow, StatusChip, fmtDateTime, fmtDate, usd,
+  StatCard, SectionTitle, EmptyRow, StatusChip, Field, fmtDateTime, fmtDate, usd,
 } from '../../../components/guildizer/GuildizerAdminKit';
 import {
   GUILDIZER_ADMIN_CATEGORIES, findGuildizerAdminItem, DEFAULT_GUILDIZER_ADMIN_KEY,
@@ -912,6 +912,118 @@ function EventLogSection() {
   );
 }
 
+// ── Platform Settings / Pricing (platform/pricing) ───────────────────────────
+function PricingSection() {
+  const [cfg, setCfg] = useState(null);
+  useEffect(() => { guildizerApi.get('/api/admin/config').then(({ data }) => setCfg(data)).catch(() => {}); }, []);
+  if (!cfg) return null;
+  const p = cfg.pricing;
+  return (
+    <Card variant="outlined"><CardContent>
+      <Typography variant="subtitle1" fontWeight={700} mb={1.5}>Pro plan pricing</Typography>
+      <Grid container spacing={2}>
+        <Grid item xs={6} sm={3}><Field label="Price" value={`$${p.pro_price_usd}`} /></Grid>
+        <Grid item xs={6} sm={3}><Field label="Period" value={`${p.pro_period_days} days`} /></Grid>
+        <Grid item xs={6} sm={3}><Field label="Currency" value={p.currency.toUpperCase()} /></Grid>
+        <Grid item xs={6} sm={3}><Field label="Provider" value={p.provider} /></Grid>
+      </Grid>
+      <Typography variant="caption" color="text.secondary" display="block" mt={2}>
+        Set via the PRO_PRICE_USD / PRO_PERIOD_DAYS env vars (read-only here).
+      </Typography>
+    </CardContent></Card>
+  );
+}
+
+// ── Platform Settings / Configuration (platform/config) ──────────────────────
+function ConfigSection() {
+  const [cfg, setCfg] = useState(null);
+  useEffect(() => { guildizerApi.get('/api/admin/config').then(({ data }) => setCfg(data)).catch(() => {}); }, []);
+  if (!cfg) return null;
+  return (
+    <>
+      <Card variant="outlined" sx={{ mb: 2 }}><CardContent>
+        <Typography variant="subtitle1" fontWeight={700} mb={1.5}>AI</Typography>
+        <Grid container spacing={2}>
+          <Grid item xs={6} sm={3}><Field label="Provider" value={cfg.ai.provider} /></Grid>
+          <Grid item xs={6} sm={3}><Field label="Text model" value={cfg.ai.text_model} /></Grid>
+          <Grid item xs={6} sm={3}><Field label="Vision model" value={cfg.ai.vision_model} /></Grid>
+          <Grid item xs={6} sm={3}><Field label="Max tokens" value={cfg.ai.max_tokens} /></Grid>
+        </Grid>
+      </CardContent></Card>
+      <Card variant="outlined" sx={{ mb: 2 }}><CardContent>
+        <Typography variant="subtitle1" fontWeight={700} mb={1.5}>URLs & Discord</Typography>
+        <Grid container spacing={2}>
+          <Grid item xs={12} sm={6}><Field label="Frontend" value={cfg.urls.frontend} mono /></Grid>
+          <Grid item xs={12} sm={6}><Field label="Backend" value={cfg.urls.backend} mono /></Grid>
+          <Grid item xs={12} sm={6}><Field label="OAuth redirect" value={cfg.urls.redirect_uri} mono /></Grid>
+          <Grid item xs={6} sm={3}><Field label="Guildizer path" value={cfg.urls.guildizer_path} mono /></Grid>
+          <Grid item xs={6} sm={3}><Field label="Discord client ID" value={cfg.discord.client_id} mono /></Grid>
+        </Grid>
+      </CardContent></Card>
+      <Card variant="outlined"><CardContent>
+        <Typography variant="subtitle1" fontWeight={700} mb={1.5}>Session</Typography>
+        <Grid container spacing={2}>
+          <Grid item xs={6} sm={3}><Field label="Cookie" value={cfg.session.cookie_name} /></Grid>
+          <Grid item xs={6} sm={3}><Field label="Secure" value={cfg.session.secure ? 'Yes' : 'No'} /></Grid>
+          <Grid item xs={6} sm={3}><Field label="SameSite" value={cfg.session.samesite} /></Grid>
+          <Grid item xs={6} sm={3}><Field label="Max age" value={`${cfg.session.max_age_days}d`} /></Grid>
+        </Grid>
+      </CardContent></Card>
+    </>
+  );
+}
+
+// ── Platform Settings / Secrets & Keys (platform/secrets) — super only ───────
+function SecretsSection() {
+  const [data, setData] = useState(null);
+  useEffect(() => { guildizerApi.get('/api/admin/secrets').then(({ data: d }) => setData(d.secrets)).catch(() => setData([])); }, []);
+  if (!data) return null;
+  return (
+    <Card variant="outlined"><CardContent>
+      <Typography variant="subtitle1" fontWeight={700} mb={0.5}>Secrets & keys</Typography>
+      <Typography variant="caption" color="text.secondary" display="block" mb={1.5}>
+        Shows only whether each secret is configured — values are never returned.
+      </Typography>
+      <List dense>
+        {data.map((s) => (
+          <ListItem key={s.key} disableGutters
+            secondaryAction={<Chip size="small" variant="outlined" color={s.set ? 'success' : 'default'}
+              label={s.set ? 'set' : 'not set'} />}>
+            <ListItemText primary={<code>{s.key}</code>} />
+          </ListItem>
+        ))}
+        {data.length === 0 && <Typography variant="body2" color="text.secondary">Super-admin role required.</Typography>}
+      </List>
+    </CardContent></Card>
+  );
+}
+
+// ── Platform Settings / System (platform/system) ─────────────────────────────
+function SystemSection() {
+  const [sys, setSys] = useState(null);
+  useEffect(() => { guildizerApi.get('/api/admin/system').then(({ data }) => setSys(data)).catch(() => {}); }, []);
+  if (!sys) return null;
+  return (
+    <>
+      <Grid container spacing={1.5} mb={3}>
+        <Grid item xs={6} sm={3}><StatCard value={sys.db.ok ? 'Online' : 'Down'} label={`Database (${sys.db.dialect})`} color={sys.db.ok ? PALETTE.green : PALETTE.red} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard value={sys.ai.configured ? 'OK' : 'No key'} label="AI" color={sys.ai.configured ? PALETTE.green : PALETTE.amber} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard value={sys.billing.nowpayments_configured ? 'OK' : 'Off'} label="Billing" color={sys.billing.nowpayments_configured ? PALETTE.green : PALETTE.amber} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard value={sys.bot.token_set ? 'OK' : 'No token'} label="Bot token" color={sys.bot.token_set ? PALETTE.green : PALETTE.red} /></Grid>
+      </Grid>
+      <Card variant="outlined"><CardContent>
+        <Grid container spacing={2}>
+          <Grid item xs={6} sm={3}><Field label="Guilds" value={sys.db.guilds.toLocaleString()} /></Grid>
+          <Grid item xs={6} sm={3}><Field label="Users" value={sys.db.users.toLocaleString()} /></Grid>
+          <Grid item xs={6} sm={3}><Field label="Members" value={sys.db.members.toLocaleString()} /></Grid>
+          <Grid item xs={6} sm={3}><Field label="AI chain" value={(sys.ai.chain || []).join(' → ') || '—'} /></Grid>
+          <Grid item xs={12}><Field label="Server time (UTC)" value={fmtDateTime(sys.time_utc)} /></Grid>
+        </Grid>
+      </CardContent></Card>
+    </>
+  );
+}
+
 // ── Placeholder for sections built in later phases ───────────────────────────
 function Placeholder({ label }) {
   return (
@@ -939,6 +1051,10 @@ const SECTION_COMPONENTS = {
   campaigns: CampaignsSection,
   'event-log': EventLogSection,
   'ai-usage': AiUsageSection,
+  pricing: PricingSection,
+  config: ConfigSection,
+  secrets: SecretsSection,
+  system: SystemSection,
   roles: RolesSection,
   promo: PromoSection,
   audit: AuditSection,

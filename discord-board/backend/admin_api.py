@@ -887,6 +887,81 @@ def ai_health():
     return jsonify(data)
 
 
+# --- Phase 6 (admin parity): Platform Settings ---
+@admin_bp.get("/api/admin/config")
+@admin_required
+def admin_config():
+    """Non-secret configuration snapshot (pricing, AI, URLs, session). Never
+    returns secret values — see /api/admin/secrets for is-set booleans."""
+    from config import Config
+    return jsonify(
+        pricing={"pro_price_usd": Config.PRO_PRICE_USD, "pro_period_days": Config.PRO_PERIOD_DAYS,
+                 "currency": "usd", "provider": "nowpayments"},
+        ai={"provider": Config.AI_PROVIDER, "text_model": Config.AI_MODEL or "(provider default)",
+            "vision_model": Config.VISION_MODEL, "max_tokens": Config.AI_MAX_TOKENS},
+        urls={"frontend": Config.FRONTEND_URL, "backend": Config.BACKEND_URL,
+              "guildizer_path": Config.GUILDIZER_FRONTEND_PATH,
+              "redirect_uri": Config.DISCORD_REDIRECT_URI},
+        discord={"client_id": Config.DISCORD_CLIENT_ID or None,
+                 "bot_permissions": Config.DISCORD_BOT_PERMISSIONS or "(default)"},
+        session={"cookie_name": Config.SESSION_COOKIE_NAME, "secure": Config.SESSION_COOKIE_SECURE,
+                 "samesite": Config.SESSION_COOKIE_SAMESITE, "max_age_days": Config.SESSION_MAX_AGE // 86400},
+        admins={"env_super_ids": [str(i) for i in sorted(Config.ADMIN_USER_IDS)]},
+    )
+
+
+@admin_bp.get("/api/admin/secrets")
+@admin_required
+def admin_secrets():
+    """is-set booleans for every secret — never the values. Super-admin only."""
+    from admin import is_super
+    from config import Config
+    if not is_super(g.user_id):
+        return jsonify(error="super_admin_required"), 403
+    keys = {
+        "DISCORD_BOT_TOKEN": Config.DISCORD_BOT_TOKEN,
+        "DISCORD_CLIENT_SECRET": Config.DISCORD_CLIENT_SECRET,
+        "OPENAI_API_KEY": Config.OPENAI_API_KEY,
+        "OPENROUTER_API_KEY": Config.OPENROUTER_API_KEY,
+        "ANTHROPIC_API_KEY": Config.ANTHROPIC_API_KEY,
+        "NOWPAYMENTS_API_KEY": Config.NOWPAYMENTS_API_KEY,
+        "NOWPAYMENTS_IPN_SECRET": Config.NOWPAYMENTS_IPN_SECRET,
+        "GUILDIZER_ENCRYPTION_KEY": Config.ENCRYPTION_KEY,
+        "FLASK_SECRET_KEY": "" if Config.SECRET_KEY == "dev-secret-change-me" else Config.SECRET_KEY,
+        "DATABASE_URL": Config.DATABASE_URL,
+    }
+    return jsonify(secrets=[{"key": k, "set": bool(v)} for k, v in keys.items()])
+
+
+@admin_bp.get("/api/admin/system")
+@admin_required
+def admin_system():
+    """Web/worker/DB health, version, and core counts."""
+    from sqlalchemy import text
+
+    from config import Config
+    db_ok, dialect = True, "unknown"
+    try:
+        g.db.execute(text("SELECT 1"))
+        dialect = g.db.get_bind().dialect.name
+    except Exception:  # pragma: no cover - defensive
+        db_ok = False
+    try:
+        import ai
+        ai_status = ai.status()
+    except Exception:  # pragma: no cover
+        ai_status = {"configured": False, "chain": []}
+    return jsonify(
+        db={"ok": db_ok, "dialect": dialect,
+            "guilds": _count(Guild), "users": _count(User), "members": _count(Member)},
+        ai={"configured": bool(ai_status.get("configured")), "provider": Config.AI_PROVIDER,
+            "chain": ai_status.get("chain", [])},
+        billing={"nowpayments_configured": bool(Config.NOWPAYMENTS_API_KEY)},
+        bot={"token_set": bool(Config.DISCORD_BOT_TOKEN)},
+        time_utc=datetime.utcnow().isoformat() + "Z",
+    )
+
+
 @admin_bp.post("/api/admin/users/<int:user_id>/purge")
 @admin_required
 def purge_user(user_id: int):

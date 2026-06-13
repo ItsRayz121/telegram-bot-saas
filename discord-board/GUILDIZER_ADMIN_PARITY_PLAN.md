@@ -112,10 +112,10 @@ Roles, Compliance/Purge, Secrets). Backend already enforces super-only on those.
 - [x] Campaigns table + routed `GuildizerAdminCampaignDetail` (Overview / Tasks / Submissions) at `analytics/campaigns/:campaignId`; Backend `GET /api/admin/campaigns/<id>` (definition + funnel + recent submissions)
 - [x] Cross-check (py_compile + CI=false build, no new warnings) + commit + push
 
-### Phase 6 — Platform Settings
-- [ ] AI Management (rich, from ai-health + ai-usage), Pricing (read config), Configuration `[api]`, Secrets booleans `[api]`, System health `[api]`
-- [ ] Backend: `GET /api/admin/system`, `GET /api/admin/config`
-- [ ] Cross-check + commit + push
+### Phase 6 — Platform Settings ✅
+- [x] AI Management already rich (shipped Phase 1, ai-health + ai-usage); Pricing section (Pro price/period read from config); Configuration section (AI / URLs+Discord / Session snapshot); Secrets section (is-set booleans only, super-only); System section (DB/AI/billing/bot health + counts + server time)
+- [x] Backend: `GET /api/admin/config` (non-secret snapshot), `GET /api/admin/secrets` (booleans only, super-only), `GET /api/admin/system`
+- [x] Cross-check (py_compile + CI=false build, no new warnings) + commit + push
 
 ### Phase 7 — Compliance & Comms
 - [ ] Compliance (GDPR purge UI, super-only), Promo Codes, Announcements `[api/stub]` (+ model/endpoint if built)
