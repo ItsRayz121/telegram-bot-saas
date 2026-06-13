@@ -61,19 +61,38 @@ def _provider() -> str:
     return (Config.AI_PROVIDER or "openai").lower()
 
 
-def _text_model() -> str:
-    return Config.AI_MODEL or _DEFAULT_MODELS.get(_provider(), "gpt-4o-mini")
+def _provider_chain() -> list[str]:
+    """Ordered text-provider rollup: the configured provider first, then OpenAI as
+    an automatic fallback (when it isn't already primary and a key is set). So an
+    OpenRouter/DeepSeek setup tries DeepSeek first and quietly falls back to OpenAI
+    if DeepSeek errors or returns nothing."""
+    primary = _provider()
+    chain = [primary]
+    if primary != "openai" and Config.OPENAI_API_KEY:
+        chain.append("openai")
+    return chain
 
 
-def is_configured() -> bool:
-    """True if the selected text provider has a usable key."""
-    p = _provider()
+def _provider_configured(p: str) -> bool:
     if p == "openrouter":
         return bool(Config.OPENROUTER_API_KEY)
     if p == "anthropic":
         return bool(Config.ANTHROPIC_API_KEY)
-    # default: openai
     return bool(Config.OPENAI_API_KEY)
+
+
+def _model_for(provider: str) -> str:
+    """Model for a given provider. The GUILDIZER_AI_MODEL override only applies to
+    the configured primary provider — a fallback provider always uses its own
+    default (so a DeepSeek model id never leaks into an OpenAI fallback call)."""
+    if provider == _provider() and Config.AI_MODEL:
+        return Config.AI_MODEL
+    return _DEFAULT_MODELS.get(provider, "gpt-4o-mini")
+
+
+def is_configured() -> bool:
+    """True if ANY provider in the rollup chain has a usable key."""
+    return any(_provider_configured(p) for p in _provider_chain())
 
 
 # --- lazy clients ------------------------------------------------------------
@@ -119,11 +138,22 @@ def _get_anthropic_client():
 
 # --- endpoint resolution -----------------------------------------------------
 
-def _text_endpoint() -> tuple[str, str | None, dict | None]:
-    """(api_key, base_url, default_headers) for the OpenAI-compatible text path."""
-    if _provider() == "openrouter":
-        return Config.OPENROUTER_API_KEY, _OPENROUTER_BASE_URL, _OPENROUTER_HEADERS
-    return Config.OPENAI_API_KEY, None, None
+def _attempt(provider: str, system: str, prompt: str, max_tokens: int) -> AIResult | None:
+    """Run one text completion against a single provider. Returns None (never
+    raises) so the rollup can move on to the next provider in the chain."""
+    if not _provider_configured(provider):
+        return None
+    model = _model_for(provider)
+    try:
+        if provider == "anthropic":
+            return _run_anthropic(model, system, prompt, max_tokens)
+        if provider == "openrouter":
+            return _run_openai(Config.OPENROUTER_API_KEY, _OPENROUTER_BASE_URL,
+                               _OPENROUTER_HEADERS, model, system, prompt, max_tokens)
+        return _run_openai(Config.OPENAI_API_KEY, None, None, model, system, prompt, max_tokens)
+    except Exception:  # noqa: BLE001 — let the rollup try the next provider
+        log.exception("AI attempt failed (provider=%s, model=%s)", provider, model)
+        return None
 
 
 # --- low-level runners -------------------------------------------------------
@@ -192,21 +222,20 @@ def _verdict(text: str, positive: str) -> str | None:
 # --- public API (stable; callers unchanged) ----------------------------------
 
 def complete(system: str, prompt: str, max_tokens: int | None = None) -> AIResult | None:
-    """Generic completion with a custom system prompt. Graceful: returns None when
-    AI is unavailable or errors."""
-    if not is_configured():
-        return None
+    """Generic completion with a custom system prompt. Walks the provider rollup
+    (e.g. DeepSeek -> OpenAI), returning the first usable result. Graceful: returns
+    None only when every provider is unavailable, errors, or yields empty text."""
     mt = max_tokens or Config.AI_MAX_TOKENS
     sys_t = (system or "")[:4000]
     prompt_t = (prompt or "")[:6000]
-    try:
-        if _provider() == "anthropic":
-            return _run_anthropic(_text_model(), sys_t, prompt_t, mt)
-        api_key, base_url, headers = _text_endpoint()
-        return _run_openai(api_key, base_url, headers, _text_model(), sys_t, prompt_t, mt)
-    except Exception:  # noqa: BLE001 — never let an AI error crash the handler
-        log.exception("AI complete failed")
-        return None
+    primary = _provider()
+    for provider in _provider_chain():
+        result = _attempt(provider, sys_t, prompt_t, mt)
+        if result is not None and result.text:
+            if provider != primary:
+                log.info("AI rolled up to fallback provider=%s", provider)
+            return result
+    return None
 
 
 def ask(prompt: str) -> AIResult | None:
@@ -244,7 +273,7 @@ def check_image(image_url: str) -> tuple[str, AIResult] | None:
                 _IMG_SYSTEM, "Classify this image.", 5, image_url=image_url,
             )
         elif _provider() == "anthropic" and Config.ANTHROPIC_API_KEY:
-            result = _run_anthropic(_text_model(), _IMG_SYSTEM, "", 5, image_url=image_url)
+            result = _run_anthropic(_model_for("anthropic"), _IMG_SYSTEM, "", 5, image_url=image_url)
         else:
             # OpenRouter/DeepSeek with no OpenAI key -> vision unsupported.
             return None
