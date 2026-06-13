@@ -577,6 +577,149 @@ function ReportsSection() {
   );
 }
 
+// ── Users & Access / Users (access/users) ───────────────────────────────────
+function UsersSection() {
+  const navigate = useNavigate();
+  const [users, setUsers] = useState(null);
+  const [q, setQ] = useState('');
+  useEffect(() => { guildizerApi.get('/api/admin/users').then(({ data }) => setUsers(data.users)).catch(() => {}); }, []);
+  if (!users) return null;
+  const needle = q.trim().toLowerCase();
+  const rows = needle
+    ? users.filter((u) => (u.username || '').toLowerCase().includes(needle)
+        || (u.global_name || '').toLowerCase().includes(needle) || String(u.id).includes(needle))
+    : users;
+  return (
+    <Card variant="outlined"><CardContent>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>
+        <Typography variant="subtitle1" fontWeight={700}>Users ({rows.length})</Typography>
+        <TextField size="small" placeholder="Search name or ID…" value={q}
+          onChange={(e) => setQ(e.target.value)} sx={{ width: 240 }} />
+      </Stack>
+      <Table size="small">
+        <TableHead><TableRow>
+          <TableCell>User</TableCell><TableCell>Discord ID</TableCell>
+          <TableCell align="right">Servers</TableCell><TableCell align="right">Last login</TableCell>
+        </TableRow></TableHead>
+        <TableBody>
+          {rows.length === 0 && <EmptyRow colSpan={4} label="No users." />}
+          {rows.map((u) => (
+            <TableRow key={u.id} hover sx={{ cursor: 'pointer' }}
+              onClick={() => navigate(`/guildizer/admin/access/users/${u.id}`)}>
+              <TableCell>{u.global_name || u.username || u.id}</TableCell>
+              <TableCell sx={{ fontFamily: 'monospace', color: 'text.secondary' }}>{u.id}</TableCell>
+              <TableCell align="right">{u.memberships}</TableCell>
+              <TableCell align="right"><Typography variant="caption" color="text.disabled">{fmtDate(u.last_login_at)}</Typography></TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </CardContent></Card>
+  );
+}
+
+// ── Users & Access / Referrals (access/referrals) ────────────────────────────
+function ReferralsSection() {
+  const [data, setData] = useState(null);
+  useEffect(() => { guildizerApi.get('/api/admin/referrals?days=30').then(({ data: d }) => setData(d)).catch(() => {}); }, []);
+  if (!data) return null;
+  return (
+    <>
+      <Grid container spacing={1.5} mb={3}>
+        <Grid item xs={6} sm={4}><StatCard value={data.links_total} label="Invite links" color={PALETTE.blue} /></Grid>
+        <Grid item xs={6} sm={4}><StatCard value={data.joins_total} label="Attributed joins" color={PALETTE.green} /></Grid>
+        <Grid item xs={6} sm={4}><StatCard value={data.joins_window} label={`Joins · ${data.window_days}d`} color={PALETTE.cyan} /></Grid>
+      </Grid>
+
+      <Card variant="outlined" sx={{ mb: 3 }}><CardContent>
+        <Typography variant="subtitle1" fontWeight={700} mb={1}>Top inviters</Typography>
+        <List dense>
+          {data.top_inviters.length === 0 && <Typography variant="body2" color="text.secondary">No referrals yet.</Typography>}
+          {data.top_inviters.map((i) => (
+            <ListItem key={i.inviter_id} disableGutters
+              secondaryAction={<Chip size="small" variant="outlined" label={`${i.joins} joins`} />}>
+              <ListItemText primary={i.inviter_name || i.inviter_id}
+                primaryTypographyProps={{ variant: 'body2' }} />
+            </ListItem>
+          ))}
+        </List>
+      </CardContent></Card>
+
+      <Card variant="outlined"><CardContent>
+        <Typography variant="subtitle1" fontWeight={700} mb={1}>Recent attributed joins</Typography>
+        <Table size="small">
+          <TableHead><TableRow>
+            <TableCell>Joiner</TableCell><TableCell>Inviter</TableCell><TableCell>Code</TableCell>
+            <TableCell align="right">When</TableCell>
+          </TableRow></TableHead>
+          <TableBody>
+            {data.recent.length === 0 && <EmptyRow colSpan={4} label="No joins yet." />}
+            {data.recent.map((j) => (
+              <TableRow key={j.id} hover>
+                <TableCell>{j.joiner_name || j.joiner_id}</TableCell>
+                <TableCell>{j.inviter_name || j.inviter_id || '—'}</TableCell>
+                <TableCell sx={{ fontFamily: 'monospace' }}>{j.code || '—'}</TableCell>
+                <TableCell align="right"><Typography variant="caption" color="text.disabled">{fmtDateTime(j.created_at)}</Typography></TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent></Card>
+    </>
+  );
+}
+
+// ── Users & Access / Suspicious (access/suspicious) ──────────────────────────
+function SuspiciousSection() {
+  const [data, setData] = useState(null);
+  useEffect(() => { guildizerApi.get('/api/admin/suspicious?days=14').then(({ data: d }) => setData(d)).catch(() => {}); }, []);
+  if (!data) return null;
+  return (
+    <>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>
+        <Typography variant="subtitle1" fontWeight={700}>
+          {data.total} suspicious events · last {data.window_days}d
+        </Typography>
+      </Stack>
+      <Stack direction="row" useFlexGap flexWrap="wrap" spacing={0.5} mb={3}>
+        {Object.entries(data.by_category).map(([cat, n]) => (
+          <Chip key={cat} size="small" variant="outlined" label={`${cat} · ${n}`} />
+        ))}
+        {data.total === 0 && <Typography variant="body2" color="text.secondary">No suspicious activity. 🎉</Typography>}
+      </Stack>
+
+      <Card variant="outlined" sx={{ mb: 3 }}><CardContent>
+        <Typography variant="subtitle1" fontWeight={700} mb={1}>Top offenders</Typography>
+        <List dense>
+          {data.top_offenders.length === 0 && <Typography variant="body2" color="text.secondary">None.</Typography>}
+          {data.top_offenders.map((o) => (
+            <ListItem key={o.user_id} disableGutters
+              secondaryAction={<Chip size="small" color="error" variant="outlined" label={`${o.events} events`} />}>
+              <Shield sx={{ fontSize: 16, mr: 1, color: 'text.disabled' }} />
+              <ListItemText primary={o.username || o.user_id} primaryTypographyProps={{ variant: 'body2' }} />
+            </ListItem>
+          ))}
+        </List>
+      </CardContent></Card>
+
+      <Card variant="outlined"><CardContent>
+        <Typography variant="subtitle1" fontWeight={700} mb={1}>Recent events</Typography>
+        <List dense>
+          {data.recent.length === 0 && <Typography variant="body2" color="text.secondary">No events.</Typography>}
+          {data.recent.map((e) => (
+            <ListItem key={e.id} disableGutters
+              secondaryAction={<Typography variant="caption" color="text.disabled">{fmtDateTime(e.created_at)}</Typography>}>
+              <Chip size="small" variant="outlined" color="warning" label={e.category} sx={{ mr: 1 }} />
+              <ListItemText primary={`${e.action || '—'} — ${e.username ? e.username + ' · ' : ''}${e.detail || ''}`}
+                primaryTypographyProps={{ variant: 'body2', noWrap: true }} />
+            </ListItem>
+          ))}
+        </List>
+      </CardContent></Card>
+    </>
+  );
+}
+
 // ── Placeholder for sections built in later phases ───────────────────────────
 function Placeholder({ label }) {
   return (
@@ -592,6 +735,9 @@ const SECTION_COMPONENTS = {
   dashboard: DashboardSection,
   proof: ProofMetricsSection,
   reports: ReportsSection,
+  users: UsersSection,
+  referrals: ReferralsSection,
+  suspicious: SuspiciousSection,
   ai: AiManagementSection,
   bothealth: BotHealthSection,
   'feature-usage': FeatureUsageSection,

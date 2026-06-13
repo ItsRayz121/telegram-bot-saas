@@ -88,17 +88,17 @@ Roles, Compliance/Purge, Secrets). Backend already enforces super-only on those.
 - [x] Migrated current single-page content into shell sections (Dashboard, AI Management, Bot Health, Feature Usage, AI Usage, Roles, Promo, Audit); other sidebar items show parity placeholders
 - [x] Build passes (CI=false), cross-checked, committed + pushed
 
-### Phase 2 — Overview category
-- [ ] Backend: `GET /api/admin/revenue` (Subscription MRR/active/recent), `GET /api/admin/growth?days=` (GuildDailyStat series), `GET /api/admin/reports` (ModReport), `GET /api/admin/proof-metrics` (CampaignSubmission)
-- [ ] Dashboard: KPI grids (Users / Bot Ecosystem / Revenue / Engagement) + recharts revenue line + growth area, clickable drill-downs
-- [ ] Proof Metrics section; Reports section
-- [ ] Cross-check + commit + push
+### Phase 2 — Overview category ✅
+- [x] Backend: `GET /api/admin/revenue` (Subscription MRR/ARR/this+last month/all-time + 6-mo trend), `GET /api/admin/growth?days=` (GuildDailyStat platform-wide series), `GET /api/admin/reports` (ModReport + per-status counts), `GET /api/admin/proof-metrics` (CampaignSubmission funnel)
+- [x] Dashboard: stat grid w/ clickable drill-downs + Revenue KPI row + recharts revenue line + 7/30/90d growth area
+- [x] Proof Metrics section (KPI grid, review funnel, recent submissions); Reports section (status counts + filterable queue)
+- [x] Cross-check (py_compile + CI=false build) + commit (24b7b46) + push
 
-### Phase 3 — Users & Access
-- [ ] `GuildizerAdminUsers` (searchable/paginated table) + routed `GuildizerAdminUserDetail` (MUI Tabs: Overview, Memberships, AI Usage, Risk, Audit, Notes)
-- [ ] Backend: enrich user detail (AI usage, warnings, submissions, audit) + admin notes write
-- [ ] Roles & Access section; Referrals section **[api]**; Suspicious section **[api]**
-- [ ] Cross-check + commit + push
+### Phase 3 — Users & Access ✅
+- [x] `UsersSection` (searchable table → row click) + routed `GuildizerAdminUserDetail` (Tabs: Overview, Memberships, AI Usage, Risk, Audit, Notes) at `access/users/:userId`
+- [x] Backend: enriched `GET /api/admin/users/<id>` (AI usage rollup, warnings, protection events, submission counts, audit trail, admin_notes) + `POST .../notes`; `users.admin_notes` column self-healed
+- [x] Roles & Access section (already shipped Phase 1); `GET /api/admin/referrals` (top inviters + recent joins) + Referrals section; `GET /api/admin/suspicious` (top offenders + category rollup) + Suspicious section
+- [x] Cross-check (py_compile + CI=false build, no new warnings) + commit + push
 
 ### Phase 4 — Bots & Servers
 - [ ] `GuildizerAdminServers` table + routed `GuildizerAdminServerDetail` (Tabs: Overview, Members, Protection, Campaigns, Settings, Actions: plan/disable)

@@ -11,11 +11,15 @@ from sqlalchemy import func
 
 from admin import admin_required
 from models import (
+    AdminAuditLog,
+    AITokenUsage,
     Campaign,
     CampaignSubmission,
     Guild,
     GuildDailyStat,
+    InviteJoin,
     Member,
+    MemberWarning,
     ModReport,
     ProtectionEvent,
     Subscription,
@@ -150,9 +154,156 @@ def user_detail(user_id: int):
          "is_owner": bool(m.is_owner), "plan": gd.plan}
         for m, gd in rows
     ]
+
+    # AI usage ledger rollup for this user.
+    ai_totals = (
+        g.db.query(func.coalesce(func.sum(AITokenUsage.input_tokens), 0),
+                   func.coalesce(func.sum(AITokenUsage.output_tokens), 0),
+                   func.count(AITokenUsage.id))
+        .filter(AITokenUsage.user_id == user_id)
+        .one()
+    )
+
+    # Risk signals — warnings issued + protection events triggered.
+    warnings = (
+        g.db.query(MemberWarning)
+        .filter(MemberWarning.user_id == user_id)
+        .order_by(MemberWarning.created_at.desc())
+        .limit(25).all()
+    )
+    prot = (
+        g.db.query(ProtectionEvent)
+        .filter(ProtectionEvent.user_id == user_id)
+        .order_by(ProtectionEvent.created_at.desc())
+        .limit(25).all()
+    )
+
+    # Campaign proof submissions by this user.
+    sub_counts = dict(
+        g.db.query(CampaignSubmission.status, func.count(CampaignSubmission.id))
+        .filter(CampaignSubmission.user_id == user_id)
+        .group_by(CampaignSubmission.status).all()
+    )
+
+    # Admin audit entries naming this user (as actor or target).
+    audit_rows = (
+        g.db.query(AdminAuditLog)
+        .filter((AdminAuditLog.admin_id == user_id) | (AdminAuditLog.target == str(user_id)))
+        .order_by(AdminAuditLog.created_at.desc())
+        .limit(25).all()
+    )
+
     return jsonify(
-        user={**u.to_dict(), "last_login_at": u.last_login_at.isoformat() + "Z" if u.last_login_at else None},
+        user={**u.to_dict(),
+              "last_login_at": u.last_login_at.isoformat() + "Z" if u.last_login_at else None,
+              "created_at": u.created_at.isoformat() + "Z" if u.created_at else None,
+              "admin_notes": u.admin_notes},
         memberships=memberships,
+        ai_usage={"input_tokens": int(ai_totals[0]), "output_tokens": int(ai_totals[1]),
+                  "calls": int(ai_totals[2])},
+        warnings=[w.to_dict() for w in warnings],
+        protection_events=[{**e.to_dict(), "guild_id": str(e.guild_id)} for e in prot],
+        submissions={
+            "verified": int(sub_counts.get("verified", 0)),
+            "pending": int(sub_counts.get("pending", 0)),
+            "rejected": int(sub_counts.get("rejected", 0)),
+            "total": int(sum(sub_counts.values())),
+        },
+        audit=[r.to_dict() for r in audit_rows],
+    )
+
+
+@admin_bp.post("/api/admin/users/<int:user_id>/notes")
+@admin_required
+def set_user_notes(user_id: int):
+    """Save the platform-admin private notes on a user."""
+    from admin import audit
+    u = g.db.get(User, user_id)
+    if u is None:
+        return jsonify(error="not_found"), 404
+    body = request.get_json(silent=True) or {}
+    u.admin_notes = (str(body.get("notes") or "")).strip()[:4000] or None
+    audit(g.db, g.user_id, "user_notes", str(user_id))
+    g.db.commit()
+    return jsonify(ok=True, admin_notes=u.admin_notes)
+
+
+@admin_bp.get("/api/admin/referrals")
+@admin_required
+def referrals():
+    """Invite/referral attribution: top inviters by attributed joins + recent joins."""
+    from models import InviteLink
+    days = _as_int(request.args.get("days", 30), 30, 1, 180)
+    since = datetime.utcnow() - timedelta(days=days)
+    top = (
+        g.db.query(InviteJoin.inviter_id,
+                   func.max(InviteJoin.inviter_name),
+                   func.count(InviteJoin.id))
+        .filter(InviteJoin.inviter_id.isnot(None))
+        .group_by(InviteJoin.inviter_id)
+        .order_by(func.count(InviteJoin.id).desc())
+        .limit(15).all()
+    )
+    recent = (
+        g.db.query(InviteJoin)
+        .order_by(InviteJoin.created_at.desc())
+        .limit(20).all()
+    )
+    return jsonify(
+        links_total=_count(InviteLink),
+        joins_total=_count(InviteJoin),
+        joins_window=_count(InviteJoin, InviteJoin.created_at >= since),
+        window_days=days,
+        top_inviters=[
+            {"inviter_id": str(iid), "inviter_name": name, "joins": int(c)}
+            for iid, name, c in top
+        ],
+        recent=[{**j.to_dict(), "guild_id": str(j.guild_id)} for j in recent],
+    )
+
+
+SUSPICIOUS_CATEGORIES = ("raid", "spam", "nsfw", "csam", "lockdown_join",
+                         "join_gate", "manual_lockdown")
+
+
+@admin_bp.get("/api/admin/suspicious")
+@admin_required
+def suspicious():
+    """Abuse/raid signals from ProtectionEvent — top offending users + recent
+    events in the suspicious categories."""
+    days = _as_int(request.args.get("days", 14), 14, 1, 90)
+    since = datetime.utcnow() - timedelta(days=days)
+    base = g.db.query(ProtectionEvent).filter(
+        ProtectionEvent.category.in_(SUSPICIOUS_CATEGORIES),
+        ProtectionEvent.created_at >= since,
+    )
+    offenders = (
+        g.db.query(ProtectionEvent.user_id,
+                   func.max(ProtectionEvent.username),
+                   func.count(ProtectionEvent.id))
+        .filter(ProtectionEvent.category.in_(SUSPICIOUS_CATEGORIES),
+                ProtectionEvent.created_at >= since,
+                ProtectionEvent.user_id.isnot(None))
+        .group_by(ProtectionEvent.user_id)
+        .order_by(func.count(ProtectionEvent.id).desc())
+        .limit(15).all()
+    )
+    recent = base.order_by(ProtectionEvent.created_at.desc()).limit(30).all()
+    by_category = dict(
+        g.db.query(ProtectionEvent.category, func.count(ProtectionEvent.id))
+        .filter(ProtectionEvent.category.in_(SUSPICIOUS_CATEGORIES),
+                ProtectionEvent.created_at >= since)
+        .group_by(ProtectionEvent.category).all()
+    )
+    return jsonify(
+        window_days=days,
+        total=int(sum(by_category.values())),
+        by_category={k: int(v) for k, v in by_category.items()},
+        top_offenders=[
+            {"user_id": str(uid), "username": name, "events": int(c)}
+            for uid, name, c in offenders
+        ],
+        recent=[{**e.to_dict(), "guild_id": str(e.guild_id)} for e in recent],
     )
 
 

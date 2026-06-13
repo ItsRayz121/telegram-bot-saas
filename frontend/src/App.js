@@ -85,6 +85,7 @@ import GuildizerServerDetail from './pages/guildizer/GuildizerServerDetail';
 import GuildizerBots from './pages/guildizer/GuildizerBots';
 import GuildizerAdminLayout from './layouts/GuildizerAdminLayout';
 import GuildizerAdminPanel from './pages/guildizer/admin/GuildizerAdminPanel';
+import GuildizerAdminUserDetail from './pages/guildizer/admin/GuildizerAdminUserDetail';
 import AdminHub from './pages/AdminHub';
 
 // Pages — lazy loaded
@@ -305,6 +306,7 @@ export default function App() {
             {/* Guildizer admin console — dedicated full-screen shell (nested) */}
             <Route path="/guildizer/admin" element={<GuildizerAdminRoute />}>
               <Route index element={<Navigate to="overview/dashboard" replace />} />
+              <Route path="access/users/:userId" element={<GuildizerAdminUserDetail />} />
               <Route path=":category/:section" element={<GuildizerAdminPanel />} />
             </Route>
 

@@ -41,6 +41,7 @@ class User(Base):
 
     created_at = Column(DateTime, default=datetime.utcnow)
     last_login_at = Column(DateTime, default=datetime.utcnow)
+    admin_notes = Column(Text, nullable=True)          # platform-admin private notes
 
     # Guilds this user personally owns (owner_id on Guild). Distinct from the
     # broader membership/manage relationship captured by UserGuild.
