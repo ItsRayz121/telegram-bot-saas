@@ -1498,3 +1498,29 @@ class AdminAuditLog(Base):
             "detail": self.detail,
             "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
         }
+
+
+class AdminAnnouncement(Base):
+    """A platform notice authored in the admin panel (Compliance & Comms). Stored
+    + togglable; consumers (dashboard banner) read the active ones."""
+
+    __tablename__ = "admin_announcements"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    title = Column(String(200), nullable=False)
+    body = Column(Text, default="")
+    level = Column(String(16), default="info")   # info | warning | critical
+    active = Column(Boolean, default=True, nullable=False)
+    created_by = Column(BigInteger, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "title": self.title,
+            "body": self.body or "",
+            "level": self.level or "info",
+            "active": bool(self.active),
+            "created_by": str(self.created_by) if self.created_by else None,
+            "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
+        }

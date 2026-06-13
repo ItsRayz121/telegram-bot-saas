@@ -962,6 +962,65 @@ def admin_system():
     )
 
 
+# --- Phase 7 (admin parity): Compliance & Comms — announcements ---
+@admin_bp.get("/api/admin/announcements")
+@admin_required
+def list_announcements():
+    from models import AdminAnnouncement
+    rows = (
+        g.db.query(AdminAnnouncement)
+        .order_by(AdminAnnouncement.created_at.desc())
+        .limit(100).all()
+    )
+    return jsonify(announcements=[r.to_dict() for r in rows])
+
+
+@admin_bp.post("/api/admin/announcements")
+@admin_required
+def create_announcement():
+    from admin import audit
+    from models import AdminAnnouncement
+    body = request.get_json(silent=True) or {}
+    title = (str(body.get("title") or "")).strip()[:200]
+    if not title:
+        return jsonify(error="title_required"), 400
+    level = body.get("level") if body.get("level") in ("info", "warning", "critical") else "info"
+    row = AdminAnnouncement(
+        title=title, body=(str(body.get("body") or "")).strip()[:2000],
+        level=level, active=bool(body.get("active", True)), created_by=g.user_id,
+    )
+    g.db.add(row)
+    audit(g.db, g.user_id, "announce_create", title, f"level={level}")
+    g.db.commit()
+    return jsonify(announcement=row.to_dict()), 201
+
+
+@admin_bp.post("/api/admin/announcements/<int:aid>/toggle")
+@admin_required
+def toggle_announcement(aid: int):
+    from models import AdminAnnouncement
+    row = g.db.get(AdminAnnouncement, aid)
+    if row is None:
+        return jsonify(error="not_found"), 404
+    row.active = not row.active
+    g.db.commit()
+    return jsonify(announcement=row.to_dict())
+
+
+@admin_bp.delete("/api/admin/announcements/<int:aid>")
+@admin_required
+def delete_announcement(aid: int):
+    from admin import audit
+    from models import AdminAnnouncement
+    row = g.db.get(AdminAnnouncement, aid)
+    if row is None:
+        return jsonify(error="not_found"), 404
+    g.db.delete(row)
+    audit(g.db, g.user_id, "announce_delete", str(aid))
+    g.db.commit()
+    return jsonify(ok=True)
+
+
 @admin_bp.post("/api/admin/users/<int:user_id>/purge")
 @admin_required
 def purge_user(user_id: int):

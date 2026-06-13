@@ -117,9 +117,10 @@ Roles, Compliance/Purge, Secrets). Backend already enforces super-only on those.
 - [x] Backend: `GET /api/admin/config` (non-secret snapshot), `GET /api/admin/secrets` (booleans only, super-only), `GET /api/admin/system`
 - [x] Cross-check (py_compile + CI=false build, no new warnings) + commit + push
 
-### Phase 7 — Compliance & Comms
-- [ ] Compliance (GDPR purge UI, super-only), Promo Codes, Announcements `[api/stub]` (+ model/endpoint if built)
-- [ ] Cross-check + commit + push
+### Phase 7 — Compliance & Comms ✅
+- [x] Compliance section: GDPR purge UI (super-only, type-DELETE confirm, shows purged counts) over the existing `POST /api/admin/users/<id>/purge`; Promo Codes already shipped Phase 1
+- [x] Announcements: new `AdminAnnouncement` model (auto-created by create_all, no migration) + `GET/POST/DELETE /api/admin/announcements` + `POST .../toggle`; Announcements section (compose w/ level, list, enable/disable, delete)
+- [x] Cross-check (py_compile + CI=false build, no new warnings) + commit + push
 
 ### Phase 8 — Parity sweep & cleanup
 - [ ] Visual parity pass vs Telegizer (spacing, glow, StatCard, chips, breadcrumbs)

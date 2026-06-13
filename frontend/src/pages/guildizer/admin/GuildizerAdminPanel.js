@@ -1024,6 +1024,109 @@ function SystemSection() {
   );
 }
 
+// ── Compliance & Comms / Compliance (compliance/compliance) — super only ─────
+function ComplianceSection() {
+  const [uid, setUid] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const purge = async () => {
+    setBusy(true); setResult(null); setError(null);
+    try {
+      const { data } = await guildizerApi.post(`/api/admin/users/${uid.trim()}/purge`);
+      setResult(data.purged); setUid(''); setConfirm('');
+    } catch (e) {
+      setError(e?.response?.data?.error || 'Purge failed.');
+    } finally { setBusy(false); }
+  };
+
+  const ready = /^\d+$/.test(uid.trim()) && confirm.trim().toUpperCase() === 'DELETE';
+  return (
+    <Card variant="outlined"><CardContent>
+      <Typography variant="subtitle1" fontWeight={700} mb={0.5}>GDPR data purge</Typography>
+      <Alert severity="warning" sx={{ mb: 2 }}>
+        Permanently deletes a user's personal data (reminders, notes, tasks, memberships, custom bots)
+        and anonymizes their name in guild-owned records. This cannot be undone.
+      </Alert>
+      <Stack spacing={1.5} sx={{ maxWidth: 420 }}>
+        <TextField size="small" label="Discord user ID" value={uid} onChange={(e) => setUid(e.target.value)} />
+        <TextField size="small" label='Type DELETE to confirm' value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+        <Button variant="contained" color="error" disabled={!ready || busy} onClick={purge}>
+          {busy ? 'Purging…' : 'Purge user data'}
+        </Button>
+      </Stack>
+      {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
+      {result && (
+        <Alert severity="success" sx={{ mt: 2 }}>
+          Purged: {Object.entries(result).filter(([, v]) => v).map(([k, v]) => `${k}=${v}`).join(', ') || 'nothing to delete'}
+        </Alert>
+      )}
+    </CardContent></Card>
+  );
+}
+
+// ── Compliance & Comms / Announcements (compliance/announce) ─────────────────
+function AnnouncementsSection() {
+  const [rows, setRows] = useState(null);
+  const [title, setTitle] = useState('');
+  const [body, setBody] = useState('');
+  const [level, setLevel] = useState('info');
+  const load = () => guildizerApi.get('/api/admin/announcements').then(({ data }) => setRows(data.announcements)).catch(() => {});
+  useEffect(() => { load(); }, []);
+
+  const create = () =>
+    guildizerApi.post('/api/admin/announcements', { title, body, level })
+      .then(() => { setTitle(''); setBody(''); setLevel('info'); load(); }).catch(() => {});
+
+  if (!rows) return null;
+  const levelColor = { info: 'info', warning: 'warning', critical: 'error' };
+  return (
+    <>
+      <Card variant="outlined" sx={{ mb: 2 }}><CardContent>
+        <Typography variant="subtitle1" fontWeight={700} mb={1.5}>New announcement</Typography>
+        <Stack spacing={1.5}>
+          <TextField size="small" label="Title" value={title} onChange={(e) => setTitle(e.target.value)} fullWidth />
+          <TextField size="small" label="Body" value={body} onChange={(e) => setBody(e.target.value)} fullWidth multiline minRows={2} />
+          <Stack direction="row" spacing={1} alignItems="center">
+            <TextField select size="small" label="Level" value={level} onChange={(e) => setLevel(e.target.value)}
+              SelectProps={{ native: true }} sx={{ width: 130 }}>
+              <option value="info">info</option>
+              <option value="warning">warning</option>
+              <option value="critical">critical</option>
+            </TextField>
+            <Button variant="contained" disabled={!title.trim()} onClick={create}>Publish</Button>
+          </Stack>
+        </Stack>
+      </CardContent></Card>
+
+      <Card variant="outlined"><CardContent>
+        <Typography variant="subtitle1" fontWeight={700} mb={1}>Announcements ({rows.length})</Typography>
+        {rows.length === 0 && <Typography variant="body2" color="text.secondary">None yet.</Typography>}
+        <List dense>
+          {rows.map((a) => (
+            <ListItem key={a.id} disableGutters
+              secondaryAction={
+                <Stack direction="row" spacing={0.5}>
+                  <Button size="small" color="inherit" onClick={() => guildizerApi.post(`/api/admin/announcements/${a.id}/toggle`).then(load)}>
+                    {a.active ? 'Disable' : 'Enable'}
+                  </Button>
+                  <Button size="small" color="inherit" onClick={() => guildizerApi.delete(`/api/admin/announcements/${a.id}`).then(load)}>Delete</Button>
+                </Stack>
+              }>
+              <Chip size="small" variant="outlined" color={levelColor[a.level] || 'default'} label={a.level} sx={{ mr: 1 }} />
+              <ListItemText primary={a.title}
+                secondary={a.active ? 'active' : 'inactive'}
+                primaryTypographyProps={{ variant: 'body2', sx: { opacity: a.active ? 1 : 0.55 } }} />
+            </ListItem>
+          ))}
+        </List>
+      </CardContent></Card>
+    </>
+  );
+}
+
 // ── Placeholder for sections built in later phases ───────────────────────────
 function Placeholder({ label }) {
   return (
@@ -1056,6 +1159,8 @@ const SECTION_COMPONENTS = {
   secrets: SecretsSection,
   system: SystemSection,
   roles: RolesSection,
+  compliance: ComplianceSection,
+  announce: AnnouncementsSection,
   promo: PromoSection,
   audit: AuditSection,
 };
