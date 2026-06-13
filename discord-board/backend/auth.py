@@ -228,7 +228,23 @@ def _sync_memberships(db, user_id: int, guilds: list[dict]) -> None:
 @auth_bp.get("/auth/me")
 def me():
     uid = current_user_id()
+    # Telegizer email super-admin bridge: a platform owner reaches the Guildizer
+    # admin panel via their website login (no Discord session). The admin gate
+    # (admin_required) already honors this token; /auth/me must too, otherwise the
+    # admin layout's access check 401s and shows "access required" despite the
+    # bridge being valid. Only consulted when there's no native Discord session.
     if uid is None:
+        from admin import bridge_super_admin, BRIDGE_ADMIN_ID
+        ident = bridge_super_admin()
+        if ident is not None:
+            return jsonify(
+                id=BRIDGE_ADMIN_ID,
+                email=ident.get("email"),
+                username=ident.get("email") or "Telegizer Admin",
+                is_bridge_admin=True,
+                is_admin=True,
+                admin_role="super",
+            )
         return jsonify(error="unauthorized"), 401
     db = SessionLocal()
     try:
