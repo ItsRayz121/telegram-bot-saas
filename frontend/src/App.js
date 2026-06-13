@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useParams, useLocation } from 'react-router-dom';
 import { trackGAPageView } from './index';
 import { Box, CircularProgress, Typography, Button } from '@mui/material';
 import { ThemeProvider } from '@mui/material/styles';
@@ -82,8 +82,10 @@ import HubCustomBotWorkspace from './pages/HubCustomBotWorkspace';
 import GuildizerServers from './pages/guildizer/GuildizerServers';
 import GuildizerManageServers from './pages/guildizer/GuildizerManageServers';
 import GuildizerServerDetail from './pages/guildizer/GuildizerServerDetail';
-import GuildizerAdmin from './pages/guildizer/GuildizerAdmin';
 import GuildizerBots from './pages/guildizer/GuildizerBots';
+import GuildizerAdminLayout from './layouts/GuildizerAdminLayout';
+import GuildizerAdminPanel from './pages/guildizer/admin/GuildizerAdminPanel';
+import AdminHub from './pages/AdminHub';
 
 // Pages — lazy loaded
 const AssistantNotes = React.lazy(() => import('./pages/AssistantNotes'));
@@ -218,6 +220,16 @@ function AdminRoute({ children }) {
   return <AdminLayout user={adminUser}>{children}</AdminLayout>;
 }
 
+// Guildizer admin: requires app login, then renders the dedicated full-screen
+// Guildizer admin shell (which gates on the Guildizer session). Nested child
+// routes render inside the shell's <Outlet/>. Kept fully separate from the
+// Telegizer AdminRoute/AdminLayout above.
+function GuildizerAdminRoute() {
+  const token = localStorage.getItem('token');
+  if (!token) return <Navigate to="/login" replace />;
+  return <GuildizerAdminLayout><Outlet /></GuildizerAdminLayout>;
+}
+
 export default function App() {
   return (
     <ThemeProvider theme={telegizer}>
@@ -287,10 +299,14 @@ export default function App() {
 
             {/* ── Discord (Guildizer) — 3rd pillar ──────────────────────────── */}
             <Route path="/guildizer"                    element={<AppRoute><GuildizerServers /></AppRoute>} />
-            <Route path="/guildizer/admin"              element={<AppRoute><GuildizerAdmin /></AppRoute>} />
             <Route path="/guildizer/bots"               element={<AppRoute><GuildizerBots /></AppRoute>} />
             <Route path="/guildizer/servers"            element={<AppRoute><GuildizerManageServers /></AppRoute>} />
             <Route path="/guildizer/servers/:guildId"   element={<AppRoute><GuildizerServerDetail /></AppRoute>} />
+            {/* Guildizer admin console — dedicated full-screen shell (nested) */}
+            <Route path="/guildizer/admin" element={<GuildizerAdminRoute />}>
+              <Route index element={<Navigate to="overview/dashboard" replace />} />
+              <Route path=":category/:section" element={<GuildizerAdminPanel />} />
+            </Route>
 
             {/* ── Workspace ─────────────────────────────────────────────────── */}
             <Route path="/workspace"               element={<AppRoute><Workspace /></AppRoute>} />
@@ -347,6 +363,8 @@ export default function App() {
             <Route path="/settings" element={<AppRoute><Settings /></AppRoute>} />
 
             {/* ── Admin ─────────────────────────────────────────────────────── */}
+            {/* Console chooser: Telegizer vs Guildizer admin */}
+            <Route path="/admin-hub" element={<AdminHub />} />
             <Route path="/admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />
             <Route path="/admin/users/:userId" element={<AdminRoute><AdminUserDetail /></AdminRoute>} />
             <Route path="/admin/groups/:groupId" element={<AdminRoute><AdminGroupDetail /></AdminRoute>} />

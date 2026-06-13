@@ -236,8 +236,9 @@ def me():
         if user is None:
             return jsonify(error="unauthorized"), 401
         data = user.to_dict()
-        from admin import is_admin as _is_admin  # env super-admins + DB roles
+        from admin import is_admin as _is_admin, is_super as _is_super  # env super-admins + DB roles
         data["is_admin"] = _is_admin(uid)
+        data["admin_role"] = "super" if _is_super(uid) else ("support" if _is_admin(uid) else None)
         return jsonify(data)
     finally:
         db.close()

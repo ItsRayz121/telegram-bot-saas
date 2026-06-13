@@ -76,16 +76,17 @@ Roles, Compliance/Purge, Secrets). Backend already enforces super-only on those.
 - [x] Write this plan/checklist
 - [x] Commit + push
 
-### Phase 1 — Admin shell foundation
-- [ ] `config/guildizerAdminNav.js` — `GUILDIZER_ADMIN_CATEGORIES` (6 cats), helpers (`adminPath`, `findItem`, `DEFAULT_KEY`)
-- [ ] `contexts/GuildizerAdminContext.js` — `{ me, role, can() }`
-- [ ] `components/guildizer/GuildizerAdminSidebar.js` — collapsible sidebar (logo, profile card, categories, footer), localStorage collapse, mobile Drawer
-- [ ] `layouts/GuildizerAdminLayout.js` — full-screen shell: glow bg, sticky AppBar ("Guildizer Admin Console" + role chip), sidebar, content `maxWidth 1400`, gate (guildizerApi `/auth/me` → `is_admin`), denial screen
-- [ ] `components/guildizer/GuildizerAdminKit.js` — `StatCard, StatusChip, Field, SectionTitle, EmptyRow, fmtDate/fmtDateTime/fmtRelative/usd` (copied visual primitives)
-- [ ] Routing: nested `/guildizer/admin` → layout with `<Outlet/>`, child routes per section + detail pages; `/guildizer/admin` redirects to `overview/dashboard`
-- [ ] **Admin chooser**: `pages/AdminHub.js` (two product cards) + route `/admin-hub`; repoint `TopNav.js` + `Sidebar.js` entries to `/admin-hub`
-- [ ] Migrate current single-page content into the new **Dashboard** section as a starting point
-- [ ] Cross-check + commit + push
+### Phase 1 — Admin shell foundation ✅
+- [x] `config/guildizerAdminNav.js` — `GUILDIZER_ADMIN_CATEGORIES` (6 cats), helpers (`guildizerAdminPath`, `findGuildizerAdminItem`, `DEFAULT_GUILDIZER_ADMIN_KEY`), `superOnly` gating
+- [x] `contexts/GuildizerAdminContext.js` — `{ me, role, can() }`
+- [x] `components/guildizer/GuildizerAdminSidebar.js` — collapsible sidebar (Guildizer logo, profile card, categories, footer Back/Switch Console), localStorage collapse, mobile Drawer
+- [x] `layouts/GuildizerAdminLayout.js` — full-screen shell: glow bg, sticky AppBar ("Guildizer Admin" + role chip), sidebar, gate (guildizerApi `/auth/me` → `is_admin`), denial screen, provides context
+- [x] `components/guildizer/GuildizerAdminKit.js` — `StatCard, StatusChip, Field, SectionTitle, EmptyRow, fmt*`
+- [x] Routing: nested `/guildizer/admin` (GuildizerAdminRoute → layout `<Outlet/>`), index → `overview/dashboard`, `:category/:section` → panel
+- [x] **Admin chooser**: `pages/AdminHub.js` (two product cards + access chips) + route `/admin-hub`; repointed `TopNav.js` + `Sidebar.js` to `/admin-hub`
+- [x] Backend: `/auth/me` now returns `admin_role` (super/support/null)
+- [x] Migrated current single-page content into shell sections (Dashboard, AI Management, Bot Health, Feature Usage, AI Usage, Roles, Promo, Audit); other sidebar items show parity placeholders
+- [x] Build passes (CI=false), cross-checked, committed + pushed
 
 ### Phase 2 — Overview category
 - [ ] Backend: `GET /api/admin/revenue` (Subscription MRR/active/recent), `GET /api/admin/growth?days=` (GuildDailyStat series), `GET /api/admin/reports` (ModReport), `GET /api/admin/proof-metrics` (CampaignSubmission)

@@ -491,7 +491,7 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
           Billing & Plan
         </MenuItem>
         {isAdmin && (
-          <MenuItem onClick={() => { setAnchorEl(null); nav('/admin'); }} dense>
+          <MenuItem onClick={() => { setAnchorEl(null); nav('/admin-hub'); }} dense>
             <ListItemIcon><AdminPanelSettings fontSize="small" /></ListItemIcon>
             Admin Panel
           </MenuItem>

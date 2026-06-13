@@ -218,9 +218,9 @@ export default function TopNav({ title, subtitle, actions, breadcrumb, hasSideba
           <Tooltip title="Admin Panel" arrow>
             <IconButton
               size="small"
-              onClick={() => navigate('/admin')}
+              onClick={() => navigate('/admin-hub')}
               sx={{
-                ml: 0.5, color: pathname === '/admin' ? '#ef4444' : 'text.secondary',
+                ml: 0.5, color: pathname.startsWith('/admin') ? '#ef4444' : 'text.secondary',
                 display: { xs: 'none', md: 'inline-flex' },
                 transition: 'color 0.15s, background 0.15s',
                 '&:hover': { color: '#ef4444', bgcolor: 'rgba(239,68,68,0.1)' },
