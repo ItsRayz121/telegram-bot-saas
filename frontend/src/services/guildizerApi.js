@@ -16,6 +16,15 @@ const guildizerApi = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+// Super-admin bridge: attach the Telegizer website token so the Guildizer admin
+// panel can authorise off the existing email login (no separate Discord login).
+// Harmless for non-admin endpoints — only admin_required reads this header.
+guildizerApi.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) config.headers['X-Telegizer-Token'] = token;
+  return config;
+});
+
 // Full-page redirect into Discord OAuth (must be top-level navigation).
 export const guildizerLoginUrl = () => `${GUILDIZER_API_URL}/auth/discord/login`;
 

@@ -40,12 +40,25 @@ export default function AdminHub() {
   const [gzAdmin, setGzAdmin] = useState(null);
 
   useEffect(() => {
-    // Telegizer admin status.
+    // Telegizer admin status — also drives the Guildizer card: a Telegizer
+    // super_admin reaches the Guildizer admin via the email bridge (no Discord
+    // login), so super-admins see access on both.
     const base = process.env.REACT_APP_API_URL || '';
+    let isSuper = false;
     fetch(`${base}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
-      .then((r) => r.json()).then((d) => setTgAdmin(!!d.user?.is_admin)).catch(() => setTgAdmin(false));
-    // Guildizer admin status (separate session cookie).
-    guildizerApi.get('/auth/me').then(({ data }) => setGzAdmin(!!data?.is_admin)).catch(() => setGzAdmin(false));
+      .then((r) => r.json())
+      .then((d) => {
+        setTgAdmin(!!d.user?.is_admin);
+        isSuper = d.user?.admin_role === 'super_admin';
+        if (isSuper) setGzAdmin(true); // bridged in — short-circuit the Discord check
+      })
+      .catch(() => setTgAdmin(false));
+    // Guildizer admin via its own Discord session (covers Discord-only admins who
+    // aren't Telegizer super-admins). Don't downgrade a super-admin who's already
+    // been granted above.
+    guildizerApi.get('/auth/me')
+      .then(({ data }) => setGzAdmin((prev) => prev || !!data?.is_admin))
+      .catch(() => setGzAdmin((prev) => (isSuper ? true : (prev ?? false))));
   }, [token]);
 
   if (!token) return <Navigate to="/login" replace />;

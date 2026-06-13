@@ -48,6 +48,14 @@ class Config:
         int(x) for x in os.getenv("ADMIN_USER_IDS", "").replace(" ", "").split(",") if x.isdigit()
     }
 
+    # Super-admin bridge: a Telegizer super-admin reaches the Guildizer admin
+    # panel using their existing telegizer.com email login (NO Discord login).
+    # We trust the main site as the identity provider by validating the caller's
+    # token against its own /api/auth/me — so we never import Telegizer code or
+    # share a database; we just call its public endpoint. TELEGIZER_API_URL is
+    # that site's API base (e.g. https://telegizer.com). Empty = bridge disabled.
+    TELEGIZER_API_URL = os.getenv("TELEGIZER_API_URL", "").rstrip("/")
+
     # Fernet key for encrypting custom-bot tokens at rest (crypto.py).
     # Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     # If unset, crypto.py derives a key from SECRET_KEY (dev fallback only).
