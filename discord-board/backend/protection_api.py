@@ -205,6 +205,17 @@ def update_moderation(guild_id: int):
         if "cooldown_minutes" in er_in:
             er["cooldown_minutes"] = _as_int(er_in["cooldown_minutes"], 10, 1, 1440)
         extra["emoji_reactions"] = er
+    if isinstance(body.get("social_replies"), dict):
+        sr_in = body["social_replies"]
+        sr = dict(extra.get("social_replies") or {})
+        for key in ("enabled", "react_to_appreciation", "reply_to_appreciation"):
+            if key in sr_in:
+                sr[key] = bool(sr_in[key])
+        if "cooldown_minutes" in sr_in:
+            sr["cooldown_minutes"] = _as_int(sr_in["cooldown_minutes"], 5, 1, 1440)
+        if sr_in.get("mode") in ("minimal", "professional", "friendly", "community_manager"):
+            sr["mode"] = sr_in["mode"]
+        extra["social_replies"] = sr
     if isinstance(body.get("command_permissions"), dict):
         cp = dict(extra.get("command_permissions") or {})
         if "delete_unauthorized" in body["command_permissions"]:

@@ -95,6 +95,12 @@ EXTRA_DEFAULTS = {
         "enabled": False, "admin_thumbs_up": False,
         "sentiment_reactions": False, "cooldown_minutes": 10,
     },
+    # Phase 3 parity — human-like social replies to appreciation (social_replies.py).
+    # mode: minimal | professional | friendly | community_manager
+    "social_replies": {
+        "enabled": False, "react_to_appreciation": True,
+        "reply_to_appreciation": True, "cooldown_minutes": 5, "mode": "friendly",
+    },
     "command_permissions": {"delete_unauthorized": False},
     # Escalating punishment ladder: steps = [{"at", "action", "minutes", "window_hours"}]
     "warn_ladder": {"enabled": False, "steps": []},

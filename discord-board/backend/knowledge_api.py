@@ -124,6 +124,13 @@ def update_digest(guild_id: int):
             digest["hour_utc"] = max(0, min(23, int(body["hour_utc"])))
         except (TypeError, ValueError):
             pass
+    if body.get("cadence") in ("daily", "weekly", "monthly"):
+        digest["cadence"] = body["cadence"]
+    if "weekday" in body:
+        try:
+            digest["weekday"] = max(0, min(6, int(body["weekday"])))
+        except (TypeError, ValueError):
+            pass
     extra["digest"] = digest
     row.extra = extra
     g.db.commit()

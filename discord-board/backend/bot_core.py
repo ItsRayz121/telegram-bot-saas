@@ -51,6 +51,7 @@ import protection
 import raid_guard
 import self_roles
 import settings as settings_mod
+import social_replies
 import starboard
 import stats_runtime
 import tickets
@@ -150,6 +151,7 @@ _dm_last: dict[tuple[int, int], float] = {}
 _emoji_react_last: dict[tuple[int, int], float] = {}     # sentiment reactions
 _reaction_xp_last: dict[tuple[int, int], float] = {}     # reaction XP per author
 _kb_reply_last: dict[tuple[int, int], float] = {}        # KB auto-replies
+_social_reply_last: dict[tuple[int, int], float] = {}    # social appreciation replies
 
 _RATE_MAP_MAX_AGE = 3600  # entries older than this are dead weight
 
@@ -158,7 +160,7 @@ def _sweep_rate_maps() -> None:
     """Drop stale per-user rate-limit entries so the maps stay bounded."""
     cutoff = time.monotonic() - _RATE_MAP_MAX_AGE
     for m in (_smartmod_last, _imageai_last, _escalation_last, _dm_last,
-              _emoji_react_last, _reaction_xp_last, _kb_reply_last):
+              _emoji_react_last, _reaction_xp_last, _kb_reply_last, _social_reply_last):
         for key in [k for k, ts in m.items() if ts < cutoff]:
             m.pop(key, None)
 
@@ -492,6 +494,7 @@ class CoreMixin:
                 await self._image_ai_check(message, cfg)
                 await self._escalation_check(message, cfg)
                 await self._maybe_emoji_react(message, cfg, is_staff=False)
+                await self._maybe_social_reply(message, cfg)
                 responded = await self._maybe_auto_respond(message)
                 if not responded:
                     await self._maybe_kb_reply(message, cfg)
@@ -740,6 +743,29 @@ class CoreMixin:
             return
         _emoji_react_last[key] = time.monotonic()
         await governor.safe(message.add_reaction(emoji), what="sentiment reaction")
+
+    async def _maybe_social_reply(self, message: discord.Message, cfg: dict) -> None:
+        """Human-like reply/reaction to appreciation messages ("thanks!"). Static
+        pools, no AI cost; per-member cooldown so it stays warm, not spammy."""
+        sr = cfg.get("social_replies") or {}
+        if not sr.get("enabled"):
+            return
+        if not social_replies.is_appreciation(message.content or ""):
+            return
+        cooldown = max(1, int(sr.get("cooldown_minutes") or 5)) * 60
+        key = (message.guild.id, message.author.id)
+        if time.monotonic() - _social_reply_last.get(key, 0.0) < cooldown:
+            return
+        _social_reply_last[key] = time.monotonic()
+        if sr.get("react_to_appreciation"):
+            await governor.safe(message.add_reaction(social_replies.appreciation_emoji()),
+                                what="appreciation reaction")
+        if sr.get("reply_to_appreciation"):
+            await governor.safe(
+                message.reply(social_replies.pick_reply(sr.get("mode") or "friendly"),
+                              mention_author=False),
+                what="appreciation reply",
+            )
 
     async def _command_permissions_check(self, message: discord.Message, cfg: dict) -> bool:
         """Text-style command misuse ("!ban", ".kick" … from non-staff). Deletes
@@ -1604,13 +1630,14 @@ class CoreMixin:
             if guild is None or channel is None or not hasattr(channel, "send"):
                 await asyncio.to_thread(digest_runtime.mark_posted, item["guild_id"])
                 continue
+            label = item.get("label", "Daily")
             body = await asyncio.to_thread(
-                digest_runtime.build_stats_text, guild.id, guild.name or "this server"
+                digest_runtime.build_stats_text, guild.id, guild.name or "this server", label
             )
             if ai.is_configured():
                 result = await asyncio.to_thread(
                     ai.complete,
-                    "Rewrite this Discord server daily digest as a short, upbeat "
+                    f"Rewrite this Discord server {label.lower()} digest as a short, upbeat "
                     "community update. Keep ALL the numbers. Max 5 lines.",
                     body, 250,
                 )

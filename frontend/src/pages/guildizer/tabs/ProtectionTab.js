@@ -108,6 +108,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
   const setRp = setSection('reports');
   const setMl = setSection('mod_log');
   const setAa = setSection('admin_alerts');
+  const setSr = setSection('social_replies');
 
   async function reviewReport(id, status) {
     try {
@@ -707,6 +708,54 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
               <TextField type="number" size="small" margin="dense" fullWidth label="Cooldown per member (minutes)" sx={{ mt: 1 }}
                 value={cfg.emoji_reactions?.cooldown_minutes ?? 10} inputProps={{ min: 1, max: 1440 }}
                 onChange={(e) => setEr({ cooldown_minutes: Number(e.target.value) })} />
+            </CardContent>
+          </Card>
+
+          {/* 9b ── Social Replies ──────────────────────────────────────────── */}
+          <Card variant="outlined" sx={{ mt: 2, mb: 2 }}>
+            <CardContent>
+              <Typography variant="h6" fontWeight={600} mb={1}>Social Replies</Typography>
+              <Typography variant="body2" color="text.secondary" mb={2}>
+                The bot replies warmly when a member says thanks ("that helped!", "you rock").
+                No AI cost — friendly canned responses, with a per-member cooldown.
+              </Typography>
+              <FormControlLabel
+                control={<Switch checked={!!cfg.social_replies?.enabled} onChange={(e) => setSr({ enabled: e.target.checked })} />}
+                label="Enable social replies"
+              />
+              {cfg.social_replies?.enabled && (
+                <>
+                  <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column' }}>
+                    <FormControlLabel
+                      control={<Switch checked={cfg.social_replies?.reply_to_appreciation !== false} onChange={(e) => setSr({ reply_to_appreciation: e.target.checked })} />}
+                      label="Reply with a friendly message"
+                    />
+                    <FormControlLabel
+                      control={<Switch checked={cfg.social_replies?.react_to_appreciation !== false} onChange={(e) => setSr({ react_to_appreciation: e.target.checked })} />}
+                      label="Add a 🙏 reaction"
+                    />
+                  </Box>
+                  <Grid container spacing={2} sx={{ mt: 0.5 }}>
+                    <Grid item xs={12} sm={6}>
+                      <FormControl fullWidth size="small">
+                        <InputLabel>Personality</InputLabel>
+                        <Select label="Personality" value={cfg.social_replies?.mode || 'friendly'}
+                          onChange={(e) => setSr({ mode: e.target.value })}>
+                          <MenuItem value="minimal">Minimal</MenuItem>
+                          <MenuItem value="professional">Professional</MenuItem>
+                          <MenuItem value="friendly">Friendly</MenuItem>
+                          <MenuItem value="community_manager">Community manager</MenuItem>
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <TextField type="number" size="small" fullWidth label="Cooldown per member (minutes)"
+                        value={cfg.social_replies?.cooldown_minutes ?? 5} inputProps={{ min: 1, max: 1440 }}
+                        onChange={(e) => setSr({ cooldown_minutes: Number(e.target.value) })} />
+                    </Grid>
+                  </Grid>
+                </>
+              )}
             </CardContent>
           </Card>
 

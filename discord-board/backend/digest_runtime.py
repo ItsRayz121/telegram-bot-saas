@@ -13,7 +13,30 @@ from models import GuildDailyStat, GuildSettings, Member
 
 log = logging.getLogger("guildizer.digest")
 
-DIGEST_DEFAULTS = {"enabled": False, "channel_id": None, "hour_utc": 18, "last_day": None}
+DIGEST_DEFAULTS = {
+    "enabled": False, "channel_id": None, "hour_utc": 18,
+    # Phase 3 parity — cadence. daily | weekly | monthly. `weekday` (0=Mon..6=Sun)
+    # is only used for weekly; monthly posts on the 1st. last_day = the date we
+    # last posted (period de-dupe is derived from it).
+    "cadence": "daily", "weekday": 0, "last_day": None,
+}
+
+_CADENCE_LABEL = {"daily": "Daily", "weekly": "Weekly", "monthly": "Monthly"}
+
+
+def _cadence_due(cfg: dict, now: datetime) -> bool:
+    """True if a digest of this cadence should post at `now` (caller has already
+    checked it wasn't posted today)."""
+    cadence = cfg.get("cadence") or "daily"
+    if cadence == "weekly":
+        try:
+            target = max(0, min(6, int(cfg.get("weekday", 0))))
+        except (TypeError, ValueError):
+            target = 0
+        return now.weekday() == target
+    if cadence == "monthly":
+        return now.day == 1
+    return True  # daily
 
 
 def get_config(guild_id: int) -> dict:
@@ -54,7 +77,10 @@ def due_guilds(served_guild_ids: list[int]) -> list[dict]:
                 continue
             if cfg.get("last_day") == today:
                 continue
-            out.append({"guild_id": row.guild_id, "channel_id": int(cfg["channel_id"])})
+            if not _cadence_due(cfg, now):
+                continue
+            out.append({"guild_id": row.guild_id, "channel_id": int(cfg["channel_id"]),
+                        "label": _CADENCE_LABEL.get(cfg.get("cadence") or "daily", "Daily")})
     finally:
         db.close()
         SessionLocal.remove()
@@ -78,7 +104,7 @@ def mark_posted(guild_id: int) -> None:
         SessionLocal.remove()
 
 
-def build_stats_text(guild_id: int, guild_name: str) -> str:
+def build_stats_text(guild_id: int, guild_name: str, label: str = "Daily") -> str:
     """Plain digest body from today's rollups + top chatter."""
     today = datetime.utcnow().strftime("%Y-%m-%d")
     db = SessionLocal()
@@ -100,7 +126,7 @@ def build_stats_text(guild_id: int, guild_name: str) -> str:
             .first()
         )
         lines = [
-            f"📊 **Daily digest — {guild_name}** ({today})",
+            f"📊 **{label} digest — {guild_name}** ({today})",
             f"• {messages} messages from {actives} active member(s)",
             f"• {joins} joined · {leaves} left",
         ]
