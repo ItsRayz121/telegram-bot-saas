@@ -22,6 +22,7 @@ import discord
 from discord import app_commands
 from discord.ext import tasks
 
+import admin_alerts
 import ai
 import anti_nuke
 import assistant
@@ -59,6 +60,29 @@ from database import SessionLocal
 from models import BotHealthEvent, CustomBot, Guild, GuildSettings, Member
 
 log = logging.getLogger("guildizer.core")
+
+
+# Auto-clean: Discord system-message types → the auto_clean config key that
+# enables deleting them. Built with getattr so newer/older discord.py enum
+# variants (boost tiers) degrade gracefully instead of raising at import.
+def _system_clean_map() -> dict:
+    out = {}
+    pairs = [
+        ("new_member", "join_messages"),
+        ("premium_guild_subscription", "boost_messages"),
+        ("premium_guild_subscription_tier_1", "boost_messages"),
+        ("premium_guild_subscription_tier_2", "boost_messages"),
+        ("premium_guild_subscription_tier_3", "boost_messages"),
+        ("pins_add", "pin_notifications"),
+    ]
+    for enum_name, cfg_key in pairs:
+        mt = getattr(discord.MessageType, enum_name, None)
+        if mt is not None:
+            out[mt] = cfg_key
+    return out
+
+
+_SYSTEM_CLEAN = _system_clean_map()
 
 
 # Both lineages need Server Members (join/leave) and Message Content (filter).
@@ -363,12 +387,13 @@ class CoreMixin:
             if not message.author.bot:
                 await self._handle_dm(message)
             return
-        # auto-clean: delete system join messages when configured (Phase 10)
-        if message.type == discord.MessageType.new_member:
+        # auto-clean: delete configured system messages (joins / boosts / pins)
+        clean_key = _SYSTEM_CLEAN.get(message.type)
+        if clean_key:
             if serves(self, message.guild.id):
                 cfg = await asyncio.to_thread(self._load_moderation, message.guild.id)
-                if cfg and (cfg.get("auto_clean") or {}).get("join_messages"):
-                    await governor.safe(message.delete(), what="auto-clean join message")
+                if cfg and (cfg.get("auto_clean") or {}).get(clean_key):
+                    await governor.safe(message.delete(), what=f"auto-clean {clean_key}")
             return
         # Auto-publish announcement-channel posts to follower servers (Phase 4
         # native). Runs before the bot skip so our own scheduled posts publish too.
@@ -443,6 +468,11 @@ class CoreMixin:
                 target_name=str(message.author), target_id=message.author.id,
                 reason=decision["detail"], channel_name=f"#{message.channel}",
             )
+            if action_taken == "ban":
+                await admin_alerts.post(
+                    message.guild, cfg, "ban",
+                    f"Auto-banned **{message.author}** — {decision['detail']}",
+                )
             await asyncio.to_thread(
                 automation_runtime.dispatch_event, message.guild.id, "moderation_action",
                 {"action": action_taken, "category": decision["category"],
@@ -881,6 +911,8 @@ class CoreMixin:
             automation_runtime.dispatch_event, guild.id, "raid_activated",
             {"seconds_remaining": secs},
         )
+        await admin_alerts.post(guild, cfg, "raid",
+                                f"Raid mode activated in **{guild.name}** for {secs}s.")
         if not cfg.get("rg_notify"):
             return
         ch_id = cfg.get("rg_notify_channel_id")

@@ -20,6 +20,7 @@ from collections import deque
 
 import discord
 
+import admin_alerts
 import governor
 import protection
 from database import SessionLocal
@@ -113,7 +114,7 @@ _KIND_LABEL = {
 
 
 async def respond(client, guild: discord.Guild, executor_id: int,
-                  kind: str, cfg: dict) -> None:
+                  kind: str, cfg: dict, full_cfg: dict | None = None) -> None:
     """Threshold crossed: contain the executor per the configured action and
     alert admins."""
     member = guild.get_member(executor_id)
@@ -143,6 +144,10 @@ async def respond(client, guild: discord.Guild, executor_id: int,
     await asyncio.to_thread(_log_event, guild.id, taken, executor_id,
                             str(member) if member else None, detail)
 
+    await admin_alerts.post(guild, full_cfg or {}, "nuke",
+                            f"Anti-nuke triggered by **{name}** (`{executor_id}`) — "
+                            f"{_KIND_LABEL[kind]}; response: {taken}.")
+
     ch_id = cfg.get("alert_channel_id")
     channel = guild.get_channel(int(ch_id)) if ch_id else guild.system_channel
     if channel is None or not hasattr(channel, "send"):
@@ -170,7 +175,7 @@ async def handle(client, guild: discord.Guild, kind: str, target_id: int) -> Non
     if executor_id is None or _exempt(client, guild, executor_id, cfg):
         return
     if note(guild.id, executor_id, kind, cfg):
-        await respond(client, guild, executor_id, kind, cfg)
+        await respond(client, guild, executor_id, kind, cfg, full_cfg=cfg_full)
 
 
 def _load_cfg(guild_id: int) -> dict | None:

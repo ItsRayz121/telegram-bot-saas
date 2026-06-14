@@ -17,6 +17,7 @@ from datetime import timedelta
 import discord
 from discord import app_commands
 
+import admin_alerts
 import assistant
 import governor
 import leveling
@@ -81,19 +82,24 @@ def _log_event(guild_id, category, action, user_id=None, username=None, detail=N
 
 
 def _mod_log_cfg(guild_id: int) -> dict:
-    """Just the mod_log section, for mirroring a manual action to the log channel."""
+    """The mod_log + admin_alerts sections, for mirroring a manual action to the
+    log channel and (optionally) the consolidated critical-alerts channel."""
     db = SessionLocal()
     try:
         snap = protection.load_snapshot(db, guild_id) or {}
-        return {"mod_log": snap.get("mod_log") or {}}
+        return {"mod_log": snap.get("mod_log") or {},
+                "admin_alerts": snap.get("admin_alerts") or {}}
     finally:
         db.close()
         SessionLocal.remove()
 
 
 async def _post_mod_log(interaction: discord.Interaction, action: str,
-                        member, reason: str | None, category: str = "moderation") -> None:
-    """Mirror a manual mod-command action into the guild's mod-log channel."""
+                        member, reason: str | None, category: str = "moderation",
+                        alert_event: str | None = None,
+                        alert_text: str | None = None) -> None:
+    """Mirror a manual mod-command action into the mod-log channel, and (when an
+    alert_event is given) into the consolidated critical-alerts channel."""
     cfg = await asyncio.to_thread(_mod_log_cfg, interaction.guild.id)
     await mod_log.post(
         interaction.guild, cfg, action=action, category=category,
@@ -101,6 +107,8 @@ async def _post_mod_log(interaction: discord.Interaction, action: str,
         target_id=getattr(member, "id", None),
         moderator_name=str(interaction.user), reason=reason,
     )
+    if alert_event and alert_text:
+        await admin_alerts.post(interaction.guild, cfg, alert_event, alert_text)
 
 
 def _warning_rows(guild_id: int, user_id: int, limit: int):
@@ -185,6 +193,9 @@ async def _report_alert(interaction: discord.Interaction, target_name: str,
                         detail: str) -> None:
     """Mirror a new /report into the configured alert channel (reports section)."""
     cfg = await asyncio.to_thread(_mod_cfg, interaction.guild.id)
+    alert_cfg = await asyncio.to_thread(_mod_log_cfg, interaction.guild.id)
+    await admin_alerts.post(interaction.guild, alert_cfg, "report",
+                            f"New report from {interaction.user} about **{target_name}**: {detail}")
     ch_id = (cfg.get("reports") or {}).get("alert_channel_id")
     if not ch_id:
         return
@@ -361,7 +372,8 @@ def attach_mod_commands(client) -> None:  # noqa: C901  (a flat list of commands
                                 str(member), "ban")
         await asyncio.to_thread(_log_event, interaction.guild.id, "moderation", "ban",
                                 member.id, str(member), reason)
-        await _post_mod_log(interaction, "ban", member, reason)
+        await _post_mod_log(interaction, "ban", member, reason, alert_event="ban",
+                            alert_text=f"**{member}** was banned by {interaction.user} — {reason}")
         cfg = await asyncio.to_thread(_mod_cfg, interaction.guild.id)
         await interaction.response.send_message(
             f"🔨 Banned **{member.display_name}**: {reason}",
@@ -418,7 +430,9 @@ def attach_mod_commands(client) -> None:  # noqa: C901  (a flat list of commands
                                 str(member), "ban")
         await asyncio.to_thread(_log_event, interaction.guild.id, "moderation", "tempban",
                                 member.id, str(member), f"{duration} — {reason}")
-        await _post_mod_log(interaction, "tempban", member, f"{duration} — {reason}")
+        await _post_mod_log(interaction, "tempban", member, f"{duration} — {reason}",
+                            alert_event="ban",
+                            alert_text=f"**{member}** was temp-banned ({duration}) by {interaction.user} — {reason}")
         cfg = await asyncio.to_thread(_mod_cfg, interaction.guild.id)
         await interaction.response.send_message(
             f"⏳ Temp-banned **{member.display_name}** for {duration}: {reason}",

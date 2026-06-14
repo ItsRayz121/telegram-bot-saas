@@ -188,8 +188,9 @@ def update_moderation(guild_id: int):
     if isinstance(body.get("auto_clean"), dict):
         ac_in = body["auto_clean"]
         ac = dict(extra.get("auto_clean") or {})
-        if "join_messages" in ac_in:
-            ac["join_messages"] = bool(ac_in["join_messages"])
+        for key in ("join_messages", "boost_messages", "pin_notifications"):
+            if key in ac_in:
+                ac[key] = bool(ac_in[key])
         if "warn_messages_seconds" in ac_in:
             ac["warn_messages_seconds"] = _as_int(ac_in["warn_messages_seconds"], 0, 0, 86400)
         if "action_messages_seconds" in ac_in:
@@ -277,6 +278,16 @@ def update_moderation(guild_id: int):
             ch = ml_in["channel_id"]
             ml["channel_id"] = str(ch) if ch and str(ch).isdigit() else None
         extra["mod_log"] = ml
+    if isinstance(body.get("admin_alerts"), dict):
+        aa_in = body["admin_alerts"]
+        aa = dict(extra.get("admin_alerts") or {})
+        for key in ("enabled", "on_ban", "on_raid", "on_nuke", "on_report"):
+            if key in aa_in:
+                aa[key] = bool(aa_in[key])
+        if "channel_id" in aa_in:
+            ch = aa_in["channel_id"]
+            aa["channel_id"] = str(ch) if ch and str(ch).isdigit() else None
+        extra["admin_alerts"] = aa
 
     # Native AutoMod sync: any change to the blocked words or the sync settings
     # queues a reconcile — the bot's 20s loop pushes the rule to Discord and

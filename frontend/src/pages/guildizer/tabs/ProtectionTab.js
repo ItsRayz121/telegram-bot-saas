@@ -107,6 +107,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
   const setWl = setSection('warn_ladder');
   const setRp = setSection('reports');
   const setMl = setSection('mod_log');
+  const setAa = setSection('admin_alerts');
 
   async function reviewReport(id, status) {
     try {
@@ -762,6 +763,8 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
             <Card variant="outlined"><CardContent>
               <Typography variant="h6" fontWeight={600} mb={1}>Auto clean</Typography>
               <FormControlLabel control={<Switch checked={!!cfg.auto_clean?.join_messages} onChange={(e) => setAc({ join_messages: e.target.checked })} />} label={'Auto-delete "X joined the server" messages'} />
+              <FormControlLabel control={<Switch checked={!!cfg.auto_clean?.boost_messages} onChange={(e) => setAc({ boost_messages: e.target.checked })} />} label={'Auto-delete server-boost messages'} />
+              <FormControlLabel control={<Switch checked={!!cfg.auto_clean?.pin_notifications} onChange={(e) => setAc({ pin_notifications: e.target.checked })} />} label={'Auto-delete "X pinned a message" notices'} />
               <TextField type="number" size="small" margin="dense" fullWidth
                 label="Delete warning messages after (seconds, 0 = never)"
                 value={cfg.auto_clean?.warn_messages_seconds ?? 0} inputProps={{ min: 0, max: 86400 }}
@@ -786,6 +789,38 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
               />
               {cfg.mod_log?.enabled && channelSelect('Log channel', cfg.mod_log?.channel_id,
                 (v) => setMl({ channel_id: v }), '— pick a channel —')}
+            </CardContent></Card>
+          </Grid>
+
+          <Grid item xs={12}>
+            <Card variant="outlined"><CardContent>
+              <Typography variant="h6" fontWeight={600} mb={1}>Critical alerts</Typography>
+              <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+                One channel for the high-signal safety events, so you don't have to watch the full
+                mod-log. Pick which events should ping here.
+              </Typography>
+              <FormControlLabel
+                control={<Switch checked={!!cfg.admin_alerts?.enabled} onChange={(e) => setAa({ enabled: e.target.checked })} />}
+                label="Enable a consolidated critical-alerts channel"
+              />
+              {cfg.admin_alerts?.enabled && (
+                <>
+                  {channelSelect('Alert channel', cfg.admin_alerts?.channel_id,
+                    (v) => setAa({ channel_id: v }), '— pick a channel —')}
+                  <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column' }}>
+                    {[
+                      ['on_ban', 'Bans (automod + manual)'],
+                      ['on_raid', 'Raid mode activated'],
+                      ['on_nuke', 'Anti-nuke triggered'],
+                      ['on_report', 'New member reports'],
+                    ].map(([key, label]) => (
+                      <FormControlLabel key={key}
+                        control={<Switch checked={!!cfg.admin_alerts?.[key]} onChange={(e) => setAa({ [key]: e.target.checked })} />}
+                        label={label} />
+                    ))}
+                  </Box>
+                </>
+              )}
             </CardContent></Card>
           </Grid>
 

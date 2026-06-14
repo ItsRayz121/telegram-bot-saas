@@ -73,6 +73,8 @@ EXTRA_DEFAULTS = {
     "warnings": {"max_warnings": 3, "action": "timeout", "timeout_minutes": 30,
                  "window_hours": 0},
     "auto_clean": {"join_messages": False,
+                   # Phase 2 parity — broader system-message cleanup.
+                   "boost_messages": False, "pin_notifications": False,
                    "warn_messages_seconds": 0, "action_messages_seconds": 0},
     "escalation": {"enabled": False, "keywords": [], "alert_channel_id": None,
                    "types": []},
@@ -117,6 +119,12 @@ EXTRA_DEFAULTS = {
     # every moderation action (automod removals + manual mod commands) is
     # mirrored there as an embed (mod_log.py).
     "mod_log": {"enabled": False, "channel_id": None},
+    # Phase 2 parity — consolidated critical-alerts channel. One place an admin
+    # gets the high-signal safety events, instead of wiring each feature's own
+    # channel. Additive: per-feature alert channels still work (admin_alerts.py).
+    "admin_alerts": {"enabled": False, "channel_id": None,
+                     "on_ban": True, "on_raid": True,
+                     "on_nuke": True, "on_report": False},
 }
 
 
