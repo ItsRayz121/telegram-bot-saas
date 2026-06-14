@@ -113,6 +113,10 @@ export default function GuildizerServers() {
     return bots.filter((b) => (b.bot_username || '').toLowerCase().includes(q));
   }, [bots, botSearch]);
 
+  // Full-page redirect into Discord OAuth. Pre-auth, every action on the preview
+  // cards routes here — nothing in the dashboard works until the account is linked.
+  const connect = () => { window.location.href = guildizerLoginUrl(); };
+
   if (state.loading) {
     return <Box sx={{ display: 'grid', placeItems: 'center', minHeight: 320 }}><CircularProgress /></Box>;
   }
@@ -130,59 +134,50 @@ export default function GuildizerServers() {
 
       {error && <Alert severity="warning" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
 
-      {!state.connected ? (
-        <Card variant="outlined" sx={{ maxWidth: 460, mx: 'auto', textAlign: 'center' }}>
-          <CardContent sx={{ p: 4 }}>
-            <Forum sx={{ fontSize: 44, color: 'primary.main', mb: 1 }} />
-            <Typography variant="h6" fontWeight={700} mb={0.5}>Connect your Discord</Typography>
-            <Typography variant="body2" color="text.secondary" mb={3}>
-              Authorize Discord to see and manage the servers you run. We request <b>identify</b> and <b>guilds</b> only.
-            </Typography>
-            <Button
-              variant="contained" size="large" startIcon={<Forum />}
-              onClick={() => { window.location.href = guildizerLoginUrl(); }}
-            >
-              Continue with Discord
-            </Button>
-          </CardContent>
-        </Card>
-      ) : (
-        <>
-          {/* ── Official Guildizer Bot hero card ── */}
-          <OfficialBotCard
-            installedCount={installedCount}
-            inviteUrl={state.inviteUrl}
-            onManage={() => navigate('/guildizer/servers')}
-          />
+      {/* One-time "Connect your Discord" banner — pinned at the top while signed
+          out, auto-hides the moment the account is linked. The full layout
+          (official bot + community bots) renders below it either way. */}
+      {!state.connected && <ConnectBanner onConnect={connect} />}
 
-          {/* Secondary controls row (Guildizer-specific) */}
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mb: 2, flexWrap: 'wrap' }}>
-            {isAdmin && (
-              <Button size="small" variant="outlined" startIcon={<AdminPanelSettings />} onClick={() => navigate('/guildizer/admin')}>
-                Admin
-              </Button>
-            )}
-            <Button size="small" variant="outlined" startIcon={<Redeem />} onClick={() => setRedeemOpen(true)}>
-              Redeem code
-            </Button>
-            <NotificationsBell />
-          </Box>
+      {/* ── Official Guildizer Bot hero card (always visible) ── */}
+      <OfficialBotCard
+        connected={state.connected}
+        installedCount={installedCount}
+        inviteUrl={state.inviteUrl}
+        onManage={() => navigate('/guildizer/servers')}
+        onConnect={connect}
+      />
 
-          {/* ── Default view: Community (custom) bots, mirroring the Telegizer
-                dashboard's Community Bots section. The linked servers now live on
-                their own page (/guildizer/servers) via the hero card's button. ── */}
-          <CommunityBotsSection
-            bots={bots}
-            filteredBots={filteredBots}
-            hasPro={hasPro}
-            search={botSearch}
-            onSearch={setBotSearch}
-            onAdd={() => setAddBotOpen(true)}
-            onChanged={loadBots}
-            navigate={navigate}
-          />
-        </>
+      {/* Secondary controls row — only meaningful once connected (all auth-gated). */}
+      {state.connected && (
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mb: 2, flexWrap: 'wrap' }}>
+          {isAdmin && (
+            <Button size="small" variant="outlined" startIcon={<AdminPanelSettings />} onClick={() => navigate('/guildizer/admin')}>
+              Admin
+            </Button>
+          )}
+          <Button size="small" variant="outlined" startIcon={<Redeem />} onClick={() => setRedeemOpen(true)}>
+            Redeem code
+          </Button>
+          <NotificationsBell />
+        </Box>
       )}
+
+      {/* ── Community (custom) bots, mirroring the Telegizer dashboard's
+            Community Bots section. The linked servers live on their own page
+            (/guildizer/servers) via the hero card's button. ── */}
+      <CommunityBotsSection
+        connected={state.connected}
+        bots={bots}
+        filteredBots={filteredBots}
+        hasPro={hasPro}
+        search={botSearch}
+        onSearch={setBotSearch}
+        onAdd={() => setAddBotOpen(true)}
+        onConnect={connect}
+        onChanged={loadBots}
+        navigate={navigate}
+      />
 
       <ConnectWizard
         open={addBotOpen}
@@ -194,8 +189,46 @@ export default function GuildizerServers() {
   );
 }
 
+// ── One-time "Connect your Discord" banner (signed-out only) ──────────────────
+function ConnectBanner({ onConnect }) {
+  return (
+    <Card
+      sx={{
+        mb: 2,
+        border: '1px solid',
+        borderColor: 'rgba(88,101,242,0.35)',
+        background: 'linear-gradient(135deg, rgba(88,101,242,0.12) 0%, rgba(11,22,38,0.9) 100%)',
+        boxShadow: '0 4px 24px rgba(0,0,0,0.4), 0 0 0 1px rgba(88,101,242,0.18)',
+      }}
+    >
+      <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', py: 2 }}>
+        <Avatar
+          sx={{
+            width: 42, height: 42, flexShrink: 0,
+            background: 'linear-gradient(135deg, #5865f2, #22d3ee)',
+            boxShadow: '0 0 14px rgba(88,101,242,0.4)',
+          }}
+        >
+          <Forum fontSize="small" />
+        </Avatar>
+        <Box sx={{ flexGrow: 1, minWidth: 200 }}>
+          <Typography variant="subtitle1" fontWeight={700} letterSpacing="-0.01em">Connect your Discord</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Authorize Discord to see and manage the servers you run. We request <b>identify</b> and <b>guilds</b> only.
+          </Typography>
+        </Box>
+        <Button variant="contained" startIcon={<Forum />} onClick={onConnect} sx={{ flexShrink: 0 }}>
+          Continue with Discord
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Official Guildizer Bot hero card (mirrors Telegizer's OfficialBotSection) ──
-function OfficialBotCard({ installedCount, inviteUrl, onManage }) {
+// Always rendered. Pre-auth it shows a generic "preview" (no live counts) and its
+// action buttons funnel into the Discord connect flow.
+function OfficialBotCard({ connected, installedCount, inviteUrl, onManage, onConnect }) {
   return (
     <Card
       sx={{
@@ -226,18 +259,24 @@ function OfficialBotCard({ installedCount, inviteUrl, onManage }) {
           <Chip label="Active" color="success" size="small" sx={{ boxShadow: '0 0 8px rgba(34,197,94,0.4)' }} />
         </Box>
         <Typography variant="caption" color="text.disabled">
-          {installedCount} server{installedCount !== 1 ? 's' : ''} linked · Free for all verified users
+          {connected
+            ? `${installedCount} server${installedCount !== 1 ? 's' : ''} linked · Free for all verified users`
+            : 'Free for all verified users · Connect Discord to link your servers'}
         </Typography>
       </CardContent>
       <CardActions sx={{ px: 2, pb: 2, pt: 1, gap: 1 }}>
-        {inviteUrl && (
+        {connected && inviteUrl ? (
           <Button size="small" variant="contained" component="a" href={inviteUrl} target="_blank" rel="noopener noreferrer"
             startIcon={<Add />}>
             Add to Server
           </Button>
+        ) : (
+          <Button size="small" variant="contained" startIcon={<Add />} onClick={onConnect}>
+            Add to Server
+          </Button>
         )}
-        <Button size="small" startIcon={<Groups />} onClick={onManage}>
-          Manage Servers ({installedCount})
+        <Button size="small" startIcon={<Groups />} onClick={connected ? onManage : onConnect}>
+          Manage Servers{connected ? ` (${installedCount})` : ''}
         </Button>
       </CardActions>
     </Card>
@@ -345,7 +384,7 @@ export function ManageServersView({
 
 // ── Community Bots section — the default Servers view. White-label custom bots,
 //    laid out to match the Telegizer dashboard's Community Bots section 1:1. ──
-function CommunityBotsSection({ bots, filteredBots, hasPro, search, onSearch, onAdd, onChanged, navigate }) {
+function CommunityBotsSection({ connected, bots, filteredBots, hasPro, search, onSearch, onAdd, onConnect, onChanged, navigate }) {
   const count = bots.length;
   const atLimit = count >= MAX_CUSTOM_BOTS;
   const slotsFree = MAX_CUSTOM_BOTS - count;
@@ -385,9 +424,9 @@ function CommunityBotsSection({ bots, filteredBots, hasPro, search, onSearch, on
 
       {/* CTA row */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, flexWrap: 'wrap' }}>
-        <Tooltip title={atLimit ? 'Custom-bot limit reached' : !hasPro ? 'Custom bots need at least one Pro server' : ''}>
+        <Tooltip title={!connected ? 'Connect your Discord first' : atLimit ? 'Custom-bot limit reached' : !hasPro ? 'Custom bots need at least one Pro server' : ''}>
           <span>
-            <Button variant="contained" size="small" startIcon={<Add />} onClick={onAdd} disabled={atLimit}>
+            <Button variant="contained" size="small" startIcon={<Add />} onClick={connected ? onAdd : onConnect} disabled={connected && atLimit}>
               Add Bot
             </Button>
           </span>
@@ -441,7 +480,7 @@ function CommunityBotsSection({ bots, filteredBots, hasPro, search, onSearch, on
           </Typography>
           <Button
             sx={{ mt: 2 }} variant="contained" startIcon={<Add />}
-            onClick={onAdd}
+            onClick={connected ? onAdd : onConnect}
           >
             Connect a bot
           </Button>

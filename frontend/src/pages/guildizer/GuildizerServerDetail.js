@@ -2,13 +2,12 @@ import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Box, Typography, Tabs, Tab, Card, CardContent, Grid, Avatar, Stack,
-  List, ListItem, ListItemText, ListItemIcon, Chip, CircularProgress, Alert, Button,
-  IconButton, Tooltip, Menu, MenuItem,
+  List, ListItem, ListItemText, Chip, CircularProgress, Alert, Button,
+  IconButton, Tooltip,
 } from '@mui/material';
 import {
   ArrowBack, Save, Schedule, Shield, People, Forum as ForumIcon,
-  SmartToy, Bolt, Assessment, Dashboard as DashboardIcon, Terminal,
-  GroupAdd, Payments, MoreHoriz, ExpandMore,
+  SmartToy, Bolt, Assessment, Settings as SettingsIcon,
 } from '@mui/icons-material';
 import guildizerApi from '../../services/guildizerApi';
 import { SaveBarContext } from './tabs/saveBar';
@@ -39,32 +38,28 @@ import {
 const CHANNEL_TYPES = { 0: 'Text', 2: 'Voice', 4: 'Category', 5: 'Announcement', 13: 'Stage', 15: 'Forum' };
 
 // Telegizer-parity IA: 6 grouped management tabs (Moderation … Analytics) with
-// the exact subtab structure of the Telegram group dashboard, plus the
-// server-level extras (Overview / Commands / Team / Billing). Each carries an
-// icon so the pill nav matches the Telegizer category pills 1:1.
+// the exact subtab structure of the Telegram group dashboard, fronted by a single
+// "Settings" pill that gathers the Guildizer-only server-admin extras (Overview /
+// Commands / Team / Billing) as sub-tabs — keeping the 6 shared category pills
+// clean and matching the Telegizer category pills 1:1.
 const AREAS = [
-  { label: 'Overview', icon: DashboardIcon },
+  { label: 'Settings', icon: SettingsIcon, subs: ['Overview', 'Commands', 'Team', 'Billing'] },
   { label: 'Moderation', icon: Shield, subs: ['AutoMod', 'Behavior', 'Reports'] },
   { label: 'Members', icon: People, subs: ['Verification', 'Welcome', 'XP & Roles', 'Self-roles'] },
   { label: 'Engagement', icon: ForumIcon, subs: ['Raids', 'Invite Links', 'Campaigns', 'Tickets', 'Starboard', 'Boosts', 'Events'] },
   { label: 'AI & Integrations', icon: SmartToy, subs: ['Knowledge Base', 'Escalation'] },
   { label: 'Automation', icon: Bolt, subs: ['Scheduler', 'Auto Reply', 'Polls', 'Forwarding', 'Threads', 'Workflows', 'Webhooks'] },
   { label: 'Analytics', icon: Assessment, subs: ['Overview', 'Members', 'Leaderboard', 'Audit Log', 'Warnings', 'Digest', 'AI Activity'] },
-  { label: 'Commands', icon: Terminal },
-  { label: 'Team', icon: GroupAdd },
-  { label: 'Billing', icon: Payments },
 ];
 
-// The 6 Telegizer-parity category pills (Moderation … Analytics) + Overview stay
-// visible; the server-admin tabs below are tucked into a "More ▾" overflow pill so
-// the nav doesn't sprawl past ~7 items (matches the Telegram dashboard's pill count).
-const MORE_LABELS = ['Commands', 'Team', 'Billing'];
-const PRIMARY_AREAS = AREAS.filter((a) => !MORE_LABELS.includes(a.label));
-const MORE_AREAS = AREAS.filter((a) => MORE_LABELS.includes(a.label));
-
-// Old flat-tab deep links → new area/subtab so saved URLs keep working.
+// Old flat-tab deep links → new area/subtab so saved URLs keep working. The
+// former top-level Overview / Commands / Team / Billing tabs now live as sub-tabs
+// under Settings; older flat tabs map onto their category/subtab homes.
 const LEGACY_TABS = {
-  Settings: ['Members', 'Welcome'],
+  Overview: ['Settings', 'Overview'],
+  Commands: ['Settings', 'Commands'],
+  Team: ['Settings', 'Team'],
+  Billing: ['Settings', 'Billing'],
   Content: ['Automation', 'Scheduler'],
   Protection: ['Moderation', 'AutoMod'],
   Leveling: ['Members', 'XP & Roles'],
@@ -78,7 +73,7 @@ export default function GuildizerServerDetail() {
   // Deep-linkable: /guildizer/servers/<id>?tab=Moderation&sub=Behavior
   const [searchParams, setSearchParams] = useSearchParams();
 
-  let tabName = searchParams.get('tab') || 'Overview';
+  let tabName = searchParams.get('tab') || 'Settings';
   let subName = searchParams.get('sub') || '';
   if (LEGACY_TABS[tabName]) [tabName, subName] = LEGACY_TABS[tabName];
 
@@ -88,12 +83,16 @@ export default function GuildizerServerDetail() {
   const subIdx = subs ? Math.max(0, subs.indexOf(subName)) : 0;
   const sub = subs ? subs[subIdx] : null;
 
-  const setTab = (label) => setSearchParams(label === 'Overview' ? {} : { tab: label }, { replace: true });
+  // Settings is the default landing area, so its bare pill keeps a clean URL;
+  // every area carries subs, so a pill click jumps to that area's first sub-tab.
+  const setTab = (label) => {
+    if (label === 'Settings') { setSearchParams({}, { replace: true }); return; }
+    const a = AREAS.find((x) => x.label === label);
+    setSearchParams(a?.subs ? { tab: label, sub: a.subs[0] } : { tab: label }, { replace: true });
+  };
   const setSub = (v) => setSearchParams({ tab: area.label, sub: subs[v] }, { replace: true });
 
   const [state, setState] = useState({ loading: true, guild: null, error: null });
-  const [moreAnchor, setMoreAnchor] = useState(null); // "More ▾" overflow menu
-  const moreActive = MORE_LABELS.includes(area.label);
 
   // ── Single sticky Save bar wiring (Telegizer parity) ────────────────────────
   const saveRef = useRef(null);
@@ -203,7 +202,7 @@ export default function GuildizerServerDetail() {
                 display: 'flex', gap: 0.75, py: 1, overflowX: 'auto',
                 '::-webkit-scrollbar': { display: 'none' }, scrollBehavior: 'smooth', WebkitOverflowScrolling: 'touch',
               }}>
-                {PRIMARY_AREAS.map(({ label, icon: Icon }) => {
+                {AREAS.map(({ label, icon: Icon }) => {
                   const active = label === area.label;
                   return (
                     <Box
@@ -226,49 +225,7 @@ export default function GuildizerServerDetail() {
                     </Box>
                   );
                 })}
-
-                {/* "More ▾" overflow pill — Commands / Team / Billing. Shows the
-                    active item's name when one is selected so it never feels hidden. */}
-                <Box
-                  onClick={(e) => setMoreAnchor(e.currentTarget)}
-                  sx={{
-                    display: 'flex', alignItems: 'center', gap: 0.5,
-                    px: 1.5, py: 0.6, borderRadius: 2, cursor: 'pointer',
-                    whiteSpace: 'nowrap', userSelect: 'none',
-                    bgcolor: moreActive ? 'primary.main' : 'rgba(255,255,255,0.05)',
-                    color: moreActive ? 'white' : 'text.secondary',
-                    border: '1px solid',
-                    borderColor: moreActive ? 'primary.main' : 'rgba(255,255,255,0.12)',
-                    transition: 'all 0.15s ease',
-                    '&:hover': { bgcolor: moreActive ? 'primary.dark' : 'rgba(255,255,255,0.09)' },
-                  }}
-                >
-                  <MoreHoriz sx={{ fontSize: 15 }} />
-                  <Typography variant="body2" fontWeight={moreActive ? 700 : 500} fontSize="0.78rem">
-                    {moreActive ? area.label : 'More'}
-                  </Typography>
-                  <ExpandMore sx={{ fontSize: 14 }} />
-                </Box>
               </Box>
-
-              <Menu
-                anchorEl={moreAnchor}
-                open={!!moreAnchor}
-                onClose={() => setMoreAnchor(null)}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-                transformOrigin={{ vertical: 'top', horizontal: 'left' }}
-              >
-                {MORE_AREAS.map(({ label, icon: Icon }) => (
-                  <MenuItem
-                    key={label}
-                    selected={label === area.label}
-                    onClick={() => { setTab(label); setMoreAnchor(null); }}
-                  >
-                    <ListItemIcon sx={{ minWidth: 34 }}><Icon fontSize="small" /></ListItemIcon>
-                    <ListItemText primaryTypographyProps={{ fontSize: '0.85rem' }}>{label}</ListItemText>
-                  </MenuItem>
-                ))}
-              </Menu>
             </Box>
 
             {/* Sub-tab row */}
@@ -282,7 +239,11 @@ export default function GuildizerServerDetail() {
 
           {/* ── Tab content ── */}
           <Box sx={{ pt: 3, pb: 4 }}>
-            {key === 'Overview' && <Overview guild={guild} />}
+            {/* SETTINGS (server-level) */}
+            {key === 'Settings/Overview' && <Overview guild={guild} />}
+            {key === 'Settings/Commands' && <CommandsTab guildId={guildId} />}
+            {key === 'Settings/Team' && <TeamTab guildId={guildId} />}
+            {key === 'Settings/Billing' && <BillingTab guildId={guildId} />}
 
             {/* MODERATION */}
             {key === 'Moderation/AutoMod' && <ProtectionTab guildId={guildId} channels={channels} section="automod" />}
@@ -325,11 +286,6 @@ export default function GuildizerServerDetail() {
             {key === 'Analytics/Warnings' && <WarningsSubtab guildId={guildId} />}
             {key === 'Analytics/Digest' && <DigestSubtab guildId={guildId} channels={channels} />}
             {key === 'Analytics/AI Activity' && <AIActivitySubtab guildId={guildId} />}
-
-            {/* SERVER-LEVEL */}
-            {key === 'Commands' && <CommandsTab guildId={guildId} />}
-            {key === 'Team' && <TeamTab guildId={guildId} />}
-            {key === 'Billing' && <BillingTab guildId={guildId} />}
           </Box>
         </SaveBarContext.Provider>
       )}
