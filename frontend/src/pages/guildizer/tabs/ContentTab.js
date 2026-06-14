@@ -40,13 +40,13 @@ export default function ContentTab({ guildId, channels = [] }) {
     <Grid container spacing={2}>
       {error && <Grid item xs={12}><Alert severity="warning" onClose={() => setError(null)}>{error}</Alert></Grid>}
 
-      <Grid item xs={12} md={6}>
+      <Grid item xs={12}>
         <SchedulerCard guildId={guildId} messages={messages} channels={textChannels} onChanged={reload} />
       </Grid>
-      <Grid item xs={12} md={6}>
+      <Grid item xs={12}>
         <PollsCard guildId={guildId} polls={polls} channels={textChannels} onChanged={reload} />
       </Grid>
-      <Grid item xs={12} md={6}>
+      <Grid item xs={12}>
         <DigestCard guildId={guildId} channels={textChannels} />
       </Grid>
       <Grid item xs={12}>

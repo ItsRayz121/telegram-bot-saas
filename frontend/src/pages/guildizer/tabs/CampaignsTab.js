@@ -244,7 +244,7 @@ function CampaignDetail({ guildId, campaignId, channels, plan, onBack }) {
           </CardContent></Card>
         </Grid>
 
-        <Grid item xs={12} md={6}>
+        <Grid item xs={12}>
           <FieldsCard guildId={guildId} campaignId={campaignId} />
         </Grid>
 

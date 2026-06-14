@@ -390,7 +390,7 @@ function Overview({ guild }) {
   const roles = (guild.roles || []).filter((r) => r.name !== '@everyone');
   return (
     <Grid container spacing={2}>
-      <Grid item xs={12} md={6}>
+      <Grid item xs={12}>
         <Card variant="outlined">
           <CardContent>
             <Typography variant="subtitle1" fontWeight={700} mb={1}>Channels</Typography>
@@ -405,7 +405,7 @@ function Overview({ guild }) {
           </CardContent>
         </Card>
       </Grid>
-      <Grid item xs={12} md={6}>
+      <Grid item xs={12}>
         <Card variant="outlined">
           <CardContent>
             <Typography variant="subtitle1" fontWeight={700} mb={1}>Roles</Typography>

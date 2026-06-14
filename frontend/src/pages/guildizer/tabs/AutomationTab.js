@@ -59,10 +59,10 @@ export default function AutomationTab({ guildId, channels = [], roles = [] }) {
         <WorkflowsCard guildId={guildId} workflows={workflows} channels={textChannels}
           roles={assignableRoles} onChanged={reload} />
       </Grid>
-      <Grid item xs={12} md={6}>
+      <Grid item xs={12}>
         <MirrorsCard guildId={guildId} mirrors={mirrors} channels={textChannels} onChanged={reload} />
       </Grid>
-      <Grid item xs={12} md={6}>
+      <Grid item xs={12}>
         <WebhooksCard guildId={guildId} inbound={inbound} outbound={outbound}
           channels={textChannels} onChanged={reload} />
       </Grid>
