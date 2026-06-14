@@ -47,7 +47,7 @@ export default function CommandsTab({ guildId }) {
 
   return (
     <Grid container spacing={2}>
-      <Grid item xs={12} md={6}>
+      <Grid item xs={12}>
         <Card variant="outlined"><CardContent>
           <Typography variant="h6" fontWeight={600}>Slash commands</Typography>
           <Typography variant="caption" color="text.secondary" display="block" mb={1}>
@@ -70,7 +70,7 @@ export default function CommandsTab({ guildId }) {
         </CardContent></Card>
       </Grid>
 
-      <Grid item xs={12} md={6}>
+      <Grid item xs={12}>
         <Card variant="outlined"><CardContent>
           <Typography variant="h6" fontWeight={600} mb={1}>{editingId ? 'Edit command' : 'New command'}</Typography>
           <Typography variant="body2" color="text.secondary" mb={2}>

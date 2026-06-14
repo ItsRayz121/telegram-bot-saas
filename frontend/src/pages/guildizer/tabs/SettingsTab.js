@@ -50,7 +50,7 @@ export default function SettingsTab({ guildId, channels = [], roles = [] }) {
 
   return (
     <Grid container spacing={2}>
-      <Grid item xs={12} md={6}>
+      <Grid item xs={12}>
         <Card variant="outlined"><CardContent>
           <Typography variant="subtitle1" fontWeight={700} mb={1}>Welcome message</Typography>
           <FormControlLabel
@@ -88,7 +88,7 @@ export default function SettingsTab({ guildId, channels = [], roles = [] }) {
         </CardContent></Card>
       </Grid>
 
-      <Grid item xs={12} md={6}>
+      <Grid item xs={12}>
         <Card variant="outlined"><CardContent>
           <Typography variant="subtitle1" fontWeight={700} mb={1}>DM new members</Typography>
           <FormControlLabel
@@ -102,7 +102,7 @@ export default function SettingsTab({ guildId, channels = [], roles = [] }) {
         </CardContent></Card>
       </Grid>
 
-      <Grid item xs={12} md={6}>
+      <Grid item xs={12}>
         <Card variant="outlined"><CardContent>
           <Typography variant="subtitle1" fontWeight={700} mb={1}>Leave message</Typography>
           <FormControlLabel

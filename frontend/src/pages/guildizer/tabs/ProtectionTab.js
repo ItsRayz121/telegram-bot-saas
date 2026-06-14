@@ -686,7 +686,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
       {/* ════════════════════════════ BEHAVIOR ════════════════════════════ */}
       {section === 'behavior' && (
         <Grid container spacing={2}>
-          <Grid item xs={12} md={6}>
+          <Grid item xs={12}>
             <Card variant="outlined"><CardContent>
               <Typography variant="h6" fontWeight={600} mb={1}>Warning thresholds</Typography>
               <Typography variant="caption" color="text.secondary" display="block" mb={1}>
@@ -711,7 +711,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
             </CardContent></Card>
           </Grid>
 
-          <Grid item xs={12} md={6}>
+          <Grid item xs={12}>
             <Card variant="outlined"><CardContent>
               <Typography variant="h6" fontWeight={600} mb={1}>Auto clean</Typography>
               <FormControlLabel control={<Switch checked={!!cfg.auto_clean?.join_messages} onChange={(e) => setAc({ join_messages: e.target.checked })} />} label={'Auto-delete "X joined the server" messages'} />
@@ -786,7 +786,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
       {/* ════════════════════════════ REPORTS ════════════════════════════ */}
       {section === 'reports' && (
         <Grid container spacing={2}>
-          <Grid item xs={12} md={6}>
+          <Grid item xs={12}>
             <Card variant="outlined"><CardContent>
               <Typography variant="h6" fontWeight={600} mb={1}>Report settings</Typography>
               <Typography variant="caption" color="text.secondary" display="block" mb={1}>
@@ -825,7 +825,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
       {/* ════════════════════ VERIFICATION (Members tab) ════════════════════ */}
       {section === 'verification' && (
         <Grid container spacing={2}>
-          <Grid item xs={12} md={6}>
+          <Grid item xs={12}>
             <Card variant="outlined"><CardContent>
               <Typography variant="h6" fontWeight={600} mb={1}>Join verification (captcha)</Typography>
               <FormControlLabel control={<Switch checked={!!cfg.verification?.enabled} onChange={(e) => setV({ enabled: e.target.checked })} />} label="Require new members to verify before they can see the server" />
@@ -853,7 +853,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
             </CardContent></Card>
           </Grid>
 
-          <Grid item xs={12} md={6}>
+          <Grid item xs={12}>
             <Card variant="outlined"><CardContent>
               <Typography variant="h6" fontWeight={600} mb={1}>Join gate</Typography>
               {num('Minimum account age (days, 0 = off)', 'jg_min_account_age_days', 0, 365)}
@@ -866,7 +866,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
       {/* ════════════════ ESCALATION (AI & Integrations tab) ════════════════ */}
       {section === 'escalation' && (
         <Grid container spacing={2}>
-          <Grid item xs={12} md={8}>
+          <Grid item xs={12}>
             <Card variant="outlined"><CardContent>
               <Typography variant="h6" fontWeight={600} mb={1}>Escalation alerts</Typography>
               <FormControlLabel control={<Switch checked={!!cfg.escalation?.enabled} onChange={(e) => setEsc({ enabled: e.target.checked })} />} label="Alert admins when members sound frustrated" />

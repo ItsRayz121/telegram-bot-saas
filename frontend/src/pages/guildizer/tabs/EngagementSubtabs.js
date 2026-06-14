@@ -77,7 +77,7 @@ export function RaidsSubtab({ guildId, channels = [] }) {
     <Grid container spacing={2}>
       {error && <Grid item xs={12}><Alert severity="warning" onClose={() => setError(null)}>{error}</Alert></Grid>}
 
-      <Grid item xs={12} md={6}>
+      <Grid item xs={12}>
         <Card variant="outlined"><CardContent>
           <Typography variant="h6" fontWeight={600} mb={1}>Launch a raid</Typography>
           <Typography variant="caption" color="text.secondary" display="block" mb={1}>
@@ -108,7 +108,7 @@ export function RaidsSubtab({ guildId, channels = [] }) {
         </CardContent></Card>
       </Grid>
 
-      <Grid item xs={12} md={6}>
+      <Grid item xs={12}>
         <Card variant="outlined"><CardContent>
           <Typography variant="h6" fontWeight={600} mb={1}>Raids</Typography>
           <Typography variant="body2" color="text.secondary" mb={2}>Active and past raids, with participant counts and end times.</Typography>
@@ -163,7 +163,7 @@ export function InviteLinksSubtab({ guildId }) {
     <Grid container spacing={2}>
       {error && <Grid item xs={12}><Alert severity="warning" onClose={() => setError(null)}>{error}</Alert></Grid>}
 
-      <Grid item xs={12} md={5}>
+      <Grid item xs={12}>
         <Card variant="outlined"><CardContent>
           <Typography variant="h6" fontWeight={600} mb={1}>Referral rewards</Typography>
           <Typography variant="caption" color="text.secondary" display="block" mb={1}>
@@ -178,7 +178,7 @@ export function InviteLinksSubtab({ guildId }) {
         </CardContent></Card>
       </Grid>
 
-      <Grid item xs={12} md={7}>
+      <Grid item xs={12}>
         <Card variant="outlined"><CardContent>
           <Typography variant="h6" fontWeight={600} mb={1}>Top inviters</Typography>
           <Typography variant="body2" color="text.secondary" mb={2}>Members ranked by how many people joined through their tracked invites.</Typography>
@@ -277,7 +277,7 @@ export function TicketsSubtab({ guildId, channels = [], roles = [] }) {
     <Grid container spacing={2}>
       {error && <Grid item xs={12}><Alert severity="warning" onClose={() => setError(null)}>{error}</Alert></Grid>}
 
-      <Grid item xs={12} md={7}>
+      <Grid item xs={12}>
         <Card variant="outlined"><CardContent>
           <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
             <Typography variant="h6" fontWeight={600}>Ticket system</Typography>
@@ -334,7 +334,7 @@ export function TicketsSubtab({ guildId, channels = [], roles = [] }) {
         </CardContent></Card>
       </Grid>
 
-      <Grid item xs={12} md={5}>
+      <Grid item xs={12}>
         <Card variant="outlined"><CardContent>
           <Typography variant="h6" fontWeight={600} mb={1}>
             Open tickets {cfg.open?.length ? `(${cfg.open.length})` : ''}
@@ -394,7 +394,7 @@ export function StarboardSubtab({ guildId, channels = [] }) {
       {error && <Grid item xs={12}><Alert severity="warning" onClose={() => setError(null)}>{error}</Alert></Grid>}
 
       {cfg && (
-        <Grid item xs={12} md={7}>
+        <Grid item xs={12}>
           <Card variant="outlined"><CardContent>
             <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
               <Typography variant="h6" fontWeight={600}>Starboard</Typography>
@@ -490,7 +490,7 @@ export function EventsSubtab({ guildId, channels = [] }) {
     <Grid container spacing={2}>
       {error && <Grid item xs={12}><Alert severity="warning" onClose={() => setError(null)}>{error}</Alert></Grid>}
 
-      <Grid item xs={12} md={6}>
+      <Grid item xs={12}>
         <Card variant="outlined"><CardContent>
           <Typography variant="h6" fontWeight={600} mb={1}>📅 New server event</Typography>
           <Typography variant="caption" color="text.secondary" display="block" mb={1}>
@@ -539,7 +539,7 @@ export function EventsSubtab({ guildId, channels = [] }) {
         </CardContent></Card>
       </Grid>
 
-      <Grid item xs={12} md={6}>
+      <Grid item xs={12}>
         <Card variant="outlined"><CardContent>
           <Typography variant="h6" fontWeight={600} mb={1}>Upcoming & recent</Typography>
           <Typography variant="body2" color="text.secondary" mb={2}>Scheduled events with their status — cancel or remove them here.</Typography>
@@ -602,7 +602,7 @@ export function BoostsSubtab({ guildId, channels = [], roles = [] }) {
       {error && <Grid item xs={12}><Alert severity="warning" onClose={() => setError(null)}>{error}</Alert></Grid>}
 
       {cfg && (
-        <Grid item xs={12} md={7}>
+        <Grid item xs={12}>
           <Card variant="outlined"><CardContent>
             <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
               <Typography variant="h6" fontWeight={600}>🚀 Boost tracking</Typography>

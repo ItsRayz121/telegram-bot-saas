@@ -59,7 +59,7 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
 
   return (
     <Grid container spacing={2}>
-      <Grid item xs={12} md={6}>
+      <Grid item xs={12}>
         <Card variant="outlined"><CardContent>
           <Typography variant="subtitle1" fontWeight={700} mb={1}>XP &amp; levels</Typography>
           <FormControlLabel control={<Switch checked={cfg.levels_enabled} onChange={(e) => set({ levels_enabled: e.target.checked })} />} label="Award XP for chatting (100 XP per level)" />
@@ -82,7 +82,7 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
         </CardContent></Card>
       </Grid>
 
-      <Grid item xs={12} md={6}>
+      <Grid item xs={12}>
         <Card variant="outlined"><CardContent>
           <Typography variant="subtitle1" fontWeight={700} mb={1}>Moderation XP penalties</Typography>
           <Typography variant="caption" color="text.secondary" display="block" mb={1}>
@@ -124,7 +124,7 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
         </CardContent></Card>
       </Grid>
 
-      <Grid item xs={12} md={6}>
+      <Grid item xs={12}>
         <Card variant="outlined"><CardContent>
           <Typography variant="subtitle1" fontWeight={700} mb={1}>🎙️ Voice</Typography>
           <Typography variant="caption" color="text.secondary" display="block" mb={1}>
@@ -158,7 +158,7 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
         </CardContent></Card>
       </Grid>
 
-      <Grid item xs={12} md={6}>
+      <Grid item xs={12}>
         <Card variant="outlined"><CardContent>
           <Typography variant="subtitle1" fontWeight={700} mb={1}>Leaderboard</Typography>
           {board.length === 0 && <Typography variant="body2" color="text.secondary">No XP earned yet.</Typography>}

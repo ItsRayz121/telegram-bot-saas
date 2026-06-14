@@ -197,7 +197,7 @@ function CampaignDetail({ guildId, campaignId, channels, plan, onBack }) {
       <Button startIcon={<ArrowBack />} onClick={onBack} color="inherit" sx={{ mb: 1 }}>All campaigns</Button>
       {msg && <Alert severity="info" sx={{ mb: 2 }} onClose={() => setMsg(null)}>{msg}</Alert>}
       <Grid container spacing={2}>
-        <Grid item xs={12} md={6}>
+        <Grid item xs={12}>
           <Card variant="outlined"><CardContent>
             <Typography variant="h6" fontWeight={700}>{c.title}</Typography>
             <Stack direction="row" spacing={1} alignItems="center" mb={1}>
@@ -221,7 +221,7 @@ function CampaignDetail({ guildId, campaignId, channels, plan, onBack }) {
           </CardContent></Card>
         </Grid>
 
-        <Grid item xs={12} md={6}>
+        <Grid item xs={12}>
           <Card variant="outlined"><CardContent>
             <Typography variant="h6" fontWeight={600} mb={1}>Tasks</Typography>
             <Typography variant="body2" color="text.secondary" mb={2}>Break the campaign into individual tasks, each with its own XP reward and verification.</Typography>

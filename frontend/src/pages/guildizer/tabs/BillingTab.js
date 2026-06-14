@@ -37,7 +37,7 @@ export default function BillingTab({ guildId }) {
 
   return (
     <Grid container spacing={2}>
-      <Grid item xs={12} md={6}>
+      <Grid item xs={12}>
         <Card variant="outlined"><CardContent>
           <Typography variant="h6" fontWeight={600} mb={1}>Plan</Typography>
           <Typography variant="body2" color="text.secondary" mb={2}>
@@ -61,7 +61,7 @@ export default function BillingTab({ guildId }) {
         </CardContent></Card>
       </Grid>
 
-      <Grid item xs={12} md={6}>
+      <Grid item xs={12}>
         <Card variant="outlined"><CardContent>
           <Typography variant="h6" fontWeight={600} mb={1}>{pro.name} includes</Typography>
           <Typography variant="body2" color="text.secondary" mb={2}>
@@ -81,10 +81,10 @@ export default function BillingTab({ guildId }) {
         </CardContent></Card>
       </Grid>
 
-      <Grid item xs={12} md={6}>
+      <Grid item xs={12}>
         <PromoCard guildId={guildId} />
       </Grid>
-      <Grid item xs={12} md={6}>
+      <Grid item xs={12}>
         <HistoryCard guildId={guildId} />
       </Grid>
     </Grid>
