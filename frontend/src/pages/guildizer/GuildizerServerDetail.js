@@ -37,19 +37,20 @@ import {
 // Discord channel type enum → label (common ones).
 const CHANNEL_TYPES = { 0: 'Text', 2: 'Voice', 4: 'Category', 5: 'Announcement', 13: 'Stage', 15: 'Forum' };
 
-// Telegizer-parity IA: 6 grouped management tabs (Moderation … Analytics) with
-// the exact subtab structure of the Telegram group dashboard, fronted by a single
-// "Settings" pill that gathers the Guildizer-only server-admin extras (Overview /
-// Commands / Team / Billing) as sub-tabs — keeping the 6 shared category pills
-// clean and matching the Telegizer category pills 1:1.
+// Telegizer-parity IA: 6 grouped management tabs (Moderation … Analytics) in the
+// exact order + subtab structure of the Telegram group dashboard, followed by a
+// trailing "Settings" pill that gathers the Guildizer-only server-admin extras
+// (Overview / Commands / Team / Billing) as sub-tabs. Settings sits last because
+// it is configure-once setup, not day-to-day operation; the 6 shared category
+// pills lead and match the Telegizer category pills 1:1.
 const AREAS = [
-  { label: 'Settings', icon: SettingsIcon, subs: ['Overview', 'Commands', 'Team', 'Billing'] },
   { label: 'Moderation', icon: Shield, subs: ['AutoMod', 'Behavior', 'Reports'] },
   { label: 'Members', icon: People, subs: ['Verification', 'Welcome', 'XP & Roles', 'Self-roles'] },
   { label: 'Engagement', icon: ForumIcon, subs: ['Raids', 'Invite Links', 'Campaigns', 'Tickets', 'Starboard', 'Boosts', 'Events'] },
   { label: 'AI & Integrations', icon: SmartToy, subs: ['Knowledge Base', 'Escalation'] },
   { label: 'Automation', icon: Bolt, subs: ['Scheduler', 'Auto Reply', 'Polls', 'Forwarding', 'Threads', 'Workflows', 'Webhooks'] },
   { label: 'Analytics', icon: Assessment, subs: ['Overview', 'Members', 'Leaderboard', 'Audit Log', 'Warnings', 'Digest', 'AI Activity'] },
+  { label: 'Settings', icon: SettingsIcon, subs: ['Overview', 'Commands', 'Team', 'Billing'] },
 ];
 
 // Old flat-tab deep links → new area/subtab so saved URLs keep working. The
@@ -73,7 +74,7 @@ export default function GuildizerServerDetail() {
   // Deep-linkable: /guildizer/servers/<id>?tab=Moderation&sub=Behavior
   const [searchParams, setSearchParams] = useSearchParams();
 
-  let tabName = searchParams.get('tab') || 'Settings';
+  let tabName = searchParams.get('tab') || 'Moderation';
   let subName = searchParams.get('sub') || '';
   if (LEGACY_TABS[tabName]) [tabName, subName] = LEGACY_TABS[tabName];
 
@@ -83,10 +84,11 @@ export default function GuildizerServerDetail() {
   const subIdx = subs ? Math.max(0, subs.indexOf(subName)) : 0;
   const sub = subs ? subs[subIdx] : null;
 
-  // Settings is the default landing area, so its bare pill keeps a clean URL;
-  // every area carries subs, so a pill click jumps to that area's first sub-tab.
+  // Moderation (the first pill) is the default landing area, so its bare pill
+  // keeps a clean URL; every area carries subs, so a pill click jumps to that
+  // area's first sub-tab.
   const setTab = (label) => {
-    if (label === 'Settings') { setSearchParams({}, { replace: true }); return; }
+    if (label === AREAS[0].label) { setSearchParams({}, { replace: true }); return; }
     const a = AREAS.find((x) => x.label === label);
     setSearchParams(a?.subs ? { tab: label, sub: a.subs[0] } : { tab: label }, { replace: true });
   };
