@@ -285,3 +285,28 @@ def phone_match(text: str):
 
 def spoiler_match(text: str):
     return "spoiler" if _SPOILER_RE.search(text or "") else None
+
+
+# --- Homoglyph / mixed-script spoofing -----------------------------------------
+# Cyrillic & Greek letters that are visually confusable with ASCII Latin. A
+# single token that mixes real Latin letters with these lookalikes is almost
+# always deliberate filter-evasion (e.g. "pаypal" with a Cyrillic а). We only
+# flag the MIXED case, never pure non-Latin words — genuine Cyrillic/Greek text
+# is the language filter's job, so this stays near-zero false-positive.
+_CONFUSABLE_CHARS = set(
+    "аеоріјѕсухкңԁ"        # Cyrillic lowercase lookalikes (a e o p i j s c y x k …)
+    "АЕОРСНХІЈЅВКМТ"       # Cyrillic uppercase lookalikes
+    "οανρτυχικµ"           # Greek lowercase lookalikes
+    "ΟΑΝΡΤΥΧΙΚΒΕΗΜ"       # Greek uppercase lookalikes
+)
+_ASCII_LETTER_RE = re.compile(r"[A-Za-z]")
+_TOKEN_RE = re.compile(r"\S+")
+
+
+def homoglyph_match(text: str):
+    """Return the first token mixing ASCII Latin letters with confusable
+    Cyrillic/Greek lookalikes (classic word-filter evasion), else None."""
+    for token in _TOKEN_RE.findall(text or ""):
+        if _ASCII_LETTER_RE.search(token) and any(ch in _CONFUSABLE_CHARS for ch in token):
+            return token[:40]
+    return None

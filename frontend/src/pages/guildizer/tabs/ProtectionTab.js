@@ -106,6 +106,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
   const setCp = setSection('command_permissions');
   const setWl = setSection('warn_ladder');
   const setRp = setSection('reports');
+  const setMl = setSection('mod_log');
 
   async function reviewReport(id, status) {
     try {
@@ -248,6 +249,51 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                       ? `Last synced ${new Date(am.native_sync.last_synced_at).toLocaleString()}`
                       : 'Not synced yet.'}
                 </Typography>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* 1b ── Anti-Spam / Flood ───────────────────────────────────────── */}
+          <Card sx={{ mb: 2 }}>
+            <CardContent>
+              <Typography variant="h6" fontWeight={600} mb={1}>Anti-Spam / Flood</Typography>
+              <Typography variant="body2" color="text.secondary" mb={2}>
+                Catches a single member firing off messages too fast. (Coordinated multi-user
+                raids are handled separately under <b>Behavior → Raid Protection</b>.)
+              </Typography>
+              <FormControlLabel
+                control={<Switch checked={!!am.flood?.enabled} onChange={(e) => setAm('flood', { enabled: e.target.checked })} />}
+                label="Enable per-member flood control"
+              />
+              {am.flood?.enabled && (
+                <Grid container spacing={2} sx={{ mt: 0.5 }}>
+                  <Grid item xs={6} sm={3}>
+                    <TextField type="number" size="small" fullWidth label="Max messages"
+                      value={am.flood?.max_messages ?? 5} inputProps={{ min: 2, max: 50 }}
+                      onChange={(e) => setAm('flood', { max_messages: Number(e.target.value) })} />
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <TextField type="number" size="small" fullWidth label="Within seconds"
+                      value={am.flood?.window_seconds ?? 10} inputProps={{ min: 2, max: 120 }}
+                      onChange={(e) => setAm('flood', { window_seconds: Number(e.target.value) })} />
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <FormControl size="small" fullWidth>
+                      <InputLabel>Action</InputLabel>
+                      <Select label="Action" value={am.flood?.action || 'timeout'}
+                        onChange={(e) => setAm('flood', { action: e.target.value })}>
+                        {CF_ACTIONS.map((a) => <MenuItem key={a} value={a}>{a}</MenuItem>)}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  {(am.flood?.action || 'timeout') === 'timeout' && (
+                    <Grid item xs={6} sm={3}>
+                      <TextField type="number" size="small" fullWidth label="Timeout (minutes)"
+                        value={am.flood?.timeout_minutes ?? 10} inputProps={{ min: 1, max: 1000 }}
+                        onChange={(e) => setAm('flood', { timeout_minutes: Number(e.target.value) })} />
+                    </Grid>
+                  )}
+                </Grid>
               )}
             </CardContent>
           </Card>
@@ -573,6 +619,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                   ['Block Phone Numbers', 'contact_sharing'],
                   ['Block Spoiler Content', 'spoiler_content'],
                   ['Block Bot Mentions', 'bot_mentions'],
+                  ['Block Look-alike / Mixed-script Spoofing', 'homoglyphs'],
                 ].map(([label, key]) => {
                   const rule = am[key] || {};
                   return (
@@ -723,6 +770,22 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                 label="Delete mod-action messages after (seconds, 0 = never)"
                 value={cfg.auto_clean?.action_messages_seconds ?? 0} inputProps={{ min: 0, max: 86400 }}
                 onChange={(e) => setAc({ action_messages_seconds: Number(e.target.value) })} />
+            </CardContent></Card>
+          </Grid>
+
+          <Grid item xs={12}>
+            <Card variant="outlined"><CardContent>
+              <Typography variant="h6" fontWeight={600} mb={1}>Mod-action log</Typography>
+              <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+                Mirror every moderation action — automod removals plus /warn, /mute, /kick, /ban,
+                /tempban, /unban and /purge — into a private channel as an embed.
+              </Typography>
+              <FormControlLabel
+                control={<Switch checked={!!cfg.mod_log?.enabled} onChange={(e) => setMl({ enabled: e.target.checked })} />}
+                label="Enable the mod-action log channel"
+              />
+              {cfg.mod_log?.enabled && channelSelect('Log channel', cfg.mod_log?.channel_id,
+                (v) => setMl({ channel_id: v }), '— pick a channel —')}
             </CardContent></Card>
           </Grid>
 

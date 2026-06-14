@@ -268,6 +268,15 @@ def update_moderation(guild_id: int):
             ch = body["reports"]["alert_channel_id"]
             rp["alert_channel_id"] = str(ch) if ch and str(ch).isdigit() else None
         extra["reports"] = rp
+    if isinstance(body.get("mod_log"), dict):
+        ml_in = body["mod_log"]
+        ml = dict(extra.get("mod_log") or {})
+        if "enabled" in ml_in:
+            ml["enabled"] = bool(ml_in["enabled"])
+        if "channel_id" in ml_in:
+            ch = ml_in["channel_id"]
+            ml["channel_id"] = str(ch) if ch and str(ch).isdigit() else None
+        extra["mod_log"] = ml
 
     # Native AutoMod sync: any change to the blocked words or the sync settings
     # queues a reconcile — the bot's 20s loop pushes the rule to Discord and

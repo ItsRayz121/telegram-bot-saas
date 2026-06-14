@@ -86,6 +86,10 @@ def warning_text(category: str) -> str:
         return "🚫 That message was removed — please don't shout in all caps."
     if category == "language":
         return "🚫 That message was removed by the server's language filter."
+    if category == "homoglyphs":
+        return "🚫 That message was removed — disguised/look-alike characters aren't allowed."
+    if category == "flood":
+        return "🚫 Slow down — you're sending messages too quickly."
     if category in ("attachment", "sticker", "voice_message", "photo", "video", "gif"):
         return "🚫 That content type isn't allowed in this server."
     if category == "email_detection":
@@ -135,6 +139,13 @@ def evaluate_automod(text: str, cfg: dict) -> dict | None:
         if hit:
             return {"category": "language", "action": _norm_action(lang.get("action", "delete")),
                     "matched": hit, "detail": f"Filtered script: {hit}"}
+
+    homo = am.get("homoglyphs") or {}
+    if homo.get("enabled"):
+        hit = cf.homoglyph_match(text)
+        if hit:
+            return {"category": "homoglyphs", "action": _norm_action(homo.get("action", "delete")),
+                    "matched": hit, "detail": f"Mixed-script spoofing: {hit}"}
 
     return None
 

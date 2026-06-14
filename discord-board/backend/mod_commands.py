@@ -20,6 +20,7 @@ from discord import app_commands
 import assistant
 import governor
 import leveling
+import mod_log
 import moderation_runtime as modrt
 import protection
 from database import SessionLocal
@@ -77,6 +78,29 @@ def _log_event(guild_id, category, action, user_id=None, username=None, detail=N
         protection.log_event(db, guild_id, category, action,
                              user_id=user_id, username=username, detail=detail)
     _db_call(_do)
+
+
+def _mod_log_cfg(guild_id: int) -> dict:
+    """Just the mod_log section, for mirroring a manual action to the log channel."""
+    db = SessionLocal()
+    try:
+        snap = protection.load_snapshot(db, guild_id) or {}
+        return {"mod_log": snap.get("mod_log") or {}}
+    finally:
+        db.close()
+        SessionLocal.remove()
+
+
+async def _post_mod_log(interaction: discord.Interaction, action: str,
+                        member, reason: str | None, category: str = "moderation") -> None:
+    """Mirror a manual mod-command action into the guild's mod-log channel."""
+    cfg = await asyncio.to_thread(_mod_log_cfg, interaction.guild.id)
+    await mod_log.post(
+        interaction.guild, cfg, action=action, category=category,
+        target_name=str(member) if member else None,
+        target_id=getattr(member, "id", None),
+        moderator_name=str(interaction.user), reason=reason,
+    )
 
 
 def _warning_rows(guild_id: int, user_id: int, limit: int):
@@ -211,9 +235,10 @@ def attach_mod_commands(client) -> None:  # noqa: C901  (a flat list of commands
                 msg += f"\n🚨 Warning limit reached — {outcome}; warnings reset."
             else:
                 msg += f"\n🚨 Ladder step (warning #{escalation['at']}) — {outcome}."
+        warn_action = escalation["action"] if escalation else "warned"
         await asyncio.to_thread(_log_event, interaction.guild.id, "warning",
-                                escalation["action"] if escalation else "warned",
-                                member.id, str(member), reason)
+                                warn_action, member.id, str(member), reason)
+        await _post_mod_log(interaction, warn_action, member, reason, category="warning")
         await interaction.response.send_message(
             msg, delete_after=_clean_seconds(cfg, "warn_messages_seconds"))
 
@@ -246,6 +271,7 @@ def attach_mod_commands(client) -> None:  # noqa: C901  (a flat list of commands
             return await _deny(interaction, f"{member.display_name} has no warnings to remove.")
         await asyncio.to_thread(_log_event, interaction.guild.id, "warning", "removed",
                                 member.id, str(member), "warning removed")
+        await _post_mod_log(interaction, "removed", member, "warning removed", category="warning")
         await interaction.response.send_message(f"✅ Removed the latest warning for {member.mention}.")
 
     @tree.command(name="mute", description="Timeout a member. e.g. /mute @user 2h spam")
@@ -272,6 +298,7 @@ def attach_mod_commands(client) -> None:  # noqa: C901  (a flat list of commands
                                 str(member), "timeout")
         await asyncio.to_thread(_log_event, interaction.guild.id, "moderation", "timeout",
                                 member.id, str(member), f"{duration} — {reason}")
+        await _post_mod_log(interaction, "timeout", member, f"{duration} — {reason}")
         cfg = await asyncio.to_thread(_mod_cfg, interaction.guild.id)
         await interaction.response.send_message(
             f"🔇 Muted {member.mention} for {duration}: {reason}",
@@ -288,6 +315,7 @@ def attach_mod_commands(client) -> None:  # noqa: C901  (a flat list of commands
             return await _deny(interaction, "Unmute failed — check my permissions.")
         await asyncio.to_thread(_log_event, interaction.guild.id, "moderation", "untimeout",
                                 member.id, str(member), None)
+        await _post_mod_log(interaction, "untimeout", member, None)
         await interaction.response.send_message(f"🔊 Unmuted {member.mention}.")
 
     @tree.command(name="kick", description="Kick a member from the server.")
@@ -306,6 +334,7 @@ def attach_mod_commands(client) -> None:  # noqa: C901  (a flat list of commands
                                 str(member), "kick")
         await asyncio.to_thread(_log_event, interaction.guild.id, "moderation", "kick",
                                 member.id, str(member), reason)
+        await _post_mod_log(interaction, "kick", member, reason)
         cfg = await asyncio.to_thread(_mod_cfg, interaction.guild.id)
         await interaction.response.send_message(
             f"👢 Kicked **{member.display_name}**: {reason}",
@@ -332,6 +361,7 @@ def attach_mod_commands(client) -> None:  # noqa: C901  (a flat list of commands
                                 str(member), "ban")
         await asyncio.to_thread(_log_event, interaction.guild.id, "moderation", "ban",
                                 member.id, str(member), reason)
+        await _post_mod_log(interaction, "ban", member, reason)
         cfg = await asyncio.to_thread(_mod_cfg, interaction.guild.id)
         await interaction.response.send_message(
             f"🔨 Banned **{member.display_name}**: {reason}",
@@ -354,6 +384,10 @@ def attach_mod_commands(client) -> None:  # noqa: C901  (a flat list of commands
             return await _deny(interaction, "Unban failed — is that user actually banned?")
         await asyncio.to_thread(_log_event, interaction.guild.id, "moderation", "unban",
                                 int(user_id), None, reason)
+        cfg = await asyncio.to_thread(_mod_log_cfg, interaction.guild.id)
+        await mod_log.post(interaction.guild, cfg, action="unban",
+                           target_name=f"User {user_id}", target_id=int(user_id),
+                           moderator_name=str(interaction.user), reason=reason)
         await interaction.response.send_message(f"✅ Unbanned `{user_id}`: {reason}")
 
     @tree.command(name="tempban", description="Ban a member temporarily. e.g. /tempban @user 7d raiding")
@@ -384,6 +418,7 @@ def attach_mod_commands(client) -> None:  # noqa: C901  (a flat list of commands
                                 str(member), "ban")
         await asyncio.to_thread(_log_event, interaction.guild.id, "moderation", "tempban",
                                 member.id, str(member), f"{duration} — {reason}")
+        await _post_mod_log(interaction, "tempban", member, f"{duration} — {reason}")
         cfg = await asyncio.to_thread(_mod_cfg, interaction.guild.id)
         await interaction.response.send_message(
             f"⏳ Temp-banned **{member.display_name}** for {duration}: {reason}",
@@ -405,10 +440,11 @@ def attach_mod_commands(client) -> None:  # noqa: C901  (a flat list of commands
             deleted = await interaction.channel.purge(limit=count, check=check)
         except (discord.Forbidden, discord.HTTPException):
             return await _deny(interaction, "Purge failed — check my Manage Messages permission here.")
+        purge_detail = f"{len(deleted)} message(s) in #{interaction.channel}"
         await asyncio.to_thread(_log_event, interaction.guild.id, "moderation", "purge",
                                 member.id if member else None,
-                                str(member) if member else None,
-                                f"{len(deleted)} message(s) in #{interaction.channel}")
+                                str(member) if member else None, purge_detail)
+        await _post_mod_log(interaction, "purge", member, purge_detail)
         await interaction.followup.send(f"🧹 Deleted {len(deleted)} message(s).", ephemeral=True)
 
     @tree.command(name="userinfo", description="Show a member's profile, roles and warning count.")

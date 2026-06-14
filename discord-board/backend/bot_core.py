@@ -31,9 +31,11 @@ import campaign_runtime
 import campaign_views
 import command_registrar
 import digest_runtime
+import flood_guard
 import knowledge
 import content_runtime
 import governor
+import mod_log
 import guild_sync
 import invite_tracking
 import leveling
@@ -422,6 +424,10 @@ class CoreMixin:
         if decision is None:
             decision = moderation.evaluate_content(text, flags, cfg)
         if decision is None:
+            # Per-user flood guard (stateful) — runs even when the message itself
+            # is clean, since flooding is about rate, not content.
+            decision = flood_guard.check(message.guild.id, message.author.id, cfg)
+        if decision is None:
             # Smart Moderation Layer 2 (rule-based) — trusted admins bypass it.
             sm = (cfg.get("automod") or {}).get("smart_mod") or {}
             if str(message.author.id) not in [str(t) for t in (sm.get("trusted_user_ids") or [])]:
@@ -431,6 +437,11 @@ class CoreMixin:
             await asyncio.to_thread(
                 self._log, message.guild.id, decision["category"], action_taken,
                 message.author.id, str(message.author), message.channel.id, decision["detail"],
+            )
+            await mod_log.post(
+                message.guild, cfg, action=action_taken, category=decision["category"],
+                target_name=str(message.author), target_id=message.author.id,
+                reason=decision["detail"], channel_name=f"#{message.channel}",
             )
             await asyncio.to_thread(
                 automation_runtime.dispatch_event, message.guild.id, "moderation_action",
@@ -840,7 +851,8 @@ class CoreMixin:
             await self._apply_xp_penalty(guild_id, member.id, str(member), esc_action)
             return f"warned+{esc_action}"
         if action == "timeout":
-            await governor.safe(member.timeout(timedelta(minutes=10), reason=reason), what="timeout")
+            mins = max(1, int(decision.get("timeout_minutes") or 10))
+            await governor.safe(member.timeout(timedelta(minutes=mins), reason=reason), what="timeout")
             await self._apply_xp_penalty(guild_id, member.id, str(member), "timeout")
             return "timeout"
         if action == "kick":

@@ -37,6 +37,12 @@ EXTRA_DEFAULTS = {
         "excessive_emojis": {"enabled": False, "max_emojis": 15, "action": "delete"},
         "caps_lock": {"enabled": False, "threshold_percent": 80, "min_length": 15, "action": "delete"},
         "language_filter": {"enabled": False, "scripts": [], "action": "delete"},
+        # Phase 1 parity — per-user flood/message-rate guard (enforced by
+        # flood_guard.py; distinct from raid_guard's multi-user detection).
+        "flood": {"enabled": False, "max_messages": 5, "window_seconds": 10,
+                  "action": "timeout", "timeout_minutes": 10},
+        # Phase 1 parity — mixed-script (Cyrillic/Greek) look-alike spoofing.
+        "homoglyphs": {"enabled": False, "action": "delete"},
         "media": {"block_attachments": False, "block_stickers": False,
                   "block_voice": False, "block_photos": False,
                   "block_videos": False, "block_gifs": False, "action": "delete"},
@@ -107,6 +113,10 @@ EXTRA_DEFAULTS = {
         "formality": "casual",                       # casual | neutral | formal
     },
     "reports": {"alert_channel_id": None},
+    # Phase 1 parity — mod-action log channel. When enabled + a channel is set,
+    # every moderation action (automod removals + manual mod commands) is
+    # mirrored there as an embed (mod_log.py).
+    "mod_log": {"enabled": False, "channel_id": None},
 }
 
 
