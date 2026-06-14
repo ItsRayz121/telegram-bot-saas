@@ -163,6 +163,7 @@ def _sweep_rate_maps() -> None:
               _emoji_react_last, _reaction_xp_last, _kb_reply_last, _social_reply_last):
         for key in [k for k, ts in m.items() if ts < cutoff]:
             m.pop(key, None)
+    flood_guard.sweep(_RATE_MAP_MAX_AGE)
 
 
 # ── Emoji-reaction sentiment + text-command heuristics (dashboard parity) ───────

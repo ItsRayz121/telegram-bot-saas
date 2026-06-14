@@ -296,7 +296,7 @@ def spoiler_match(text: str):
 _CONFUSABLE_CHARS = set(
     "аеоріјѕсухкңԁ"        # Cyrillic lowercase lookalikes (a e o p i j s c y x k …)
     "АЕОРСНХІЈЅВКМТ"       # Cyrillic uppercase lookalikes
-    "οανρτυχικµ"           # Greek lowercase lookalikes
+    "οανρτυχικ"            # Greek lowercase lookalikes
     "ΟΑΝΡΤΥΧΙΚΒΕΗΜ"       # Greek uppercase lookalikes
 )
 _ASCII_LETTER_RE = re.compile(r"[A-Za-z]")

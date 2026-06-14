@@ -69,6 +69,16 @@ def check(guild_id, user_id, cfg: dict) -> dict | None:
     return None
 
 
+def sweep(max_age_seconds: float = 3600) -> None:
+    """Drop per-(guild,user) windows whose newest hit is stale, so the registry
+    stays bounded. Called periodically by the bot's rate-map sweeper — flood keys
+    are high-cardinality (one per chatty member), unlike raid_guard's per-guild
+    deques, so they need active pruning."""
+    cutoff = time.monotonic() - max_age_seconds
+    for key in [k for k, dq in _hits.items() if not dq or dq[-1] < cutoff]:
+        _hits.pop(key, None)
+
+
 def reset(guild_id=None) -> None:
     """Drop tracked windows — for tests and on guild leave."""
     if guild_id is None:
