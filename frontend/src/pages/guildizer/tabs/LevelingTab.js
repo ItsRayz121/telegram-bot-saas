@@ -70,6 +70,18 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
           {numL2('XP per reaction received (0 = off)', 'xp_per_reaction')}
           {numL2('Reaction XP cooldown (seconds)', 'reaction_cooldown_seconds', 3600)}
           <FormControlLabel control={<Switch checked={cfg.announce_level_up} onChange={(e) => set({ announce_level_up: e.target.checked })} />} label="Announce level-ups" />
+          <FormControlLabel
+            control={<Switch checked={!!l2.ai_levelup} onChange={(e) => setL2({ ai_levelup: e.target.checked })} />}
+            label={(
+              <Stack direction="row" spacing={1} alignItems="center">
+                <span>AI-generated level-up line</span>
+                <Chip label="Pro" color="primary" size="small" sx={{ height: 18, fontSize: '0.65rem', fontWeight: 700 }} />
+              </Stack>
+            )}
+          />
+          <Typography variant="caption" color="text.secondary" display="block" ml={4} mb={0.5} mt={-0.5}>
+            Adds a fresh AI congrats sentence under the announce. Needs an AI key on the backend.
+          </Typography>
           <TextField select size="small" margin="dense" fullWidth label="Announce in channel"
             value={cfg.levelup_channel_id || ''} onChange={(e) => set({ levelup_channel_id: e.target.value || null })}>
             <MenuItem value="">— same channel as message —</MenuItem>

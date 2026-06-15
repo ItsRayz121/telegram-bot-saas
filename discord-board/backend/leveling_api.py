@@ -91,6 +91,8 @@ def update_leveling(guild_id: int):
                         ("penalty_kick", 10000), ("penalty_ban", 10000)):
             if key in l_in:
                 l2[key] = _as_int(l_in[key], 0, 0, hi)
+        if "ai_levelup" in l_in:
+            l2["ai_levelup"] = bool(l_in["ai_levelup"])
         if isinstance(l_in.get("role_rewards"), list):
             rewards = []
             for r in l_in["role_rewards"][:20]:

@@ -986,6 +986,22 @@ class CoreMixin:
                 cfg.get("levelup_message"),
                 mention=member.mention, username=str(member), level=new_level,
             )
+            # AI-generated congratulations line (Pro parity with Telegizer). Adds a
+            # fresh, varied sentence under the template; falls back silently when
+            # AI is unavailable or errors so the plain announce always lands.
+            if l2.get("ai_levelup") and ai.is_configured():
+                try:
+                    res = await asyncio.to_thread(
+                        ai.complete,
+                        "You write a single short, upbeat congratulations line for a "
+                        "Discord member who just leveled up. One sentence, no quotes.",
+                        f"{member.display_name} just reached level {new_level}.",
+                        40,
+                    )
+                    if res and res.text:
+                        text = f"{text}\n{res.text.strip()[:300]}"
+                except Exception:  # noqa: BLE001 — never block the announce
+                    pass
             delete_after = int(l2.get("levelup_delete_after_seconds") or 0) or None
             ch_id = cfg.get("levelup_channel_id")
             channel = guild.get_channel(int(ch_id)) if ch_id else fallback_channel

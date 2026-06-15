@@ -50,6 +50,8 @@ LEVELING2_DEFAULTS = {
     "xp_per_reaction": 0,
     "reaction_cooldown_seconds": 60,
     "levelup_delete_after_seconds": 0,
+    "ai_levelup": False,    # add an AI-generated congrats line under the announce
+
     "penalty_warn": 0,      # XP removed when the member is warned
     "penalty_timeout": 0,   # … timed out
     "penalty_kick": 0,      # … kicked
