@@ -119,6 +119,9 @@ EXTRA_DEFAULTS = {
         "min_words": 3, "reply_length": "medium",   # short | medium | long
         "emoji_usage": "some",                       # none | some | lots
         "formality": "casual",                       # casual | neutral | formal
+        # professional_support | friendly | expert | concise | community_manager
+        "personality": "professional_support",
+        "custom_instructions": "",                   # free-text rules appended to the prompt
     },
     "reports": {"alert_channel_id": None},
     # Phase 1 parity — mod-action log channel. When enabled + a channel is set,

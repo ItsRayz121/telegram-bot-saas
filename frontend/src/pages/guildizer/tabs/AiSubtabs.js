@@ -80,6 +80,23 @@ function KbRepliesCard({ guildId }) {
         value={cfg.formality || 'casual'} onChange={(e) => set({ formality: e.target.value })}>
         {['casual', 'neutral', 'formal'].map((v) => <MenuItem key={v} value={v}>{v}</MenuItem>)}
       </TextField>
+      <TextField select size="small" margin="dense" fullWidth label="Personality"
+        value={cfg.personality || 'professional_support'} onChange={(e) => set({ personality: e.target.value })}
+        helperText="Shapes how the AI talks when answering from the knowledge base.">
+        {[
+          ['professional_support', 'Professional support'],
+          ['friendly', 'Friendly'],
+          ['expert', 'Expert'],
+          ['concise', 'Concise'],
+          ['community_manager', 'Community manager'],
+        ].map(([v, label]) => <MenuItem key={v} value={v}>{label}</MenuItem>)}
+      </TextField>
+      <TextField multiline minRows={2} size="small" margin="dense" fullWidth
+        label="Custom instructions"
+        placeholder={'e.g. Always reply in English and Spanish\nNever recommend competitor tools\nLink to docs.example.com when relevant'}
+        value={cfg.custom_instructions || ''} inputProps={{ maxLength: 1200 }}
+        onChange={(e) => set({ custom_instructions: e.target.value })}
+        helperText={`${(cfg.custom_instructions || '').length}/1200 — extra rules appended to every KB answer.`} />
       {error && <Alert severity="error" sx={{ mt: 1, py: 0 }}>{error}</Alert>}
       <Button variant="contained" size="small" sx={{ mt: 1 }} onClick={save} disabled={saving}>
         {saving ? 'Saving…' : 'Save changes'}

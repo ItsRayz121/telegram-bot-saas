@@ -849,11 +849,24 @@ class CoreMixin:
         formality = {"casual": "Keep the tone casual and friendly.",
                      "neutral": "Keep the tone neutral.",
                      "formal": "Keep the tone professional and polite."}
+        personalities = {
+            "professional_support": "You are a professional support assistant — clear, helpful and reassuring.",
+            "friendly": "You are a warm, friendly community helper.",
+            "expert": "You are a knowledgeable expert who answers precisely and confidently.",
+            "concise": "You are terse and to the point — no filler.",
+            "community_manager": "You are an energetic community manager who keeps people engaged.",
+        }
+        persona = personalities.get(kb.get("personality") or "professional_support",
+                                    personalities["professional_support"])
         tone = " ".join((
+            persona,
             length.get(kb.get("reply_length") or "medium", length["medium"]),
             emoji_use.get(kb.get("emoji_usage") or "some", emoji_use["some"]),
             formality.get(kb.get("formality") or "casual", formality["casual"]),
         ))
+        custom = (kb.get("custom_instructions") or "").strip()
+        if custom:
+            tone += f"\n\nAdditional rules from the server admins:\n{custom[:1200]}"
         result = await asyncio.to_thread(ai.complete, f"{system}\n\n{tone}", question)
         if result is None or not result.text:
             return False

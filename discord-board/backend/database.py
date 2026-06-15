@@ -42,6 +42,10 @@ _HEAL_COLUMNS = [
     ("members", "voice_minutes", "INTEGER"),
     # Scheduler embed builder (Discord-native phase 4)
     ("scheduled_messages", "embed", "JSON"),
+    # KB file ingestion: extracted text + embedded chunks for semantic /ask
+    ("knowledge_documents", "file_type", "VARCHAR(10)"),
+    ("knowledge_documents", "content_text", "TEXT"),
+    ("knowledge_documents", "chunks", "JSON"),
 ]
 
 

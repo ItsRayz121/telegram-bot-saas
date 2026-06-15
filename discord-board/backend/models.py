@@ -1308,13 +1308,29 @@ class KnowledgeDocument(Base):
     enabled = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # Uploaded-document parity (Phase: KB file ingestion). Manual FAQ entries keep
+    # file_type "text" with empty chunks; uploaded files store extracted text +
+    # embedded chunks for semantic /ask retrieval.
+    file_type = Column(String(10), default="text")     # text | pdf | docx | txt | md
+    content_text = Column(Text, default="")            # full extracted text (capped)
+    chunks = Column(JSON, default=list)                # [{"text": str, "embedding": [float]|None}]
+
+    @property
+    def chunk_count(self) -> int:
+        return len(self.chunks or [])
 
     def to_dict(self) -> dict:
         return {
             "id": self.id,
             "title": self.title,
+            # `filename` mirrors `title` so the upload UI and the manual-doc UI
+            # can share one list row shape.
+            "filename": self.title,
             "content": self.content or "",
             "enabled": bool(self.enabled),
+            "file_type": self.file_type or "text",
+            "chunk_count": self.chunk_count,
+            "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
             "updated_at": self.updated_at.isoformat() + "Z" if self.updated_at else None,
         }
 

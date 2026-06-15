@@ -273,6 +273,12 @@ def update_moderation(guild_id: int):
             kb["emoji_usage"] = kb_in["emoji_usage"]
         if kb_in.get("formality") in ("casual", "neutral", "formal"):
             kb["formality"] = kb_in["formality"]
+        if kb_in.get("personality") in (
+            "professional_support", "friendly", "expert", "concise", "community_manager",
+        ):
+            kb["personality"] = kb_in["personality"]
+        if "custom_instructions" in kb_in:
+            kb["custom_instructions"] = str(kb_in["custom_instructions"] or "")[:1200]
         extra["kb_replies"] = kb
     if isinstance(body.get("reports"), dict):
         rp = dict(extra.get("reports") or {})

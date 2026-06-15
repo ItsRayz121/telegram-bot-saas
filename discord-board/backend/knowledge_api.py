@@ -10,6 +10,7 @@ from flask import Blueprint, g, jsonify, request
 
 import digest_runtime
 import access
+import kb_index
 import plan_limits
 from auth import login_required
 from models import Guild, GuildSettings, KnowledgeDocument, UserGuild
@@ -56,6 +57,42 @@ def create_doc(guild_id: int):
     g.db.add(row)
     g.db.commit()
     return jsonify(document=row.to_dict()), 201
+
+
+@knowledge_bp.post("/api/guilds/<int:guild_id>/knowledge/upload")
+@login_required
+def upload_doc(guild_id: int):
+    """Ingest an uploaded PDF / DOCX / TXT / MD file: extract text, chunk, embed,
+    and index it for semantic /ask retrieval."""
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return err
+    cap = plan_limits.limit(g.db, guild_id, "knowledge_docs")
+    if g.db.query(KnowledgeDocument).filter(KnowledgeDocument.guild_id == guild_id).count() >= cap:
+        return plan_limits.limit_response("knowledge_docs", cap)
+
+    f = request.files.get("file")
+    if f is None:
+        return jsonify(error="no_file"), 400
+    filename = (f.filename or "document").strip()
+    content_bytes = f.read()
+    if not content_bytes:
+        return jsonify(error="empty_file"), 400
+    if len(content_bytes) > kb_index.MAX_FILE_BYTES:
+        return jsonify(error="file_too_large", detail="Max 5MB per file."), 400
+
+    file_type, type_err = kb_index.detect_type(filename, content_bytes)
+    if type_err:
+        return jsonify(error="bad_file", detail=type_err), 400
+
+    try:
+        doc, proc_err = kb_index.process_upload(g.db, guild_id, filename, file_type, content_bytes)
+    except Exception:  # noqa: BLE001
+        g.db.rollback()
+        return jsonify(error="processing_failed"), 500
+    if proc_err:
+        return jsonify(error="processing_failed", detail=proc_err), 400
+    return jsonify(document=doc), 201
 
 
 @knowledge_bp.put("/api/guilds/<int:guild_id>/knowledge/<int:did>")
