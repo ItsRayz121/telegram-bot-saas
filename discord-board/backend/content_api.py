@@ -345,6 +345,7 @@ def create_response(guild_id: int):
         guild_id=guild_id, trigger=trigger, response=response,
         match_type=body.get("match_type") if body.get("match_type") in ("contains", "exact") else "contains",
         cooldown_seconds=cooldown,
+        use_as_ai_knowledge=bool(body.get("use_as_ai_knowledge")),
     )
     g.db.add(row)
     g.db.commit()
@@ -374,6 +375,8 @@ def update_response(guild_id: int, rid: int):
             pass
     if "enabled" in body:
         row.enabled = bool(body["enabled"])
+    if "use_as_ai_knowledge" in body:
+        row.use_as_ai_knowledge = bool(body["use_as_ai_knowledge"])
     g.db.commit()
     return jsonify(response=row.to_dict())
 

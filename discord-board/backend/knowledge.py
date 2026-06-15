@@ -44,6 +44,7 @@ def grounded_with_confidence(guild_id: int, question: str) -> tuple[str | None, 
 
     db = SessionLocal()
     try:
+        from models import AutoResponse
         docs = (
             db.query(KnowledgeDocument)
             .filter(KnowledgeDocument.guild_id == guild_id,
@@ -51,12 +52,26 @@ def grounded_with_confidence(guild_id: int, question: str) -> tuple[str | None, 
             .limit(50)
             .all()
         )
-        if not docs:
+        # (title, text) candidates: KB docs (uploaded files expose content_text)
+        # plus enabled auto-responses opted into AI knowledge (trigger -> reply).
+        candidates: list[tuple[str, str]] = [
+            (d.title, d.content_text or d.content or "") for d in docs
+        ]
+        ai_responses = (
+            db.query(AutoResponse)
+            .filter(AutoResponse.guild_id == guild_id,
+                    AutoResponse.enabled.is_(True),
+                    AutoResponse.use_as_ai_knowledge.is_(True))
+            .limit(100)
+            .all()
+        )
+        candidates += [(r.trigger, r.response or "") for r in ai_responses]
+        if not candidates:
             return None, False
         q_terms = _terms(question)
         scored = []
-        for d in docs:
-            doc_terms = _terms(f"{d.title} {d.content}")
+        for title, text in candidates:
+            doc_terms = _terms(f"{title} {text}")
             overlap = 0
             for t in q_terms:
                 if t in doc_terms:
@@ -66,22 +81,17 @@ def grounded_with_confidence(guild_id: int, question: str) -> tuple[str | None, 
                     for dt in doc_terms if len(dt) >= 4
                 ):
                     overlap += 1   # prefix match: refund ~ refunds, launch ~ launches
-            scored.append((overlap, d))
+            scored.append((overlap, title, text))
         scored.sort(key=lambda x: x[0], reverse=True)
         confident = scored[0][0] > 0
-        top = [d for score, d in scored[:3] if score > 0] or [scored[0][1]]
+        top = [(t, x) for score, t, x in scored[:3] if score > 0] or [(scored[0][1], scored[0][2])]
         context = ""
-        for d in top:
-            chunk = f"## {d.title}\n{d.content}\n\n"
+        for title, text in top:
+            chunk = f"## {title}\n{text}\n\n"
             if len(context) + len(chunk) > _MAX_CONTEXT:
                 break
             context += chunk
-        return (
-            "You are this Discord server's helpful assistant. Answer the member's "
-            "question using ONLY the server knowledge below when relevant; if the "
-            "answer isn't covered, say so briefly. Be concise.\n\n"
-            f"SERVER KNOWLEDGE:\n{context.strip()}"
-        ), confident
+        return _PROMPT_HEADER + context.strip(), confident
     finally:
         db.close()
         SessionLocal.remove()

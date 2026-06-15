@@ -1034,6 +1034,9 @@ class AutoResponse(Base):
     response = Column(Text, default="")
     cooldown_seconds = Column(Integer, default=30)
     enabled = Column(Boolean, default=True)
+    # When on, the trigger+reply pair is also fed to the AI knowledge base so /ask
+    # can answer related questions phrased differently than the keyword.
+    use_as_ai_knowledge = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     def to_dict(self) -> dict:
@@ -1044,6 +1047,7 @@ class AutoResponse(Base):
             "response": self.response or "",
             "cooldown_seconds": self.cooldown_seconds or 30,
             "enabled": bool(self.enabled),
+            "use_as_ai_knowledge": bool(self.use_as_ai_knowledge),
         }
 
 

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   Box, Grid, Card, CardContent, Typography, TextField, MenuItem, Button, Chip,
   CircularProgress, Alert, List, ListItem, ListItemText, Stack, Switch,
-  FormControlLabel, IconButton,
+  FormControlLabel, IconButton, Tooltip,
 } from '@mui/material';
 import { Delete, Add } from '@mui/icons-material';
 import guildizerApi from '../../../services/guildizerApi';
@@ -278,15 +278,16 @@ export function AutoResponsesCard({ guildId, responses, onChanged }) {
   const [trigger, setTrigger] = useState('');
   const [response, setResponse] = useState('');
   const [matchType, setMatchType] = useState('contains');
+  const [asKnowledge, setAsKnowledge] = useState(false);
   const [busy, setBusy] = useState(false);
 
   async function add() {
     setBusy(true);
     try {
       await guildizerApi.post(`/api/guilds/${guildId}/auto-responses`, {
-        trigger, response, match_type: matchType,
+        trigger, response, match_type: matchType, use_as_ai_knowledge: asKnowledge,
       });
-      setTrigger(''); setResponse('');
+      setTrigger(''); setResponse(''); setAsKnowledge(false);
       await onChanged();
     } catch { /* parent shows errors on reload */ }
     setBusy(false);
@@ -296,7 +297,8 @@ export function AutoResponsesCard({ guildId, responses, onChanged }) {
     <Card variant="outlined"><CardContent>
       <Typography variant="h6" fontWeight={600} mb={1}>Auto-responses</Typography>
       <Typography variant="body2" color="text.secondary" mb={2}>
-        Automatically reply when a message matches a trigger phrase.
+        Automatically reply when a message matches a trigger phrase. Flag one as
+        <b> AI knowledge</b> and the /ask AI can also answer related questions from it.
       </Typography>
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
         <TextField size="small" margin="dense" label="Trigger" value={trigger}
@@ -313,11 +315,21 @@ export function AutoResponsesCard({ guildId, responses, onChanged }) {
           Add
         </Button>
       </Stack>
+      <FormControlLabel sx={{ mt: 0.5 }}
+        control={<Switch size="small" checked={asKnowledge} onChange={(e) => setAsKnowledge(e.target.checked)} />}
+        label={<Typography variant="body2">Use as AI knowledge for /ask</Typography>} />
       <List dense sx={{ mt: 1 }}>
         {responses.map((r) => (
           <ListItem key={r.id} disableGutters
             secondaryAction={(
               <Stack direction="row" spacing={0.5} alignItems="center">
+                <Tooltip title="Let the /ask AI answer from this trigger">
+                  <Chip size="small" label="AI" clickable
+                    color={r.use_as_ai_knowledge ? 'primary' : 'default'}
+                    variant={r.use_as_ai_knowledge ? 'filled' : 'outlined'}
+                    onClick={() => guildizerApi.put(`/api/guilds/${guildId}/auto-responses/${r.id}`, { use_as_ai_knowledge: !r.use_as_ai_knowledge }).then(onChanged)}
+                    sx={{ height: 20, fontSize: '0.65rem' }} />
+                </Tooltip>
                 <Switch size="small" checked={r.enabled}
                   onChange={(e) => guildizerApi.put(`/api/guilds/${guildId}/auto-responses/${r.id}`, { enabled: e.target.checked }).then(onChanged)} />
                 <IconButton size="small" onClick={() => guildizerApi.delete(`/api/guilds/${guildId}/auto-responses/${r.id}`).then(onChanged)}>
