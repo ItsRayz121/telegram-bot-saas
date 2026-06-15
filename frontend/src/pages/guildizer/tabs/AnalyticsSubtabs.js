@@ -3,12 +3,12 @@
  * Leaderboard · Audit Log · Warnings · Digest · AI Activity.
  * (Overview reuses AnalyticsTab, Members reuses MembersTab.)
  */
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Box, Card, CardContent, Typography, Chip, CircularProgress, Alert,
-  List, ListItem, ListItemText, IconButton,
+  List, ListItem, ListItemText, IconButton, TextField, InputAdornment, Stack,
 } from '@mui/material';
-import { Delete } from '@mui/icons-material';
+import { Delete, Search } from '@mui/icons-material';
 import guildizerApi from '../../../services/guildizerApi';
 import { DigestCard } from './ContentTab';
 
@@ -82,6 +82,7 @@ export function AIActivitySubtab({ guildId }) {
 function EventFeed({ guildId, title, limit, filter, emptyText = 'No events yet.' }) {
   const [events, setEvents] = useState(null);
   const [error, setError] = useState(null);
+  const [query, setQuery] = useState('');
 
   useEffect(() => {
     guildizerApi.get(`/api/guilds/${guildId}/protection/events?limit=${limit}`)
@@ -90,18 +91,36 @@ function EventFeed({ guildId, title, limit, filter, emptyText = 'No events yet.'
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [guildId, limit]);
 
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q || !events) return events || [];
+    return events.filter((e) => [
+      e.action, e.username, e.detail, e.category, CAT_LABEL[e.category],
+    ].some((v) => (v || '').toString().toLowerCase().includes(q)));
+  }, [events, query]);
+
   if (events === null) return <Loading />;
 
   return (
     <Card variant="outlined"><CardContent>
-      <Typography variant="h6" fontWeight={600} mb={1}>{title}</Typography>
+      <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between"
+        alignItems={{ xs: 'stretch', sm: 'center' }} spacing={1} mb={1}>
+        <Typography variant="h6" fontWeight={600}>{title}</Typography>
+        <TextField size="small" placeholder="Search action, member, detail…" value={query}
+          onChange={(e) => setQuery(e.target.value)} sx={{ minWidth: { sm: 280 } }}
+          InputProps={{ startAdornment: (<InputAdornment position="start"><Search fontSize="small" /></InputAdornment>) }} />
+      </Stack>
       <Typography variant="body2" color="text.secondary" mb={2}>
         A read-only feed of recent moderation and protection events on this server.
       </Typography>
       {error && <Alert severity="warning" sx={{ mb: 1 }}>{error}</Alert>}
-      {events.length === 0 && <Typography variant="body2" color="text.secondary">{emptyText}</Typography>}
+      {shown.length === 0 && (
+        <Typography variant="body2" color="text.secondary">
+          {query.trim() ? 'No events match your search.' : emptyText}
+        </Typography>
+      )}
       <List dense>
-        {events.map((e) => (
+        {shown.map((e) => (
           <ListItem key={e.id} disableGutters
             secondaryAction={<Typography variant="caption" color="text.disabled">{new Date(e.created_at).toLocaleString()}</Typography>}>
             <Chip size="small" label={CAT_LABEL[e.category] || e.category} color={CAT_COLOR[e.category] || 'default'} variant="outlined" sx={{ mr: 1 }} />
@@ -118,6 +137,7 @@ function EventFeed({ guildId, title, limit, filter, emptyText = 'No events yet.'
 export function WarningsSubtab({ guildId }) {
   const [warnings, setWarnings] = useState(null);
   const [error, setError] = useState(null);
+  const [query, setQuery] = useState('');
 
   const reload = useCallback(() => guildizerApi.get(`/api/guilds/${guildId}/warnings?limit=100`)
     .then(({ data }) => setWarnings(data.warnings))
@@ -132,18 +152,36 @@ export function WarningsSubtab({ guildId }) {
     } catch { setError('Could not remove the warning.'); }
   }
 
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q || !warnings) return warnings || [];
+    return warnings.filter((w) => [
+      w.username, w.user_id, w.reason, w.moderator_name,
+    ].some((v) => (v || '').toString().toLowerCase().includes(q)));
+  }, [warnings, query]);
+
   if (warnings === null) return <Loading />;
 
   return (
     <Card variant="outlined"><CardContent>
-      <Typography variant="h6" fontWeight={600} mb={1}>Warnings</Typography>
+      <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between"
+        alignItems={{ xs: 'stretch', sm: 'center' }} spacing={1} mb={1}>
+        <Typography variant="h6" fontWeight={600}>Warnings</Typography>
+        <TextField size="small" placeholder="Search member, reason, moderator…" value={query}
+          onChange={(e) => setQuery(e.target.value)} sx={{ minWidth: { sm: 280 } }}
+          InputProps={{ startAdornment: (<InputAdornment position="start"><Search fontSize="small" /></InputAdornment>) }} />
+      </Stack>
       <Typography variant="body2" color="text.secondary" mb={2}>
         Active warnings issued to members. Remove any that no longer apply.
       </Typography>
       {error && <Alert severity="warning" sx={{ mb: 1 }} onClose={() => setError(null)}>{error}</Alert>}
-      {warnings.length === 0 && <Typography variant="body2" color="text.secondary">No warnings on record. 🎉</Typography>}
+      {shown.length === 0 && (
+        <Typography variant="body2" color="text.secondary">
+          {query.trim() ? 'No warnings match your search.' : 'No warnings on record. 🎉'}
+        </Typography>
+      )}
       <List dense>
-        {warnings.map((w) => (
+        {shown.map((w) => (
           <ListItem key={w.id} disableGutters
             secondaryAction={(
               <IconButton size="small" color="error" onClick={() => remove(w.id)} title="Remove warning">
