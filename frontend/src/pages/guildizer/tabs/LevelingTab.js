@@ -138,6 +138,29 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
 
       <Grid item xs={12}>
         <Card variant="outlined"><CardContent>
+          <Typography variant="subtitle1" fontWeight={700} mb={1}>🏅 Rank card style</Typography>
+          <Typography variant="caption" color="text.secondary" display="block" mb={1.5}>
+            Colours for the image shown by <code>/rank</code> — a gradient background and an accent XP bar.
+          </Typography>
+          <Grid container spacing={2}>
+            {[
+              ['Background start', 'bg_color_start', '#1a1a2e'],
+              ['Background end', 'bg_color_end', '#16213e'],
+              ['Accent', 'accent_color', '#5865F2'],
+            ].map(([label, key, fallback]) => (
+              <Grid item xs={12} sm={4} key={key}>
+                <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>{label}</Typography>
+                <input type="color" value={(l2.rank_card || {})[key] || fallback}
+                  onChange={(e) => setL2({ rank_card: { ...(l2.rank_card || {}), [key]: e.target.value } })}
+                  style={{ width: '100%', height: 40, borderRadius: 8, border: '1px solid #30363d', cursor: 'pointer', background: 'transparent' }} />
+              </Grid>
+            ))}
+          </Grid>
+        </CardContent></Card>
+      </Grid>
+
+      <Grid item xs={12}>
+        <Card variant="outlined"><CardContent>
           <Typography variant="subtitle1" fontWeight={700} mb={1}>🎙️ Voice</Typography>
           <Typography variant="caption" color="text.secondary" display="block" mb={1}>
             Voice XP is granted every 5 minutes to members actively in voice (AFK channel,

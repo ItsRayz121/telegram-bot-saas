@@ -57,6 +57,12 @@ LEVELING2_DEFAULTS = {
     "penalty_kick": 0,      # … kicked
     "penalty_ban": 0,       # … banned
     "role_rewards": [],     # [{"level": int, "role_id": str}]
+    # /rank image card colours (hex). Rendered by rank_card.py.
+    "rank_card": {
+        "bg_color_start": "#1a1a2e",
+        "bg_color_end": "#16213e",
+        "accent_color": "#5865F2",
+    },
 }
 
 

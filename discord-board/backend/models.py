@@ -418,6 +418,9 @@ class Member(Base):
     admin_notes = Column(Text, nullable=True)
     # Voice XP (healed): total minutes counted by the voice loop
     voice_minutes = Column(Integer, nullable=True)
+    # First-message verification (healed): set once the member passes the captcha,
+    # so verify_on="first_message" challenges each member only once.
+    verified = Column(Boolean, nullable=True)
 
     def to_dict(self) -> dict:
         return {

@@ -13,6 +13,7 @@ double-welcome. The routing map is cached in-process and refreshed every ~15s.
 from __future__ import annotations
 
 import asyncio
+import io
 import logging
 import re
 import time
@@ -49,6 +50,7 @@ import moderation
 import moderation_runtime
 import protection
 import raid_guard
+import rank_card
 import self_roles
 import settings as settings_mod
 import social_replies
@@ -427,6 +429,14 @@ class CoreMixin:
                                    or perms.manage_messages))
 
         cfg = await asyncio.to_thread(self._load_moderation, message.guild.id)
+        # First-message verification: challenge a non-staff member the first time
+        # they speak (verify_on="first_message"). Deletes the message + gates them.
+        vcfg = (cfg or {}).get("verification") or {}
+        if (vcfg.get("enabled") and vcfg.get("verify_on") == "first_message"
+                and not is_staff):
+            if await self._maybe_first_message_verify(message, vcfg):
+                return
+
         if is_staff or not cfg:
             if cfg:
                 await self._maybe_emoji_react(message, cfg, is_staff=True)
@@ -1055,9 +1065,11 @@ class CoreMixin:
                 if taken == "kick":
                     return
 
-        # join captcha: quarantine role + challenge in #verify (Phase 11)
+        # join captcha: quarantine role + challenge in #verify (Phase 11).
+        # verify_on="first_message" defers the challenge until the member speaks
+        # (handled in on_message), so lurkers aren't gated until they participate.
         vcfg = (mod or {}).get("verification") or {}
-        if vcfg.get("enabled"):
+        if vcfg.get("enabled") and vcfg.get("verify_on", "join") == "join":
             await self._start_verification(member, vcfg)
 
         # welcome message + auto-roles
@@ -1136,6 +1148,25 @@ class CoreMixin:
         if msg:
             await asyncio.to_thread(verification.set_challenge_message, guild.id,
                                     member.id, channel.id, msg.id)
+
+    async def _maybe_first_message_verify(self, message: discord.Message, vcfg: dict) -> bool:
+        """verify_on="first_message": gate a member the first time they post.
+        Returns True when the message was handled (deleted + challenge started or
+        the member is mid-challenge), so the caller stops processing it."""
+        member = message.author
+        guild = message.guild
+        # already mid-challenge (has the Unverified role) — keep them quiet
+        role_id = vcfg.get("role_id")
+        if role_id and any(str(r.id) == str(role_id) for r in getattr(member, "roles", [])):
+            await governor.safe(message.delete(), what="first-msg verify (pending) delete")
+            return True
+        # already verified once — let them speak
+        if await asyncio.to_thread(verification.is_verified, guild.id, member.id):
+            return False
+        # first message from an unverified member: delete it and start the captcha
+        await governor.safe(message.delete(), what="first-msg verify delete")
+        await self._start_verification(member, vcfg)
+        return True
 
     async def _send_welcome(self, member: discord.Member, cfg: dict) -> None:
         guild = member.guild
@@ -1597,7 +1628,8 @@ class CoreMixin:
                 continue
             vcfg = ((await asyncio.to_thread(self._load_moderation, guild.id)) or {}).get("verification") or {}
             member = guild.get_member(row["user_id"])
-            await verification._delete_challenge_message(guild, row)
+            if vcfg.get("auto_delete_on_timeout", True):
+                await verification._delete_challenge_message(guild, row)
             if member is not None and vcfg.get("on_timeout", "kick") == "kick":
                 if await governor.safe(member.kick(reason="Guildizer: verification timed out"),
                                        what="verification timeout kick"):
@@ -1927,7 +1959,14 @@ class CoreMixin:
             m = db.get(Member, {"guild_id": guild_id, "user_id": user_id})
             if m is None:
                 return None
-            return {"xp": m.xp or 0, "level": m.level or 1, "rank": leveling.rank_of(db, guild_id, user_id)}
+            row = db.get(GuildSettings, guild_id)
+            l2 = {**settings_mod.LEVELING2_DEFAULTS,
+                  **((row.extra or {}).get("leveling2") or {})} if row else settings_mod.LEVELING2_DEFAULTS
+            return {
+                "xp": m.xp or 0, "level": m.level or 1,
+                "rank": leveling.rank_of(db, guild_id, user_id),
+                "style": l2.get("rank_card") or settings_mod.LEVELING2_DEFAULTS["rank_card"],
+            }
         finally:
             db.close()
             SessionLocal.remove()
@@ -2135,12 +2174,31 @@ def attach_builtin_commands(client) -> None:
         if not snap:
             await interaction.response.send_message("You have no XP yet — start chatting!", ephemeral=True)
             return
-        need = leveling.xp_for_level(snap["level"] + 1)
-        await interaction.response.send_message(
-            f"🏅 **Level {snap['level']}** · {snap['xp']} XP · rank #{snap['rank']}\n"
-            f"Next level at {need} XP.",
-            ephemeral=True,
+        level, xp = snap["level"], snap["xp"]
+        into_level = xp - leveling.xp_for_level(level)
+        need = leveling.xp_for_level(level + 1) - leveling.xp_for_level(level)
+        # Try an image rank card; fall back to text if Pillow/render unavailable.
+        avatar_bytes = None
+        try:
+            avatar_bytes = await interaction.user.display_avatar.read()
+        except Exception:  # noqa: BLE001
+            avatar_bytes = None
+        img = await asyncio.to_thread(
+            rank_card.render,
+            username=interaction.user.display_name, avatar_bytes=avatar_bytes,
+            level=level, xp=xp, rank=snap["rank"],
+            into_level=into_level, need_for_level=need, style=snap.get("style"),
         )
+        if img:
+            await interaction.response.send_message(
+                file=discord.File(io.BytesIO(img), filename="rank.png"), ephemeral=True
+            )
+        else:
+            await interaction.response.send_message(
+                f"🏅 **Level {level}** · {xp} XP · rank #{snap['rank']}\n"
+                f"{into_level}/{need} XP into this level.",
+                ephemeral=True,
+            )
 
     @client.tree.command(name="leaderboard", description="Show the top members by XP.")
     async def leaderboard(interaction: discord.Interaction) -> None:

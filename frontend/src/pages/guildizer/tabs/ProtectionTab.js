@@ -986,6 +986,12 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                 <MenuItem value="math">Math question</MenuItem>
                 <MenuItem value="word">Type a word</MenuItem>
               </TextField>
+              <TextField select size="small" margin="dense" fullWidth label="When to verify"
+                value={cfg.verification?.verify_on || 'join'} onChange={(e) => setV({ verify_on: e.target.value })}
+                helperText="On join gates everyone immediately. On first message lets people lurk, and only challenges them when they first speak.">
+                <MenuItem value="join">On join</MenuItem>
+                <MenuItem value="first_message">On first message</MenuItem>
+              </TextField>
               <TextField type="number" size="small" margin="dense" fullWidth label="Timeout (seconds)"
                 value={cfg.verification?.timeout_seconds ?? 300} inputProps={{ min: 60, max: 3600 }}
                 onChange={(e) => setV({ timeout_seconds: Number(e.target.value) })} />
@@ -997,6 +1003,10 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                 <MenuItem value="kick">Kick the member</MenuItem>
                 <MenuItem value="keep">Keep them unverified</MenuItem>
               </TextField>
+              <FormControlLabel sx={{ mt: 0.5 }}
+                control={<Switch checked={cfg.verification?.auto_delete_on_timeout !== false}
+                  onChange={(e) => setV({ auto_delete_on_timeout: e.target.checked })} />}
+                label="Auto-delete the challenge message on timeout" />
             </CardContent></Card>
           </Grid>
 

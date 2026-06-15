@@ -142,6 +142,31 @@ def expired_rows(served_guild_ids: list[int]) -> list[dict]:
         SessionLocal.remove()
 
 
+def is_verified(guild_id, user_id) -> bool:
+    """True if the member already passed first-message verification once."""
+    from models import Member
+    db = SessionLocal()
+    try:
+        m = db.get(Member, {"guild_id": guild_id, "user_id": user_id})
+        return bool(m and m.verified)
+    finally:
+        db.close()
+        SessionLocal.remove()
+
+
+def mark_verified(guild_id, user_id, username=None) -> None:
+    """Persist that the member passed verification (used by first_message mode)."""
+    import leveling
+    db = SessionLocal()
+    try:
+        m = leveling.get_or_create_member(db, guild_id, user_id, username)
+        m.verified = True
+        db.commit()
+    finally:
+        db.close()
+        SessionLocal.remove()
+
+
 def save_setup_ids(guild_id, role_id, channel_id) -> None:
     db = SessionLocal()
     try:
@@ -278,6 +303,7 @@ async def finish_attempt(interaction: discord.Interaction, outcome: str, info: d
                                 what="verify role removal")
         await interaction.response.send_message("✅ You're verified — welcome!", ephemeral=True)
         await _delete_challenge_message(guild, info)
+        await asyncio.to_thread(mark_verified, guild.id, member.id, str(member))
         await asyncio.to_thread(_log, guild.id, "verification", "verified", member.id, str(member))
     elif outcome == "retry":
         await interaction.response.send_message(

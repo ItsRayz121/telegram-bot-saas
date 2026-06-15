@@ -83,6 +83,8 @@ EXTRA_DEFAULTS = {
         "enabled": False, "method": "button",        # button | math | word
         "timeout_seconds": 300, "max_attempts": 3,
         "on_timeout": "kick",                         # kick | keep
+        "verify_on": "join",                          # join | first_message
+        "auto_delete_on_timeout": True,               # delete the challenge on timeout
         "role_id": None, "channel_id": None,          # filled by the bot at setup
     },
     "bot_policy": {

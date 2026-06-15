@@ -93,6 +93,14 @@ def update_leveling(guild_id: int):
                 l2[key] = _as_int(l_in[key], 0, 0, hi)
         if "ai_levelup" in l_in:
             l2["ai_levelup"] = bool(l_in["ai_levelup"])
+        if isinstance(l_in.get("rank_card"), dict):
+            rc_in = l_in["rank_card"]
+            rc = dict(l2.get("rank_card") or settings_mod.LEVELING2_DEFAULTS["rank_card"])
+            for key in ("bg_color_start", "bg_color_end", "accent_color"):
+                val = str(rc_in.get(key) or "").strip()
+                if val and len(val) <= 9 and val.startswith("#"):
+                    rc[key] = val
+            l2["rank_card"] = rc
         if isinstance(l_in.get("role_rewards"), list):
             rewards = []
             for r in l_in["role_rewards"][:20]:

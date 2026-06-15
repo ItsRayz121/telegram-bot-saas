@@ -11,3 +11,4 @@ openai>=1.40.0,<2.0.0
 cryptography==42.0.8
 pypdf==4.3.1
 python-docx==1.1.2
+Pillow==10.4.0

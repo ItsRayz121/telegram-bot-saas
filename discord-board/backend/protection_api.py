@@ -170,6 +170,10 @@ def update_moderation(guild_id: int):
             v["max_attempts"] = _as_int(v_in["max_attempts"], 3, 1, 10)
         if v_in.get("on_timeout") in ("kick", "keep"):
             v["on_timeout"] = v_in["on_timeout"]
+        if v_in.get("verify_on") in ("join", "first_message"):
+            v["verify_on"] = v_in["verify_on"]
+        if "auto_delete_on_timeout" in v_in:
+            v["auto_delete_on_timeout"] = bool(v_in["auto_delete_on_timeout"])
         extra["verification"] = v
     if isinstance(body.get("bot_policy"), dict):
         b_in = body["bot_policy"]

@@ -48,6 +48,8 @@ _HEAL_COLUMNS = [
     ("knowledge_documents", "chunks", "JSON"),
     # Auto-responses can double as AI knowledge for /ask
     ("auto_responses", "use_as_ai_knowledge", "BOOLEAN"),
+    # First-message verification: member passed the captcha once
+    ("members", "verified", "BOOLEAN"),
 ]
 
 
