@@ -227,6 +227,17 @@ async def _apply_ladder(interaction: discord.Interaction, member: discord.Member
     return "no action"
 
 
+def _notify_owner_report(db, guild_id: int, target_name: str, detail: str) -> None:
+    """Dashboard alert for the server owner (in-app bell + web push). Best-effort.
+    Shaped for _db_call (db is injected as the first arg)."""
+    import access
+    from models import Guild
+    guild_row = db.get(Guild, guild_id)
+    if guild_row and guild_row.owner_id:
+        access.notify(db, guild_row.owner_id, "🚩 New report filed",
+                      f"A member reported {target_name}: {detail}"[:480], "warning")
+
+
 async def _report_alert(interaction: discord.Interaction, target_name: str,
                         detail: str) -> None:
     """Mirror a new /report into the configured alert channel (reports section)."""
@@ -234,6 +245,8 @@ async def _report_alert(interaction: discord.Interaction, target_name: str,
     alert_cfg = await asyncio.to_thread(_mod_log_cfg, interaction.guild.id)
     await admin_alerts.post(interaction.guild, alert_cfg, "report",
                             f"New report from {interaction.user} about **{target_name}**: {detail}")
+    await asyncio.to_thread(_db_call, _notify_owner_report,
+                            interaction.guild.id, target_name, detail)
     ch_id = (cfg.get("reports") or {}).get("alert_channel_id")
     if not ch_id:
         return

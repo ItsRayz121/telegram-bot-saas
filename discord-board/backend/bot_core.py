@@ -963,12 +963,32 @@ class CoreMixin:
         )
         await admin_alerts.post(guild, cfg, "raid",
                                 f"Raid mode activated in **{guild.name}** for {secs}s.")
+        await asyncio.to_thread(self._notify_owner_raid, guild.id, guild.name, secs)
         if not cfg.get("rg_notify"):
             return
         ch_id = cfg.get("rg_notify_channel_id")
         channel = guild.get_channel(int(ch_id)) if ch_id else guild.system_channel
         if channel and hasattr(channel, "send"):
             await governor.safe(channel.send(raid_guard.activation_notice(secs)), what="raid notice")
+
+    def _notify_owner_raid(self, guild_id: int, guild_name: str, secs: int) -> None:
+        """Dashboard alert for the server owner (in-app bell + web push). Best-effort."""
+        db = SessionLocal()
+        try:
+            import access
+            guild_row = db.get(Guild, guild_id)
+            if guild_row and guild_row.owner_id:
+                access.notify(
+                    db, guild_row.owner_id, "🚨 Raid mode activated",
+                    f"Coordinated join/spam detected in {guild_name or 'your server'} — "
+                    f"locked down for {secs}s.", "error",
+                )
+            db.commit()
+        except Exception:  # noqa: BLE001
+            db.rollback()
+        finally:
+            db.close()
+            SessionLocal.remove()
 
     # --- leveling / XP ----------------------------------------------------------
     async def _maybe_award_xp(self, message: discord.Message) -> bool:

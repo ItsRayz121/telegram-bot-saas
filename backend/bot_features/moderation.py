@@ -1113,6 +1113,20 @@ class ModerationSystem:
                 )
         except Exception:
             pass
+        # Dashboard alert for the bot owner (in-app bell + web push). Best-effort.
+        try:
+            with self.app.app_context():
+                from ..models import Bot
+                from ..routes.notifications import create_notification
+                bot_row = Bot.query.get(group.bot_id)
+                if bot_row and bot_row.user_id:
+                    create_notification(
+                        bot_row.user_id, "raid_alert",
+                        "🚨 Raid mode activated",
+                        f"Coordinated spam detected in {group.group_name or 'your group'} — new joins are temporarily restricted.",
+                    )
+        except Exception:
+            pass
 
     # ── Smart Moderation: Layer 2 ─────────────────────────────────────────────
 

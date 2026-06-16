@@ -1853,6 +1853,19 @@ class BotInstance:
             )
             db.session.add(report)
             db.session.commit()
+            # Dashboard alert for the bot owner (in-app bell + web push). Best-effort.
+            try:
+                from .models import Bot
+                from .routes.notifications import create_notification
+                bot_row = Bot.query.get(group.bot_id)
+                if bot_row and bot_row.user_id:
+                    create_notification(
+                        bot_row.user_id, "report",
+                        "🚩 New report filed",
+                        f"A member reported a message in {group.group_name or 'your group'}. Reason: {reason[:120]}",
+                    )
+            except Exception:
+                pass
 
         await update.message.reply_text("✅ Report submitted. Admins have been notified.")
 

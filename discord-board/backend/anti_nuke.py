@@ -93,6 +93,17 @@ def _log_event(guild_id: int, action: str, user_id: int, username, detail: str) 
     try:
         protection.log_event(db, guild_id, "anti_nuke", action,
                              user_id=user_id, username=username, detail=detail)
+        # Dashboard alert for the server owner (in-app bell + web push). Best-effort.
+        try:
+            import access
+            from models import Guild
+            guild_row = db.get(Guild, guild_id)
+            if guild_row and guild_row.owner_id:
+                access.notify(db, guild_row.owner_id, "🧨 Anti-nuke triggered",
+                              (detail or "Destructive admin activity was contained.")[:480],
+                              "error")
+        except Exception:  # noqa: BLE001
+            pass
         db.commit()
     except Exception:  # noqa: BLE001
         db.rollback()

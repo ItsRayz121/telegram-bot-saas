@@ -3680,6 +3680,22 @@ async def _announce_raid(bot, group_id, settings, flask_app):
     _log_event(flask_app, str(group_id), "raid_mode_activated",
                "Coordinated spam detected — new joins restricted",
                {"moderator_username": "RaidGuard"})
+    # Dashboard alert for the group owner (in-app bell + web push). Best-effort.
+    try:
+        if flask_app:
+            with flask_app.app_context():
+                from .models import TelegramGroup
+                from .routes.notifications import create_notification
+                tg = TelegramGroup.query.filter_by(telegram_group_id=str(group_id)).first()
+                if tg and tg.owner_user_id:
+                    create_notification(
+                        tg.owner_user_id, "raid_alert",
+                        "🚨 Raid mode activated",
+                        f"Coordinated spam detected in {tg.title or 'your group'} — new joins are temporarily restricted.",
+                        {"url": f"/groups/{tg.id}"},
+                    )
+    except Exception:
+        pass
 
 
 async def _automod_execute(bot, message, group_id: str, flask_app, rule: str, action: str,
@@ -5305,6 +5321,20 @@ async def cmd_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 db.session.add(rpt)
                 db.session.commit()
+                # Dashboard alert for the group owner (in-app bell + web push).
+                try:
+                    from .models import TelegramGroup
+                    from .routes.notifications import create_notification
+                    tg = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
+                    if tg and tg.owner_user_id:
+                        create_notification(
+                            tg.owner_user_id, "report",
+                            "🚩 New report filed",
+                            f"{target_name} was reported in {tg.title or 'your group'}. Reason: {reason[:120]}",
+                            {"url": f"/groups/{tg.id}"},
+                        )
+                except Exception:
+                    pass
         except Exception as exc:
             _log.debug("[OfficialBot] OfficialReportedMessage save failed: %s", exc)
 
