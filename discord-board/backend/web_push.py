@@ -54,7 +54,7 @@ def _vapid_config():
     priv = os.environ.get("VAPID_PRIVATE_KEY", "").strip()
     if not priv:
         return None
-    email = os.environ.get("VAPID_CLAIM_EMAIL", "admin@telegizer.com").strip()
+    email = os.environ.get("VAPID_CLAIM_EMAIL", "fazalelahi5577@gmail.com").strip()
     return priv, {"sub": f"mailto:{email}"}
 
 
