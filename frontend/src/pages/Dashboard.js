@@ -13,7 +13,7 @@ import {
   Add, Delete, Settings, BarChart, SmartToy, AccountCircle,
   PowerSettingsNew, Upgrade, CheckCircle, Close, ContentCopy,
   ArrowForward, CreditCard, People, Home, AttachMoney,
-  Notifications, NotificationsNone, Search, ManageAccounts,
+  Search, ManageAccounts,
   EmojiEvents, ExpandMore, Groups, Telegram, OpenInNew,
   HelpOutline, Campaign, Email, Refresh,
 } from '@mui/icons-material';
@@ -21,10 +21,10 @@ import { track } from '../services/analytics';
 import Divider from '@mui/material/Divider';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import TelegizerLogo from '../components/TelegizerLogo';
-import Badge from '@mui/material/Badge';
+import NotificationBell from '../components/NotificationBell';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { bots, auth, billing, referrals as referralsApi, notifications as notificationsApi, telegramAccount, telegramGroups as telegramGroupsApi } from '../services/api';
+import { bots, auth, billing, referrals as referralsApi, telegramAccount, telegramGroups as telegramGroupsApi } from '../services/api';
 
 const MAX_BOTS = { free: 1, pro: 3, enterprise: 50 };
 
@@ -719,31 +719,7 @@ export default function Dashboard() {
     }
   };
 
-  const [unreadNotifs, setUnreadNotifs] = useState(0);
-  const [notifAnchor, setNotifAnchor] = useState(null);
   const [supportAnchor, setSupportAnchor] = useState(null);
-  const [notifList, setNotifList] = useState([]);
-
-  useEffect(() => {
-    notificationsApi.unreadCount().then(r => setUnreadNotifs(r.data.unread || 0)).catch(() => {});
-  }, []);
-
-  const openNotifMenu = async (e) => {
-    setNotifAnchor(e.currentTarget);
-    try {
-      const r = await notificationsApi.list({ per_page: 10 });
-      setNotifList(r.data.notifications || []);
-      setUnreadNotifs(r.data.unread || 0);
-    } catch {}
-  };
-
-  const markAllRead = async () => {
-    try {
-      await notificationsApi.markAllRead();
-      setUnreadNotifs(0);
-      setNotifList(prev => prev.map(n => ({ ...n, read: true })));
-    } catch {}
-  };
 
   const stopTgPoll = () => {
     if (tgPollRef.current) { clearInterval(tgPollRef.current); tgPollRef.current = null; }
@@ -877,32 +853,7 @@ export default function Dashboard() {
               Upgrade
             </Button>
           )}
-          <IconButton onClick={openNotifMenu} sx={{ mr: 0.5 }}>
-            <Badge badgeContent={unreadNotifs} color="error" max={99}>
-              {unreadNotifs > 0 ? <Notifications /> : <NotificationsNone />}
-            </Badge>
-          </IconButton>
-          <Menu anchorEl={notifAnchor} open={Boolean(notifAnchor)} onClose={() => setNotifAnchor(null)}
-            PaperProps={{ sx: { width: { xs: '90vw', sm: 340 }, maxHeight: 460 } }}>
-            <Box sx={{ px: 2, py: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Typography variant="subtitle2" fontWeight={700}>Notifications</Typography>
-              {unreadNotifs > 0 && <Button size="small" onClick={markAllRead}>Mark all read</Button>}
-            </Box>
-            {notifList.length === 0 ? (
-              <MenuItem disabled><Typography variant="body2" color="text.secondary">No notifications yet</Typography></MenuItem>
-            ) : notifList.map(n => (
-              <MenuItem key={n.id} sx={{ whiteSpace: 'normal', alignItems: 'flex-start', py: 1,
-                bgcolor: n.read ? 'transparent' : 'action.hover' }}>
-                <Box>
-                  <Typography variant="body2" fontWeight={n.read ? 400 : 600}>{n.title}</Typography>
-                  <Typography variant="caption" color="text.secondary">{n.message}</Typography>
-                  <Typography variant="caption" display="block" color="text.disabled">
-                    {new Date(n.created_at).toLocaleDateString()}
-                  </Typography>
-                </Box>
-              </MenuItem>
-            ))}
-          </Menu>
+          <NotificationBell sx={{ mr: 0.5 }} />
           <IconButton onClick={(e) => setAnchorEl(e.currentTarget)}>
             <AccountCircle />
           </IconButton>

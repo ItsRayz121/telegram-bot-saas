@@ -1,8 +1,12 @@
 /* Telegizer Service Worker
- * v5 — navigation requests always go to network (network-first).
+ * v6 — navigation requests always go to network (network-first).
  * Static hashed assets (/static/*) use cache-first.
  * index.html is intentionally NOT precached — it must always be fetched fresh
  * so new deployments are picked up immediately by Telegram WebView and browsers.
+ *
+ * Changes in v6:
+ * - Web Push: 'push' handler shows an OS notification from the JSON payload
+ * - 'notificationclick' focuses an existing tab or opens the deep-link URL
  *
  * Changes in v5:
  * - Never intercept POST requests or /api/* (unchanged)
@@ -10,7 +14,7 @@
  * - Fixed: caches.match() can return undefined — always fall back to a real Response
  *   so respondWith() never receives a non-Response value (was causing TypeError)
  */
-const CACHE_VERSION = 'Telegizer-v5';
+const CACHE_VERSION = 'Telegizer-v6';
 const STATIC_CACHE  = `${CACHE_VERSION}-static`;
 
 // Only precache the offline fallback page — NOT index.html.
@@ -120,4 +124,48 @@ self.addEventListener('fetch', (event) => {
         })
     );
   }
+});
+
+// ── Web Push ────────────────────────────────────────────────────────────────
+// Payload is JSON: { title, body, type, category, url, id }
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch (e) {
+    data = { title: 'Telegizer', body: event.data ? event.data.text() : '' };
+  }
+  const title = data.title || 'Telegizer';
+  const options = {
+    body: data.body || '',
+    icon: '/icons/telegizer-icon-192.png',
+    badge: '/icons/telegizer-icon-192.png',
+    // Group by category so repeated alerts of one kind collapse instead of stacking.
+    tag: data.category || data.type || 'telegizer',
+    renotify: true,
+    data: { url: data.url || '/notifications' },
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = (event.notification.data && event.notification.data.url) || '/notifications';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // Focus an existing tab if one is open, navigating it to the target.
+      for (const client of clientList) {
+        if ('focus' in client) {
+          client.focus();
+          if ('navigate' in client) {
+            try { client.navigate(target); } catch (e) { /* cross-origin guard */ }
+          }
+          return undefined;
+        }
+      }
+      // Otherwise open a fresh window.
+      if (self.clients.openWindow) return self.clients.openWindow(target);
+      return undefined;
+    })
+  );
 });

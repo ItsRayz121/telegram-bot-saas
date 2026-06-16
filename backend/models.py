@@ -133,6 +133,10 @@ class User(db.Model):
     chargeback_count = db.Column(db.Integer, default=0, nullable=False)
     # Free-text notes written by platform admins on the user detail page.
     admin_notes = db.Column(db.Text, nullable=True)
+    # Notification preferences (in-app sound + per-category toggles + web push opt-in).
+    # JSON shape: {"sound": bool, "push": bool, "categories": {"billing": bool, ...}}
+    # None = all defaults on. See routes/notifications.py NOTIF_PREF_DEFAULTS.
+    notification_prefs = db.Column(db.JSON, nullable=True)
 
     bots = db.relationship("Bot", backref="owner", lazy=True, cascade="all, delete-orphan")
 
@@ -1112,6 +1116,32 @@ class UserNotification(db.Model):
             "message": self.message,
             "read": self.read,
             "created_at": self.created_at.isoformat(),
+            "metadata": self.metadata_ or {},
+        }
+
+
+class PushSubscription(db.Model):
+    """A browser Web Push subscription (one per device/browser) for a user.
+
+    Stores the endpoint + keys returned by the browser PushManager so the
+    backend can deliver OS-level push notifications via VAPID even when the
+    PWA / tab is closed. Endpoint is unique so re-subscribing upserts."""
+    __tablename__ = "push_subscriptions"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    endpoint = db.Column(db.Text, nullable=False, unique=True)
+    p256dh = db.Column(db.String(255), nullable=False)
+    auth = db.Column(db.String(255), nullable=False)
+    user_agent = db.Column(db.String(300), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    last_used_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=True)
+
+    def to_subscription_info(self):
+        """Shape expected by pywebpush."""
+        return {
+            "endpoint": self.endpoint,
+            "keys": {"p256dh": self.p256dh, "auth": self.auth},
         }
 
 

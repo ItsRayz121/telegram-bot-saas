@@ -11,6 +11,7 @@ import Sidebar, { SIDEBAR_WIDTH, SIDEBAR_COLLAPSED_WIDTH } from '../components/S
 // Telegizer Assistant panel hidden per user request — keep import handy for re-enable.
 // import { DesktopAssistantSidebar, MobileAssistantFab } from '../components/AssistantSidebar';
 import TelegizerLogo from '../components/TelegizerLogo';
+import NotificationBell from '../components/NotificationBell';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 export default function AppLayout({ children }) {
@@ -136,6 +137,8 @@ export default function AppLayout({ children }) {
                 <TelegizerLogo size="sm" variant="icon" />
                 <Typography fontWeight={800} fontSize="0.9rem" letterSpacing="-0.02em">Telegizer</Typography>
               </Box>
+              <Box sx={{ flexGrow: 1 }} />
+              <NotificationBell size="small" sx={{ color: 'text.secondary' }} />
             </Toolbar>
           </AppBar>
         )}

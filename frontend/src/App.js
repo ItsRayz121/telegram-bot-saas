@@ -45,6 +45,7 @@ import GroupAnalytics from './pages/GroupAnalytics';
 import Analytics from './pages/Analytics';
 import Billing from './pages/Billing';
 import Settings from './pages/Settings';
+import NotificationsPage from './pages/Notifications';
 import AdminPanel from './pages/AdminPanel';
 import AdminUserDetail from './pages/AdminUserDetail';
 import AdminGroupDetail from './pages/AdminGroupDetail';
@@ -83,6 +84,7 @@ import GuildizerServers from './pages/guildizer/GuildizerServers';
 import GuildizerManageServers from './pages/guildizer/GuildizerManageServers';
 import GuildizerServerDetail from './pages/guildizer/GuildizerServerDetail';
 import GuildizerBots from './pages/guildizer/GuildizerBots';
+import GuildizerNotifications from './pages/guildizer/GuildizerNotifications';
 import GuildizerAdminLayout from './layouts/GuildizerAdminLayout';
 import GuildizerAdminPanel from './pages/guildizer/admin/GuildizerAdminPanel';
 import GuildizerAdminUserDetail from './pages/guildizer/admin/GuildizerAdminUserDetail';
@@ -304,6 +306,7 @@ export default function App() {
             {/* ── Discord (Guildizer) — 3rd pillar ──────────────────────────── */}
             <Route path="/guildizer"                    element={<AppRoute><GuildizerServers /></AppRoute>} />
             <Route path="/guildizer/bots"               element={<AppRoute><GuildizerBots /></AppRoute>} />
+            <Route path="/guildizer/notifications"      element={<AppRoute><GuildizerNotifications /></AppRoute>} />
             <Route path="/guildizer/servers"            element={<AppRoute><GuildizerManageServers /></AppRoute>} />
             <Route path="/guildizer/servers/:guildId"   element={<AppRoute><GuildizerServerDetail /></AppRoute>} />
             {/* Guildizer admin console — dedicated full-screen shell (nested) */}
@@ -366,9 +369,10 @@ export default function App() {
             {/* ── Referrals ─────────────────────────────────────────────────── */}
             <Route path="/referrals" element={<AppRoute><Referrals /></AppRoute>} />
 
-            {/* ── Billing / Settings ─────────────────────────────────────────── */}
+            {/* ── Billing / Settings / Notifications ─────────────────────────── */}
             <Route path="/billing"  element={<AppRoute><Billing /></AppRoute>} />
             <Route path="/settings" element={<AppRoute><Settings /></AppRoute>} />
+            <Route path="/notifications" element={<AppRoute><NotificationsPage /></AppRoute>} />
 
             {/* ── Admin ─────────────────────────────────────────────────────── */}
             {/* Console chooser: Telegizer vs Guildizer admin */}

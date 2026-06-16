@@ -147,6 +147,13 @@ export const notifications = {
   unreadCount: () => api.get('/api/notifications/unread-count'),
   markRead: (id) => api.post(`/api/notifications/${id}/read`),
   markAllRead: () => api.post('/api/notifications/read-all'),
+  // Preferences (sound / push opt-in / per-category mute)
+  getPreferences: () => api.get('/api/notifications/preferences'),
+  updatePreferences: (data) => api.put('/api/notifications/preferences', data),
+  // Web Push subscription management
+  vapidKey: () => api.get('/api/notifications/vapid-public-key'),
+  subscribePush: (subscription) => api.post('/api/notifications/subscribe', subscription),
+  unsubscribePush: (data) => api.post('/api/notifications/unsubscribe', data || {}),
 };
 
 export const bots = {

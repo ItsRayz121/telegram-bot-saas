@@ -2,19 +2,20 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Box, Container, Typography, Button, Card, CardContent, CardActions, Grid, Avatar,
-  CircularProgress, Alert, Chip, Stack, IconButton, Badge, Menu, MenuItem,
+  CircularProgress, Alert, Chip, Stack, IconButton,
   ListItemText, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
   Divider, Tooltip, Collapse, Paper, List, ListItem, ListItemIcon, LinearProgress,
   InputAdornment,
 } from '@mui/material';
 import {
-  Forum, Add, OpenInNew, AdminPanelSettings, SmartToy, Notifications, Redeem,
+  Forum, Add, OpenInNew, AdminPanelSettings, SmartToy, Redeem,
   CheckCircle, Settings, Refresh, BarChart, LinkOff, Security, HelpOutline,
   ExpandMore, ExpandLess, Groups, ArrowBack, Shield, Lock, Search, Close,
   Delete, Code,
 } from '@mui/icons-material';
-import guildizerApi, { guildizerLoginUrl } from '../../services/guildizerApi';
+import guildizerApi, { guildizerLoginUrl, guildizerNotifications } from '../../services/guildizerApi';
 import { ConnectWizard } from './GuildizerBots';
+import NotificationBell from '../../components/NotificationBell';
 
 // Mirrors the backend MAX_BOTS_PER_USER (custom_bots_api.py).
 const MAX_CUSTOM_BOTS = 5;
@@ -591,40 +592,10 @@ function _relativeTime(iso) {
   return `${d}d ago`;
 }
 
+// Guildizer reuses the shared Telegizer bell (live polling, sound, mute, "view
+// all") pointed at the Guildizer backend + notifications page.
 function NotificationsBell() {
-  const [anchor, setAnchor] = useState(null);
-  const [items, setItems] = useState([]);
-  const [unread, setUnread] = useState(0);
-
-  useEffect(() => {
-    guildizerApi.get('/api/notifications')
-      .then(({ data }) => { setItems(data.notifications); setUnread(data.unread); })
-      .catch(() => {});
-  }, []);
-
-  const openMenu = (e) => {
-    setAnchor(e.currentTarget);
-    if (unread > 0) {
-      guildizerApi.post('/api/notifications/read').then(() => setUnread(0)).catch(() => {});
-    }
-  };
-
-  return (
-    <>
-      <IconButton onClick={openMenu}>
-        <Badge badgeContent={unread} color="error"><Notifications /></Badge>
-      </IconButton>
-      <Menu anchorEl={anchor} open={!!anchor} onClose={() => setAnchor(null)}>
-        {items.length === 0 && <MenuItem disabled>No notifications</MenuItem>}
-        {items.map((n) => (
-          <MenuItem key={n.id} sx={{ whiteSpace: 'normal', maxWidth: 360 }} onClick={() => setAnchor(null)}>
-            <ListItemText primary={n.title} secondary={n.body}
-              primaryTypographyProps={{ fontWeight: n.read ? 400 : 700, variant: 'body2' }} />
-          </MenuItem>
-        ))}
-      </Menu>
-    </>
-  );
+  return <NotificationBell api={guildizerNotifications} viewAllPath="/guildizer/notifications" />;
 }
 
 function RedeemDialog({ open, onClose }) {

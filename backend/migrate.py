@@ -61,6 +61,11 @@ def init_db():
         )
         _run_alter(
             db.engine,
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS notification_prefs JSON",
+            "users.notification_prefs",
+        )
+        _run_alter(
+            db.engine,
             "ALTER TABLE user_api_keys ADD COLUMN IF NOT EXISTS scope VARCHAR(20) NOT NULL DEFAULT 'group'",
             "user_api_keys.scope",
         )

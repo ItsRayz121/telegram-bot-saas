@@ -36,4 +36,21 @@ export async function guildizerLogout() {
   }
 }
 
+// Notification + Web Push client for the Guildizer pillar. Shape matches the
+// Telegizer `notifications` client so shared helpers (utils/push.js,
+// NotificationBell) can be reused with either backend.
+export const guildizerNotifications = {
+  list: (params) => guildizerApi.get('/api/notifications/history', { params }),
+  unreadCount: () => guildizerApi.get('/api/notifications/unread-count'),
+  // GZ marks all read in one call (no per-id endpoint); markRead/markAllRead
+  // both hit the same route so the shared bell component works unchanged.
+  markRead: () => guildizerApi.post('/api/notifications/read'),
+  markAllRead: () => guildizerApi.post('/api/notifications/read'),
+  getPreferences: () => guildizerApi.get('/api/notifications/preferences'),
+  updatePreferences: (data) => guildizerApi.put('/api/notifications/preferences', data),
+  vapidKey: () => guildizerApi.get('/api/notifications/vapid-public-key'),
+  subscribePush: (subscription) => guildizerApi.post('/api/notifications/subscribe', subscription),
+  unsubscribePush: (data) => guildizerApi.post('/api/notifications/unsubscribe', data || {}),
+};
+
 export default guildizerApi;

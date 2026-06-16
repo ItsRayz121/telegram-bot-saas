@@ -42,6 +42,9 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     last_login_at = Column(DateTime, default=datetime.utcnow)
     admin_notes = Column(Text, nullable=True)          # platform-admin private notes
+    # Notification preferences (in-app sound + per-category toggles + web push opt-in).
+    # {"sound": bool, "push": bool, "categories": {"moderation": bool, ...}}
+    notification_prefs = Column(JSON, nullable=True)
 
     # Guilds this user personally owns (owner_id on Guild). Distinct from the
     # broader membership/manage relationship captured by UserGuild.
@@ -1437,6 +1440,28 @@ class UserNotification(Base):
             "read": bool(self.read),
             "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
         }
+
+
+class PushSubscription(Base):
+    """A browser Web Push subscription for a user. Mirrors the Telegizer model
+    so the Guildizer dashboard can deliver OS-level push via VAPID. NOTE: the
+    Guildizer UI shares the telegizer.com origin (one service worker), so this
+    MUST use the SAME VAPID keypair as Telegizer — set identical
+    VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY env on both Railway services."""
+
+    __tablename__ = "push_subscriptions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, nullable=False, index=True)   # Discord snowflake
+    endpoint = Column(Text, nullable=False, unique=True)
+    p256dh = Column(String(255), nullable=False)
+    auth = Column(String(255), nullable=False)
+    user_agent = Column(String(300), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_used_at = Column(DateTime, default=datetime.utcnow)
+
+    def to_subscription_info(self) -> dict:
+        return {"endpoint": self.endpoint, "keys": {"p256dh": self.p256dh, "auth": self.auth}}
 
 
 class PromoCode(Base):

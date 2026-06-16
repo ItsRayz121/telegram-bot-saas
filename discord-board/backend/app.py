@@ -29,6 +29,7 @@ from self_roles_api import self_roles_bp
 from settings_api import settings_bp
 from starboard_api import starboard_bp
 from team_api import team_bp
+from notifications_api import notifications_extra_bp
 from tickets_api import tickets_bp
 
 
@@ -77,6 +78,7 @@ def create_app() -> Flask:
     app.register_blueprint(crm_bp)
     app.register_blueprint(knowledge_bp)
     app.register_blueprint(team_bp)
+    app.register_blueprint(notifications_extra_bp)
 
     @app.get("/")
     def root():

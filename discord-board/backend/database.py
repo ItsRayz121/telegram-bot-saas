@@ -50,6 +50,8 @@ _HEAL_COLUMNS = [
     ("auto_responses", "use_as_ai_knowledge", "BOOLEAN"),
     # First-message verification: member passed the captcha once
     ("members", "verified", "BOOLEAN"),
+    # Notification preferences (sound / web push opt-in / per-category mute)
+    ("users", "notification_prefs", "JSON"),
 ]
 
 

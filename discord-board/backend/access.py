@@ -35,8 +35,14 @@ def team_guild_ids(db, user_id: int) -> list[int]:
 
 
 def notify(db, user_id: int, title: str, body: str = "", kind: str = "info") -> None:
-    """Queue a dashboard notification. Caller commits."""
+    """Queue a dashboard notification (caller commits) + best-effort web push."""
     db.add(UserNotification(
         user_id=user_id, kind=kind if kind in ("info", "warning", "error") else "info",
         title=(title or "")[:120], body=(body or "")[:500] or None,
     ))
+    # Fan out an OS-level push if the user opted in. Best-effort; never raises.
+    try:
+        from web_push import maybe_push_notification
+        maybe_push_notification(db, user_id, title, body, kind)
+    except Exception:
+        pass
