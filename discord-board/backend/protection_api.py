@@ -224,6 +224,13 @@ def update_moderation(guild_id: int):
         cp = dict(extra.get("command_permissions") or {})
         if "delete_unauthorized" in body["command_permissions"]:
             cp["delete_unauthorized"] = bool(body["command_permissions"]["delete_unauthorized"])
+        pc_in = body["command_permissions"].get("per_command")
+        if isinstance(pc_in, dict):
+            pc = dict(cp.get("per_command") or {})
+            for cmd in ("warn", "ban", "mute", "kick"):
+                if cmd in pc_in:
+                    pc[cmd] = "everyone" if pc_in[cmd] == "everyone" else "admins_only"
+            cp["per_command"] = pc
         extra["command_permissions"] = cp
     if isinstance(body.get("warn_ladder"), dict):
         wl_in = body["warn_ladder"]

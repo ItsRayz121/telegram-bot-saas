@@ -103,7 +103,16 @@ EXTRA_DEFAULTS = {
         "enabled": False, "react_to_appreciation": True,
         "reply_to_appreciation": True, "cooldown_minutes": 5, "mode": "friendly",
     },
-    "command_permissions": {"delete_unauthorized": False},
+    # delete_unauthorized: scrub text-style command misuse. per_command: who may
+    # run each moderation command — "admins_only" (default) keeps the native
+    # permission gate; "everyone" opens it to all members (parity with Telegizer).
+    "command_permissions": {
+        "delete_unauthorized": False,
+        "per_command": {
+            "warn": "admins_only", "ban": "admins_only",
+            "mute": "admins_only", "kick": "admins_only",
+        },
+    },
     # Escalating punishment ladder: steps = [{"at", "action", "minutes", "window_hours"}]
     "warn_ladder": {"enabled": False, "steps": []},
     # AI knowledge-base auto-reply behaviour (consumed by knowledge.py /ask layer)

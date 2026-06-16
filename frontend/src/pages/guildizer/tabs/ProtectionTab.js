@@ -771,9 +771,36 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                 control={<Switch checked={!!cfg.command_permissions?.delete_unauthorized} onChange={(e) => setCp({ delete_unauthorized: e.target.checked })} />}
                 label="Delete messages that invoke commands the member can't use"
               />
-              <Typography variant="caption" color="text.secondary" display="block">
-                Discord also enforces native slash-command permissions per role — configure those in
-                Server Settings → Integrations → Guildizer. This switch covers text-style command misuse.
+              <Typography variant="caption" color="text.secondary" display="block" mb={2}>
+                When a member runs a moderation command they aren't allowed to use, delete their
+                message instead of replying in the channel. The attempt is still recorded in the
+                activity log. This switch covers text-style command misuse.
+              </Typography>
+              <Box sx={{ maxWidth: 460 }}>
+                {['/warn', '/ban', '/mute', '/kick'].map((cmd) => {
+                  const key = cmd.slice(1);
+                  const val = (cfg.command_permissions?.per_command || {})[key] || 'admins_only';
+                  return (
+                    <Box key={cmd} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, py: 0.75, borderBottom: '1px solid', borderColor: 'divider' }}>
+                      <Typography fontWeight={600} sx={{ fontFamily: 'monospace', fontSize: '0.9rem', minWidth: 70 }}>{cmd}</Typography>
+                      <FormControl size="small" sx={{ minWidth: 160 }}>
+                        <Select
+                          value={val}
+                          onChange={(e) => setCp({ per_command: { ...(cfg.command_permissions?.per_command || {}), [key]: e.target.value } })}
+                        >
+                          <MenuItem value="admins_only">Admins only</MenuItem>
+                          <MenuItem value="everyone">Everyone</MenuItem>
+                        </Select>
+                      </FormControl>
+                    </Box>
+                  );
+                })}
+              </Box>
+              <Typography variant="caption" color="text.secondary" display="block" mt={1.5}>
+                <b>Admins only</b> (default) keeps the command restricted to staff with the matching
+                permission. <b>Everyone</b> lets any member run it. For destructive commands prefer
+                Discord's native per-role permissions (Server Settings → Integrations → Guildizer),
+                which also control whether the command is visible to members.
               </Typography>
             </CardContent>
           </Card>

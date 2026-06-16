@@ -65,6 +65,18 @@ def _mod_cfg(guild_id: int) -> dict:
         SessionLocal.remove()
 
 
+def _cmd_perms(guild_id: int) -> dict:
+    """The per-command permission map (command_permissions.per_command):
+    {"warn": "admins_only"|"everyone", …}. Drives _cmd_allowed."""
+    db = SessionLocal()
+    try:
+        snap = protection.load_snapshot(db, guild_id) or {}
+        return (snap.get("command_permissions") or {}).get("per_command") or {}
+    finally:
+        db.close()
+        SessionLocal.remove()
+
+
 def _clean_seconds(cfg: dict, key: str) -> int | None:
     """auto_clean timer for the bot's own warn/action messages (None = keep)."""
     return int((cfg.get("auto_clean") or {}).get(key) or 0) or None
@@ -155,6 +167,20 @@ def _has(interaction: discord.Interaction, **perm_flags) -> bool:
     return all(getattr(perms, name, False) for name in perm_flags)
 
 
+async def _cmd_allowed(interaction: discord.Interaction, cmd_key: str,
+                       **perm_flags) -> bool:
+    """Whether the invoker may run this moderation command. When
+    command_permissions.per_command[cmd_key] is "everyone" the native-permission
+    gate is bypassed (parity with Telegizer's Command Permissions dropdowns);
+    otherwise the matching Discord permission is required (admins always pass)."""
+    if interaction.guild is None:
+        return False
+    perms = await asyncio.to_thread(_cmd_perms, interaction.guild.id)
+    if (perms.get(cmd_key) or "admins_only") == "everyone":
+        return True
+    return _has(interaction, **perm_flags)
+
+
 async def _check_target(interaction: discord.Interaction, member: discord.Member) -> str | None:
     """None if the target is actionable, else the reason it isn't."""
     if member.id == interaction.user.id:
@@ -216,7 +242,7 @@ def attach_mod_commands(client) -> None:  # noqa: C901  (a flat list of commands
     @app_commands.describe(member="Who to warn", reason="Why")
     @app_commands.default_permissions(moderate_members=True)
     async def warn(interaction: discord.Interaction, member: discord.Member, reason: str) -> None:
-        if interaction.guild is None or not _has(interaction, moderate_members=True):
+        if not await _cmd_allowed(interaction, "warn", moderate_members=True):
             return await _deny(interaction, "You need the Timeout Members permission.")
         problem = await _check_target(interaction, member)
         if problem:
@@ -290,7 +316,7 @@ def attach_mod_commands(client) -> None:  # noqa: C901  (a flat list of commands
     @app_commands.default_permissions(moderate_members=True)
     async def mute(interaction: discord.Interaction, member: discord.Member,
                    duration: str, reason: str = "No reason given") -> None:
-        if interaction.guild is None or not _has(interaction, moderate_members=True):
+        if not await _cmd_allowed(interaction, "mute", moderate_members=True):
             return await _deny(interaction, "You need the Timeout Members permission.")
         problem = await _check_target(interaction, member)
         if problem:
@@ -333,7 +359,7 @@ def attach_mod_commands(client) -> None:  # noqa: C901  (a flat list of commands
     @app_commands.default_permissions(kick_members=True)
     async def kick(interaction: discord.Interaction, member: discord.Member,
                    reason: str = "No reason given") -> None:
-        if interaction.guild is None or not _has(interaction, kick_members=True):
+        if not await _cmd_allowed(interaction, "kick", kick_members=True):
             return await _deny(interaction, "You need the Kick Members permission.")
         problem = await _check_target(interaction, member)
         if problem:
@@ -357,7 +383,7 @@ def attach_mod_commands(client) -> None:  # noqa: C901  (a flat list of commands
     async def ban(interaction: discord.Interaction, member: discord.Member,
                   reason: str = "No reason given",
                   delete_days: app_commands.Range[int, 0, 7] = 1) -> None:
-        if interaction.guild is None or not _has(interaction, ban_members=True):
+        if not await _cmd_allowed(interaction, "ban", ban_members=True):
             return await _deny(interaction, "You need the Ban Members permission.")
         problem = await _check_target(interaction, member)
         if problem:
