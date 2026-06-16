@@ -60,8 +60,8 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
   return (
     <Grid container spacing={2}>
       <Grid item xs={12}>
-        <Card variant="outlined"><CardContent>
-          <Typography variant="subtitle1" fontWeight={700} mb={1}>XP &amp; levels</Typography>
+        <Card><CardContent>
+          <Typography variant="h6" fontWeight={600} mb={2}>XP &amp; Level System</Typography>
           <FormControlLabel control={<Switch checked={cfg.levels_enabled} onChange={(e) => set({ levels_enabled: e.target.checked })} />} label="Award XP for chatting (100 XP per level)" />
           <TextField type="number" size="small" margin="dense" fullWidth label="XP per message"
             value={cfg.xp_per_message} inputProps={{ min: 0, max: 1000 }} onChange={(e) => set({ xp_per_message: Number(e.target.value) })} />
@@ -95,8 +95,8 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
       </Grid>
 
       <Grid item xs={12}>
-        <Card variant="outlined"><CardContent>
-          <Typography variant="subtitle1" fontWeight={700} mb={1}>Moderation XP penalties</Typography>
+        <Card><CardContent>
+          <Typography variant="subtitle1" fontWeight={600} mb={1}>XP Penalties (Moderation Actions)</Typography>
           <Typography variant="caption" color="text.secondary" display="block" mb={1}>
             XP removed when a member is moderated (XP never drops below 0). 0 disables a penalty.
           </Typography>
@@ -106,8 +106,8 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
           {numL2('Ban penalty', 'penalty_ban', 10000)}
         </CardContent></Card>
 
-        <Card variant="outlined" sx={{ mt: 2 }}><CardContent>
-          <Typography variant="subtitle1" fontWeight={700} mb={1}>Level → role rewards</Typography>
+        <Card sx={{ mt: 2 }}><CardContent>
+          <Typography variant="subtitle1" fontWeight={600} mb={1}>Level → role rewards</Typography>
           <Typography variant="caption" color="text.secondary" display="block" mb={1}>
             Grant a role when a member reaches a level. Guildizer's role must sit above any role it assigns.
           </Typography>
@@ -137,8 +137,8 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
       </Grid>
 
       <Grid item xs={12}>
-        <Card variant="outlined"><CardContent>
-          <Typography variant="subtitle1" fontWeight={700} mb={1}>🏅 Rank card style</Typography>
+        <Card><CardContent>
+          <Typography variant="subtitle1" fontWeight={600} mb={1}>🏅 Rank Card Style</Typography>
           <Typography variant="caption" color="text.secondary" display="block" mb={1.5}>
             Colours for the image shown by <code>/rank</code> — a gradient background and an accent XP bar.
           </Typography>
@@ -160,8 +160,8 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
       </Grid>
 
       <Grid item xs={12}>
-        <Card variant="outlined"><CardContent>
-          <Typography variant="subtitle1" fontWeight={700} mb={1}>🎙️ Voice</Typography>
+        <Card><CardContent>
+          <Typography variant="subtitle1" fontWeight={600} mb={1}>🎙️ Voice</Typography>
           <Typography variant="caption" color="text.secondary" display="block" mb={1}>
             Voice XP is granted every 5 minutes to members actively in voice (AFK channel,
             deafened members and near-empty channels don't count). Needs XP enabled above.
@@ -194,8 +194,8 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
       </Grid>
 
       <Grid item xs={12}>
-        <Card variant="outlined"><CardContent>
-          <Typography variant="subtitle1" fontWeight={700} mb={1}>Leaderboard</Typography>
+        <Card><CardContent>
+          <Typography variant="subtitle1" fontWeight={600} mb={1}>Leaderboard</Typography>
           {board.length === 0 && <Typography variant="body2" color="text.secondary">No XP earned yet.</Typography>}
           <List dense>
             {board.map((m) => (

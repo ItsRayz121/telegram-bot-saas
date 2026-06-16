@@ -51,8 +51,8 @@ export default function SettingsTab({ guildId, channels = [], roles = [] }) {
   return (
     <Grid container spacing={2}>
       <Grid item xs={12}>
-        <Card variant="outlined"><CardContent>
-          <Typography variant="subtitle1" fontWeight={700} mb={1}>Welcome message</Typography>
+        <Card><CardContent>
+          <Typography variant="h6" fontWeight={600} mb={2}>Welcome Message</Typography>
           <FormControlLabel
             control={<Switch checked={cfg.welcome_enabled} onChange={(e) => set({ welcome_enabled: e.target.checked })} />}
             label="Send a message when a member joins"
@@ -89,8 +89,8 @@ export default function SettingsTab({ guildId, channels = [], roles = [] }) {
       </Grid>
 
       <Grid item xs={12}>
-        <Card variant="outlined"><CardContent>
-          <Typography variant="subtitle1" fontWeight={700} mb={1}>DM new members</Typography>
+        <Card><CardContent>
+          <Typography variant="subtitle1" fontWeight={600} mb={1}>DM new members</Typography>
           <FormControlLabel
             control={<Switch checked={!!cfg.welcome2?.dm_enabled} onChange={(e) => setW2({ dm_enabled: e.target.checked })} />}
             label="Send a private DM when a member joins"
@@ -103,8 +103,8 @@ export default function SettingsTab({ guildId, channels = [], roles = [] }) {
       </Grid>
 
       <Grid item xs={12}>
-        <Card variant="outlined"><CardContent>
-          <Typography variant="subtitle1" fontWeight={700} mb={1}>Leave message</Typography>
+        <Card><CardContent>
+          <Typography variant="subtitle1" fontWeight={600} mb={1}>Leave message</Typography>
           <FormControlLabel
             control={<Switch checked={cfg.leave_enabled} onChange={(e) => set({ leave_enabled: e.target.checked })} />}
             label="Send a message when a member leaves"
@@ -121,8 +121,8 @@ export default function SettingsTab({ guildId, channels = [], roles = [] }) {
       </Grid>
 
       <Grid item xs={12}>
-        <Card variant="outlined"><CardContent>
-          <Typography variant="subtitle1" fontWeight={700} mb={1}>Auto-roles</Typography>
+        <Card><CardContent>
+          <Typography variant="subtitle1" fontWeight={600} mb={1}>Auto-roles</Typography>
           <FormControlLabel
             control={<Switch checked={cfg.autorole_enabled} onChange={(e) => set({ autorole_enabled: e.target.checked })} />}
             label="Assign roles automatically on join"
