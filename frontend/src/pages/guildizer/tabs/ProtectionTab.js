@@ -785,7 +785,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
         <Grid container spacing={2}>
           <Grid item xs={12}>
             <Card variant="outlined"><CardContent>
-              <Typography variant="h6" fontWeight={600} mb={1}>Warning thresholds</Typography>
+              <Typography variant="h6" fontWeight={600} mb={1}>Warning Thresholds</Typography>
               <Typography variant="caption" color="text.secondary" display="block" mb={1}>
                 /warn and automod warnings count up; at the limit the action fires and the count resets.
               </Typography>
@@ -875,7 +875,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
 
           <Grid item xs={12}>
             <Card variant="outlined"><CardContent>
-              <Typography variant="h6" fontWeight={600} mb={1}>Escalating punishments</Typography>
+              <Typography variant="h6" fontWeight={600} mb={1}>Warning Escalation</Typography>
               <FormControlLabel control={<Switch checked={!!cfg.warn_ladder?.enabled} onChange={(e) => setWl({ enabled: e.target.checked })} />} label="Enable an escalating punishment ladder" />
               <Typography variant="caption" color="text.secondary" display="block" mb={1}>
                 Each step fires when a member reaches that warning count (counted within the step's window). Warnings aren't reset between steps, so higher steps stay reachable.
@@ -935,7 +935,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
         <Grid container spacing={2}>
           <Grid item xs={12}>
             <Card variant="outlined"><CardContent>
-              <Typography variant="h6" fontWeight={600} mb={1}>Report settings</Typography>
+              <Typography variant="h6" fontWeight={600} mb={1}>Reports Settings</Typography>
               <Typography variant="caption" color="text.secondary" display="block" mb={1}>
                 Members use /report to flag messages or members. Reports land here and (optionally) in a channel.
               </Typography>

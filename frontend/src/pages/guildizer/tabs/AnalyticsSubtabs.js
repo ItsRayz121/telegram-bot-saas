@@ -45,7 +45,7 @@ export function LeaderboardSubtab({ guildId }) {
 
   return (
     <Card variant="outlined"><CardContent>
-      <Typography variant="h6" fontWeight={600} mb={1}>XP leaderboard (top 50)</Typography>
+      <Typography variant="h6" fontWeight={600} mb={1}>XP Leaderboard (top 50)</Typography>
       <Typography variant="body2" color="text.secondary" mb={2}>
         Your most active members ranked by XP earned from chatting and voice activity.
       </Typography>
@@ -166,7 +166,7 @@ export function WarningsSubtab({ guildId }) {
     <Card variant="outlined"><CardContent>
       <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between"
         alignItems={{ xs: 'stretch', sm: 'center' }} spacing={1} mb={1}>
-        <Typography variant="h6" fontWeight={600}>Warnings</Typography>
+        <Typography variant="h6" fontWeight={600}>Active Warnings</Typography>
         <TextField size="small" placeholder="Search member, reason, moderator…" value={query}
           onChange={(e) => setQuery(e.target.value)} sx={{ minWidth: { sm: 280 } }}
           InputProps={{ startAdornment: (<InputAdornment position="start"><Search fontSize="small" /></InputAdornment>) }} />
