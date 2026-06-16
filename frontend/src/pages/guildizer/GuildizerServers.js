@@ -16,6 +16,7 @@ import {
 import guildizerApi, { guildizerLoginUrl, guildizerNotifications } from '../../services/guildizerApi';
 import { ConnectWizard } from './GuildizerBots';
 import NotificationBell from '../../components/NotificationBell';
+import PushNudge from '../../components/PushNudge';
 
 // Mirrors the backend MAX_BOTS_PER_USER (custom_bots_api.py).
 const MAX_CUSTOM_BOTS = 5;
@@ -162,6 +163,15 @@ export default function GuildizerServers() {
           </Button>
           <NotificationsBell />
         </Box>
+      )}
+
+      {/* Soft, frequency-capped prompt to enable web push for Guildizer. */}
+      {state.connected && (
+        <PushNudge
+          api={guildizerNotifications}
+          ns="gz"
+          label="Turn on notifications so you never miss raids, anti-nuke alerts and reports on your servers."
+        />
       )}
 
       {/* ── Community (custom) bots, mirroring the Telegizer dashboard's

@@ -22,6 +22,7 @@ import Divider from '@mui/material/Divider';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import TelegizerLogo from '../components/TelegizerLogo';
 import NotificationBell from '../components/NotificationBell';
+import PushNudge from '../components/PushNudge';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { bots, auth, billing, referrals as referralsApi, telegramAccount, telegramGroups as telegramGroupsApi } from '../services/api';
@@ -898,6 +899,10 @@ export default function Dashboard() {
       </AppBar>}
 
       <Box sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 2, md: 3 } }}>
+
+        {/* Soft, frequency-capped prompt to enable web push (only while the OS
+            permission is still untouched — see PushNudge policy). */}
+        <PushNudge ns="tg" />
 
         {/* Email verification is now enforced by VerifiedRoute in App.js —
             unverified users never reach this page. No banner needed. */}
