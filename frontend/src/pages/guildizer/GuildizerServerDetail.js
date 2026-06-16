@@ -48,8 +48,12 @@ const AREAS = [
   { label: 'Members', icon: People, subs: ['Verification', 'Welcome', 'XP & Roles', 'Self-roles'] },
   { label: 'Engagement', icon: ForumIcon, subs: ['Raids', 'Invite Links', 'Campaigns', 'Tickets', 'Starboard', 'Boosts', 'Events'] },
   { label: 'AI & Integrations', icon: SmartToy, subs: ['Knowledge Base', 'Escalation'] },
-  { label: 'Automation', icon: Bolt, subs: ['Scheduler', 'Auto Reply', 'Polls', 'Forwarding', 'Threads', 'Workflows', 'Webhooks'] },
-  { label: 'Analytics', icon: Assessment, subs: ['Overview', 'Members', 'Leaderboard', 'Audit Log', 'Warnings', 'Digest', 'AI Activity'] },
+  // Telegizer Automation order is Scheduler · Auto Reply · Polls · Forwarding · Workflows · Webhooks;
+  // the Discord-only "Threads" subtab trails so the shared subtabs keep Telegizer's order/positions.
+  { label: 'Automation', icon: Bolt, subs: ['Scheduler', 'Auto Reply', 'Polls', 'Forwarding', 'Workflows', 'Webhooks', 'Threads'] },
+  // Telegizer Analytics lands on "Members" first; the Guildizer-only "Overview" trails so the
+  // default landing subtab and the shared subtab order both match Telegizer 1:1.
+  { label: 'Analytics', icon: Assessment, subs: ['Members', 'Leaderboard', 'Audit Log', 'Warnings', 'Digest', 'AI Activity', 'Overview'] },
   { label: 'Settings', icon: SettingsIcon, subs: ['Overview', 'Commands', 'Team', 'Billing'] },
 ];
 

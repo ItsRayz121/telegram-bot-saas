@@ -105,8 +105,34 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
           {numL2('Kick penalty', 'penalty_kick', 10000)}
           {numL2('Ban penalty', 'penalty_ban', 10000)}
         </CardContent></Card>
+      </Grid>
 
-        <Card sx={{ mt: 2 }}><CardContent>
+      {/* Rank Card Style sits before Level → role rewards to match Telegizer's XP card order. */}
+      <Grid item xs={12}>
+        <Card><CardContent>
+          <Typography variant="subtitle1" fontWeight={600} mb={1}>🏅 Rank Card Style</Typography>
+          <Typography variant="caption" color="text.secondary" display="block" mb={1.5}>
+            Colours for the image shown by <code>/rank</code> — a gradient background and an accent XP bar.
+          </Typography>
+          <Grid container spacing={2}>
+            {[
+              ['Background start', 'bg_color_start', '#1a1a2e'],
+              ['Background end', 'bg_color_end', '#16213e'],
+              ['Accent', 'accent_color', '#5865F2'],
+            ].map(([label, key, fallback]) => (
+              <Grid item xs={12} sm={4} key={key}>
+                <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>{label}</Typography>
+                <input type="color" value={(l2.rank_card || {})[key] || fallback}
+                  onChange={(e) => setL2({ rank_card: { ...(l2.rank_card || {}), [key]: e.target.value } })}
+                  style={{ width: '100%', height: 40, borderRadius: 8, border: '1px solid #30363d', cursor: 'pointer', background: 'transparent' }} />
+              </Grid>
+            ))}
+          </Grid>
+        </CardContent></Card>
+      </Grid>
+
+      <Grid item xs={12}>
+        <Card><CardContent>
           <Typography variant="subtitle1" fontWeight={600} mb={1}>Level → role rewards</Typography>
           <Typography variant="caption" color="text.secondary" display="block" mb={1}>
             Grant a role when a member reaches a level. Guildizer's role must sit above any role it assigns.
@@ -133,29 +159,6 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
             onClick={() => setL2({ role_rewards: [...rewards, { level: (rewards[rewards.length - 1]?.level || 0) + 5, role_id: assignableRoles[0]?.id }] })}>
             Add reward
           </Button>
-        </CardContent></Card>
-      </Grid>
-
-      <Grid item xs={12}>
-        <Card><CardContent>
-          <Typography variant="subtitle1" fontWeight={600} mb={1}>🏅 Rank Card Style</Typography>
-          <Typography variant="caption" color="text.secondary" display="block" mb={1.5}>
-            Colours for the image shown by <code>/rank</code> — a gradient background and an accent XP bar.
-          </Typography>
-          <Grid container spacing={2}>
-            {[
-              ['Background start', 'bg_color_start', '#1a1a2e'],
-              ['Background end', 'bg_color_end', '#16213e'],
-              ['Accent', 'accent_color', '#5865F2'],
-            ].map(([label, key, fallback]) => (
-              <Grid item xs={12} sm={4} key={key}>
-                <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>{label}</Typography>
-                <input type="color" value={(l2.rank_card || {})[key] || fallback}
-                  onChange={(e) => setL2({ rank_card: { ...(l2.rank_card || {}), [key]: e.target.value } })}
-                  style={{ width: '100%', height: 40, borderRadius: 8, border: '1px solid #30363d', cursor: 'pointer', background: 'transparent' }} />
-              </Grid>
-            ))}
-          </Grid>
         </CardContent></Card>
       </Grid>
 

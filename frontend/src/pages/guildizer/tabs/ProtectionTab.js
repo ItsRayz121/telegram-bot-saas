@@ -835,6 +835,44 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
             </CardContent></Card>
           </Grid>
 
+          {/* Warning Escalation sits right after Thresholds to match Telegizer's Behavior order. */}
+          <Grid item xs={12}>
+            <Card variant="outlined"><CardContent>
+              <Typography variant="h6" fontWeight={600} mb={1}>Warning Escalation</Typography>
+              <FormControlLabel control={<Switch checked={!!cfg.warn_ladder?.enabled} onChange={(e) => setWl({ enabled: e.target.checked })} />} label="Enable an escalating punishment ladder" />
+              <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+                Each step fires when a member reaches that warning count (counted within the step's window). Warnings aren't reset between steps, so higher steps stay reachable.
+              </Typography>
+              {(cfg.warn_ladder?.steps || []).map((s, i) => (
+                <Stack key={i} direction="row" spacing={1} alignItems="center" mb={1} useFlexGap flexWrap="wrap">
+                  <TextField type="number" size="small" label="At warning #" value={s.at}
+                    inputProps={{ min: 1, max: 20 }} sx={{ width: 120 }}
+                    onChange={(e) => setWl({ steps: cfg.warn_ladder.steps.map((x, j) => j === i ? { ...x, at: Number(e.target.value) } : x) })} />
+                  <TextField select size="small" label="Action" value={s.action} sx={{ width: 130 }}
+                    onChange={(e) => setWl({ steps: cfg.warn_ladder.steps.map((x, j) => j === i ? { ...x, action: e.target.value } : x) })}>
+                    {LADDER_ACTIONS.map((a) => <MenuItem key={a} value={a}>{a}</MenuItem>)}
+                  </TextField>
+                  {s.action === 'timeout' && (
+                    <TextField type="number" size="small" label="Minutes" value={s.minutes}
+                      inputProps={{ min: 1, max: 40320 }} sx={{ width: 110 }}
+                      onChange={(e) => setWl({ steps: cfg.warn_ladder.steps.map((x, j) => j === i ? { ...x, minutes: Number(e.target.value) } : x) })} />
+                  )}
+                  <TextField type="number" size="small" label="Within (hrs, 0=all)" value={s.window_hours}
+                    inputProps={{ min: 0, max: 720 }} sx={{ width: 150 }}
+                    onChange={(e) => setWl({ steps: cfg.warn_ladder.steps.map((x, j) => j === i ? { ...x, window_hours: Number(e.target.value) } : x) })} />
+                  <IconButton size="small" onClick={() => setWl({ steps: cfg.warn_ladder.steps.filter((_, j) => j !== i) })}>
+                    <Delete fontSize="small" />
+                  </IconButton>
+                </Stack>
+              ))}
+              <Button size="small" startIcon={<Add />}
+                disabled={(cfg.warn_ladder?.steps || []).length >= 5}
+                onClick={() => setWl({ steps: [...(cfg.warn_ladder?.steps || []), { at: (cfg.warn_ladder?.steps?.length || 0) + 2, action: 'timeout', minutes: 30, window_hours: 0 }] })}>
+                Add step
+              </Button>
+            </CardContent></Card>
+          </Grid>
+
           <Grid item xs={12}>
             <Card variant="outlined"><CardContent>
               <Typography variant="h6" fontWeight={600} mb={1}>Auto clean</Typography>
@@ -897,43 +935,6 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                   </Box>
                 </>
               )}
-            </CardContent></Card>
-          </Grid>
-
-          <Grid item xs={12}>
-            <Card variant="outlined"><CardContent>
-              <Typography variant="h6" fontWeight={600} mb={1}>Warning Escalation</Typography>
-              <FormControlLabel control={<Switch checked={!!cfg.warn_ladder?.enabled} onChange={(e) => setWl({ enabled: e.target.checked })} />} label="Enable an escalating punishment ladder" />
-              <Typography variant="caption" color="text.secondary" display="block" mb={1}>
-                Each step fires when a member reaches that warning count (counted within the step's window). Warnings aren't reset between steps, so higher steps stay reachable.
-              </Typography>
-              {(cfg.warn_ladder?.steps || []).map((s, i) => (
-                <Stack key={i} direction="row" spacing={1} alignItems="center" mb={1} useFlexGap flexWrap="wrap">
-                  <TextField type="number" size="small" label="At warning #" value={s.at}
-                    inputProps={{ min: 1, max: 20 }} sx={{ width: 120 }}
-                    onChange={(e) => setWl({ steps: cfg.warn_ladder.steps.map((x, j) => j === i ? { ...x, at: Number(e.target.value) } : x) })} />
-                  <TextField select size="small" label="Action" value={s.action} sx={{ width: 130 }}
-                    onChange={(e) => setWl({ steps: cfg.warn_ladder.steps.map((x, j) => j === i ? { ...x, action: e.target.value } : x) })}>
-                    {LADDER_ACTIONS.map((a) => <MenuItem key={a} value={a}>{a}</MenuItem>)}
-                  </TextField>
-                  {s.action === 'timeout' && (
-                    <TextField type="number" size="small" label="Minutes" value={s.minutes}
-                      inputProps={{ min: 1, max: 40320 }} sx={{ width: 110 }}
-                      onChange={(e) => setWl({ steps: cfg.warn_ladder.steps.map((x, j) => j === i ? { ...x, minutes: Number(e.target.value) } : x) })} />
-                  )}
-                  <TextField type="number" size="small" label="Within (hrs, 0=all)" value={s.window_hours}
-                    inputProps={{ min: 0, max: 720 }} sx={{ width: 150 }}
-                    onChange={(e) => setWl({ steps: cfg.warn_ladder.steps.map((x, j) => j === i ? { ...x, window_hours: Number(e.target.value) } : x) })} />
-                  <IconButton size="small" onClick={() => setWl({ steps: cfg.warn_ladder.steps.filter((_, j) => j !== i) })}>
-                    <Delete fontSize="small" />
-                  </IconButton>
-                </Stack>
-              ))}
-              <Button size="small" startIcon={<Add />}
-                disabled={(cfg.warn_ladder?.steps || []).length >= 5}
-                onClick={() => setWl({ steps: [...(cfg.warn_ladder?.steps || []), { at: (cfg.warn_ladder?.steps?.length || 0) + 2, action: 'timeout', minutes: 30, window_hours: 0 }] })}>
-                Add step
-              </Button>
             </CardContent></Card>
           </Grid>
 
