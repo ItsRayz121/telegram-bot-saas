@@ -35,9 +35,8 @@ export default function CampaignsTab({ guildId, channels = [] }) {
 
   return (
     <>
-    <Card variant="outlined"><CardContent>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
-        <Typography variant="h6" fontWeight={600}>Campaigns</Typography>
+    <GuildizerCollapsibleCard id="gz.engagement.campaigns" title="Campaigns">
+      <Stack direction="row" justifyContent="flex-end" alignItems="center" mb={2}>
         <Button variant="contained" startIcon={<Add />} onClick={() => setCreating((v) => !v)}>{creating ? 'Close' : 'New campaign'}</Button>
       </Stack>
       <Typography variant="body2" color="text.secondary" mb={2}>Run proof, content, social, and raid campaigns that reward members with XP for completing tasks.</Typography>
@@ -59,7 +58,7 @@ export default function CampaignsTab({ guildId, channels = [] }) {
           {plan !== 'pro' && <Typography variant="caption" color="text.disabled" display="block" mt={1}>Free plan: 1 active campaign. Campaign leaderboards are Pro.</Typography>}
         </>
       )}
-    </CardContent></Card>
+    </GuildizerCollapsibleCard>
     <ReferralsCard guildId={guildId} />
     </>
   );
@@ -82,9 +81,10 @@ function ReferralsCard({ guildId }) {
 
   if (!data) return null;
   return (
-    <Card variant="outlined" sx={{ mt: 2 }}><CardContent>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
-        <Typography variant="h6" fontWeight={600}>Referrals</Typography>
+    <GuildizerCollapsibleCard
+      id="gz.engagement.referrals"
+      title="Referrals"
+      action={(
         <Stack direction="row" spacing={1} alignItems="center">
           <TextField type="number" size="small" label="XP per referral" value={xp}
             inputProps={{ min: 0, max: 1000 }} onChange={(e) => setXp(Number(e.target.value))} sx={{ width: 140 }} />
@@ -93,7 +93,8 @@ function ReferralsCard({ guildId }) {
             Save
           </Button>
         </Stack>
-      </Stack>
+      )}
+    >
       <Typography variant="caption" color="text.secondary" display="block" mb={1}>
         Members get a personal tracked invite with /invitelink. Joins are attributed automatically.
       </Typography>
@@ -110,7 +111,7 @@ function ReferralsCard({ guildId }) {
             ))}
           </List>
         )}
-    </CardContent></Card>
+    </GuildizerCollapsibleCard>
   );
 }
 
@@ -249,8 +250,7 @@ function CampaignDetail({ guildId, campaignId, channels, plan, onBack }) {
         </Grid>
 
         <Grid item xs={12}>
-          <Card variant="outlined"><CardContent>
-            <Typography variant="h6" fontWeight={600} mb={1}>Pending submissions ({subs.length})</Typography>
+          <GuildizerCollapsibleCard id="gz.campaigns.pending_submissions" title={`Pending submissions (${subs.length})`}>
             <Typography variant="body2" color="text.secondary" mb={2}>Review member proof submissions and verify or reject each one.</Typography>
             {subs.length === 0 && <Typography variant="body2" color="text.secondary">Nothing to review.</Typography>}
             <List dense>
@@ -272,15 +272,16 @@ function CampaignDetail({ guildId, campaignId, channels, plan, onBack }) {
                 </ListItem>
               ))}
             </List>
-          </CardContent></Card>
+          </GuildizerCollapsibleCard>
         </Grid>
 
         <Grid item xs={12}>
-          <Card variant="outlined"><CardContent>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
-              <Typography variant="h6" fontWeight={600}>Leaderboard {plan !== 'pro' && <Chip size="small" label="Pro" sx={{ ml: 1 }} />}</Typography>
-              <Button size="small" variant="outlined" onClick={loadBoard}>{board ? 'Refresh' : 'Load'}</Button>
-            </Stack>
+          <GuildizerCollapsibleCard
+            id="gz.campaigns.leaderboard"
+            title="Leaderboard"
+            badge={plan !== 'pro' && <Chip size="small" label="Pro" sx={{ ml: 1 }} />}
+            action={<Button size="small" variant="outlined" onClick={loadBoard}>{board ? 'Refresh' : 'Load'}</Button>}
+          >
             <Typography variant="body2" color="text.secondary" mb={2}>Members ranked by the XP they have earned from verified submissions in this campaign.</Typography>
             {board && board.length === 0 && <Typography variant="body2" color="text.secondary">No verified submissions yet.</Typography>}
             {board && (
@@ -294,7 +295,7 @@ function CampaignDetail({ guildId, campaignId, channels, plan, onBack }) {
                 ))}
               </List>
             )}
-          </CardContent></Card>
+          </GuildizerCollapsibleCard>
         </Grid>
       </Grid>
     </Box>

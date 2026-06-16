@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  Box, Typography, Tabs, Tab, Card, CardContent, Grid, Avatar, Stack,
+  Box, Typography, Tabs, Tab, Grid, Avatar, Stack,
   List, ListItem, ListItemText, Chip, CircularProgress, Alert, Button,
   IconButton, Tooltip,
 } from '@mui/material';
@@ -11,6 +11,7 @@ import {
 } from '@mui/icons-material';
 import guildizerApi from '../../services/guildizerApi';
 import { GuildizerUiPrefsProvider } from '../../context/GuildizerUiPrefsContext';
+import GuildizerCollapsibleCard from '../../components/guildizer/GuildizerCollapsibleCard';
 import { SaveBarContext } from './tabs/saveBar';
 import SettingsTab from './tabs/SettingsTab';
 import CommandsTab from './tabs/CommandsTab';
@@ -357,14 +358,15 @@ function BackupsCard({ guildId }) {
   );
 
   return (
-    <Card variant="outlined">
-      <CardContent>
-        <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
-          <Typography variant="subtitle1" fontWeight={700}>🗄️ Server backups</Typography>
-          <Button size="small" variant="contained" disabled={busy || inFlight} onClick={create}>
-            Back up now
-          </Button>
-        </Stack>
+    <GuildizerCollapsibleCard
+      id="settings.overview.server_backups"
+      title="🗄️ Server backups"
+      action={(
+        <Button size="small" variant="contained" disabled={busy || inFlight} onClick={create}>
+          Back up now
+        </Button>
+      )}
+    >
         <Typography variant="caption" color="text.secondary" display="block" mb={1}>
           Snapshots roles, channels and permission overwrites (up to 5 kept). Restore
           re-applies drifted settings and recreates deleted items — it never deletes
@@ -393,8 +395,7 @@ function BackupsCard({ guildId }) {
             </ListItem>
           ))}
         </List>
-      </CardContent>
-    </Card>
+    </GuildizerCollapsibleCard>
   );
 }
 
@@ -404,9 +405,7 @@ function Overview({ guild }) {
   return (
     <Grid container spacing={2}>
       <Grid item xs={12}>
-        <Card variant="outlined">
-          <CardContent>
-            <Typography variant="subtitle1" fontWeight={700} mb={1}>Channels</Typography>
+        <GuildizerCollapsibleCard id="settings.overview.channels" title="Channels">
             {channels.length === 0 && <Typography variant="body2" color="text.secondary">No channels synced yet.</Typography>}
             <List dense disablePadding>
               {channels.map((c) => (
@@ -415,13 +414,10 @@ function Overview({ guild }) {
                 </ListItem>
               ))}
             </List>
-          </CardContent>
-        </Card>
+        </GuildizerCollapsibleCard>
       </Grid>
       <Grid item xs={12}>
-        <Card variant="outlined">
-          <CardContent>
-            <Typography variant="subtitle1" fontWeight={700} mb={1}>Roles</Typography>
+        <GuildizerCollapsibleCard id="settings.overview.roles" title="Roles">
             {roles.length === 0 && <Typography variant="body2" color="text.secondary">No roles synced yet.</Typography>}
             <List dense disablePadding>
               {roles.map((r) => (
@@ -431,8 +427,7 @@ function Overview({ guild }) {
                 </ListItem>
               ))}
             </List>
-          </CardContent>
-        </Card>
+        </GuildizerCollapsibleCard>
       </Grid>
       <Grid item xs={12}>
         <BackupsCard guildId={guild.id} />

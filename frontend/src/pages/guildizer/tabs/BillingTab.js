@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Box, Grid, Card, CardContent, Typography, Button, Chip, List, ListItem,
+  Box, Grid, Typography, Button, Chip, List, ListItem,
   ListItemIcon, ListItemText, CircularProgress, Alert, Stack, TextField,
 } from '@mui/material';
 import { CheckCircle } from '@mui/icons-material';
@@ -39,8 +39,7 @@ export default function BillingTab({ guildId }) {
   return (
     <Grid container spacing={2}>
       <Grid item xs={12}>
-        <Card variant="outlined"><CardContent>
-          <Typography variant="h6" fontWeight={600} mb={1}>Plan</Typography>
+        <GuildizerCollapsibleCard id="settings.billing.plan" title="Plan">
           <Typography variant="body2" color="text.secondary" mb={2}>
             Your current subscription tier and renewal date for this server.
           </Typography>
@@ -59,12 +58,11 @@ export default function BillingTab({ guildId }) {
               Payments are not configured on this server instance.
             </Typography>
           )}
-        </CardContent></Card>
+        </GuildizerCollapsibleCard>
       </Grid>
 
       <Grid item xs={12}>
-        <Card variant="outlined"><CardContent>
-          <Typography variant="h6" fontWeight={600} mb={1}>{pro.name} includes</Typography>
+        <GuildizerCollapsibleCard id="settings.billing.pro_includes" title={`${pro.name} includes`}>
           <Typography variant="body2" color="text.secondary" mb={2}>
             Everything you unlock by upgrading this server to Pro.
           </Typography>
@@ -79,7 +77,7 @@ export default function BillingTab({ guildId }) {
           <Typography variant="caption" color="text.disabled">
             Paid in crypto via NOWPayments. {pro.period_days}-day periods; re-ups stack.
           </Typography>
-        </CardContent></Card>
+        </GuildizerCollapsibleCard>
       </Grid>
 
       <Grid item xs={12}>
@@ -134,8 +132,7 @@ function HistoryCard({ guildId }) {
 
   if (rows === null) return null;
   return (
-    <Card variant="outlined"><CardContent>
-      <Typography variant="h6" fontWeight={600} mb={1}>Payment history</Typography>
+    <GuildizerCollapsibleCard id="settings.billing.payment_history" title="Payment history">
       <Typography variant="body2" color="text.secondary" mb={2}>
         A record of past and pending checkouts for this server.
       </Typography>
@@ -158,6 +155,6 @@ function HistoryCard({ guildId }) {
           checkout above to complete the upgrade.
         </Typography>
       )}
-    </CardContent></Card>
+    </GuildizerCollapsibleCard>
   );
 }

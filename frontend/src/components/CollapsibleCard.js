@@ -26,6 +26,7 @@ export default function CollapsibleCard({
   id,
   title,
   badge = null,
+  action = null,
   defaultOpen = false,
   sx,
   children,
@@ -39,13 +40,22 @@ export default function CollapsibleCard({
       sx={{ mt: 2, ...sx }}
     >
       <AccordionSummary expandIcon={<ExpandMore />}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%', pr: 1 }}>
           {typeof title === 'string' ? (
             <Typography fontWeight={600}>{title}</Typography>
           ) : (
             title
           )}
           {badge}
+          {action && (
+            <Box
+              sx={{ ml: 'auto', display: 'flex', alignItems: 'center' }}
+              onClick={(e) => e.stopPropagation()}
+              onFocus={(e) => e.stopPropagation()}
+            >
+              {action}
+            </Box>
+          )}
         </Box>
       </AccordionSummary>
       <AccordionDetails>{children}</AccordionDetails>

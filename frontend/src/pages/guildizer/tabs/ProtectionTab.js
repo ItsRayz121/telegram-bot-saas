@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import {
-  Box, Grid, Card, CardContent, Typography, Switch, FormControlLabel, TextField,
+  Box, Grid, Typography, Switch, FormControlLabel, TextField,
   MenuItem, Button, Chip, CircularProgress, Alert, Snackbar, List, ListItem,
   ListItemText, Stack, IconButton, Checkbox, Divider, FormControl, InputLabel,
   Select,
@@ -418,15 +418,16 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
           </GuildizerCollapsibleCard>
 
           {/* 5 ── Protection Activity feed ─────────────────────────────────── */}
-          <Card sx={{ mb: 2 }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                <Typography variant="h6" fontWeight={600}>📋 Protection Activity</Typography>
-                <Box sx={{ flexGrow: 1 }} />
-                <Button size="small" onClick={loadEvents} disabled={eventsLoading}>
-                  {eventsLoading ? 'Refreshing…' : 'Refresh'}
-                </Button>
-              </Box>
+          <GuildizerCollapsibleCard
+            id="gz.moderation.protection_activity"
+            title="📋 Protection Activity"
+            sx={{ mb: 2 }}
+            action={(
+              <Button size="small" onClick={loadEvents} disabled={eventsLoading}>
+                {eventsLoading ? 'Refreshing…' : 'Refresh'}
+              </Button>
+            )}
+          >
               <Typography variant="body2" color="text.secondary" mb={2}>
                 What the bot did at <b>join time</b> and during raids — restricting/banning bots,
                 locking down raids and containing nukes. These never appear in the normal moderation log.
@@ -457,8 +458,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                   ))}
                 </Box>
               )}
-            </CardContent>
-          </Card>
+          </GuildizerCollapsibleCard>
 
           {/* 6 ── Smart Moderation — 3-layer system (Pro) ─────────────────── */}
           <GuildizerCollapsibleCard id="gz.moderation.smart_moderation" title="Smart Moderation" badge={<ProBadge />} sx={{ mt: 2, mb: 2 }}>
@@ -883,8 +883,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
           </Grid>
 
           <Grid item xs={12}>
-            <Card variant="outlined"><CardContent>
-              <Typography variant="h6" fontWeight={600} mb={1}>Recent warnings</Typography>
+            <GuildizerCollapsibleCard id="gz.moderation.recent_warnings" title="Recent warnings">
               {recentWarnings.length === 0 && <Typography variant="body2" color="text.secondary">No warnings yet.</Typography>}
               <List dense>
                 {recentWarnings.map((w) => (
@@ -897,7 +896,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                   </ListItem>
                 ))}
               </List>
-            </CardContent></Card>
+            </GuildizerCollapsibleCard>
           </Grid>
         </Grid>
       )}
@@ -922,8 +921,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
           </Grid>
 
           <Grid item xs={12}>
-            <Card variant="outlined"><CardContent>
-              <Typography variant="h6" fontWeight={600} mb={1}>Open reports ({reports.length})</Typography>
+            <GuildizerCollapsibleCard id="gz.moderation.open_reports" title={`Open reports (${reports.length})`}>
               {reports.length === 0 && <Typography variant="body2" color="text.secondary">No open reports. 🎉</Typography>}
               <List dense>
                 {reports.map((r) => (
@@ -941,7 +939,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                   </ListItem>
                 ))}
               </List>
-            </CardContent></Card>
+            </GuildizerCollapsibleCard>
           </Grid>
         </Grid>
       )}

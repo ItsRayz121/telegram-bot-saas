@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Box, Grid, Card, CardContent, Typography, Switch, FormControlLabel, TextField,
+  Box, Grid, Typography, Switch, FormControlLabel, TextField,
   MenuItem, Button, Chip, CircularProgress, Alert, Snackbar, Stack, IconButton,
 } from '@mui/material';
 import { Add, Delete, Send } from '@mui/icons-material';
 import guildizerApi from '../../../services/guildizerApi';
+import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
 
 const TEXT_TYPES = new Set([0, 5]);
 const MAX_MENUS = 10;
@@ -85,9 +86,11 @@ export default function SelfRolesSubtab({ guildId, channels = [], roles = [] }) 
 
       {menus.map((m, i) => (
         <Grid item xs={12} key={m.id ?? `new-${i}`}>
-          <Card variant="outlined"><CardContent>
-            <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1} useFlexGap flexWrap="wrap">
-              <Typography variant="h6" fontWeight={600}>Menu — {m.title || 'untitled'}</Typography>
+          <GuildizerCollapsibleCard
+            id={`gz.members.selfrole_menu_${m.id ?? `new_${i}`}`}
+            defaultOpen={!m.id}
+            title={`Menu — ${m.title || 'untitled'}`}
+            action={(
               <Stack direction="row" spacing={1} alignItems="center">
                 {m.message_id && <Chip size="small" color="success" variant="outlined" label="Posted" />}
                 {m.needs_post && <Chip size="small" color="info" variant="outlined" label="Post queued" />}
@@ -97,8 +100,8 @@ export default function SelfRolesSubtab({ guildId, channels = [], roles = [] }) 
                   <Delete fontSize="small" />
                 </IconButton>
               </Stack>
-            </Stack>
-
+            )}
+          >
             <Grid container spacing={2}>
               <Grid item xs={12} md={6}>
                 <TextField size="small" margin="dense" fullWidth label="Title"
@@ -170,7 +173,7 @@ export default function SelfRolesSubtab({ guildId, channels = [], roles = [] }) 
                 )}
               </Grid>
             </Grid>
-          </CardContent></Card>
+          </GuildizerCollapsibleCard>
         </Grid>
       ))}
 

@@ -4,7 +4,7 @@
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Box, Grid, Card, CardContent, Typography, TextField, MenuItem, Button, Chip,
+  Box, Grid, Typography, TextField, MenuItem, Button, Chip,
   CircularProgress, Alert, List, ListItem, ListItemText, Stack,
   FormControlLabel, Switch,
 } from '@mui/material';
@@ -109,8 +109,7 @@ export function RaidsSubtab({ guildId, channels = [] }) {
       </Grid>
 
       <Grid item xs={12}>
-        <Card variant="outlined"><CardContent>
-          <Typography variant="h6" fontWeight={600} mb={1}>Raids</Typography>
+        <GuildizerCollapsibleCard id="gz.engagement.raids_list" title="Raids">
           <Typography variant="body2" color="text.secondary" mb={2}>Active and past raids, with participant counts and end times.</Typography>
           {raids.length === 0 && <Typography variant="body2" color="text.secondary">No raids yet.</Typography>}
           <List dense>
@@ -127,7 +126,7 @@ export function RaidsSubtab({ guildId, channels = [] }) {
               </ListItem>
             ))}
           </List>
-        </CardContent></Card>
+        </GuildizerCollapsibleCard>
       </Grid>
     </Grid>
   );
@@ -178,8 +177,7 @@ export function InviteLinksSubtab({ guildId }) {
       </Grid>
 
       <Grid item xs={12}>
-        <Card variant="outlined"><CardContent>
-          <Typography variant="h6" fontWeight={600} mb={1}>Top inviters</Typography>
+        <GuildizerCollapsibleCard id="gz.engagement.top_inviters" title="Top inviters">
           <Typography variant="body2" color="text.secondary" mb={2}>Members ranked by how many people joined through their tracked invites.</Typography>
           {data.leaderboard.length === 0 && <Typography variant="body2" color="text.secondary">No tracked invites yet.</Typography>}
           <List dense>
@@ -191,12 +189,11 @@ export function InviteLinksSubtab({ guildId }) {
               </ListItem>
             ))}
           </List>
-        </CardContent></Card>
+        </GuildizerCollapsibleCard>
       </Grid>
 
       <Grid item xs={12}>
-        <Card variant="outlined"><CardContent>
-          <Typography variant="h6" fontWeight={600} mb={1}>Recent joins via invites</Typography>
+        <GuildizerCollapsibleCard id="gz.engagement.recent_joins" title="Recent joins via invites">
           <Typography variant="body2" color="text.secondary" mb={2}>The latest members to join and which invite brought them in.</Typography>
           {data.recent.length === 0 && <Typography variant="body2" color="text.secondary">Nothing yet.</Typography>}
           <List dense>
@@ -210,7 +207,7 @@ export function InviteLinksSubtab({ guildId }) {
               </ListItem>
             ))}
           </List>
-        </CardContent></Card>
+        </GuildizerCollapsibleCard>
       </Grid>
     </Grid>
   );
@@ -277,12 +274,14 @@ export function TicketsSubtab({ guildId, channels = [], roles = [] }) {
       {error && <Grid item xs={12}><Alert severity="warning" onClose={() => setError(null)}>{error}</Alert></Grid>}
 
       <Grid item xs={12}>
-        <Card variant="outlined"><CardContent>
-          <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
-            <Typography variant="h6" fontWeight={600}>Ticket system</Typography>
+        <GuildizerCollapsibleCard
+          id="gz.engagement.ticket_system"
+          title="Ticket system"
+          action={(
             <FormControlLabel sx={{ mr: 0 }} label="Enabled"
               control={<Switch checked={!!cfg.enabled} onChange={(e) => set({ enabled: e.target.checked })} />} />
-          </Stack>
+          )}
+        >
           <Typography variant="caption" color="text.secondary" display="block" mb={1}>
             Members click a button on the panel to open a private support thread.
             Closing a ticket posts its transcript to the channel you pick below.
@@ -330,14 +329,14 @@ export function TicketsSubtab({ guildId, channels = [], roles = [] }) {
             )}
             <Chip size="small" variant="outlined" label={panelStatus.label} color={panelStatus.color} />
           </Stack>
-        </CardContent></Card>
+        </GuildizerCollapsibleCard>
       </Grid>
 
       <Grid item xs={12}>
-        <Card variant="outlined"><CardContent>
-          <Typography variant="h6" fontWeight={600} mb={1}>
-            Open tickets {cfg.open?.length ? `(${cfg.open.length})` : ''}
-          </Typography>
+        <GuildizerCollapsibleCard
+          id="gz.engagement.open_tickets"
+          title={`Open tickets${cfg.open?.length ? ` (${cfg.open.length})` : ''}`}
+        >
           <Typography variant="body2" color="text.secondary" mb={2}>Currently open support threads members have opened from the panel.</Typography>
           {(!cfg.open || cfg.open.length === 0) &&
             <Typography variant="body2" color="text.secondary">No open tickets. {cfg.counter > 0 ? `${cfg.counter} handled so far.` : ''}</Typography>}
@@ -353,7 +352,7 @@ export function TicketsSubtab({ guildId, channels = [], roles = [] }) {
               </ListItem>
             ))}
           </List>
-        </CardContent></Card>
+        </GuildizerCollapsibleCard>
       </Grid>
     </Grid>
   );
@@ -394,12 +393,14 @@ export function StarboardSubtab({ guildId, channels = [] }) {
 
       {cfg && (
         <Grid item xs={12}>
-          <Card variant="outlined"><CardContent>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
-              <Typography variant="h6" fontWeight={600}>Starboard</Typography>
+          <GuildizerCollapsibleCard
+            id="gz.engagement.starboard"
+            title="Starboard"
+            action={(
               <FormControlLabel sx={{ mr: 0 }} label="Enabled"
                 control={<Switch checked={!!cfg.enabled} onChange={(e) => set({ enabled: e.target.checked })} />} />
-            </Stack>
+            )}
+          >
             <Typography variant="caption" color="text.secondary" display="block" mb={1}>
               When a message collects enough reactions, the bot reposts it to your
               best-of channel and keeps the count updated.
@@ -428,7 +429,7 @@ export function StarboardSubtab({ guildId, channels = [] }) {
                 </Typography>
               )}
             </Stack>
-          </CardContent></Card>
+          </GuildizerCollapsibleCard>
         </Grid>
       )}
     </Grid>
@@ -538,8 +539,7 @@ export function EventsSubtab({ guildId, channels = [] }) {
       </Grid>
 
       <Grid item xs={12}>
-        <Card variant="outlined"><CardContent>
-          <Typography variant="h6" fontWeight={600} mb={1}>Upcoming & recent</Typography>
+        <GuildizerCollapsibleCard id="gz.engagement.events_list" title="Upcoming & recent">
           <Typography variant="body2" color="text.secondary" mb={2}>Scheduled events with their status — cancel or remove them here.</Typography>
           {events.length === 0 && <Typography variant="body2" color="text.secondary">No events yet.</Typography>}
           <List dense>
@@ -560,7 +560,7 @@ export function EventsSubtab({ guildId, channels = [] }) {
               </ListItem>
             ))}
           </List>
-        </CardContent></Card>
+        </GuildizerCollapsibleCard>
       </Grid>
     </Grid>
   );
@@ -601,12 +601,14 @@ export function BoostsSubtab({ guildId, channels = [], roles = [] }) {
 
       {cfg && (
         <Grid item xs={12}>
-          <Card variant="outlined"><CardContent>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
-              <Typography variant="h6" fontWeight={600}>🚀 Boost tracking</Typography>
+          <GuildizerCollapsibleCard
+            id="gz.engagement.boost_tracking"
+            title="🚀 Boost tracking"
+            action={(
               <FormControlLabel sx={{ mr: 0 }} label="Enabled"
                 control={<Switch checked={!!cfg.enabled} onChange={(e) => set({ enabled: e.target.checked })} />} />
-            </Stack>
+            )}
+          >
             <Typography variant="caption" color="text.secondary" display="block" mb={1}>
               When someone boosts, the bot says thanks, can grant an extra reward role
               (on top of Discord's native booster role), and can award bonus XP. The
@@ -634,7 +636,7 @@ export function BoostsSubtab({ guildId, channels = [], roles = [] }) {
             <Button variant="contained" size="small" sx={{ mt: 1 }} disabled={busy} onClick={save}>
               {saved ? 'Saved ✓' : 'Save'}
             </Button>
-          </CardContent></Card>
+          </GuildizerCollapsibleCard>
         </Grid>
       )}
     </Grid>

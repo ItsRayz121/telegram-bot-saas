@@ -191,12 +191,10 @@ const SCOPE_OPTIONS = [
 // ── Reusable inline command routing block ─────────────────────────────────────
 // Renders a compact scope selector + topic picker for each command in `cmds`.
 // Share the same cmdRouting state + handleSaveCmdRouting from GroupSettings.
-function InlineCmdRouting({ cmds, title, description, cmdRouting, setCmdRouting, saving, onSave }) {
+function InlineCmdRouting({ id, cmds, title, description, cmdRouting, setCmdRouting, saving, onSave }) {
   const topics = cmdRouting.topics || [];
   return (
-    <Card sx={{ mt: 2 }}>
-      <CardContent>
-        <Typography variant="subtitle1" fontWeight={600} mb={0.5}>{title || 'Command Routing'}</Typography>
+    <CollapsibleCard id={id} title={title || 'Command Routing'}>
         {description && (
           <Typography variant="body2" color="text.secondary" mb={2}>{description}</Typography>
         )}
@@ -285,8 +283,7 @@ function InlineCmdRouting({ cmds, title, description, cmdRouting, setCmdRouting,
           {saving ? <CircularProgress size={16} sx={{ mr: 1 }} /> : null}
           Save Routing
         </Button>
-      </CardContent>
-    </Card>
+    </CollapsibleCard>
   );
 }
 
@@ -2102,10 +2099,8 @@ function GroupSettingsInner() {
                   </Alert>
                 )}
             </CollapsibleCard>
-            <Card>
-              <CardContent>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                  <Typography variant="subtitle1" fontWeight={600}>Reported Messages</Typography>
+            <CollapsibleCard id="tg.moderation.reported_messages" title="Reported Messages">
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
                   <Button size="small" onClick={fetchReports} disabled={reportsLoading}>Refresh</Button>
                 </Box>
                 {reportsLoading ? <CircularProgress size={24} /> : (
@@ -2178,8 +2173,7 @@ function GroupSettingsInner() {
                     </TableContainer>
                   )
                 )}
-              </CardContent>
-            </Card>
+            </CollapsibleCard>
           </>
         )}
 
@@ -2317,6 +2311,7 @@ function GroupSettingsInner() {
           </CollapsibleCard>
 
           <InlineCmdRouting
+            id="tg.members.verification_command_routing"
             cmds={['/verify']}
             title="Verification Command Routing"
             description="Control which forum topics the /verify command is allowed in."
@@ -2574,6 +2569,7 @@ function GroupSettingsInner() {
             </CollapsibleCard>
 
             <InlineCmdRouting
+              id="tg.members.role_command_routing"
               cmds={['/role']}
               title="Role Command Routing"
               description="Control which forum topics the /role command is allowed in."
@@ -2882,6 +2878,7 @@ function GroupSettingsInner() {
             </CollapsibleCard>
             <InviteLinks botId={botId} groupId={groupId} />
             <InlineCmdRouting
+              id="tg.community.invite_command_routing"
               cmds={['/invite', '/ref']}
               title="Invite Command Routing"
               description="Control which forum topics invite and referral commands are allowed in."
@@ -2907,6 +2904,7 @@ function GroupSettingsInner() {
           <>
             <KnowledgeBase botId={botId} groupId={groupId} settings={settingsData} updateSetting={updateSetting} />
             <InlineCmdRouting
+              id="tg.ai.command_routing"
               cmds={['/ask']}
               title="AI Command Routing"
               description="Control which forum topics the /ask command is allowed in."

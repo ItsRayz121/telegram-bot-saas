@@ -8,6 +8,7 @@ import {
 } from '@mui/material';
 import { Upload, Delete, Description, Psychology, Key, ExpandMore, ExpandLess, CheckCircle, SmartToy, Tune, EmojiPeople, ImageSearch, Search, Person } from '@mui/icons-material';
 import { toast } from 'react-toastify';
+import CollapsibleCard from './CollapsibleCard';
 import { knowledge, apiKeys, settings as settingsApi } from '../services/api';
 import { AI_PERSONALITIES, REPLY_LENGTHS, EMOJI_LEVELS, FORMALITY_LEVELS } from '../config/aiPersonalities';
 
@@ -230,12 +231,15 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
   return (
     <Box>
       {/* Basic enable toggle */}
-      <Card sx={{ mb: 2 }}>
-        <CardContent>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+      <CollapsibleCard
+        id="tg.ai.knowledge_base"
+        title={(
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Psychology color="primary" />
             <Typography variant="h6" fontWeight={600}>AI Knowledge Base</Typography>
           </Box>
+        )}
+      >
           <Typography variant="body2" color="text.secondary" mb={2}>
             Upload documents and let the bot answer questions from your files. Use <strong>/ask your question</strong> in the group, or enable automatic replies below.
           </Typography>
@@ -243,8 +247,7 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
             control={<Switch checked={!!kb.enabled} onChange={e => updateSetting('knowledge_base.enabled', e.target.checked)} />}
             label="Enable AI Q&A from knowledge base"
           />
-        </CardContent>
-      </Card>
+      </CollapsibleCard>
 
       {/* API Key Settings */}
       <Card sx={{ mb: 2 }}>
@@ -381,9 +384,7 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
       </Card>
 
       {/* Automatic Reply Settings */}
-      <Card sx={{ mb: 2 }}>
-        <CardContent>
-          <Typography variant="subtitle1" fontWeight={600} mb={1}>Automatic Knowledge Replies</Typography>
+      <CollapsibleCard id="tg.ai.auto_replies" title="Automatic Knowledge Replies">
           <Typography variant="body2" color="text.secondary" mb={2}>
             Let the bot automatically answer knowledge-base questions without needing the /ask command.
           </Typography>
@@ -468,16 +469,18 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
               </>
             )}
           </Grid>
-        </CardContent>
-      </Card>
+      </CollapsibleCard>
 
       {/* AI Personality & Reply Behavior */}
-      <Card sx={{ mb: 2 }}>
-        <CardContent>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+      <CollapsibleCard
+        id="tg.ai.reply_personality"
+        title={(
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <SmartToy color="primary" fontSize="small" />
             <Typography variant="subtitle1" fontWeight={600}>AI Reply Personality</Typography>
           </Box>
+        )}
+      >
           <Typography variant="body2" color="text.secondary" mb={2}>
             Choose how the AI communicates with your community. Each personality uses professionally
             engineered prompts designed to feel natural and human — not robotic.
@@ -608,16 +611,18 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
             context → personality rules → anti-robotic guidelines → your custom instructions.
             Replies adapt to your community's tone automatically without any AI jailbreak risk.
           </Alert>
-        </CardContent>
-      </Card>
+      </CollapsibleCard>
 
       {/* Auto Replies as AI Knowledge */}
-      <Card sx={{ mb: 2 }}>
-        <CardContent>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+      <CollapsibleCard
+        id="tg.ai.auto_replies_knowledge"
+        title={(
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <SmartToy color="primary" fontSize="small" />
             <Typography variant="subtitle1" fontWeight={600}>Auto Replies as AI Knowledge</Typography>
           </Box>
+        )}
+      >
           <Typography variant="body2" color="text.secondary" mb={1.5}>
             When enabled, the AI can use your saved auto-reply triggers as extra knowledge for smarter,
             context-aware answers — even when users phrase questions differently than the trigger keyword.
@@ -637,19 +642,21 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
               on each trigger you want the AI to learn from. Only enabled triggers marked for AI use are included.
             </Alert>
           )}
-        </CardContent>
-      </Card>
+      </CollapsibleCard>
 
       {/* Human-Like Community Interaction */}
       {(() => {
         const sr = settings?.social_replies || {};
         return (
-          <Card sx={{ mb: 2 }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+          <CollapsibleCard
+            id="tg.ai.social_replies"
+            title={(
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <EmojiPeople color="primary" fontSize="small" />
                 <Typography variant="subtitle1" fontWeight={600}>Human-Like Community Interaction</Typography>
               </Box>
+            )}
+          >
               <Typography variant="body2" color="text.secondary" mb={1.5}>
                 Bot reacts and responds naturally to appreciation messages ("thanks", "helpful", "solved", etc.)
                 — no AI cost, personality-aware, with spam protection.
@@ -744,8 +751,7 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
                   </Alert>
                 </Box>
               )}
-            </CardContent>
-          </Card>
+          </CollapsibleCard>
         );
       })()}
 
@@ -753,12 +759,15 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
       {(() => {
         const img = settings?.image_ai || {};
         return (
-          <Card sx={{ mb: 2 }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+          <CollapsibleCard
+            id="tg.ai.image_ai"
+            title={(
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <ImageSearch color="primary" fontSize="small" />
                 <Typography variant="subtitle1" fontWeight={600}>Image Understanding (Multimodal AI)</Typography>
               </Box>
+            )}
+          >
               <Typography variant="body2" color="text.secondary" mb={1.5}>
                 AI analyzes screenshots, error messages, and images sent with captions. Uses GPT-4o mini
                 (~$0.0003/image). Smart gating ensures most images are never sent to the API.
@@ -984,15 +993,12 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
                   </Alert>
                 </Box>
               )}
-            </CardContent>
-          </Card>
+          </CollapsibleCard>
         );
       })()}
 
       {/* Upload */}
-      <Card sx={{ mb: 2 }}>
-        <CardContent>
-          <Typography variant="subtitle1" fontWeight={600} mb={2}>Upload Documents</Typography>
+      <CollapsibleCard id="tg.ai.kb_upload" title="Upload Documents">
           <Alert severity="info" sx={{ mb: 2 }}>
             Supported: PDF, DOCX, TXT, MD — Max 5MB per file. Text is extracted and indexed for semantic search.
             {savedApiKey
@@ -1012,13 +1018,10 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
           <Button variant="outlined" startIcon={<Upload />} onClick={() => fileRef.current.click()} disabled={uploading}>
             {uploading ? uploadStage || 'Processing…' : 'Upload Document'}
           </Button>
-        </CardContent>
-      </Card>
+      </CollapsibleCard>
 
       {/* Document list */}
-      <Card>
-        <CardContent>
-          <Typography variant="subtitle1" fontWeight={600} mb={1}>Indexed Documents ({docs.length})</Typography>
+      <CollapsibleCard id="tg.ai.kb_documents" title={`Indexed Documents (${docs.length})`}>
           {docs.length === 0 ? (
             <Typography variant="body2" color="text.secondary">No documents uploaded yet.</Typography>
           ) : (
@@ -1043,8 +1046,7 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
               ))}
             </List>
           )}
-        </CardContent>
-      </Card>
+      </CollapsibleCard>
     </Box>
   );
 }
