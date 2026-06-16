@@ -52,6 +52,8 @@ _HEAL_COLUMNS = [
     ("members", "verified", "BOOLEAN"),
     # Notification preferences (sound / web push opt-in / per-category mute)
     ("users", "notification_prefs", "JSON"),
+    # Per-user UI prefs: open/closed state of collapsible settings cards
+    ("users", "ui_preferences", "JSON"),
 ]
 
 

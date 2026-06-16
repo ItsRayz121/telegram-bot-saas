@@ -10,6 +10,7 @@ import {
   SmartToy, Bolt, Assessment, Settings as SettingsIcon,
 } from '@mui/icons-material';
 import guildizerApi from '../../services/guildizerApi';
+import { GuildizerUiPrefsProvider } from '../../context/GuildizerUiPrefsContext';
 import { SaveBarContext } from './tabs/saveBar';
 import SettingsTab from './tabs/SettingsTab';
 import CommandsTab from './tabs/CommandsTab';
@@ -73,6 +74,14 @@ const LEGACY_TABS = {
 };
 
 export default function GuildizerServerDetail() {
+  return (
+    <GuildizerUiPrefsProvider>
+      <GuildizerServerDetailInner />
+    </GuildizerUiPrefsProvider>
+  );
+}
+
+function GuildizerServerDetailInner() {
   const { guildId } = useParams();
   const navigate = useNavigate();
   // Deep-linkable: /guildizer/servers/<id>?tab=Moderation&sub=Behavior

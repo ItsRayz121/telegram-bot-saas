@@ -4,13 +4,12 @@ import {
   Card, CardContent, Button, TextField, Switch, FormControlLabel,
   Grid, CircularProgress, Chip, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Paper, Select, MenuItem,
-  FormControl, InputLabel, Pagination, Divider, Accordion,
-  AccordionSummary, AccordionDetails, Dialog, DialogTitle,
+  FormControl, InputLabel, Pagination, Divider, Dialog, DialogTitle,
   DialogContent, DialogActions, Tooltip, Alert, Stack, Avatar, Popover,
   useTheme, useMediaQuery,
 } from '@mui/material';
 import {
-  ArrowBack, Save, Add, ExpandMore, Delete, CheckCircle, Schedule,
+  ArrowBack, Save, Add, Delete, CheckCircle, Schedule,
   Send, Assessment, People, SmartToy, Refresh,
   Warning as WarningIcon, EmojiEvents, FileDownload,
 } from '@mui/icons-material';
@@ -36,6 +35,8 @@ import {
   PRO_GATED_LABELS,
 } from '../config/featureRegistry';
 import PlanGate from '../components/PlanGate';
+import { UiPrefsProvider } from '../context/UiPrefsContext';
+import CollapsibleCard from '../components/CollapsibleCard';
 
 function ProBadge() {
   return <Chip label="Pro" color="primary" size="small" sx={{ ml: 1, height: 18, fontSize: '0.65rem', fontWeight: 700 }} />;
@@ -290,6 +291,14 @@ function InlineCmdRouting({ cmds, title, description, cmdRouting, setCmdRouting,
 }
 
 export default function GroupSettings() {
+  return (
+    <UiPrefsProvider>
+      <GroupSettingsInner />
+    </UiPrefsProvider>
+  );
+}
+
+function GroupSettingsInner() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const navigate = useNavigate();
@@ -1043,11 +1052,7 @@ export default function GroupSettings() {
         {/* MODERATION › AutoMod */}
         {cat === 'moderation' && subTab === 0 && (
           <>
-            <Card sx={{ mb: 2 }}>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                  <Typography variant="h6" fontWeight={600}>AutoMod</Typography>
-                </Box>
+            <CollapsibleCard id="tg.moderation.automod" title="AutoMod">
                 <FormControlLabel
                   control={<Switch checked={!!am.enabled} onChange={(e) => updateSetting('automod.enabled', e.target.checked)} />}
                   label="Enable AutoMod globally"
@@ -1082,15 +1087,10 @@ export default function GroupSettings() {
                   helperText="Added to the built-in adult/NSFW word list. Plain text is deleted + warned; NSFW on inline buttons is banned."
                   value={(am.nsfw_filter?.extra_words || []).join(', ')}
                   onChange={(e) => updateSetting('automod.nsfw_filter.extra_words', e.target.value.split(',').map(w => w.trim()).filter(Boolean))} />
-              </CardContent>
-            </Card>
+            </CollapsibleCard>
 
             {/* Bot Protection — controls bots added to the group (Phase 1) */}
-            <Card sx={{ mb: 2 }}>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                  <Typography variant="h6" fontWeight={600}>🛡️ Bot Protection</Typography>
-                </Box>
+            <CollapsibleCard id="tg.moderation.bot_protection" title="🛡️ Bot Protection">
                 <Typography variant="body2" color="text.secondary" mb={2}>
                   Telegram never delivers another bot's <i>messages</i> to us, so bot spam
                   (adult content, link-farm buttons, scam bots) can only be stopped when the
@@ -1187,15 +1187,10 @@ export default function GroupSettings() {
                   />
                   <Button variant="outlined" onClick={addTrustedBot}>Add</Button>
                 </Box>
-              </CardContent>
-            </Card>
+            </CollapsibleCard>
 
             {/* Raid Mode — behaviour-based coordinated-spam lockdown (Phase 3) */}
-            <Card sx={{ mb: 2 }}>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                  <Typography variant="h6" fontWeight={600}>🚨 Raid Mode</Typography>
-                </Box>
+            <CollapsibleCard id="tg.moderation.raid_mode" title="🚨 Raid Mode">
                 <Typography variant="body2" color="text.secondary" mb={2}>
                   Detects <b>coordinated</b> spam — many different accounts tripping the
                   filters, or posting the same message, in a short burst. It does <b>not</b>
@@ -1304,8 +1299,7 @@ export default function GroupSettings() {
                     </Box>
                   );
                 })()}
-              </CardContent>
-            </Card>
+            </CollapsibleCard>
 
             {/* Protection Activity — bot-policy + raid-mode event log (Phase 4) */}
             <Card sx={{ mb: 2 }}>
@@ -1360,10 +1354,10 @@ export default function GroupSettings() {
             </Card>
 
             {/* Smart Moderation — 3-layer AI-powered system (Pro only) */}
-            <Card variant="outlined" sx={{ mt: 2 }}>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                  <Typography variant="h6" fontWeight={600}>Smart Moderation</Typography>
+            <CollapsibleCard
+              id="tg.moderation.smart_moderation"
+              title="Smart Moderation"
+              badge={<>
                   <Chip
                     label={(am.smart_mod || {}).ai_enabled ? 'AI Active' : 'Rule-based · AI optional'}
                     size="small"
@@ -1371,7 +1365,8 @@ export default function GroupSettings() {
                     variant="outlined"
                   />
                   <ProBadge />
-                </Box>
+              </>}
+            >
                 <Typography variant="body2" color="text.secondary" mb={2}>
                   Three-layer system: fast rules → hidden URL detection → optional AI relevance check.
                   The AI layer runs <b>only</b> when you enable Layer 3 below <b>and</b> a workspace AI key
@@ -1526,17 +1521,13 @@ export default function GroupSettings() {
                   )}
                 </Box>
                 </PlanGate>
-              </CardContent>
-            </Card>
+            </CollapsibleCard>
 
-            <Accordion>
-              <AccordionSummary expandIcon={<ExpandMore />}>
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                  <Typography fontWeight={600}>Extended Rules — Media & Content</Typography>
-                  <ProBadge />
-                </Box>
-              </AccordionSummary>
-              <AccordionDetails>
+            <CollapsibleCard
+              id="tg.moderation.automod.extended_rules"
+              title="Extended Rules — Media & Content"
+              badge={<ProBadge />}
+            >
                 {/* Global defaults — apply once, inherited by all enabled rules */}
                 <Box sx={{ p: 2, mb: 2, bgcolor: 'rgba(255,255,255,0.03)', border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
                   <Typography variant="subtitle2" fontWeight={700} mb={1.5}>Default settings for all rules</Typography>
@@ -1639,17 +1630,13 @@ export default function GroupSettings() {
                     );
                   })}
                 </Grid>
-              </AccordionDetails>
-            </Accordion>
+            </CollapsibleCard>
 
-            <Accordion sx={{ mt: 1 }}>
-              <AccordionSummary expandIcon={<ExpandMore />}>
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                  <Typography fontWeight={600}>Language Filter</Typography>
-                  <ProBadge />
-                </Box>
-              </AccordionSummary>
-              <AccordionDetails>
+            <CollapsibleCard
+              id="tg.moderation.automod.language_filter"
+              title="Language Filter"
+              badge={<ProBadge />}
+            >
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2, flexWrap: 'wrap' }}>
                   <FormControlLabel
                     control={<Switch checked={!!(am.language_filter || {}).enabled}
@@ -1684,13 +1671,10 @@ export default function GroupSettings() {
                     );
                   })}
                 </Grid>
-              </AccordionDetails>
-            </Accordion>
+            </CollapsibleCard>
 
             {/* Emoji Reactions */}
-            <Card variant="outlined" sx={{ mt: 2 }}>
-              <CardContent>
-                <Typography variant="h6" fontWeight={600} mb={1}>Emoji Reactions</Typography>
+            <CollapsibleCard id="tg.moderation.automod.emoji_reactions" title="Emoji Reactions">
                 <Typography variant="body2" color="text.secondary" mb={2}>
                   React to messages with emojis based on their sentiment. Admin messages always get 👍. Member messages get ❤️ 🔥 😂 👍 🎉 🫂 based on tone.
                 </Typography>
@@ -1711,12 +1695,9 @@ export default function GroupSettings() {
                     label="React to member messages based on sentiment (❤️ 🔥 😂 👍 🎉 🫂)"
                   />
                 </Box>
-              </CardContent>
-            </Card>
+            </CollapsibleCard>
 
-            <Card sx={{ mt: 2 }}>
-              <CardContent>
-                <Typography variant="subtitle1" fontWeight={600} mb={0.5}>Command Permissions</Typography>
+            <CollapsibleCard id="tg.moderation.command_permissions" title="Command Permissions">
                 <Typography variant="body2" color="text.secondary" mb={2}>
                   Control who can use moderation commands. Default is admins only.
                 </Typography>
@@ -1752,17 +1733,14 @@ export default function GroupSettings() {
                   );
                 })}
                 </Box>
-              </CardContent>
-            </Card>
+            </CollapsibleCard>
           </>
         )}
 
         {/* MODERATION › Behavior */}
         {cat === 'moderation' && subTab === 1 && (
           <>
-            <Card sx={{ mb: 2 }}>
-              <CardContent>
-                <Typography variant="h6" fontWeight={600} mb={2}>Warning Thresholds</Typography>
+            <CollapsibleCard id="tg.moderation.warning_thresholds" title="Warning Thresholds">
                 <Grid container spacing={2}>
                   <Grid item xs={12} sm={4}>
                     <TextField fullWidth type="number" label="Max Warnings"
@@ -1797,17 +1775,15 @@ export default function GroupSettings() {
                     )}
                   </Grid>
                 </Grid>
-              </CardContent>
-            </Card>
+            </CollapsibleCard>
 
             {/* Warning Escalation foundation — configurable but NOT enforced yet.
                 Disabled by default; the owner finalises the rules before it goes live. */}
-            <Card sx={{ mb: 2 }}>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                  <Typography variant="h6" fontWeight={600}>Warning Escalation</Typography>
-                  <Chip label="Not active yet" size="small" color="default" variant="outlined" />
-                </Box>
+            <CollapsibleCard
+              id="tg.moderation.warning_escalation"
+              title="Warning Escalation"
+              badge={<Chip label="Not active yet" size="small" color="default" variant="outlined" />}
+            >
                 <Typography variant="body2" color="text.secondary" mb={2}>
                   Configure an automatic action once a member crosses a warning threshold within a time window.
                   This is a foundation only — <strong>rules are saved but not enforced</strong> until you turn it on.
@@ -1855,13 +1831,10 @@ export default function GroupSettings() {
                       onChange={(e) => updateSetting('warning_escalation.mute_duration_minutes', parseInt(e.target.value))} />
                   </Grid>
                 </Grid>
-              </CardContent>
-            </Card>
+            </CollapsibleCard>
 
             {/* #10 — auto-delete warning/action notices from the group chat */}
-            <Card sx={{ mb: 2 }}>
-              <CardContent>
-                <Typography variant="subtitle1" fontWeight={600} mb={0.5}>Warning Messages</Typography>
+            <CollapsibleCard id="tg.moderation.warning_messages" title="Warning Messages">
                 <Typography variant="body2" color="text.secondary" mb={2}>
                   Keep the chat clean by auto-removing the bot's warning notices. The warning is always kept
                   in the audit log even when the chat message is deleted.
@@ -1890,17 +1863,9 @@ export default function GroupSettings() {
                     </FormControl>
                   </Box>
                 )}
-              </CardContent>
-            </Card>
+            </CollapsibleCard>
 
-            <Accordion>
-              <AccordionSummary expandIcon={<ExpandMore />}>
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                  <Typography fontWeight={600}>Escalation Chain</Typography>
-                  <ProBadge />
-                </Box>
-              </AccordionSummary>
-              <AccordionDetails>
+            <CollapsibleCard id="tg.moderation.escalation_chain" title="Escalation Chain" badge={<ProBadge />}>
                 <FormControlLabel
                   control={<Switch checked={!!mod.escalation_enabled}
                     onChange={(e) => updateSetting('moderation.escalation_enabled', e.target.checked)} />}
@@ -1974,12 +1939,9 @@ export default function GroupSettings() {
                 }} sx={{ mt: 1 }}>
                   Add Step
                 </Button>
-              </AccordionDetails>
-            </Accordion>
+            </CollapsibleCard>
 
-            <Card sx={{ mt: 2, mb: 2 }}>
-              <CardContent>
-                <Typography variant="subtitle1" fontWeight={600} mb={1}>Auto Clean System Messages</Typography>
+            <CollapsibleCard id="tg.moderation.auto_clean" title="Auto Clean System Messages">
                 <Typography variant="body2" color="text.secondary" mb={2}>
                   Automatically delete Telegram system messages to keep your chat clean.
                 </Typography>
@@ -2007,12 +1969,9 @@ export default function GroupSettings() {
                     </Grid>
                   ))}
                 </Grid>
-              </CardContent>
-            </Card>
+            </CollapsibleCard>
 
-            <Card>
-              <CardContent>
-                <Typography variant="subtitle1" fontWeight={600} mb={1}>Auto-Delete Notification Messages</Typography>
+            <CollapsibleCard id="tg.moderation.auto_delete_notifications" title="Auto-Delete Notification Messages">
                 <Typography variant="body2" color="text.secondary" mb={2}>
                   How long to keep AutoMod and moderation notification messages before deleting them. 0 = never delete.
                 </Typography>
@@ -2030,17 +1989,14 @@ export default function GroupSettings() {
                       onChange={(e) => updateSetting('moderation.auto_delete_action_seconds', parseInt(e.target.value) || 0)} />
                   </Grid>
                 </Grid>
-              </CardContent>
-            </Card>
+            </CollapsibleCard>
           </>
         )}
 
         {/* MODERATION › Reports */}
         {cat === 'moderation' && subTab === 2 && (
           <>
-            <Card sx={{ mb: 2 }}>
-              <CardContent>
-                <Typography variant="h6" fontWeight={600} mb={2}>Reports Settings</Typography>
+            <CollapsibleCard id="tg.moderation.reports_settings" title="Reports Settings">
                 <FormControlLabel
                   control={<Switch checked={!!rep.enabled} onChange={(e) => updateSetting('reports.enabled', e.target.checked)} />}
                   label="Enable /report command"
@@ -2145,8 +2101,7 @@ export default function GroupSettings() {
                     </Typography>
                   </Alert>
                 )}
-              </CardContent>
-            </Card>
+            </CollapsibleCard>
             <Card>
               <CardContent>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
@@ -2235,9 +2190,7 @@ export default function GroupSettings() {
         {/* MEMBERS › Verification */}
         {cat === 'members' && subTab === 0 && (
           <>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" fontWeight={600} mb={2}>Verification Settings</Typography>
+          <CollapsibleCard id="tg.members.verification" title="Verification Settings">
               <FormControlLabel
                 control={<Switch checked={!!v.enabled} onChange={(e) => updateSetting('verification.enabled', e.target.checked)} />}
                 label="Enable verification for new members"
@@ -2361,8 +2314,7 @@ export default function GroupSettings() {
                   </Typography>
                 </Alert>
               )}
-            </CardContent>
-          </Card>
+          </CollapsibleCard>
 
           <InlineCmdRouting
             cmds={['/verify']}
@@ -2379,9 +2331,7 @@ export default function GroupSettings() {
         {/* MEMBERS › Welcome */}
         {cat === 'members' && subTab === 1 && (
           <>
-            <Card>
-              <CardContent>
-                <Typography variant="h6" fontWeight={600} mb={2}>Welcome Message</Typography>
+            <CollapsibleCard id="tg.members.welcome_message" title="Welcome Message">
                 <FormControlLabel
                   control={<Switch checked={!!w.enabled} onChange={(e) => updateSetting('welcome.enabled', e.target.checked)} />}
                   label="Send welcome message to new members"
@@ -2435,13 +2385,10 @@ export default function GroupSettings() {
                     </Grid>
                   )}
                 </Grid>
-              </CardContent>
-            </Card>
+            </CollapsibleCard>
 
             {!isOfficial && (
-              <Card sx={{ mt: 2 }}>
-                <CardContent>
-                  <Typography variant="subtitle1" fontWeight={600} mb={1}>Private Welcome DM</Typography>
+              <CollapsibleCard id="tg.members.private_welcome_dm" title="Private Welcome DM">
                   <Typography variant="body2" color="text.secondary" mb={2}>
                     Send a private message to each new member in addition to the group welcome.
                   </Typography>
@@ -2458,8 +2405,7 @@ export default function GroupSettings() {
                       onChange={e => updateSetting('welcome.dm_message', e.target.value)}
                       helperText="Placeholders: {first_name}, {group_name}, {username}" />
                   )}
-                </CardContent>
-              </Card>
+              </CollapsibleCard>
             )}
           </>
         )}
@@ -2467,9 +2413,7 @@ export default function GroupSettings() {
         {/* MEMBERS › XP & Roles */}
         {cat === 'members' && subTab === 2 && (
           <>
-            <Card sx={{ mb: 2 }}>
-              <CardContent>
-                <Typography variant="h6" fontWeight={600} mb={2}>XP & Level System</Typography>
+            <CollapsibleCard id="tg.members.xp_level_system" title="XP & Level System">
                 <FormControlLabel
                   control={<Switch checked={!!l.enabled} onChange={(e) => updateSetting('levels.enabled', e.target.checked)} />}
                   label="Enable XP and leveling system"
@@ -2536,12 +2480,9 @@ export default function GroupSettings() {
                       onChange={(e) => updateSetting('levels.delete_levelup_after_seconds', parseInt(e.target.value))} />
                   </Grid>
                 </Grid>
-              </CardContent>
-            </Card>
+            </CollapsibleCard>
 
-            <Card sx={{ mb: 2 }}>
-              <CardContent>
-                <Typography variant="subtitle1" fontWeight={600} mb={1}>XP Penalties (Moderation Actions)</Typography>
+            <CollapsibleCard id="tg.members.xp_penalties" title="XP Penalties (Moderation Actions)" sx={{ mb: 2 }}>
                 <Typography variant="body2" color="text.secondary" mb={2}>XP deducted when a moderation action is applied to a member.</Typography>
                 <Grid container spacing={2}>
                   <Grid item xs={6} sm={3}>
@@ -2565,12 +2506,9 @@ export default function GroupSettings() {
                       onChange={(e) => updateSetting('levels.xp_penalty_ban', parseInt(e.target.value))} />
                   </Grid>
                 </Grid>
-              </CardContent>
-            </Card>
+            </CollapsibleCard>
 
-            <Card sx={{ mb: 2 }}>
-              <CardContent>
-                <Typography variant="subtitle1" fontWeight={600} mb={2}>Rank Card Style</Typography>
+            <CollapsibleCard id="tg.members.rank_card_style" title="Rank Card Style" sx={{ mb: 2 }}>
                 <Grid container spacing={2} alignItems="center">
                   <Grid item xs={12} sm={4}>
                     <Typography variant="body2" color="text.secondary" mb={0.5}>Background Start</Typography>
@@ -2594,12 +2532,9 @@ export default function GroupSettings() {
                       style={{ width: '100%', height: 40, borderRadius: 8, border: '1px solid #30363d', cursor: 'pointer' }} />
                   </Grid>
                 </Grid>
-              </CardContent>
-            </Card>
+            </CollapsibleCard>
 
-            <Card>
-              <CardContent>
-                <Typography variant="subtitle1" fontWeight={600} mb={1}>Roles</Typography>
+            <CollapsibleCard id="tg.members.roles" title="Roles">
                 <Typography variant="body2" color="text.secondary" mb={2}>
                   Members are automatically assigned a role when they reach the specified level. Use <code>/roles</code> in Telegram to display the list.
                 </Typography>
@@ -2636,8 +2571,7 @@ export default function GroupSettings() {
                 }}>
                   Add Role
                 </Button>
-              </CardContent>
-            </Card>
+            </CollapsibleCard>
 
             <InlineCmdRouting
               cmds={['/role']}
@@ -2649,9 +2583,7 @@ export default function GroupSettings() {
               onSave={handleSaveCmdRouting}
             />
 
-            <Card sx={{ mt: 2 }}>
-              <CardContent>
-                <Typography variant="subtitle1" fontWeight={600} mb={0.5}>XP Command Routing</Typography>
+            <CollapsibleCard id="tg.members.xp_command_routing" title="XP Command Routing" sx={{ mt: 2 }}>
                 <Typography variant="body2" color="text.secondary" mb={2}>
                   Control which forum topics the <code>/xp</code>, <code>/rank</code>, and <code>/leaderboard</code> commands are allowed in.
                   Only applies when the group has Telegram forum topics enabled.
@@ -2749,8 +2681,7 @@ export default function GroupSettings() {
                   {saving ? <CircularProgress size={16} sx={{ mr: 1 }} /> : null}
                   Save Routing
                 </Button>
-              </CardContent>
-            </Card>
+            </CollapsibleCard>
           </>
         )}
 
@@ -2939,9 +2870,7 @@ export default function GroupSettings() {
         {/* COMMUNITY › Invite Links */}
         {cat === 'community' && subTab === 1 && (
           <>
-            <Card sx={{ mb: 2 }}>
-              <CardContent>
-                <Typography variant="subtitle2" fontWeight={600} mb={1}>Invite Command Topic</Typography>
+            <CollapsibleCard id="tg.community.invite_command_topic" title="Invite Command Topic" sx={{ mb: 2 }}>
                 <ForumTopicSelector
                   botId={botId}
                   groupId={groupId}
@@ -2950,8 +2879,7 @@ export default function GroupSettings() {
                   label="Allowed Topic"
                   helperText="If set, /invitelink only works in this topic. Other topics: silent ignore."
                 />
-              </CardContent>
-            </Card>
+            </CollapsibleCard>
             <InviteLinks botId={botId} groupId={groupId} />
             <InlineCmdRouting
               cmds={['/invite', '/ref']}
@@ -3003,8 +2931,7 @@ export default function GroupSettings() {
                 Admins reply directly to the bot DM — the answer is auto-saved into the Knowledge Base.
               </Alert>
 
-              <Card sx={{ mb: 2 }}>
-                <CardContent>
+              <CollapsibleCard id="tg.ai.global_escalation" title="Global Escalation" sx={{ mb: 2 }}>
                   <FormControlLabel
                     control={<Switch checked={!!esc.enabled}
                       onChange={(e) => updateSetting('escalation.enabled', e.target.checked)} />}
@@ -3098,12 +3025,9 @@ export default function GroupSettings() {
                   <Typography variant="caption" color="text.secondary" display="block" mt={1}>
                     Selected admins receive a private DM when any AI or Automation issue occurs. They must have started the bot first.
                   </Typography>
-                </CardContent>
-              </Card>
+              </CollapsibleCard>
 
-              <Card sx={{ mb: 2 }}>
-                <CardContent>
-                  <Typography variant="subtitle2" fontWeight={600} mb={1}>Escalation Types</Typography>
+              <CollapsibleCard id="tg.ai.escalation_types" title="Escalation Types" sx={{ mb: 2 }}>
                   {[
                     { key: 'ai_kb',      label: '🤖 AI Knowledge Base',  desc: 'Escalate when KB auto-reply confidence is low' },
                     { key: 'ai_image',   label: '🖼️ AI Image Review',    desc: 'Escalate low-confidence image AI results' },
@@ -3126,11 +3050,9 @@ export default function GroupSettings() {
                       />
                     );
                   })}
-                </CardContent>
-              </Card>
+              </CollapsibleCard>
 
-              <Card>
-                <CardContent>
+              <CollapsibleCard id="tg.ai.escalation_auto_learn" title="Auto-Learn from Admin Replies">
                   <FormControlLabel
                     control={<Switch checked={esc.auto_learn !== false}
                       onChange={(e) => updateSetting('escalation.auto_learn', e.target.checked)} />}
@@ -3140,8 +3062,7 @@ export default function GroupSettings() {
                     When an admin replies to an escalation DM, the Q&amp;A is automatically stored in the
                     Knowledge Base for future auto-replies.
                   </Typography>
-                </CardContent>
-              </Card>
+              </CollapsibleCard>
             </>
           );
         })()}
@@ -3842,12 +3763,7 @@ export default function GroupSettings() {
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
           ) : (
             <>
-              <Card sx={{ mb: 2 }}>
-                <CardContent>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                    <Assessment color="primary" />
-                    <Typography variant="h6" fontWeight={600}>Telegram Report Digest</Typography>
-                  </Box>
+              <CollapsibleCard id="tg.analytics.report_digest" title="Telegram Report Digest" sx={{ mb: 2 }}>
                   <Typography variant="body2" color="text.secondary" mb={3}>
                     Automatically send a summary report to this Telegram group on your chosen schedule.
                     The report includes spam removed, members warned/banned, scheduled posts sent, polls created, and growth stats.
@@ -3903,13 +3819,10 @@ export default function GroupSettings() {
                   >
                     Save Digest Settings
                   </Button>
-                </CardContent>
-              </Card>
+              </CollapsibleCard>
 
               {/* Digest Recipients — shown for both official-bot and custom-bot groups */}
-              <Card sx={{ mb: 2 }}>
-                  <CardContent>
-                    <Typography variant="subtitle1" fontWeight={600} mb={0.5}>Report Recipients</Typography>
+              <CollapsibleCard id="tg.analytics.report_recipients" title="Report Recipients" sx={{ mb: 2 }}>
                     <Typography variant="body2" color="text.secondary" mb={2}>
                       Choose who receives the digest report. Recipients marked ⚠ have not yet started @telegizer_bot and cannot receive private DMs.
                     </Typography>
@@ -4012,8 +3925,7 @@ export default function GroupSettings() {
                         Save Recipient Settings
                       </Button>
                     </Box>
-                  </CardContent>
-                </Card>
+              </CollapsibleCard>
 
               {/* AI Summary — official-bot groups only */}
               {isOfficial && (
@@ -4059,9 +3971,7 @@ export default function GroupSettings() {
                 </Card>
               )}
 
-              <Card>
-                <CardContent>
-                  <Typography variant="subtitle1" fontWeight={600} mb={0.5}>Send Report Now</Typography>
+              <CollapsibleCard id="tg.analytics.send_report_now" title="Send Report Now">
                   <Typography variant="body2" color="text.secondary" mb={2}>
                     Immediately send a report to all configured recipients.
                     Useful for checking the setup or sharing a snapshot with your community.
@@ -4093,8 +4003,7 @@ export default function GroupSettings() {
                       Admins who have not started @telegizer_bot will be silently skipped.
                     </Typography>
                   </Alert>
-                </CardContent>
-              </Card>
+              </CollapsibleCard>
             </>
           )
         )}
@@ -4107,9 +4016,7 @@ export default function GroupSettings() {
             <>
               {/* AI Status panel */}
               {aiStatus && (
-                <Card sx={{ mb: 2 }}>
-                  <CardContent>
-                    <Typography variant="subtitle1" fontWeight={600} mb={1.5}>🤖 AI Status</Typography>
+                <CollapsibleCard id="tg.analytics.ai_status" title="🤖 AI Status" sx={{ mb: 2 }}>
                     <Grid container spacing={1.5}>
                       {[
                         { label: 'Smart Moderation', value: aiStatus.smart_moderation, good: 'enabled' },
@@ -4156,8 +4063,7 @@ export default function GroupSettings() {
                         <strong>{fmtTs(aiStatus.last_successful_response)}</strong>
                       </Typography>
                     </Stack>
-                  </CardContent>
-                </Card>
+                </CollapsibleCard>
               )}
 
               {/* Metrics */}

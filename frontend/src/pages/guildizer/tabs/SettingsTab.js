@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import {
-  Box, Grid, Card, CardContent, Typography, Switch, FormControlLabel,
+  Box, Grid, Typography, Switch, FormControlLabel,
   TextField, MenuItem, Button, Chip, CircularProgress, Alert, Snackbar,
 } from '@mui/material';
 import guildizerApi from '../../../services/guildizerApi';
+import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
 import { useSaveBar } from './saveBar';
 
 const TEXT_TYPES = new Set([0, 5]);
@@ -51,8 +52,7 @@ export default function SettingsTab({ guildId, channels = [], roles = [] }) {
   return (
     <Grid container spacing={2}>
       <Grid item xs={12}>
-        <Card><CardContent>
-          <Typography variant="h6" fontWeight={600} mb={2}>Welcome Message</Typography>
+        <GuildizerCollapsibleCard id="members.welcome.welcome_message" title="Welcome Message">
           <FormControlLabel
             control={<Switch checked={cfg.welcome_enabled} onChange={(e) => set({ welcome_enabled: e.target.checked })} />}
             label="Send a message when a member joins"
@@ -85,12 +85,11 @@ export default function SettingsTab({ guildId, channels = [], roles = [] }) {
             label="Auto-delete after seconds (0 = keep)"
             value={cfg.welcome2?.delete_after_seconds ?? 0} inputProps={{ min: 0, max: 3600 }}
             onChange={(e) => setW2({ delete_after_seconds: Number(e.target.value) })} />
-        </CardContent></Card>
+        </GuildizerCollapsibleCard>
       </Grid>
 
       <Grid item xs={12}>
-        <Card><CardContent>
-          <Typography variant="subtitle1" fontWeight={600} mb={1}>DM new members</Typography>
+        <GuildizerCollapsibleCard id="members.welcome.dm_new_members" title="DM new members">
           <FormControlLabel
             control={<Switch checked={!!cfg.welcome2?.dm_enabled} onChange={(e) => setW2({ dm_enabled: e.target.checked })} />}
             label="Send a private DM when a member joins"
@@ -99,12 +98,11 @@ export default function SettingsTab({ guildId, channels = [], roles = [] }) {
             value={cfg.welcome2?.dm_message || ''} inputProps={{ maxLength: 2000 }}
             onChange={(e) => setW2({ dm_message: e.target.value })}
             helperText="Placeholders: {user} {server} {member_count}. Members with DMs closed are skipped." />
-        </CardContent></Card>
+        </GuildizerCollapsibleCard>
       </Grid>
 
       <Grid item xs={12}>
-        <Card><CardContent>
-          <Typography variant="subtitle1" fontWeight={600} mb={1}>Leave message</Typography>
+        <GuildizerCollapsibleCard id="members.welcome.leave_message" title="Leave message">
           <FormControlLabel
             control={<Switch checked={cfg.leave_enabled} onChange={(e) => set({ leave_enabled: e.target.checked })} />}
             label="Send a message when a member leaves"
@@ -117,12 +115,11 @@ export default function SettingsTab({ guildId, channels = [], roles = [] }) {
           <TextField fullWidth multiline minRows={2} size="small" margin="normal" label="Message"
             value={cfg.leave_message} inputProps={{ maxLength: 2000 }}
             onChange={(e) => set({ leave_message: e.target.value })} />
-        </CardContent></Card>
+        </GuildizerCollapsibleCard>
       </Grid>
 
       <Grid item xs={12}>
-        <Card><CardContent>
-          <Typography variant="subtitle1" fontWeight={600} mb={1}>Auto-roles</Typography>
+        <GuildizerCollapsibleCard id="members.welcome.auto_roles" title="Auto-roles">
           <FormControlLabel
             control={<Switch checked={cfg.autorole_enabled} onChange={(e) => set({ autorole_enabled: e.target.checked })} />}
             label="Assign roles automatically on join"
@@ -140,7 +137,7 @@ export default function SettingsTab({ guildId, channels = [], roles = [] }) {
           <Typography variant="caption" color="text.disabled" display="block" mt={1}>
             Guildizer's role must sit above any role it assigns.
           </Typography>
-        </CardContent></Card>
+        </GuildizerCollapsibleCard>
       </Grid>
 
       {!sb && (

@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Box, Grid, Card, CardContent, Typography, TextField, Button, List, ListItem,
+  Box, Grid, Typography, TextField, Button, List, ListItem,
   ListItemText, IconButton, Switch, FormControlLabel, Alert, InputAdornment, Stack,
 } from '@mui/material';
 import { Edit, Delete } from '@mui/icons-material';
 import guildizerApi from '../../../services/guildizerApi';
+import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
 
 const BLANK = { name: '', description: 'Custom command', response: '', enabled: true };
 
@@ -48,8 +49,7 @@ export default function CommandsTab({ guildId }) {
   return (
     <Grid container spacing={2}>
       <Grid item xs={12}>
-        <Card variant="outlined"><CardContent>
-          <Typography variant="h6" fontWeight={600}>Slash commands</Typography>
+        <GuildizerCollapsibleCard id="settings.commands.slash_commands" title="Slash commands">
           <Typography variant="caption" color="text.secondary" display="block" mb={1}>
             Members run these as <code>/name</code>. Changes go live within ~30s.
           </Typography>
@@ -67,12 +67,11 @@ export default function CommandsTab({ guildId }) {
               </ListItem>
             ))}
           </List>
-        </CardContent></Card>
+        </GuildizerCollapsibleCard>
       </Grid>
 
       <Grid item xs={12}>
-        <Card variant="outlined"><CardContent>
-          <Typography variant="h6" fontWeight={600} mb={1}>{editingId ? 'Edit command' : 'New command'}</Typography>
+        <GuildizerCollapsibleCard id="settings.commands.command_editor" title={editingId ? 'Edit command' : 'New command'}>
           <Typography variant="body2" color="text.secondary" mb={2}>
             Define a name, description and the reply Guildizer sends when the command runs.
           </Typography>
@@ -98,7 +97,7 @@ export default function CommandsTab({ guildId }) {
             </Button>
             {editingId && <Button onClick={cancel} color="inherit">Cancel</Button>}
           </Box>
-        </CardContent></Card>
+        </GuildizerCollapsibleCard>
       </Grid>
     </Grid>
   );

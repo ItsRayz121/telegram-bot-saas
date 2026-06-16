@@ -45,6 +45,9 @@ class User(Base):
     # Notification preferences (in-app sound + per-category toggles + web push opt-in).
     # {"sound": bool, "push": bool, "categories": {"moderation": bool, ...}}
     notification_prefs = Column(JSON, nullable=True)
+    # Per-user UI prefs. {"cards": {"<card_id>": bool}} — open/closed state of each
+    # collapsible settings card. Absent/None = closed by default. See ui_prefs_api.py.
+    ui_preferences = Column(JSON, nullable=True)
 
     # Guilds this user personally owns (owner_id on Guild). Distinct from the
     # broader membership/manage relationship captured by UserGuild.

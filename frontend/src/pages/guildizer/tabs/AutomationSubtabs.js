@@ -6,10 +6,11 @@
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Box, CircularProgress, Alert, Card, CardContent, Typography, Switch,
+  Box, CircularProgress, Alert, Typography, Switch,
   FormControlLabel, TextField, MenuItem, Button, Snackbar,
 } from '@mui/material';
 import guildizerApi from '../../../services/guildizerApi';
+import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
 import { SchedulerCard, PollsCard, AutoResponsesCard } from './ContentTab';
 import { WorkflowsCard, MirrorsCard, WebhooksCard } from './AutomationTab';
 
@@ -58,8 +59,7 @@ function AutoPublishCard({ guildId, channels = [] }) {
 
   if (!cfg) return error ? <Alert severity="warning" sx={{ mt: 2 }}>{error}</Alert> : null;
   return (
-    <Card variant="outlined" sx={{ mt: 2 }}><CardContent>
-      <Typography variant="h6" fontWeight={600} mb={1}>📣 Auto-publish announcements</Typography>
+    <GuildizerCollapsibleCard id="automation.auto_publish_announcements" title="📣 Auto-publish announcements">
       <FormControlLabel control={<Switch checked={!!cfg.enabled} onChange={(e) => setCfg((c) => ({ ...c, enabled: e.target.checked }))} />}
         label="Publish posts in announcement channels to follower servers automatically" />
       <Typography variant="caption" color="text.secondary" display="block" mb={1}>
@@ -86,7 +86,7 @@ function AutoPublishCard({ guildId, channels = [] }) {
       </Box>
       <Snackbar open={saved} autoHideDuration={2000} onClose={() => setSaved(false)} message="Saved"
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }} />
-    </CardContent></Card>
+    </GuildizerCollapsibleCard>
   );
 }
 
@@ -134,8 +134,7 @@ export function ThreadsSubtab({ guildId, channels = [] }) {
 
   if (!cfg) return error ? <Alert severity="warning">{error}</Alert> : <Loading />;
   return (
-    <Card variant="outlined"><CardContent>
-      <Typography variant="h6" fontWeight={600} mb={1}>🧵 Thread auto-management</Typography>
+    <GuildizerCollapsibleCard id="automation.thread_auto_management" title="🧵 Thread auto-management">
       <FormControlLabel control={<Switch checked={!!cfg.enabled} onChange={(e) => setCfg((c) => ({ ...c, enabled: e.target.checked }))} />}
         label="Open a discussion thread on every new post in the channels below" />
       <Typography variant="caption" color="text.secondary" display="block" mb={1}>
@@ -162,7 +161,7 @@ export function ThreadsSubtab({ guildId, channels = [] }) {
       </Box>
       <Snackbar open={saved} autoHideDuration={2000} onClose={() => setSaved(false)} message="Saved"
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }} />
-    </CardContent></Card>
+    </GuildizerCollapsibleCard>
   );
 }
 

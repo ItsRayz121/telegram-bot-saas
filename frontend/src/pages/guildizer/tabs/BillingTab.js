@@ -5,6 +5,7 @@ import {
 } from '@mui/material';
 import { CheckCircle } from '@mui/icons-material';
 import guildizerApi from '../../../services/guildizerApi';
+import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
 
 export default function BillingTab({ guildId }) {
   const [data, setData] = useState(null);
@@ -110,8 +111,7 @@ function PromoCard({ guildId }) {
   }
 
   return (
-    <Card variant="outlined"><CardContent>
-      <Typography variant="h6" fontWeight={600} mb={1}>Promo code</Typography>
+    <GuildizerCollapsibleCard id="settings.billing.promo_code" title="Promo code">
       <Typography variant="body2" color="text.secondary" mb={2}>
         Have a promo code? Redeem it here to add Pro days to this server.
       </Typography>
@@ -120,7 +120,7 @@ function PromoCard({ guildId }) {
         <TextField size="small" fullWidth label="Code" value={code} onChange={(e) => setCode(e.target.value)} />
         <Button variant="contained" size="small" disabled={busy || !code.trim()} onClick={redeem}>Redeem</Button>
       </Stack>
-    </CardContent></Card>
+    </GuildizerCollapsibleCard>
   );
 }
 

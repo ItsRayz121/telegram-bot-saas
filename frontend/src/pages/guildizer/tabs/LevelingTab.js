@@ -6,6 +6,7 @@ import {
 } from '@mui/material';
 import { Add, Delete } from '@mui/icons-material';
 import guildizerApi from '../../../services/guildizerApi';
+import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
 import { useSaveBar } from './saveBar';
 
 const TEXT_TYPES = new Set([0, 5]);
@@ -60,8 +61,7 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
   return (
     <Grid container spacing={2}>
       <Grid item xs={12}>
-        <Card><CardContent>
-          <Typography variant="h6" fontWeight={600} mb={2}>XP &amp; Level System</Typography>
+        <GuildizerCollapsibleCard id="members.leveling.xp_level_system" title="XP & Level System">
           <FormControlLabel control={<Switch checked={cfg.levels_enabled} onChange={(e) => set({ levels_enabled: e.target.checked })} />} label="Award XP for chatting (100 XP per level)" />
           <TextField type="number" size="small" margin="dense" fullWidth label="XP per message"
             value={cfg.xp_per_message} inputProps={{ min: 0, max: 1000 }} onChange={(e) => set({ xp_per_message: Number(e.target.value) })} />
@@ -91,12 +91,11 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
             value={cfg.levelup_message} inputProps={{ maxLength: 1000 }} onChange={(e) => set({ levelup_message: e.target.value })}
             helperText="Placeholders: {user} {username} {level}" />
           {numL2('Delete level-up message after (seconds, 0 = keep)', 'levelup_delete_after_seconds', 86400)}
-        </CardContent></Card>
+        </GuildizerCollapsibleCard>
       </Grid>
 
       <Grid item xs={12}>
-        <Card><CardContent>
-          <Typography variant="subtitle1" fontWeight={600} mb={1}>XP Penalties (Moderation Actions)</Typography>
+        <GuildizerCollapsibleCard id="members.leveling.xp_penalties" title="XP Penalties (Moderation Actions)">
           <Typography variant="caption" color="text.secondary" display="block" mb={1}>
             XP removed when a member is moderated (XP never drops below 0). 0 disables a penalty.
           </Typography>
@@ -104,13 +103,12 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
           {numL2('Timeout penalty', 'penalty_timeout', 10000)}
           {numL2('Kick penalty', 'penalty_kick', 10000)}
           {numL2('Ban penalty', 'penalty_ban', 10000)}
-        </CardContent></Card>
+        </GuildizerCollapsibleCard>
       </Grid>
 
       {/* Rank Card Style sits before Level → role rewards to match Telegizer's XP card order. */}
       <Grid item xs={12}>
-        <Card><CardContent>
-          <Typography variant="subtitle1" fontWeight={600} mb={1}>🏅 Rank Card Style</Typography>
+        <GuildizerCollapsibleCard id="members.leveling.rank_card_style" title="🏅 Rank Card Style">
           <Typography variant="caption" color="text.secondary" display="block" mb={1.5}>
             Colours for the image shown by <code>/rank</code> — a gradient background and an accent XP bar.
           </Typography>
@@ -128,12 +126,11 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
               </Grid>
             ))}
           </Grid>
-        </CardContent></Card>
+        </GuildizerCollapsibleCard>
       </Grid>
 
       <Grid item xs={12}>
-        <Card><CardContent>
-          <Typography variant="subtitle1" fontWeight={600} mb={1}>Level → role rewards</Typography>
+        <GuildizerCollapsibleCard id="members.leveling.level_role_rewards" title="Level → role rewards">
           <Typography variant="caption" color="text.secondary" display="block" mb={1}>
             Grant a role when a member reaches a level. Guildizer's role must sit above any role it assigns.
           </Typography>
@@ -159,12 +156,11 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
             onClick={() => setL2({ role_rewards: [...rewards, { level: (rewards[rewards.length - 1]?.level || 0) + 5, role_id: assignableRoles[0]?.id }] })}>
             Add reward
           </Button>
-        </CardContent></Card>
+        </GuildizerCollapsibleCard>
       </Grid>
 
       <Grid item xs={12}>
-        <Card><CardContent>
-          <Typography variant="subtitle1" fontWeight={600} mb={1}>🎙️ Voice</Typography>
+        <GuildizerCollapsibleCard id="members.leveling.voice" title="🎙️ Voice">
           <Typography variant="caption" color="text.secondary" display="block" mb={1}>
             Voice XP is granted every 5 minutes to members actively in voice (AFK channel,
             deafened members and near-empty channels don't count). Needs XP enabled above.
@@ -193,7 +189,7 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
           <TextField type="number" size="small" margin="dense" fullWidth label="Room user limit (0 = unlimited)"
             value={cfg.voice?.j2c_user_limit ?? 0} inputProps={{ min: 0, max: 99 }}
             onChange={(e) => setVoice({ j2c_user_limit: Number(e.target.value) })} />
-        </CardContent></Card>
+        </GuildizerCollapsibleCard>
       </Grid>
 
       <Grid item xs={12}>

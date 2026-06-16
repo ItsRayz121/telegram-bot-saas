@@ -10,6 +10,7 @@ import {
 } from '@mui/material';
 import { RocketLaunch, Send, DeleteOutline } from '@mui/icons-material';
 import guildizerApi from '../../../services/guildizerApi';
+import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
 
 const TEXT_TYPES = new Set([0, 5]);
 const STATUS_COLOR = { draft: 'default', active: 'success', paused: 'warning', closed: 'default' };
@@ -78,8 +79,7 @@ export function RaidsSubtab({ guildId, channels = [] }) {
       {error && <Grid item xs={12}><Alert severity="warning" onClose={() => setError(null)}>{error}</Alert></Grid>}
 
       <Grid item xs={12}>
-        <Card variant="outlined"><CardContent>
-          <Typography variant="h6" fontWeight={600} mb={1}>Launch a raid</Typography>
+        <GuildizerCollapsibleCard id="gz.engagement.launch_a_raid" title="Launch a raid">
           <Typography variant="caption" color="text.secondary" display="block" mb={1}>
             Rally the server on a post — members who take part earn XP. Announced in the chosen channel.
           </Typography>
@@ -105,7 +105,7 @@ export function RaidsSubtab({ guildId, channels = [] }) {
             disabled={busy || !title.trim() || !/^https?:\/\//.test(url)} onClick={createRaid}>
             Launch raid
           </Button>
-        </CardContent></Card>
+        </GuildizerCollapsibleCard>
       </Grid>
 
       <Grid item xs={12}>
@@ -164,8 +164,7 @@ export function InviteLinksSubtab({ guildId }) {
       {error && <Grid item xs={12}><Alert severity="warning" onClose={() => setError(null)}>{error}</Alert></Grid>}
 
       <Grid item xs={12}>
-        <Card variant="outlined"><CardContent>
-          <Typography variant="h6" fontWeight={600} mb={1}>Referral rewards</Typography>
+        <GuildizerCollapsibleCard id="gz.engagement.referral_rewards" title="Referral rewards">
           <Typography variant="caption" color="text.secondary" display="block" mb={1}>
             The bot tracks which invite each member joined through. Members create their own tracked
             link with /invitelink.
@@ -175,7 +174,7 @@ export function InviteLinksSubtab({ guildId }) {
               inputProps={{ min: 0, max: 1000 }} onChange={(e) => setXp(Number(e.target.value))} sx={{ flex: 1 }} />
             <Button variant="contained" size="small" disabled={busy} onClick={saveXp}>Save</Button>
           </Stack>
-        </CardContent></Card>
+        </GuildizerCollapsibleCard>
       </Grid>
 
       <Grid item xs={12}>
@@ -491,8 +490,7 @@ export function EventsSubtab({ guildId, channels = [] }) {
       {error && <Grid item xs={12}><Alert severity="warning" onClose={() => setError(null)}>{error}</Alert></Grid>}
 
       <Grid item xs={12}>
-        <Card variant="outlined"><CardContent>
-          <Typography variant="h6" fontWeight={600} mb={1}>📅 New server event</Typography>
+        <GuildizerCollapsibleCard id="gz.engagement.new_server_event" title="📅 New server event">
           <Typography variant="caption" color="text.secondary" display="block" mb={1}>
             Creates a native Discord scheduled event members can mark interest in.
             The bot needs the Manage Events permission.
@@ -536,7 +534,7 @@ export function EventsSubtab({ guildId, channels = [] }) {
             disabled={busy || !formOk} onClick={add}>
             Create event
           </Button>
-        </CardContent></Card>
+        </GuildizerCollapsibleCard>
       </Grid>
 
       <Grid item xs={12}>

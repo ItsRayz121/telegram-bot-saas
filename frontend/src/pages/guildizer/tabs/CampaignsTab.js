@@ -6,6 +6,7 @@ import {
 } from '@mui/material';
 import { Add, Delete, ArrowBack } from '@mui/icons-material';
 import guildizerApi from '../../../services/guildizerApi';
+import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
 
 const TEXT_TYPES = new Set([0, 5]);
 const TYPES = ['proof_collection', 'content_submission', 'social_task', 'raid'];
@@ -222,8 +223,7 @@ function CampaignDetail({ guildId, campaignId, channels, plan, onBack }) {
         </Grid>
 
         <Grid item xs={12}>
-          <Card variant="outlined"><CardContent>
-            <Typography variant="h6" fontWeight={600} mb={1}>Tasks</Typography>
+          <GuildizerCollapsibleCard id="gz.campaigns.tasks" title="Tasks">
             <Typography variant="body2" color="text.secondary" mb={2}>Break the campaign into individual tasks, each with its own XP reward and verification.</Typography>
             {c.tasks.length === 0 && <Typography variant="body2" color="text.secondary">No tasks — single-task campaign.</Typography>}
             <List dense>
@@ -241,7 +241,7 @@ function CampaignDetail({ guildId, campaignId, channels, plan, onBack }) {
             </Grid>
             <TextField size="small" fullWidth margin="dense" label="Task link (optional)" placeholder="https://…" value={task.task_url} onChange={(e) => setTask({ ...task, task_url: e.target.value })} />
             <Button size="small" variant="outlined" onClick={addTask} disabled={!task.title.trim()}>Add task</Button>
-          </CardContent></Card>
+          </GuildizerCollapsibleCard>
         </Grid>
 
         <Grid item xs={12}>
@@ -318,8 +318,7 @@ function FieldsCard({ guildId, campaignId }) {
   }, [campaignId]);
 
   return (
-    <Card variant="outlined"><CardContent>
-      <Typography variant="h6" fontWeight={600} mb={1}>Proof form fields</Typography>
+    <GuildizerCollapsibleCard id="gz.campaigns.proof_form_fields" title="Proof form fields">
       <Typography variant="caption" color="text.secondary" display="block" mb={1}>
         Extra inputs shown in the proof popup (max 4) — e.g. wallet address, username on X.
       </Typography>
@@ -345,6 +344,6 @@ function FieldsCard({ guildId, campaignId }) {
         ))}
         {fields.length === 0 && <Typography variant="body2" color="text.secondary">No extra fields.</Typography>}
       </List>
-    </CardContent></Card>
+    </GuildizerCollapsibleCard>
   );
 }

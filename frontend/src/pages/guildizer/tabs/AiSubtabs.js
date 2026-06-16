@@ -7,10 +7,11 @@
  */
 import React, { useEffect, useState } from 'react';
 import {
-  Grid, Card, CardContent, Typography, TextField, MenuItem, Button, Switch,
+  Grid, Typography, TextField, MenuItem, Button, Switch,
   FormControlLabel, Alert, Snackbar,
 } from '@mui/material';
 import guildizerApi from '../../../services/guildizerApi';
+import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
 import KnowledgeTab from './KnowledgeTab';
 
 export function KnowledgeBaseSubtab({ guildId }) {
@@ -53,8 +54,7 @@ function KbRepliesCard({ guildId }) {
   if (!cfg) return null;
 
   return (
-    <Card variant="outlined"><CardContent>
-      <Typography variant="h6" fontWeight={600} mb={1}>AI reply behaviour</Typography>
+    <GuildizerCollapsibleCard id="ai.ai_reply_behaviour" title="AI reply behaviour">
       <Typography variant="caption" color="text.secondary" display="block" mb={1}>
         Controls how the bot answers from the knowledge base. /ask always works; automatic
         replies follow these rules (one auto-reply per member per 30 seconds).
@@ -103,6 +103,6 @@ function KbRepliesCard({ guildId }) {
       </Button>
       <Snackbar open={saved} autoHideDuration={2500} onClose={() => setSaved(false)} message="Saved"
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }} />
-    </CardContent></Card>
+    </GuildizerCollapsibleCard>
   );
 }

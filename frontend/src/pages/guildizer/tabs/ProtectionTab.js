@@ -3,10 +3,11 @@ import {
   Box, Grid, Card, CardContent, Typography, Switch, FormControlLabel, TextField,
   MenuItem, Button, Chip, CircularProgress, Alert, Snackbar, List, ListItem,
   ListItemText, Stack, IconButton, Checkbox, Divider, FormControl, InputLabel,
-  Select, Accordion, AccordionSummary, AccordionDetails,
+  Select,
 } from '@mui/material';
-import { Delete, Add, ExpandMore } from '@mui/icons-material';
+import { Delete, Add } from '@mui/icons-material';
 import guildizerApi from '../../../services/guildizerApi';
+import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
 import { useSaveBar } from './saveBar';
 
 const TEXT_TYPES = new Set([0, 5]);
@@ -188,11 +189,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
       {section === 'automod' && (
         <>
           {/* 1 ── AutoMod / Core Rules ─────────────────────────────────────── */}
-          <Card sx={{ mb: 2 }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <Typography variant="h6" fontWeight={600}>AutoMod</Typography>
-              </Box>
+          <GuildizerCollapsibleCard id="gz.moderation.automod" title="AutoMod" sx={{ mb: 2 }}>
               <FormControlLabel
                 control={<Switch checked={!!cfg.cf_enabled} onChange={(e) => set({ cf_enabled: e.target.checked })} />}
                 label="Enable content filtering globally"
@@ -252,13 +249,10 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                       : 'Not synced yet.'}
                 </Typography>
               )}
-            </CardContent>
-          </Card>
+          </GuildizerCollapsibleCard>
 
           {/* 1b ── Anti-Spam / Flood ───────────────────────────────────────── */}
-          <Card sx={{ mb: 2 }}>
-            <CardContent>
-              <Typography variant="h6" fontWeight={600} mb={1}>Anti-Spam / Flood</Typography>
+          <GuildizerCollapsibleCard id="gz.moderation.anti_spam_flood" title="Anti-Spam / Flood" sx={{ mb: 2 }}>
               <Typography variant="body2" color="text.secondary" mb={2}>
                 Catches a single member firing off messages too fast. (Coordinated multi-user
                 raids are handled separately under <b>Behavior → Raid Protection</b>.)
@@ -297,15 +291,10 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                   )}
                 </Grid>
               )}
-            </CardContent>
-          </Card>
+          </GuildizerCollapsibleCard>
 
           {/* 2 ── Bot Protection ───────────────────────────────────────────── */}
-          <Card sx={{ mb: 2 }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                <Typography variant="h6" fontWeight={600}>🛡️ Bot Protection</Typography>
-              </Box>
+          <GuildizerCollapsibleCard id="gz.moderation.bot_protection" title="🛡️ Bot Protection" sx={{ mb: 2 }}>
               <Typography variant="body2" color="text.secondary" mb={2}>
                 Guards against unknown bots being added to your server. New bots can be kicked
                 on join or simply flagged to admins — the alert message has a one-click Trust button.
@@ -332,15 +321,10 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
               <TextField size="small" fullWidth label="Trusted bot IDs" placeholder="123456789, 987654321"
                 value={(cfg.bot_policy?.trusted_bot_ids || []).join(', ')}
                 onChange={(e) => setBp({ trusted_bot_ids: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })} />
-            </CardContent>
-          </Card>
+          </GuildizerCollapsibleCard>
 
           {/* 3 ── Raid Mode + Emergency lockdown ───────────────────────────── */}
-          <Card sx={{ mb: 2 }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                <Typography variant="h6" fontWeight={600}>🚨 Raid Mode</Typography>
-              </Box>
+          <GuildizerCollapsibleCard id="gz.moderation.raid_mode" title="🚨 Raid Mode" sx={{ mb: 2 }}>
               <Typography variant="body2" color="text.secondary" mb={2}>
                 Detects <b>coordinated</b> spam — many distinct accounts tripping the filters or
                 posting identical text in a short burst. It does <b>not</b> lock on raw join rate.
@@ -389,15 +373,10 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                   </Stack>
                 </Box>
               )}
-            </CardContent>
-          </Card>
+          </GuildizerCollapsibleCard>
 
           {/* 4 ── Anti-nuke guard (Discord-native extra) ───────────────────── */}
-          <Card sx={{ mb: 2 }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                <Typography variant="h6" fontWeight={600}>🧨 Anti-Nuke Guard</Typography>
-              </Box>
+          <GuildizerCollapsibleCard id="gz.moderation.anti_nuke_guard" title="🧨 Anti-Nuke Guard" sx={{ mb: 2 }}>
               <Typography variant="body2" color="text.secondary" mb={2}>
                 Contains a compromised admin account. Counts destructive actions per admin from the
                 audit log; crossing a threshold inside the window triggers the response below. Needs
@@ -436,8 +415,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                 value={(cfg.anti_nuke?.whitelist_user_ids || []).join(', ')}
                 onChange={(e) => setAn({ whitelist_user_ids: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })}
                 helperText="Comma-separated user IDs the guard never acts on. The server owner and the bot are always exempt." />
-            </CardContent>
-          </Card>
+          </GuildizerCollapsibleCard>
 
           {/* 5 ── Protection Activity feed ─────────────────────────────────── */}
           <Card sx={{ mb: 2 }}>
@@ -483,17 +461,14 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
           </Card>
 
           {/* 6 ── Smart Moderation — 3-layer system (Pro) ─────────────────── */}
-          <Card variant="outlined" sx={{ mt: 2, mb: 2 }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                <Typography variant="h6" fontWeight={600}>Smart Moderation</Typography>
+          <GuildizerCollapsibleCard id="gz.moderation.smart_moderation" title="Smart Moderation" badge={<ProBadge />} sx={{ mt: 2, mb: 2 }}>
+              <Box sx={{ mb: 1 }}>
                 <Chip
                   label={am.smart_mod?.ai_enabled ? 'AI Active' : 'Rule-based · AI optional'}
                   size="small"
                   color={am.smart_mod?.ai_enabled ? 'primary' : 'default'}
                   variant="outlined"
                 />
-                <ProBadge />
               </Box>
               <Typography variant="body2" color="text.secondary" mb={2}>
                 Three-layer system: fast rules → obfuscated-URL detection → optional AI relevance
@@ -569,18 +544,10 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                 value={(am.smart_mod?.trusted_user_ids || []).join(', ')}
                 onChange={(e) => setAm('smart_mod', { trusted_user_ids: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })}
                 helperText="Comma-separated Discord user IDs whose messages skip all smart-moderation checks." />
-            </CardContent>
-          </Card>
+          </GuildizerCollapsibleCard>
 
           {/* 7 ── Extended Rules accordion (Media & Content) ───────────────── */}
-          <Accordion>
-            <AccordionSummary expandIcon={<ExpandMore />}>
-              <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                <Typography fontWeight={600}>Extended Rules — Media &amp; Content</Typography>
-                <ProBadge />
-              </Box>
-            </AccordionSummary>
-            <AccordionDetails>
+          <GuildizerCollapsibleCard id="gz.moderation.extended_rules_media_content" title="Extended Rules — Media &amp; Content" badge={<ProBadge />}>
               {/* Media types — share one action; toggled individually */}
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, mb: 1 }}>
                 <Typography variant="subtitle2" fontWeight={600}>Media types</Typography>
@@ -646,18 +613,10 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                   );
                 })}
               </Grid>
-            </AccordionDetails>
-          </Accordion>
+          </GuildizerCollapsibleCard>
 
           {/* 8 ── Language Filter accordion ────────────────────────────────── */}
-          <Accordion sx={{ mt: 1 }}>
-            <AccordionSummary expandIcon={<ExpandMore />}>
-              <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                <Typography fontWeight={600}>Language Filter</Typography>
-                <ProBadge />
-              </Box>
-            </AccordionSummary>
-            <AccordionDetails>
+          <GuildizerCollapsibleCard id="gz.moderation.language_filter" title="Language Filter" badge={<ProBadge />} sx={{ mt: 1 }}>
               <FormControlLabel
                 control={<Switch checked={!!am.language_filter?.enabled} onChange={(e) => setAm('language_filter', { enabled: e.target.checked })} />}
                 label="Enable language filter"
@@ -680,13 +639,10 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                   );
                 })}
               </Grid>
-            </AccordionDetails>
-          </Accordion>
+          </GuildizerCollapsibleCard>
 
           {/* 9 ── Emoji Reactions ──────────────────────────────────────────── */}
-          <Card variant="outlined" sx={{ mt: 2, mb: 2 }}>
-            <CardContent>
-              <Typography variant="h6" fontWeight={600} mb={1}>Emoji Reactions</Typography>
+          <GuildizerCollapsibleCard id="gz.moderation.emoji_reactions" title="Emoji Reactions" sx={{ mt: 2, mb: 2 }}>
               <Typography variant="body2" color="text.secondary" mb={2}>
                 The bot reacts to messages to keep the community warm. Admin messages always get 👍.
                 Member messages get ❤️ 🔥 😂 👍 🎉 based on tone, with the cooldown below.
@@ -708,13 +664,10 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
               <TextField type="number" size="small" margin="dense" fullWidth label="Cooldown per member (minutes)" sx={{ mt: 1 }}
                 value={cfg.emoji_reactions?.cooldown_minutes ?? 10} inputProps={{ min: 1, max: 1440 }}
                 onChange={(e) => setEr({ cooldown_minutes: Number(e.target.value) })} />
-            </CardContent>
-          </Card>
+          </GuildizerCollapsibleCard>
 
           {/* 9b ── Social Replies ──────────────────────────────────────────── */}
-          <Card variant="outlined" sx={{ mt: 2, mb: 2 }}>
-            <CardContent>
-              <Typography variant="h6" fontWeight={600} mb={1}>Social Replies</Typography>
+          <GuildizerCollapsibleCard id="gz.moderation.social_replies" title="Social Replies" sx={{ mt: 2, mb: 2 }}>
               <Typography variant="body2" color="text.secondary" mb={2}>
                 The bot replies warmly when a member says thanks ("that helped!", "you rock").
                 No AI cost — friendly canned responses, with a per-member cooldown.
@@ -756,13 +709,10 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                   </Grid>
                 </>
               )}
-            </CardContent>
-          </Card>
+          </GuildizerCollapsibleCard>
 
           {/* 10 ── Command Permissions ─────────────────────────────────────── */}
-          <Card sx={{ mt: 2 }}>
-            <CardContent>
-              <Typography variant="subtitle1" fontWeight={600} mb={0.5}>Command Permissions</Typography>
+          <GuildizerCollapsibleCard id="gz.moderation.command_permissions" title="Command Permissions" sx={{ mt: 2 }}>
               <Typography variant="body2" color="text.secondary" mb={2}>
                 Control who can use moderation commands. Default is admins only.
               </Typography>
@@ -802,8 +752,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                 Discord's native per-role permissions (Server Settings → Integrations → Guildizer),
                 which also control whether the command is visible to members.
               </Typography>
-            </CardContent>
-          </Card>
+          </GuildizerCollapsibleCard>
         </>
       )}
 
@@ -811,8 +760,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
       {section === 'behavior' && (
         <Grid container spacing={2}>
           <Grid item xs={12}>
-            <Card variant="outlined"><CardContent>
-              <Typography variant="h6" fontWeight={600} mb={1}>Warning Thresholds</Typography>
+            <GuildizerCollapsibleCard id="gz.moderation.warning_thresholds" title="Warning Thresholds">
               <Typography variant="caption" color="text.secondary" display="block" mb={1}>
                 /warn and automod warnings count up; at the limit the action fires and the count resets.
               </Typography>
@@ -832,13 +780,12 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                 label="Count warnings from the last N hours (0 = all time)"
                 value={cfg.warnings?.window_hours ?? 0} inputProps={{ min: 0, max: 720 }}
                 onChange={(e) => setW({ window_hours: Number(e.target.value) })} />
-            </CardContent></Card>
+            </GuildizerCollapsibleCard>
           </Grid>
 
           {/* Warning Escalation sits right after Thresholds to match Telegizer's Behavior order. */}
           <Grid item xs={12}>
-            <Card variant="outlined"><CardContent>
-              <Typography variant="h6" fontWeight={600} mb={1}>Warning Escalation</Typography>
+            <GuildizerCollapsibleCard id="gz.moderation.warning_escalation" title="Warning Escalation">
               <FormControlLabel control={<Switch checked={!!cfg.warn_ladder?.enabled} onChange={(e) => setWl({ enabled: e.target.checked })} />} label="Enable an escalating punishment ladder" />
               <Typography variant="caption" color="text.secondary" display="block" mb={1}>
                 Each step fires when a member reaches that warning count (counted within the step's window). Warnings aren't reset between steps, so higher steps stay reachable.
@@ -870,12 +817,11 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                 onClick={() => setWl({ steps: [...(cfg.warn_ladder?.steps || []), { at: (cfg.warn_ladder?.steps?.length || 0) + 2, action: 'timeout', minutes: 30, window_hours: 0 }] })}>
                 Add step
               </Button>
-            </CardContent></Card>
+            </GuildizerCollapsibleCard>
           </Grid>
 
           <Grid item xs={12}>
-            <Card variant="outlined"><CardContent>
-              <Typography variant="h6" fontWeight={600} mb={1}>Auto clean</Typography>
+            <GuildizerCollapsibleCard id="gz.moderation.auto_clean" title="Auto clean">
               <FormControlLabel control={<Switch checked={!!cfg.auto_clean?.join_messages} onChange={(e) => setAc({ join_messages: e.target.checked })} />} label={'Auto-delete "X joined the server" messages'} />
               <FormControlLabel control={<Switch checked={!!cfg.auto_clean?.boost_messages} onChange={(e) => setAc({ boost_messages: e.target.checked })} />} label={'Auto-delete server-boost messages'} />
               <FormControlLabel control={<Switch checked={!!cfg.auto_clean?.pin_notifications} onChange={(e) => setAc({ pin_notifications: e.target.checked })} />} label={'Auto-delete "X pinned a message" notices'} />
@@ -887,12 +833,11 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                 label="Delete mod-action messages after (seconds, 0 = never)"
                 value={cfg.auto_clean?.action_messages_seconds ?? 0} inputProps={{ min: 0, max: 86400 }}
                 onChange={(e) => setAc({ action_messages_seconds: Number(e.target.value) })} />
-            </CardContent></Card>
+            </GuildizerCollapsibleCard>
           </Grid>
 
           <Grid item xs={12}>
-            <Card variant="outlined"><CardContent>
-              <Typography variant="h6" fontWeight={600} mb={1}>Mod-action log</Typography>
+            <GuildizerCollapsibleCard id="gz.moderation.mod_action_log" title="Mod-action log">
               <Typography variant="caption" color="text.secondary" display="block" mb={1}>
                 Mirror every moderation action — automod removals plus /warn, /mute, /kick, /ban,
                 /tempban, /unban and /purge — into a private channel as an embed.
@@ -903,12 +848,11 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
               />
               {cfg.mod_log?.enabled && channelSelect('Log channel', cfg.mod_log?.channel_id,
                 (v) => setMl({ channel_id: v }), '— pick a channel —')}
-            </CardContent></Card>
+            </GuildizerCollapsibleCard>
           </Grid>
 
           <Grid item xs={12}>
-            <Card variant="outlined"><CardContent>
-              <Typography variant="h6" fontWeight={600} mb={1}>Critical alerts</Typography>
+            <GuildizerCollapsibleCard id="gz.moderation.critical_alerts" title="Critical alerts">
               <Typography variant="caption" color="text.secondary" display="block" mb={1}>
                 One channel for the high-signal safety events, so you don't have to watch the full
                 mod-log. Pick which events should ping here.
@@ -935,7 +879,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                   </Box>
                 </>
               )}
-            </CardContent></Card>
+            </GuildizerCollapsibleCard>
           </Grid>
 
           <Grid item xs={12}>
@@ -962,8 +906,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
       {section === 'reports' && (
         <Grid container spacing={2}>
           <Grid item xs={12}>
-            <Card variant="outlined"><CardContent>
-              <Typography variant="h6" fontWeight={600} mb={1}>Reports Settings</Typography>
+            <GuildizerCollapsibleCard id="gz.moderation.reports_settings" title="Reports Settings">
               <Typography variant="caption" color="text.secondary" display="block" mb={1}>
                 Members use /report to flag messages or members. Reports land here and (optionally) in a channel.
               </Typography>
@@ -975,7 +918,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
               {cfg.reports?.enabled !== false &&
                 channelSelect('Alert channel for new reports', cfg.reports?.alert_channel_id,
                   (v) => setRp({ alert_channel_id: v }), '— dashboard only —')}
-            </CardContent></Card>
+            </GuildizerCollapsibleCard>
           </Grid>
 
           <Grid item xs={12}>
@@ -1007,8 +950,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
       {section === 'verification' && (
         <Grid container spacing={2}>
           <Grid item xs={12}>
-            <Card variant="outlined"><CardContent>
-              <Typography variant="h6" fontWeight={600} mb={1}>Join verification (captcha)</Typography>
+            <GuildizerCollapsibleCard id="gz.members.join_verification_captcha" title="Join verification (captcha)">
               <FormControlLabel control={<Switch checked={!!cfg.verification?.enabled} onChange={(e) => setV({ enabled: e.target.checked })} />} label="Require new members to verify before they can see the server" />
               <Typography variant="caption" color="text.secondary" display="block" mb={1}>
                 On first use the bot creates an Unverified role and a #verify channel, and hides
@@ -1041,15 +983,14 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                 control={<Switch checked={cfg.verification?.auto_delete_on_timeout !== false}
                   onChange={(e) => setV({ auto_delete_on_timeout: e.target.checked })} />}
                 label="Auto-delete the challenge message on timeout" />
-            </CardContent></Card>
+            </GuildizerCollapsibleCard>
           </Grid>
 
           <Grid item xs={12}>
-            <Card variant="outlined"><CardContent>
-              <Typography variant="h6" fontWeight={600} mb={1}>Join gate</Typography>
+            <GuildizerCollapsibleCard id="gz.members.join_gate" title="Join gate">
               {num('Minimum account age (days, 0 = off)', 'jg_min_account_age_days', 0, 365)}
               <Typography variant="caption" color="text.disabled">Newer accounts are kicked on join. Useful during raids.</Typography>
-            </CardContent></Card>
+            </GuildizerCollapsibleCard>
           </Grid>
         </Grid>
       )}
@@ -1058,8 +999,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
       {section === 'escalation' && (
         <Grid container spacing={2}>
           <Grid item xs={12}>
-            <Card variant="outlined"><CardContent>
-              <Typography variant="h6" fontWeight={600} mb={1}>Escalation alerts</Typography>
+            <GuildizerCollapsibleCard id="gz.moderation.escalation_alerts" title="Escalation alerts">
               <FormControlLabel control={<Switch checked={!!cfg.escalation?.enabled} onChange={(e) => setEsc({ enabled: e.target.checked })} />} label="Alert admins when members sound frustrated" />
               <TextField size="small" margin="dense" fullWidth label="Trigger keywords"
                 placeholder="refund, scam, not working"
@@ -1082,7 +1022,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                     })} />
                 )} label={<Typography variant="body2">{label}</Typography>} />
               ))}
-            </CardContent></Card>
+            </GuildizerCollapsibleCard>
           </Grid>
         </Grid>
       )}

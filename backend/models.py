@@ -137,6 +137,10 @@ class User(db.Model):
     # JSON shape: {"sound": bool, "push": bool, "categories": {"billing": bool, ...}}
     # None = all defaults on. See routes/notifications.py NOTIF_PREF_DEFAULTS.
     notification_prefs = db.Column(db.JSON, nullable=True)
+    # Per-user UI preferences. JSON shape: {"cards": {"<card_id>": bool, ...}}
+    # where each card_id maps to whether that collapsible settings card is open.
+    # Absent/None = closed by default. See routes/ui_prefs.py.
+    ui_preferences = db.Column(db.JSON, nullable=True)
 
     bots = db.relationship("Bot", backref="owner", lazy=True, cascade="all, delete-orphan")
 

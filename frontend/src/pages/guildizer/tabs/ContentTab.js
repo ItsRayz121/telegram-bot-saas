@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Box, Grid, Card, CardContent, Typography, TextField, MenuItem, Button, Chip,
+  Box, Grid, Typography, TextField, MenuItem, Button, Chip,
   CircularProgress, Alert, List, ListItem, ListItemText, Stack, Switch,
   FormControlLabel, IconButton, Tooltip,
 } from '@mui/material';
 import { Delete, Add } from '@mui/icons-material';
 import guildizerApi from '../../../services/guildizerApi';
+import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
 
 const TEXT_TYPES = new Set([0, 5]);
 const STATUS_COLOR = { pending: 'default', open: 'info', ended: 'success', failed: 'error' };
@@ -77,8 +78,7 @@ export function DigestCard({ guildId, channels }) {
   const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   const cadence = cfg.cadence || 'daily';
   return (
-    <Card variant="outlined"><CardContent>
-      <Typography variant="h6" fontWeight={600} mb={1}>Activity digest</Typography>
+    <GuildizerCollapsibleCard id="members.content.activity_digest" title="Activity digest">
       <Typography variant="caption" color="text.secondary" display="block" mb={1}>
         Posts an activity summary on your chosen cadence (AI-polished when an AI key is configured).
       </Typography>
@@ -103,7 +103,7 @@ export function DigestCard({ guildId, channels }) {
       <TextField type="number" fullWidth size="small" margin="dense" label="Post after (UTC hour)"
         value={cfg.hour_utc ?? 18} inputProps={{ min: 0, max: 23 }}
         onChange={(e) => save({ hour_utc: Number(e.target.value) })} />
-    </CardContent></Card>
+    </GuildizerCollapsibleCard>
   );
 }
 
@@ -137,8 +137,7 @@ export function SchedulerCard({ guildId, messages, channels, onChanged }) {
   }
 
   return (
-    <Card variant="outlined"><CardContent>
-      <Typography variant="h6" fontWeight={600} mb={1}>Scheduled messages</Typography>
+    <GuildizerCollapsibleCard id="members.content.scheduled_messages" title="Scheduled messages">
       <Typography variant="body2" color="text.secondary" mb={2}>
         Queue one-off or recurring posts to a channel, optionally with a rich embed.
       </Typography>
@@ -200,7 +199,7 @@ export function SchedulerCard({ guildId, messages, channels, onChanged }) {
         ))}
         {messages.length === 0 && <Typography variant="body2" color="text.secondary">Nothing scheduled.</Typography>}
       </List>
-    </CardContent></Card>
+    </GuildizerCollapsibleCard>
   );
 }
 
@@ -226,8 +225,7 @@ export function PollsCard({ guildId, polls, channels, onChanged }) {
   }
 
   return (
-    <Card variant="outlined"><CardContent>
-      <Typography variant="h6" fontWeight={600} mb={1}>Polls (native)</Typography>
+    <GuildizerCollapsibleCard id="members.content.polls_native" title="Polls (native)">
       <Typography variant="body2" color="text.secondary" mb={2}>
         Post a native Discord poll with timed voting and optional multiple choice.
       </Typography>
@@ -270,7 +268,7 @@ export function PollsCard({ guildId, polls, channels, onChanged }) {
         ))}
         {polls.length === 0 && <Typography variant="body2" color="text.secondary">No polls yet.</Typography>}
       </List>
-    </CardContent></Card>
+    </GuildizerCollapsibleCard>
   );
 }
 
@@ -294,8 +292,7 @@ export function AutoResponsesCard({ guildId, responses, onChanged }) {
   }
 
   return (
-    <Card variant="outlined"><CardContent>
-      <Typography variant="h6" fontWeight={600} mb={1}>Auto-responses</Typography>
+    <GuildizerCollapsibleCard id="members.content.auto_responses" title="Auto-responses">
       <Typography variant="body2" color="text.secondary" mb={2}>
         Automatically reply when a message matches a trigger phrase. Flag one as
         <b> AI knowledge</b> and the /ask AI can also answer related questions from it.
@@ -344,6 +341,6 @@ export function AutoResponsesCard({ guildId, responses, onChanged }) {
         ))}
         {responses.length === 0 && <Typography variant="body2" color="text.secondary">No auto-responses yet.</Typography>}
       </List>
-    </CardContent></Card>
+    </GuildizerCollapsibleCard>
   );
 }

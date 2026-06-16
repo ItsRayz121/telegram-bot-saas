@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Box, Card, CardContent, Typography, TextField, CircularProgress, Alert,
+  Box, Typography, TextField, CircularProgress, Alert,
   List, ListItem, ListItemText, Stack, Switch, IconButton, Button, Collapse,
   Chip, LinearProgress, Divider,
 } from '@mui/material';
@@ -8,6 +8,7 @@ import {
   Delete, Add, ExpandMore, ExpandLess, UploadFile, Description,
 } from '@mui/icons-material';
 import guildizerApi from '../../../services/guildizerApi';
+import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
 
 const ALLOWED = ['pdf', 'docx', 'txt', 'md'];
 
@@ -79,8 +80,7 @@ export default function KnowledgeTab({ guildId }) {
   if (loading) return <Box sx={{ display: 'grid', placeItems: 'center', py: 4 }}><CircularProgress /></Box>;
 
   return (
-    <Card variant="outlined"><CardContent>
-      <Typography variant="h6" fontWeight={600} mb={0.5}>Knowledge base</Typography>
+    <GuildizerCollapsibleCard id="ai.knowledge_base" title="Knowledge base">
       <Typography variant="caption" color="text.secondary" display="block" mb={2}>
         Documents here ground the /ask command — the AI answers from your server's own
         FAQ, rules and guides instead of guessing. Upload files (PDF, DOCX, TXT, MD) for
@@ -132,7 +132,7 @@ export default function KnowledgeTab({ guildId }) {
         {docs.map((d) => <DocRow key={d.id} guildId={guildId} doc={d} onChanged={load} />)}
         {docs.length === 0 && <Typography variant="body2" color="text.secondary">No documents yet.</Typography>}
       </List>
-    </CardContent></Card>
+    </GuildizerCollapsibleCard>
   );
 }
 

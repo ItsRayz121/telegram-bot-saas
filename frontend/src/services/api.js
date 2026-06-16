@@ -156,6 +156,12 @@ export const notifications = {
   unsubscribePush: (data) => api.post('/api/notifications/unsubscribe', data || {}),
 };
 
+// Per-user UI preferences (open/closed state of collapsible settings cards).
+export const uiPrefs = {
+  get: () => api.get('/api/ui-prefs'),
+  update: (data) => api.put('/api/ui-prefs', data),
+};
+
 export const bots = {
   getAll: () => api.get('/api/bots'),
   create: (data) => api.post('/api/bots', data),

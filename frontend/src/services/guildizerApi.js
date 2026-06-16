@@ -53,4 +53,10 @@ export const guildizerNotifications = {
   unsubscribePush: (data) => guildizerApi.post('/api/notifications/unsubscribe', data || {}),
 };
 
+// Per-user UI preferences (open/closed state of collapsible settings cards).
+export const guildizerUiPrefs = {
+  get: () => guildizerApi.get('/api/ui-prefs'),
+  update: (data) => guildizerApi.put('/api/ui-prefs', data),
+};
+
 export default guildizerApi;

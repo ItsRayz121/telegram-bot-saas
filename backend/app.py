@@ -49,6 +49,7 @@ from .routes.api_keys import api_keys_bp
 from .routes.referrals import referrals_bp
 from .routes.digest import digest_bp, run_digest_scheduler
 from .routes.notifications import notifications_bp
+from .routes.ui_prefs import ui_prefs_bp
 from .routes.totp import totp_bp
 from .routes.telegram_groups import tg_groups_bp
 from .routes.custom_bots import custom_bots_bp
@@ -273,6 +274,7 @@ def create_app():
     app.register_blueprint(referrals_bp)
     app.register_blueprint(digest_bp)
     app.register_blueprint(notifications_bp)
+    app.register_blueprint(ui_prefs_bp)
     app.register_blueprint(totp_bp)
     app.register_blueprint(tg_groups_bp)
     app.register_blueprint(custom_bots_bp)
