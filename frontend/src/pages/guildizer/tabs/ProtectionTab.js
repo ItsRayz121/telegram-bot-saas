@@ -966,8 +966,14 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
               <Typography variant="caption" color="text.secondary" display="block" mb={1}>
                 Members use /report to flag messages or members. Reports land here and (optionally) in a channel.
               </Typography>
-              {channelSelect('Alert channel for new reports', cfg.reports?.alert_channel_id,
-                (v) => setRp({ alert_channel_id: v }), '— dashboard only —')}
+              <FormControlLabel
+                control={<Switch checked={cfg.reports?.enabled !== false}
+                  onChange={(e) => setRp({ enabled: e.target.checked })} />}
+                label="Enable the /report command and Report Message action"
+              />
+              {cfg.reports?.enabled !== false &&
+                channelSelect('Alert channel for new reports', cfg.reports?.alert_channel_id,
+                  (v) => setRp({ alert_channel_id: v }), '— dashboard only —')}
             </CardContent></Card>
           </Grid>
 

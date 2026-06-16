@@ -134,7 +134,7 @@ EXTRA_DEFAULTS = {
         "personality": "professional_support",
         "custom_instructions": "",                   # free-text rules appended to the prompt
     },
-    "reports": {"alert_channel_id": None},
+    "reports": {"enabled": True, "alert_channel_id": None},
     # Phase 1 parity — mod-action log channel. When enabled + a channel is set,
     # every moderation action (automod removals + manual mod commands) is
     # mirrored there as an embed (mod_log.py).

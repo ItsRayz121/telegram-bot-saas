@@ -65,6 +65,18 @@ def _mod_cfg(guild_id: int) -> dict:
         SessionLocal.remove()
 
 
+def _reports_enabled(guild_id: int) -> bool:
+    """Whether the /report command + Report Message context menu are active
+    (reports.enabled, default True). Parity with Telegizer's 'Enable /report'."""
+    db = SessionLocal()
+    try:
+        snap = protection.load_snapshot(db, guild_id) or {}
+        return (snap.get("reports") or {}).get("enabled", True) is not False
+    finally:
+        db.close()
+        SessionLocal.remove()
+
+
 def _cmd_perms(guild_id: int) -> dict:
     """The per-command permission map (command_permissions.per_command):
     {"warn": "admins_only"|"everyone", …}. Drives _cmd_allowed."""
@@ -530,6 +542,8 @@ def attach_mod_commands(client) -> None:  # noqa: C901  (a flat list of commands
     async def report(interaction: discord.Interaction, member: discord.Member, reason: str) -> None:
         if interaction.guild is None:
             return await _deny(interaction, "Use this in a server.")
+        if not await asyncio.to_thread(_reports_enabled, interaction.guild.id):
+            return await _deny(interaction, "Reporting is turned off in this server.")
         await asyncio.to_thread(
             _db_call, modrt.create_report, interaction.guild.id,
             reporter_id=interaction.user.id, reporter_name=str(interaction.user),
@@ -546,6 +560,8 @@ def attach_mod_commands(client) -> None:  # noqa: C901  (a flat list of commands
     async def report_message(interaction: discord.Interaction, message: discord.Message) -> None:
         if interaction.guild is None:
             return await _deny(interaction, "Use this in a server.")
+        if not await asyncio.to_thread(_reports_enabled, interaction.guild.id):
+            return await _deny(interaction, "Reporting is turned off in this server.")
         await asyncio.to_thread(
             _db_call, modrt.create_report, interaction.guild.id,
             reporter_id=interaction.user.id, reporter_name=str(interaction.user),

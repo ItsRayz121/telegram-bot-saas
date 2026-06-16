@@ -293,6 +293,8 @@ def update_moderation(guild_id: int):
         extra["kb_replies"] = kb
     if isinstance(body.get("reports"), dict):
         rp = dict(extra.get("reports") or {})
+        if "enabled" in body["reports"]:
+            rp["enabled"] = bool(body["reports"]["enabled"])
         if "alert_channel_id" in body["reports"]:
             ch = body["reports"]["alert_channel_id"]
             rp["alert_channel_id"] = str(ch) if ch and str(ch).isdigit() else None
