@@ -549,23 +549,61 @@ def send_onboarding_emails():
 
 # ── Assistant proactive delivery helpers ──────────────────────────────────────
 
+# Global pacing for proactive DM loops (daily briefings, reminders, health alerts).
+# Telegram's documented limit is ~30 messages/sec globally; we stay well under it.
+# A module-level monotonic clock paces sends within a Celery task's single process.
+import threading as _threading
+import time as _time
+
+_DM_SEND_LOCK = _threading.Lock()
+_DM_LAST_SEND = [0.0]
+_DM_MIN_INTERVAL = 0.05   # ≤20 DMs/sec across the whole loop — comfortably under 30/s
+
+
 def _send_telegram_dm(telegram_user_id: str, text: str) -> bool:
-    """Send a Telegram DM to a user via the platform bot. Returns True on success."""
+    """Send a Telegram DM to a user via the platform bot. Returns True on success.
+
+    Anti-ban (BINDING rule): paces sends under Telegram's global rate cap and
+    honors a 429 flood-wait (`parameters.retry_after`) exactly before one retry,
+    so bulk proactive loops can never hammer the API into a ban. Only ever called
+    with users who have started the bot (telegram_user_id set) — never strangers.
+    """
     import os
     import requests as _r
     bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
     if not bot_token or not telegram_user_id:
         return False
-    try:
-        resp = _r.post(
-            f"https://api.telegram.org/bot{bot_token}/sendMessage",
-            json={"chat_id": telegram_user_id, "text": text, "parse_mode": "Markdown"},
-            timeout=10,
-        )
-        return resp.ok
-    except Exception as exc:
-        logger.warning("_send_telegram_dm failed user=%s: %s", telegram_user_id, exc)
-        return False
+
+    # Global pacing: ensure a minimum gap between consecutive sends.
+    with _DM_SEND_LOCK:
+        gap = _time.monotonic() - _DM_LAST_SEND[0]
+        if gap < _DM_MIN_INTERVAL:
+            _time.sleep(_DM_MIN_INTERVAL - gap)
+        _DM_LAST_SEND[0] = _time.monotonic()
+
+    for _attempt in range(2):
+        try:
+            resp = _r.post(
+                f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                json={"chat_id": telegram_user_id, "text": text, "parse_mode": "Markdown"},
+                timeout=10,
+            )
+            if resp.status_code == 429:
+                # Honor Telegram's flood-wait exactly (bounded), then retry once.
+                retry_after = 1
+                try:
+                    retry_after = int(resp.json().get("parameters", {}).get("retry_after", 1))
+                except Exception:
+                    pass
+                _log_wait = min(max(retry_after, 1), 60)
+                logger.warning("_send_telegram_dm: 429 flood-wait %ss user=%s", _log_wait, telegram_user_id)
+                _time.sleep(_log_wait)
+                continue
+            return resp.ok
+        except Exception as exc:
+            logger.warning("_send_telegram_dm failed user=%s: %s", telegram_user_id, exc)
+            return False
+    return False
 
 
 @celery.task(name="backend.scheduler.deliver_due_reminders")
