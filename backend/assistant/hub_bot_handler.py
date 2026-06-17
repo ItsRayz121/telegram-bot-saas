@@ -20,7 +20,7 @@ hub_bot_id
 import logging
 from datetime import datetime
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
 from telegram.constants import ChatType, ParseMode
 from telegram.ext import (
     Application, CallbackQueryHandler, ChatMemberHandler,
@@ -226,8 +226,13 @@ async def _on_start(
         except Exception as exc:
             _log.debug("_on_start: db lookup failed: %s", exc)
 
-    hub_url = f"{frontend}/ark/official/overview"
-    connect_url = f"{frontend}/settings"
+    # In-Telegram Mini App deep links. Opening /mini-app authenticates silently
+    # against Echo's bot token (see telegram_webapp._first_party_bot_tokens) and
+    # lands on the same telegram_user_id account as the group-management bot — no
+    # external browser, no re-login. The ?start=<code> picks the landing page
+    # (see frontend MiniApp.resolveStartDestination).
+    hub_webapp = WebAppInfo(url=f"{frontend}/mini-app?start=echo")
+    connect_webapp = WebAppInfo(url=f"{frontend}/mini-app?start=settings")
 
     text = (
         f"👋 *Hi {first}! I'm Echo — your AI group observer.*\n\n"
@@ -252,17 +257,17 @@ async def _on_start(
 
     if is_linked:
         keyboard.append([
-            InlineKeyboardButton("✅ Account Connected", callback_data="echo_noop"),
+            InlineKeyboardButton("✅ Account Connected", web_app=connect_webapp),
         ])
     else:
         keyboard.append([
-            InlineKeyboardButton("🔗 Connect Account", url=connect_url),
+            InlineKeyboardButton("🔗 Connect Account", web_app=connect_webapp),
         ])
 
     row2 = []
     if add_to_group_url:
         row2.append(InlineKeyboardButton("➕ Add Me to a Group", url=add_to_group_url))
-    row2.append(InlineKeyboardButton("📊 Open My Hub", url=hub_url))
+    row2.append(InlineKeyboardButton("📊 Open My Hub", web_app=hub_webapp))
     keyboard.append(row2)
 
     await update.message.reply_text(

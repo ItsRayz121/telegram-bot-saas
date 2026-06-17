@@ -105,6 +105,51 @@ def _verify_init_data(init_data: str, bot_token: str) -> tuple[dict | None, str 
         return None, f"exception:{exc}"
 
 
+def _first_party_bot_tokens() -> list[tuple[str, str]]:
+    """First-party bot tokens whose Mini App sessions we accept, in priority order.
+
+    Telegram signs initData with the launching bot's token, so the Mini App can be
+    opened from any of our own bots — the official group-management bot or Echo
+    (the assistant bot). They all resolve to the SAME account because identity is
+    keyed on the global telegram_user_id, not on which bot launched the app.
+
+    Custom bots are NOT listed here: they can't sign the Mini App and instead
+    redirect through the official bot (see bot_ui.py), so we never trust a
+    client-supplied token. To support a new first-party bot, add its token here.
+    Empty/unset tokens are skipped so a missing env var degrades gracefully.
+    """
+    candidates = [
+        ("official", (Config.TELEGRAM_BOT_TOKEN or "").strip()),
+        ("echo", (Config.ECHO_BOT_TOKEN or "").strip()),
+    ]
+    return [(name, tok) for name, tok in candidates if tok]
+
+
+def _verify_init_data_any(init_data: str) -> tuple[dict | None, str | None]:
+    """Validate initData against every first-party bot token, returning on first match.
+
+    Returns (parsed_dict, None) on success, or (None, reason) where reason reflects
+    the most informative failure across all tokens (an expired signature beats a
+    plain HMAC mismatch, since the data was authentic but stale).
+    """
+    tokens = _first_party_bot_tokens()
+    if not tokens:
+        return None, "no_bot_configured"
+
+    best_reason = None
+    for name, token in tokens:
+        parsed, reason = _verify_init_data(init_data, token)
+        if parsed:
+            return parsed, None
+        # Prefer an "expired" reason over "hmac_mismatch": expiry means this bot's
+        # token DID sign the data (authentic but stale), which is the real cause.
+        if reason and "expired" in reason:
+            best_reason = reason
+        elif best_reason is None:
+            best_reason = reason
+    return None, best_reason
+
+
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _user_groups(user: User):
@@ -273,11 +318,12 @@ def miniapp_auth():
     if not init_data:
         return jsonify({"error": "init_data is required"}), 400
 
-    bot_token = (Config.TELEGRAM_BOT_TOKEN or "").strip()
-    if not bot_token:
+    if not _first_party_bot_tokens():
         return jsonify({"error": "Bot not configured"}), 503
 
-    parsed, fail_reason = _verify_init_data(init_data, bot_token)
+    # Accept a session signed by any of our first-party bots (official OR Echo);
+    # all resolve to the same telegram_user_id account below.
+    parsed, fail_reason = _verify_init_data_any(init_data)
     if not parsed:
         _log.warning("miniapp_auth: initData verification failed reason=%s ip=%s",
                      fail_reason, request.remote_addr)
