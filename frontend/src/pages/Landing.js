@@ -10,7 +10,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import {
   SmartToy, Shield, Schedule, BarChart, People, CheckCircle,
   AutoAwesome, Bolt, Warning, TrendingDown, AccessTime,
-  ArrowForward, CurrencyBitcoin, Lock,
+  ArrowForward, CurrencyBitcoin, Lock, Telegram, Forum,
 } from '@mui/icons-material';
 import TelegizerLogo from '../components/TelegizerLogo';
 import { useNavigate } from 'react-router-dom';
@@ -172,6 +172,36 @@ const EARLY_FEEDBACK = [
   {
     text: 'Seeing which invite links actually brought real members changed how I run growth. The analytics alone are worth it.',
     context: 'Group owner, DeFi community',
+  },
+];
+
+// The wider product family. Telegizer (this page) is the Telegram pillar; Echo is
+// the in-app AI assistant; Guildizer is the separate Discord product (shares this
+// origin). Cross-sell only — the hero stays 100% focused on Telegram groups.
+const PRODUCT_FAMILY = [
+  {
+    icon: <Telegram fontSize="large" />,
+    name: 'Telegizer',
+    tag: 'Telegram groups',
+    desc: 'Moderation, scheduled content, member systems, and growth analytics for your Telegram groups — all from one dashboard.',
+    chip: "You're here",
+    to: null,
+  },
+  {
+    icon: <SmartToy fontSize="large" />,
+    name: 'Echo',
+    tag: 'AI assistant',
+    desc: 'Your personal AI assistant on Telegram — reminders, notes, tasks, smart links, and daily digests, right inside chat.',
+    cta: 'Open Echo',
+    to: '/workspace',
+  },
+  {
+    icon: <Forum fontSize="large" />,
+    name: 'Guildizer',
+    tag: 'Discord servers',
+    desc: 'The same automation, moderation, and growth tools — rebuilt natively for your Discord servers.',
+    cta: 'Open Guildizer',
+    to: '/guildizer',
   },
 ];
 
@@ -398,6 +428,7 @@ export default function Landing() {
   const [testimonialsRef, testimonialsVisible] = useScrollReveal(0.1);
   const [pricingRef, pricingVisible] = useScrollReveal(0.05);
   const [faqRef, faqVisible] = useScrollReveal(0.1);
+  const [familyRef, familyVisible] = useScrollReveal(0.1);
   const [ctaRef, ctaVisible] = useScrollReveal(0.15);
 
   useEffect(() => {
@@ -946,6 +977,50 @@ export default function Landing() {
               </AccordionDetails>
             </Accordion>
           ))}
+        </Container>
+      </Box>
+
+      {/* ── Product family (cross-sell — hero stays focused on Telegram) ── */}
+      <Box ref={familyRef} sx={{ bgcolor: '#0b1626', borderTop: '1px solid', borderColor: 'divider', py: { xs: 8, md: 10 }, ...reveal(familyVisible) }}>
+        <Container maxWidth="lg">
+          <Box sx={{ textAlign: 'center', mb: 6 }}>
+            <Typography variant="overline" color="primary.main" fontWeight={700} letterSpacing={2}>
+              The Telegizer Family
+            </Typography>
+            <Typography variant="h4" fontWeight={800} mt={1} mb={1}>
+              One toolkit for{' '}
+              <Box component="span" className="gradient-text">every community you run</Box>
+            </Typography>
+            <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 580, mx: 'auto' }}>
+              Telegizer is part of a small family of tools built to run online communities
+              without the busywork — across both Telegram and Discord.
+            </Typography>
+          </Box>
+          <Grid container spacing={3} justifyContent="center">
+            {PRODUCT_FAMILY.map((p, i) => (
+              <Grid item xs={12} sm={6} md={4} key={p.name} sx={reveal(familyVisible, i * 90)}>
+                <Card sx={{ height: '100%', p: 1, display: 'flex', flexDirection: 'column' }}>
+                  <CardContent sx={{ flexGrow: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+                      <Box sx={{ color: 'primary.main' }}>{p.icon}</Box>
+                      <Chip label={p.tag} size="small" variant="outlined" sx={{ fontSize: 11, height: 20 }} />
+                    </Box>
+                    <Typography variant="h6" fontWeight={700} mb={1}>{p.name}</Typography>
+                    <Typography variant="body2" color="text.secondary" lineHeight={1.7}>{p.desc}</Typography>
+                  </CardContent>
+                  <Box sx={{ px: 2, pb: 2 }}>
+                    {p.to ? (
+                      <Button variant="outlined" size="small" endIcon={<ArrowForward />} onClick={() => navigate(p.to)}>
+                        {p.cta}
+                      </Button>
+                    ) : (
+                      <Chip label={p.chip} size="small" color="primary" sx={{ fontWeight: 600 }} />
+                    )}
+                  </Box>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
         </Container>
       </Box>
 
