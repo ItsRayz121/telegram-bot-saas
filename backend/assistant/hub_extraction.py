@@ -628,11 +628,8 @@ def _send_deadline_alert_dm(user_id: int, tasks: list, subject: str = "⚠️ *N
             lines.append(f"• {t['title']} — due {t['due_date']}")
         text = "\n".join(lines)
 
-        requests.post(
-            f"https://api.telegram.org/bot{bot_token}/sendMessage",
-            json={"chat_id": tg_id, "text": text, "parse_mode": "Markdown"},
-            timeout=10,
-        )
+        from ..telegram_safe import safe_send_message
+        safe_send_message(bot_token, tg_id, text, parse_mode="Markdown")
     except Exception as exc:
         _log.debug("hub_extraction: deadline alert DM failed: %s", exc)
 

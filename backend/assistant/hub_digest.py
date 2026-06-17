@@ -152,15 +152,9 @@ def _build_and_deliver(bot_id: str, user_id: int, settings: dict) -> bool:
     if not bot_token:
         return False
 
-    try:
-        resp = requests.post(
-            f"https://api.telegram.org/bot{bot_token}/sendMessage",
-            json={"chat_id": tg_id, "text": text, "parse_mode": "Markdown"},
-            timeout=15,
-        )
-        resp.raise_for_status()
-    except Exception as exc:
-        _log.error("hub_digest: Telegram DM failed user=%s: %s", user_id, exc)
+    from ..telegram_safe import safe_send_message
+    if not safe_send_message(bot_token, tg_id, text, parse_mode="Markdown", timeout=15):
+        _log.error("hub_digest: Telegram DM failed user=%s", user_id)
         return False
 
     # Record the digest
@@ -296,12 +290,9 @@ def _deliver_due_reminders() -> int:
                 continue
 
             from .hub_crypto import _dec
+            from ..telegram_safe import safe_send_message
             text = f"🔔 *Reminder*\n{_dec(reminder.content)}"
-            requests.post(
-                f"https://api.telegram.org/bot{bot_token}/sendMessage",
-                json={"chat_id": tg_id, "text": text, "parse_mode": "Markdown"},
-                timeout=10,
-            )
+            safe_send_message(bot_token, tg_id, text, parse_mode="Markdown")
             reminder.delivered_at = datetime.utcnow()
             sent += 1
         except Exception as exc:

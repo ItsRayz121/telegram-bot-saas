@@ -103,15 +103,9 @@ def post_announcement(user, args: dict) -> dict:
 
     group = groups[0]
     bot_token = Config.TELEGRAM_BOT_TOKEN
-    try:
-        resp = _r.post(
-            f"https://api.telegram.org/bot{bot_token}/sendMessage",
-            json={"chat_id": group.telegram_group_id, "text": text, "parse_mode": "Markdown"},
-            timeout=10,
-        )
-        resp.raise_for_status()
-    except Exception as exc:
-        _log.warning("post_announcement: send failed: %s", exc)
+    from ..telegram_safe import safe_send_message
+    if not safe_send_message(bot_token, group.telegram_group_id, text, parse_mode="Markdown"):
+        _log.warning("post_announcement: send failed for group %s", group.telegram_group_id)
         return {"reply": "Failed to send the announcement. Make sure the bot is still active in the group.", "data": None}
 
     return {

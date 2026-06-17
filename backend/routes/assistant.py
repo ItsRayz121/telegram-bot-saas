@@ -249,18 +249,10 @@ def send_dm():
         return jsonify({"error": "Telegram not connected"}), 400
 
     flask_app = request.environ.get("flask_app")  # set by app factory, optional
-    try:
-        # Send via bot using requests (sync-friendly)
-        import requests as _r
-        bot_token = Config.TELEGRAM_BOT_TOKEN
-        resp = _r.post(
-            f"https://api.telegram.org/bot{bot_token}/sendMessage",
-            json={"chat_id": user.telegram_user_id, "text": text},
-            timeout=10,
-        )
-        resp.raise_for_status()
-    except Exception as exc:
-        _log.warning("send_dm telegram error: %s", exc)
+    from ..telegram_safe import safe_send_message
+    bot_token = Config.TELEGRAM_BOT_TOKEN
+    if not safe_send_message(bot_token, user.telegram_user_id, text):
+        _log.warning("send_dm telegram error for user=%s", user.id)
         return jsonify({"error": "Failed to send message"}), 502
 
     # Log outbound DM

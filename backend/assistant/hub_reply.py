@@ -207,14 +207,11 @@ def _handle(bot_token, bot_username, message_text, chat_id, message_id, bot_id, 
                         ))
                         loop.close()
                         # Send ack instead of generic reply
-                        _req.post(
-                            f"https://api.telegram.org/bot{bot_token}/sendMessage",
-                            json={
-                                "chat_id": chat_id,
-                                "text": "Your question has been forwarded to an admin. They'll respond shortly.",
-                                "reply_to_message_id": message_id,
-                            },
-                            timeout=8,
+                        from ..telegram_safe import safe_send_message
+                        safe_send_message(
+                            bot_token, chat_id,
+                            "Your question has been forwarded to an admin. They'll respond shortly.",
+                            reply_to_message_id=message_id,
                         )
                         return True
                 except Exception:
@@ -222,22 +219,12 @@ def _handle(bot_token, bot_username, message_text, chat_id, message_id, bot_id, 
 
             # Notify escalation_contact admin via DM if configured
             if _escalation_contact:
-                try:
-                    import requests as _req2
-                    _req2.post(
-                        f"https://api.telegram.org/bot{bot_token}/sendMessage",
-                        json={
-                            "chat_id": _escalation_contact,
-                            "text": (
-                                f"❓ <b>Unanswered question in group {chat_id}</b>\n\n"
-                                f"{query}"
-                            ),
-                            "parse_mode": "HTML",
-                        },
-                        timeout=8,
-                    )
-                except Exception:
-                    pass
+                from ..telegram_safe import safe_send_message
+                safe_send_message(
+                    bot_token, _escalation_contact,
+                    f"❓ <b>Unanswered question in group {chat_id}</b>\n\n{query}",
+                    parse_mode="HTML",
+                )
 
             reply_text = (
                 "I don't have a knowledge card for that. "
@@ -342,22 +329,13 @@ def _gpt_answer(query: str, bot_id: str, user_id: int, tone: str = "friendly") -
 
 def _send_reply(bot_token: str, chat_id: int, message_id: int,
                 text: str, parse_mode: str = "HTML") -> bool:
-    import requests as _req
-    try:
-        _req.post(
-            f"https://api.telegram.org/bot{bot_token}/sendMessage",
-            json={
-                "chat_id": chat_id,
-                "text": text,
-                "parse_mode": parse_mode,
-                "reply_to_message_id": message_id,
-            },
-            timeout=10,
-        )
-        return True
-    except Exception as exc:
-        _log.warning("hub_reply: send failed: %s", exc)
-        return False
+    # Routed through the shared safe sender: paced + 429-aware so a chatty group
+    # can never flood the bot into a Telegram ban.
+    from ..telegram_safe import safe_send_message
+    return safe_send_message(
+        bot_token, chat_id, text,
+        parse_mode=parse_mode, reply_to_message_id=message_id,
+    )
 
 
 # ── Smart pre-filter ───────────────────────────────────────────────────────────
