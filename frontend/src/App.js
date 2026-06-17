@@ -18,6 +18,8 @@ import { isTelegramMiniApp } from './utils/telegram';
 
 // Pages — public
 import Landing from './pages/Landing';
+import GuildizerLanding from './pages/GuildizerLanding';
+import EchoLanding from './pages/EchoLanding';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Pricing from './pages/Pricing';
@@ -253,6 +255,8 @@ export default function App() {
             {/* ── Public (no sidebar) ─────────────────────────────────────── */}
             {/* Root + referral/invite entry pages: redirect to /mini-app when opened inside Telegram */}
             <Route path="/" element={<TelegramAware><Landing /></TelegramAware>} />
+            <Route path="/guildizer-landing" element={<GuildizerLanding />} />
+            <Route path="/echo" element={<EchoLanding />} />
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/payment/success" element={<PaymentSuccess />} />
             <Route path="/terms" element={<Terms />} />

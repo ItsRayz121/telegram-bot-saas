@@ -13,6 +13,7 @@ import {
   ArrowForward, CurrencyBitcoin, Lock, Telegram, Forum,
 } from '@mui/icons-material';
 import TelegizerLogo from '../components/TelegizerLogo';
+import PlatformSwitcher from '../components/PlatformSwitcher';
 import { useNavigate } from 'react-router-dom';
 import usePageMeta from '../hooks/usePageMeta';
 
@@ -192,16 +193,16 @@ const PRODUCT_FAMILY = [
     name: 'Echo',
     tag: 'AI assistant',
     desc: 'Your personal AI assistant on Telegram — reminders, notes, tasks, smart links, and daily digests, right inside chat.',
-    cta: 'Open Echo',
-    to: '/workspace',
+    cta: 'Explore Echo',
+    to: '/echo',
   },
   {
     icon: <Forum fontSize="large" />,
     name: 'Guildizer',
     tag: 'Discord servers',
     desc: 'The same automation, moderation, and growth tools — rebuilt natively for your Discord servers.',
-    cta: 'Open Guildizer',
-    to: '/guildizer',
+    cta: 'Explore Guildizer',
+    to: '/guildizer-landing',
   },
 ];
 
@@ -506,6 +507,7 @@ export default function Landing() {
           pointerEvents: 'none',
         }} />
         <Container maxWidth="md" sx={{ position: 'relative' }}>
+          <PlatformSwitcher active="telegram:group" />
           <Chip
             label="Built for Telegram community managers"
             size="small"
