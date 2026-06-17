@@ -17,6 +17,9 @@ NOTIF_CATEGORIES = ["billing", "moderation", "campaigns", "ai", "members", "syst
 NOTIF_PREF_DEFAULTS = {
     "sound": True,   # play a bell sound in-app when a new notification arrives
     "push": False,   # web push opt-in (off until the user grants permission)
+    # Proactive daily Telegram briefing DM — OPT-IN (off until the user enables it).
+    # Anti-ban: never send recurring DMs no one asked for; see [[anti_ban_rule]].
+    "daily_briefing": False,
     "categories": {c: True for c in NOTIF_CATEGORIES},
 }
 
@@ -61,6 +64,8 @@ def get_prefs(user: User) -> dict:
             prefs["sound"] = bool(stored["sound"])
         if "push" in stored:
             prefs["push"] = bool(stored["push"])
+        if "daily_briefing" in stored:
+            prefs["daily_briefing"] = bool(stored["daily_briefing"])
         cats = stored.get("categories")
         if isinstance(cats, dict):
             for c in NOTIF_CATEGORIES:
@@ -275,6 +280,8 @@ def update_preferences():
         prefs["sound"] = bool(body["sound"])
     if "push" in body:
         prefs["push"] = bool(body["push"])
+    if "daily_briefing" in body:
+        prefs["daily_briefing"] = bool(body["daily_briefing"])
     cats = body.get("categories")
     if isinstance(cats, dict):
         for c in NOTIF_CATEGORIES:

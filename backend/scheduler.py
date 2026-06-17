@@ -772,8 +772,12 @@ def send_daily_briefings():
         today = date.today()
         tomorrow = today + timedelta(days=1)
 
-        # Only users who have Telegram connected
-        users = User.query.filter(User.telegram_user_id.isnot(None)).all()
+        # Only users who have Telegram connected AND explicitly opted in to the
+        # daily briefing. Anti-ban: this recurring DM is opt-in (default OFF) so we
+        # never send a daily message to anyone who didn't ask for it.
+        from .routes.notifications import get_prefs
+        candidates = User.query.filter(User.telegram_user_id.isnot(None)).all()
+        users = [u for u in candidates if get_prefs(u).get("daily_briefing")]
         sent = 0
         for user in users:
             try:

@@ -95,6 +95,12 @@ export default function Notifications() {
     savePrefs({ sound: on });
   };
 
+  const handleDailyBriefingToggle = (e) => {
+    const on = e.target.checked;
+    setPrefs(p => ({ ...(p || {}), daily_briefing: on }));
+    savePrefs({ daily_briefing: on });
+  };
+
   const handleCategoryToggle = (cat) => (e) => {
     const on = e.target.checked;
     const categories = { ...(prefs?.categories || {}), [cat]: on };
@@ -214,6 +220,25 @@ export default function Notifications() {
             <Switch
               checked={prefs ? prefs.sound !== false : true}
               onChange={handleSoundToggle}
+            />
+          </Box>
+
+          <Divider sx={{ my: 2 }} />
+
+          {/* Daily briefing — proactive Telegram DM (opt-in, off by default) */}
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2 }}>
+            <Box>
+              <Typography variant="body2" fontWeight={600}>
+                Daily Telegram briefing
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Get a once-a-day Telegram DM with your meetings, due reminders, and any
+                groups needing attention. Off by default — turn it on only if you want it.
+              </Typography>
+            </Box>
+            <Switch
+              checked={Boolean(prefs?.daily_briefing)}
+              onChange={handleDailyBriefingToggle}
             />
           </Box>
         </CardContent>
