@@ -141,6 +141,10 @@ class ModerationSystem:
         self.app = app
         self._spam_tracker = {}
         self._ai_cooldown: dict = {}  # (chat_id, user_id) → last AI call datetime
+        # Slow mode (per-user minimum gap between messages). Distinct from
+        # _spam_tracker (burst detection): this enforces a steady pace.
+        self._slow_tracker: dict = {}       # "chat:user" → datetime of last ACCEPTED message
+        self._slow_warn_tracker: dict = {}  # "chat:user" → datetime of last "slow down" notice
 
     async def warn_user(self, bot, chat_id, target_user_id, target_username,
                         moderator_id, moderator_username, reason, group):
@@ -410,6 +414,10 @@ class ModerationSystem:
             self.check_language_filter,
             self.check_spoiler_content,
             self.check_bot_mentions,
+            # Slow mode runs LAST among text checks so a too-fast message that is
+            # ALSO a content violation (NSFW, bad words, links) gets the harsher,
+            # content-specific action rather than a silent slow-mode delete.
+            self.check_slow_mode,
         ]
 
         for check in text_checks:
@@ -627,6 +635,83 @@ class ModerationSystem:
             self._spam_tracker[key] = []
             return True
 
+        return False
+
+    async def check_slow_mode(self, bot, message, text, group, settings):
+        """Per-user minimum gap between messages ("smart slow mode").
+
+        Unlike check_spam (burst detection), this enforces a steady pace: a
+        member's message that lands sooner than seconds_between_messages after
+        their previous ACCEPTED message is removed. The baseline timestamp is
+        only advanced on accepted messages, so the next allowed time is measured
+        from the last good post — exactly like Telegram's native slow mode.
+
+        Admins/creators and trusted users are already excluded by check_automod
+        before this runs; this adds an optional high-XP exemption. Returns True
+        when it acts on (removes) the message, else False.
+        """
+        cfg = settings.get("slow_mode", {})
+        if not cfg.get("enabled", False):
+            return False
+
+        user_id = message.from_user.id if message.from_user else None
+        if not user_id:
+            return False
+        chat_id = message.chat.id
+        gap = max(5, int(cfg.get("seconds_between_messages", 60) or 60))
+        key = f"{chat_id}:{user_id}"
+        now = datetime.utcnow()
+
+        last = self._slow_tracker.get(key)
+        if last is not None and (now - last).total_seconds() < gap:
+            # Would-be violation. Do the (rare) high-XP exemption lookup only now,
+            # so the common path never touches the database.
+            min_level = int(cfg.get("exempt_min_level", 0) or 0)
+            if min_level > 0:
+                try:
+                    with self.app.app_context():
+                        from ..database import DatabaseManager
+                        member = DatabaseManager.get_or_create_member(group.id, user_id)
+                        if member and (member.level or 0) >= min_level:
+                            self._slow_tracker[key] = now  # treat as accepted
+                            return False
+                except Exception as e:
+                    logger.debug(f"slow_mode level exemption lookup failed: {e}")
+
+            action = cfg.get("action", "delete")
+            if action == "mute":
+                await self.execute_automod_action(
+                    bot, message, group, "mute",
+                    reason=f"Slow mode — wait {gap}s between messages",
+                    mute_duration=int(cfg.get("mute_duration_minutes", 5) or 5),
+                )
+            elif action == "warn":
+                # Throttle the notice to at most once per gap per user — repeatedly
+                # replying to every too-fast message would itself look like spam
+                # (anti-ban rule). Off-throttle, just delete silently.
+                last_warn = self._slow_warn_tracker.get(key)
+                if last_warn is None or (now - last_warn).total_seconds() >= gap:
+                    self._slow_warn_tracker[key] = now
+                    await self.execute_automod_action(
+                        bot, message, group, "warn",
+                        reason=f"Slow mode is on — please wait {gap}s between messages",
+                    )
+                else:
+                    try:
+                        await bot.delete_message(chat_id=chat_id, message_id=message.message_id)
+                    except Exception:
+                        pass
+            else:  # "delete" (default) — silent removal, zero outbound sends
+                try:
+                    await bot.delete_message(chat_id=chat_id, message_id=message.message_id)
+                except Exception:
+                    pass
+            # Do NOT advance the baseline on a rejected message: the next allowed
+            # post stays measured from the last accepted one.
+            return True
+
+        # Accepted — this becomes the new baseline.
+        self._slow_tracker[key] = now
         return False
 
     async def check_external_links(self, bot, message, text, group, settings):

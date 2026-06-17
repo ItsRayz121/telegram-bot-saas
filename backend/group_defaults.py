@@ -180,6 +180,23 @@ _DEFAULTS: dict = {
             "action": "mute",
             "mute_duration_minutes": 10,
         },
+        # Slow mode — a per-user MINIMUM gap between messages (a smarter version
+        # of Telegram's native slow mode). Distinct from `spam` above, which is
+        # burst detection (N msgs in a short window). This enforces a steady pace:
+        # a member's message that arrives sooner than seconds_between_messages
+        # after their previous accepted one is removed. Admins and trusted users
+        # (automod.smart_mod.trusted_users) are always exempt; members at/above
+        # exempt_min_level (0 = off) also bypass it. OFF by default — opt-in, since
+        # it changes how a group fundamentally feels. action "delete" is silent and
+        # the safest for anti-ban; "warn" sends a notice throttled to at most once
+        # per gap per user; "mute" temporarily restricts repeat offenders.
+        "slow_mode": {
+            "enabled": False,
+            "seconds_between_messages": 60,
+            "action": "delete",          # "delete" | "warn" | "mute"
+            "mute_duration_minutes": 5,  # used when action == "mute"
+            "exempt_min_level": 0,       # members at/above this XP level bypass (0 = no level exemption)
+        },
         "bad_words": {
             "enabled": True,
             "words": [],                 # no-op until admin adds words

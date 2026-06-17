@@ -880,6 +880,7 @@ function GroupSettingsInner() {
   const bp = settingsData.bot_policy || {};
   const rg = settingsData.raid_guard || {};
   const mod = settingsData.moderation || {};
+  const sm = am.slow_mode || {};
   const ac = settingsData.auto_clean || {};
   const rep = settingsData.reports || {};
   const we = settingsData.warning_escalation || {};
@@ -1084,6 +1085,65 @@ function GroupSettingsInner() {
                   helperText="Added to the built-in adult/NSFW word list. Plain text is deleted + warned; NSFW on inline buttons is banned."
                   value={(am.nsfw_filter?.extra_words || []).join(', ')}
                   onChange={(e) => updateSetting('automod.nsfw_filter.extra_words', e.target.value.split(',').map(w => w.trim()).filter(Boolean))} />
+            </CollapsibleCard>
+
+            {/* Slow Mode — per-user minimum gap between messages (smart slow mode) */}
+            <CollapsibleCard id="tg.moderation.slow_mode" title="🐢 Slow Mode">
+                <Typography variant="body2" color="text.secondary" mb={2}>
+                  Enforces a <b>minimum gap between each member's messages</b> — a smarter version
+                  of Telegram's built-in slow mode. Unlike Spam Detection (which catches rapid
+                  bursts), this keeps a steady pace. Admins and trusted users are always exempt,
+                  and you can let high-level members skip it. Requires AutoMod to be enabled.
+                </Typography>
+
+                <FormControlLabel
+                  control={<Switch checked={!!sm.enabled}
+                    onChange={(e) => updateSetting('automod.slow_mode.enabled', e.target.checked)} />}
+                  label="Enable slow mode"
+                />
+
+                <Grid container spacing={2} sx={{ mt: 0.5 }}>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth size="small" type="number"
+                      label="Seconds between messages"
+                      value={sm.seconds_between_messages ?? 60}
+                      onChange={(e) => updateSetting('automod.slow_mode.seconds_between_messages', Math.max(5, parseInt(e.target.value || '0', 10)))}
+                      helperText="Minimum wait after a member's previous message."
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth size="small" type="number"
+                      label="Exempt members at level ≥"
+                      value={sm.exempt_min_level ?? 0}
+                      onChange={(e) => updateSetting('automod.slow_mode.exempt_min_level', Math.max(0, parseInt(e.target.value || '0', 10)))}
+                      helperText="0 = no level exemption. Admins & trusted users always bypass."
+                    />
+                  </Grid>
+                </Grid>
+
+                <FormControl fullWidth size="small" sx={{ mt: 2 }}>
+                  <InputLabel>Action on a too-fast message</InputLabel>
+                  <Select
+                    label="Action on a too-fast message"
+                    value={sm.action || 'delete'}
+                    onChange={(e) => updateSetting('automod.slow_mode.action', e.target.value)}
+                  >
+                    <MenuItem value="delete">Delete silently (recommended)</MenuItem>
+                    <MenuItem value="warn">Delete + warn (notice throttled to once per gap)</MenuItem>
+                    <MenuItem value="mute">Mute the member temporarily</MenuItem>
+                  </Select>
+                </FormControl>
+
+                {sm.action === 'mute' && (
+                  <TextField
+                    fullWidth size="small" type="number" sx={{ mt: 2 }}
+                    label="Mute duration (minutes)"
+                    value={sm.mute_duration_minutes ?? 5}
+                    onChange={(e) => updateSetting('automod.slow_mode.mute_duration_minutes', Math.max(1, parseInt(e.target.value || '0', 10)))}
+                  />
+                )}
             </CollapsibleCard>
 
             {/* Bot Protection — controls bots added to the group (Phase 1) */}
