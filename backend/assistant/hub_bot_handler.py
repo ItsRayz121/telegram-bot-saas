@@ -232,7 +232,7 @@ async def _on_start(
     # external browser, no re-login. The ?start=<code> picks the landing page
     # (see frontend MiniApp.resolveStartDestination).
     hub_webapp = WebAppInfo(url=f"{frontend}/mini-app?start=echo")
-    connect_webapp = WebAppInfo(url=f"{frontend}/mini-app?start=settings")
+    app_webapp = WebAppInfo(url=f"{frontend}/mini-app?start=dashboard")
 
     text = (
         f"👋 *Hi {first}! I'm Echo — your AI group observer.*\n\n"
@@ -255,14 +255,12 @@ async def _on_start(
 
     keyboard = []
 
-    if is_linked:
-        keyboard.append([
-            InlineKeyboardButton("✅ Account Connected", web_app=connect_webapp),
-        ])
-    else:
-        keyboard.append([
-            InlineKeyboardButton("🔗 Connect Account", web_app=connect_webapp),
-        ])
+    # Opening the Mini App auto-authenticates and links the account, so there's no
+    # manual "connect" step anymore. Use the same label as the official bot for a
+    # consistent feel across both boards. is_linked is left unused intentionally.
+    keyboard.append([
+        InlineKeyboardButton("🚀 Open Telegizer App", web_app=app_webapp),
+    ])
 
     row2 = []
     if add_to_group_url:
