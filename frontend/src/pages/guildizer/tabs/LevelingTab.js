@@ -193,8 +193,7 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
       </Grid>
 
       <Grid item xs={12}>
-        <Card><CardContent>
-          <Typography variant="subtitle1" fontWeight={600} mb={1}>Leaderboard</Typography>
+        <GuildizerCollapsibleCard id="gz.leveling.leaderboard" title="Leaderboard">
           {board.length === 0 && <Typography variant="body2" color="text.secondary">No XP earned yet.</Typography>}
           <List dense>
             {board.map((m) => (
@@ -205,7 +204,7 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
               </ListItem>
             ))}
           </List>
-        </CardContent></Card>
+        </GuildizerCollapsibleCard>
       </Grid>
 
       {!sb && (
