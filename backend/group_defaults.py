@@ -341,6 +341,10 @@ _DEFAULTS: dict = {
         "min_text_len": 8,
         "lockdown_minutes": 10,
         "lockdown_action": "mute",              # "mute" | "kick" joiners during a raid
+        # Who gets restricted from MESSAGING while a raid is active:
+        #   "recent_joiners" → only members who join during the raid (default)
+        #   "all"            → every non-admin who posts is muted (group read-only)
+        "lockdown_scope": "recent_joiners",
         "notify": True,
         # Phase 4b: admin "emergency lockdown" panic button. ISO-8601 UTC expiry
         # set from the dashboard; join handlers restrict newcomers until it passes.

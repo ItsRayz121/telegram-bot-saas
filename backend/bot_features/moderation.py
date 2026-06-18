@@ -393,8 +393,14 @@ class ModerationSystem:
             from . import raid_guard
             if raid_guard.note_message(chat_id, user_id, text, group.settings):
                 await self._announce_raid(bot, chat_id, group)
+            # scope='all' → mute every non-admin who posts during an active raid
+            # (admins/trusted already returned above), making the group read-only.
+            elif (raid_guard.lockdown_scope(group.settings) == "all"
+                    and raid_guard.is_locked_down(chat_id, group.settings)):
+                if await raid_guard.restrict_message_sender(bot, chat_id, message, user_id):
+                    return True
         except Exception as e:
-            logger.debug(f"raid_guard message note failed: {e}")
+            logger.debug(f"raid_guard message handling failed: {e}")
 
         # Normalize homoglyphs before text checks
         normalized_text = normalize_homoglyphs(text) if settings.get("homoglyphs", {}).get("enabled") else text
@@ -1182,7 +1188,10 @@ class ModerationSystem:
         try:
             await bot.send_message(
                 chat_id=chat_id,
-                text=raid_guard.activation_notice(raid_guard.seconds_remaining(chat_id)),
+                text=raid_guard.activation_notice(
+                    raid_guard.seconds_remaining(chat_id),
+                    raid_guard.lockdown_scope(group.settings),
+                ),
                 parse_mode="Markdown",
             )
         except Exception as e:
@@ -1194,7 +1203,7 @@ class ModerationSystem:
                     group_id=group.id, action_type="raid_mode_activated",
                     target_user_id="", target_username=None,
                     moderator_id="raid_guard", moderator_username="RaidGuard",
-                    reason="Coordinated spam detected — new joins restricted",
+                    reason="Coordinated spam detected — group messaging restricted",
                 )
         except Exception:
             pass
@@ -1208,7 +1217,8 @@ class ModerationSystem:
                     create_notification(
                         bot_row.user_id, "raid_alert",
                         "🚨 Raid mode activated",
-                        f"Coordinated spam detected in {group.group_name or 'your group'} — new joins are temporarily restricted.",
+                        f"Coordinated spam detected in {group.group_name or 'your group'} — group messaging is temporarily restricted.",
+                        {"url": f"/bot/{group.bot_id}/group/{group.id}"},
                     )
         except Exception:
             pass

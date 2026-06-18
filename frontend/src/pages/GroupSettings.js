@@ -1432,7 +1432,8 @@ function GroupSettingsInner() {
                   Detects <b>coordinated</b> spam — many different accounts tripping the
                   filters, or posting the same message, in a short burst. It does <b>not</b>
                   lock on join rate (healthy spikes like shout-outs are fine). When a raid is
-                  detected, members who join <i>during</i> it are auto-restricted until it settles.
+                  detected, the bot temporarily restricts <i>messaging</i> (not joining) until
+                  it settles — choose who gets muted below.
                 </Typography>
 
                 <FormControlLabel
@@ -1477,6 +1478,22 @@ function GroupSettingsInner() {
                     />
                   </Grid>
                 </Grid>
+
+                <FormControl fullWidth size="small" sx={{ mt: 2 }}>
+                  <InputLabel>Who gets muted during a raid</InputLabel>
+                  <Select
+                    label="Who gets muted during a raid"
+                    value={rg.lockdown_scope || 'recent_joiners'}
+                    onChange={(e) => updateSetting('raid_guard.lockdown_scope', e.target.value)}
+                  >
+                    <MenuItem value="recent_joiners">Only new / recent joiners (recommended)</MenuItem>
+                    <MenuItem value="all">Everyone except admins (group goes read-only)</MenuItem>
+                  </Select>
+                </FormControl>
+                <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                  “Everyone except admins” temporarily mutes any non-admin who posts while the
+                  raid is active — messaging is restricted, members are never blocked from joining.
+                </Typography>
 
                 <FormControl fullWidth size="small" sx={{ mt: 2 }}>
                   <InputLabel>Action on members who join during a raid</InputLabel>

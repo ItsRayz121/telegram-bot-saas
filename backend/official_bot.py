@@ -2831,14 +2831,24 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
 
         # Phase 3 raid mode — duplicate-flood detection (behaviour-based, never
-        # join-rate). Detection only; the lockdown response runs at join time.
+        # join-rate). Detection here; the lockdown response runs at join time and,
+        # when lockdown_scope='all', also per-message below.
         try:
             from .bot_features import raid_guard
             uid = message.from_user.id if message.from_user else None
             if raid_guard.note_message(group_id, uid, text, full_settings):
                 await _announce_raid(context.bot, group_id, full_settings, flask_app)
+            # scope='all' → restrict messaging for every non-admin during the raid.
+            elif (raid_guard.lockdown_scope(full_settings) == "all"
+                    and message.from_user and not message.from_user.is_bot
+                    and raid_guard.is_locked_down(group_id, full_settings)):
+                if not await _is_raid_exempt(context.bot, group_id, message.from_user.id, flask_app):
+                    if await raid_guard.restrict_message_sender(
+                        context.bot, chat.id, message, message.from_user.id
+                    ):
+                        return
         except Exception as _re:
-            _log.debug("raid_guard message note failed: %s", _re)
+            _log.debug("raid_guard message handling failed: %s", _re)
 
         if am_cfg.get("enabled"):
             if await _automod_check(context.bot, message, am_cfg, group_id, flask_app):
@@ -3675,6 +3685,26 @@ def _msg_preview(msg, max_len=500):
     return (text[: max_len - 1] + "…") if len(text) >= max_len else text
 
 
+async def _is_raid_exempt(bot, group_id, user_id, flask_app) -> bool:
+    """Admins / creator are exempt from the scope='all' raid message-lock.
+
+    Tries the cached OfficialMember.is_admin first (no Telegram call); falls back
+    to a live status check so a not-yet-cached admin is never muted."""
+    try:
+        if flask_app:
+            with flask_app.app_context():
+                from .models import OfficialMember
+                m = OfficialMember.query.filter_by(
+                    telegram_group_id=str(group_id), telegram_user_id=str(user_id)
+                ).first()
+                if m and m.is_admin:
+                    return True
+        member = await bot.get_chat_member(chat_id=int(group_id), user_id=int(user_id))
+        return getattr(member, "status", None) in ("administrator", "creator")
+    except Exception:
+        return False
+
+
 async def _announce_raid(bot, group_id, settings, flask_app):
     """Post the one-time in-group raid-mode alert and log the event (best-effort)."""
     from .bot_features import raid_guard
@@ -3694,13 +3724,16 @@ async def _announce_raid(bot, group_id, settings, flask_app):
         if _can_send_to_group(str(group_id)):
             await bot.send_message(
                 chat_id=int(group_id),
-                text=raid_guard.activation_notice(raid_guard.seconds_remaining(group_id)),
+                text=raid_guard.activation_notice(
+                    raid_guard.seconds_remaining(group_id),
+                    raid_guard.lockdown_scope(settings),
+                ),
                 parse_mode=ParseMode.MARKDOWN,
             )
     except Exception as exc:
         _log.debug("[OfficialBot] raid announce failed: %s", exc)
     _log_event(flask_app, str(group_id), "raid_mode_activated",
-               "Coordinated spam detected — new joins restricted",
+               "Coordinated spam detected — group messaging restricted",
                {"moderator_username": "RaidGuard"})
     # Dashboard alert for the group owner (in-app bell + web push). Best-effort.
     try:
@@ -3713,8 +3746,8 @@ async def _announce_raid(bot, group_id, settings, flask_app):
                     create_notification(
                         tg.owner_user_id, "raid_alert",
                         "🚨 Raid mode activated",
-                        f"Coordinated spam detected in {tg.title or 'your group'} — new joins are temporarily restricted.",
-                        {"url": f"/groups/{tg.id}"},
+                        f"Coordinated spam detected in {tg.title or 'your group'} — group messaging is temporarily restricted.",
+                        {"url": f"/bot/official/group/{group_id}"},
                     )
     except Exception:
         pass

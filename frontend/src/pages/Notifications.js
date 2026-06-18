@@ -7,6 +7,7 @@ import {
   NotificationsActive, VolumeUp, DoneAll, MarkEmailRead,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
+import { useNavigate } from 'react-router-dom';
 import { notifications as notificationsApi } from '../services/api';
 import { enablePush, disablePush, pushSupported, notificationPermission } from '../utils/push';
 
@@ -24,6 +25,7 @@ const CATEGORY_LABELS = {
 const PER_PAGE = 20;
 
 export default function Notifications() {
+  const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -141,6 +143,11 @@ export default function Notifications() {
     if (!n.read) {
       try { await notificationsApi.markRead(n.id); } catch { /* ignore */ }
       setItems(prev => prev.map(x => x.id === n.id ? { ...x, read: true } : x));
+    }
+    // Deep-link to the relevant page when the notification carries a target.
+    const target = n.metadata?.url || n.metadata?.link;
+    if (target && typeof target === 'string' && target.startsWith('/')) {
+      navigate(target);
     }
   };
 

@@ -43,6 +43,10 @@ _DEFAULTS = {
     "min_text_len": 8,           # ignore short/empty messages for duplicate detection
     "lockdown_minutes": 10,
     "lockdown_action": "mute",   # what happens to members who join during a raid: mute | kick
+    # Who gets restricted from MESSAGING while a raid is active:
+    #   recent_joiners → only members who join during the raid (default, narrow)
+    #   all            → every non-admin who posts is muted (group goes read-only)
+    "lockdown_scope": "recent_joiners",
     "notify": True,
 }
 
@@ -215,12 +219,44 @@ async def lockdown_joiner(bot, chat_id, user_id, settings: dict) -> str:
     return "mute" if await _restrict_member(bot, chat_id, user_id) else "none"
 
 
-def activation_notice(seconds_left: int = 0) -> str:
+def lockdown_scope(settings: dict) -> str:
+    """'all' (mute every non-admin who posts) or 'recent_joiners' (default)."""
+    return "all" if get_config(settings).get("lockdown_scope") == "all" else "recent_joiners"
+
+
+async def restrict_message_sender(bot, chat_id, message, user_id) -> bool:
+    """Delete a message and mute its sender until the raid lockdown ends.
+
+    Used for lockdown_scope='all' so the group becomes read-only for non-admins
+    during a raid — restricting MESSAGING rather than joining. The mute carries an
+    until_date tied to the lockdown window, so it self-lifts (no group-wide
+    permission change to restore)."""
+    try:
+        await bot.delete_message(chat_id=chat_id, message_id=message.message_id)
+    except Exception:
+        pass
+    secs = max(60, seconds_remaining(chat_id) or 600)
+    until = datetime.utcnow() + timedelta(seconds=secs)
+    try:
+        await bot.restrict_chat_member(
+            chat_id=chat_id, user_id=user_id,
+            permissions=ChatPermissions(can_send_messages=False),
+            until_date=until,
+        )
+        return True
+    except Exception as exc:
+        logger.debug("raid message-lock failed (chat=%s user=%s): %s", chat_id, user_id, exc)
+        return False
+
+
+def activation_notice(seconds_left: int = 0, scope: str = "recent_joiners") -> str:
     """Linkless in-group alert posted once when raid mode activates."""
     mins = max(1, round(seconds_left / 60)) if seconds_left else None
     tail = f" for ~{mins} min" if mins else ""
+    who = ("Everyone except admins is temporarily muted"
+           if scope == "all" else "New members are temporarily muted")
     return (
         "🛡️ *Raid mode activated* — I detected coordinated spam from multiple "
-        f"accounts. New members are being automatically restricted{tail} until "
-        "things settle. Admins can lift this anytime by disabling Raid Mode."
+        f"accounts. {who}{tail} until things settle. Admins can lift this anytime "
+        "by disabling Raid Mode."
     )
