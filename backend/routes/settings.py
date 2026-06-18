@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 import requests as _http
 from flask import Blueprint, request, jsonify, Response
 from flask_jwt_extended import jwt_required, get_jwt_identity
@@ -399,9 +399,19 @@ def get_audit_logs(bot_id, group_id):
         page = request.args.get("page", 1, type=int)
         per_page = min(request.args.get("per_page", 50, type=int), 100)
         action_type = request.args.get("action_type", "")
+        search = (request.args.get("q") or request.args.get("search") or "").strip()
         query = AuditLog.query.filter_by(group_id=group.id)
         if action_type:
             query = query.filter_by(action_type=action_type)
+        if search:
+            like = f"%{search}%"
+            query = query.filter(db.or_(
+                AuditLog.target_username.ilike(like),
+                AuditLog.target_user_id.ilike(like),
+                AuditLog.moderator_username.ilike(like),
+                AuditLog.reason.ilike(like),
+                AuditLog.action_type.ilike(like),
+            ))
         query = query.order_by(AuditLog.timestamp.desc())
         paginated = query.paginate(page=page, per_page=per_page, error_out=False)
         return jsonify({
@@ -517,6 +527,18 @@ def get_custom_bot_leaderboard(bot_id, group_id):
         limit = min(request.args.get("limit", 20, type=int), 100)
         period = request.args.get("period", "all")
         has_wallet_filter = request.args.get("has_wallet")
+        search = (request.args.get("q") or "").strip().lower()
+
+        def _apply_search(qry):
+            if not search:
+                return qry
+            like = f"%{search}%"
+            return qry.filter(db.or_(
+                Member.username.ilike(like),
+                Member.first_name.ilike(like),
+                Member.telegram_user_id.ilike(like),
+                Member.wallet_address.ilike(like),
+            ))
 
         # Period (1d/7d/30d): true rolling window straight from the XP ledger.
         if period in ("1d", "7d", "30d"):
@@ -529,6 +551,7 @@ def get_custom_bot_leaderboard(bot_id, group_id):
             )
             if has_wallet_filter == "true":
                 q = q.filter(Member.wallet_address.isnot(None), Member.wallet_address != "")
+            q = _apply_search(q)
             rows = q.order_by(sums_sq.c.psum.desc()).limit(limit).all()
             col = {"1d": "xp_1d", "7d": "xp_7d", "30d": "xp_30d"}[period]
             out = []
@@ -543,10 +566,104 @@ def get_custom_bot_leaderboard(bot_id, group_id):
                 Member.wallet_address.isnot(None),
                 Member.wallet_address != "",
             )
+        members_q = _apply_search(members_q)
         members = members_q.order_by(Member.xp.desc()).limit(limit).all()
         return jsonify({"members": [m.to_dict() for m in members]})
     except Exception as e:
         logger.error(f"get_custom_bot_leaderboard error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/members/<user_id>/moderate", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=20)
+def moderate_custom_member(bot_id, group_id, user_id):
+    """Run a moderation action on one member from a custom-bot dashboard.
+
+    Supported actions: warn / mute / kick / ban / tempban. Performs the Telegram
+    call through the running custom bot, records an AuditLog row (so it shows in
+    the Audit Log) and updates the member. Single owner-chosen target only, per
+    the anti-ban rule.
+    """
+    try:
+        user = _get_current_user()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        bot, group, err = _get_bot_and_group(user, bot_id, group_id)
+        if err:
+            return err
+
+        data = request.get_json() or {}
+        action = (data.get("action") or "").strip().lower()
+        if action not in {"warn", "mute", "kick", "ban", "tempban"}:
+            return jsonify({"error": f"Invalid action '{action}'"}), 400
+        reason = (data.get("reason") or "").strip() or "Action taken from dashboard"
+        try:
+            duration_minutes = int(data.get("duration_minutes") or 0)
+        except (TypeError, ValueError):
+            duration_minutes = 0
+
+        member = Member.query.filter_by(group_id=group.id, telegram_user_id=str(user_id)).first()
+        target_username = member.username if member else None
+        target_name = (member.first_name if member and member.first_name else None) \
+            or (f"@{target_username}" if target_username else f"User {user_id}")
+        moderator_name = user.full_name or user.email or "Dashboard admin"
+
+        def _audit(at):
+            db.session.add(AuditLog(
+                group_id=group.id, action_type=at,
+                target_user_id=str(user_id), target_username=target_username,
+                moderator_username=moderator_name, reason=reason,
+                extra_data={"source": "dashboard", "duration_minutes": duration_minutes or None},
+            ))
+
+        if action == "warn":
+            _audit("warn")
+            if member:
+                member.warnings = (member.warnings or 0) + 1
+            db.session.commit()
+            return jsonify({"ok": True, "action": action})
+
+        from ..bot_manager import bot_manager
+        tg_bot, loop = bot_manager.get_bot_runtime(bot.id)
+        if not tg_bot or not loop:
+            return jsonify({"error": "Bot is not running right now — please try again shortly."}), 503
+
+        import asyncio
+        from telegram import ChatPermissions
+        chat_id = int(group.telegram_group_id)
+
+        async def _do():
+            if action == "ban":
+                await tg_bot.ban_chat_member(chat_id=chat_id, user_id=int(user_id))
+            elif action == "tempban":
+                until = datetime.utcnow() + timedelta(minutes=(duration_minutes or 1440))
+                await tg_bot.ban_chat_member(chat_id=chat_id, user_id=int(user_id), until_date=until)
+            elif action == "kick":
+                await tg_bot.ban_chat_member(chat_id=chat_id, user_id=int(user_id))
+                await tg_bot.unban_chat_member(chat_id=chat_id, user_id=int(user_id))
+            elif action == "mute":
+                until = datetime.utcnow() + timedelta(minutes=(duration_minutes or 60))
+                await tg_bot.restrict_chat_member(
+                    chat_id=chat_id, user_id=int(user_id),
+                    permissions=ChatPermissions(can_send_messages=False), until_date=until,
+                )
+
+        try:
+            asyncio.run_coroutine_threadsafe(_do(), loop).result(timeout=15)
+        except Exception as exc:
+            return jsonify({"error": f"Telegram refused the action: {exc}"}), 502
+
+        if action == "mute" and member:
+            member.is_muted = True
+            member.mute_until = datetime.utcnow() + timedelta(minutes=(duration_minutes or 60))
+        if action in ("ban", "tempban") and member and hasattr(member, "is_banned"):
+            member.is_banned = (action == "ban")
+        _audit(action)
+        db.session.commit()
+        return jsonify({"ok": True, "action": action})
+    except Exception as e:
+        logger.error(f"moderate_custom_member error: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 

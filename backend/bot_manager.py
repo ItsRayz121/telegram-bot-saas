@@ -3520,6 +3520,18 @@ class BotManager:
             count = len(self.active_bots)
         logger.info(f"Started {count} bots")
 
+    def get_bot_runtime(self, bot_id: int):
+        """Return (bot, loop) for a running custom bot, or (None, None).
+
+        Lets Flask request handlers bridge into a custom bot's asyncio loop the
+        same way the official lineage uses get_official_bot_loop().
+        """
+        with self._lock:
+            instance = self.active_bots.get(bot_id)
+        if instance and instance.application and instance.loop and instance.loop.is_running():
+            return instance.application.bot, instance.loop
+        return None, None
+
     def route_update(self, bot_id: int, update_data: dict) -> bool:
         """Dispatch a Telegram update JSON to the correct bot's Application.
 

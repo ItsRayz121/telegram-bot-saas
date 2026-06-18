@@ -277,6 +277,12 @@ export const settings = {
       ? api.delete(`/api/telegram-groups/${groupId}/warnings/${warningId}`)
       : api.delete(`/api/bots/${botId}/groups/${groupId}/warnings/${warningId}`),
 
+  // Run a moderation action (warn / mute / kick / ban / tempban) on one member.
+  moderateMember: (botId, groupId, userId, data) =>
+    botId === 'official'
+      ? api.post(`/api/telegram-groups/${groupId}/members/${userId}/moderate`, data)
+      : api.post(`/api/bots/${botId}/groups/${groupId}/members/${userId}/moderate`, data),
+
   // Escalation log: lists EscalationEvent records for this group
   listEscalations: (botId, groupId, params) =>
     botId === 'official'

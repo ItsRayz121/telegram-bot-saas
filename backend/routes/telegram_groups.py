@@ -536,6 +536,123 @@ def remove_warning(group_id, warning_id):
     return jsonify({"message": "Warning removed"}), 200
 
 
+# ── Member moderation actions (dashboard-initiated) ────────────────────────────
+
+@tg_groups_bp.route("/<group_id>/members/<user_id>/moderate", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=20)
+def moderate_official_member(group_id, user_id):
+    """Run a moderation action on one member from the dashboard.
+
+    Supported actions: warn / mute / kick / ban / tempban. Performs the Telegram
+    call through the live official bot, records a mod-log BotEvent (so it shows up
+    in the Audit Log) and updates the member row. Single, owner-chosen target only
+    — never bulk — per the anti-ban rule.
+    """
+    user = _current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    tg = _owns_group(user.id, group_id)
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+
+    data = request.get_json() or {}
+    action = (data.get("action") or "").strip().lower()
+    if action not in {"warn", "mute", "kick", "ban", "tempban"}:
+        return jsonify({"error": f"Invalid action '{action}'"}), 400
+    reason = (data.get("reason") or "").strip() or "Action taken from dashboard"
+    try:
+        duration_minutes = int(data.get("duration_minutes") or 0)
+    except (TypeError, ValueError):
+        duration_minutes = 0
+
+    member = OfficialMember.query.filter_by(
+        telegram_group_id=group_id, telegram_user_id=str(user_id)
+    ).first()
+    target_username = member.username if member else None
+    target_name = (member.first_name if member and member.first_name else None) \
+        or (f"@{target_username}" if target_username else f"User {user_id}")
+    moderator_name = user.full_name or user.email or "Dashboard admin"
+
+    meta = {
+        "target_user_id": str(user_id),
+        "target_username": target_username or "",
+        "moderator_username": moderator_name,
+        "moderator_id": str(user.id),
+        "reason": reason,
+        "source": "dashboard",
+    }
+
+    # warn is a pure DB action — no Telegram call required.
+    if action == "warn":
+        w = OfficialWarning(
+            telegram_group_id=group_id,
+            target_user_id=str(user_id),
+            target_username=target_username,
+            moderator_username=moderator_name,
+            reason=reason,
+            active=True,
+        )
+        db.session.add(w)
+        if member:
+            member.warnings = (member.warnings or 0) + 1
+        db.session.add(BotEvent(
+            telegram_group_id=str(group_id), event_type="mod_warning",
+            message=f"{target_name} warned by {moderator_name}: {reason}", metadata_=meta,
+        ))
+        db.session.commit()
+        return jsonify({"ok": True, "action": action}), 200
+
+    # All other actions need the live bot.
+    from ..official_bot import get_official_bot_loop
+    bot, loop = get_official_bot_loop()
+    if not bot or not loop:
+        return jsonify({"error": "Bot is not running right now — please try again shortly."}), 503
+
+    import asyncio
+    from telegram import ChatPermissions
+    chat_id = int(group_id)
+
+    async def _do():
+        if action == "ban":
+            await bot.ban_chat_member(chat_id=chat_id, user_id=int(user_id))
+        elif action == "tempban":
+            until = datetime.utcnow() + timedelta(minutes=(duration_minutes or 1440))
+            await bot.ban_chat_member(chat_id=chat_id, user_id=int(user_id), until_date=until)
+        elif action == "kick":
+            await bot.ban_chat_member(chat_id=chat_id, user_id=int(user_id))
+            await bot.unban_chat_member(chat_id=chat_id, user_id=int(user_id))
+        elif action == "mute":
+            until = datetime.utcnow() + timedelta(minutes=(duration_minutes or 60))
+            await bot.restrict_chat_member(
+                chat_id=chat_id, user_id=int(user_id),
+                permissions=ChatPermissions(can_send_messages=False),
+                until_date=until,
+            )
+
+    try:
+        asyncio.run_coroutine_threadsafe(_do(), loop).result(timeout=15)
+    except Exception as exc:
+        return jsonify({"error": f"Telegram refused the action: {exc}"}), 502
+
+    event_type = {"ban": "mod_ban", "tempban": "mod_tempban",
+                  "kick": "mod_kick", "mute": "mod_mute"}[action]
+    if action == "tempban":
+        meta["duration_minutes"] = duration_minutes or 1440
+    if action == "mute":
+        meta["duration_minutes"] = duration_minutes or 60
+        if member:
+            member.is_muted = True
+            member.mute_until = datetime.utcnow() + timedelta(minutes=(duration_minutes or 60))
+
+    db.session.add(BotEvent(
+        telegram_group_id=str(group_id), event_type=event_type,
+        message=f"{target_name} {action} by {moderator_name}: {reason}", metadata_=meta,
+    ))
+    db.session.commit()
+    return jsonify({"ok": True, "action": action}), 200
+
+
 # ── Mod-log (BotEvent stream for mod actions) ──────────────────────────────────
 
 @tg_groups_bp.route("/<group_id>/mod-log", methods=["GET"])
@@ -558,10 +675,23 @@ def get_mod_log(group_id):
     page = request.args.get("page", 1, type=int)
     per_page = min(request.args.get("per_page", 50, type=int), 100)
 
-    paginated = BotEvent.query.filter(
+    q = BotEvent.query.filter(
         BotEvent.telegram_group_id == group_id,
         BotEvent.event_type.in_(MOD_EVENT_TYPES),
-    ).order_by(BotEvent.created_at.desc()).paginate(
+    )
+
+    # Free-text search across the event message + serialized metadata (target
+    # name / id / username, moderator, reason). Cast the JSON to text so a single
+    # ilike covers every field the Audit Log surfaces.
+    search = (request.args.get("q") or request.args.get("search") or "").strip()
+    if search:
+        like = f"%{search}%"
+        q = q.filter(db.or_(
+            BotEvent.message.ilike(like),
+            db.cast(BotEvent.metadata_, db.Text).ilike(like),
+        ))
+
+    paginated = q.order_by(BotEvent.created_at.desc()).paginate(
         page=page, per_page=per_page, error_out=False
     )
 
@@ -697,6 +827,18 @@ def get_leaderboard(group_id):
     limit = min(request.args.get("limit", 20, type=int), 100)
     period = request.args.get("period", "all")
     has_wallet = request.args.get("has_wallet")
+    search = (request.args.get("q") or "").strip().lower()
+
+    def _apply_search(qry):
+        if not search:
+            return qry
+        like = f"%{search}%"
+        return qry.filter(db.or_(
+            OfficialMember.username.ilike(like),
+            OfficialMember.first_name.ilike(like),
+            OfficialMember.telegram_user_id.ilike(like),
+            OfficialMember.wallet_address.ilike(like),
+        ))
 
     # Period (1d/7d/30d): compute the true rolling window straight from the XP
     # ledger so Today / 7 Days / 30 Days never collapse onto all-time XP.
@@ -716,6 +858,7 @@ def get_leaderboard(group_id):
                 OfficialMember.wallet_address.isnot(None),
                 OfficialMember.wallet_address != "",
             )
+        q = _apply_search(q)
         rows = q.order_by(sums_sq.c.psum.desc()).limit(limit).all()
         col = {"1d": "xp_1d", "7d": "xp_7d", "30d": "xp_30d"}[period]
         out = []
@@ -730,6 +873,7 @@ def get_leaderboard(group_id):
             OfficialMember.wallet_address.isnot(None),
             OfficialMember.wallet_address != "",
         )
+    members_q = _apply_search(members_q)
     members = members_q.order_by(OfficialMember.xp.desc()).limit(limit).all()
     return jsonify({"members": [m.to_dict() for m in members]}), 200
 

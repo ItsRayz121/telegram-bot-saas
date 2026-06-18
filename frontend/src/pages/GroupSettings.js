@@ -6,12 +6,14 @@ import {
   TableContainer, TableHead, TableRow, Paper, Select, MenuItem,
   FormControl, InputLabel, Pagination, Divider, Dialog, DialogTitle,
   DialogContent, DialogActions, Tooltip, Alert, Stack, Avatar, Popover,
+  Menu, InputAdornment, ListItemIcon, ListItemText,
   useTheme, useMediaQuery,
 } from '@mui/material';
 import {
   ArrowBack, Save, Add, Delete, CheckCircle, Schedule,
   Send, Assessment, People, SmartToy, Refresh,
   Warning as WarningIcon, EmojiEvents, FileDownload,
+  Search, Block, Gavel, VolumeOff, PersonRemove,
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -82,6 +84,69 @@ const ACTION_COLORS = {
   warn: 'warning', ban: 'error', kick: 'error', mute: 'warning',
   unmute: 'success', unban: 'success', tempban: 'error', tempmute: 'warning', purge: 'info',
 };
+
+// Inline moderation menu used in the Warnings + Audit Log rows so an admin can
+// act on a repeat offender (warn / mute / kick / temp-ban / ban) without leaving
+// the page. Single, owner-chosen target only — never bulk (anti-ban rule).
+function ModerationActions({ botId, groupId, userId, username, onDone }) {
+  const [anchor, setAnchor] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const close = () => setAnchor(null);
+  const LABELS = { warn: 'Warn', mute: 'Mute (1h)', kick: 'Kick', tempban: 'Temp-ban (24h)', ban: 'Ban permanently' };
+
+  const run = async (action, opts = {}) => {
+    close();
+    if (!userId) { toast.error('No target user id on this row'); return; }
+    const who = username ? `@${username}` : `user ${userId}`;
+    if (action !== 'warn' && !window.confirm(`${LABELS[action]} ${who}?`)) return;
+    setBusy(true);
+    try {
+      await settings.moderateMember(botId, groupId, userId, { action, ...opts });
+      toast.success(`${LABELS[action]} applied to ${who}`);
+      onDone?.();
+    } catch (e) {
+      toast.error(e.response?.data?.error || `Failed to ${action}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <Tooltip title="Moderation actions">
+        <span>
+          <IconButton size="small" disabled={busy || !userId}
+            onClick={(e) => { e.stopPropagation(); setAnchor(e.currentTarget); }}>
+            {busy ? <CircularProgress size={16} /> : <Gavel fontSize="small" />}
+          </IconButton>
+        </span>
+      </Tooltip>
+      <Menu anchorEl={anchor} open={!!anchor} onClose={close} onClick={(e) => e.stopPropagation()}>
+        <MenuItem onClick={() => run('warn')}>
+          <ListItemIcon><WarningIcon fontSize="small" color="warning" /></ListItemIcon>
+          <ListItemText>Warn</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={() => run('mute', { duration_minutes: 60 })}>
+          <ListItemIcon><VolumeOff fontSize="small" /></ListItemIcon>
+          <ListItemText>Mute 1 hour</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={() => run('kick')}>
+          <ListItemIcon><PersonRemove fontSize="small" /></ListItemIcon>
+          <ListItemText>Kick (remove)</ListItemText>
+        </MenuItem>
+        <Divider />
+        <MenuItem onClick={() => run('tempban', { duration_minutes: 1440 })}>
+          <ListItemIcon><Gavel fontSize="small" color="error" /></ListItemIcon>
+          <ListItemText>Temp-ban 24h</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={() => run('ban')}>
+          <ListItemIcon><Block fontSize="small" color="error" /></ListItemIcon>
+          <ListItemText>Ban permanently</ListItemText>
+        </MenuItem>
+      </Menu>
+    </>
+  );
+}
 
 // Friendly labels for the Protection Activity log (bot policy + raid mode).
 const PROTECTION_EVENT_META = {
@@ -327,10 +392,12 @@ function GroupSettingsInner() {
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const [leaderboardTimeRange, setLeaderboardTimeRange] = useState('all');
   const [leaderboardWalletOnly, setLeaderboardWalletOnly] = useState(false);
+  const [leaderboardSearch, setLeaderboardSearch] = useState('');
 
   const [auditLogs, setAuditLogs] = useState([]);
   const [auditTotal, setAuditTotal] = useState(0);
   const [auditPage, setAuditPage] = useState(1);
+  const [auditSearch, setAuditSearch] = useState('');
   const [expandedLogId, setExpandedLogId] = useState(null);
   const [expandedWarnId, setExpandedWarnId] = useState(null);
 
@@ -478,6 +545,7 @@ function GroupSettingsInner() {
       const params = { limit: 50 };
       if (leaderboardTimeRange && leaderboardTimeRange !== 'all') params.period = leaderboardTimeRange;
       if (leaderboardWalletOnly) params.has_wallet = 'true';
+      if (leaderboardSearch.trim()) params.q = leaderboardSearch.trim();
       const res = await settings.getLeaderboard(botId, groupId, params);
       setLeaderboard(res.data.members || []);
     } catch {
@@ -485,17 +553,19 @@ function GroupSettingsInner() {
     } finally {
       setLeaderboardLoading(false);
     }
-  }, [botId, groupId, leaderboardTimeRange, leaderboardWalletOnly]);
+  }, [botId, groupId, leaderboardTimeRange, leaderboardWalletOnly, leaderboardSearch]);
 
   const fetchAuditLogs = useCallback(async (page = 1) => {
     try {
-      const res = await settings.getAuditLogs(botId, groupId, { page, per_page: 20 });
+      const params = { page, per_page: 20 };
+      if (auditSearch.trim()) params.q = auditSearch.trim();
+      const res = await settings.getAuditLogs(botId, groupId, params);
       setAuditLogs(res.data.logs);
       setAuditTotal(res.data.pages);
     } catch {
       toast.error('Failed to load audit logs');
     }
-  }, [botId, groupId]);
+  }, [botId, groupId, auditSearch]);
 
   const fetchProtectionLog = useCallback(async () => {
     setProtectionLoading(true);
@@ -3345,6 +3415,13 @@ function GroupSettingsInner() {
                 </Button>
               </Box>
             </Box>
+            <TextField
+              size="small" fullWidth sx={{ mb: 1.5 }}
+              placeholder="Search name, @username, Telegram ID, wallet…"
+              value={leaderboardSearch}
+              onChange={(e) => setLeaderboardSearch(e.target.value)}
+              InputProps={{ startAdornment: (<InputAdornment position="start"><Search fontSize="small" /></InputAdornment>) }}
+            />
             {leaderboardTimeRange !== 'all' && (
               <Typography variant="caption" color="text.secondary" display="block" mb={1.5}>
                 Showing XP earned in the last {leaderboardTimeRange === '1d' ? '24 hours' : leaderboardTimeRange === '7d' ? '7 days' : '30 days'}.
@@ -3461,6 +3538,13 @@ function GroupSettingsInner() {
                 ? 'Moderation actions (bans, kicks, mutes, warns, purges) logged by @telegizer_bot in this group.'
                 : 'Moderation actions (bans, kicks, mutes, warns, purges) logged by your bot in this group.'}
             </Typography>
+            <TextField
+              size="small" fullWidth sx={{ mb: 1.5 }}
+              placeholder="Search target, moderator, reason, action, message…"
+              value={auditSearch}
+              onChange={(e) => { setAuditSearch(e.target.value); setAuditPage(1); }}
+              InputProps={{ startAdornment: (<InputAdornment position="start"><Search fontSize="small" /></InputAdornment>) }}
+            />
             {auditLogs.length === 0 ? (
               <Alert severity="info" icon={false}>
                 No moderation events recorded yet. Events appear here after admins use commands like /ban, /kick, /mute, or /warn.
@@ -3479,9 +3563,16 @@ function GroupSettingsInner() {
                     >
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
                         <Chip label={log.action_type} color={ACTION_COLORS[log.action_type] || 'default'} size="small" sx={{ height: 20, fontSize: '0.68rem' }} />
-                        <Typography variant="caption" color="text.secondary">
-                          {fmtTs(log.timestamp)}
-                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }} onClick={(e) => e.stopPropagation()}>
+                          <Typography variant="caption" color="text.secondary">
+                            {fmtTs(log.timestamp)}
+                          </Typography>
+                          <ModerationActions
+                            botId={botId} groupId={groupId}
+                            userId={log.target_user_id} username={log.target_username}
+                            onDone={() => { fetchAuditLogs(auditPage); fetchWarnings({ page: 1 }); }}
+                          />
+                        </Box>
                       </Box>
                       <Typography variant="caption" display="block">
                         <strong>Target:</strong> {log.target_username ? `@${log.target_username}` : log.target_user_id || '—'}
@@ -3524,6 +3615,7 @@ function GroupSettingsInner() {
                     <TableCell sx={{ width: 130 }}>Reason</TableCell>
                     <TableCell>Msg Preview</TableCell>
                     <TableCell sx={{ width: 120 }}>Time</TableCell>
+                    <TableCell sx={{ width: 56 }} align="right">Act</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -3569,10 +3661,17 @@ function GroupSettingsInner() {
                               {fmtTs(log.timestamp)}
                             </Typography>
                           </TableCell>
+                          <TableCell sx={cellSx} align="right" onClick={(e) => e.stopPropagation()}>
+                            <ModerationActions
+                              botId={botId} groupId={groupId}
+                              userId={log.target_user_id} username={log.target_username}
+                              onDone={() => { fetchAuditLogs(auditPage); fetchWarnings({ page: 1 }); }}
+                            />
+                          </TableCell>
                         </TableRow>
                         {isExpanded && (
                           <TableRow>
-                            <TableCell colSpan={6} sx={{ py: 1.5, px: 2.5, bgcolor: 'rgba(255,255,255,0.025)' }}>
+                            <TableCell colSpan={7} sx={{ py: 1.5, px: 2.5, bgcolor: 'rgba(255,255,255,0.025)' }}>
                               <Stack spacing={0.75}>
                                 {log.reason && (
                                   <Box>
@@ -3669,11 +3768,19 @@ function GroupSettingsInner() {
                               </Typography>
                             )}
                           </Box>
-                          <Tooltip title="Remove warning">
-                            <IconButton size="small" color="error" onClick={(e) => { e.stopPropagation(); handleRemoveWarning(warning.id); }}>
-                              <Delete sx={{ fontSize: 16 }} />
-                            </IconButton>
-                          </Tooltip>
+                          <Box sx={{ display: 'flex', alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
+                            <ModerationActions
+                              botId={botId} groupId={groupId}
+                              userId={warning.target_user_id}
+                              username={warning.resolved_username || warning.target_username}
+                              onDone={() => fetchWarnings({ page: 1 })}
+                            />
+                            <Tooltip title="Remove warning">
+                              <IconButton size="small" color="error" onClick={(e) => { e.stopPropagation(); handleRemoveWarning(warning.id); }}>
+                                <Delete sx={{ fontSize: 16 }} />
+                              </IconButton>
+                            </Tooltip>
+                          </Box>
                         </Box>
                         {shortLabel && <Typography variant="caption" color="text.secondary" display="block">{shortLabel}</Typography>}
                         {warnMsgPreview && <Typography variant="caption" color="text.disabled" display="block" noWrap>{warnMsgPreview}</Typography>}
@@ -3713,7 +3820,7 @@ function GroupSettingsInner() {
                         <TableCell>Msg Preview</TableCell>
                         <TableCell sx={{ width: 120 }}>Issued By</TableCell>
                         <TableCell sx={{ width: 110 }}>Date</TableCell>
-                        <TableCell sx={{ width: 56 }} align="center">Del</TableCell>
+                        <TableCell sx={{ width: 90 }} align="center">Actions</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -3762,12 +3869,20 @@ function GroupSettingsInner() {
                                   {fmtTs(warning.created_at)}
                                 </Typography>
                               </TableCell>
-                              <TableCell sx={cellSx} align="center">
-                                <Tooltip title="Remove warning">
-                                  <IconButton size="small" color="error" onClick={(e) => { e.stopPropagation(); handleRemoveWarning(warning.id); }}>
-                                    <Delete sx={{ fontSize: 16 }} />
-                                  </IconButton>
-                                </Tooltip>
+                              <TableCell sx={cellSx} align="center" onClick={(e) => e.stopPropagation()}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  <ModerationActions
+                                    botId={botId} groupId={groupId}
+                                    userId={warning.target_user_id}
+                                    username={warning.resolved_username || warning.target_username}
+                                    onDone={() => fetchWarnings({ page: 1 })}
+                                  />
+                                  <Tooltip title="Remove warning">
+                                    <IconButton size="small" color="error" onClick={(e) => { e.stopPropagation(); handleRemoveWarning(warning.id); }}>
+                                      <Delete sx={{ fontSize: 16 }} />
+                                    </IconButton>
+                                  </Tooltip>
+                                </Box>
                               </TableCell>
                             </TableRow>
                             {isExpanded && (
