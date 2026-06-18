@@ -314,11 +314,7 @@ def get_members(bot_id, group_id):
         sort_by = request.args.get("sort_by", "xp")
         sort_dir = request.args.get("sort_dir", "desc")
         period = request.args.get("period", "all")
-
-        # When sorting by XP and a time period is set, sort by the period column instead
-        _period_col_names = {"1d": "xp_1d", "7d": "xp_7d", "30d": "xp_30d"}
-        if period != "all" and sort_by == "xp":
-            sort_by = _period_col_names.get(period, "xp")
+        period_is_window = period in ("1d", "7d", "30d")
 
         query = Member.query.filter_by(group_id=group.id)
         if search:
@@ -349,6 +345,31 @@ def get_members(bot_id, group_id):
             "is_verified": Member.is_verified, "wallet_address": Member.wallet_address,
             "xp_1d": Member.xp_1d, "xp_7d": Member.xp_7d, "xp_30d": Member.xp_30d,
         }
+        # Period (1d/7d/30d): outer-join the XP ledger so displayed window XP and
+        # XP-sort ordering reflect the true rolling window, not stale snapshots.
+        if period_is_window:
+            from ..database import xp_period_subquery
+            from sqlalchemy import func
+            sums_sq = xp_period_subquery("custom", period)
+            psum = func.coalesce(sums_sq.c.psum, 0)
+            total = query.count()
+            jq = query.outerjoin(sums_sq, sums_sq.c.mid == Member.id).add_columns(psum.label("psum"))
+            order_expr = psum if sort_by == "xp" else _sort_map.get(sort_by, Member.xp)
+            jq = jq.order_by(order_expr.desc() if sort_dir == "desc" else order_expr.asc())
+            rows = jq.offset((page - 1) * per_page).limit(per_page).all()
+            col = {"1d": "xp_1d", "7d": "xp_7d", "30d": "xp_30d"}[period]
+            members_out = []
+            for m, psum_val in rows:
+                setattr(m, col, int(psum_val or 0))
+                members_out.append(m.to_dict())
+            return jsonify({
+                "members": members_out,
+                "total": total,
+                "pages": max(1, (total + per_page - 1) // per_page),
+                "page": page,
+                "per_page": per_page,
+            })
+
         sort_col = _sort_map.get(sort_by, Member.xp)
         query = query.order_by(sort_col.desc() if sort_dir == "desc" else sort_col.asc())
         paginated = query.paginate(page=page, per_page=per_page, error_out=False)
@@ -497,22 +518,32 @@ def get_custom_bot_leaderboard(bot_id, group_id):
         period = request.args.get("period", "all")
         has_wallet_filter = request.args.get("has_wallet")
 
-        period_col_map = {
-            "1d": Member.xp_1d,
-            "7d": Member.xp_7d,
-            "30d": Member.xp_30d,
-        }
-        sort_col = period_col_map.get(period, Member.xp)
+        # Period (1d/7d/30d): true rolling window straight from the XP ledger.
+        if period in ("1d", "7d", "30d"):
+            from ..database import xp_period_subquery
+            sums_sq = xp_period_subquery("custom", period)
+            q = (
+                db.session.query(Member, sums_sq.c.psum)
+                .join(sums_sq, sums_sq.c.mid == Member.id)
+                .filter(Member.group_id == group.id, sums_sq.c.psum > 0)
+            )
+            if has_wallet_filter == "true":
+                q = q.filter(Member.wallet_address.isnot(None), Member.wallet_address != "")
+            rows = q.order_by(sums_sq.c.psum.desc()).limit(limit).all()
+            col = {"1d": "xp_1d", "7d": "xp_7d", "30d": "xp_30d"}[period]
+            out = []
+            for m, psum in rows:
+                setattr(m, col, int(psum or 0))
+                out.append(m.to_dict())
+            return jsonify({"members": out})
 
         members_q = Member.query.filter_by(group_id=group.id)
-        if period != "all":
-            members_q = members_q.filter(sort_col > 0)
         if has_wallet_filter == "true":
             members_q = members_q.filter(
                 Member.wallet_address.isnot(None),
                 Member.wallet_address != "",
             )
-        members = members_q.order_by(sort_col.desc()).limit(limit).all()
+        members = members_q.order_by(Member.xp.desc()).limit(limit).all()
         return jsonify({"members": [m.to_dict() for m in members]})
     except Exception as e:
         logger.error(f"get_custom_bot_leaderboard error: {e}", exc_info=True)

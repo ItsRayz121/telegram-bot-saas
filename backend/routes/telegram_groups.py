@@ -698,22 +698,39 @@ def get_leaderboard(group_id):
     period = request.args.get("period", "all")
     has_wallet = request.args.get("has_wallet")
 
-    period_col_map = {
-        "1d": OfficialMember.xp_1d,
-        "7d": OfficialMember.xp_7d,
-        "30d": OfficialMember.xp_30d,
-    }
-    sort_col = period_col_map.get(period, OfficialMember.xp)
+    # Period (1d/7d/30d): compute the true rolling window straight from the XP
+    # ledger so Today / 7 Days / 30 Days never collapse onto all-time XP.
+    if period in ("1d", "7d", "30d"):
+        from ..database import xp_period_subquery
+        sums_sq = xp_period_subquery("official", period)
+        q = (
+            db.session.query(OfficialMember, sums_sq.c.psum)
+            .join(sums_sq, sums_sq.c.mid == OfficialMember.id)
+            .filter(
+                OfficialMember.telegram_group_id == group_id,
+                sums_sq.c.psum > 0,
+            )
+        )
+        if has_wallet == "true":
+            q = q.filter(
+                OfficialMember.wallet_address.isnot(None),
+                OfficialMember.wallet_address != "",
+            )
+        rows = q.order_by(sums_sq.c.psum.desc()).limit(limit).all()
+        col = {"1d": "xp_1d", "7d": "xp_7d", "30d": "xp_30d"}[period]
+        out = []
+        for m, psum in rows:
+            setattr(m, col, int(psum or 0))  # surface accurate window XP to the client
+            out.append(m.to_dict())
+        return jsonify({"members": out}), 200
 
     members_q = OfficialMember.query.filter_by(telegram_group_id=group_id)
-    if period != "all":
-        members_q = members_q.filter(sort_col > 0)
     if has_wallet == "true":
         members_q = members_q.filter(
             OfficialMember.wallet_address.isnot(None),
             OfficialMember.wallet_address != "",
         )
-    members = members_q.order_by(sort_col.desc()).limit(limit).all()
+    members = members_q.order_by(OfficialMember.xp.desc()).limit(limit).all()
     return jsonify({"members": [m.to_dict() for m in members]}), 200
 
 
@@ -1550,11 +1567,7 @@ def list_official_members(group_id):
     sort_by = request.args.get("sort_by", "xp")
     sort_dir = request.args.get("sort_dir", "desc")
     period = request.args.get("period", "all")
-
-    # When sorting by XP and a time period is set, sort by the period column instead
-    period_col_map = {"1d": "xp_1d", "7d": "xp_7d", "30d": "xp_30d"}
-    if period != "all" and sort_by == "xp":
-        sort_by = period_col_map.get(period, "xp")
+    period_is_window = period in ("1d", "7d", "30d")
 
     query = OfficialMember.query.filter_by(telegram_group_id=group_id)
 
@@ -1583,10 +1596,37 @@ def list_official_members(group_id):
     if has_warnings is not None and has_warnings.lower() == "true":
         query = query.filter(OfficialMember.warnings > 0)
 
+    total = query.count()
+
+    # Period (1d/7d/30d): outer-join the XP ledger so the displayed window XP and
+    # (when sorting by XP) the ordering both come from the true rolling window.
+    if period_is_window:
+        from ..database import xp_period_subquery
+        from sqlalchemy import func
+        sums_sq = xp_period_subquery("official", period)
+        psum = func.coalesce(sums_sq.c.psum, 0)
+        jq = query.outerjoin(sums_sq, sums_sq.c.mid == OfficialMember.id).add_columns(psum.label("psum"))
+        if sort_by == "xp":
+            order_expr = psum
+        else:
+            order_expr = getattr(OfficialMember, sort_by, OfficialMember.xp)
+        jq = jq.order_by(order_expr.desc() if sort_dir == "desc" else order_expr.asc())
+        rows = jq.offset((page - 1) * per_page).limit(per_page).all()
+        col = {"1d": "xp_1d", "7d": "xp_7d", "30d": "xp_30d"}[period]
+        members_out = []
+        for m, psum_val in rows:
+            setattr(m, col, int(psum_val or 0))
+            members_out.append(m.to_dict())
+        return jsonify({
+            "members": members_out,
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "pages": max(1, (total + per_page - 1) // per_page),
+        }), 200
+
     col = getattr(OfficialMember, sort_by, OfficialMember.xp)
     query = query.order_by(col.desc() if sort_dir == "desc" else col.asc())
-
-    total = query.count()
     members = query.offset((page - 1) * per_page).limit(per_page).all()
 
     return jsonify({

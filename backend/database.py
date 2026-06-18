@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from .models import db, Group, Member, AuditLog, Bot, User, XpEvent
 from .group_defaults import get_group_default_settings
 from .config import Config
@@ -8,6 +8,53 @@ def get_default_settings():
     """Return canonical group defaults. Delegates to group_defaults so both
     the official bot and legacy custom-bot groups stay in sync."""
     return get_group_default_settings()
+
+
+# ── Period (rolling-window) XP from the ledger ─────────────────────────────────
+# The xp_1d/xp_7d/xp_30d snapshot columns are only as fresh as the last
+# recompute_xp_periods run, so "Today / 7 Days / 30 Days" can read identically to
+# all-time between runs. These helpers compute the true rolling window straight
+# from the xp_events ledger so member/leaderboard endpoints are always accurate.
+
+_PERIOD_DAYS = {"1d": 1, "7d": 7, "30d": 30}
+
+
+def xp_period_subquery(scope, period):
+    """SQLAlchemy subquery of (mid, psum) summing xp_events over the rolling
+    window for `scope` ('official' | 'custom'). Returns None for unknown period."""
+    days = _PERIOD_DAYS.get(period)
+    if not days:
+        return None
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    return (
+        db.session.query(
+            XpEvent.member_id.label("mid"),
+            db.func.sum(XpEvent.amount).label("psum"),
+        )
+        .filter(XpEvent.scope == scope, XpEvent.created_at >= cutoff)
+        .group_by(XpEvent.member_id)
+        .subquery()
+    )
+
+
+def xp_period_sums(scope, period, member_ids=None):
+    """Return {member_id: xp_sum (>=0)} from the ledger over the rolling window.
+    `member_ids` optionally restricts the scan. Empty dict for unknown period."""
+    days = _PERIOD_DAYS.get(period)
+    if not days:
+        return {}
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    q = (
+        db.session.query(XpEvent.member_id, db.func.sum(XpEvent.amount))
+        .filter(XpEvent.scope == scope, XpEvent.created_at >= cutoff)
+    )
+    if member_ids is not None:
+        member_ids = list(member_ids)
+        if not member_ids:
+            return {}
+        q = q.filter(XpEvent.member_id.in_(member_ids))
+    q = q.group_by(XpEvent.member_id)
+    return {mid: max(0, int(s or 0)) for mid, s in q.all()}
 
 
 class DatabaseManager:
