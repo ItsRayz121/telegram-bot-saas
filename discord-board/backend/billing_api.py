@@ -45,9 +45,15 @@ def billing_status(guild_id: int):
     # lazily downgrade if the Pro period lapsed
     if billing.expire_if_due(g.db, guild):
         g.db.commit()
+    # Account-level plan: Pro is an account entitlement — if the owner holds Pro
+    # on any of their servers, this one is Pro too (no separate per-server plan).
+    account_pro = billing.account_is_pro(g.db, guild.owner_id)
+    via_other = account_pro and not guild.is_pro
     return jsonify(
-        plan=guild.plan or "free",
-        is_pro=guild.is_pro,
+        plan="pro" if (guild.is_pro or account_pro) else "free",
+        is_pro=guild.is_pro or account_pro,
+        account_pro=account_pro,
+        via_account=via_other,  # Pro inherited from another server on this account
         plan_expires_at=guild.plan_expires_at.isoformat() + "Z" if guild.plan_expires_at else None,
         pricing=billing.pricing(),
         configured=nowpayments.is_configured(),

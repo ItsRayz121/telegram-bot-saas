@@ -1,15 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Box, Grid, Card, CardContent, Typography, Button, TextField, MenuItem, Switch,
   FormControlLabel, List, ListItem, ListItemText, IconButton, Chip, Alert,
-  CircularProgress, Stack, Divider,
+  CircularProgress, Stack, Divider, Tabs, Tab,
 } from '@mui/material';
-import { Add, Delete, ArrowBack } from '@mui/icons-material';
+import { Add, Delete, ArrowBack, Download } from '@mui/icons-material';
 import guildizerApi from '../../../services/guildizerApi';
 import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
+import { downloadCsv } from './csv';
 
 const TEXT_TYPES = new Set([0, 5]);
 const TYPES = ['proof_collection', 'content_submission', 'social_task', 'raid'];
+const TYPE_LABEL = { proof_collection: 'Proof Collection', content_submission: 'Content Submission', social_task: 'Social Task', raid: 'Raid' };
 const VMODES = ['manual', 'honor', 'link'];
 const STATUS_COLOR = { draft: 'default', active: 'success', paused: 'warning', closed: 'default' };
 
@@ -19,7 +21,17 @@ export default function CampaignsTab({ guildId, channels = [] }) {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
   const [creating, setCreating] = useState(false);
+  const [typeFilter, setTypeFilter] = useState('all');
   const textChannels = channels.filter((c) => TEXT_TYPES.has(c.type));
+
+  const summary = useMemo(() => {
+    const active = campaigns.filter((c) => c.status === 'active').length;
+    const submissions = campaigns.reduce((n, c) => n + (c.counts?.verified || 0) + (c.counts?.pending || 0), 0);
+    const pending = campaigns.reduce((n, c) => n + (c.counts?.pending || 0), 0);
+    return { total: campaigns.length, active, submissions, pending };
+  }, [campaigns]);
+
+  const shown = typeFilter === 'all' ? campaigns : campaigns.filter((c) => c.type === typeFilter);
 
   async function load() {
     setLoading(true);
@@ -39,23 +51,48 @@ export default function CampaignsTab({ guildId, channels = [] }) {
       <Stack direction="row" justifyContent="flex-end" alignItems="center" mb={2}>
         <Button variant="contained" startIcon={<Add />} onClick={() => setCreating((v) => !v)}>{creating ? 'Close' : 'New campaign'}</Button>
       </Stack>
-      <Typography variant="body2" color="text.secondary" mb={2}>Run proof, content, social, and raid campaigns that reward members with XP for completing tasks.</Typography>
+      <Typography variant="body2" color="text.secondary" mb={2}>Run proof, content, social, and raid campaigns that reward members with XP for completing tasks. Members participate from Discord.</Typography>
+
+      {plan !== 'pro' && (
+        <Alert severity="info" icon={false} sx={{ mb: 2 }}>
+          <strong>Free plan:</strong> 1 active campaign, manual/honor proof. Pro unlocks multiple
+          campaigns, link-validity checks, per-campaign leaderboards and bulk CSV export.
+        </Alert>
+      )}
+
+      {/* Summary cards (Telegizer parity) */}
+      <Grid container spacing={1.5} mb={2}>
+        {[['Campaigns', summary.total], ['Active', summary.active, 'success.main'], ['Submissions', summary.submissions], ['Pending Review', summary.pending, 'warning.main']].map(([label, val, color]) => (
+          <Grid item xs={6} md={3} key={label}>
+            <Card variant="outlined"><CardContent sx={{ py: 1.5, textAlign: 'center' }}>
+              <Typography variant="h5" fontWeight={800} sx={color ? { color } : undefined}>{val}</Typography>
+              <Typography variant="caption" color="text.secondary">{label}</Typography>
+            </CardContent></Card>
+          </Grid>
+        ))}
+      </Grid>
+
+      {/* Type filter tabs */}
+      <Tabs value={typeFilter} onChange={(_, v) => setTypeFilter(v)} variant="scrollable" scrollButtons="auto"
+        sx={{ mb: 1, minHeight: 36, '& .MuiTab-root': { minHeight: 36, textTransform: 'none' } }}>
+        <Tab value="all" label={`All (${campaigns.length})`} />
+        {TYPES.map((t) => <Tab key={t} value={t} label={`${TYPE_LABEL[t]} (${campaigns.filter((c) => c.type === t).length})`} />)}
+      </Tabs>
 
       {creating && <CreateForm guildId={guildId} channels={textChannels} onCreated={() => { setCreating(false); load(); }} />}
 
       {loading ? <Box sx={{ display: 'grid', placeItems: 'center', py: 3 }}><CircularProgress /></Box> : (
         <>
-          {campaigns.length === 0 && <Typography variant="body2" color="text.secondary">No campaigns yet.</Typography>}
+          {shown.length === 0 && <Typography variant="body2" color="text.secondary">No campaigns{typeFilter !== 'all' ? ' of this type' : ''} yet.</Typography>}
           <List dense>
-            {campaigns.map((c) => (
+            {shown.map((c) => (
               <ListItem key={c.id} button onClick={() => setSelected(c.id)} divider
                 secondaryAction={<Typography variant="caption" color="text.secondary">{c.counts.verified}✓ / {c.counts.pending}⏳</Typography>}>
                 <Chip size="small" label={c.status} color={STATUS_COLOR[c.status]} sx={{ mr: 1.5 }} />
-                <ListItemText primary={c.title} secondary={`${c.task_count} tasks`} />
+                <ListItemText primary={c.title} secondary={`${TYPE_LABEL[c.type] || c.type} · ${c.task_count} tasks`} />
               </ListItem>
             ))}
           </List>
-          {plan !== 'pro' && <Typography variant="caption" color="text.disabled" display="block" mt={1}>Free plan: 1 active campaign. Campaign leaderboards are Pro.</Typography>}
         </>
       )}
     </GuildizerCollapsibleCard>
@@ -191,6 +228,18 @@ function CampaignDetail({ guildId, campaignId, channels, plan, onBack }) {
     try { const { data } = await guildizerApi.get(`${base}/leaderboard`); setBoard(data.leaderboard); }
     catch (e) { setMsg(e?.response?.status === 402 ? 'Campaign leaderboards are a Pro feature.' : 'Failed to load.'); }
   }
+  async function exportCsv() {
+    try {
+      const { data } = await guildizerApi.get(`${base}/submissions`);
+      const rows = (data.submissions || []).map((s) => [
+        s.username || '', s.user_id, s.status,
+        s.proof?.value || '',
+        s.proof?.fields ? Object.entries(s.proof.fields).map(([k, v]) => `${k}: ${v}`).join(' | ') : '',
+        s.created_at ? new Date(s.created_at).toLocaleString() : '',
+      ]);
+      downloadCsv(`campaign_${campaignId}_submissions.csv`, ['Name', 'User ID', 'Status', 'Proof', 'Fields', 'Submitted'], rows);
+    } catch { setMsg('Could not export submissions.'); }
+  }
 
   if (!c) return <Box sx={{ display: 'grid', placeItems: 'center', py: 3 }}><CircularProgress /></Box>;
 
@@ -213,6 +262,7 @@ function CampaignDetail({ guildId, campaignId, channels, plan, onBack }) {
               {c.status !== 'active' && <Button size="small" variant="contained" onClick={() => patch({ status: 'active' })}>Activate</Button>}
               {c.status === 'active' && <Button size="small" variant="outlined" onClick={() => patch({ status: 'paused' })}>Pause</Button>}
               {c.status === 'active' && <Button size="small" variant="outlined" onClick={post}>Re-post</Button>}
+              <Button size="small" variant="outlined" startIcon={<Download />} onClick={exportCsv}>Export CSV</Button>
               <Button size="small" variant="outlined" color="inherit" onClick={() => patch({ status: 'closed' })}>Close</Button>
               {c.status !== 'active' && (
                 <Button size="small" variant="outlined" color="error" onClick={remove}>Delete</Button>

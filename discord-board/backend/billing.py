@@ -42,6 +42,23 @@ def activate_pro(db, guild, subscription) -> None:
     subscription.expires_at = expires
 
 
+def account_is_pro(db, owner_id) -> bool:
+    """Account-level Pro: one purchase covers every server the same owner has, so
+    Pro is an account entitlement rather than a per-server add-on. Grant-only —
+    never downgrades, so it can't break existing access or charge anyone."""
+    if not owner_id:
+        return False
+    from models import Guild
+    now = datetime.utcnow()
+    return db.query(
+        db.query(Guild).filter(
+            Guild.owner_id == owner_id,
+            Guild.plan == "pro",
+            (Guild.plan_expires_at.is_(None)) | (Guild.plan_expires_at > now),
+        ).exists()
+    ).scalar()
+
+
 def expire_if_due(db, guild) -> bool:
     """Downgrade a guild whose Pro period has lapsed. Returns True if changed."""
     if guild.plan == "pro" and guild.plan_expires_at and guild.plan_expires_at < datetime.utcnow():

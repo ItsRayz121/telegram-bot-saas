@@ -28,6 +28,7 @@ export function RaidsSubtab({ guildId, channels = [] }) {
   const [hours, setHours] = useState(24);
   const [xp, setXp] = useState(50);
   const [channelId, setChannelId] = useState('');
+  const [mode, setMode] = useState('now'); // now | draft
 
   const reload = useCallback(async () => {
     try {
@@ -51,18 +52,31 @@ export function RaidsSubtab({ guildId, channels = [] }) {
         reward_xp: xp,
         channel_id: channelId || null,
       });
-      // activate + announce right away — a raid is time-critical
-      await guildizerApi.put(`/api/guilds/${guildId}/campaigns/${data.id}`, {
-        status: 'active',
-        ends_at: new Date(Date.now() + hours * 3600 * 1000).toISOString(),
-      });
-      if (channelId) {
-        await guildizerApi.post(`/api/guilds/${guildId}/campaigns/${data.id}/post`).catch(() => {});
+      if (mode === 'now') {
+        // activate + announce right away — a raid is time-critical
+        await guildizerApi.put(`/api/guilds/${guildId}/campaigns/${data.id}`, {
+          status: 'active',
+          ends_at: new Date(Date.now() + hours * 3600 * 1000).toISOString(),
+        });
+        if (channelId) {
+          await guildizerApi.post(`/api/guilds/${guildId}/campaigns/${data.id}/post`).catch(() => {});
+        }
       }
+      // mode === 'draft': leave it as a draft to launch later from the list below.
       setTitle(''); setUrl('');
       await reload();
     } catch { setError('Could not create the raid.'); }
     setBusy(false);
+  }
+
+  async function launchDraft(id) {
+    try {
+      await guildizerApi.put(`/api/guilds/${guildId}/campaigns/${id}`, {
+        status: 'active', ends_at: new Date(Date.now() + hours * 3600 * 1000).toISOString(),
+      });
+      await guildizerApi.post(`/api/guilds/${guildId}/campaigns/${id}/post`).catch(() => {});
+      await reload();
+    } catch { setError('Could not launch the raid.'); }
   }
 
   async function endRaid(id) {
@@ -96,14 +110,21 @@ export function RaidsSubtab({ guildId, channels = [] }) {
             <TextField type="number" size="small" margin="dense" label="XP reward"
               value={xp} inputProps={{ min: 0, max: 100000 }} onChange={(e) => setXp(Number(e.target.value))} sx={{ flex: 1 }} />
           </Stack>
-          <TextField select fullWidth size="small" margin="dense" label="Announce in channel"
-            value={channelId} onChange={(e) => setChannelId(e.target.value)}>
-            <MenuItem value="">— don't announce —</MenuItem>
-            {textChannels.map((c) => <MenuItem key={c.id} value={c.id}># {c.name}</MenuItem>)}
-          </TextField>
+          <Stack direction="row" spacing={1}>
+            <TextField select fullWidth size="small" margin="dense" label="Announce in channel"
+              value={channelId} onChange={(e) => setChannelId(e.target.value)}>
+              <MenuItem value="">— don't announce —</MenuItem>
+              {textChannels.map((c) => <MenuItem key={c.id} value={c.id}># {c.name}</MenuItem>)}
+            </TextField>
+            <TextField select size="small" margin="dense" label="When" value={mode}
+              onChange={(e) => setMode(e.target.value)} sx={{ minWidth: 150 }}>
+              <MenuItem value="now">Launch now</MenuItem>
+              <MenuItem value="draft">Save as draft</MenuItem>
+            </TextField>
+          </Stack>
           <Button startIcon={<RocketLaunch />} variant="contained" size="small" sx={{ mt: 1 }}
             disabled={busy || !title.trim() || !/^https?:\/\//.test(url)} onClick={createRaid}>
-            Launch raid
+            {mode === 'draft' ? 'Save draft' : 'Launch raid'}
           </Button>
         </GuildizerCollapsibleCard>
       </Grid>
@@ -115,8 +136,12 @@ export function RaidsSubtab({ guildId, channels = [] }) {
           <List dense>
             {raids.map((r) => (
               <ListItem key={r.id} disableGutters
-                secondaryAction={r.status === 'active' && (
-                  <Button size="small" color="inherit" onClick={() => endRaid(r.id)}>End</Button>
+                secondaryAction={(
+                  r.status === 'active'
+                    ? <Button size="small" color="inherit" onClick={() => endRaid(r.id)}>End</Button>
+                    : r.status === 'draft'
+                      ? <Button size="small" startIcon={<RocketLaunch />} onClick={() => launchDraft(r.id)}>Launch</Button>
+                      : null
                 )}>
                 <Chip size="small" variant="outlined" label={r.status} color={STATUS_COLOR[r.status] || 'default'} sx={{ mr: 1 }} />
                 <ListItemText

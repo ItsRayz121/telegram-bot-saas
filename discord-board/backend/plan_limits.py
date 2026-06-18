@@ -38,7 +38,13 @@ CUSTOM_BOTS_REQUIRE_PRO = True
 
 def plan_of(db, guild_id: int) -> str:
     guild = db.get(Guild, guild_id)
-    return "pro" if (guild is not None and guild.is_pro) else "free"
+    if guild is None:
+        return "free"
+    if guild.is_pro:
+        return "pro"
+    # Account-level: Pro on any of the owner's servers unlocks them all.
+    import billing
+    return "pro" if billing.account_is_pro(db, guild.owner_id) else "free"
 
 
 def limit(db, guild_id: int, key: str) -> int:
