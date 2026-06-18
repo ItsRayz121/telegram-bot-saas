@@ -7,9 +7,10 @@
  */
 import React, { useEffect, useState } from 'react';
 import {
-  Grid, Typography, TextField, MenuItem, Button, Switch,
-  FormControlLabel, Alert, Snackbar,
+  Grid, Box, Typography, TextField, MenuItem, Button, Switch, Chip,
+  FormControlLabel, Alert, Snackbar, Card, CardActionArea, CircularProgress,
 } from '@mui/material';
+import { CheckCircle } from '@mui/icons-material';
 import guildizerApi from '../../../services/guildizerApi';
 import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
 import KnowledgeTab from './KnowledgeTab';
@@ -18,12 +19,100 @@ export function KnowledgeBaseSubtab({ guildId }) {
   return (
     <Grid container spacing={2}>
       <Grid item xs={12}>
+        <PlatformAiCard guildId={guildId} />
+      </Grid>
+      <Grid item xs={12}>
         <KnowledgeTab guildId={guildId} />
       </Grid>
       <Grid item xs={12}>
         <KbRepliesCard guildId={guildId} />
       </Grid>
+      <Grid item xs={12}>
+        <HumanLikeCard guildId={guildId} />
+      </Grid>
     </Grid>
+  );
+}
+
+// AI Provider status — Guildizer uses one platform AI key for the whole fleet
+// (no per-guild keys by design), so this surfaces the live provider state.
+function PlatformAiCard({ guildId }) {
+  const [s, setS] = useState(null);
+  useEffect(() => {
+    guildizerApi.get(`/api/guilds/${guildId}/ai-status`).then(({ data }) => setS(data)).catch(() => setS(false));
+  }, [guildId]);
+  return (
+    <GuildizerCollapsibleCard id="ai.platform_ai" title="🔑 AI Provider"
+      badge={s && s !== false ? <Chip size="small" color={s.provider_connected ? 'success' : 'default'}
+        label={s.provider_connected ? 'Platform AI Active' : 'Not connected'} /> : null}>
+      <Typography variant="body2" color="text.secondary">
+        Guildizer runs on a managed platform AI key — no API key needed per server.
+        {s && s !== false && <> Current provider: <strong>{s.provider}</strong>{s.provider_connected ? ' (connected).' : ' (not configured on this instance).'}</>}
+      </Typography>
+    </GuildizerCollapsibleCard>
+  );
+}
+
+const PERSONALITIES = [
+  ['professional_support', '🎧 Professional Customer Support', 'Calm, concise, trusted support-agent feel. Best for SaaS, services and product communities.'],
+  ['friendly', '🤝 Friendly Community Moderator', 'Warm, conversational, community-first. Best for hobby groups, fan communities and welcoming servers.'],
+  ['expert', '📚 Serious Expert', 'Knowledgeable, precise, structured. Best for technical, financial and B2B communities.'],
+  ['community_manager', '🪙 Web3 Community Manager', 'Crypto-native tone, ecosystem-focused, educational but casual. Best for crypto and Web3 projects.'],
+  ['concise', '⚡ Concise', 'Short, direct answers with minimal fluff.'],
+];
+
+// Human-Like Community Interaction (social_replies) — surfaced on the AI tab for
+// Telegizer parity; writes the same moderation config as the Moderation tab.
+function HumanLikeCard({ guildId }) {
+  const [cfg, setCfg] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    guildizerApi.get(`/api/guilds/${guildId}/moderation`)
+      .then(({ data }) => setCfg(data.social_replies || {})).catch(() => {});
+  }, [guildId]);
+  const set = (patch) => setCfg((c) => ({ ...c, ...patch }));
+
+  async function save() {
+    setSaving(true);
+    try {
+      const { data } = await guildizerApi.put(`/api/guilds/${guildId}/moderation`, { social_replies: cfg });
+      setCfg(data.social_replies || cfg); setSaved(true);
+    } catch { /* keep */ }
+    setSaving(false);
+  }
+  if (!cfg) return null;
+  return (
+    <GuildizerCollapsibleCard id="ai.human_like" title="🙋 Human-Like Community Interaction">
+      <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+        Bot reacts and replies naturally to appreciation ("thanks", "helpful", "solved") — no AI
+        cost, personality-aware, with spam protection.
+      </Typography>
+      <FormControlLabel control={<Switch checked={!!cfg.enabled} onChange={(e) => set({ enabled: e.target.checked })} />}
+        label="Enable human-like interaction" />
+      {cfg.enabled && (
+        <>
+          <FormControlLabel control={<Switch checked={cfg.react_to_appreciation !== false} onChange={(e) => set({ react_to_appreciation: e.target.checked })} />}
+            label="React with emoji to appreciation" />
+          <FormControlLabel control={<Switch checked={cfg.reply_to_appreciation !== false} onChange={(e) => set({ reply_to_appreciation: e.target.checked })} />}
+            label="Reply with a text acknowledgment" />
+          <TextField select size="small" margin="dense" fullWidth label="Interaction style"
+            value={cfg.mode || 'friendly'} onChange={(e) => set({ mode: e.target.value })}>
+            {[['minimal', 'Minimal'], ['professional', 'Professional'], ['friendly', 'Friendly'], ['community_manager', 'Community Manager']]
+              .map(([v, l]) => <MenuItem key={v} value={v}>{l}</MenuItem>)}
+          </TextField>
+          <TextField type="number" size="small" margin="dense" fullWidth label="Cooldown per user (minutes)"
+            value={cfg.cooldown_minutes ?? 5} inputProps={{ min: 1, max: 1440 }}
+            onChange={(e) => set({ cooldown_minutes: Number(e.target.value) })} />
+        </>
+      )}
+      <Button variant="contained" size="small" sx={{ mt: 1 }} onClick={save} disabled={saving}>
+        {saving ? 'Saving…' : 'Save changes'}
+      </Button>
+      <Snackbar open={saved} autoHideDuration={2500} onClose={() => setSaved(false)} message="Saved"
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }} />
+    </GuildizerCollapsibleCard>
   );
 }
 
@@ -80,17 +169,29 @@ function KbRepliesCard({ guildId }) {
         value={cfg.formality || 'casual'} onChange={(e) => set({ formality: e.target.value })}>
         {['casual', 'neutral', 'formal'].map((v) => <MenuItem key={v} value={v}>{v}</MenuItem>)}
       </TextField>
-      <TextField select size="small" margin="dense" fullWidth label="Personality"
-        value={cfg.personality || 'professional_support'} onChange={(e) => set({ personality: e.target.value })}
-        helperText="Shapes how the AI talks when answering from the knowledge base.">
-        {[
-          ['professional_support', 'Professional support'],
-          ['friendly', 'Friendly'],
-          ['expert', 'Expert'],
-          ['concise', 'Concise'],
-          ['community_manager', 'Community manager'],
-        ].map(([v, label]) => <MenuItem key={v} value={v}>{label}</MenuItem>)}
-      </TextField>
+      <Typography variant="subtitle2" fontWeight={600} sx={{ mt: 1.5, mb: 0.5 }}>AI Reply Personality</Typography>
+      <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+        Shapes how the AI talks when answering from the knowledge base. Each uses a
+        professionally engineered prompt designed to feel natural — not robotic.
+      </Typography>
+      <Grid container spacing={1}>
+        {PERSONALITIES.map(([value, title, desc]) => {
+          const active = (cfg.personality || 'professional_support') === value;
+          return (
+            <Grid item xs={12} sm={6} key={value}>
+              <Card variant="outlined" sx={{ borderColor: active ? 'primary.main' : 'divider', borderWidth: active ? 2 : 1, height: '100%' }}>
+                <CardActionArea onClick={() => set({ personality: value })} sx={{ p: 1.25, height: '100%', alignItems: 'flex-start' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <Typography variant="body2" fontWeight={700}>{title}</Typography>
+                    {active && <CheckCircle color="primary" sx={{ fontSize: 16 }} />}
+                  </Box>
+                  <Typography variant="caption" color="text.secondary">{desc}</Typography>
+                </CardActionArea>
+              </Card>
+            </Grid>
+          );
+        })}
+      </Grid>
       <TextField multiline minRows={2} size="small" margin="dense" fullWidth
         label="Custom instructions"
         placeholder={'e.g. Always reply in English and Spanish\nNever recommend competitor tools\nLink to docs.example.com when relevant'}

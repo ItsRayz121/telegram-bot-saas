@@ -14,6 +14,7 @@ import {
   Delete, Search, Download, Gavel,
   WarningAmber, VolumeOff, PersonRemove, Block,
 } from '@mui/icons-material';
+import { useSearchParams } from 'react-router-dom';
 import guildizerApi from '../../../services/guildizerApi';
 import { DigestCard } from './ContentTab';
 import { downloadCsv } from './csv';
@@ -180,11 +181,64 @@ export function AuditLogSubtab({ guildId }) {
 
 export function AIActivitySubtab({ guildId }) {
   return (
-    <GuildizerCollapsibleCard id="analytics.ai_activity" title="🤖 AI Activity">
-      <EventFeed guildId={guildId} title="AI activity" limit={200} bare
-        filter={(e) => AI_CATEGORIES.has(e.category)}
-        subtitle="Smart-moderation, image-AI and knowledge-base actions taken by the AI."
-        emptyText="No AI actions yet. Enable Smart mod, Image AI or the knowledge base to see activity here." />
+    <Stack spacing={0}>
+      <AIStatusPanel guildId={guildId} />
+      <GuildizerCollapsibleCard id="analytics.ai_activity" title="🤖 AI Activity" defaultOpen>
+        <EventFeed guildId={guildId} title="AI activity" limit={200} bare
+          filter={(e) => AI_CATEGORIES.has(e.category)}
+          subtitle="Smart-moderation, image-AI and knowledge-base actions taken by the AI. Click a row to preview what the AI acted on."
+          emptyText="No AI actions yet. Enable Smart mod, Image AI or the knowledge base to see activity here." />
+      </GuildizerCollapsibleCard>
+    </Stack>
+  );
+}
+
+// AI Status panel — live layer states + action counts. Each chip deep-links to
+// the setting that controls it (with a focus pulse).
+function AIStatusPanel({ guildId }) {
+  const [s, setS] = useState(null);
+  const [, setParams] = useSearchParams();
+
+  useEffect(() => {
+    guildizerApi.get(`/api/guilds/${guildId}/ai-status`).then(({ data }) => setS(data)).catch(() => setS(false));
+  }, [guildId]);
+
+  const go = (link) => link && setParams({ tab: link.tab, sub: link.sub, ...(link.focus ? { focus: link.focus } : {}) });
+  const chip = (label, on, link, onText = 'Enabled', offText = 'Off') => (
+    <Tooltip title={link ? 'Open settings' : ''}>
+      <Chip size="small" clickable={!!link} onClick={() => go(link)} variant="outlined"
+        color={on ? 'success' : 'default'} label={`${label}: ${on ? onText : offText}`} sx={{ mr: 0.5, mb: 0.5 }} />
+    </Tooltip>
+  );
+
+  if (s === null) return <Loading />;
+  return (
+    <GuildizerCollapsibleCard id="analytics.ai_status" title="🤖 AI Status" defaultOpen>
+      {s === false ? (
+        <Typography variant="body2" color="text.secondary">Could not load AI status.</Typography>
+      ) : (
+        <>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', mb: 1.5 }}>
+            {chip('Smart Moderation', s.smart_moderation, s.links?.smart_moderation)}
+            {chip('Human-Like Replies', s.human_like, s.links?.human_like)}
+            {chip('Knowledge Base', s.kb_configured, s.links?.knowledge_base, 'Configured', 'Not set')}
+            {chip(`Provider (${s.provider})`, s.provider_connected, s.links?.provider, 'Connected', 'Not connected')}
+          </Box>
+          {s.last_action_at && (
+            <Typography variant="caption" color="text.secondary" display="block" mb={1.5}>
+              Last AI action: {new Date(s.last_action_at).toLocaleString()}
+            </Typography>
+          )}
+          <Stack direction="row" spacing={1}>
+            {[['Today', s.counts?.today], ['This Week', s.counts?.week], ['This Month', s.counts?.month], ['Total', s.counts?.total]].map(([label, n]) => (
+              <Box key={label} sx={{ flex: 1, textAlign: 'center', border: '1px solid', borderColor: 'divider', borderRadius: 1, py: 1 }}>
+                <Typography variant="h6" fontWeight={800}>{n ?? 0}</Typography>
+                <Typography variant="caption" color="text.secondary">{label}</Typography>
+              </Box>
+            ))}
+          </Stack>
+        </>
+      )}
     </GuildizerCollapsibleCard>
   );
 }

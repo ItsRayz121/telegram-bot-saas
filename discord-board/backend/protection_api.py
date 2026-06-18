@@ -17,8 +17,11 @@ from flask import Blueprint, g, jsonify, request
 import moderation_runtime
 import protection
 import access
+import ai
 from auth import login_required
-from models import Guild, MemberWarning, ProtectionEvent, UserGuild
+from models import Guild, KnowledgeDocument, MemberWarning, ProtectionEvent, UserGuild
+
+_AI_CATEGORIES = ("smart_mod", "smart_promo", "image_ai", "image_nsfw", "ask", "ai", "escalation")
 
 protection_bp = Blueprint("protection", __name__)
 
@@ -372,6 +375,60 @@ def list_events(guild_id: int):
         .all()
     )
     return jsonify(events=[e.to_dict() for e in events])
+
+
+@protection_bp.get("/api/guilds/<int:guild_id>/ai-status")
+@login_required
+def ai_status(guild_id: int):
+    """Powers the AI Activity status panel: which AI layers are on + action counts.
+    Each block carries a `link` (tab/sub[/focus]) so the dashboard chips can jump
+    straight to the relevant setting."""
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return err
+    row = protection.get_or_create(g.db, guild_id)
+    extra = protection._merged_extra(row)
+    smart = (extra.get("automod") or {}).get("smart_mod") or {}
+    social = extra.get("social_replies") or {}
+    kb = extra.get("kb_replies") or {}
+    docs = g.db.query(KnowledgeDocument).filter(KnowledgeDocument.guild_id == guild_id).count()
+
+    now = datetime.utcnow()
+    day = now - timedelta(days=1)
+    week = now - timedelta(days=7)
+    month = now - timedelta(days=30)
+
+    def _count(since=None):
+        q = g.db.query(ProtectionEvent).filter(
+            ProtectionEvent.guild_id == guild_id,
+            ProtectionEvent.category.in_(_AI_CATEGORIES))
+        if since is not None:
+            q = q.filter(ProtectionEvent.created_at >= since)
+        return q.count()
+
+    last = (g.db.query(ProtectionEvent)
+            .filter(ProtectionEvent.guild_id == guild_id,
+                    ProtectionEvent.category.in_(_AI_CATEGORIES))
+            .order_by(ProtectionEvent.created_at.desc()).first())
+
+    return jsonify(
+        provider=ai._provider(),
+        provider_connected=ai.is_configured(),
+        smart_moderation=bool(smart.get("enabled")),
+        smart_mod_ai=bool(smart.get("ai_enabled", True)),
+        human_like=bool(social.get("enabled")),
+        kb_configured=bool(docs > 0 or kb.get("enabled")),
+        kb_docs=docs,
+        last_action_at=last.created_at.isoformat() + "Z" if last and last.created_at else None,
+        counts={"today": _count(day), "week": _count(week),
+                "month": _count(month), "total": _count()},
+        links={
+            "smart_moderation": {"tab": "Moderation", "sub": "Behavior", "focus": "gz.moderation.smart_moderation"},
+            "human_like": {"tab": "Moderation", "sub": "Behavior", "focus": "gz.moderation.social_replies"},
+            "knowledge_base": {"tab": "AI & Integrations", "sub": "Knowledge Base", "focus": "ai.knowledge_base"},
+            "provider": {"tab": "AI & Integrations", "sub": "Knowledge Base", "focus": "ai.platform_ai"},
+        },
+    )
 
 
 # --- Phase 10: warnings + reports queues ---------------------------------------

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   Accordion,
   AccordionSummary,
@@ -7,6 +7,7 @@ import {
   Typography,
 } from '@mui/material';
 import { ExpandMore } from '@mui/icons-material';
+import { useSearchParams } from 'react-router-dom';
 import { useGuildizerUiPrefs } from '../../context/GuildizerUiPrefsContext';
 
 /**
@@ -26,9 +27,22 @@ export default function GuildizerCollapsibleCard({
   children,
 }) {
   const { ready, isOpen, toggle } = useGuildizerUiPrefs();
-  const expanded = ready ? isOpen(id, defaultOpen) : false;
+  // Deep-link focus: ?focus=<id> auto-opens this card, scrolls to it and pulses
+  // it briefly, so the AI Activity status chips (and other deep-links) can land
+  // the user right on the relevant setting.
+  const [params] = useSearchParams();
+  const focused = params.get('focus') === id;
+  const ref = useRef(null);
+  useEffect(() => {
+    if (focused && ref.current) {
+      ref.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [focused]);
+
+  const expanded = focused || (ready ? isOpen(id, defaultOpen) : false);
   return (
     <Accordion
+      ref={ref}
       expanded={expanded}
       onChange={() => toggle(id, defaultOpen)}
       disableGutters
@@ -36,13 +50,20 @@ export default function GuildizerCollapsibleCard({
       sx={{
         mt: 2,
         border: '1px solid',
-        borderColor: 'divider',
+        borderColor: focused ? 'primary.main' : 'divider',
         borderRadius: 2,
         overflow: 'hidden',
         // Kill the default MUI accordion divider line + sibling-merge so an
         // expanded card never overlaps or fuses with the card above/below it.
         '&:before': { display: 'none' },
         '&.Mui-expanded': { mt: 2 },
+        ...(focused ? {
+          animation: 'gzPulse 1.2s ease-in-out 2',
+          '@keyframes gzPulse': {
+            '0%, 100%': { boxShadow: '0 0 0 0 rgba(157,108,247,0.0)' },
+            '50%': { boxShadow: '0 0 0 4px rgba(157,108,247,0.45)' },
+          },
+        } : {}),
         ...sx,
       }}
     >
