@@ -217,6 +217,8 @@ def _load_pending_verifications_from_db(flask_app):
 _spam_tracker: dict = {}
 # Per-(chat,user) cooldown for the OPTIONAL Smart AI Moderation layer.
 _official_ai_cooldown: dict = {}
+# Per (group,user) cooldown so /ask spam can't flood admin DMs with escalations.
+_kb_escalation_cooldown: dict = {}
 
 # Default word list for word-method verification
 _DEFAULT_VERIFY_WORDS = [
@@ -1097,6 +1099,26 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if email_verify.is_active(context):
         if await email_verify.handle_text(update, context, flask_app, _user_by_tg_id):
             return
+
+    # ── Escalation reply: an admin replying to an escalation DM resolves the
+    #    event and (if auto-learn is on) saves the answer into the KB. ─────────
+    if message and message.reply_to_message and flask_app:
+        try:
+            from .bot_features.escalation import handle_admin_reply
+            matched = handle_admin_reply(
+                reply_text=(message.text or ""),
+                admin_telegram_id=str(user.id),
+                replied_to_message_id=message.reply_to_message.message_id,
+                app=flask_app,
+            )
+            if matched:
+                await message.reply_text(
+                    "✅ Thanks — your answer was recorded and saved to the knowledge "
+                    "base, so the bot can answer this next time."
+                )
+                return
+        except Exception as _exc:
+            _log.debug("escalation admin-reply handling failed: %s", _exc)
 
     # ── Note capture shortcut ─────────────────────────────────────────────────
     _raw = (message.text or "").strip()
@@ -5480,6 +5502,55 @@ async def cmd_auditlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ─── /ask — Knowledge Base Q&A ────────────────────────────────────────────────
 
+async def _maybe_escalate_kb(bot, flask_app, group_id, question, message, confidence):
+    """Escalate a low-confidence / no-answer KB question to the group's admins.
+
+    Returns True if an escalation DM was actually sent. Honors the group's
+    Escalation settings (enabled + ai_kb type + admin_ids); silently no-ops
+    otherwise so we never spam.
+    """
+    if not flask_app:
+        return False
+    try:
+        sender = message.from_user if message else None
+        # Anti-ban: throttle so a user spamming /ask can't flood admin DMs.
+        cd_key = f"{group_id}:{getattr(sender, 'id', '')}"
+        now = datetime.utcnow()
+        last = _kb_escalation_cooldown.get(cd_key)
+        if last and (now - last).total_seconds() < 60:
+            return False
+        _kb_escalation_cooldown[cd_key] = now
+
+        with flask_app.app_context():
+            from .models import TelegramGroup
+            tg = TelegramGroup.query.filter_by(telegram_group_id=str(group_id)).first()
+            if not tg:
+                return False
+            settings = tg.settings or {}
+            group_name = tg.title or getattr(tg, "name", None) or "this community"
+        from .bot_features.escalation import trigger_escalation
+        event_id = await trigger_escalation(
+            bot=bot,
+            group_settings=settings,
+            issue_type="ai_kb",
+            original_content=question,
+            context_data={
+                "confidence": confidence,
+                "group_name": group_name,
+                "user_id": getattr(sender, "id", None),
+                "username": getattr(sender, "username", None) or "",
+                "thread_id": getattr(message, "message_thread_id", None),
+            },
+            app=flask_app,
+            telegram_group_id=str(group_id),
+            original_message=message,
+        )
+        return event_id is not None
+    except Exception as exc:
+        _log.debug("KB escalation failed: %s", exc)
+        return False
+
+
 async def cmd_ask(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Answer a question from the group's knowledge base."""
     if not _is_group_chat(update):
@@ -5496,10 +5567,31 @@ async def cmd_ask(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         from .bot_features.knowledge_base import KnowledgeBaseSystem
         kb = KnowledgeBaseSystem(flask_app)
+        # Load AI-knowledge auto-replies (incl. escalation-learned answers) so a
+        # previously-resolved question gets answered directly next time.
+        kb_settings = {}
+        auto_reply_triggers = []
+        try:
+            with flask_app.app_context():
+                from .models import TelegramGroup, AutoResponse
+                tg = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
+                kb_settings = (tg.settings or {}).get("knowledge_base", {}) if tg else {}
+                if kb_settings.get("use_auto_replies_as_knowledge", False):
+                    trs = AutoResponse.query.filter_by(
+                        telegram_group_id=group_id, is_enabled=True,
+                        use_as_ai_knowledge=True, response_type="auto_response",
+                    ).all()
+                    auto_reply_triggers = [
+                        {"trigger": t.trigger_text, "response": t.response_text} for t in trs
+                    ]
+        except Exception:
+            pass
         answer, confidence = await kb.answer_question(
             question=question,
             group_id=None,
             telegram_group_id=group_id,
+            kb_settings=kb_settings or None,
+            auto_reply_triggers=auto_reply_triggers or None,
         )
     except Exception as exc:
         _log.error("cmd_ask error: %s", exc)
@@ -5512,10 +5604,21 @@ async def cmd_ask(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     CONFIDENCE_THRESHOLD = 0.35
     if not answer or confidence < CONFIDENCE_THRESHOLD:
-        await update.message.reply_text(
-            "❓ I couldn't find a confident answer in the knowledge base. "
-            "Try rephrasing or ask an admin."
+        # Don't just give up — flag it to the group admins (if escalation is on),
+        # so they can answer and teach the bot for next time.
+        escalated = await _maybe_escalate_kb(
+            context.bot, flask_app, group_id, question, update.message, confidence
         )
+        if escalated:
+            await update.message.reply_text(
+                "❓ I'm not sure about that one yet — I've flagged it to the group "
+                "admins and they'll follow up. Thanks for your patience!"
+            )
+        else:
+            await update.message.reply_text(
+                "❓ I couldn't find a confident answer in the knowledge base. "
+                "Try rephrasing or ask an admin."
+            )
         return
 
     await update.message.reply_text(

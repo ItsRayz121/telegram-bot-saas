@@ -236,16 +236,24 @@ def handle_admin_reply(
             logger.info("escalation: event #%s resolved by admin %s",
                         target_event.id, admin_telegram_id)
 
-            # Auto-learn into KB if enabled
+            # Auto-learn into KB if enabled. Resolve settings from whichever
+            # lineage owns the event (custom Group or official TelegramGroup).
             group_settings = {}
-            if target_event.group_id:
-                try:
+            try:
+                if target_event.group_id:
                     from ..models import Group
                     grp = Group.query.get(target_event.group_id)
                     if grp:
                         group_settings = grp.settings or {}
-                except Exception:
-                    pass
+                elif target_event.telegram_group_id:
+                    from ..models import TelegramGroup
+                    tg = TelegramGroup.query.filter_by(
+                        telegram_group_id=str(target_event.telegram_group_id)
+                    ).first()
+                    if tg:
+                        group_settings = tg.settings or {}
+            except Exception:
+                pass
 
             esc = _get_escalation_settings(group_settings)
             if esc.get("auto_learn", True) and target_event.original_content and reply_text:
@@ -259,36 +267,38 @@ def handle_admin_reply(
 
 
 def _auto_learn(event, answer: str, app) -> None:
-    """Store escalation Q&A as a KB document for future auto-replies."""
+    """Save the resolved escalation Q&A as an AI-knowledge auto-reply.
+
+    Stored as an AutoResponse with use_as_ai_knowledge=True (trigger=question,
+    response=admin answer) so the very next matching question is answered
+    automatically. Works for both lineages: custom via group_id, official via
+    telegram_group_id. (The previous KnowledgeDocument-based version referenced
+    columns that don't exist, so it always failed silently.)
+    """
     try:
-        from ..models import db, EscalationEvent, KnowledgeDocument
-        import json
+        from ..models import db, AutoResponse
 
-        # Build a small markdown doc
-        label = _ISSUE_LABELS.get(event.issue_type, event.issue_type)
-        doc_text = (
-            f"# Escalation Q&A [{label}]\n\n"
-            f"**Question:** {event.original_content}\n\n"
-            f"**Answer:** {answer}\n\n"
-            f"*Learned from admin resolution on {datetime.utcnow().strftime('%Y-%m-%d')}*"
-        )
+        question = (event.original_content or "").strip()
+        if not question or not answer:
+            return
 
-        kd = KnowledgeDocument(
+        ar = AutoResponse(
             group_id=event.group_id,
-            title=f"[Auto-learned] {(event.original_content or '')[:80]}",
-            source_type="escalation_learn",
-            raw_text=doc_text,
-            metadata_={
-                "escalation_id": event.id,
-                "issue_type": event.issue_type,
-                "admin_id": event.resolved_admin_telegram_id,
-            },
+            telegram_group_id=str(event.telegram_group_id) if event.telegram_group_id else None,
+            trigger_text=question[:500],
+            response_text=answer,
+            match_type="contains",
+            use_as_ai_knowledge=True,
+            is_enabled=True,
         )
-        db.session.add(kd)
+        db.session.add(ar)
 
-        # Mark event as learned
-        event.learned = True
+        # Mark event as learned (column is best-effort; guard if absent).
+        try:
+            event.learned = True
+        except Exception:
+            pass
         db.session.commit()
-        logger.info("escalation: auto-learned event #%s into KB", event.id)
+        logger.info("escalation: auto-learned event #%s into KB auto-replies", event.id)
     except Exception as exc:
         logger.warning("escalation: auto_learn failed: %s", exc)
