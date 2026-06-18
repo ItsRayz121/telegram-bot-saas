@@ -37,7 +37,20 @@ export default function CollapsibleCard({
     <Accordion
       expanded={expanded}
       onChange={() => toggle(id, defaultOpen)}
-      sx={{ mt: 2, ...sx }}
+      disableGutters
+      elevation={0}
+      sx={{
+        mt: 2,
+        border: '1px solid',
+        borderColor: 'divider',
+        borderRadius: 2,
+        overflow: 'hidden',
+        // Kill the default MUI accordion divider line + sibling-merge so an
+        // expanded card never overlaps or fuses with the card above/below it.
+        '&:before': { display: 'none' },
+        '&.Mui-expanded': { mt: 2 },
+        ...sx,
+      }}
     >
       <AccordionSummary expandIcon={<ExpandMore />}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%', pr: 1 }}>

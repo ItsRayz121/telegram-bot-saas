@@ -250,7 +250,7 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
       </CollapsibleCard>
 
       {/* API Key Settings */}
-      <Card sx={{ mb: 2 }}>
+      <Card sx={{ mt: 2, mb: 2 }}>
         <CardContent>
           <Box
             sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}

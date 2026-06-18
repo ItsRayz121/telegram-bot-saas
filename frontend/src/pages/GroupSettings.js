@@ -1538,58 +1538,6 @@ function GroupSettingsInner() {
                 })()}
             </CollapsibleCard>
 
-            {/* Protection Activity — bot-policy + raid-mode event log (Phase 4) */}
-            <Card sx={{ mb: 2 }}>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                  <Typography variant="h6" fontWeight={600}>📋 Protection Activity</Typography>
-                  <Box sx={{ flexGrow: 1 }} />
-                  <Button size="small" onClick={fetchProtectionLog} disabled={protectionLoading}>
-                    {protectionLoading ? 'Refreshing…' : 'Refresh'}
-                  </Button>
-                </Box>
-                <Typography variant="body2" color="text.secondary" mb={2}>
-                  What the bot did at <b>join time</b> — restricting/banning new bots and
-                  locking down raids. These never appear in the normal moderation log.
-                </Typography>
-                {protectionLog.length === 0 ? (
-                  <Typography variant="body2" color="text.disabled">
-                    {protectionLoading ? 'Loading…' : 'No protection events yet.'}
-                  </Typography>
-                ) : (
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                    {protectionLog.map((ev) => {
-                      const meta = ev.metadata || {};
-                      const info = PROTECTION_EVENT_META[ev.event_type] || { icon: '•', label: ev.event_type };
-                      const who = meta.target_username
-                        ? '@' + String(meta.target_username).replace(/^@/, '')
-                        : (meta.target_user_id ? `id ${meta.target_user_id}` : '');
-                      return (
-                        <Box key={ev.id} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1,
-                          py: 0.75, borderBottom: '1px solid', borderColor: 'divider' }}>
-                          <Typography component="span" sx={{ fontSize: 18, lineHeight: 1.4 }}>{info.icon}</Typography>
-                          <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                            <Typography variant="body2" fontWeight={600}>
-                              {info.label}{who ? ` — ${who}` : ''}
-                            </Typography>
-                            {(ev.message || meta.reason) && (
-                              <Typography variant="caption" color="text.secondary"
-                                sx={{ display: 'block', wordBreak: 'break-word' }}>
-                                {ev.message || meta.reason}
-                              </Typography>
-                            )}
-                          </Box>
-                          <Typography variant="caption" color="text.disabled" sx={{ whiteSpace: 'nowrap' }}>
-                            {fmtTs(ev.created_at)}
-                          </Typography>
-                        </Box>
-                      );
-                    })}
-                  </Box>
-                )}
-              </CardContent>
-            </Card>
-
             {/* Smart Moderation — 3-layer AI-powered system (Pro only) */}
             <CollapsibleCard
               id="tg.moderation.smart_moderation"
@@ -1970,6 +1918,58 @@ function GroupSettingsInner() {
                   );
                 })}
                 </Box>
+            </CollapsibleCard>
+
+            {/* Protection Activity — bot-policy + raid-mode event log (Phase 4).
+                Lives at the very bottom of AutoMod and is collapsible. */}
+            <CollapsibleCard
+              id="tg.moderation.protection_activity"
+              title="📋 Protection Activity"
+              action={
+                <Button size="small" onClick={fetchProtectionLog} disabled={protectionLoading}>
+                  {protectionLoading ? 'Refreshing…' : 'Refresh'}
+                </Button>
+              }
+            >
+              <Typography variant="body2" color="text.secondary" mb={2}>
+                What the bot did at <b>join time</b> — restricting/banning new bots and
+                locking down raids. These never appear in the normal moderation log.
+              </Typography>
+              {protectionLog.length === 0 ? (
+                <Typography variant="body2" color="text.disabled">
+                  {protectionLoading ? 'Loading…' : 'No protection events yet.'}
+                </Typography>
+              ) : (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  {protectionLog.map((ev) => {
+                    const meta = ev.metadata || {};
+                    const info = PROTECTION_EVENT_META[ev.event_type] || { icon: '•', label: ev.event_type };
+                    const who = meta.target_username
+                      ? '@' + String(meta.target_username).replace(/^@/, '')
+                      : (meta.target_user_id ? `id ${meta.target_user_id}` : '');
+                    return (
+                      <Box key={ev.id} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1,
+                        py: 0.75, borderBottom: '1px solid', borderColor: 'divider' }}>
+                        <Typography component="span" sx={{ fontSize: 18, lineHeight: 1.4 }}>{info.icon}</Typography>
+                        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                          <Typography variant="body2" fontWeight={600}>
+                            {info.label}{who ? ` — ${who}` : ''}
+                          </Typography>
+                          {(ev.message || meta.reason) && (
+                            <Typography variant="caption" color="text.secondary"
+                              sx={{ display: 'block', wordBreak: 'break-word' }}>
+                              {ev.message || meta.reason}
+                            </Typography>
+                          )}
+                        </Box>
+                        <Typography variant="caption" color="text.disabled" sx={{ whiteSpace: 'nowrap' }}>
+                          {fmtTs(ev.created_at)}
+                        </Typography>
+                      </Box>
+                    );
+                  })}
+                </Box>
+              )}
             </CollapsibleCard>
           </>
         )}
