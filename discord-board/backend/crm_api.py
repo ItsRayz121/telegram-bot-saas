@@ -11,6 +11,8 @@ from datetime import datetime, timedelta
 from flask import Blueprint, g, jsonify, request
 
 import access
+import member_stats
+import settings as settings_mod
 from auth import login_required
 from models import Guild, GuildDailyStat, Member, UserGuild
 
@@ -39,15 +41,45 @@ def list_members(guild_id: int):
         if search.isdigit():
             q = q.filter(Member.user_id == int(search))
         else:
-            q = q.filter(Member.username.ilike(f"%{search}%"))
+            like = f"%{search}%"
+            q = q.filter((Member.username.ilike(like)) | (Member.wallet.ilike(like)))
+    if (request.args.get("has_wallet") or "").lower() in ("1", "true", "yes"):
+        q = q.filter(Member.wallet.isnot(None), Member.wallet != "")
+    period = request.args.get("period")  # 1d|today|7d|30d|all
     sort = SORTS.get(request.args.get("sort", "xp"), Member.xp)
     try:
         limit = max(1, min(200, int(request.args.get("limit", 50))))
     except ValueError:
         limit = 50
-    rows = q.order_by(sort.desc().nullslast()).limit(limit).all()
+
+    # Period-aware XP (Telegizer parity): sum the ledger over the window and rank
+    # by it. All-time keeps the cheaper Member.xp ordering.
+    since = member_stats.period_since(period)
+    xp_period = member_stats.xp_by_user(g.db, guild_id, since) if period and period != "all" else None
+    if xp_period is not None:
+        rows = q.all()
+        rows.sort(key=lambda m: xp_period.get(m.user_id, 0), reverse=True)
+        rows = rows[:limit]
+    else:
+        rows = q.order_by(sort.desc().nullslast()).limit(limit).all()
+
+    warns = member_stats.warnings_by_user(g.db, guild_id)
+    settings_row = settings_mod.get_or_create(g.db, guild_id)
+    role_rewards = ((settings_row.extra or {}).get("leveling2") or {}).get("role_rewards") or []
+    roles_by_level = member_stats.role_label_map(g.db, guild_id, role_rewards)
+
+    out = []
+    for m in rows:
+        d = m.to_dict()
+        d["warnings"] = warns.get(m.user_id, 0)
+        d["verified"] = bool(getattr(m, "verified", False))
+        d["has_wallet"] = bool(m.wallet)
+        d["role"] = roles_by_level.get(m.level or 1)
+        if xp_period is not None:
+            d["xp_period"] = xp_period.get(m.user_id, 0)
+        out.append(d)
     total = g.db.query(Member).filter(Member.guild_id == guild_id).count()
-    return jsonify(members=[m.to_dict() for m in rows], total=total)
+    return jsonify(members=out, total=total, period=period or "all")
 
 
 @crm_bp.put("/api/guilds/<int:guild_id>/members/<int:user_id>")

@@ -148,6 +148,45 @@ def get_guild_roles(guild_id: int) -> list[dict]:
     return resp.json()
 
 
+# --- Moderation via REST (dashboard row actions; no gateway needed) -----------
+def _mod_headers(reason: str | None = None) -> dict:
+    h = _bot_headers()
+    if reason:
+        h["X-Audit-Log-Reason"] = reason[:400]
+    return h
+
+
+def kick_member(guild_id: int, user_id: int, reason: str | None = None) -> None:
+    resp = requests.delete(
+        f"{API_BASE}/guilds/{guild_id}/members/{user_id}",
+        headers=_mod_headers(reason), timeout=_TIMEOUT,
+    )
+    resp.raise_for_status()
+
+
+def ban_member(guild_id: int, user_id: int, reason: str | None = None,
+               delete_message_seconds: int = 0) -> None:
+    resp = requests.put(
+        f"{API_BASE}/guilds/{guild_id}/bans/{user_id}",
+        headers=_mod_headers(reason),
+        json={"delete_message_seconds": max(0, min(604800, int(delete_message_seconds)))},
+        timeout=_TIMEOUT,
+    )
+    resp.raise_for_status()
+
+
+def timeout_member(guild_id: int, user_id: int, until_iso: str | None,
+                   reason: str | None = None) -> None:
+    """Set (or clear, when until_iso is None) a member's communication timeout."""
+    resp = requests.patch(
+        f"{API_BASE}/guilds/{guild_id}/members/{user_id}",
+        headers=_mod_headers(reason),
+        json={"communication_disabled_until": until_iso},
+        timeout=_TIMEOUT,
+    )
+    resp.raise_for_status()
+
+
 # --- White-label custom bot validation (arbitrary bot token) -------------------
 # Application flags that report whether the privileged-intent toggles are ON in
 # the app owner's Developer Portal. The *_LIMITED variants are what unverified

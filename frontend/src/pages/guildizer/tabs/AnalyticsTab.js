@@ -4,6 +4,7 @@ import {
   ToggleButtonGroup, ToggleButton, Stack, Tooltip,
 } from '@mui/material';
 import guildizerApi from '../../../services/guildizerApi';
+import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
 
 export default function AnalyticsTab({ guildId }) {
   const [loading, setLoading] = useState(true);
@@ -41,13 +42,13 @@ export default function AnalyticsTab({ guildId }) {
       <StatCard label="Active today" value={t.actives_today} />
 
       <Grid item xs={12}>
-        <BarsCard title="Messages per day" series={data.series} field="messages" color="#5865F2" />
+        <BarsCard id="analytics.overview.messages" title="Messages per day" series={data.series} field="messages" color="#5865F2" />
       </Grid>
       <Grid item xs={12} md={6}>
-        <BarsCard title="Joins per day" series={data.series} field="joins" color="#3BA55D" />
+        <BarsCard id="analytics.overview.joins" title="Joins per day" series={data.series} field="joins" color="#3BA55D" />
       </Grid>
       <Grid item xs={12} md={6}>
-        <BarsCard title="Leaves per day" series={data.series} field="leaves" color="#ED4245" />
+        <BarsCard id="analytics.overview.leaves" title="Leaves per day" series={data.series} field="leaves" color="#ED4245" />
       </Grid>
     </Grid>
   );
@@ -64,11 +65,10 @@ function StatCard({ label, value }) {
   );
 }
 
-function BarsCard({ title, series, field, color }) {
+function BarsCard({ id, title, series, field, color }) {
   const max = Math.max(1, ...series.map((d) => d[field]));
   return (
-    <Card variant="outlined"><CardContent>
-      <Typography variant="h6" fontWeight={600} mb={1}>{title}</Typography>
+    <GuildizerCollapsibleCard id={id} title={title}>
       <Typography variant="body2" color="text.secondary" mb={2}>
         Daily activity over the selected window. Hover a bar to see its date and exact count.
       </Typography>
@@ -90,6 +90,6 @@ function BarsCard({ title, series, field, color }) {
         <Typography variant="caption" color="text.disabled">{series[0]?.day}</Typography>
         <Typography variant="caption" color="text.disabled">{series[series.length - 1]?.day}</Typography>
       </Stack>
-    </CardContent></Card>
+    </GuildizerCollapsibleCard>
   );
 }

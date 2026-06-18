@@ -11,10 +11,11 @@ from datetime import datetime
 from flask import Blueprint, g, jsonify, request
 
 import leveling
+import member_stats
 import settings as settings_mod
 import access
 from auth import login_required
-from models import Guild, UserGuild
+from models import Guild, Member, UserGuild
 
 leveling_bp = Blueprint("leveling", __name__)
 
@@ -146,10 +147,40 @@ def leaderboard(guild_id: int):
     if not ok:
         return err
     limit = _as_int(request.args.get("limit", 10), 10, 1, 100)
-    members = leveling.top_members(g.db, guild_id, limit)
+    period = request.args.get("period")  # 1d|today|7d|30d|all
+    q = (request.args.get("q") or "").strip()
+    has_wallet = (request.args.get("has_wallet") or "").lower() in ("1", "true", "yes")
+
+    query = g.db.query(Member).filter(Member.guild_id == guild_id)
+    if q:
+        if q.isdigit():
+            query = query.filter(Member.user_id == int(q))
+        else:
+            like = f"%{q}%"
+            query = query.filter((Member.username.ilike(like)) | (Member.wallet.ilike(like)))
+    if has_wallet:
+        query = query.filter(Member.wallet.isnot(None), Member.wallet != "")
+
+    since = member_stats.period_since(period)
+    xp_period = member_stats.xp_by_user(g.db, guild_id, since) if period and period != "all" else None
+    if xp_period is not None:
+        members = query.all()
+        members.sort(key=lambda m: xp_period.get(m.user_id, 0), reverse=True)
+        members = [m for m in members if xp_period.get(m.user_id, 0) > 0][:limit]
+    else:
+        members = query.order_by(Member.xp.desc().nullslast()).limit(limit).all()
+
+    settings_row = settings_mod.get_or_create(g.db, guild_id)
+    role_rewards = ((settings_row.extra or {}).get("leveling2") or {}).get("role_rewards") or []
+    roles_by_level = member_stats.role_label_map(g.db, guild_id, role_rewards)
+
     rows = []
     for i, m in enumerate(members, start=1):
         d = m.to_dict()
         d["rank"] = i
+        d["role"] = roles_by_level.get(m.level or 1)
+        d["has_wallet"] = bool(m.wallet)
+        if xp_period is not None:
+            d["xp_period"] = xp_period.get(m.user_id, 0)
         rows.append(d)
-    return jsonify(leaderboard=rows)
+    return jsonify(leaderboard=rows, period=period or "all")

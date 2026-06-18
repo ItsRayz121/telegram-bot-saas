@@ -402,6 +402,65 @@ def delete_warning(guild_id: int, warning_id: int):
     return jsonify(ok=True)
 
 
+# --- Dashboard moderation actions (Telegizer-parity audit/warnings row menu) ---
+# warn / mute (timeout) / kick / tempban / ban, performed via Discord REST so the
+# web can act on a member without a gateway. Each is logged to the audit feed.
+_MOD_ACTIONS = {"warn", "mute", "kick", "tempban", "ban"}
+_EVENT_ACTION = {"warn": "warned", "mute": "timeout", "kick": "kick", "tempban": "ban", "ban": "ban"}
+
+
+@protection_bp.post("/api/guilds/<int:guild_id>/moderation/action")
+@login_required
+def moderation_action(guild_id: int):
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return err
+    guild = g.db.get(Guild, guild_id)
+    if guild is None:
+        return jsonify(error="not_found"), 404
+    if not guild.bot_present:
+        return jsonify(error="bot_not_in_server"), 409
+
+    body = request.get_json(silent=True) or {}
+    action = str(body.get("action") or "").lower()
+    if action not in _MOD_ACTIONS:
+        return jsonify(error="bad_action"), 400
+    uid_raw = str(body.get("user_id") or "")
+    if not uid_raw.isdigit():
+        return jsonify(error="bad_user_id"), 400
+    user_id = int(uid_raw)
+    username = (body.get("username") or "")[:120] or None
+    reason = (body.get("reason") or "Dashboard action")[:300]
+    minutes = _as_int(body.get("minutes", 60), 60, 1, 40320)  # mute/tempban window
+
+    import discord_api
+    try:
+        if action == "warn":
+            g.db.add(MemberWarning(
+                guild_id=guild_id, user_id=user_id, username=username,
+                moderator_id=None, moderator_name="Dashboard", reason=reason,
+            ))
+        elif action == "mute":
+            until = (datetime.utcnow() + timedelta(minutes=minutes)).isoformat() + "Z"
+            discord_api.timeout_member(guild_id, user_id, until, reason)
+        elif action == "kick":
+            discord_api.kick_member(guild_id, user_id, reason)
+        elif action == "ban":
+            discord_api.ban_member(guild_id, user_id, reason)
+        elif action == "tempban":
+            discord_api.ban_member(guild_id, user_id, reason)
+            moderation_runtime.schedule_unban(g.db, guild_id, user_id, username, minutes * 60, reason)
+    except Exception:
+        return jsonify(error="discord_action_failed"), 502
+
+    g.db.add(ProtectionEvent(
+        guild_id=guild_id, category="moderation", action=_EVENT_ACTION[action],
+        user_id=user_id, username=username, detail=f"{action} · {reason}"[:255],
+    ))
+    g.db.commit()
+    return jsonify(ok=True, action=action)
+
+
 @protection_bp.get("/api/guilds/<int:guild_id>/reports")
 @login_required
 def list_reports(guild_id: int):
