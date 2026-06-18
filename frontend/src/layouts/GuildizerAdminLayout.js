@@ -30,14 +30,26 @@ export default function GuildizerAdminLayout({ children }) {
   });
   const [status, setStatus] = useState('loading'); // loading | allowed | denied
   const [me, setMe] = useState(null);
+  const [deniedHint, setDeniedHint] = useState(null);
 
   useEffect(() => {
+    const hasToken = (() => { try { return !!localStorage.getItem('token'); } catch { return false; } })();
     guildizerApi.get('/auth/me')
       .then(({ data }) => {
         if (data?.is_admin) { setMe(data); setStatus('allowed'); }
-        else setStatus('denied');
+        else { setDeniedHint(null); setStatus('denied'); }
       })
-      .catch(() => setStatus('denied'));
+      .catch((err) => {
+        const d = err?.response?.data || {};
+        // We sent a Telegizer token but the bridge didn't authorise — almost
+        // always TELEGIZER_API_URL on the Guildizer backend is unset/misconfigured.
+        if (hasToken && d.bridge_configured === false) {
+          setDeniedHint('The Telegizer→Guildizer admin bridge is not configured on the Guildizer backend. Set TELEGIZER_API_URL to the Telegizer API base (https://api.telegizer.com) and redeploy.');
+        } else if (hasToken) {
+          setDeniedHint('Your Telegizer login was not recognised as a super-admin for Guildizer. If you just signed in, refresh; otherwise contact a platform administrator.');
+        }
+        setStatus('denied');
+      });
   }, []);
 
   useEffect(() => { if (!isMobile && isSmallDesktop) setCollapsed(true); }, [isMobile, isSmallDesktop]);
@@ -64,8 +76,8 @@ export default function GuildizerAdminLayout({ children }) {
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', gap: 2, px: 2, textAlign: 'center', bgcolor: PALETTE.bg0 }}>
         <Typography variant="h6" fontWeight={700}>Guildizer Admin Access Required</Typography>
-        <Typography variant="body2" color="text.secondary">
-          Your account does not have Guildizer admin privileges. Contact a platform administrator if you believe this is an error.
+        <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 520 }}>
+          {deniedHint || 'Your account does not have Guildizer admin privileges. Contact a platform administrator if you believe this is an error.'}
         </Typography>
         <Button variant="outlined" onClick={() => navigate('/guildizer')}>Back to Servers</Button>
       </Box>

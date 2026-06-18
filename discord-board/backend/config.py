@@ -56,7 +56,10 @@ class Config:
     # be the main BACKEND API base, i.e. https://api.telegizer.com — NOT the
     # www/frontend host https://telegizer.com (that's Vercel, which has no /api
     # route and will 404, silently disabling the bridge). Empty = bridge disabled.
-    TELEGIZER_API_URL = os.getenv("TELEGIZER_API_URL", "").rstrip("/")
+    # Default to the known Telegizer backend API base so the bridge keeps working
+    # even if the env var is dropped on a redeploy (the recurring cause of
+    # "Guildizer Admin Access Required"). Override only if the API host differs.
+    TELEGIZER_API_URL = (os.getenv("TELEGIZER_API_URL") or "https://api.telegizer.com").rstrip("/")
 
     # Fernet key for encrypting custom-bot tokens at rest (crypto.py).
     # Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"

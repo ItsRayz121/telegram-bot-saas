@@ -245,7 +245,15 @@ def me():
                 is_admin=True,
                 admin_role="super",
             )
-        return jsonify(error="unauthorized"), 401
+        # No Discord session and the bridge didn't authorise. Tell the client
+        # enough to explain *why* so the admin gate isn't a silent dead end.
+        from config import Config
+        had_token = bool(request.headers.get("X-Telegizer-Token"))
+        return jsonify(
+            error="unauthorized",
+            bridge_configured=bool(Config.TELEGIZER_API_URL),
+            had_token=had_token,
+        ), 401
     db = SessionLocal()
     try:
         user = db.get(User, uid)

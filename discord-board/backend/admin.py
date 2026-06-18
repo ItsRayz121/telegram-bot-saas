@@ -19,11 +19,14 @@ under the sentinel id ``BRIDGE_ADMIN_ID`` and are treated as super.
 from __future__ import annotations
 
 import hashlib
+import logging
 import time
 from functools import wraps
 
 import requests
 from flask import g, jsonify, request
+
+log = logging.getLogger("guildizer.admin")
 
 from auth import current_user_id
 from config import Config
@@ -74,7 +77,15 @@ def bridge_super_admin():
             # "super admins can access everything".
             if user.get("admin_role") == "super_admin":
                 identity = {"email": (user.get("email") or "").lower()}
-    except requests.RequestException:
+            else:
+                log.info("Bridge: token valid but not super_admin (role=%s).", user.get("admin_role"))
+        else:
+            # The classic misconfig: TELEGIZER_API_URL points at the Vercel front
+            # end (no /api route) → 404 → bridge silently disabled. Log loudly.
+            log.warning("Bridge: %s/api/auth/me returned %s — check TELEGIZER_API_URL "
+                        "points at the BACKEND API base.", Config.TELEGIZER_API_URL, resp.status_code)
+    except requests.RequestException as e:
+        log.warning("Bridge: could not reach %s/api/auth/me (%s).", Config.TELEGIZER_API_URL, e)
         identity = None
 
     _bridge_cache[key] = (now + _BRIDGE_TTL, identity)

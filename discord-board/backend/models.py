@@ -926,7 +926,8 @@ class Poll(Base):
     multiselect = Column(Boolean, default=False)
     needs_post = Column(Boolean, default=True)
     message_id = Column(BigInteger, nullable=True)
-    status = Column(String(12), default="pending")     # pending | open | ended | failed
+    status = Column(String(12), default="pending")     # draft | pending | scheduled | open | ended | failed
+    scheduled_at = Column(DateTime, nullable=True)      # post-later time (UTC); None = post asap
     ends_at = Column(DateTime, nullable=True)
     results = Column(JSON, default=dict)               # {answer_text: votes}
     created_by = Column(BigInteger, nullable=True)
@@ -941,6 +942,7 @@ class Poll(Base):
             "duration_hours": self.duration_hours or 24,
             "multiselect": bool(self.multiselect),
             "status": self.status,
+            "scheduled_at": self.scheduled_at.isoformat() + "Z" if self.scheduled_at else None,
             "ends_at": self.ends_at.isoformat() + "Z" if self.ends_at else None,
             "results": dict(self.results or {}),
             "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,

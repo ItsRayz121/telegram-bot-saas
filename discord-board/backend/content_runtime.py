@@ -8,6 +8,8 @@ from __future__ import annotations
 import time
 from datetime import datetime, timedelta
 
+from sqlalchemy import or_
+
 from database import SessionLocal
 from models import AutoResponse, GuildEvent, Poll, ScheduledMessage
 
@@ -72,8 +74,10 @@ def polls_to_post(served_guild_ids: list[int]) -> list[dict]:
     try:
         rows = (
             db.query(Poll)
-            .filter(Poll.needs_post.is_(True), Poll.status == "pending",
-                    Poll.guild_id.in_(served_guild_ids))
+            .filter(Poll.needs_post.is_(True),
+                    Poll.status.in_(("pending", "scheduled")),
+                    Poll.guild_id.in_(served_guild_ids),
+                    or_(Poll.scheduled_at.is_(None), Poll.scheduled_at <= datetime.utcnow()))
             .limit(10)
             .all()
         )

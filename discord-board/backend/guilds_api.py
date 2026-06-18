@@ -14,6 +14,7 @@ from flask import Blueprint, g, jsonify
 
 import discord_api
 import access
+import guild_sync
 from auth import login_required
 from config import Config
 from models import Channel, Guild, Role, UserGuild
@@ -101,6 +102,40 @@ def guild_detail(guild_id: int):
     if not guild.bot_present:
         data["invite_url"] = _build_invite_url(guild_id)
     return jsonify(data)
+
+
+@guilds_bp.post("/api/guilds/<int:guild_id>/resync")
+@login_required
+def resync_guild(guild_id: int):
+    """Pull the live channel + role list from Discord (REST) and refresh the DB,
+    so roles/channels created in Discord after the last gateway sync appear in
+    the dashboard without waiting for the bot to re-sync."""
+    if not access.can_manage_guild(g.db, g.user_id, guild_id):
+        return jsonify(error="forbidden"), 403
+    guild = g.db.get(Guild, guild_id)
+    if guild is None:
+        return jsonify(error="not_found"), 404
+    if not guild.bot_present:
+        return jsonify(error="bot_not_in_server"), 409
+    try:
+        channels_json = discord_api.get_guild_channels(guild_id)
+        roles_json = discord_api.get_guild_roles(guild_id)
+    except Exception:
+        return jsonify(error="discord_unavailable"), 502
+    guild_sync.sync_channels_rest(g.db, guild_id, channels_json)
+    guild_sync.sync_roles_rest(g.db, guild_id, roles_json)
+    g.db.commit()
+
+    channels = (
+        g.db.query(Channel).filter(Channel.guild_id == guild_id).order_by(Channel.position).all()
+    )
+    roles = (
+        g.db.query(Role).filter(Role.guild_id == guild_id).order_by(Role.position.desc()).all()
+    )
+    return jsonify(
+        channels=[c.to_dict() for c in channels],
+        roles=[r.to_dict() for r in roles],
+    )
 
 
 @guilds_bp.get("/api/guilds/<int:guild_id>/invite")

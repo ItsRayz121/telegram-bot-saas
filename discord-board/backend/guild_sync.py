@@ -68,6 +68,48 @@ def sync_roles(db, dguild) -> None:
     _prune(db, Role, dguild.id, current_ids)
 
 
+# --- REST-based sync (used by the Flask API, which has no gateway cache) -------
+# The web process can't see discord.py guild objects, so these upsert from the
+# raw REST JSON (GET /guilds/{id}/roles and /channels). Same shape as the gateway
+# sync above; caller commits.
+def sync_channels_rest(db, guild_id: int, channels_json: list[dict]) -> None:
+    current_ids = set()
+    for ch in channels_json:
+        cid = int(ch["id"])
+        current_ids.add(cid)
+        row = db.get(Channel, cid)
+        if row is None:
+            row = Channel(id=cid, guild_id=guild_id)
+            db.add(row)
+        row.guild_id = guild_id
+        row.name = ch.get("name")
+        row.type = int(ch.get("type", 0))
+        row.position = int(ch.get("position", 0) or 0)
+        row.parent_id = int(ch["parent_id"]) if ch.get("parent_id") else None
+        row.synced_at = datetime.utcnow()
+    _prune(db, Channel, guild_id, current_ids)
+
+
+def sync_roles_rest(db, guild_id: int, roles_json: list[dict]) -> None:
+    current_ids = set()
+    for role in roles_json:
+        rid = int(role["id"])
+        current_ids.add(rid)
+        row = db.get(Role, rid)
+        if row is None:
+            row = Role(id=rid, guild_id=guild_id)
+            db.add(row)
+        row.guild_id = guild_id
+        row.name = role.get("name")
+        row.color = int(role.get("color", 0) or 0)
+        row.position = int(role.get("position", 0) or 0)
+        row.permissions = str(role.get("permissions", "0"))
+        row.managed = bool(role.get("managed"))
+        row.mentionable = bool(role.get("mentionable"))
+        row.synced_at = datetime.utcnow()
+    _prune(db, Role, guild_id, current_ids)
+
+
 def _prune(db, model, guild_id: int, keep_ids: set[int]) -> None:
     for row in db.query(model).filter(model.guild_id == guild_id).all():
         if row.id not in keep_ids:

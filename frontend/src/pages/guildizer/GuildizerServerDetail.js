@@ -7,7 +7,7 @@ import {
 } from '@mui/material';
 import {
   ArrowBack, Save, Schedule, Shield, People, Forum as ForumIcon,
-  SmartToy, Bolt, Assessment, Settings as SettingsIcon,
+  SmartToy, Bolt, Assessment, Settings as SettingsIcon, Refresh,
 } from '@mui/icons-material';
 import guildizerApi from '../../services/guildizerApi';
 import { GuildizerUiPrefsProvider } from '../../context/GuildizerUiPrefsContext';
@@ -144,6 +144,16 @@ function GuildizerServerDetailInner() {
   const channels = guild?.channels || [];
   const roles = guild?.roles || [];
 
+  const [resyncing, setResyncing] = useState(false);
+  const resync = useCallback(async () => {
+    setResyncing(true);
+    try {
+      const { data } = await guildizerApi.post(`/api/guilds/${guildId}/resync`);
+      setState((s) => (s.guild ? { ...s, guild: { ...s.guild, channels: data.channels, roles: data.roles } } : s));
+    } catch { /* leave current data in place */ }
+    setResyncing(false);
+  }, [guildId]);
+
   return (
     <Box sx={{ maxWidth: 1000, mx: 'auto', px: { xs: 2, md: 3 }, py: 0 }}>
       {state.loading && <Box sx={{ display: 'grid', placeItems: 'center', minHeight: 240 }}><CircularProgress /></Box>}
@@ -182,6 +192,14 @@ function GuildizerServerDetailInner() {
                 {(guild.name || '?').slice(0, 2).toUpperCase()}
               </Avatar>
               <Typography variant="h6" fontWeight={700} noWrap sx={{ flexGrow: 1 }}>{guild.name}</Typography>
+
+              <Tooltip title="Refresh channels & roles from Discord (picks up ones you just created).">
+                <span>
+                  <IconButton size="small" onClick={resync} disabled={resyncing} sx={{ mr: 0.25 }}>
+                    {resyncing ? <CircularProgress size={16} /> : <Refresh fontSize="small" />}
+                  </IconButton>
+                </span>
+              </Tooltip>
 
               <Tooltip title="Discord schedules and timestamps everywhere in UTC.">
                 <Chip icon={<Schedule sx={{ fontSize: 14 }} />} label="UTC" size="small" variant="outlined"

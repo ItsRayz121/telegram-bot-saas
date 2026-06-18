@@ -262,6 +262,39 @@ def list_polls(guild_id: int):
     return jsonify(polls=[r.to_dict() for r in rows])
 
 
+def _poll_fields(body):
+    """Validate & normalise the editable poll fields shared by create/edit."""
+    question = str(body.get("question") or "").strip()[:300]
+    answers = [str(a).strip()[:55] for a in (body.get("answers") or []) if str(a).strip()][:10]
+    channel_id = body.get("channel_id")
+    if not question or len(answers) < 2 or not (channel_id and str(channel_id).isdigit()):
+        return None, (jsonify(error="question_two_answers_and_channel_required"), 400)
+    try:
+        duration = max(1, min(768, int(body.get("duration_hours", 24))))
+    except (TypeError, ValueError):
+        duration = 24
+    return {
+        "question": question, "answers": answers, "channel_id": int(channel_id),
+        "duration_hours": duration, "multiselect": bool(body.get("multiselect")),
+    }, None
+
+
+def _poll_schedule(body):
+    """Resolve post mode → (status, needs_post, scheduled_at).
+
+    mode: 'now' (default) posts on the next bot tick; 'schedule' waits until
+    scheduled_at; 'draft' is parked until the user posts it.
+    """
+    mode = str(body.get("mode") or "now").lower()
+    if mode == "draft":
+        return "draft", False, None
+    if mode == "schedule":
+        when = _parse_dt(body.get("scheduled_at"))
+        if when and when > datetime.utcnow():
+            return "scheduled", True, when
+    return "pending", True, None
+
+
 @content_bp.post("/api/guilds/<int:guild_id>/polls")
 @login_required
 def create_poll(guild_id: int):
@@ -269,23 +302,75 @@ def create_poll(guild_id: int):
     if not ok:
         return err
     body = request.get_json(silent=True) or {}
-    question = str(body.get("question") or "").strip()[:300]
-    answers = [str(a).strip()[:55] for a in (body.get("answers") or []) if str(a).strip()][:10]
-    channel_id = body.get("channel_id")
-    if not question or len(answers) < 2 or not (channel_id and str(channel_id).isdigit()):
-        return jsonify(error="question_two_answers_and_channel_required"), 400
-    try:
-        duration = max(1, min(768, int(body.get("duration_hours", 24))))
-    except (TypeError, ValueError):
-        duration = 24
+    fields, ferr = _poll_fields(body)
+    if ferr:
+        return ferr
+    status, needs_post, scheduled_at = _poll_schedule(body)
     row = Poll(
-        guild_id=guild_id, channel_id=int(channel_id), question=question,
-        answers=answers, duration_hours=duration,
-        multiselect=bool(body.get("multiselect")), created_by=g.user_id,
+        guild_id=guild_id, created_by=g.user_id,
+        status=status, needs_post=needs_post, scheduled_at=scheduled_at, **fields,
     )
     g.db.add(row)
     g.db.commit()
     return jsonify(poll=row.to_dict()), 201
+
+
+@content_bp.put("/api/guilds/<int:guild_id>/polls/<int:pid>")
+@login_required
+def update_poll(guild_id: int, pid: int):
+    """Edit an unposted poll (draft / pending / scheduled) or change its post mode."""
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return err
+    row = g.db.get(Poll, pid)
+    if row is None or row.guild_id != guild_id:
+        return jsonify(error="not_found"), 404
+    if row.status not in ("draft", "pending", "scheduled"):
+        return jsonify(error="poll_already_posted"), 409
+    body = request.get_json(silent=True) or {}
+    fields, ferr = _poll_fields(body)
+    if ferr:
+        return ferr
+    for k, v in fields.items():
+        setattr(row, k, v)
+    if "mode" in body:
+        row.status, row.needs_post, row.scheduled_at = _poll_schedule(body)
+    g.db.commit()
+    return jsonify(poll=row.to_dict())
+
+
+@content_bp.post("/api/guilds/<int:guild_id>/polls/<int:pid>/post")
+@login_required
+def post_poll_now(guild_id: int, pid: int):
+    """Push a draft/scheduled poll live on the next bot tick."""
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return err
+    row = g.db.get(Poll, pid)
+    if row is None or row.guild_id != guild_id:
+        return jsonify(error="not_found"), 404
+    if row.status not in ("draft", "scheduled"):
+        return jsonify(error="not_postable"), 409
+    row.status, row.needs_post, row.scheduled_at = "pending", True, None
+    g.db.commit()
+    return jsonify(poll=row.to_dict())
+
+
+@content_bp.post("/api/guilds/<int:guild_id>/polls/<int:pid>/end")
+@login_required
+def end_poll(guild_id: int, pid: int):
+    """Close a live poll early — the bot finalises it on the next tick."""
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return err
+    row = g.db.get(Poll, pid)
+    if row is None or row.guild_id != guild_id:
+        return jsonify(error="not_found"), 404
+    if row.status != "open":
+        return jsonify(error="poll_not_live"), 409
+    row.ends_at = datetime.utcnow()
+    g.db.commit()
+    return jsonify(poll=row.to_dict())
 
 
 @content_bp.delete("/api/guilds/<int:guild_id>/polls/<int:pid>")

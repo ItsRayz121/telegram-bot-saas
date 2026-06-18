@@ -4,12 +4,13 @@ import {
   CircularProgress, Alert, List, ListItem, ListItemText, Stack, Switch,
   FormControlLabel, IconButton, Tooltip,
 } from '@mui/material';
-import { Delete, Add } from '@mui/icons-material';
+import { Delete, Add, Send, Edit as EditIcon, StopCircle } from '@mui/icons-material';
 import guildizerApi from '../../../services/guildizerApi';
 import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
 
 const TEXT_TYPES = new Set([0, 5]);
-const STATUS_COLOR = { pending: 'default', open: 'info', ended: 'success', failed: 'error' };
+const STATUS_COLOR = { draft: 'default', pending: 'warning', scheduled: 'info', open: 'info', ended: 'success', failed: 'error' };
+const POLL_STATUS_LABEL = { pending: 'posting…', scheduled: 'scheduled', draft: 'draft', open: 'live', ended: 'ended', failed: 'failed' };
 
 export default function ContentTab({ guildId, channels = [] }) {
   const [loading, setLoading] = useState(true);
@@ -203,66 +204,148 @@ export function SchedulerCard({ guildId, messages, channels, onChanged }) {
   );
 }
 
-export function PollsCard({ guildId, polls, channels, onChanged }) {
-  const [question, setQuestion] = useState('');
-  const [answersText, setAnswersText] = useState('');
-  const [channelId, setChannelId] = useState('');
-  const [duration, setDuration] = useState(24);
-  const [multiselect, setMultiselect] = useState(false);
-  const [busy, setBusy] = useState(false);
+const EMPTY_POLL_FORM = { question: '', answers: ['', ''], channelId: '', duration: 24, multiselect: false, mode: 'now', scheduledAt: '' };
 
-  async function add() {
-    setBusy(true);
+export function PollsCard({ guildId, polls, channels, onChanged }) {
+  const [form, setForm] = useState(EMPTY_POLL_FORM);
+  const [editingId, setEditingId] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  const set = (patch) => setForm((f) => ({ ...f, ...patch }));
+  const setAnswer = (i, val) => setForm((f) => ({ ...f, answers: f.answers.map((a, j) => (j === i ? val : a)) }));
+  const addAnswer = () => setForm((f) => (f.answers.length >= 10 ? f : { ...f, answers: [...f.answers, ''] }));
+  const removeAnswer = (i) => setForm((f) => (f.answers.length <= 2 ? f : { ...f, answers: f.answers.filter((_, j) => j !== i) }));
+  const reset = () => { setForm(EMPTY_POLL_FORM); setEditingId(null); setError(null); };
+
+  const cleanAnswers = form.answers.map((a) => a.trim()).filter(Boolean);
+  const canSubmit = form.question.trim() && cleanAnswers.length >= 2 && form.channelId
+    && (form.mode !== 'schedule' || form.scheduledAt);
+
+  async function submit() {
+    setBusy(true); setError(null);
+    const payload = {
+      question: form.question, answers: cleanAnswers, channel_id: form.channelId,
+      duration_hours: form.duration, multiselect: form.multiselect, mode: form.mode,
+      scheduled_at: form.mode === 'schedule' && form.scheduledAt ? new Date(form.scheduledAt).toISOString() : null,
+    };
     try {
-      await guildizerApi.post(`/api/guilds/${guildId}/polls`, {
-        question, channel_id: channelId, duration_hours: duration, multiselect,
-        answers: answersText.split('\n').map((a) => a.trim()).filter(Boolean),
-      });
-      setQuestion(''); setAnswersText('');
+      if (editingId) await guildizerApi.put(`/api/guilds/${guildId}/polls/${editingId}`, payload);
+      else await guildizerApi.post(`/api/guilds/${guildId}/polls`, payload);
+      reset();
       await onChanged();
-    } catch { /* parent shows errors on reload */ }
+    } catch { setError('Could not save the poll — check the question, at least 2 answers, and a channel.'); }
     setBusy(false);
   }
+
+  function startEdit(p) {
+    setEditingId(p.id);
+    setError(null);
+    const ans = (p.answers || []).slice();
+    while (ans.length < 2) ans.push('');
+    setForm({
+      question: p.question || '', answers: ans, channelId: p.channel_id || '',
+      duration: p.duration_hours || 24, multiselect: !!p.multiselect,
+      mode: p.status === 'draft' ? 'draft' : p.status === 'scheduled' ? 'schedule' : 'now',
+      scheduledAt: p.scheduled_at ? toLocalInput(p.scheduled_at) : '',
+    });
+  }
+
+  const act = (id, verb) => guildizerApi.post(`/api/guilds/${guildId}/polls/${id}/${verb}`).then(onChanged).catch(() => {});
+  const del = (id) => guildizerApi.delete(`/api/guilds/${guildId}/polls/${id}`).then(onChanged).catch(() => {});
+
+  const submitLabel = editingId ? 'Save changes'
+    : form.mode === 'draft' ? 'Save draft'
+    : form.mode === 'schedule' ? 'Schedule poll' : 'Post poll';
 
   return (
     <GuildizerCollapsibleCard id="members.content.polls_native" title="Polls (native)">
       <Typography variant="body2" color="text.secondary" mb={2}>
         Post a native Discord poll with timed voting and optional multiple choice.
+        Post it now, schedule it for later, or save it as a draft.
       </Typography>
       <TextField fullWidth size="small" margin="dense" label="Question"
-        value={question} inputProps={{ maxLength: 300 }} onChange={(e) => setQuestion(e.target.value)} />
-      <TextField fullWidth multiline minRows={2} size="small" margin="dense"
-        label="Answers (one per line, 2–10)"
-        value={answersText} onChange={(e) => setAnswersText(e.target.value)} />
+        value={form.question} inputProps={{ maxLength: 300 }} onChange={(e) => set({ question: e.target.value })} />
+
+      <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+        Answers (2–10)
+      </Typography>
+      {form.answers.map((a, i) => (
+        <Stack key={i} direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5 }}>
+          <TextField fullWidth size="small" label={`Option ${i + 1}`} value={a}
+            inputProps={{ maxLength: 55 }} onChange={(e) => setAnswer(i, e.target.value)} />
+          <IconButton size="small" disabled={form.answers.length <= 2} onClick={() => removeAnswer(i)} title="Remove option">
+            <Delete fontSize="small" />
+          </IconButton>
+        </Stack>
+      ))}
+      <Button size="small" startIcon={<Add />} disabled={form.answers.length >= 10} onClick={addAnswer} sx={{ mt: 0.5 }}>
+        Add option
+      </Button>
+
       <TextField select fullWidth size="small" margin="dense" label="Channel"
-        value={channelId} onChange={(e) => setChannelId(e.target.value)}>
+        value={form.channelId} onChange={(e) => set({ channelId: e.target.value })}>
         {channels.map((c) => <MenuItem key={c.id} value={c.id}># {c.name}</MenuItem>)}
       </TextField>
       <Stack direction="row" spacing={1} alignItems="center">
         <TextField type="number" size="small" margin="dense" label="Duration (hours)"
-          value={duration} inputProps={{ min: 1, max: 768 }}
-          onChange={(e) => setDuration(Number(e.target.value))} sx={{ width: 150 }} />
-        <FormControlLabel control={<Switch checked={multiselect} onChange={(e) => setMultiselect(e.target.checked)} />}
+          value={form.duration} inputProps={{ min: 1, max: 768 }}
+          onChange={(e) => set({ duration: Number(e.target.value) })} sx={{ width: 150 }} />
+        <FormControlLabel control={<Switch checked={form.multiselect} onChange={(e) => set({ multiselect: e.target.checked })} />}
           label="Multiple choice" />
       </Stack>
-      <Button startIcon={<Add />} variant="contained" size="small" sx={{ mt: 1 }}
-        disabled={busy || !question.trim() || !channelId} onClick={add}>
-        Post poll
-      </Button>
+
+      <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5 }}>
+        <TextField select size="small" margin="dense" label="When" value={form.mode}
+          onChange={(e) => set({ mode: e.target.value })} sx={{ minWidth: 150 }}>
+          <MenuItem value="now">Post now</MenuItem>
+          <MenuItem value="schedule">Schedule</MenuItem>
+          <MenuItem value="draft">Save as draft</MenuItem>
+        </TextField>
+        {form.mode === 'schedule' && (
+          <TextField type="datetime-local" size="small" margin="dense" label="Post at"
+            InputLabelProps={{ shrink: true }} value={form.scheduledAt}
+            onChange={(e) => set({ scheduledAt: e.target.value })} sx={{ flex: 1 }} />
+        )}
+      </Stack>
+
+      {error && <Alert severity="error" sx={{ mt: 1, py: 0 }}>{error}</Alert>}
+      <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+        <Button startIcon={editingId ? null : <Add />} variant="contained" size="small"
+          disabled={busy || !canSubmit} onClick={submit}>
+          {busy ? 'Saving…' : submitLabel}
+        </Button>
+        {editingId && <Button size="small" onClick={reset} disabled={busy}>Cancel</Button>}
+      </Stack>
+
       <List dense sx={{ mt: 1 }}>
         {polls.map((p) => (
-          <ListItem key={p.id} disableGutters
-            secondaryAction={p.status !== 'open' && (
-              <IconButton size="small" onClick={() => guildizerApi.delete(`/api/guilds/${guildId}/polls/${p.id}`).then(onChanged)}>
-                <Delete fontSize="small" />
-              </IconButton>
+          <ListItem key={p.id} disableGutters alignItems="flex-start"
+            secondaryAction={(
+              <Stack direction="row" spacing={0.5} alignItems="center">
+                {(p.status === 'draft' || p.status === 'scheduled') && (
+                  <Tooltip title="Post now"><IconButton size="small" color="primary" onClick={() => act(p.id, 'post')}><Send fontSize="small" /></IconButton></Tooltip>
+                )}
+                {['draft', 'pending', 'scheduled'].includes(p.status) && (
+                  <Tooltip title="Edit"><IconButton size="small" onClick={() => startEdit(p)}><EditIcon fontSize="small" /></IconButton></Tooltip>
+                )}
+                {p.status === 'open' && (
+                  <Tooltip title="End poll now"><IconButton size="small" color="warning" onClick={() => act(p.id, 'end')}><StopCircle fontSize="small" /></IconButton></Tooltip>
+                )}
+                {p.status !== 'open' && (
+                  <IconButton size="small" onClick={() => del(p.id)} title="Delete"><Delete fontSize="small" /></IconButton>
+                )}
+              </Stack>
             )}>
-            <Chip size="small" variant="outlined" label={p.status} color={STATUS_COLOR[p.status] || 'default'} sx={{ mr: 1 }} />
+            <Chip size="small" variant="outlined" label={POLL_STATUS_LABEL[p.status] || p.status}
+              color={STATUS_COLOR[p.status] || 'default'} sx={{ mr: 1, mt: 0.3 }} />
             <ListItemText
               primary={p.question}
               secondary={p.status === 'ended'
-                ? Object.entries(p.results || {}).map(([a, v]) => `${a}: ${v}`).join(' · ') || 'no votes'
-                : `${(p.answers || []).length} options${p.ends_at ? ` · ends ${new Date(p.ends_at).toLocaleString()}` : ''}`}
+                ? (Object.entries(p.results || {}).map(([a, v]) => `${a}: ${v}`).join(' · ') || 'no votes')
+                : p.status === 'scheduled' && p.scheduled_at
+                  ? `${(p.answers || []).length} options · posts ${new Date(p.scheduled_at).toLocaleString()}`
+                  : `${(p.answers || []).length} options${p.ends_at ? ` · ends ${new Date(p.ends_at).toLocaleString()}` : ''}`}
               primaryTypographyProps={{ variant: 'body2', noWrap: true }} />
           </ListItem>
         ))}
@@ -270,6 +353,14 @@ export function PollsCard({ guildId, polls, channels, onChanged }) {
       </List>
     </GuildizerCollapsibleCard>
   );
+}
+
+// datetime-local needs "YYYY-MM-DDTHH:mm" in *local* time; convert from a stored ISO/UTC string.
+function toLocalInput(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 export function AutoResponsesCard({ guildId, responses, onChanged }) {
