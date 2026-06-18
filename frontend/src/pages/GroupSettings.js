@@ -39,6 +39,8 @@ import {
 import PlanGate from '../components/PlanGate';
 import { UiPrefsProvider } from '../context/UiPrefsContext';
 import CollapsibleCard from '../components/CollapsibleCard';
+import BlockedWordPresets from '../components/BlockedWordPresets';
+import { TELEGRAM_PACKS } from '../data/blockedWordPacks';
 
 function ProBadge() {
   return <Chip label="Pro" color="primary" size="small" sx={{ ml: 1, height: 18, fontSize: '0.65rem', fontWeight: 700 }} />;
@@ -1261,6 +1263,10 @@ function GroupSettingsInner() {
                 <TextField fullWidth multiline rows={2} label="Banned Words (comma separated)" sx={{ mt: 2 }}
                   value={(am.bad_words?.words || []).join(', ')}
                   onChange={(e) => updateSetting('automod.bad_words.words', e.target.value.split(',').map(w => w.trim()).filter(Boolean))} />
+                <BlockedWordPresets packs={TELEGRAM_PACKS} onAdd={(words) => {
+                  const cur = am.bad_words?.words || [];
+                  updateSetting('automod.bad_words.words', Array.from(new Set([...cur, ...words])));
+                }} />
                 <TextField fullWidth multiline rows={2} label="Extra NSFW Words (comma separated)" sx={{ mt: 2 }}
                   helperText="Added to the built-in adult/NSFW word list. Plain text is deleted + warned; NSFW on inline buttons is banned."
                   value={(am.nsfw_filter?.extra_words || []).join(', ')}

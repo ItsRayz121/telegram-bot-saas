@@ -8,6 +8,8 @@ import {
 import { Delete, Add } from '@mui/icons-material';
 import guildizerApi from '../../../services/guildizerApi';
 import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
+import BlockedWordPresets from '../../../components/BlockedWordPresets';
+import { DISCORD_PACKS } from '../../../data/blockedWordPacks';
 import { useSaveBar } from './saveBar';
 
 const TEXT_TYPES = new Set([0, 5]);
@@ -225,6 +227,10 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
               <TextField fullWidth multiline rows={2} label="Custom Blocked Words (comma separated)" sx={{ mt: 2 }}
                 placeholder="word1, word2, …" helperText="Leet/spacing aware."
                 value={wordsText} onChange={(e) => setWordsText(e.target.value)} />
+              <BlockedWordPresets packs={DISCORD_PACKS} onAdd={(words) => {
+                const cur = wordsText.split(',').map((w) => w.trim()).filter(Boolean);
+                setWordsText(Array.from(new Set([...cur, ...words])).join(', '));
+              }} />
               <TextField fullWidth multiline rows={2} label="Whitelisted Domains (for external-link blocking)" sx={{ mt: 2 }}
                 placeholder="youtube.com, x.com" helperText="Comma-separated. Subdomains are allowed automatically."
                 value={wlText} onChange={(e) => setWlText(e.target.value)} />
