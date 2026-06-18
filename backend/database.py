@@ -37,26 +37,6 @@ def xp_period_subquery(scope, period):
     )
 
 
-def xp_period_sums(scope, period, member_ids=None):
-    """Return {member_id: xp_sum (>=0)} from the ledger over the rolling window.
-    `member_ids` optionally restricts the scan. Empty dict for unknown period."""
-    days = _PERIOD_DAYS.get(period)
-    if not days:
-        return {}
-    cutoff = datetime.utcnow() - timedelta(days=days)
-    q = (
-        db.session.query(XpEvent.member_id, db.func.sum(XpEvent.amount))
-        .filter(XpEvent.scope == scope, XpEvent.created_at >= cutoff)
-    )
-    if member_ids is not None:
-        member_ids = list(member_ids)
-        if not member_ids:
-            return {}
-        q = q.filter(XpEvent.member_id.in_(member_ids))
-    q = q.group_by(XpEvent.member_id)
-    return {mid: max(0, int(s or 0)) for mid, s in q.all()}
-
-
 class DatabaseManager:
 
     @staticmethod
