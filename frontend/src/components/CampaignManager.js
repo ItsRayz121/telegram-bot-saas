@@ -258,6 +258,14 @@ export default function CampaignManager({ botId, groupId }) {
 
   const openCreate = (type) => { setCreateAnchor(null); setCreateType(type); };
 
+  const activeType = TYPES.find((t) => t.value === typeFilter);
+  // Create button is context-aware: on a specific type tab it creates that type
+  // directly; on "All campaigns" it opens the type picker menu.
+  const handleCreateClick = (e) => {
+    if (typeFilter === 'all') setCreateAnchor(e.currentTarget);
+    else openCreate(typeFilter);
+  };
+
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
@@ -267,9 +275,10 @@ export default function CampaignManager({ botId, groupId }) {
             Run social tasks, content submissions and proof collection. Members participate from Telegram.
           </Typography>
         </Box>
-        <Button variant="contained" startIcon={<Add />} endIcon={<ArrowDropDown />}
-          onClick={(e) => setCreateAnchor(e.currentTarget)}>
-          Create
+        <Button variant="contained" startIcon={<Add />}
+          endIcon={typeFilter === 'all' ? <ArrowDropDown /> : undefined}
+          onClick={handleCreateClick}>
+          {activeType ? `Create ${activeType.label}` : 'Create'}
         </Button>
         <Menu anchorEl={createAnchor} open={!!createAnchor} onClose={() => setCreateAnchor(null)}>
           {TYPES.map((t) => (
@@ -280,29 +289,25 @@ export default function CampaignManager({ botId, groupId }) {
         </Menu>
       </Box>
 
-      {/* Type filter chips — one click to scope the list, no drill-down.
-          Hidden until at least one campaign exists (matches the stats grid). */}
-      {campaigns.length > 0 && (
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
-          <Chip
-            label={`All (${totals.total})`}
-            color={typeFilter === 'all' ? 'primary' : 'default'}
-            variant={typeFilter === 'all' ? 'filled' : 'outlined'}
-            onClick={() => setTypeFilter('all')}
-            size="small"
+      {/* Persistent type tabs — All campaigns + one tab per campaign type. Always
+          visible so an admin can jump straight to (and create) a single type. */}
+      <Tabs
+        value={typeFilter}
+        onChange={(_, v) => setTypeFilter(v)}
+        variant="scrollable"
+        scrollButtons="auto"
+        allowScrollButtonsMobile
+        sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
+      >
+        <Tab value="all" label={`All campaigns (${totals.total})`} />
+        {TYPES.map((t) => (
+          <Tab
+            key={t.value}
+            value={t.value}
+            label={`${t.emoji} ${t.label} (${byType[t.value]?.total || 0})`}
           />
-          {TYPES.map((t) => (
-            <Chip
-              key={t.value}
-              label={`${t.emoji} ${t.chip} (${byType[t.value]?.total || 0})`}
-              color={typeFilter === t.value ? 'primary' : 'default'}
-              variant={typeFilter === t.value ? 'filled' : 'outlined'}
-              onClick={() => setTypeFilter(t.value)}
-              size="small"
-            />
-          ))}
-        </Box>
-      )}
+        ))}
+      </Tabs>
 
       <Alert severity="info" sx={{ mb: 2 }}>
         Free plan: 1 active campaign, manual/honor proof, Telegram-join auto-verify.
@@ -335,10 +340,14 @@ export default function CampaignManager({ botId, groupId }) {
         <Card>
           <CardContent sx={{ textAlign: 'center', py: 4 }}>
             <CampaignIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
-            <Typography color="text.secondary" sx={{ mb: 2 }}>No campaigns yet. Create one to engage your community.</Typography>
-            <Button variant="contained" startIcon={<Add />} endIcon={<ArrowDropDown />}
-              onClick={(e) => setCreateAnchor(e.currentTarget)}>
-              Create
+            <Typography color="text.secondary" sx={{ mb: 2 }}>
+              {activeType ? `No ${activeType.label} campaigns yet. Create one to engage your community.`
+                          : 'No campaigns yet. Create one to engage your community.'}
+            </Typography>
+            <Button variant="contained" startIcon={<Add />}
+              endIcon={typeFilter === 'all' ? <ArrowDropDown /> : undefined}
+              onClick={handleCreateClick}>
+              {activeType ? `Create ${activeType.label}` : 'Create'}
             </Button>
           </CardContent>
         </Card>
