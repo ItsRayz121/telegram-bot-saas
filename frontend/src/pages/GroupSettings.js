@@ -148,6 +148,116 @@ function ModerationActions({ botId, groupId, userId, username, onDone }) {
   );
 }
 
+// One AI Activity timeline row — shows a full preview (the answer for knowledge
+// actions, the removed message for moderation) plus an Improve/Feedback control
+// so an admin can correct the AI and, for answers, teach the bot for next time.
+function AIActivityRow({ e, botId, groupId, fmtTs, onDone }) {
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const isKnowledge = e.category === 'knowledge';
+  const meta = e.meta || {};
+  const fb = meta.feedback || null;
+  const [rating, setRating] = useState(fb?.rating || '');
+  const [note, setNote] = useState(fb?.note || '');
+  const [corrected, setCorrected] = useState(meta.answer || '');
+  const [saveToKb, setSaveToKb] = useState(isKnowledge);
+
+  const submit = async () => {
+    setSaving(true);
+    try {
+      const res = await settings.submitAiActivityFeedback(botId, groupId, e.id, {
+        rating,
+        note,
+        corrected_answer: isKnowledge ? corrected : '',
+        save_to_kb: isKnowledge && saveToKb,
+      });
+      toast.success(res.data?.saved_to_kb
+        ? 'Saved — the bot will use your improved answer next time'
+        : 'Feedback saved');
+      setOpen(false);
+      onDone?.();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to save feedback');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <TableRow>
+      <TableCell sx={{ whiteSpace: 'nowrap', verticalAlign: 'top', width: 150 }}>
+        <Typography variant="caption" color="text.secondary">{fmtTs(e.created_at)}</Typography>
+      </TableCell>
+      <TableCell sx={{ verticalAlign: 'top', width: 110 }}>
+        <Chip label={e.category} size="small" variant="outlined" sx={{ textTransform: 'capitalize' }} />
+      </TableCell>
+      <TableCell>
+        <Typography variant="body2" fontWeight={600}>
+          {e.action}
+          {e.status && e.status !== 'ok' && (
+            <Chip label={e.status} size="small" color={e.status === 'failed' ? 'error' : 'default'} sx={{ ml: 1, height: 16, fontSize: '0.6rem' }} />
+          )}
+        </Typography>
+        {e.target && <Typography variant="caption" color="text.secondary" display="block">{e.target}</Typography>}
+        {e.detail && <Typography variant="caption" color="text.secondary" display="block">{e.detail}</Typography>}
+        {meta.answer && (
+          <Typography variant="caption" color="text.primary" display="block" sx={{ mt: 0.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+            <strong>Answer:</strong> {meta.answer}
+          </Typography>
+        )}
+        {meta.message && (
+          <Typography variant="caption" color="text.disabled" display="block" sx={{ mt: 0.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+            <strong>Message:</strong> {meta.message}
+          </Typography>
+        )}
+        <Box sx={{ mt: 0.5, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+          <Button size="small" variant="text" onClick={() => setOpen(true)} sx={{ fontSize: '0.68rem', minWidth: 0, p: 0.25 }}>
+            {fb ? 'Edit feedback' : 'Improve / Feedback'}
+          </Button>
+          {fb?.rating && (
+            <Chip size="small" variant="outlined"
+              label={fb.rating === 'good' ? '👍 good' : '👎 needs work'}
+              color={fb.rating === 'good' ? 'success' : 'warning'}
+              sx={{ height: 18, fontSize: '0.6rem' }} />
+          )}
+        </Box>
+      </TableCell>
+
+      <Dialog open={open} onClose={() => !saving && setOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Improve this AI action</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
+          <Typography variant="body2" color="text.secondary">
+            {e.action}{e.detail ? ` — ${e.detail}` : ''}
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button variant={rating === 'good' ? 'contained' : 'outlined'} color="success" size="small" onClick={() => setRating('good')}>👍 Good</Button>
+            <Button variant={rating === 'bad' ? 'contained' : 'outlined'} color="warning" size="small" onClick={() => setRating('bad')}>👎 Needs work</Button>
+          </Box>
+          {isKnowledge && (
+            <>
+              <TextField label="Improved answer" fullWidth multiline minRows={3}
+                value={corrected} onChange={(ev) => setCorrected(ev.target.value)}
+                helperText="Edit the answer to be more accurate / professional." />
+              <FormControlLabel
+                control={<Switch checked={saveToKb} onChange={(ev) => setSaveToKb(ev.target.checked)} />}
+                label="Teach the bot — save this Q→A so the next matching question uses it" />
+            </>
+          )}
+          <TextField label="Note (optional)" fullWidth multiline minRows={2}
+            value={note} onChange={(ev) => setNote(ev.target.value)}
+            placeholder={isKnowledge ? 'Why was the answer wrong?' : 'e.g. this removal was a mistake — this kind of message is fine'} />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpen(false)} disabled={saving}>Cancel</Button>
+          <Button variant="contained" onClick={submit} disabled={saving || (!rating && !note.trim() && !corrected.trim())}>
+            {saving ? <CircularProgress size={20} /> : 'Save'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </TableRow>
+  );
+}
+
 // Friendly labels for the Protection Activity log (bot policy + raid mode).
 const PROTECTION_EVENT_META = {
   bot_restricted:      { icon: '🤖', label: 'Bot restricted on join' },
@@ -976,7 +1086,7 @@ function GroupSettingsInner() {
   // #5 — AI Status cards link to the exact tab where each thing is configured.
   const aiStatusTargets = {
     'Smart Moderation': { cat: 'moderation', sub: getSubTabIndex(CATEGORIES, 'moderation', 'AutoMod') },
-    'AI Integrations':  { cat: 'automation', sub: getSubTabIndex(CATEGORIES, 'automation', 'Webhooks') },
+    'AI Integrations':  { cat: 'ai',         sub: getSubTabIndex(CATEGORIES, 'ai', 'Knowledge Base') },
     'Knowledge Base':   { cat: 'ai',         sub: getSubTabIndex(CATEGORIES, 'ai', 'Knowledge Base') },
     'OpenAI Provider':  { cat: 'ai',         sub: getSubTabIndex(CATEGORIES, 'ai', 'Knowledge Base') },
   };
@@ -4287,26 +4397,10 @@ function GroupSettingsInner() {
                     <Table size="small">
                       <TableBody>
                         {aiActivity.events.map((e) => (
-                          <TableRow key={e.id}>
-                            <TableCell sx={{ whiteSpace: 'nowrap', verticalAlign: 'top', width: 150 }}>
-                              <Typography variant="caption" color="text.secondary">
-                                {fmtTs(e.created_at)}
-                              </Typography>
-                            </TableCell>
-                            <TableCell sx={{ verticalAlign: 'top', width: 110 }}>
-                              <Chip label={e.category} size="small" variant="outlined" sx={{ textTransform: 'capitalize' }} />
-                            </TableCell>
-                            <TableCell>
-                              <Typography variant="body2" fontWeight={600}>
-                                {e.action}
-                                {e.status && e.status !== 'ok' && (
-                                  <Chip label={e.status} size="small" color={e.status === 'failed' ? 'error' : 'default'} sx={{ ml: 1, height: 16, fontSize: '0.6rem' }} />
-                                )}
-                              </Typography>
-                              {e.target && <Typography variant="caption" color="text.secondary">{e.target}</Typography>}
-                              {e.detail && <Typography variant="caption" color="text.secondary" display="block">{e.detail}</Typography>}
-                            </TableCell>
-                          </TableRow>
+                          <AIActivityRow
+                            key={e.id} e={e} botId={botId} groupId={groupId}
+                            fmtTs={fmtTs} onDone={fetchAIActivity}
+                          />
                         ))}
                       </TableBody>
                     </Table>

@@ -752,10 +752,13 @@ def get_protection_log(group_id):
 def _official_ai_status_flags(tg):
     """Resolve the four AI Status booleans for an official-bot group."""
     settings = tg.settings or {}
-    smart = settings.get("smart_mod", {}) or {}
+    # Smart Moderation is saved at automod.smart_mod.enabled by the Moderation tab.
+    # (The old top-level "smart_mod" key is kept as a fallback for legacy groups.)
+    smart = (settings.get("automod", {}) or {}).get("smart_mod", {}) or {}
+    legacy_smart = settings.get("smart_mod", {}) or {}
     moderation_enabled = bool(
-        smart.get("enabled") or settings.get("ai_moderation")
-        or settings.get("smart_spam_detection")
+        smart.get("enabled") or legacy_smart.get("enabled")
+        or settings.get("ai_moderation") or settings.get("smart_spam_detection")
     )
     integrations_connected = OfficialWebhookIntegration.query.filter_by(
         telegram_group_id=tg.telegram_group_id, is_active=True
@@ -786,6 +789,67 @@ def get_ai_activity(group_id):
     page = request.args.get("page", 1, type=int)
     category = request.args.get("category") or None
     return jsonify(activity_summary("official", group_id, page=page, category=category)), 200
+
+
+@tg_groups_bp.route("/<group_id>/ai-activity/<int:activity_id>/feedback", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def ai_activity_feedback(group_id, activity_id):
+    """Record admin feedback on an AI action and (optionally) teach the bot.
+
+    Stores a {rating, note, corrected_answer} block on the activity's meta so the
+    AI Activity tab reflects the correction. For a knowledge answer, a corrected
+    answer can be saved back as an AI-knowledge auto-reply so the next matching
+    question gets the improved answer — a real learning loop.
+    """
+    user = _current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    tg = _owns_group(user.id, group_id)
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+
+    from ..models import AIActivity
+    from sqlalchemy.orm.attributes import flag_modified
+    act = AIActivity.query.filter_by(
+        id=activity_id, scope="official", group_ref=str(group_id)
+    ).first()
+    if not act:
+        return jsonify({"error": "Activity not found"}), 404
+
+    data = request.get_json() or {}
+    rating = (data.get("rating") or "").strip().lower()
+    note = (data.get("note") or "").strip()
+    corrected = (data.get("corrected_answer") or "").strip()
+    save_to_kb = bool(data.get("save_to_kb"))
+
+    meta = dict(act.meta or {})
+    meta["feedback"] = {
+        "rating": rating if rating in ("good", "bad") else None,
+        "note": note or None,
+        "corrected_answer": corrected or None,
+        "reviewed_by": user.full_name or user.email,
+        "reviewed_at": datetime.utcnow().isoformat(),
+    }
+    if corrected:
+        meta["answer"] = corrected[:1000]  # reflect the correction in the preview
+    act.meta = meta
+    flag_modified(act, "meta")
+
+    saved_to_kb = False
+    if save_to_kb and corrected and act.category == "knowledge" and act.detail:
+        db.session.add(AutoResponse(
+            telegram_group_id=str(group_id),
+            trigger_text=act.detail[:500],
+            response_text=corrected,
+            match_type="contains",
+            use_as_ai_knowledge=True,
+            is_enabled=True,
+        ))
+        saved_to_kb = True
+
+    db.session.commit()
+    return jsonify({"ok": True, "saved_to_kb": saved_to_kb}), 200
 
 
 @tg_groups_bp.route("/<group_id>/ai-status", methods=["GET"])

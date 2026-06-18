@@ -447,6 +447,66 @@ def get_custom_ai_activity(bot_id, group_id):
         return jsonify({"error": str(e)}), 500
 
 
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/ai-activity/<int:activity_id>/feedback", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def custom_ai_activity_feedback(bot_id, group_id, activity_id):
+    """Record admin feedback on an AI action (custom lineage) and optionally save
+    a corrected knowledge answer back as an AI-knowledge auto-reply."""
+    try:
+        user = _get_current_user()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        bot, group, err = _get_bot_and_group(user, bot_id, group_id)
+        if err:
+            return err
+
+        from ..models import AIActivity
+        from sqlalchemy.orm.attributes import flag_modified
+        act = AIActivity.query.filter_by(
+            id=activity_id, scope="custom", group_ref=str(group.id)
+        ).first()
+        if not act:
+            return jsonify({"error": "Activity not found"}), 404
+
+        data = request.get_json() or {}
+        rating = (data.get("rating") or "").strip().lower()
+        note = (data.get("note") or "").strip()
+        corrected = (data.get("corrected_answer") or "").strip()
+        save_to_kb = bool(data.get("save_to_kb"))
+
+        meta = dict(act.meta or {})
+        meta["feedback"] = {
+            "rating": rating if rating in ("good", "bad") else None,
+            "note": note or None,
+            "corrected_answer": corrected or None,
+            "reviewed_by": user.full_name or user.email,
+            "reviewed_at": datetime.utcnow().isoformat(),
+        }
+        if corrected:
+            meta["answer"] = corrected[:1000]
+        act.meta = meta
+        flag_modified(act, "meta")
+
+        saved_to_kb = False
+        if save_to_kb and corrected and act.category == "knowledge" and act.detail:
+            db.session.add(AutoResponse(
+                group_id=group.id,
+                trigger_text=act.detail[:500],
+                response_text=corrected,
+                match_type="contains",
+                use_as_ai_knowledge=True,
+                is_enabled=True,
+            ))
+            saved_to_kb = True
+
+        db.session.commit()
+        return jsonify({"ok": True, "saved_to_kb": saved_to_kb})
+    except Exception as e:
+        logger.error(f"custom_ai_activity_feedback error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
 @settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/ai-status", methods=["GET"])
 @jwt_required()
 @rate_limit(requests_per_minute=30)
@@ -464,9 +524,12 @@ def get_custom_ai_status(bot_id, group_id):
         from ..config import Config
 
         s = group.settings or {}
-        smart = s.get("smart_mod", {}) or {}
+        # Smart Moderation lives at automod.smart_mod.enabled (legacy top-level kept as fallback).
+        smart = (s.get("automod", {}) or {}).get("smart_mod", {}) or {}
+        legacy_smart = s.get("smart_mod", {}) or {}
         moderation_enabled = bool(
-            smart.get("enabled") or s.get("ai_moderation") or s.get("smart_spam_detection")
+            smart.get("enabled") or legacy_smart.get("enabled")
+            or s.get("ai_moderation") or s.get("smart_spam_detection")
         )
         integrations_connected = WebhookIntegration.query.filter_by(
             group_id=group.id, is_active=True

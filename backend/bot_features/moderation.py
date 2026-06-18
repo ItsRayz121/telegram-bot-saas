@@ -1446,6 +1446,7 @@ class ModerationSystem:
                     "promotional": "Promotional content removed",
                     "irrelevant": "Off-topic content removed",
                 }.get(verdict, "Content removed")
+                removed_text = (getattr(message, "text", None) or getattr(message, "caption", None) or "")
                 with self.app.app_context():
                     scope, ref = derive_scope_ref(group)
                     log_ai_activity(
@@ -1453,6 +1454,8 @@ class ModerationSystem:
                         detail=reason or fallback,
                         target=("@" + username) if username and not username.isdigit() else str(user_id),
                         source="ai_automod",
+                        meta=({"message": removed_text[:1000], "reason": (reason or fallback)[:500]}
+                              if removed_text else None),
                     )
             except Exception:
                 pass

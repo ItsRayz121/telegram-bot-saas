@@ -303,6 +303,11 @@ export const settings = {
     botId === 'official'
       ? api.get(`/api/telegram-groups/${groupId}/ai-status`)
       : api.get(`/api/bots/${botId}/groups/${groupId}/ai-status`),
+  // Feedback / correction on a single AI Activity entry (the learning loop)
+  submitAiActivityFeedback: (botId, groupId, activityId, data) =>
+    botId === 'official'
+      ? api.post(`/api/telegram-groups/${groupId}/ai-activity/${activityId}/feedback`, data)
+      : api.post(`/api/bots/${botId}/groups/${groupId}/ai-activity/${activityId}/feedback`, data),
 
   // Official groups: real scheduled-messages endpoints
   getScheduledMessages: (botId, groupId) =>

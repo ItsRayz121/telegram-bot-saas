@@ -186,21 +186,30 @@ class KnowledgeBaseSystem:
             return doc.to_dict(), None
 
     def _log_kb_activity(self, question, group_id, telegram_group_id,
-                         answered=True, confidence=None, source="knowledge_base"):
-        """Best-effort AI Activity log for a knowledge lookup. Never raises."""
+                         answered=True, confidence=None, source="knowledge_base",
+                         answer=None):
+        """Best-effort AI Activity log for a knowledge lookup. Never raises.
+
+        Stores the generated answer in meta so the AI Activity tab can show a
+        full question→answer preview (and the admin can correct it).
+        """
         try:
             from ..ai_activity import log_ai_activity, derive_scope_ref
             scope, ref = derive_scope_ref(
                 telegram_group_id=telegram_group_id, group_id=group_id
             )
-            meta = {"confidence": round(confidence, 3)} if confidence is not None else None
+            meta = {}
+            if confidence is not None:
+                meta["confidence"] = round(confidence, 3)
+            if answer:
+                meta["answer"] = str(answer)[:1000]
             with self.app.app_context():
                 log_ai_activity(
                     scope, ref, "knowledge",
                     "FAQ answer generated" if answered else "Knowledge lookup (no answer)",
                     detail=(question or "")[:300],
                     status="ok" if answered else "skipped",
-                    source=source, meta=meta,
+                    source=source, meta=(meta or None),
                 )
         except Exception:
             pass
@@ -261,7 +270,8 @@ class KnowledgeBaseSystem:
                     kb_settings=kb_settings,
                 )
                 self._log_kb_activity(question, group_id, telegram_group_id,
-                                      answered=bool(answer), source="auto_reply_triggers")
+                                      answered=bool(answer), source="auto_reply_triggers",
+                                      answer=answer)
                 return answer, 0.75  # fixed confidence: admin-curated content
 
             # Embed question — OpenRouter cannot handle embeddings, use OpenAI key
@@ -307,7 +317,7 @@ class KnowledgeBaseSystem:
             )
             self._log_kb_activity(question, group_id, telegram_group_id,
                                   answered=bool(answer), confidence=top_score,
-                                  source="knowledge_base")
+                                  source="knowledge_base", answer=answer)
             return answer, top_score
 
         except Exception as e:

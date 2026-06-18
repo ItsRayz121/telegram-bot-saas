@@ -4065,7 +4065,7 @@ async def _official_ai_moderation(bot, message, text, group_id, sm_cfg, flask_ap
         from .bot_features.moderation import ModerationSystem
         import asyncio as _aio
         loop = _aio.get_running_loop()
-        verdict, _reason = await loop.run_in_executor(
+        verdict, reason = await loop.run_in_executor(
             None, ModerationSystem._call_ai_moderation,
             text, topic, (message.chat.title or ""), key_info,
         )
@@ -4084,9 +4084,11 @@ async def _official_ai_moderation(bot, message, text, group_id, sm_cfg, flask_ap
                     "official", str(group_id), "moderation",
                     "Promotional content removed" if verdict == "promotional"
                     else "Off-topic content removed",
-                    detail=(text or "")[:200],
+                    detail=(reason or text or "")[:300],
                     target=("@" + uname) if uname else (str(user_id) if user_id else None),
                     source="ai_automod",
+                    meta=({"message": (text or "")[:1000], "reason": (reason or "")[:500]}
+                          if (text or reason) else None),
                 )
         except Exception:
             pass
