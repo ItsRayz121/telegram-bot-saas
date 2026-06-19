@@ -43,12 +43,15 @@ from .bot_features.group_context import GroupContext
 from .bot_features.welcome import WelcomeSystem
 from .bot_features.moderation import (
     normalize_homoglyphs,
+    normalize_hidden_urls,
+    PROMO_PATTERNS as _PROMO_RE,
     URL_PATTERN as _URL_RE,
     TELEGRAM_LINK_PATTERN as _TELEGRAM_LINK_RE,
     EMAIL_PATTERN as _EMAIL_RE,
     EMOJI_PATTERN as _EMOJI_RE,
     LANGUAGE_RANGES as _LANG_RANGES,
 )
+import re as _re_mod  # for the referral-code exemption regex (smart_mod L2)
 from .bot_features import content_filter as _cf
 from .bot_features.levels import level_from_xp as _level_from_xp, xp_for_level as _xp_for_level
 
@@ -4064,7 +4067,9 @@ async def _automod_check(bot, message, am_cfg: dict, group_id: str, flask_app) -
         ("file_attachments", message.document is not None),
         ("photos",           bool(message.photo)),
         ("videos",           message.video is not None),
+        ("gifs",             message.animation is not None),
         ("stickers",         message.sticker is not None),
+        ("games",            getattr(message, "game", None) is not None),
     ]
     for rule_key, present in _media_checks:
         mc = am_cfg.get(rule_key, {})
@@ -4072,6 +4077,30 @@ async def _automod_check(bot, message, am_cfg: dict, group_id: str, flask_app) -
             await _automod_execute(bot, message, group_id, flask_app,
                                    rule_key, mc.get("action", "delete"))
             return True
+
+    # ── Smart Moderation Layer 2: hidden-URL + promotional pattern detection ─
+    # Regex-based, no AI key needed — mirrors the custom-bot lineage
+    # (moderation.check_hidden_urls / check_promotional_content). Gated by the
+    # same smart_mod toggles so behaviour matches across all bots.
+    sm_l2 = am_cfg.get("smart_mod", {})
+    if sm_l2.get("enabled") and text:
+        l2_action = sm_l2.get("action", "delete")
+        # Hidden/obfuscated URLs (hxxp://, t(.)me, "site dot com", example_com …).
+        if sm_l2.get("hidden_url_detection", True):
+            normalized = normalize_hidden_urls(text)
+            if normalized != text and (_URL_RE.search(normalized)
+                                       or _TELEGRAM_LINK_RE.search(normalized)):
+                await _automod_execute(bot, message, group_id, flask_app,
+                                       "hidden_url", l2_action)
+                return True
+        # Promotional / ads / referral / fake-earnings patterns.
+        if sm_l2.get("promotional_detection", True):
+            ref_exempt = (sm_l2.get("allow_referral_codes") and _re_mod.search(
+                r'\bref(erral)?\s+code\b|\buse\s+my\s+code\b', text, _re_mod.I))
+            if not ref_exempt and _PROMO_RE.search(text):
+                await _automod_execute(bot, message, group_id, flask_app,
+                                       "promotional", l2_action)
+                return True
 
     # ── Smart AI Moderation (OPTIONAL — off by default) ──────────────────────
     # The official bot is rule-based by default. AI relevance/promo moderation
