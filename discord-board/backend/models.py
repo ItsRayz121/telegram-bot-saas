@@ -455,7 +455,7 @@ class XpEvent(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
-CAMPAIGN_TYPES = ("proof_collection", "content_submission", "social_task", "raid")
+CAMPAIGN_TYPES = ("proof_collection", "content_submission", "social_task", "raid", "giveaway")
 CAMPAIGN_VERIFICATION_MODES = ("manual", "honor", "link")
 CAMPAIGN_STATUSES = ("draft", "active", "paused", "closed")
 SUBMISSION_STATUSES = ("pending", "verified", "rejected")

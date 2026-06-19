@@ -22,6 +22,7 @@ from datetime import datetime
 
 from flask import Blueprint, g, jsonify, request
 from sqlalchemy import func
+from sqlalchemy.orm.attributes import flag_modified
 
 import leveling
 import access
@@ -203,6 +204,12 @@ def update_campaign(guild_id: int, cid: int):
         c.ends_at = _parse_iso(body["ends_at"])
     if "starts_at" in body:
         c.starts_at = _parse_iso(body["starts_at"])
+    if isinstance(body.get("settings"), dict):
+        # Merge so we never drop existing keys (winners, branding, etc.).
+        merged = dict(c.settings or {})
+        merged.update(body["settings"])
+        c.settings = merged
+        flag_modified(c, "settings")
 
     if "status" in body and body["status"] in CAMPAIGN_STATUSES:
         new_status = body["status"]

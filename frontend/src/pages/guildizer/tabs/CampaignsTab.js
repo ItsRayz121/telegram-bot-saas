@@ -4,14 +4,14 @@ import {
   FormControlLabel, List, ListItem, ListItemText, IconButton, Chip, Alert,
   CircularProgress, Stack, Divider, Tabs, Tab,
 } from '@mui/material';
-import { Add, Delete, ArrowBack, Download } from '@mui/icons-material';
+import { Add, Delete, ArrowBack, Download, EmojiEvents } from '@mui/icons-material';
 import guildizerApi from '../../../services/guildizerApi';
 import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
 import { downloadCsv } from './csv';
 
 const TEXT_TYPES = new Set([0, 5]);
-const TYPES = ['proof_collection', 'content_submission', 'social_task', 'raid'];
-const TYPE_LABEL = { proof_collection: 'Proof Collection', content_submission: 'Content Submission', social_task: 'Social Task', raid: 'Raid' };
+const TYPES = ['proof_collection', 'content_submission', 'social_task', 'raid', 'giveaway'];
+const TYPE_LABEL = { proof_collection: 'Proof Collection', content_submission: 'Content Submission', social_task: 'Social Task', raid: 'Raid', giveaway: 'Giveaway' };
 const VMODES = ['manual', 'honor', 'link'];
 const STATUS_COLOR = { draft: 'default', active: 'success', paused: 'warning', closed: 'default' };
 
@@ -190,6 +190,7 @@ function CampaignDetail({ guildId, campaignId, channels, plan, onBack }) {
   const [board, setBoard] = useState(null);
   const [task, setTask] = useState({ title: '', reward_xp: 25, verification_mode: 'manual', task_url: '' });
   const [msg, setMsg] = useState(null);
+  const [winnerCount, setWinnerCount] = useState(1);
 
   async function load() {
     const { data } = await guildizerApi.get(base); setC(data);
@@ -227,6 +228,20 @@ function CampaignDetail({ guildId, campaignId, channels, plan, onBack }) {
   async function loadBoard() {
     try { const { data } = await guildizerApi.get(`${base}/leaderboard`); setBoard(data.leaderboard); }
     catch (e) { setMsg(e?.response?.status === 402 ? 'Campaign leaderboards are a Pro feature.' : 'Failed to load.'); }
+  }
+  async function pickWinners() {
+    try {
+      const { data } = await guildizerApi.get(`${base}/submissions?status=verified`);
+      const verified = data.submissions || [];
+      if (verified.length === 0) { setMsg('No verified submissions to draw winners from yet.'); return; }
+      const n = Math.max(1, Math.min(winnerCount, verified.length));
+      const picked = [...verified].sort(() => Math.random() - 0.5).slice(0, n)
+        .map((s) => ({ id: s.id, user_id: s.user_id, username: s.username }));
+      const mergedSettings = { ...(c.settings || {}), winners: picked };
+      const { data: updated } = await guildizerApi.put(base, { settings: mergedSettings });
+      setC((p) => ({ ...p, ...updated }));
+      setMsg(`Picked ${picked.length} winner${picked.length === 1 ? '' : 's'}.`);
+    } catch { setMsg('Could not draw winners.'); }
   }
   async function exportCsv() {
     try {
@@ -268,6 +283,18 @@ function CampaignDetail({ guildId, campaignId, channels, plan, onBack }) {
                 <Button size="small" variant="outlined" color="error" onClick={remove}>Delete</Button>
               )}
             </Stack>
+            {/* Pick Winners — random draw over verified submissions (giveaways, raffles). */}
+            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap mt={1}>
+              <TextField type="number" size="small" label="Winners" value={winnerCount}
+                inputProps={{ min: 1, max: 50 }} sx={{ width: 100 }}
+                onChange={(e) => setWinnerCount(Math.max(1, Number(e.target.value) || 1))} />
+              <Button size="small" variant="outlined" startIcon={<EmojiEvents />} onClick={pickWinners}>Pick Winners</Button>
+            </Stack>
+            {c.settings?.winners?.length > 0 && (
+              <Alert severity="success" icon={<EmojiEvents fontSize="inherit" />} sx={{ mt: 1 }}>
+                Winners: {c.settings.winners.map((w) => (w.username ? `@${w.username}` : w.user_id)).join(', ')}
+              </Alert>
+            )}
             {c.post_status === 'posted' && <Typography variant="caption" color="success.main" display="block" mt={1}>Posted ✓</Typography>}
             {c.post_status === 'failed' && <Typography variant="caption" color="error" display="block" mt={1}>Post failed: {c.post_error}</Typography>}
           </CardContent></Card>
