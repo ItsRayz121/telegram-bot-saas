@@ -217,6 +217,11 @@ def _load_pending_verifications_from_db(flask_app):
 _spam_tracker: dict = {}
 # Per-(chat,user) cooldown for the OPTIONAL Smart AI Moderation layer.
 _official_ai_cooldown: dict = {}
+# Slow mode (per-user minimum gap between messages) — distinct from _spam_tracker
+# (burst detection). "{chat_id}:{user_id}" → datetime of last ACCEPTED message,
+# and a separate tracker for the throttled "please wait" notice.
+_official_slow_tracker: dict = {}
+_official_slow_warn_tracker: dict = {}
 # Per (group,user) cooldown so /ask spam can't flood admin DMs with escalations.
 _kb_escalation_cooldown: dict = {}
 
@@ -4080,6 +4085,94 @@ async def _automod_check(bot, message, am_cfg: dict, group_id: str, flask_app) -
         if await _official_ai_moderation(bot, message, text, group_id, sm_cfg, flask_app):
             return True
 
+    # ── Slow mode (per-user steady-pace gap) ─────────────────────────────────
+    # Runs LAST so a too-fast message that is ALSO a content violation gets the
+    # harsher content-specific action above, not a silent slow-mode delete.
+    # Mirrors the custom-bot lineage (bot_features.moderation.check_slow_mode).
+    slow_cfg = am_cfg.get("slow_mode", {})
+    if slow_cfg.get("enabled"):
+        gap = max(5, int(slow_cfg.get("seconds_between_messages", 60) or 60))
+        skey = f"{chat_id}:{user_id}"
+        now = datetime.utcnow()
+        last = _official_slow_tracker.get(skey)
+        if last is not None and (now - last).total_seconds() < gap:
+            # Optional high-XP exemption (rare path — only touches DB on a hit).
+            min_level = int(slow_cfg.get("exempt_min_level", 0) or 0)
+            if min_level > 0:
+                try:
+                    with flask_app.app_context():
+                        from .models import OfficialMember
+                        m = OfficialMember.query.filter_by(
+                            telegram_group_id=str(group_id),
+                            telegram_user_id=str(user_id),
+                        ).first()
+                        if m and (m.level or 0) >= min_level:
+                            _official_slow_tracker[skey] = now  # treat as accepted
+                            return False
+                except Exception:
+                    pass
+
+            action = slow_cfg.get("action", "delete")
+            notify = slow_cfg.get("notify", True)
+            remaining = max(1, int(gap - (now - last).total_seconds()))
+            uname = message.from_user.username if message.from_user else None
+            display = ('@' + uname) if uname else (
+                (message.from_user.first_name if message.from_user else None) or "there")
+
+            if action == "restrict":
+                # Restrict only until the next allowed time (auto-lifting cooldown);
+                # floor 31s so Telegram never treats it as a permanent restriction.
+                try:
+                    await bot.delete_message(chat_id=chat_id, message_id=message.message_id)
+                except Exception:
+                    pass
+                try:
+                    await bot.restrict_chat_member(
+                        chat_id=chat_id, user_id=user_id,
+                        permissions=ChatPermissions(can_send_messages=False),
+                        until_date=now + timedelta(seconds=max(remaining, 31)),
+                    )
+                except Exception as exc:
+                    _log.debug("[OfficialBot] slow_mode restrict failed: %s", exc)
+                if notify:
+                    lw = _official_slow_warn_tracker.get(skey)
+                    if lw is None or (now - lw).total_seconds() >= gap:
+                        _official_slow_warn_tracker[skey] = now
+                        try:
+                            nm = await bot.send_message(
+                                chat_id=chat_id,
+                                text=f"⏳ Slow mode — {display}, please wait ~{remaining}s before posting again.",
+                            )
+                            asyncio.get_running_loop().call_later(
+                                min(remaining, 15),
+                                lambda: asyncio.ensure_future(_safe_delete(bot, chat_id, nm.message_id)),
+                            )
+                        except Exception:
+                            pass
+            elif action == "mute":
+                await _automod_execute(bot, message, group_id, flask_app, "slow_mode", "mute",
+                                       mute_minutes=int(slow_cfg.get("mute_duration_minutes", 5) or 5))
+            elif action == "warn" and notify:
+                lw = _official_slow_warn_tracker.get(skey)
+                if lw is None or (now - lw).total_seconds() >= gap:
+                    _official_slow_warn_tracker[skey] = now
+                    await _automod_execute(bot, message, group_id, flask_app, "slow_mode", "warn")
+                else:
+                    try:
+                        await bot.delete_message(chat_id=chat_id, message_id=message.message_id)
+                    except Exception:
+                        pass
+            else:  # silent delete (default)
+                try:
+                    await bot.delete_message(chat_id=chat_id, message_id=message.message_id)
+                except Exception:
+                    pass
+            # Do NOT advance the baseline on a rejected message.
+            return True
+
+        # Accepted — this becomes the new baseline.
+        _official_slow_tracker[skey] = now
+
     return False
 
 
@@ -4203,12 +4296,28 @@ async def _check_warn_escalation(bot, chat_id: int, group_id: str,
                                   warn_count: int, flask_app):
     """Apply escalation or max-warnings action when warn count crosses a threshold."""
     mod = {}
+    we = {}
+    we_count = 0
     try:
         with flask_app.app_context():
-            from .models import TelegramGroup
+            from .models import TelegramGroup, OfficialWarning
             tg = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
             if tg:
-                mod = (tg.settings or {}).get("moderation", {})
+                _settings = tg.settings or {}
+                mod = _settings.get("moderation", {})
+                we = _settings.get("warning_escalation", {})
+                # Windowed warning count for the owner-configured policy.
+                if we.get("enabled"):
+                    _window = we.get("time_window_hours", 24)
+                    if _window in (None, "", 0):
+                        we_count = warn_count
+                    else:
+                        _since = datetime.utcnow() - timedelta(hours=int(_window))
+                        we_count = OfficialWarning.query.filter(
+                            OfficialWarning.telegram_group_id == str(group_id),
+                            OfficialWarning.target_user_id == str(target_id),
+                            OfficialWarning.created_at >= _since,
+                        ).count()
     except Exception as exc:
         _log.debug("[OfficialBot] Warn escalation settings load failed: %s", exc)
         return
@@ -4246,6 +4355,15 @@ async def _check_warn_escalation(bot, chat_id: int, group_id: str,
             )
         except Exception as exc:
             _log.warning("[OfficialBot] Warn escalation action %s failed: %s", action, exc)
+
+    # Owner-configured single-threshold escalation (the "Warning Escalation"
+    # card). Independent of the legacy ladder below — runs first so the ladder's
+    # early return can't skip it. Mirrors the custom-bot lineage.
+    if we.get("enabled"):
+        _we_action = we.get("action_type", "mute")
+        if _we_action != "none" and we_count >= int(we.get("warning_threshold", 3) or 3):
+            await _act(_we_action, int(we.get("mute_duration_minutes", 60) or 60),
+                       f" (reached {we_count} warnings)")
 
     if mod.get("escalation_enabled"):
         steps = sorted(mod.get("escalation_steps", []),
