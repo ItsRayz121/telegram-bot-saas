@@ -41,6 +41,7 @@ def load_for_post(cid: int) -> dict | None:
             "description": c.description or "",
             "type": c.type,
             "task_url": c.task_url,
+            "raid_goals": (c.settings or {}).get("raid_goals") or {},
             "reward_xp": c.reward_xp or 0,
             "reward_label": c.reward_label,
             "verification_mode": c.verification_mode,

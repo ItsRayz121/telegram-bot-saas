@@ -111,6 +111,14 @@ def build_embed(data: dict, brand: str = "Guildizer") -> discord.Embed:
             reward = (reward + " · " if reward else "") + data["reward_label"]
         if reward:
             embed.add_field(name="Reward", value=reward[:1024], inline=False)
+    # Twitter Raid: show the like/retweet/comment/follow targets in the post.
+    goals = data.get("raid_goals") or {}
+    if goals:
+        _gl = {"likes": "❤️ Likes", "retweets": "🔁 Retweets",
+               "comments": "💬 Comments", "follows": "➕ Follows"}
+        line = " · ".join(f"{_gl.get(k, k)}: {v}" for k, v in goals.items() if v)
+        if line:
+            embed.add_field(name="🎯 Raid goals", value=line[:1024], inline=False)
     # White-label bots brand the footer with their own name, not ours.
     embed.set_footer(text=f"{brand} • tap a button below to submit proof")
     return embed

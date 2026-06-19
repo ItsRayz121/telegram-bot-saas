@@ -11,7 +11,11 @@ import { downloadCsv } from './csv';
 
 const TEXT_TYPES = new Set([0, 5]);
 const TYPES = ['proof_collection', 'content_submission', 'social_task', 'raid', 'giveaway'];
-const TYPE_LABEL = { proof_collection: 'Proof Collection', content_submission: 'Content Submission', social_task: 'Social Task', raid: 'Raid', giveaway: 'Giveaway' };
+const TYPE_LABEL = { proof_collection: 'Proof Collection', content_submission: 'Content Submission', social_task: 'Social Task', raid: 'Twitter Raid', giveaway: 'Giveaway' };
+// Twitter Raid targets, stored under campaign settings.raid_goals.
+const RAID_GOALS = [['likes', 'Likes'], ['retweets', 'Retweets'], ['comments', 'Comments'], ['follows', 'Follows']];
+const cleanGoals = (g) => Object.fromEntries(
+  RAID_GOALS.map(([k]) => [k, parseInt(g?.[k], 10)]).filter(([, v]) => v > 0));
 const VMODES = ['manual', 'honor', 'link'];
 const STATUS_COLOR = { draft: 'default', active: 'success', paused: 'warning', closed: 'default' };
 
@@ -153,13 +157,17 @@ function ReferralsCard({ guildId }) {
 }
 
 function CreateForm({ guildId, channels, onCreated }) {
-  const [d, setD] = useState({ title: '', type: 'proof_collection', verification_mode: 'manual', description: '', reward_xp: 50, channel_id: '', one_per_user: true });
+  const [d, setD] = useState({ title: '', type: 'proof_collection', verification_mode: 'manual', description: '', reward_xp: 50, channel_id: '', one_per_user: true, task_url: '', raid_goals: {} });
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
+  const isRaid = d.type === 'raid';
 
   async function create() {
     setSaving(true); setError(null);
-    try { await guildizerApi.post(`/api/guilds/${guildId}/campaigns`, d); onCreated(); }
+    const { raid_goals, ...rest } = d;
+    const body = { ...rest, task_url: rest.task_url || null };
+    if (isRaid) body.settings = { raid_goals: cleanGoals(raid_goals) };
+    try { await guildizerApi.post(`/api/guilds/${guildId}/campaigns`, body); onCreated(); }
     catch (e) { setError(e?.response?.data?.message || e?.response?.data?.error || 'Could not create campaign.'); }
     finally { setSaving(false); }
   }
@@ -169,10 +177,25 @@ function CreateForm({ guildId, channels, onCreated }) {
       {error && <Alert severity="error" sx={{ mb: 1 }}>{error}</Alert>}
       <TextField size="small" fullWidth margin="dense" label="Title" value={d.title} inputProps={{ maxLength: 200 }} onChange={(e) => setD({ ...d, title: e.target.value })} />
       <Grid container spacing={1}>
-        <Grid item xs={6}><TextField select size="small" fullWidth margin="dense" label="Type" value={d.type} onChange={(e) => setD({ ...d, type: e.target.value })}>{TYPES.map((t) => <MenuItem key={t} value={t}>{t.replace('_', ' ')}</MenuItem>)}</TextField></Grid>
+        <Grid item xs={6}><TextField select size="small" fullWidth margin="dense" label="Type" value={d.type} onChange={(e) => setD({ ...d, type: e.target.value })}>{TYPES.map((t) => <MenuItem key={t} value={t}>{TYPE_LABEL[t]}</MenuItem>)}</TextField></Grid>
         <Grid item xs={6}><TextField select size="small" fullWidth margin="dense" label="Verification" value={d.verification_mode} onChange={(e) => setD({ ...d, verification_mode: e.target.value })}>{VMODES.map((m) => <MenuItem key={m} value={m}>{m}</MenuItem>)}</TextField></Grid>
       </Grid>
       <TextField size="small" fullWidth margin="dense" label="Description" multiline minRows={2} value={d.description} inputProps={{ maxLength: 2000 }} onChange={(e) => setD({ ...d, description: e.target.value })} />
+      {isRaid && (
+        <>
+          <TextField size="small" fullWidth margin="dense" label="Tweet URL" placeholder="https://x.com/…"
+            value={d.task_url} onChange={(e) => setD({ ...d, task_url: e.target.value })} />
+          <Typography variant="caption" color="text.secondary" display="block" mt={1}>Raid goals (shown as targets in the announcement)</Typography>
+          <Grid container spacing={1}>
+            {RAID_GOALS.map(([k, label]) => (
+              <Grid item xs={6} sm={3} key={k}>
+                <TextField type="number" size="small" fullWidth margin="dense" label={label} inputProps={{ min: 0 }}
+                  value={d.raid_goals[k] || ''} onChange={(e) => setD({ ...d, raid_goals: { ...d.raid_goals, [k]: e.target.value } })} />
+              </Grid>
+            ))}
+          </Grid>
+        </>
+      )}
       <Grid container spacing={1}>
         <Grid item xs={6}><TextField type="number" size="small" fullWidth margin="dense" label="Reward XP" value={d.reward_xp} onChange={(e) => setD({ ...d, reward_xp: Number(e.target.value) })} /></Grid>
         <Grid item xs={6}><TextField select size="small" fullWidth margin="dense" label="Announce channel" value={d.channel_id} onChange={(e) => setD({ ...d, channel_id: e.target.value })}><MenuItem value="">— none —</MenuItem>{channels.map((c) => <MenuItem key={c.id} value={c.id}># {c.name}</MenuItem>)}</TextField></Grid>
@@ -300,6 +323,12 @@ function CampaignDetail({ guildId, campaignId, channels, plan, onBack }) {
           </CardContent></Card>
         </Grid>
 
+        {c.type === 'raid' && (
+          <Grid item xs={12}>
+            <RaidSetupCard campaign={c} onSave={patch} />
+          </Grid>
+        )}
+
         <Grid item xs={12}>
           <GuildizerCollapsibleCard id="gz.campaigns.tasks" title="Tasks">
             <Typography variant="body2" color="text.secondary" mb={2}>Break the campaign into individual tasks, each with its own XP reward and verification.</Typography>
@@ -379,6 +408,32 @@ function CampaignDetail({ guildId, campaignId, channels, plan, onBack }) {
   );
 }
 
+
+function RaidSetupCard({ campaign, onSave }) {
+  const [tweet, setTweet] = useState(campaign.task_url || '');
+  const [goals, setGoals] = useState((campaign.settings || {}).raid_goals || {});
+  return (
+    <GuildizerCollapsibleCard id="gz.campaigns.raid_setup" title="🐦 Twitter Raid setup">
+      <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+        The tweet to raid and the engagement targets shown in the announcement. Members submit their proof link.
+      </Typography>
+      <TextField size="small" fullWidth margin="dense" label="Tweet URL" placeholder="https://x.com/…"
+        value={tweet} onChange={(e) => setTweet(e.target.value)} />
+      <Grid container spacing={1} mt={0.5}>
+        {RAID_GOALS.map(([k, label]) => (
+          <Grid item xs={6} sm={3} key={k}>
+            <TextField type="number" size="small" fullWidth label={label} inputProps={{ min: 0 }}
+              value={goals[k] || ''} onChange={(e) => setGoals({ ...goals, [k]: e.target.value })} />
+          </Grid>
+        ))}
+      </Grid>
+      <Button size="small" variant="outlined" sx={{ mt: 1.5 }}
+        onClick={() => onSave({ task_url: tweet || null, settings: { raid_goals: cleanGoals(goals) } })}>
+        Save raid setup
+      </Button>
+    </GuildizerCollapsibleCard>
+  );
+}
 
 function FieldsCard({ guildId, campaignId }) {
   const [fields, setFields] = useState([]);

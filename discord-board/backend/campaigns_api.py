@@ -149,7 +149,7 @@ def create_campaign(guild_id: int):
         one_per_user=bool(body.get("one_per_user", True)),
         channel_id=int(body["channel_id"]) if str(body.get("channel_id") or "").isdigit() else None,
         status="draft",
-        settings={},
+        settings=body["settings"] if isinstance(body.get("settings"), dict) else {},
     )
     g.db.add(c)
     g.db.commit()
