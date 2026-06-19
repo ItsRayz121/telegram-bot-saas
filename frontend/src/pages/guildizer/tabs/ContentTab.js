@@ -118,20 +118,35 @@ export function SchedulerCard({ guildId, messages, channels, onChanged }) {
   const [withEmbed, setWithEmbed] = useState(false);
   const [embed, setEmbed] = useState(EMPTY_EMBED);
   const [busy, setBusy] = useState(false);
+  const [editingId, setEditingId] = useState(null);
 
   const setEm = (patch) => setEmbed((e) => ({ ...e, ...patch }));
   const embedHasContent = !!(embed.title.trim() || embed.description.trim()
     || embed.image_url.trim() || embed.thumbnail_url.trim() || embed.footer.trim());
 
+  function reset() {
+    setEditingId(null); setContent(''); setWhen(''); setChannelId('');
+    setRecurrence('none'); setEmbed(EMPTY_EMBED); setWithEmbed(false);
+  }
+  function startEdit(m) {
+    setEditingId(m.id);
+    setContent(m.content || ''); setChannelId(m.channel_id || '');
+    setWhen(m.next_run_at ? toLocalInput(m.next_run_at) : '');
+    setRecurrence(m.recurrence || 'none');
+    setWithEmbed(!!m.embed); setEmbed(m.embed ? { ...EMPTY_EMBED, ...m.embed } : EMPTY_EMBED);
+  }
+
   async function add() {
     setBusy(true);
+    const payload = {
+      content, channel_id: channelId, recurrence,
+      next_run_at: new Date(when).toISOString(),
+      embed: withEmbed && embedHasContent ? embed : null,
+    };
     try {
-      await guildizerApi.post(`/api/guilds/${guildId}/scheduled-messages`, {
-        content, channel_id: channelId, recurrence,
-        next_run_at: new Date(when).toISOString(),
-        embed: withEmbed && embedHasContent ? embed : null,
-      });
-      setContent(''); setWhen(''); setEmbed(EMPTY_EMBED); setWithEmbed(false);
+      if (editingId) await guildizerApi.put(`/api/guilds/${guildId}/scheduled-messages/${editingId}`, payload);
+      else await guildizerApi.post(`/api/guilds/${guildId}/scheduled-messages`, payload);
+      reset();
       await onChanged();
     } catch { /* parent shows errors on reload */ }
     setBusy(false);
@@ -176,10 +191,13 @@ export function SchedulerCard({ guildId, messages, channels, onChanged }) {
             value={embed.thumbnail_url} onChange={(e) => setEm({ thumbnail_url: e.target.value })} />
         </Box>
       )}
-      <Button startIcon={<Add />} variant="contained" size="small" sx={{ mt: 1 }}
-        disabled={busy || (!content.trim() && !(withEmbed && embedHasContent)) || !channelId || !when} onClick={add}>
-        Schedule
-      </Button>
+      <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+        <Button startIcon={editingId ? <EditIcon /> : <Add />} variant="contained" size="small"
+          disabled={busy || (!content.trim() && !(withEmbed && embedHasContent)) || !channelId || !when} onClick={add}>
+          {editingId ? 'Save changes' : 'Schedule'}
+        </Button>
+        {editingId && <Button size="small" color="inherit" onClick={reset}>Cancel</Button>}
+      </Stack>
       <List dense sx={{ mt: 1 }}>
         {messages.map((m) => (
           <ListItem key={m.id} disableGutters
@@ -187,6 +205,7 @@ export function SchedulerCard({ guildId, messages, channels, onChanged }) {
               <Stack direction="row" spacing={0.5} alignItems="center">
                 <Switch size="small" checked={m.enabled}
                   onChange={(e) => guildizerApi.put(`/api/guilds/${guildId}/scheduled-messages/${m.id}`, { enabled: e.target.checked }).then(onChanged)} />
+                <IconButton size="small" onClick={() => startEdit(m)}><EditIcon fontSize="small" /></IconButton>
                 <IconButton size="small" onClick={() => guildizerApi.delete(`/api/guilds/${guildId}/scheduled-messages/${m.id}`).then(onChanged)}>
                   <Delete fontSize="small" />
                 </IconButton>

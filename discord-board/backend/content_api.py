@@ -208,6 +208,8 @@ def create_event(guild_id: int):
         remind = 15
     reminder_channel = body.get("reminder_channel_id")
 
+    # Draft: stored but NOT created on Discord until published from the list.
+    draft = bool(body.get("draft"))
     row = GuildEvent(
         guild_id=guild_id, name=name,
         description=str(body.get("description") or "").strip()[:1000],
@@ -219,10 +221,33 @@ def create_event(guild_id: int):
         reminder_channel_id=(int(reminder_channel)
                              if reminder_channel and str(reminder_channel).isdigit() else None),
         created_by=g.user_id,
+        needs_create=not draft,
+        status="draft" if draft else "pending",
     )
     g.db.add(row)
     g.db.commit()
     return jsonify(event=row.to_dict()), 201
+
+
+@content_bp.post("/api/guilds/<int:guild_id>/events/<int:eid>/publish")
+@login_required
+def publish_event(guild_id: int, eid: int):
+    """Turn a saved draft into a live event — the bot creates it on Discord on
+    its next tick (~20s)."""
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return err
+    row = g.db.get(GuildEvent, eid)
+    if row is None or row.guild_id != guild_id:
+        return jsonify(error="not_found"), 404
+    if row.status != "draft":
+        return jsonify(error="not_a_draft"), 400
+    if row.start_at is None or row.start_at <= datetime.utcnow():
+        return jsonify(error="start_must_be_in_future"), 400
+    row.status = "pending"
+    row.needs_create = True
+    g.db.commit()
+    return jsonify(event=row.to_dict())
 
 
 @content_bp.delete("/api/guilds/<int:guild_id>/events/<int:eid>")

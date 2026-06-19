@@ -463,7 +463,7 @@ export function StarboardSubtab({ guildId, channels = [] }) {
 
 // ── Events: native Discord scheduled events from the dashboard ────────────────
 const VOICEISH_TYPES = { voice: 2, stage: 13 };
-const EVENT_STATUS_COLOR = { pending: 'default', created: 'info', done: 'success', failed: 'error', cancelled: 'default' };
+const EVENT_STATUS_COLOR = { draft: 'warning', pending: 'default', created: 'info', done: 'success', failed: 'error', cancelled: 'default' };
 
 export function EventsSubtab({ guildId, channels = [] }) {
   const textChannels = channels.filter((c) => TEXT_TYPES.has(c.type));
@@ -480,6 +480,7 @@ export function EventsSubtab({ guildId, channels = [] }) {
   const [endAt, setEndAt] = useState('');
   const [remind, setRemind] = useState(15);
   const [remindChannel, setRemindChannel] = useState('');
+  const [mode, setMode] = useState('now'); // now | draft
 
   const voiceChannels = channels.filter((c) => c.type === VOICEISH_TYPES[entityType]);
 
@@ -499,11 +500,20 @@ export function EventsSubtab({ guildId, channels = [] }) {
         end_at: endAt ? new Date(endAt).toISOString() : null,
         remind_minutes: remind,
         reminder_channel_id: remindChannel || null,
+        draft: mode === 'draft',
       });
       setName(''); setDescription(''); setLocation(''); setStartAt(''); setEndAt('');
       await reload();
     } catch { setError('Could not create the event.'); }
     setBusy(false);
+  }
+
+  async function publish(id) {
+    setError(null);
+    try {
+      await guildizerApi.post(`/api/guilds/${guildId}/events/${id}/publish`);
+      await reload();
+    } catch { setError('Could not publish the draft — make sure the start time is still in the future.'); }
   }
 
   if (events === null) return <Box sx={{ display: 'grid', placeItems: 'center', py: 4 }}><CircularProgress /></Box>;
@@ -556,9 +566,14 @@ export function EventsSubtab({ guildId, channels = [] }) {
               {textChannels.map((c) => <MenuItem key={c.id} value={c.id}># {c.name}</MenuItem>)}
             </TextField>
           </Stack>
+          <TextField select fullWidth size="small" margin="dense" label="When to create"
+            value={mode} onChange={(e) => setMode(e.target.value)}>
+            <MenuItem value="now">Create on Discord now</MenuItem>
+            <MenuItem value="draft">Save as draft (publish later)</MenuItem>
+          </TextField>
           <Button startIcon={<RocketLaunch />} variant="contained" size="small" sx={{ mt: 1 }}
             disabled={busy || !formOk} onClick={add}>
-            Create event
+            {mode === 'draft' ? 'Save draft' : 'Create event'}
           </Button>
         </GuildizerCollapsibleCard>
       </Grid>
@@ -571,10 +586,17 @@ export function EventsSubtab({ guildId, channels = [] }) {
             {events.map((ev) => (
               <ListItem key={ev.id} disableGutters
                 secondaryAction={(
-                  <Button size="small" color="inherit"
-                    onClick={() => guildizerApi.delete(`/api/guilds/${guildId}/events/${ev.id}`).then(reload)}>
-                    {ev.status === 'created' ? 'Cancel' : 'Remove'}
-                  </Button>
+                  <Stack direction="row" spacing={0.5}>
+                    {ev.status === 'draft' && (
+                      <Button size="small" startIcon={<RocketLaunch />} onClick={() => publish(ev.id)}>
+                        Publish
+                      </Button>
+                    )}
+                    <Button size="small" color="inherit"
+                      onClick={() => guildizerApi.delete(`/api/guilds/${guildId}/events/${ev.id}`).then(reload)}>
+                      {ev.status === 'created' ? 'Cancel' : 'Remove'}
+                    </Button>
+                  </Stack>
                 )}>
                 <Chip size="small" label={ev.status} color={EVENT_STATUS_COLOR[ev.status] || 'default'}
                   variant="outlined" sx={{ mr: 1 }} />
