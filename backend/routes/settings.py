@@ -688,32 +688,39 @@ def moderate_custom_member(bot_id, group_id, user_id):
             return jsonify({"ok": True, "action": action})
 
         from ..bot_manager import bot_manager
-        tg_bot, loop = bot_manager.get_bot_runtime(bot.id)
-        if not tg_bot or not loop:
-            return jsonify({"error": "Bot is not running right now — please try again shortly."}), 503
-
-        import asyncio
         from telegram import ChatPermissions
         chat_id = int(group.telegram_group_id)
 
-        async def _do():
+        async def _do(_bot):
             if action == "ban":
-                await tg_bot.ban_chat_member(chat_id=chat_id, user_id=int(user_id))
+                await _bot.ban_chat_member(chat_id=chat_id, user_id=int(user_id))
             elif action == "tempban":
                 until = datetime.utcnow() + timedelta(minutes=(duration_minutes or 1440))
-                await tg_bot.ban_chat_member(chat_id=chat_id, user_id=int(user_id), until_date=until)
+                await _bot.ban_chat_member(chat_id=chat_id, user_id=int(user_id), until_date=until)
             elif action == "kick":
-                await tg_bot.ban_chat_member(chat_id=chat_id, user_id=int(user_id))
-                await tg_bot.unban_chat_member(chat_id=chat_id, user_id=int(user_id))
+                await _bot.ban_chat_member(chat_id=chat_id, user_id=int(user_id))
+                await _bot.unban_chat_member(chat_id=chat_id, user_id=int(user_id))
             elif action == "mute":
                 until = datetime.utcnow() + timedelta(minutes=(duration_minutes or 60))
-                await tg_bot.restrict_chat_member(
+                await _bot.restrict_chat_member(
                     chat_id=chat_id, user_id=int(user_id),
                     permissions=ChatPermissions(can_send_messages=False), until_date=until,
                 )
 
+        # Prefer the in-process runtime; on web instances the bot runs in a
+        # separate worker, so fall back to a standalone Bot using this custom
+        # bot's stored token (the action is a single REST call).
+        import asyncio
+        tg_bot, loop = bot_manager.get_bot_runtime(bot.id)
         try:
-            asyncio.run_coroutine_threadsafe(_do(), loop).result(timeout=15)
+            if tg_bot and loop:
+                asyncio.run_coroutine_threadsafe(_do(tg_bot), loop).result(timeout=15)
+            else:
+                token = (bot.get_token() or "").strip()
+                if not token:
+                    return jsonify({"error": "Bot token unavailable — cannot run the action."}), 503
+                import telegram
+                asyncio.run(_do(telegram.Bot(token=token)))
         except Exception as exc:
             return jsonify({"error": f"Telegram refused the action: {exc}"}), 502
 

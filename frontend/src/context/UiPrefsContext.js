@@ -19,6 +19,9 @@ const NOOP = {
   ready: true,
   isOpen: (_id, def = false) => def,
   toggle: () => {},
+  setOpen: () => {},
+  highlightId: null,
+  requestHighlight: () => {},
 };
 
 export function useUiPrefs() {
@@ -28,7 +31,9 @@ export function useUiPrefs() {
 export function UiPrefsProvider({ children }) {
   const [cards, setCards] = useState({});
   const [ready, setReady] = useState(false);
+  const [highlightId, setHighlightId] = useState(null);
   const saveTimer = useRef(null);
+  const hlTimer = useRef(null);
   const latest = useRef({});
 
   useEffect(() => {
@@ -77,8 +82,41 @@ export function UiPrefsProvider({ children }) {
     [scheduleSave]
   );
 
+  // Force a card to a specific open/closed state (used by deep-links so the
+  // target card is expanded before we scroll to + highlight it).
+  const setOpen = useCallback(
+    (id, value) => {
+      setCards((prev) => {
+        if ((id in prev ? !!prev[id] : false) === !!value) return prev;
+        const next = { ...prev, [id]: !!value };
+        scheduleSave(next);
+        return next;
+      });
+    },
+    [scheduleSave]
+  );
+
+  // Open + scroll to + briefly highlight a card (deep-link from AI Status / AI
+  // Activity). The highlight ring auto-clears after a few seconds.
+  const requestHighlight = useCallback(
+    (id) => {
+      if (!id) return;
+      setOpen(id, true);
+      setHighlightId(id);
+      if (hlTimer.current) clearTimeout(hlTimer.current);
+      // Wait for the target tab/card to mount, then scroll it into view.
+      setTimeout(() => {
+        try {
+          document.getElementById(`card-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } catch { /* ignore */ }
+      }, 250);
+      hlTimer.current = setTimeout(() => setHighlightId(null), 3000);
+    },
+    [setOpen]
+  );
+
   return (
-    <UiPrefsContext.Provider value={{ ready, isOpen, toggle }}>
+    <UiPrefsContext.Provider value={{ ready, isOpen, toggle, setOpen, highlightId, requestHighlight }}>
       {children}
     </UiPrefsContext.Provider>
   );

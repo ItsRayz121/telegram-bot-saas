@@ -215,7 +215,8 @@ function TasksEditor({ tasks, onChange }) {
   );
 }
 
-export default function CampaignManager({ botId, groupId }) {
+export default function CampaignManager({ botId, groupId, userTier = 'free' }) {
+  const isPaid = userTier && userTier !== 'free';
   const [campaigns, setCampaigns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [createType, setCreateType] = useState(null);   // non-null => wizard open, pre-set to this type
@@ -297,7 +298,13 @@ export default function CampaignManager({ botId, groupId }) {
         variant="scrollable"
         scrollButtons="auto"
         allowScrollButtonsMobile
-        sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
+        sx={{
+          mb: 2, borderBottom: 1, borderColor: 'divider', minHeight: 38,
+          // Compact so all six tabs fit on one row on desktop; scroll on small screens.
+          '& .MuiTab-root': {
+            minHeight: 38, minWidth: 0, px: 1.25, fontSize: '0.78rem', textTransform: 'none',
+          },
+        }}
       >
         <Tab value="all" label={`All campaigns (${totals.total})`} />
         {TYPES.map((t) => (
@@ -309,10 +316,17 @@ export default function CampaignManager({ botId, groupId }) {
         ))}
       </Tabs>
 
-      <Alert severity="info" sx={{ mb: 2 }}>
-        Free plan: 1 active campaign, manual/honor proof, Telegram-join auto-verify.
-        Pro unlocks multiple campaigns, link-validity checks, advanced fields, winner picker and bulk export.
-      </Alert>
+      {isPaid ? (
+        <Alert severity="success" sx={{ mb: 2 }}>
+          Your plan: <strong style={{ textTransform: 'capitalize' }}>{userTier}</strong> — multiple campaigns,
+          link-validity checks, advanced fields, winner picker and bulk export are all unlocked.
+        </Alert>
+      ) : (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Free plan: 1 active campaign, manual/honor proof, Telegram-join auto-verify.
+          Pro unlocks multiple campaigns, link-validity checks, advanced fields, winner picker and bulk export.
+        </Alert>
+      )}
 
       {campaigns.length > 0 && (
         <Grid container spacing={2} sx={{ mb: 2 }}>

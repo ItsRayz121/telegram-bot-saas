@@ -384,7 +384,8 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
       </Card>
 
       {/* Automatic Reply Settings */}
-      <CollapsibleCard id="tg.ai.auto_replies" title="Automatic Knowledge Replies">
+      <CollapsibleCard id="tg.ai.auto_replies" title="Automatic Knowledge Replies"
+        badge={<Chip label="AI" size="small" color="primary" variant="outlined" sx={{ height: 18, fontSize: '0.6rem' }} />}>
           <Typography variant="body2" color="text.secondary" mb={2}>
             Let the bot automatically answer knowledge-base questions without needing the /ask command.
           </Typography>
@@ -650,6 +651,7 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
         return (
           <CollapsibleCard
             id="tg.ai.social_replies"
+            badge={<Chip label="AI" size="small" color="primary" variant="outlined" sx={{ height: 18, fontSize: '0.6rem' }} />}
             title={(
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <EmojiPeople color="primary" fontSize="small" />
@@ -761,6 +763,7 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
         return (
           <CollapsibleCard
             id="tg.ai.image_ai"
+            badge={<Chip label="AI" size="small" color="primary" variant="outlined" sx={{ height: 18, fontSize: '0.6rem' }} />}
             title={(
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <ImageSearch color="primary" fontSize="small" />

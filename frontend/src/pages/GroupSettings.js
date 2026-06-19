@@ -37,7 +37,7 @@ import {
   PRO_GATED_LABELS,
 } from '../config/featureRegistry';
 import PlanGate from '../components/PlanGate';
-import { UiPrefsProvider } from '../context/UiPrefsContext';
+import { UiPrefsProvider, useUiPrefs } from '../context/UiPrefsContext';
 import CollapsibleCard from '../components/CollapsibleCard';
 import BlockedWordPresets from '../components/BlockedWordPresets';
 import { TELEGRAM_PACKS } from '../data/blockedWordPacks';
@@ -155,6 +155,7 @@ function ModerationActions({ botId, groupId, userId, username, onDone }) {
 // so an admin can correct the AI and, for answers, teach the bot for next time.
 function AIActivityRow({ e, botId, groupId, fmtTs, onDone }) {
   const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [saving, setSaving] = useState(false);
   const isKnowledge = e.category === 'knowledge';
   const meta = e.meta || {};
@@ -194,22 +195,46 @@ function AIActivityRow({ e, botId, groupId, fmtTs, onDone }) {
         <Chip label={e.category} size="small" variant="outlined" sx={{ textTransform: 'capitalize' }} />
       </TableCell>
       <TableCell>
-        <Typography variant="body2" fontWeight={600}>
-          {e.action}
-          {e.status && e.status !== 'ok' && (
-            <Chip label={e.status} size="small" color={e.status === 'failed' ? 'error' : 'default'} sx={{ ml: 1, height: 16, fontSize: '0.6rem' }} />
-          )}
-        </Typography>
-        {e.target && <Typography variant="caption" color="text.secondary" display="block">{e.target}</Typography>}
-        {e.detail && <Typography variant="caption" color="text.secondary" display="block">{e.detail}</Typography>}
-        {meta.answer && (
-          <Typography variant="caption" color="text.primary" display="block" sx={{ mt: 0.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-            <strong>Answer:</strong> {meta.answer}
+        <Box
+          onClick={() => setExpanded((v) => !v)}
+          sx={{ cursor: 'pointer', display: 'flex', alignItems: 'flex-start', gap: 0.5 }}
+        >
+          <Box component="span" sx={{ fontSize: '0.8rem', lineHeight: 1.4, color: 'text.secondary', mt: '1px' }}>
+            {expanded ? '▾' : '▸'}
+          </Box>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography variant="body2" fontWeight={600}>
+              {e.action}
+              {e.status && e.status !== 'ok' && (
+                <Chip label={e.status} size="small" color={e.status === 'failed' ? 'error' : 'default'} sx={{ ml: 1, height: 16, fontSize: '0.6rem' }} />
+              )}
+            </Typography>
+            {e.target && <Typography variant="caption" color="text.secondary" display="block">{e.target}</Typography>}
+            {/* Collapsed: one-line question/detail preview. Expanded: full Q + answer + message. */}
+            {e.detail && (
+              <Typography
+                variant="caption" color="text.secondary" display="block"
+                sx={expanded ? { whiteSpace: 'pre-wrap', wordBreak: 'break-word' }
+                  : { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+              >
+                {isKnowledge && expanded ? <><strong>Question:</strong> {e.detail}</> : e.detail}
+              </Typography>
+            )}
+          </Box>
+        </Box>
+        {expanded && meta.answer && (
+          <Typography variant="caption" color="text.primary" display="block" sx={{ mt: 0.5, ml: 2, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+            <strong>AI answer:</strong> {meta.answer}
           </Typography>
         )}
-        {meta.message && (
-          <Typography variant="caption" color="text.disabled" display="block" sx={{ mt: 0.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+        {expanded && meta.message && (
+          <Typography variant="caption" color="text.disabled" display="block" sx={{ mt: 0.5, ml: 2, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
             <strong>Message:</strong> {meta.message}
+          </Typography>
+        )}
+        {expanded && !meta.answer && isKnowledge && (
+          <Typography variant="caption" color="text.disabled" display="block" sx={{ mt: 0.5, ml: 2, fontStyle: 'italic' }}>
+            (No stored answer — logged before answer capture, or no answer was sent.)
           </Typography>
         )}
         <Box sx={{ mt: 0.5, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
@@ -476,6 +501,7 @@ function GroupSettingsInner() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const navigate = useNavigate();
+  const { requestHighlight } = useUiPrefs();
   const { id: rawBotId, groupId } = useParams();
   const botId = rawBotId || 'official';
   const isOfficial = !rawBotId;
@@ -1085,18 +1111,24 @@ function GroupSettingsInner() {
     }
   };
 
-  // #5 — AI Status cards link to the exact tab where each thing is configured.
+  // #5 — AI Status cards link to the exact tab AND card where each thing is
+  // configured, then briefly highlight that card so it's obvious.
   const aiStatusTargets = {
-    'Smart Moderation': { cat: 'moderation', sub: getSubTabIndex(CATEGORIES, 'moderation', 'AutoMod') },
-    'AI Integrations':  { cat: 'ai',         sub: getSubTabIndex(CATEGORIES, 'ai', 'Knowledge Base') },
-    'Knowledge Base':   { cat: 'ai',         sub: getSubTabIndex(CATEGORIES, 'ai', 'Knowledge Base') },
-    'OpenAI Provider':  { cat: 'ai',         sub: getSubTabIndex(CATEGORIES, 'ai', 'Knowledge Base') },
+    'Smart Moderation': { cat: 'moderation', sub: getSubTabIndex(CATEGORIES, 'moderation', 'AutoMod'),         card: 'tg.moderation.smart_moderation' },
+    'AI Integrations':  { cat: 'ai',         sub: getSubTabIndex(CATEGORIES, 'ai', 'Knowledge Base'),          card: 'tg.ai.reply_personality' },
+    'Knowledge Base':   { cat: 'ai',         sub: getSubTabIndex(CATEGORIES, 'ai', 'Knowledge Base'),          card: 'tg.ai.knowledge_base' },
+    'OpenAI Provider':  { cat: 'ai',         sub: getSubTabIndex(CATEGORIES, 'ai', 'Knowledge Base'),          card: 'tg.ai.knowledge_base' },
   };
   const goToTarget = (t) => {
     if (!t) return;
     setCat(t.cat);
     setSubTab(t.sub >= 0 ? t.sub : 0);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (t.card) {
+      // Let the tab content mount before opening + highlighting + scrolling.
+      setTimeout(() => requestHighlight(t.card), 120);
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
   return (
@@ -1318,9 +1350,34 @@ function GroupSettingsInner() {
                   >
                     <MenuItem value="delete">Delete silently (recommended)</MenuItem>
                     <MenuItem value="warn">Delete + warn (notice throttled to once per gap)</MenuItem>
+                    <MenuItem value="restrict">Cooldown — restrict until next allowed message + notice</MenuItem>
                     <MenuItem value="mute">Mute the member temporarily</MenuItem>
                   </Select>
                 </FormControl>
+
+                {sm.action === 'restrict' && (
+                  <>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                      Removes the too-fast message and restricts the member <b>only until their next
+                      allowed time</b> (the remaining gap) — Telegram then shows them an auto-lifting
+                      "you can write again in …" countdown. This is the closest thing to Telegram's
+                      native per-user timer (which bots can't set). Admins are never affected.
+                    </Typography>
+                    <FormControlLabel sx={{ mt: 1 }}
+                      control={<Switch checked={sm.notify !== false}
+                        onChange={(e) => updateSetting('automod.slow_mode.notify', e.target.checked)} />}
+                      label="Post a short, self-deleting “please wait Ns” notice"
+                    />
+                  </>
+                )}
+
+                {sm.action === 'warn' && (
+                  <FormControlLabel sx={{ mt: 1 }}
+                    control={<Switch checked={sm.notify !== false}
+                      onChange={(e) => updateSetting('automod.slow_mode.notify', e.target.checked)} />}
+                    label="Post the warning notice (off = silent delete)"
+                  />
+                )}
 
                 {sm.action === 'mute' && (
                   <TextField
@@ -1627,7 +1684,8 @@ function GroupSettingsInner() {
                       label="Allow referral codes"
                     />
                     <Typography variant="caption" color="text.secondary" display="block" ml={4}>
-                      Exempts referral codes from promotional detection
+                      Whitelists messages that mention a referral/affiliate code so they aren't auto-removed
+                      as promotion (e.g. “use my code WELCOME10”). Leave off to treat referral codes as spam.
                     </Typography>
                   </Grid>
                 </Grid>
@@ -2042,18 +2100,21 @@ function GroupSettingsInner() {
             <CollapsibleCard
               id="tg.moderation.warning_escalation"
               title="Warning Escalation"
-              badge={<Chip label="Not active yet" size="small" color="default" variant="outlined" />}
+              badge={we.enabled
+                ? <Chip label="Active" size="small" color="success" variant="outlined" />
+                : <Chip label="Off" size="small" color="default" variant="outlined" />}
             >
                 <Typography variant="body2" color="text.secondary" mb={2}>
-                  Configure an automatic action once a member crosses a warning threshold within a time window.
-                  This is a foundation only — <strong>rules are saved but not enforced</strong> until you turn it on.
+                  Automatically takes an action once a member reaches a warning threshold within a time window.
+                  When enabled, this runs live on every warning the bot issues — admins and trusted users are
+                  always exempt. Independent of the 3-strike ladder in Warning Thresholds.
                 </Typography>
                 <FormControlLabel
                   sx={{ mb: 1 }}
                   control={<Switch
                     checked={!!we.enabled}
                     onChange={(e) => updateSetting('warning_escalation.enabled', e.target.checked)} />}
-                  label={we.enabled ? 'Enabled (rules will apply once enforcement ships)' : 'Disabled — rules saved for later'}
+                  label={we.enabled ? 'Enabled — rules are enforced' : 'Disabled — rules saved for later'}
                 />
                 <Grid container spacing={2}>
                   <Grid item xs={12} sm={3}>
@@ -3155,7 +3216,7 @@ function GroupSettingsInner() {
 
         {/* COMMUNITY › Campaigns */}
         {cat === 'community' && subTab === 2 && (
-          <CampaignManager botId={botId} groupId={groupId} />
+          <CampaignManager botId={botId} groupId={groupId} userTier={userTier} />
         )}
 
         {/* ══════════════════════════════════════════════════════════

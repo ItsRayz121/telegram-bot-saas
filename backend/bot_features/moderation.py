@@ -243,6 +243,15 @@ class ModerationSystem:
                     bot, chat_id, target_user_id, target_username, group, warning_action
                 )
 
+            # Owner-configured single-threshold escalation (Warning Escalation card),
+            # independent of the 3-strike ladder above.
+            if group.settings.get("warning_escalation", {}).get("enabled"):
+                import asyncio as _aiowe
+                _aiowe.ensure_future(self._apply_warning_escalation(
+                    bot, chat_id, group, target_user_id, target_username, None,
+                    total_warnings, mod_settings.get("auto_delete_action_seconds", 0),
+                ))
+
         return total_warnings
 
     async def _apply_escalation(self, bot, chat_id, user_id, username, first_name, warn_count, mod_settings, auto_delete_seconds):
@@ -294,6 +303,67 @@ class ModerationSystem:
                 except Exception as e:
                     logger.error(f"Escalation action '{action}' failed for {user_id}: {e}")
                 return  # only first matching step fires
+
+    async def _apply_warning_escalation(self, bot, chat_id, group, user_id, username,
+                                        first_name, total_warnings, auto_delete_seconds):
+        """Owner-configured single-threshold auto-escalation (the "Warning
+        Escalation" card). Independent of the 3-strike escalation_steps ladder:
+        fires when a member's warning count reaches warning_threshold within
+        time_window_hours (or all-time when the window is blank). Anti-ban safe —
+        admins/trusted are already filtered upstream and the notice auto-deletes.
+        """
+        we = (group.settings or {}).get("warning_escalation", {})
+        if not we.get("enabled"):
+            return
+        action = we.get("action_type", "mute")
+        if action == "none":
+            return
+        threshold = int(we.get("warning_threshold", 3) or 3)
+        window = we.get("time_window_hours", 24)
+        try:
+            with self.app.app_context():
+                from ..database import DatabaseManager
+                if window in (None, "", 0):
+                    count = total_warnings
+                else:
+                    count = DatabaseManager.count_warnings_in_window(group.id, user_id, int(window))
+        except Exception:
+            count = total_warnings
+        if count < threshold:
+            return
+
+        import asyncio as _aio
+        display = ('@' + username) if username else (first_name or str(user_id))
+        notif = None
+        try:
+            if action == "mute":
+                mins = int(we.get("mute_duration_minutes", 60) or 60)
+                until = datetime.utcnow() + timedelta(minutes=mins)
+                await bot.restrict_chat_member(
+                    chat_id=chat_id, user_id=user_id,
+                    permissions=ChatPermissions(can_send_messages=False),
+                    until_date=until,
+                )
+                hrs = mins // 60
+                dur_str = f"{hrs}h" if hrs >= 1 else f"{mins}m"
+                notif = await bot.send_message(
+                    chat_id=chat_id,
+                    text=f"🔇 {display} muted {dur_str} — reached {count} warnings.",
+                )
+            elif action in ("ban", "kick"):
+                await bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
+                if action == "kick":
+                    await bot.unban_chat_member(chat_id=chat_id, user_id=user_id)
+                icon = "🚫" if action == "ban" else "👢"
+                verb = "banned" if action == "ban" else "kicked"
+                notif = await bot.send_message(
+                    chat_id=chat_id,
+                    text=f"{icon} {display} {verb} — reached {count} warnings.",
+                )
+            if notif and auto_delete_seconds:
+                _aio.ensure_future(self._delayed_delete(bot, chat_id, notif.message_id, auto_delete_seconds))
+        except Exception as e:
+            logger.error(f"Warning-escalation action '{action}' failed for {user_id}: {e}")
 
     async def _delayed_delete(self, bot, chat_id, message_id, delay_seconds):
         import asyncio
@@ -685,13 +755,53 @@ class ModerationSystem:
                     logger.debug(f"slow_mode level exemption lookup failed: {e}")
 
             action = cfg.get("action", "delete")
-            if action == "mute":
+            notify = cfg.get("notify", True)
+            remaining = max(1, int(gap - (now - last).total_seconds()))
+            if action == "restrict":
+                # Emulate Telegram's native cooldown: remove the too-fast message
+                # and restrict the member ONLY until their next allowed time, so
+                # Telegram shows them an auto-lifting "write again in …" countdown.
+                # Never a permanent restriction: Telegram treats an until_date that
+                # is <30s (or >366d) away as "forever", so floor it at 31s.
+                try:
+                    await bot.delete_message(chat_id=chat_id, message_id=message.message_id)
+                except Exception:
+                    pass
+                try:
+                    until = now + timedelta(seconds=max(remaining, 31))
+                    await bot.restrict_chat_member(
+                        chat_id=chat_id,
+                        user_id=user_id,
+                        permissions=ChatPermissions(can_send_messages=False),
+                        until_date=until,
+                    )
+                except Exception as e:
+                    logger.debug(f"slow_mode restrict failed: {e}")
+                # One throttled, self-deleting notice — repeatedly replying to every
+                # too-fast message would itself look like spam (anti-ban rule).
+                if notify:
+                    last_warn = self._slow_warn_tracker.get(key)
+                    if last_warn is None or (now - last_warn).total_seconds() >= gap:
+                        self._slow_warn_tracker[key] = now
+                        name = ('@' + message.from_user.username) if (message.from_user and message.from_user.username) \
+                            else ((message.from_user.first_name if message.from_user else None) or "there")
+                        try:
+                            import asyncio as _aio
+                            note = await bot.send_message(
+                                chat_id=chat_id,
+                                text=f"⏳ Slow mode — {name}, please wait ~{remaining}s before posting again.",
+                            )
+                            if note:
+                                _aio.ensure_future(self._delayed_delete(bot, chat_id, note.message_id, min(remaining, 15)))
+                        except Exception as e:
+                            logger.debug(f"slow_mode notice failed: {e}")
+            elif action == "mute":
                 await self.execute_automod_action(
                     bot, message, group, "mute",
                     reason=f"Slow mode — wait {gap}s between messages",
                     mute_duration=int(cfg.get("mute_duration_minutes", 5) or 5),
                 )
-            elif action == "warn":
+            elif action == "warn" and notify:
                 # Throttle the notice to at most once per gap per user — repeatedly
                 # replying to every too-fast message would itself look like spam
                 # (anti-ban rule). Off-throttle, just delete silently.
@@ -1098,6 +1208,13 @@ class ModerationSystem:
                     import asyncio as _aio
                     _aio.ensure_future(self._apply_escalation(
                         bot, chat_id, user_id, username, first_name, total, mod_s, auto_delete_action
+                    ))
+
+                # Owner-configured single-threshold escalation (Warning Escalation card).
+                if group.settings.get("warning_escalation", {}).get("enabled"):
+                    import asyncio as _aiowe
+                    _aiowe.ensure_future(self._apply_warning_escalation(
+                        bot, chat_id, group, user_id, username, first_name, total, auto_delete_action
                     ))
 
             elif action == "mute":

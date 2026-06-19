@@ -603,35 +603,43 @@ def moderate_official_member(group_id, user_id):
         db.session.commit()
         return jsonify({"ok": True, "action": action}), 200
 
-    # All other actions need the live bot.
-    from ..official_bot import get_official_bot_loop
-    bot, loop = get_official_bot_loop()
-    if not bot or not loop:
-        return jsonify({"error": "Bot is not running right now — please try again shortly."}), 503
-
-    import asyncio
+    # All other actions need a Telegram call. Prefer the in-process official-bot
+    # loop when present, but on web instances the official bot runs in a SEPARATE
+    # worker so that loop is absent — fall back to a standalone Bot(token) so the
+    # dashboard mod actions still work (the action is a single REST call). This is
+    # the same pattern used by the digest/report senders (official_settings.py).
     from telegram import ChatPermissions
     chat_id = int(group_id)
 
-    async def _do():
+    async def _do(_bot):
         if action == "ban":
-            await bot.ban_chat_member(chat_id=chat_id, user_id=int(user_id))
+            await _bot.ban_chat_member(chat_id=chat_id, user_id=int(user_id))
         elif action == "tempban":
             until = datetime.utcnow() + timedelta(minutes=(duration_minutes or 1440))
-            await bot.ban_chat_member(chat_id=chat_id, user_id=int(user_id), until_date=until)
+            await _bot.ban_chat_member(chat_id=chat_id, user_id=int(user_id), until_date=until)
         elif action == "kick":
-            await bot.ban_chat_member(chat_id=chat_id, user_id=int(user_id))
-            await bot.unban_chat_member(chat_id=chat_id, user_id=int(user_id))
+            await _bot.ban_chat_member(chat_id=chat_id, user_id=int(user_id))
+            await _bot.unban_chat_member(chat_id=chat_id, user_id=int(user_id))
         elif action == "mute":
             until = datetime.utcnow() + timedelta(minutes=(duration_minutes or 60))
-            await bot.restrict_chat_member(
+            await _bot.restrict_chat_member(
                 chat_id=chat_id, user_id=int(user_id),
                 permissions=ChatPermissions(can_send_messages=False),
                 until_date=until,
             )
 
+    import asyncio
+    from ..official_bot import get_official_bot_loop
+    live_bot, loop = get_official_bot_loop()
     try:
-        asyncio.run_coroutine_threadsafe(_do(), loop).result(timeout=15)
+        if live_bot and loop:
+            asyncio.run_coroutine_threadsafe(_do(live_bot), loop).result(timeout=15)
+        else:
+            token = (Config.TELEGRAM_BOT_TOKEN or "").strip()
+            if not token:
+                return jsonify({"error": "Bot is not configured — set TELEGRAM_BOT_TOKEN."}), 503
+            import telegram
+            asyncio.run(_do(telegram.Bot(token=token)))
     except Exception as exc:
         return jsonify({"error": f"Telegram refused the action: {exc}"}), 502
 

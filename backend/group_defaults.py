@@ -189,12 +189,19 @@ _DEFAULTS: dict = {
         # exempt_min_level (0 = off) also bypass it. OFF by default — opt-in, since
         # it changes how a group fundamentally feels. action "delete" is silent and
         # the safest for anti-ban; "warn" sends a notice throttled to at most once
-        # per gap per user; "mute" temporarily restricts repeat offenders.
+        # per gap per user; "mute" temporarily restricts repeat offenders;
+        # "restrict" emulates a Telegram-native cooldown — it removes the too-fast
+        # message and restricts the member ONLY until their next allowed time (the
+        # remaining gap), so Telegram shows them a "you can write again in …"
+        # countdown that auto-lifts. A single throttled "please wait Ns" notice
+        # accompanies it when `notify` is on. Bots cannot set Telegram's native
+        # per-group slow-mode timer (not in the Bot API) — this is the closest.
         "slow_mode": {
             "enabled": False,
             "seconds_between_messages": 60,
-            "action": "delete",          # "delete" | "warn" | "mute"
+            "action": "delete",          # "delete" | "warn" | "mute" | "restrict"
             "mute_duration_minutes": 5,  # used when action == "mute"
+            "notify": True,              # send the throttled "please wait Ns" notice (warn/restrict)
             "exempt_min_level": 0,       # members at/above this XP level bypass (0 = no level exemption)
         },
         "bad_words": {

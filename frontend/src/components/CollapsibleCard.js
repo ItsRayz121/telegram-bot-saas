@@ -31,10 +31,12 @@ export default function CollapsibleCard({
   sx,
   children,
 }) {
-  const { ready, isOpen, toggle } = useUiPrefs();
+  const { ready, isOpen, toggle, highlightId } = useUiPrefs();
   const expanded = ready ? isOpen(id, defaultOpen) : false;
+  const highlighted = highlightId === id;
   return (
     <Accordion
+      id={`card-${id}`}
       expanded={expanded}
       onChange={() => toggle(id, defaultOpen)}
       disableGutters
@@ -42,9 +44,11 @@ export default function CollapsibleCard({
       sx={{
         mt: 2,
         border: '1px solid',
-        borderColor: 'divider',
+        borderColor: highlighted ? 'primary.main' : 'divider',
         borderRadius: 2,
         overflow: 'hidden',
+        transition: 'box-shadow .3s, border-color .3s',
+        boxShadow: highlighted ? (theme) => `0 0 0 2px ${theme.palette.primary.main}` : 'none',
         // Kill the default MUI accordion divider line + sibling-merge so an
         // expanded card never overlaps or fuses with the card above/below it.
         '&:before': { display: 'none' },
