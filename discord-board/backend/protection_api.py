@@ -294,6 +294,22 @@ def update_moderation(guild_id: int):
         if "custom_instructions" in kb_in:
             kb["custom_instructions"] = str(kb_in["custom_instructions"] or "")[:1200]
         extra["kb_replies"] = kb
+    if isinstance(body.get("image_understanding"), dict):
+        iu_in = body["image_understanding"]
+        iu = dict(extra.get("image_understanding") or {})
+        for key in ("enabled", "mention_only", "require_caption", "escalate_low_confidence"):
+            if key in iu_in:
+                iu[key] = bool(iu_in[key])
+        if iu_in.get("cost_mode") in ("aggressive_savings", "balanced", "quality"):
+            iu["cost_mode"] = iu_in["cost_mode"]
+        if "confidence_threshold" in iu_in:
+            try:
+                iu["confidence_threshold"] = min(0.9, max(0.3, float(iu_in["confidence_threshold"])))
+            except (TypeError, ValueError):
+                pass
+        if "max_image_size_mb" in iu_in:
+            iu["max_image_size_mb"] = _as_int(iu_in["max_image_size_mb"], 5, 1, 10)
+        extra["image_understanding"] = iu
     if isinstance(body.get("reports"), dict):
         rp = dict(extra.get("reports") or {})
         if "enabled" in body["reports"]:

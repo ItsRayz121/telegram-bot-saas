@@ -20,6 +20,7 @@ export default function SelfRolesSubtab({ guildId, channels = [], roles = [] }) 
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState('');
+  const [scheduleAt, setScheduleAt] = useState({});   // menu index -> datetime-local string
 
   const textChannels = channels.filter((c) => TEXT_TYPES.has(c.type));
   const assignableRoles = roles.filter((r) => !r.managed && r.name !== '@everyone');
@@ -48,14 +49,19 @@ export default function SelfRolesSubtab({ guildId, channels = [], roles = [] }) 
     } catch { setError('Save failed.'); } finally { setSaving(false); }
   }
 
-  async function post(menu) {
+  async function post(menu, i) {
     setError(null);
     try {
       // Persist edits first so the bot posts what's on screen, then queue.
       const { data } = await guildizerApi.put(`/api/guilds/${guildId}/self-roles`, { menus });
       setMenus(data.menus || []);
-      await guildizerApi.post(`/api/guilds/${guildId}/self-roles/${menu.id}/post`);
-      setNotice('Queued — the bot posts the menu within ~20 seconds.');
+      const when = scheduleAt[i];
+      const body = when ? { post_at: new Date(when).toISOString() } : {};
+      const { data: res } = await guildizerApi.post(`/api/guilds/${guildId}/self-roles/${menu.id}/post`, body);
+      setNotice(res.post_status === 'scheduled'
+        ? `Scheduled — the bot posts the menu at ${new Date(res.post_at).toLocaleString()}.`
+        : 'Queued — the bot posts the menu within ~20 seconds.');
+      setScheduleAt((s) => ({ ...s, [i]: '' }));
       load();
     } catch (e) {
       setError(e?.response?.data?.message || 'Could not queue the post.');
@@ -93,7 +99,8 @@ export default function SelfRolesSubtab({ guildId, channels = [], roles = [] }) 
             action={(
               <Stack direction="row" spacing={1} alignItems="center">
                 {m.message_id && <Chip size="small" color="success" variant="outlined" label="Posted" />}
-                {m.needs_post && <Chip size="small" color="info" variant="outlined" label="Post queued" />}
+                {m.needs_post && m.post_at && <Chip size="small" color="info" variant="outlined" label={`Scheduled · ${new Date(m.post_at).toLocaleString()}`} />}
+                {m.needs_post && !m.post_at && <Chip size="small" color="info" variant="outlined" label="Post queued" />}
                 {m.needs_delete && <Chip size="small" color="warning" variant="outlined" label="Removal queued" />}
                 {m.post_error && <Chip size="small" color="error" variant="outlined" label={`Post failed: ${m.post_error}`} />}
                 <IconButton size="small" onClick={() => setMenus(menus.filter((_, j) => j !== i))}>
@@ -157,10 +164,14 @@ export default function SelfRolesSubtab({ guildId, channels = [], roles = [] }) 
                     onClick={() => setMenu(i, { entries: [...(m.entries || []), { emoji: '', label: '', role_id: assignableRoles[0]?.id }] })}>
                     Add role
                   </Button>
+                  <TextField type="datetime-local" size="small" label="Schedule (optional)"
+                    InputLabelProps={{ shrink: true }} value={scheduleAt[i] || ''}
+                    onChange={(ev) => setScheduleAt((s) => ({ ...s, [i]: ev.target.value }))}
+                    sx={{ minWidth: 210 }} />
                   <Button size="small" variant="outlined" startIcon={<Send />}
                     disabled={!m.channel_id || (m.entries || []).length === 0 || !m.id}
-                    onClick={() => post(m)}>
-                    {m.message_id ? 'Re-post menu' : 'Post menu'}
+                    onClick={() => post(m, i)}>
+                    {scheduleAt[i] ? 'Schedule post' : (m.message_id ? 'Re-post now' : 'Post now')}
                   </Button>
                   {m.message_id && (
                     <Button size="small" color="inherit" onClick={() => unpost(m)}>Remove posted message</Button>

@@ -134,6 +134,19 @@ EXTRA_DEFAULTS = {
         "personality": "professional_support",
         "custom_instructions": "",                   # free-text rules appended to the prompt
     },
+    # Image Understanding (Multimodal AI) — distinct from automod.image_ai (NSFW
+    # removal). When @mentioned with an image (+caption), the bot analyzes the
+    # screenshot/error/chart and replies; low-confidence results escalate via the
+    # existing "ai_image" escalation type. Smart gating keeps the API cost low.
+    "image_understanding": {
+        "enabled": False,
+        "mention_only": True,
+        "require_caption": True,
+        "escalate_low_confidence": True,
+        "cost_mode": "balanced",          # aggressive_savings | balanced | quality
+        "confidence_threshold": 0.65,
+        "max_image_size_mb": 5,
+    },
     "reports": {"enabled": True, "alert_channel_id": None},
     # Phase 1 parity — mod-action log channel. When enabled + a channel is set,
     # every moderation action (automod removals + manual mod commands) is

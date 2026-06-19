@@ -8,7 +8,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Grid, Box, Typography, TextField, MenuItem, Button, Switch, Chip,
-  FormControlLabel, Alert, Snackbar, Card, CardActionArea, CircularProgress,
+  FormControlLabel, Alert, Snackbar, Card, CardActionArea, Slider,
 } from '@mui/material';
 import { CheckCircle } from '@mui/icons-material';
 import guildizerApi from '../../../services/guildizerApi';
@@ -30,7 +30,86 @@ export function KnowledgeBaseSubtab({ guildId }) {
       <Grid item xs={12}>
         <HumanLikeCard guildId={guildId} />
       </Grid>
+      <Grid item xs={12}>
+        <ImageUnderstandingCard guildId={guildId} />
+      </Grid>
     </Grid>
+  );
+}
+
+// Image Understanding (Multimodal AI) — vision Q&A on screenshots/errors/charts.
+// Distinct from Moderation's NSFW image removal. Writes the image_understanding
+// section on the moderation config.
+function ImageUnderstandingCard({ guildId }) {
+  const [cfg, setCfg] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    guildizerApi.get(`/api/guilds/${guildId}/moderation`)
+      .then(({ data }) => setCfg(data.image_understanding || {})).catch(() => {});
+  }, [guildId]);
+  const set = (patch) => setCfg((c) => ({ ...c, ...patch }));
+
+  async function save() {
+    setSaving(true);
+    try {
+      const { data } = await guildizerApi.put(`/api/guilds/${guildId}/moderation`, { image_understanding: cfg });
+      setCfg(data.image_understanding || cfg); setSaved(true);
+    } catch { /* keep */ }
+    setSaving(false);
+  }
+  if (!cfg) return null;
+  const conf = Math.round((cfg.confidence_threshold ?? 0.65) * 100);
+  return (
+    <GuildizerCollapsibleCard id="ai.image_understanding" title="🖼️ Image Understanding (Multimodal AI)">
+      <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+        The bot analyzes screenshots, error messages and charts shared with a question, and replies.
+        Smart gating keeps most images off the API. Low-confidence results escalate to admins (via the Escalation settings).
+      </Typography>
+      <FormControlLabel control={<Switch checked={!!cfg.enabled} onChange={(e) => set({ enabled: e.target.checked })} />}
+        label="Enable Image Understanding" />
+      {cfg.enabled && (
+        <Grid container spacing={1.5} sx={{ mt: 0.5 }}>
+          <Grid item xs={12} sm={6}>
+            <FormControlLabel control={<Switch size="small" checked={cfg.mention_only !== false} onChange={(e) => set({ mention_only: e.target.checked })} />}
+              label="Only when the bot is @mentioned" />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <FormControlLabel control={<Switch size="small" checked={cfg.require_caption !== false} onChange={(e) => set({ require_caption: e.target.checked })} />}
+              label="Require a caption/text with the image" />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <FormControlLabel control={<Switch size="small" checked={cfg.escalate_low_confidence !== false} onChange={(e) => set({ escalate_low_confidence: e.target.checked })} />}
+              label="Escalate to admins when confidence is low" />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField select size="small" fullWidth label="Cost mode"
+              value={cfg.cost_mode || 'balanced'} onChange={(e) => set({ cost_mode: e.target.value })}>
+              <MenuItem value="aggressive_savings">Aggressive savings — @mention + error keywords</MenuItem>
+              <MenuItem value="balanced">Balanced (recommended) — caption looks like a question</MenuItem>
+              <MenuItem value="quality">Quality — any image when addressed</MenuItem>
+            </TextField>
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <Typography variant="body2" gutterBottom>Confidence threshold: <strong>{conf}%</strong></Typography>
+            <Slider value={conf} min={30} max={90} step={5} marks valueLabelDisplay="auto"
+              valueLabelFormat={(v) => `${v}%`} onChange={(_, v) => set({ confidence_threshold: v / 100 })} sx={{ maxWidth: 300 }} />
+            <Typography variant="caption" color="text.secondary" display="block">Below this → escalate instead of replying.</Typography>
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField type="number" size="small" fullWidth label="Max image size (MB)"
+              value={cfg.max_image_size_mb ?? 5} inputProps={{ min: 1, max: 10 }}
+              onChange={(e) => set({ max_image_size_mb: Number(e.target.value) || 5 })} />
+          </Grid>
+        </Grid>
+      )}
+      <Button variant="contained" size="small" sx={{ mt: 1.5, display: 'block' }} onClick={save} disabled={saving}>
+        {saving ? 'Saving…' : 'Save changes'}
+      </Button>
+      <Snackbar open={saved} autoHideDuration={2500} onClose={() => setSaved(false)} message="Saved"
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }} />
+    </GuildizerCollapsibleCard>
   );
 }
 

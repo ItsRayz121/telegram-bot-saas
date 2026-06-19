@@ -153,6 +153,18 @@ _dm_last: dict[tuple[int, int], float] = {}
 _emoji_react_last: dict[tuple[int, int], float] = {}     # sentiment reactions
 _reaction_xp_last: dict[tuple[int, int], float] = {}     # reaction XP per author
 _kb_reply_last: dict[tuple[int, int], float] = {}        # KB auto-replies
+_imgunderstand_last: dict[tuple[int, int], float] = {}   # image understanding replies
+
+# Caption keywords that make an image worth sending to the vision API (cost gating).
+_HELP_KEYWORDS = (
+    "?", "error", "help", "how", "why", "what", "fix", "issue", "problem",
+    "wrong", "fail", "broke", "stuck", "doesn't", "cant", "can't", "explain",
+)
+
+
+def _has_help_keyword(text: str) -> bool:
+    low = (text or "").lower()
+    return any(k in low for k in _HELP_KEYWORDS)
 _social_reply_last: dict[tuple[int, int], float] = {}    # social appreciation replies
 
 _RATE_MAP_MAX_AGE = 3600  # entries older than this are dead weight
@@ -508,6 +520,8 @@ class CoreMixin:
                 await self._maybe_social_reply(message, cfg)
                 responded = await self._maybe_auto_respond(message)
                 if not responded:
+                    responded = await self._image_understanding(message, cfg)
+                if not responded:
                     await self._maybe_kb_reply(message, cfg)
                 await self._maybe_mirror(message)
                 await self._run_workflows(
@@ -682,6 +696,74 @@ class CoreMixin:
             self._log, message.guild.id, "image_ai", action_taken,
             message.author.id, str(message.author), message.channel.id, decision["detail"],
         )
+
+    async def _image_understanding(self, message: discord.Message, cfg: dict) -> bool:
+        """Multimodal vision Q&A (Telegizer parity). When @mentioned (or replied
+        to) with an image + caption, analyze the screenshot/error/chart and reply.
+        Low-confidence answers escalate via the existing "ai_image" type. Smart
+        cost gating keeps most images off the API. Returns True when replied."""
+        iu = cfg.get("image_understanding") or {}
+        if not iu.get("enabled") or not ai.is_configured() or not message.attachments:
+            return False
+        image = next((a for a in message.attachments
+                      if (a.content_type or "").startswith("image/")), None)
+        if image is None:
+            return False
+        max_mb = int(iu.get("max_image_size_mb", 5) or 5)
+        if (image.size or 0) > max_mb * 1024 * 1024:
+            return False
+        mentioned = bool(self.user and self.user in message.mentions)
+        ref = message.reference.resolved if message.reference else None
+        replied_to_me = bool(
+            self.user and getattr(getattr(ref, "author", None), "id", None) == self.user.id
+        )
+        addressed = mentioned or replied_to_me
+        caption = re.sub(r"<@!?\d+>", "", message.content or "").strip()
+
+        # Cost gating: mention_only + cost_mode decide whether we hit the API.
+        if iu.get("mention_only", True) and not addressed:
+            return False
+        if iu.get("require_caption", True) and not caption:
+            return False
+        cost_mode = iu.get("cost_mode", "balanced")
+        if cost_mode == "aggressive_savings":
+            if not addressed or not _has_help_keyword(caption):
+                return False
+        elif cost_mode == "balanced":
+            if caption and "?" not in caption and not _has_help_keyword(caption):
+                return False
+        # "quality" analyzes any image that passed the mention/caption gates.
+
+        key = (message.guild.id, message.author.id)
+        if time.monotonic() - _imgunderstand_last.get(key, 0.0) < 30:
+            return False
+        _imgunderstand_last[key] = time.monotonic()
+
+        outcome = await asyncio.to_thread(ai.understand_image, image.url, caption)
+        if outcome is None:
+            return False
+        answer, confidence, usage = outcome
+        await asyncio.to_thread(self._log_ai, message.guild.id, message.author.id, usage)
+        threshold = float(iu.get("confidence_threshold", 0.65) or 0.65) * 100
+        if confidence < threshold or not answer:
+            if iu.get("escalate_low_confidence", True):
+                await self._escalate_type(
+                    message.guild, "ai_image",
+                    f"Image understanding was low-confidence ({confidence}%) for "
+                    f"{message.author.mention} in {message.channel.mention} — {message.jump_url}",
+                    user_id=message.author.id,
+                )
+            return False
+        await governor.safe(
+            message.reply(answer[:1900], mention_author=False),
+            what="image understanding reply",
+        )
+        await asyncio.to_thread(
+            self._log, message.guild.id, "image_ai", "replied",
+            message.author.id, str(message.author), message.channel.id,
+            f"Answered an image question ({confidence}% confidence)",
+        )
+        return True
 
     async def _escalation_check(self, message: discord.Message, cfg: dict) -> None:
         """Frustration keywords -> alert admins (heuristic, no AI cost)."""

@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from datetime import datetime
 
 import discord
 
@@ -69,6 +70,17 @@ def menu_snapshot(guild_id: int, menu_id: int) -> dict | None:
         SessionLocal.remove()
 
 
+def _post_due(post_at) -> bool:
+    """True when a scheduled menu post is due (or has no schedule = post now)."""
+    if not post_at:
+        return True
+    try:
+        dt = datetime.fromisoformat(str(post_at).replace("Z", "+00:00")).replace(tzinfo=None)
+    except ValueError:
+        return True   # unparseable → don't strand the post
+    return dt <= datetime.utcnow()
+
+
 def pending_actions() -> list[tuple[int, int, str]]:
     """(guild_id, menu_id, "post"|"delete") for every queued menu, all guilds.
     Cheap at current fleet size; rows without self_roles are skipped fast."""
@@ -86,7 +98,7 @@ def pending_actions() -> list[tuple[int, int, str]]:
                     continue
                 if m.get("needs_delete"):
                     out.append((gid, int(m["id"]), "delete"))
-                elif m.get("needs_post"):
+                elif m.get("needs_post") and _post_due(m.get("post_at")):
                     out.append((gid, int(m["id"]), "post"))
         return out
     finally:
@@ -117,6 +129,7 @@ def _update_menu(guild_id: int, menu_id: int, patch: dict) -> None:
 def mark_posted(guild_id: int, menu_id: int, message_id: int) -> None:
     _update_menu(guild_id, menu_id, {
         "message_id": str(message_id), "needs_post": False, "post_error": None,
+        "post_at": None,
     })
     _cache_clear()
 

@@ -11,6 +11,8 @@ preserves them per menu id so a dashboard save never orphans a posted message.
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from flask import Blueprint, g, jsonify, request
 
 import access
@@ -32,6 +34,22 @@ def _menus(row) -> list[dict]:
     return [dict(m) for m in ((row.extra or {}).get("self_roles") or [])]
 
 
+def _parse_future_iso(val) -> str | None:
+    """Normalize a client datetime to a future UTC ISO string, or None if it's
+    missing/invalid/in the past (None = post immediately)."""
+    if not val or not isinstance(val, str):
+        return None
+    try:
+        dt = datetime.fromisoformat(val.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    if dt <= datetime.utcnow():
+        return None
+    return dt.isoformat() + "Z"
+
+
 def _public(menu: dict) -> dict:
     return {
         "id": menu.get("id"),
@@ -45,6 +63,7 @@ def _public(menu: dict) -> dict:
         "needs_post": bool(menu.get("needs_post")),
         "needs_delete": bool(menu.get("needs_delete")),
         "post_error": menu.get("post_error"),
+        "post_at": menu.get("post_at"),
     }
 
 
@@ -109,6 +128,7 @@ def update_menus(guild_id: int):
             "needs_post": bool((old or {}).get("needs_post")),
             "needs_delete": bool((old or {}).get("needs_delete")),
             "post_error": (old or {}).get("post_error"),
+            "post_at": (old or {}).get("post_at"),
         })
 
     extra = dict(row.extra or {})
@@ -148,8 +168,14 @@ def queue_post(guild_id: int, menu_id: int):
         return jsonify(error="no_channel", message="Pick a channel for this menu first."), 400
     if not (target.get("entries") or []):
         return jsonify(error="no_entries", message="Add at least one role first."), 400
-    _queue(guild_id, menu_id, {"needs_post": True, "needs_delete": False, "post_error": None})
-    return jsonify(ok=True, post_status="queued")
+    body = request.get_json(silent=True) or {}
+    raw_at = body.get("post_at")
+    post_at = _parse_future_iso(raw_at)
+    if raw_at and post_at is None:
+        return jsonify(error="bad_time", message="Pick a date and time in the future."), 400
+    _queue(guild_id, menu_id, {"needs_post": True, "needs_delete": False,
+                               "post_error": None, "post_at": post_at})
+    return jsonify(ok=True, post_status="scheduled" if post_at else "queued", post_at=post_at)
 
 
 @self_roles_bp.delete("/api/guilds/<int:guild_id>/self-roles/<int:menu_id>/post")

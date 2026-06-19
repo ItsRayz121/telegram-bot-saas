@@ -19,6 +19,7 @@ disabled gracefully.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 
 from config import Config
@@ -35,6 +36,15 @@ _IMG_SYSTEM = (
     "You are an image-safety classifier for a Discord community. "
     "Reply with exactly one word: NSFW if the image contains nudity, sexual "
     "content, or graphic gore; OK otherwise."
+)
+
+_IMG_UNDERSTAND_SYSTEM = (
+    "You are a helpful Discord community assistant. A member shared an image — "
+    "usually a screenshot, error message, or chart — with a question or caption. "
+    "Analyze the image and answer concisely and practically. If the image is "
+    "unclear or you cannot tell, say so plainly instead of guessing. "
+    "Begin your reply with 'CONF:<n>' where <n> is your confidence 0-100 that "
+    "your answer is correct and useful, then a newline, then the answer."
 )
 
 # Per-provider default text model when GUILDIZER_AI_MODEL is unset.
@@ -332,4 +342,34 @@ def check_image(image_url: str) -> tuple[str, AIResult] | None:
         return ("nsfw" if _verdict(result.text, "NSFW") else "ok"), result
     except Exception:  # noqa: BLE001
         log.exception("AI image check failed")
+        return None
+
+
+def understand_image(image_url: str, caption: str) -> tuple[str, int, AIResult] | None:
+    """Multimodal Q&A over an image (screenshots, errors, charts). Returns
+    (answer, confidence_pct, usage) or None when no vision backend is available.
+    Prefers OpenAI vision; falls back to Anthropic when that's the provider."""
+    prompt = (caption or "").strip() or "Describe and explain this image for the member."
+    try:
+        if Config.OPENAI_API_KEY:
+            result = _run_openai(
+                Config.OPENAI_API_KEY, None, None, Config.VISION_MODEL,
+                _IMG_UNDERSTAND_SYSTEM, prompt, 400, image_url=image_url,
+            )
+        elif _provider() == "anthropic" and Config.ANTHROPIC_API_KEY:
+            result = _run_anthropic(
+                _model_for("anthropic"), _IMG_UNDERSTAND_SYSTEM, prompt, 400, image_url=image_url)
+        else:
+            return None
+        if result is None:
+            return None
+        text = (result.text or "").strip()
+        confidence = 70
+        m = re.match(r"\s*CONF:\s*(\d{1,3})", text, re.IGNORECASE)
+        if m:
+            confidence = max(0, min(100, int(m.group(1))))
+            text = text[m.end():].lstrip(" \n:").strip()
+        return text, confidence, result
+    except Exception:  # noqa: BLE001
+        log.exception("AI image understanding failed")
         return None
