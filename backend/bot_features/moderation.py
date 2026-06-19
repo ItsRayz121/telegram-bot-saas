@@ -244,11 +244,13 @@ class ModerationSystem:
                 )
 
             # Owner-configured single-threshold escalation (Warning Escalation card),
-            # independent of the 3-strike ladder above.
-            if group.settings.get("warning_escalation", {}).get("enabled"):
+            # independent of the 3-strike ladder above. Capture the config dict +
+            # group id by value — the coroutine runs after this context exits.
+            _we = group.settings.get("warning_escalation", {})
+            if _we.get("enabled"):
                 import asyncio as _aiowe
                 _aiowe.ensure_future(self._apply_warning_escalation(
-                    bot, chat_id, group, target_user_id, target_username, None,
+                    bot, chat_id, group.id, dict(_we), target_user_id, target_username, None,
                     total_warnings, mod_settings.get("auto_delete_action_seconds", 0),
                 ))
 
@@ -304,15 +306,20 @@ class ModerationSystem:
                     logger.error(f"Escalation action '{action}' failed for {user_id}: {e}")
                 return  # only first matching step fires
 
-    async def _apply_warning_escalation(self, bot, chat_id, group, user_id, username,
+    async def _apply_warning_escalation(self, bot, chat_id, group_id, we, user_id, username,
                                         first_name, total_warnings, auto_delete_seconds):
         """Owner-configured single-threshold auto-escalation (the "Warning
         Escalation" card). Independent of the 3-strike escalation_steps ladder:
         fires when a member's warning count reaches warning_threshold within
         time_window_hours (or all-time when the window is blank). Anti-ban safe —
         admins/trusted are already filtered upstream and the notice auto-deletes.
+
+        Takes the `we` config dict + `group_id` by value (not the Group object):
+        this runs deferred via ensure_future, after the caller's DB session may
+        have expired on commit, so reading group.settings/group.id here would risk
+        a DetachedInstanceError — mirrors _apply_escalation's mod_settings arg.
         """
-        we = (group.settings or {}).get("warning_escalation", {})
+        we = we or {}
         if not we.get("enabled"):
             return
         action = we.get("action_type", "mute")
@@ -326,7 +333,7 @@ class ModerationSystem:
                 if window in (None, "", 0):
                     count = total_warnings
                 else:
-                    count = DatabaseManager.count_warnings_in_window(group.id, user_id, int(window))
+                    count = DatabaseManager.count_warnings_in_window(group_id, user_id, int(window))
         except Exception:
             count = total_warnings
         if count < threshold:
@@ -1211,10 +1218,12 @@ class ModerationSystem:
                     ))
 
                 # Owner-configured single-threshold escalation (Warning Escalation card).
-                if group.settings.get("warning_escalation", {}).get("enabled"):
+                # Capture the config + group id by value (coroutine runs deferred).
+                _we = group.settings.get("warning_escalation", {})
+                if _we.get("enabled"):
                     import asyncio as _aiowe
                     _aiowe.ensure_future(self._apply_warning_escalation(
-                        bot, chat_id, group, user_id, username, first_name, total, auto_delete_action
+                        bot, chat_id, group.id, dict(_we), user_id, username, first_name, total, auto_delete_action
                     ))
 
             elif action == "mute":
