@@ -92,6 +92,55 @@ def bridge_super_admin():
     return identity
 
 
+# Paid Telegizer tiers that unlock Guildizer Pro under the unified subscription
+# (one plan covers both products). Free/unknown → not pro.
+_PAID_TELEGIZER_TIERS = {"pro", "enterprise", "business"}
+
+
+def telegizer_token_is_pro():
+    """True if the request's Telegizer token belongs to a PAID Telegizer account.
+
+    Powers the unified subscription: a paid plan on telegizer.com (Pro/Enterprise)
+    unlocks Guildizer Pro too, so an owner never pays twice. The Guildizer frontend
+    already forwards the website token as X-Telegizer-Token on every request, so
+    this is a no-op for users who reached Guildizer via Discord login only.
+    Returns False when the bridge is unconfigured, no token is present, the user is
+    free, or the main API can't be reached (fail-closed — never wrongly grants).
+    """
+    if not Config.TELEGIZER_API_URL:
+        return False
+    from flask import has_request_context
+    if not has_request_context():
+        return False
+    token = (request.headers.get(_BRIDGE_TOKEN_HEADER) or "").strip()
+    if not token:
+        return False
+
+    key = "plan:" + hashlib.sha256(token.encode()).hexdigest()
+    now = time.time()
+    cached = _bridge_cache.get(key)
+    if cached and cached[0] > now:
+        return bool(cached[1])
+
+    is_pro = False
+    try:
+        resp = requests.get(
+            f"{Config.TELEGIZER_API_URL}/api/auth/me",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=6,
+        )
+        if resp.status_code == 200:
+            user = (resp.json() or {}).get("user") or {}
+            is_pro = (user.get("subscription_tier") or "free").lower() in _PAID_TELEGIZER_TIERS
+    except requests.RequestException as e:
+        log.warning("Unified-plan bridge: could not reach %s/api/auth/me (%s).",
+                    Config.TELEGIZER_API_URL, e)
+        is_pro = False
+
+    _bridge_cache[key] = (now + _BRIDGE_TTL, is_pro)
+    return is_pro
+
+
 def is_super(user_id) -> bool:
     """Env-configured super admins (bootstrap), the email bridge, or a DB-granted
     super role."""

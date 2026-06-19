@@ -44,7 +44,12 @@ def plan_of(db, guild_id: int) -> str:
         return "pro"
     # Account-level: Pro on any of the owner's servers unlocks them all.
     import billing
-    return "pro" if billing.account_is_pro(db, guild.owner_id) else "free"
+    if billing.account_is_pro(db, guild.owner_id):
+        return "pro"
+    # Unified subscription: a paid Telegizer plan also grants Guildizer Pro
+    # (no-op outside a web request / when no Telegizer token is forwarded).
+    from admin import telegizer_token_is_pro
+    return "pro" if telegizer_token_is_pro() else "free"
 
 
 def limit(db, guild_id: int, key: str) -> int:

@@ -88,6 +88,7 @@ TICKETS_DEFAULTS = {
     "panel_message": "Click the button below to open a private support ticket.",
     "button_label": "🎫 Open a ticket",
     "support_role_id": None,         # pinged into each ticket thread
+    "alert_channel_id": None,        # staff get a "new ticket" alert here (with jump link)
     "transcript_channel_id": None,   # closing posts the transcript here
     "welcome_message": "",           # extra first message inside a new ticket
     "max_open_per_member": 1,

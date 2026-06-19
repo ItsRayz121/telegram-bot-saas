@@ -61,18 +61,28 @@ export default function ContentTab({ guildId, channels = [] }) {
 export function DigestCard({ guildId, channels }) {
   const [cfg, setCfg] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);  // { ok, text }
 
   useEffect(() => {
     guildizerApi.get(`/api/guilds/${guildId}/digest`).then(({ data }) => setCfg(data)).catch(() => {});
   }, [guildId]);
 
   if (!cfg) return null;
-  const save = async (patch) => {
-    setBusy(true);
+  // Edit locally; persist explicitly with Save so failures surface (auto-save
+  // used to swallow errors and silently revert on the next load).
+  const set = (patch) => setCfg((c) => ({ ...c, ...patch }));
+  const save = async () => {
+    setBusy(true); setMsg(null);
     try {
-      const { data } = await guildizerApi.put(`/api/guilds/${guildId}/digest`, { ...cfg, ...patch });
+      const { data } = await guildizerApi.put(`/api/guilds/${guildId}/digest`, {
+        enabled: cfg.enabled, channel_id: cfg.channel_id, cadence: cfg.cadence,
+        weekday: cfg.weekday, hour_utc: cfg.hour_utc,
+      });
       setCfg(data);
-    } catch { /* leave as-is */ }
+      setMsg({ ok: true, text: 'Saved' });
+    } catch {
+      setMsg({ ok: false, text: 'Could not save the digest settings.' });
+    }
     setBusy(false);
   };
 
@@ -83,27 +93,31 @@ export function DigestCard({ guildId, channels }) {
       <Typography variant="caption" color="text.secondary" display="block" mb={1}>
         Posts an activity summary on your chosen cadence (AI-polished when an AI key is configured).
       </Typography>
-      <FormControlLabel control={<Switch checked={!!cfg.enabled} disabled={busy}
-        onChange={(e) => save({ enabled: e.target.checked })} />} label="Enable activity digest" />
+      <FormControlLabel control={<Switch checked={!!cfg.enabled}
+        onChange={(e) => set({ enabled: e.target.checked })} />} label="Enable activity digest" />
       <TextField select fullWidth size="small" margin="dense" label="Channel"
-        value={cfg.channel_id || ''} onChange={(e) => save({ channel_id: e.target.value || null })}>
+        value={cfg.channel_id || ''} onChange={(e) => set({ channel_id: e.target.value || null })}>
         {channels.map((c) => <MenuItem key={c.id} value={c.id}># {c.name}</MenuItem>)}
       </TextField>
       <TextField select fullWidth size="small" margin="dense" label="Cadence"
-        value={cadence} onChange={(e) => save({ cadence: e.target.value })}>
+        value={cadence} onChange={(e) => set({ cadence: e.target.value })}>
         <MenuItem value="daily">Daily</MenuItem>
         <MenuItem value="weekly">Weekly</MenuItem>
         <MenuItem value="monthly">Monthly (1st of the month)</MenuItem>
       </TextField>
       {cadence === 'weekly' && (
         <TextField select fullWidth size="small" margin="dense" label="Day of week"
-          value={cfg.weekday ?? 0} onChange={(e) => save({ weekday: Number(e.target.value) })}>
+          value={cfg.weekday ?? 0} onChange={(e) => set({ weekday: Number(e.target.value) })}>
           {WEEKDAYS.map((d, i) => <MenuItem key={d} value={i}>{d}</MenuItem>)}
         </TextField>
       )}
       <TextField type="number" fullWidth size="small" margin="dense" label="Post after (UTC hour)"
         value={cfg.hour_utc ?? 18} inputProps={{ min: 0, max: 23 }}
-        onChange={(e) => save({ hour_utc: Number(e.target.value) })} />
+        onChange={(e) => set({ hour_utc: Number(e.target.value) })} />
+      {msg && <Alert severity={msg.ok ? 'success' : 'error'} sx={{ mt: 1, py: 0 }}>{msg.text}</Alert>}
+      <Button variant="contained" size="small" sx={{ mt: 1 }} disabled={busy} onClick={save}>
+        {busy ? 'Saving…' : 'Save'}
+      </Button>
     </GuildizerCollapsibleCard>
   );
 }

@@ -135,6 +135,12 @@ def process_upload(db, guild_id: int, filename: str, file_type: str,
     """Extract → chunk → embed → persist. Returns (doc_dict, error)."""
     text = _extract_text(content_bytes, file_type)
     if not text.strip():
+        if file_type == "pdf":
+            return None, ("No selectable text found — this looks like a scanned or "
+                          "image-only PDF. Re-save it with real text (or paste the "
+                          "content as a text entry).")
+        if file_type == "docx":
+            return None, "No text found in this document — it may be empty or contain only images."
         return None, "Could not extract any text from this file."
     chunks = _chunk_text(text)
     if not chunks:

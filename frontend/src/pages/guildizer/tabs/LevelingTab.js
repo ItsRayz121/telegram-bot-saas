@@ -151,11 +151,29 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
               </IconButton>
             </Stack>
           ))}
-          <Button size="small" startIcon={<Add />}
-            disabled={rewards.length >= 20 || assignableRoles.length === 0}
-            onClick={() => setL2({ role_rewards: [...rewards, { level: (rewards[rewards.length - 1]?.level || 0) + 5, role_id: assignableRoles[0]?.id }] })}>
-            Add reward
-          </Button>
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+            <Button size="small" startIcon={<Add />}
+              disabled={rewards.length >= 20 || assignableRoles.length === 0}
+              onClick={() => setL2({ role_rewards: [...rewards, { level: (rewards[rewards.length - 1]?.level || 0) + 5, role_id: assignableRoles[0]?.id }] })}>
+              Add reward
+            </Button>
+            {rewards.length === 0 && (
+              <Button size="small" variant="outlined" disabled={assignableRoles.length === 0}
+                onClick={() => setL2({
+                  // Telegizer's standard tier ladder. Each row defaults to your first
+                  // role — pick the matching role per tier, then Save.
+                  role_rewards: [1, 5, 10, 20, 30, 40, 50, 60, 75, 100]
+                    .map((level) => ({ level, role_id: assignableRoles[0]?.id })),
+                })}>
+                Load 10-level starter template
+              </Button>
+            )}
+          </Stack>
+          {rewards.length === 0 && assignableRoles.length === 0 && (
+            <Typography variant="caption" color="text.secondary" display="block" mt={1}>
+              Create a few roles in your server first, then load the template and map each tier.
+            </Typography>
+          )}
         </GuildizerCollapsibleCard>
       </Grid>
 

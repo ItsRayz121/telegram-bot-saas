@@ -25,7 +25,13 @@ export function KnowledgeBaseSubtab({ guildId }) {
         <KnowledgeTab guildId={guildId} />
       </Grid>
       <Grid item xs={12}>
-        <KbRepliesCard guildId={guildId} />
+        <AutoKnowledgeRepliesCard guildId={guildId} />
+      </Grid>
+      <Grid item xs={12}>
+        <ReplyPersonalityCard guildId={guildId} />
+      </Grid>
+      <Grid item xs={12}>
+        <AutoRepliesAsKnowledgeCard guildId={guildId} />
       </Grid>
       <Grid item xs={12}>
         <HumanLikeCard guildId={guildId} />
@@ -195,7 +201,11 @@ function HumanLikeCard({ guildId }) {
   );
 }
 
-function KbRepliesCard({ guildId }) {
+// Automatic Knowledge Replies — the behaviour toggles (the "AI Reply
+// Personality" half now lives in its own card below, for Telegizer parity).
+// Both cards write the kb_replies section; the backend merges field-by-field
+// so they never clobber each other.
+function AutoKnowledgeRepliesCard({ guildId }) {
   const [cfg, setCfg] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -212,7 +222,14 @@ function KbRepliesCard({ guildId }) {
   async function save() {
     setSaving(true); setError(null);
     try {
-      const { data } = await guildizerApi.put(`/api/guilds/${guildId}/moderation`, { kb_replies: cfg });
+      const { data } = await guildizerApi.put(`/api/guilds/${guildId}/moderation`, {
+        kb_replies: {
+          enabled: cfg.enabled, mention_only: cfg.mention_only,
+          low_confidence_fallback: cfg.low_confidence_fallback,
+          min_words: cfg.min_words, reply_length: cfg.reply_length,
+          emoji_usage: cfg.emoji_usage, formality: cfg.formality,
+        },
+      });
       setCfg(data.kb_replies || cfg);
       setSaved(true);
     } catch { setError('Save failed.'); }
@@ -222,7 +239,8 @@ function KbRepliesCard({ guildId }) {
   if (!cfg) return null;
 
   return (
-    <GuildizerCollapsibleCard id="ai.ai_reply_behaviour" title="AI reply behaviour">
+    <GuildizerCollapsibleCard id="ai.auto_knowledge_replies" title="Automatic Knowledge Replies"
+      badge={<Chip label="AI" size="small" color="primary" variant="outlined" sx={{ height: 18, fontSize: '0.6rem' }} />}>
       <Typography variant="caption" color="text.secondary" display="block" mb={1}>
         Controls how the bot answers from the knowledge base. /ask always works; automatic
         replies follow these rules (one auto-reply per member per 30 seconds).
@@ -248,7 +266,49 @@ function KbRepliesCard({ guildId }) {
         value={cfg.formality || 'casual'} onChange={(e) => set({ formality: e.target.value })}>
         {['casual', 'neutral', 'formal'].map((v) => <MenuItem key={v} value={v}>{v}</MenuItem>)}
       </TextField>
-      <Typography variant="subtitle2" fontWeight={600} sx={{ mt: 1.5, mb: 0.5 }}>AI Reply Personality</Typography>
+      {error && <Alert severity="error" sx={{ mt: 1, py: 0 }}>{error}</Alert>}
+      <Button variant="contained" size="small" sx={{ mt: 1 }} onClick={save} disabled={saving}>
+        {saving ? 'Saving…' : 'Save changes'}
+      </Button>
+      <Snackbar open={saved} autoHideDuration={2500} onClose={() => setSaved(false)} message="Saved"
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }} />
+    </GuildizerCollapsibleCard>
+  );
+}
+
+// AI Reply Personality — its own card (Telegizer parity). Writes only the
+// personality + custom_instructions keys of kb_replies (merged server-side).
+function ReplyPersonalityCard({ guildId }) {
+  const [cfg, setCfg] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    guildizerApi.get(`/api/guilds/${guildId}/moderation`)
+      .then(({ data }) => setCfg(data.kb_replies || {}))
+      .catch(() => setError('Failed to load personality settings.'));
+  }, [guildId]);
+
+  const set = (patch) => setCfg((c) => ({ ...c, ...patch }));
+
+  async function save() {
+    setSaving(true); setError(null);
+    try {
+      const { data } = await guildizerApi.put(`/api/guilds/${guildId}/moderation`, {
+        kb_replies: { personality: cfg.personality, custom_instructions: cfg.custom_instructions || '' },
+      });
+      setCfg(data.kb_replies || cfg);
+      setSaved(true);
+    } catch { setError('Save failed.'); }
+    setSaving(false);
+  }
+
+  if (!cfg) return null;
+
+  return (
+    <GuildizerCollapsibleCard id="ai.reply_personality" title="🎭 AI Reply Personality"
+      badge={<Chip label="AI" size="small" color="primary" variant="outlined" sx={{ height: 18, fontSize: '0.6rem' }} />}>
       <Typography variant="caption" color="text.secondary" display="block" mb={1}>
         Shapes how the AI talks when answering from the knowledge base. Each uses a
         professionally engineered prompt designed to feel natural — not robotic.
@@ -283,6 +343,49 @@ function KbRepliesCard({ guildId }) {
       </Button>
       <Snackbar open={saved} autoHideDuration={2500} onClose={() => setSaved(false)} message="Saved"
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }} />
+    </GuildizerCollapsibleCard>
+  );
+}
+
+// Auto Replies as AI Knowledge — surfaces auto-reply rules flagged "use as AI
+// knowledge" so the /ask AI can answer from them too (Telegizer parity). The
+// per-rule toggle itself lives on Automation → Auto Reply.
+function AutoRepliesAsKnowledgeCard({ guildId }) {
+  const [rules, setRules] = useState(null);
+
+  useEffect(() => {
+    guildizerApi.get(`/api/guilds/${guildId}/auto-responses`)
+      .then(({ data }) => setRules(data.responses || [])).catch(() => setRules([]));
+  }, [guildId]);
+
+  const knowledgeRules = (rules || []).filter((r) => r.use_as_ai_knowledge);
+
+  return (
+    <GuildizerCollapsibleCard id="ai.auto_replies_as_knowledge" title="🔁 Auto Replies as AI Knowledge"
+      badge={<Chip label="AI" size="small" color="primary" variant="outlined" sx={{ height: 18, fontSize: '0.6rem' }} />}>
+      <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+        Auto-reply rules you flag as “AI knowledge” are also used by the /ask AI to answer
+        related questions — not just exact trigger matches. Toggle a rule’s “AI knowledge”
+        switch on <strong>Automation → Auto Reply</strong>.
+      </Typography>
+      {rules === null ? (
+        <Typography variant="body2" color="text.secondary">Loading…</Typography>
+      ) : knowledgeRules.length === 0 ? (
+        <Alert severity="info" icon={false} sx={{ fontSize: '0.8rem' }}>
+          No auto-reply rules are used as AI knowledge yet. Add rules on Automation → Auto Reply
+          and turn on their “AI knowledge” switch.
+        </Alert>
+      ) : (
+        <Box>
+          <Typography variant="body2" fontWeight={600} mb={0.5}>
+            {knowledgeRules.length} rule{knowledgeRules.length === 1 ? '' : 's'} feeding the AI:
+          </Typography>
+          {knowledgeRules.map((r) => (
+            <Chip key={r.id} size="small" variant="outlined" sx={{ mr: 0.5, mb: 0.5 }}
+              label={r.trigger?.length > 30 ? `${r.trigger.slice(0, 30)}…` : r.trigger} />
+          ))}
+        </Box>
+      )}
     </GuildizerCollapsibleCard>
   );
 }

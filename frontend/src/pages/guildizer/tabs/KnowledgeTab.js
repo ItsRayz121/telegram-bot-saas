@@ -55,6 +55,14 @@ export default function KnowledgeTab({ guildId }) {
       if (fileRef.current) fileRef.current.value = '';
       return;
     }
+    // Reject oversize files BEFORE uploading so we never stall at 99% on the
+    // server-side size cap.
+    const MAX_BYTES = 5 * 1024 * 1024;
+    if (file.size > MAX_BYTES) {
+      setError(`"${file.name}" is ${(file.size / 1024 / 1024).toFixed(1)} MB — files must be under 5 MB.`);
+      if (fileRef.current) fileRef.current.value = '';
+      return;
+    }
     setUploading(true); setProgress(0); setStage('Uploading…'); setError(null);
     try {
       const fd = new FormData();

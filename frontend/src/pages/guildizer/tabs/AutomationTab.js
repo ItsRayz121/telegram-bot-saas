@@ -182,36 +182,60 @@ export function WorkflowsCard({ guildId, workflows, channels, roles, onChanged }
 
 export function MirrorsCard({ guildId, mirrors, channels, onChanged }) {
   const [sourceId, setSourceId] = useState('');
-  const [destId, setDestId] = useState('');
+  const [destIds, setDestIds] = useState([]);     // this-server channels (one→many)
+  const [extraId, setExtraId] = useState('');      // optional cross-server channel ID
   const [busy, setBusy] = useState(false);
+
+  // Build the destination list: picked channels + an optional pasted ID for a
+  // channel on another server (kept so cross-server mirroring still works).
+  const targets = [
+    ...destIds.filter((id) => id !== sourceId),
+    ...(/^\d+$/.test(extraId.trim()) ? [extraId.trim()] : []),
+  ];
 
   async function add() {
     setBusy(true);
     try {
-      await guildizerApi.post(`/api/guilds/${guildId}/mirrors`, {
-        source_channel_id: sourceId, dest_channel_id: destId.trim(),
-      });
-      setSourceId(''); setDestId('');
+      // One mirror per destination — same source can fan out to many channels.
+      await Promise.all(targets.map((dest) =>
+        guildizerApi.post(`/api/guilds/${guildId}/mirrors`, {
+          source_channel_id: sourceId, dest_channel_id: dest,
+        })));
+      setSourceId(''); setDestIds([]); setExtraId('');
       await onChanged();
     } catch { /* surfaced on reload */ }
     setBusy(false);
   }
 
+  const nameOf = (id) => {
+    const c = channels.find((ch) => ch.id === id);
+    return c ? `# ${c.name}` : id;
+  };
+
   return (
     <GuildizerCollapsibleCard id="automation.channel_mirroring" title="Channel mirroring">
       <Typography variant="caption" color="text.secondary" display="block" mb={1}>
-        Reposts messages to another channel via webhook, keeping the author's name and avatar.
-        The destination can be in another server the bot is in (paste its channel ID).
+        Reposts messages to other channels via webhook, keeping the author's name and avatar.
+        Pick one source and one or more destinations on this server — or paste a channel ID to
+        mirror into another server the bot is in.
       </Typography>
       <TextField select fullWidth size="small" margin="dense" label="Source channel"
         value={sourceId} onChange={(e) => setSourceId(e.target.value)}>
         {channels.map((c) => <MenuItem key={c.id} value={c.id}># {c.name}</MenuItem>)}
       </TextField>
-      <TextField fullWidth size="small" margin="dense" label="Destination channel ID"
-        value={destId} onChange={(e) => setDestId(e.target.value)} />
+      <TextField select fullWidth size="small" margin="dense" label="Destination channels (one or more)"
+        value={destIds}
+        SelectProps={{ multiple: true, renderValue: (sel) => sel.map(nameOf).join(', ') }}
+        onChange={(e) => setDestIds(typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value)}>
+        {channels.filter((c) => c.id !== sourceId).map((c) => (
+          <MenuItem key={c.id} value={c.id}># {c.name}</MenuItem>
+        ))}
+      </TextField>
+      <TextField fullWidth size="small" margin="dense" label="Or a channel ID on another server (optional)"
+        value={extraId} onChange={(e) => setExtraId(e.target.value)} />
       <Button startIcon={<Add />} variant="contained" size="small" sx={{ mt: 1 }}
-        disabled={busy || !sourceId || !/^\d+$/.test(destId.trim())} onClick={add}>
-        Add mirror
+        disabled={busy || !sourceId || targets.length === 0} onClick={add}>
+        {targets.length > 1 ? `Add ${targets.length} mirrors` : 'Add mirror'}
       </Button>
       <List dense sx={{ mt: 1 }}>
         {mirrors.map((m) => (

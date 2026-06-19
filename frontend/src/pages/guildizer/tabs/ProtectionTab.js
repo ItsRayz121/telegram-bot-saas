@@ -238,8 +238,12 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
               <Divider sx={{ my: 2 }} />
               <Typography variant="subtitle2" fontWeight={600} mb={1}>⚡ Native AutoMod sync</Typography>
               <Typography variant="body2" color="text.secondary" mb={1}>
-                Mirror your blocked words into Discord's own AutoMod so they stay enforced even
-                while the bot is offline. Needs the Manage Server permission; syncs within a minute of saving.
+                Discord has its own built-in <strong>AutoMod</strong> that blocks messages at the
+                platform level — before anyone sees them, and <strong>even when Guildizer is offline
+                or rate-limited</strong>. This mirrors your custom blocked-words list (and optionally
+                discord.gg invite links) into that native filter, so your rules keep working as a
+                safety net. Guildizer still does the smarter AI moderation on top; this is belt-and-braces.
+                Needs the <strong>Manage Server</strong> permission; syncs within a minute of saving.
               </Typography>
               <FormControlLabel control={<Switch checked={!!am.native_sync?.enabled} onChange={(e) => setAm('native_sync', { enabled: e.target.checked })} />} label="Mirror the custom blocked words into Discord AutoMod" />
               <FormControlLabel control={<Switch checked={!!am.native_sync?.block_invites} onChange={(e) => setAm('native_sync', { block_invites: e.target.checked })} />} label="Also block discord.gg invite links natively" />
@@ -1004,18 +1008,18 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
         <Grid container spacing={2}>
           <Grid item xs={12}>
             <GuildizerCollapsibleCard id="gz.moderation.escalation_alerts" title="Escalation alerts">
-              <FormControlLabel control={<Switch checked={!!cfg.escalation?.enabled} onChange={(e) => setEsc({ enabled: e.target.checked })} />} label="Alert admins when members sound frustrated" />
-              <TextField size="small" margin="dense" fullWidth label="Trigger keywords"
-                placeholder="refund, scam, not working"
-                value={(cfg.escalation?.keywords || []).join(', ')}
-                onChange={(e) => setEsc({ keywords: e.target.value.split(',').map((k) => k.trim()).filter(Boolean) })}
-                helperText="Comma-separated. One alert per member per 10 minutes." />
+              <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+                Escalation pings your staff when the bot can't handle something on its own — a
+                low-confidence /ask answer, an unclear image, a failed automation, or an unknown
+                command. Pick where the alerts go, then choose which situations escalate.
+              </Typography>
               <TextField select size="small" margin="dense" fullWidth label="Alert channel"
                 value={cfg.escalation?.alert_channel_id || ''} onChange={(e) => setEsc({ alert_channel_id: e.target.value || null })}>
                 <MenuItem value="">- none -</MenuItem>
                 {textChannels.map((c) => <MenuItem key={c.id} value={c.id}># {c.name}</MenuItem>)}
               </TextField>
-              <Typography variant="subtitle2" fontWeight={700} mt={2}>Also escalate</Typography>
+
+              <Typography variant="subtitle2" fontWeight={700} mt={2}>Escalate when the bot can't handle it</Typography>
               {ESCALATION_TYPES.map(({ key, label }) => (
                 <FormControlLabel key={key} sx={{ display: 'flex' }} control={(
                   <Checkbox size="small" checked={(cfg.escalation?.types || []).includes(key)}
@@ -1026,6 +1030,20 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                     })} />
                 )} label={<Typography variant="body2">{label}</Typography>} />
               ))}
+
+              <Typography variant="subtitle2" fontWeight={700} mt={2}>Optional — frustration detection</Typography>
+              <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>
+                Separately, ping staff when a member's message contains certain words (e.g. they
+                sound upset). Leave off if you only want the bot-can't-handle-it alerts above.
+              </Typography>
+              <FormControlLabel control={<Switch checked={!!cfg.escalation?.enabled} onChange={(e) => setEsc({ enabled: e.target.checked })} />} label="Alert admins when members sound frustrated" />
+              {cfg.escalation?.enabled && (
+                <TextField size="small" margin="dense" fullWidth label="Trigger keywords"
+                  placeholder="refund, scam, not working"
+                  value={(cfg.escalation?.keywords || []).join(', ')}
+                  onChange={(e) => setEsc({ keywords: e.target.value.split(',').map((k) => k.trim()).filter(Boolean) })}
+                  helperText="Comma-separated. One alert per member per 10 minutes." />
+              )}
             </GuildizerCollapsibleCard>
           </Grid>
         </Grid>

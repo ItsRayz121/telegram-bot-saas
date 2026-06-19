@@ -47,7 +47,10 @@ def billing_status(guild_id: int):
         g.db.commit()
     # Account-level plan: Pro is an account entitlement — if the owner holds Pro
     # on any of their servers, this one is Pro too (no separate per-server plan).
-    account_pro = billing.account_is_pro(g.db, guild.owner_id)
+    # Unified subscription: a paid Telegizer plan (Pro/Enterprise) also grants
+    # Guildizer Pro, so an owner who pays on telegizer.com never pays again here.
+    from admin import telegizer_token_is_pro
+    account_pro = billing.account_is_pro(g.db, guild.owner_id) or telegizer_token_is_pro()
     via_other = account_pro and not guild.is_pro
     return jsonify(
         plan="pro" if (guild.is_pro or account_pro) else "free",

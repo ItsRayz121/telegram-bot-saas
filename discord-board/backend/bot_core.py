@@ -165,6 +165,32 @@ _HELP_KEYWORDS = (
 def _has_help_keyword(text: str) -> bool:
     low = (text or "").lower()
     return any(k in low for k in _HELP_KEYWORDS)
+
+
+# A "#channel-name" reference NOT already part of a <#id> mention. The negative
+# lookbehind on "<" leaves real mentions alone.
+_CHANNEL_TOKEN = re.compile(r"(?<!<)#([A-Za-z0-9][\w-]{0,99})")
+
+
+def linkify_channels(guild, text: str) -> str:
+    """Turn plain "#channel-name" references in bot replies into clickable
+    Discord <#channel_id> mentions, so AI/auto-reply answers link straight to the
+    channel (e.g. "report it in #get-help"). Unmatched names are left as-is."""
+    if not guild or not text or "#" not in text:
+        return text
+    by_name: dict[str, int] = {}
+    for ch in (getattr(guild, "channels", None) or []):
+        nm = getattr(ch, "name", None)
+        if nm:
+            by_name.setdefault(nm.lower(), ch.id)
+    if not by_name:
+        return text
+
+    def _sub(m):
+        cid = by_name.get(m.group(1).lower())
+        return f"<#{cid}>" if cid else m.group(0)
+
+    return _CHANNEL_TOKEN.sub(_sub, text)
 _social_reply_last: dict[tuple[int, int], float] = {}    # social appreciation replies
 
 _RATE_MAP_MAX_AGE = 3600  # entries older than this are dead weight
@@ -963,7 +989,7 @@ class CoreMixin:
         if result is None or not result.text:
             return False
         await asyncio.to_thread(self._log_ai, message.guild.id, message.author.id, result)
-        await governor.safe(message.reply(result.text[:1950], mention_author=False),
+        await governor.safe(message.reply(linkify_channels(message.guild, result.text)[:1950], mention_author=False),
                             what="kb auto-reply")
         return True
 
@@ -974,7 +1000,7 @@ class CoreMixin:
         hit = content_runtime.match_response(message.content or "", responses)
         if hit is None or not content_runtime.cooldown_ok(message.guild.id, hit):
             return False
-        await governor.safe(message.reply(hit["response"], mention_author=False),
+        await governor.safe(message.reply(linkify_channels(message.guild, hit["response"]), mention_author=False),
                             what="auto-response")
         return True
 
@@ -2417,4 +2443,5 @@ def attach_builtin_commands(client) -> None:
             await interaction.followup.send("Sorry, I couldn't answer that right now.", ephemeral=True)
             return
         await asyncio.to_thread(CoreMixin._log_ai, interaction.guild_id, interaction.user.id, result)
-        await interaction.followup.send(result.text[:1950], ephemeral=True)
+        await interaction.followup.send(
+            linkify_channels(interaction.guild, result.text)[:1950], ephemeral=True)

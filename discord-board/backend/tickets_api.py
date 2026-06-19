@@ -34,6 +34,7 @@ def _public(cfg: dict) -> dict:
         "panel_message": cfg.get("panel_message") or "",
         "button_label": cfg.get("button_label") or "",
         "support_role_id": cfg.get("support_role_id"),
+        "alert_channel_id": cfg.get("alert_channel_id"),
         "transcript_channel_id": cfg.get("transcript_channel_id"),
         "welcome_message": cfg.get("welcome_message") or "",
         "max_open_per_member": int(cfg.get("max_open_per_member") or 1),
@@ -80,6 +81,8 @@ def update_tickets(guild_id: int):
         cfg["panel_channel_id"] = _id_or_none(body["panel_channel_id"])
     if "support_role_id" in body:
         cfg["support_role_id"] = _id_or_none(body["support_role_id"])
+    if "alert_channel_id" in body:
+        cfg["alert_channel_id"] = _id_or_none(body["alert_channel_id"])
     if "transcript_channel_id" in body:
         cfg["transcript_channel_id"] = _id_or_none(body["transcript_channel_id"])
     if "panel_title" in body:

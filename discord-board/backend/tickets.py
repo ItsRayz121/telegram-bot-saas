@@ -149,6 +149,34 @@ def forget_thread(guild_id: int, thread_id: int) -> None:
     close_entry(guild_id, thread_id)
 
 
+def mark_claimed(guild_id: int, thread_id: int, claimer_id: int, claimer_name: str) -> bool:
+    """Record who claimed a ticket. Returns False if already claimed or unknown."""
+    db = SessionLocal()
+    try:
+        row = db.get(GuildSettings, guild_id)
+        if row is None:
+            return False
+        cfg = merged(row.extra)
+        open_map = dict(cfg.get("open") or {})
+        entry = open_map.get(str(thread_id))
+        if entry is None or entry.get("claimed_by"):
+            return False
+        entry = {**entry, "claimed_by": str(claimer_id), "claimed_by_name": claimer_name[:100]}
+        open_map[str(thread_id)] = entry
+        extra = dict(row.extra or {})
+        extra["tickets"] = {**cfg, "open": open_map}
+        row.extra = extra
+        db.commit()
+        return True
+    except Exception:  # noqa: BLE001
+        db.rollback()
+        log.exception("mark_claimed failed for guild %s", guild_id)
+        return False
+    finally:
+        db.close()
+        SessionLocal.remove()
+
+
 def count_open_for(cfg: dict, user_id: int) -> int:
     return sum(1 for t in (cfg.get("open") or {}).values()
                if str(t.get("user_id")) == str(user_id))
@@ -276,14 +304,73 @@ class TicketOpenButton(discord.ui.DynamicItem[discord.ui.Button],
         lines.append("A staff member will be with you shortly. "
                      "Close the ticket when you're done.")
         view = discord.ui.View(timeout=None)
+        view.add_item(TicketClaimButton(guild.id))
         view.add_item(TicketCloseButton(guild.id))
         # Mentioning the support role pulls its members into the private thread.
         await governor.safe(thread.send(
             "\n".join(lines)[:1900], view=view,
             allowed_mentions=discord.AllowedMentions(users=True, roles=True),
         ), what="ticket opening message")
+
+        # Staff alert: a separate "new ticket" notice in the configured channel so
+        # admins see it even when they're not watching the thread/role ping.
+        alert_id = cfg.get("alert_channel_id")
+        alert_ch = guild.get_channel(int(alert_id)) if alert_id and str(alert_id).isdigit() else None
+        if alert_ch is not None and hasattr(alert_ch, "send"):
+            embed = discord.Embed(
+                title=f"🎫 New ticket #{number:04d}",
+                description=(f"{member.mention} opened a support ticket.\n"
+                            f"Jump in: {thread.mention}"),
+                color=ACCENT,
+            )
+            await governor.safe(alert_ch.send(
+                content=support_ping or None, embed=embed,
+                allowed_mentions=discord.AllowedMentions(roles=True),
+            ), what="ticket staff alert")
+
         await interaction.followup.send(
             f"✅ Your ticket is open: {thread.mention}", ephemeral=True)
+
+
+class TicketClaimButton(discord.ui.DynamicItem[discord.ui.Button],
+                        template=r"gz:tclaim:(?P<gid>\d+)"):
+    """Lets support staff claim a ticket so everyone sees who's handling it."""
+    def __init__(self, gid: int) -> None:
+        self.gid = gid
+        super().__init__(discord.ui.Button(
+            label="Claim", style=discord.ButtonStyle.success, emoji="🙋",
+            custom_id=f"gz:tclaim:{gid}",
+        ))
+
+    @classmethod
+    async def from_custom_id(cls, interaction, item, match):
+        return cls(int(match["gid"]))
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        guild = interaction.guild
+        member = interaction.user
+        thread = interaction.channel
+        if guild is None or not isinstance(member, discord.Member) \
+                or not isinstance(thread, discord.Thread):
+            await interaction.response.send_message("Use this inside a ticket.", ephemeral=True)
+            return
+        cfg = await asyncio.to_thread(snapshot, guild.id) or {}
+        if not _is_support(member, cfg):
+            await interaction.response.send_message(
+                "Only support staff can claim tickets.", ephemeral=True)
+            return
+        entry = (cfg.get("open") or {}).get(str(thread.id))
+        if entry and entry.get("claimed_by"):
+            await interaction.response.send_message(
+                f"Already claimed by {entry.get('claimed_by_name') or 'a staff member'}.",
+                ephemeral=True)
+            return
+        ok = await asyncio.to_thread(mark_claimed, guild.id, thread.id, member.id, str(member))
+        if not ok:
+            await interaction.response.send_message(
+                "Couldn't claim this ticket — it may already be claimed or closed.", ephemeral=True)
+            return
+        await interaction.response.send_message(f"🙋 {member.mention} has claimed this ticket.")
 
 
 class TicketCloseButton(discord.ui.DynamicItem[discord.ui.Button],

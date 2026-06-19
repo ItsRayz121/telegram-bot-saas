@@ -327,6 +327,13 @@ export function TicketsSubtab({ guildId, channels = [], roles = [] }) {
             <MenuItem value="">— none —</MenuItem>
             {assignableRoles.map((r) => <MenuItem key={r.id} value={r.id}>{r.name}</MenuItem>)}
           </TextField>
+          <TextField select fullWidth size="small" margin="dense"
+            label="Staff alert channel (new-ticket notification)"
+            value={cfg.alert_channel_id || ''} onChange={(e) => set({ alert_channel_id: e.target.value || null })}
+            helperText="Posts a “New ticket #N opened by …” alert with a jump link, so staff see it even when not watching the thread.">
+            <MenuItem value="">— no separate alert —</MenuItem>
+            {textChannels.map((c) => <MenuItem key={c.id} value={c.id}># {c.name}</MenuItem>)}
+          </TextField>
           <TextField select fullWidth size="small" margin="dense" label="Transcript channel"
             value={cfg.transcript_channel_id || ''} onChange={(e) => set({ transcript_channel_id: e.target.value || null })}>
             <MenuItem value="">— don't keep transcripts —</MenuItem>

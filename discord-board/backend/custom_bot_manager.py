@@ -54,7 +54,7 @@ class CustomBotClient(bot_core.CoreMixin, discord.Client):
         self.add_dynamic_items(verification.VerifyButton,
                                bot_policy.TrustBotButton, bot_policy.KickBotButton)
         self.add_dynamic_items(self_roles.SelfRoleButton)
-        self.add_dynamic_items(tickets.TicketOpenButton, tickets.TicketCloseButton)
+        self.add_dynamic_items(tickets.TicketOpenButton, tickets.TicketClaimButton, tickets.TicketCloseButton)
         self.resync_commands.start()
         self.post_campaigns.start()
         self.deliver_reminders.start()
