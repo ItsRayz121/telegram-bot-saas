@@ -167,9 +167,10 @@ def _has_help_keyword(text: str) -> bool:
     return any(k in low for k in _HELP_KEYWORDS)
 
 
-# A "#channel-name" reference NOT already part of a <#id> mention. The negative
-# lookbehind on "<" leaves real mentions alone.
-_CHANNEL_TOKEN = re.compile(r"(?<!<)#([A-Za-z0-9][\w-]{0,99})")
+# A "#channel-name" reference at a word boundary (e.g. "see #rules"). The
+# lookbehind excludes a preceding "<" (real <#id> mentions) and any word char,
+# so URL fragments like "example.com/page#section" are left untouched.
+_CHANNEL_TOKEN = re.compile(r"(?<![\w<])#([A-Za-z0-9][\w-]{0,99})")
 
 
 def linkify_channels(guild, text: str) -> str:
