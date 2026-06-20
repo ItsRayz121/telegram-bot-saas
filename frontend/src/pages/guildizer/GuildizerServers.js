@@ -8,7 +8,7 @@ import {
   InputAdornment,
 } from '@mui/material';
 import {
-  Forum, Add, OpenInNew, AdminPanelSettings, SmartToy, Redeem,
+  Forum, Add, OpenInNew, AdminPanelSettings, SmartToy, Redeem, CardGiftcard,
   CheckCircle, Settings, Refresh, BarChart, LinkOff, Security, HelpOutline,
   ExpandMore, ExpandLess, Groups, ArrowBack, Shield, Lock, Search, Close,
   Delete, Code,
@@ -158,6 +158,9 @@ export default function GuildizerServers() {
               Admin
             </Button>
           )}
+          <Button size="small" variant="outlined" startIcon={<CardGiftcard />} onClick={() => navigate('/guildizer/referrals')}>
+            Invite Friends
+          </Button>
           <Button size="small" variant="outlined" startIcon={<Redeem />} onClick={() => setRedeemOpen(true)}>
             Redeem code
           </Button>

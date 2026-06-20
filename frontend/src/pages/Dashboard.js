@@ -11,7 +11,7 @@ import {
 import useMediaQuery from '@mui/material/useMediaQuery';
 import {
   Add, Delete, Settings, BarChart, SmartToy, AccountCircle,
-  PowerSettingsNew, Upgrade, CheckCircle, Close, ContentCopy,
+  PowerSettingsNew, Upgrade, CheckCircle, Close,
   ArrowForward, CreditCard, People, Home, AttachMoney,
   Search, ManageAccounts,
   EmojiEvents, ExpandMore, Groups, Telegram, OpenInNew,
@@ -21,6 +21,7 @@ import { track } from '../services/analytics';
 import Divider from '@mui/material/Divider';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import TelegizerLogo from '../components/TelegizerLogo';
+import ReferralLinks from '../components/ReferralLinks';
 import NotificationBell from '../components/NotificationBell';
 import PushNudge from '../components/PushNudge';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -335,7 +336,6 @@ const REFERRAL_MILESTONES = [
 ];
 
 function InviteCard() {
-  const [copied, setCopied] = useState(false);
   const [stats, setStats] = useState(null);
 
   const botUsername = (process.env.REACT_APP_TELEGRAM_BOT_USERNAME || 'telegizer_bot').replace(/^@/, '');
@@ -343,20 +343,12 @@ function InviteCard() {
   // Falls back to web invite page once stats load.
   const refCode = stats?.referral_code;
   const tgLink  = refCode ? `https://t.me/${botUsername}?start=ref_${refCode}` : '';
-  const webLink = refCode ? `${window.location.origin}/invite/${refCode}` : '';
+  const webLink = refCode ? `${window.location.origin}/r/${refCode}` : '';
   const inviteLink = tgLink || webLink;
 
   useEffect(() => {
     referralsApi.getStats().then((r) => setStats(r.data)).catch(() => {});
   }, []);
-
-  const handleCopy = () => {
-    if (!inviteLink) return;
-    navigator.clipboard.writeText(inviteLink).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  };
 
   const handleTelegramShare = () => {
     const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(webLink || inviteLink)}&text=${encodeURIComponent('Manage your Telegram groups with Telegizer — free!')}`;
@@ -397,22 +389,10 @@ function InviteCard() {
           Invite 3 → get 7 days Pro · Invite 10 → get 1 month Pro. Rewards apply automatically.
         </Typography>
 
-        {/* Telegram-first referral link */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1.5, bgcolor: 'background.default', borderRadius: 2, border: '1px solid', borderColor: 'divider', mb: 1.5 }}>
-          <Telegram sx={{ fontSize: 16, color: '#0088cc', flexShrink: 0 }} />
-          <Typography variant="caption" color="text.secondary" sx={{ flexGrow: 1, fontFamily: 'monospace', wordBreak: 'break-all' }}>
-            {inviteLink || 'Loading…'}
-          </Typography>
-          <IconButton size="small" onClick={handleCopy} color={copied ? 'success' : 'default'} disabled={!inviteLink}>
-            {copied ? <CheckCircle fontSize="small" /> : <ContentCopy fontSize="small" />}
-          </IconButton>
-        </Box>
+        {/* Both links credit the same referrer */}
+        <ReferralLinks refCode={refCode} botUsername={botUsername} primary="telegram" sx={{ mb: 1.5 }} />
 
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-          <Button size="small" variant="outlined" startIcon={<ContentCopy fontSize="small" />}
-            onClick={handleCopy} disabled={!inviteLink}>
-            {copied ? 'Copied!' : 'Copy Link'}
-          </Button>
           <Button size="small" variant="contained" startIcon={<Telegram fontSize="small" />}
             onClick={handleTelegramShare} disabled={!inviteLink}
             sx={{ bgcolor: '#0088cc', '&:hover': { bgcolor: '#006699' } }}>
@@ -420,9 +400,6 @@ function InviteCard() {
           </Button>
         </Box>
 
-        {copied && (
-          <Typography variant="caption" color="success.main" mt={0.75} display="block">Link copied!</Typography>
-        )}
         {total > 0 && (
           <Typography variant="caption" color="text.disabled" display="block" mt={1}>
             {total} successful referral{total !== 1 ? 's' : ''} so far

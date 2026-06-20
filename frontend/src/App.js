@@ -87,6 +87,7 @@ import GuildizerManageServers from './pages/guildizer/GuildizerManageServers';
 import GuildizerServerDetail from './pages/guildizer/GuildizerServerDetail';
 import GuildizerBots from './pages/guildizer/GuildizerBots';
 import GuildizerNotifications from './pages/guildizer/GuildizerNotifications';
+import GuildizerReferrals from './pages/guildizer/GuildizerReferrals';
 import GuildizerAdminLayout from './layouts/GuildizerAdminLayout';
 import GuildizerAdminPanel from './pages/guildizer/admin/GuildizerAdminPanel';
 import GuildizerAdminUserDetail from './pages/guildizer/admin/GuildizerAdminUserDetail';
@@ -267,6 +268,8 @@ export default function App() {
             <Route path="/status" element={<Status />} />
             <Route path="/join" element={<TelegramAware><JoinReferral /></TelegramAware>} />
             <Route path="/invite/:code" element={<TelegramAware><InviteLanding /></TelegramAware>} />
+            {/* Short website referral link (shared everywhere as the "Website link") */}
+            <Route path="/r/:code" element={<TelegramAware><InviteLanding /></TelegramAware>} />
             <Route path="/team/join/:token" element={<TeamInvitePage />} />
 
             {/* ── Auth (no sidebar) ─────────────────────────────────────────── */}
@@ -311,6 +314,7 @@ export default function App() {
             <Route path="/guildizer"                    element={<AppRoute><GuildizerServers /></AppRoute>} />
             <Route path="/guildizer/bots"               element={<AppRoute><GuildizerBots /></AppRoute>} />
             <Route path="/guildizer/notifications"      element={<AppRoute><GuildizerNotifications /></AppRoute>} />
+            <Route path="/guildizer/referrals"          element={<AppRoute><GuildizerReferrals /></AppRoute>} />
             <Route path="/guildizer/servers"            element={<AppRoute><GuildizerManageServers /></AppRoute>} />
             <Route path="/guildizer/servers/:guildId"   element={<AppRoute><GuildizerServerDetail /></AppRoute>} />
             {/* Guildizer admin console — dedicated full-screen shell (nested) */}

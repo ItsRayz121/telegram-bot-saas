@@ -17,6 +17,7 @@ import { toast } from 'react-toastify';
 import { auth, totp as totpApi, billing, userSettings, telegramAccount, googleCalendar as calApi, referrals as referralsApi, team as teamApi } from '../services/api';
 import { track } from '../services/analytics';
 import TimezoneSelect from '../components/TimezoneSelect';
+import ReferralLinks from '../components/ReferralLinks';
 
 function safeParseUser() {
   try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; }
@@ -872,7 +873,6 @@ export default function Settings() {
   const [exportingData, setExportingData] = useState(false);
 
   const [refStats, setRefStats] = useState(null);
-  const [refCopied, setRefCopied] = useState(false);
 
   const fetchUser = useCallback(async () => {
     try {
@@ -980,17 +980,6 @@ export default function Settings() {
 
   const botUsername = (process.env.REACT_APP_TELEGRAM_BOT_USERNAME || 'telegizer_bot').replace(/^@/, '');
   const refCode = refStats?.referral_code;
-  const refLink = refCode
-    ? `https://t.me/${botUsername}?start=ref_${refCode}`
-    : '';
-
-  const handleRefCopy = () => {
-    if (!refLink) return;
-    navigator.clipboard.writeText(refLink).then(() => {
-      setRefCopied(true);
-      setTimeout(() => setRefCopied(false), 2000);
-    });
-  };
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
@@ -1071,42 +1060,8 @@ export default function Settings() {
           <Typography variant="body2" color="text.secondary" mb={2}>
             Share your link. When friends sign up and activate, you earn free Pro time automatically.
           </Typography>
-          {refLink ? (
-            <Box
-              sx={{
-                display: 'flex', alignItems: 'center', gap: 1,
-                bgcolor: 'action.hover', borderRadius: 1.5, px: 1.5, py: 1, mb: 2,
-                border: '1px solid', borderColor: 'divider',
-                overflow: 'hidden',
-              }}
-            >
-              <Typography
-                variant="body2"
-                sx={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'monospace', fontSize: '0.78rem' }}
-              >
-                {refLink}
-              </Typography>
-              <Tooltip title={refCopied ? 'Copied!' : 'Copy link'}>
-                <IconButton size="small" onClick={handleRefCopy}>
-                  {refCopied ? <CheckCircle fontSize="small" color="success" /> : <ContentCopy fontSize="small" />}
-                </IconButton>
-              </Tooltip>
-            </Box>
-          ) : (
-            <Box sx={{ bgcolor: 'action.hover', borderRadius: 1.5, px: 1.5, py: 1, mb: 2, border: '1px solid', borderColor: 'divider' }}>
-              <Typography variant="body2" color="text.disabled" sx={{ fontFamily: 'monospace', fontSize: '0.78rem' }}>Loading your referral link…</Typography>
-            </Box>
-          )}
+          <ReferralLinks refCode={refCode} botUsername={botUsername} primary="telegram" sx={{ mb: 2 }} />
           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-            <Button
-              variant="outlined"
-              size="small"
-              startIcon={<ContentCopy fontSize="small" />}
-              onClick={handleRefCopy}
-              disabled={!refLink}
-            >
-              {refCopied ? 'Copied!' : 'Copy Link'}
-            </Button>
             <Button
               variant="text"
               size="small"

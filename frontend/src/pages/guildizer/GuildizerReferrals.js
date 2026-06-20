@@ -1,20 +1,23 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
-  Box, Typography, Card, CardContent, Button, Chip,
-  LinearProgress, Table, TableBody, TableCell, TableRow,
-  Skeleton, Avatar,
+  Box, Container, Typography, Card, CardContent, Button, Chip,
+  LinearProgress, Table, TableBody, TableCell, TableRow, Skeleton, Avatar,
 } from '@mui/material';
 import {
-  CheckCircle, EmojiEvents, People, CardGiftcard,
-  Share, Telegram,
+  CardGiftcard, ArrowBack, EmojiEvents, People, CheckCircle,
 } from '@mui/icons-material';
-import { referrals as referralsApi } from '../services/api';
-import { track } from '../services/analytics';
-import ReferralLinks from '../components/ReferralLinks';
+import { referrals as referralsApi } from '../../services/api';
+import ReferralLinks from '../../components/ReferralLinks';
 
+// Same account-level referral system as Telegizer — Guildizer shares the unified
+// account/plan, so the referral code, milestones and rewards are identical.
+// Whether a friend uses the Website link or the Telegram link, the SAME referrer
+// is credited (both carry the same code). Here the Website link is the primary
+// share surface since Discord communities share on the web, not Telegram.
 const MILESTONES = [
-  { count: 3,  reward: '7 days Pro',    icon: '🎁', color: '#2563eb' },
-  { count: 10, reward: '1 month Pro',   icon: '🚀', color: '#7c3aed' },
+  { count: 3,  reward: '7 days Pro',  icon: '🎁', color: '#5865F2' },
+  { count: 10, reward: '1 month Pro', icon: '🚀', color: '#9d6cf7' },
 ];
 
 function MilestoneCard({ milestone, total }) {
@@ -26,9 +29,7 @@ function MilestoneCard({ milestone, total }) {
         border: '1px solid',
         borderColor: reached ? 'success.main' : 'divider',
         bgcolor: reached ? 'rgba(34,197,94,0.05)' : 'background.paper',
-        borderRadius: 2,
-        flex: 1,
-        minWidth: 0,
+        borderRadius: 2, flex: 1, minWidth: 0,
       }}
     >
       <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
@@ -46,11 +47,8 @@ function MilestoneCard({ milestone, total }) {
           variant="determinate"
           value={progress}
           sx={{
-            height: 6, borderRadius: 3,
-            bgcolor: 'rgba(255,255,255,0.08)',
-            '& .MuiLinearProgress-bar': {
-              bgcolor: reached ? 'success.main' : milestone.color,
-            },
+            height: 6, borderRadius: 3, bgcolor: 'rgba(255,255,255,0.08)',
+            '& .MuiLinearProgress-bar': { bgcolor: reached ? 'success.main' : milestone.color },
           }}
         />
         <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
@@ -75,24 +73,15 @@ function StepBadge({ n, label, sub }) {
   );
 }
 
-export default function Referrals() {
+export default function GuildizerReferrals() {
+  const navigate = useNavigate();
   const [stats, setStats] = useState(null);
   const [leaderboard, setLeaderboard] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const botUsername = (process.env.REACT_APP_TELEGRAM_BOT_USERNAME || 'telegizer_bot').replace(/^@/, '');
-  const refCode  = stats?.referral_code;
-  // Both links carry the same code → same referrer credited either way.
-  const tgLink   = refCode ? `https://t.me/${botUsername}?start=ref_${refCode}` : '';
-  const webLink  = refCode ? `${window.location.origin}/r/${refCode}` : '';
-  const inviteLink = tgLink || webLink;
-
-  const handleTelegramShare = () => {
-    // Share the web invite URL via Telegram (so it works for non-Telegram recipients too)
-    const url = `https://t.me/share/url?url=${encodeURIComponent(webLink || inviteLink)}&text=${encodeURIComponent('Join me on Telegizer — the easiest way to manage your Telegram community!')}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
-    track('referral_shared', { method: 'telegram' });
-  };
+  const refCode = stats?.referral_code;
+  const total = stats?.total_referrals ?? 0;
 
   useEffect(() => {
     Promise.all([
@@ -101,64 +90,32 @@ export default function Referrals() {
     ]).finally(() => setLoading(false));
   }, []);
 
-  const handleShare = () => {
-    if (navigator.share) {
-      navigator.share({ title: 'Join Telegizer', text: 'Manage your Telegram groups with Telegizer!', url: webLink || inviteLink }).catch(() => {});
-    } else if (inviteLink) {
-      navigator.clipboard.writeText(webLink || inviteLink).catch(() => {});
-    }
-    track('referral_shared', { method: 'native' });
-  };
-
-  const total = stats?.total_referrals ?? 0;
-
   return (
-    <Box sx={{ maxWidth: 800, mx: 'auto', px: { xs: 2, md: 3 }, py: 3 }}>
+    <Container maxWidth="md" sx={{ py: { xs: 2, sm: 3 } }}>
+      <Button startIcon={<ArrowBack />} size="small" onClick={() => navigate('/guildizer')} sx={{ mb: 2 }}>
+        Back to Guildizer
+      </Button>
 
-      {/* ── Hero ── */}
-      <Box sx={{ mb: 3 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
-          <CardGiftcard sx={{ color: 'primary.main', fontSize: 28 }} />
-          <Typography variant="h5" fontWeight={700}>Invite Friends — Earn Free Pro</Typography>
-        </Box>
-        <Typography variant="body2" color="text.secondary">
-          Share your link. When friends sign up and activate, you earn free Pro time automatically.
-        </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
+        <CardGiftcard color="primary" />
+        <Typography variant="h5" fontWeight={800}>Invite Friends — Earn Free Pro</Typography>
       </Box>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+        Share your link. When friends sign up and activate, you earn free Pro time automatically —
+        it unlocks Pro across Telegizer, Echo and Guildizer on the same account.
+      </Typography>
 
-      {/* ── Invite link box ── */}
-      <Card sx={{ mb: 3, border: '1px solid', borderColor: 'primary.main', borderRadius: 2, bgcolor: 'rgba(37,99,235,0.05)' }}>
-        <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-          <ReferralLinks refCode={refCode} botUsername={botUsername} primary="telegram" />
+      {/* Share links */}
+      <Card sx={{ mb: 3, border: '1px solid', borderColor: 'primary.main', borderRadius: 2, bgcolor: 'rgba(88,101,242,0.05)' }}>
+        <CardContent sx={{ p: { xs: 2, sm: 2.5 }, '&:last-child': { pb: { xs: 2, sm: 2.5 } } }}>
+          <ReferralLinks refCode={refCode} botUsername={botUsername} primary="web" />
           <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 1 }}>
             Either link credits you — friends are tracked to the same referral code.
           </Typography>
-          <Box sx={{ display: 'flex', gap: 1, mt: 1.5, flexWrap: 'wrap' }}>
-            <Button
-              variant="outlined"
-              size="small"
-              startIcon={<Share />}
-              onClick={handleShare}
-              disabled={!inviteLink}
-              sx={{ borderRadius: 1.5 }}
-            >
-              Share
-            </Button>
-            <Button
-              variant="contained"
-              size="small"
-              startIcon={<Telegram />}
-              onClick={handleTelegramShare}
-              disabled={!inviteLink}
-              sx={{ borderRadius: 1.5, bgcolor: '#0088cc', '&:hover': { bgcolor: '#007ab8' } }}
-            >
-              Share on Telegram
-            </Button>
-          </Box>
         </CardContent>
       </Card>
 
-      {/* ── Milestones ── */}
+      {/* Milestones */}
       <Typography variant="subtitle2" fontWeight={700} mb={1.5}>Your Progress</Typography>
       {loading ? (
         <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
@@ -182,7 +139,7 @@ export default function Referrals() {
         />
       )}
 
-      {/* ── Leaderboard ── */}
+      {/* Leaderboard */}
       {!loading && leaderboard && leaderboard.leaderboard?.length > 0 && (
         <Card sx={{ mb: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
           <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
@@ -197,10 +154,10 @@ export default function Referrals() {
                 {leaderboard.leaderboard.map((entry) => (
                   <TableRow
                     key={entry.rank}
-                    sx={{ bgcolor: entry.is_current_user ? 'rgba(33,150,243,0.07)' : 'transparent' }}
+                    sx={{ bgcolor: entry.is_current_user ? 'rgba(88,101,242,0.08)' : 'transparent' }}
                   >
                     <TableCell sx={{ width: 36, pr: 0, fontWeight: 700, color: entry.rank <= 3 ? 'warning.main' : 'text.secondary', fontSize: '0.8rem' }}>
-                      {entry.rank <= 3 ? ['🥇','🥈','🥉'][entry.rank - 1] : `#${entry.rank}`}
+                      {entry.rank <= 3 ? ['🥇', '🥈', '🥉'][entry.rank - 1] : `#${entry.rank}`}
                     </TableCell>
                     <TableCell sx={{ fontWeight: entry.is_current_user ? 700 : 400, fontSize: '0.85rem' }}>
                       {entry.name}
@@ -213,34 +170,21 @@ export default function Referrals() {
                 ))}
               </TableBody>
             </Table>
-            {leaderboard.current_user_rank === null && leaderboard.current_user_count === 0 && (
-              <Typography variant="caption" color="text.disabled" display="block" mt={1.5} textAlign="center">
-                Refer friends to appear on the leaderboard
-              </Typography>
-            )}
-            {leaderboard.current_user_rank === null && leaderboard.current_user_count > 0 && (
-              <Box sx={{ mt: 1.5, pt: 1.5, borderTop: '1px dashed', borderColor: 'divider' }}>
-                <Typography variant="caption" color="text.secondary">
-                  Your rank this month: unranked · {leaderboard.current_user_count} referral{leaderboard.current_user_count !== 1 ? 's' : ''}
-                </Typography>
-              </Box>
-            )}
           </CardContent>
         </Card>
       )}
 
-      {/* ── How it works ── */}
+      {/* How it works */}
       <Card sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
         <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
           <Typography variant="subtitle2" fontWeight={700} mb={2}>How it works</Typography>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <StepBadge n="1" label="Copy your link" sub="Share it anywhere — Telegram, Twitter, email, anywhere." />
-            <StepBadge n="2" label="Friend signs up" sub="They register using your unique referral link." />
+            <StepBadge n="1" label="Copy your link" sub="Share the Website or Telegram link anywhere — Discord, Twitter, email." />
+            <StepBadge n="2" label="Friend signs up" sub="They register using your unique referral link. Both links credit you." />
             <StepBadge n="3" label="You earn automatically" sub="Hit 3 referrals → 7 days Pro. Hit 10 → 1 month Pro. No action needed." />
           </Box>
         </CardContent>
       </Card>
-
-    </Box>
+    </Container>
   );
 }
