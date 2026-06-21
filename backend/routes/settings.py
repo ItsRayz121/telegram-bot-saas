@@ -707,9 +707,15 @@ def moderate_custom_member(bot_id, group_id, user_id):
                     permissions=ChatPermissions(can_send_messages=False), until_date=until,
                 )
             elif action == "unmute":
+                # Restore the group's DEFAULT member permissions (proper unmute),
+                # falling back to a permissive set if they can't be read.
+                try:
+                    default_perms = (await _bot.get_chat(chat_id)).permissions
+                except Exception:
+                    default_perms = None
                 await _bot.restrict_chat_member(
                     chat_id=chat_id, user_id=int(user_id),
-                    permissions=ChatPermissions(
+                    permissions=default_perms or ChatPermissions(
                         can_send_messages=True, can_send_audios=True, can_send_documents=True,
                         can_send_photos=True, can_send_videos=True, can_send_video_notes=True,
                         can_send_voice_notes=True, can_send_polls=True,

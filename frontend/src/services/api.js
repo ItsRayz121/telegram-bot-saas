@@ -176,7 +176,7 @@ export const bots = {
 // Normalise official-group mod-log event_type → action_type used by the Audit Log UI
 const _modTypeMap = (t) => ({
   mod_warn: 'warn', mod_warning: 'warn',
-  mod_ban: 'ban', mod_kick: 'kick',
+  mod_ban: 'ban', mod_unban: 'unban', mod_kick: 'kick',
   mod_mute: 'mute', mod_unmute: 'unmute',
   mod_tempban: 'tempban', mod_tempmute: 'tempmute',
   mod_purge: 'purge', automod_action: 'purge',

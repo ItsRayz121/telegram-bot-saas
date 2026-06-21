@@ -31,7 +31,7 @@ const CAT_LABEL = {
   verification: 'Verification', bot_policy: 'Bot policy', escalation: 'Escalation',
 };
 const CAT_COLOR = { nsfw: 'error', csam: 'error', raid: 'warning', manual_lockdown: 'warning', lockdown_join: 'warning', invite: 'info', link: 'info' };
-const ACTION_COLOR = { ban: 'error', kick: 'warning', timeout: 'warning', warned: 'warning', deleted: 'default', restricted: 'info', none: 'default' };
+const ACTION_COLOR = { ban: 'error', kick: 'warning', timeout: 'warning', warned: 'warning', deleted: 'default', restricted: 'info', none: 'default', untimeout: 'success', unban: 'success' };
 const AI_CATEGORIES = new Set(['smart_mod', 'smart_promo', 'image_ai', 'image_nsfw', 'ask', 'ai', 'escalation']);
 const PERIODS = [
   { value: 'all', label: 'All Time' }, { value: '30d', label: '30 Days' },
