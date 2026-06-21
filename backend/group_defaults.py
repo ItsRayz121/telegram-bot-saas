@@ -396,11 +396,13 @@ _DEFAULTS: dict = {
     },
 
     # ── Auto-clean service messages ───────────────────────────────────────────
-    # Disabled by default — admins should consciously opt in to silent joins/leaves.
+    # On by default — silently removes join/leave/pin service-message clutter so a
+    # fresh install feels tidy. Only deletes Telegram's own service notices (never
+    # member content), so there is no anti-ban risk. Owners can opt out per item.
     "auto_clean": {
-        "enabled": False,
-        "delete_joins": False,
-        "delete_leaves": False,
+        "enabled": True,
+        "delete_joins": True,
+        "delete_leaves": True,
         "delete_photo_changes": False,
         "delete_pinned_messages": True,  # pin notifications are almost always noise
         "delete_forum_events": False,
@@ -410,8 +412,10 @@ _DEFAULTS: dict = {
     },
 
     # ── Reports ───────────────────────────────────────────────────────────────
+    # On by default — members can flag bad content with /report and admins are
+    # notified privately. Silent, admin-only, no public posting.
     "reports": {
-        "enabled": False,
+        "enabled": True,
         "notify_admins": "all",
         "selected_admin_ids": [],
     },
@@ -507,8 +511,11 @@ _DEFAULTS: dict = {
     },
 
     # ── Admin alerts ──────────────────────────────────────────────────────────
+    # On by default but scoped to reports only — owners get a private heads-up
+    # when a member files a /report. Noisier triggers (every ban / spam burst)
+    # stay off so the bot never floods admin DMs (anti-ban: throttled, opt-in).
     "admin_alerts": {
-        "enabled": False,
+        "enabled": True,
         "on_ban": False,
         "on_raid_start": False,
         "on_report": True,    # pre-wired: fires when master switch enabled

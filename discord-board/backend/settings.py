@@ -148,10 +148,17 @@ def get_or_create(db, guild_id: int) -> GuildSettings:
     """Return the guild's settings row, creating a defaulted one if missing."""
     row = db.get(GuildSettings, guild_id)
     if row is None:
+        # New server → pre-enable the safe, free engagement basics so the bot is
+        # useful the moment it's added. Welcome still only posts once a channel is
+        # chosen (bot_core gates on welcome_channel_id), and leveling just accrues
+        # XP + announces level-ups. Existing servers are never touched — they take
+        # the _backfill path, which only fills NULL columns.
         row = GuildSettings(
             guild_id=guild_id,
+            welcome_enabled=True,
             welcome_message=DEFAULT_WELCOME,
             leave_message=DEFAULT_LEAVE,
+            levels_enabled=True,
             autorole_ids=[],
             extra={},
         )
