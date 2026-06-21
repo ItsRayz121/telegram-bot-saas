@@ -130,9 +130,16 @@ function PlatformAiCard({ guildId }) {
     <GuildizerCollapsibleCard id="ai.platform_ai" title="🔑 AI Provider"
       badge={s && s !== false ? <Chip size="small" color={s.provider_connected ? 'success' : 'default'}
         label={s.provider_connected ? 'Platform AI Active' : 'Not connected'} /> : null}>
-      <Typography variant="body2" color="text.secondary">
-        Guildizer runs on a managed platform AI key — no API key needed per server.
-        {s && s !== false && <> Current provider: <strong>{s.provider}</strong>{s.provider_connected ? ' (connected).' : ' (not configured on this instance).'}</>}
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+        Guildizer includes managed <strong>Platform AI</strong> for this whole server — there is
+        no API key to add, no billing to set up and nothing to configure. It powers AI moderation,
+        knowledge-base auto-replies, AI welcome messages and the reply personalities out of the box,
+        included in your plan.
+        {s && s !== false && <> Current provider: <strong>{s.provider}</strong>{s.provider_connected ? ' — connected and active.' : ' — not configured on this instance.'}</>}
+      </Typography>
+      <Typography variant="caption" color="text.disabled" display="block">
+        The platform key is managed fleet-wide and applies to every server automatically. Per-server
+        provider overrides aren't needed on Guildizer — if your plan changes, AI access updates here.
       </Typography>
     </GuildizerCollapsibleCard>
   );

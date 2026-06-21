@@ -658,7 +658,7 @@ def moderate_custom_member(bot_id, group_id, user_id):
 
         data = request.get_json() or {}
         action = (data.get("action") or "").strip().lower()
-        if action not in {"warn", "mute", "kick", "ban", "tempban"}:
+        if action not in {"warn", "mute", "kick", "ban", "tempban", "unmute", "unban"}:
             return jsonify({"error": f"Invalid action '{action}'"}), 400
         reason = (data.get("reason") or "").strip() or "Action taken from dashboard"
         try:
@@ -706,6 +706,18 @@ def moderate_custom_member(bot_id, group_id, user_id):
                     chat_id=chat_id, user_id=int(user_id),
                     permissions=ChatPermissions(can_send_messages=False), until_date=until,
                 )
+            elif action == "unmute":
+                await _bot.restrict_chat_member(
+                    chat_id=chat_id, user_id=int(user_id),
+                    permissions=ChatPermissions(
+                        can_send_messages=True, can_send_audios=True, can_send_documents=True,
+                        can_send_photos=True, can_send_videos=True, can_send_video_notes=True,
+                        can_send_voice_notes=True, can_send_polls=True,
+                        can_send_other_messages=True, can_add_web_page_previews=True,
+                    ),
+                )
+            elif action == "unban":
+                await _bot.unban_chat_member(chat_id=chat_id, user_id=int(user_id), only_if_banned=True)
 
         # Prefer the in-process runtime; on web instances the bot runs in a
         # separate worker, so fall back to a standalone Bot using this custom
@@ -727,8 +739,13 @@ def moderate_custom_member(bot_id, group_id, user_id):
         if action == "mute" and member:
             member.is_muted = True
             member.mute_until = datetime.utcnow() + timedelta(minutes=(duration_minutes or 60))
+        if action == "unmute" and member:
+            member.is_muted = False
+            member.mute_until = None
         if action in ("ban", "tempban") and member and hasattr(member, "is_banned"):
             member.is_banned = (action == "ban")
+        if action == "unban" and member and hasattr(member, "is_banned"):
+            member.is_banned = False
         _audit(action)
         db.session.commit()
         return jsonify({"ok": True, "action": action})

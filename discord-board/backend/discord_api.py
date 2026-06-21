@@ -187,6 +187,17 @@ def timeout_member(guild_id: int, user_id: int, until_iso: str | None,
     resp.raise_for_status()
 
 
+def unban_member(guild_id: int, user_id: int, reason: str | None = None) -> None:
+    """Lift a ban. Treats an already-unbanned user (404) as success."""
+    resp = requests.delete(
+        f"{API_BASE}/guilds/{guild_id}/bans/{user_id}",
+        headers=_mod_headers(reason), timeout=_TIMEOUT,
+    )
+    if resp.status_code == 404:
+        return
+    resp.raise_for_status()
+
+
 # --- White-label custom bot validation (arbitrary bot token) -------------------
 # Application flags that report whether the privileged-intent toggles are ON in
 # the app owner's Developer Portal. The *_LIMITED variants are what unverified

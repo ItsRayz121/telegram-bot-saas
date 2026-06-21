@@ -478,8 +478,9 @@ def delete_warning(guild_id: int, warning_id: int):
 # --- Dashboard moderation actions (Telegizer-parity audit/warnings row menu) ---
 # warn / mute (timeout) / kick / tempban / ban, performed via Discord REST so the
 # web can act on a member without a gateway. Each is logged to the audit feed.
-_MOD_ACTIONS = {"warn", "mute", "kick", "tempban", "ban"}
-_EVENT_ACTION = {"warn": "warned", "mute": "timeout", "kick": "kick", "tempban": "ban", "ban": "ban"}
+_MOD_ACTIONS = {"warn", "mute", "kick", "tempban", "ban", "unmute", "unban"}
+_EVENT_ACTION = {"warn": "warned", "mute": "timeout", "kick": "kick", "tempban": "ban", "ban": "ban",
+                 "unmute": "untimeout", "unban": "unban"}
 
 
 @protection_bp.post("/api/guilds/<int:guild_id>/moderation/action")
@@ -523,6 +524,10 @@ def moderation_action(guild_id: int):
         elif action == "tempban":
             discord_api.ban_member(guild_id, user_id, reason)
             moderation_runtime.schedule_unban(g.db, guild_id, user_id, username, minutes * 60, reason)
+        elif action == "unmute":
+            discord_api.timeout_member(guild_id, user_id, None, reason)
+        elif action == "unban":
+            discord_api.unban_member(guild_id, user_id, reason)
     except Exception:
         return jsonify(error="discord_action_failed"), 502
 

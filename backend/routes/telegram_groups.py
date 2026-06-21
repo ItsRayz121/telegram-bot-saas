@@ -558,7 +558,7 @@ def moderate_official_member(group_id, user_id):
 
     data = request.get_json() or {}
     action = (data.get("action") or "").strip().lower()
-    if action not in {"warn", "mute", "kick", "ban", "tempban"}:
+    if action not in {"warn", "mute", "kick", "ban", "tempban", "unmute", "unban"}:
         return jsonify({"error": f"Invalid action '{action}'"}), 400
     reason = (data.get("reason") or "").strip() or "Action taken from dashboard"
     try:
@@ -627,6 +627,19 @@ def moderate_official_member(group_id, user_id):
                 permissions=ChatPermissions(can_send_messages=False),
                 until_date=until,
             )
+        elif action == "unmute":
+            # Lift the restriction by restoring a full, permissive permission set.
+            await _bot.restrict_chat_member(
+                chat_id=chat_id, user_id=int(user_id),
+                permissions=ChatPermissions(
+                    can_send_messages=True, can_send_audios=True, can_send_documents=True,
+                    can_send_photos=True, can_send_videos=True, can_send_video_notes=True,
+                    can_send_voice_notes=True, can_send_polls=True,
+                    can_send_other_messages=True, can_add_web_page_previews=True,
+                ),
+            )
+        elif action == "unban":
+            await _bot.unban_chat_member(chat_id=chat_id, user_id=int(user_id), only_if_banned=True)
 
     import asyncio
     from ..official_bot import get_official_bot_loop
@@ -644,7 +657,8 @@ def moderate_official_member(group_id, user_id):
         return jsonify({"error": f"Telegram refused the action: {exc}"}), 502
 
     event_type = {"ban": "mod_ban", "tempban": "mod_tempban",
-                  "kick": "mod_kick", "mute": "mod_mute"}[action]
+                  "kick": "mod_kick", "mute": "mod_mute",
+                  "unmute": "mod_unmute", "unban": "mod_unban"}[action]
     if action == "tempban":
         meta["duration_minutes"] = duration_minutes or 1440
     if action == "mute":
@@ -652,6 +666,11 @@ def moderate_official_member(group_id, user_id):
         if member:
             member.is_muted = True
             member.mute_until = datetime.utcnow() + timedelta(minutes=(duration_minutes or 60))
+    if action == "unmute" and member:
+        member.is_muted = False
+        member.mute_until = None
+    if action == "unban" and member and hasattr(member, "is_banned"):
+        member.is_banned = False
 
     db.session.add(BotEvent(
         telegram_group_id=str(group_id), event_type=event_type,
@@ -678,7 +697,7 @@ def get_mod_log(group_id):
 
     MOD_EVENT_TYPES = (
         "mod_warning", "mod_ban", "mod_kick", "mod_mute", "mod_unmute",
-        "mod_tempban", "mod_purge", "automod_action",
+        "mod_unban", "mod_tempban", "mod_purge", "automod_action",
     )
     page = request.args.get("page", 1, type=int)
     per_page = min(request.args.get("per_page", 50, type=int), 100)

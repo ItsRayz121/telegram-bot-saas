@@ -6,13 +6,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Box, Card, CardContent, Typography, Chip, CircularProgress, Alert,
-  IconButton, TextField, InputAdornment, Stack, Button, Menu, MenuItem,
+  IconButton, TextField, InputAdornment, Stack, Button, Menu, MenuItem, Divider,
   Table, TableHead, TableBody, TableRow, TableCell, Collapse, ToggleButtonGroup,
   ToggleButton, Tooltip,
 } from '@mui/material';
 import {
   Delete, Search, Download, Gavel,
-  WarningAmber, VolumeOff, PersonRemove, Block,
+  WarningAmber, VolumeOff, VolumeUp, LockOpen, PersonRemove, Block,
 } from '@mui/icons-material';
 import { useSearchParams } from 'react-router-dom';
 import guildizerApi from '../../../services/guildizerApi';
@@ -49,6 +49,9 @@ const MOD_ACTIONS = [
   { key: 'kick', label: 'Kick (remove)', icon: <PersonRemove fontSize="small" />, confirm: true },
   { key: 'tempban', label: 'Temp-ban 24h', icon: <Gavel fontSize="small" />, minutes: 1440, confirm: true },
   { key: 'ban', label: 'Ban permanently', icon: <Block fontSize="small" />, confirm: true, danger: true },
+  // Reverse actions — lift a timeout/ban applied by the bot or an admin.
+  { key: 'unmute', label: 'Unmute (remove timeout)', icon: <VolumeUp fontSize="small" color="success" />, confirm: false, restore: true },
+  { key: 'unban', label: 'Unban', icon: <LockOpen fontSize="small" color="success" />, confirm: true, restore: true },
 ];
 
 export function ModActionMenu({ guildId, userId, username, reason, onActed }) {
@@ -80,10 +83,13 @@ export function ModActionMenu({ guildId, userId, username, reason, onActed }) {
         <span><IconButton size="small" disabled={busy} onClick={(e) => setAnchor(e.currentTarget)}><Gavel fontSize="small" /></IconButton></span>
       </Tooltip>
       <Menu anchorEl={anchor} open={!!anchor} onClose={() => setAnchor(null)}>
-        {MOD_ACTIONS.map((a) => (
-          <MenuItem key={a.key} onClick={() => run(a)} sx={a.danger ? { color: 'error.main' } : undefined}>
-            <Box sx={{ mr: 1, display: 'flex' }}>{a.icon}</Box>{a.label}
-          </MenuItem>
+        {MOD_ACTIONS.map((a, i) => (
+          <React.Fragment key={a.key}>
+            {a.restore && !MOD_ACTIONS[i - 1]?.restore && <Divider />}
+            <MenuItem onClick={() => run(a)} sx={a.danger ? { color: 'error.main' } : (a.restore ? { color: 'success.main' } : undefined)}>
+              <Box sx={{ mr: 1, display: 'flex' }}>{a.icon}</Box>{a.label}
+            </MenuItem>
+          </React.Fragment>
         ))}
       </Menu>
     </>

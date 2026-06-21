@@ -13,7 +13,7 @@ import {
   ArrowBack, Save, Add, Delete, CheckCircle, Schedule,
   Send, Assessment, People, SmartToy, Refresh,
   Warning as WarningIcon, EmojiEvents, FileDownload,
-  Search, Block, Gavel, VolumeOff, PersonRemove,
+  Search, Block, Gavel, VolumeOff, VolumeUp, LockOpen, PersonRemove,
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -94,7 +94,7 @@ function ModerationActions({ botId, groupId, userId, username, onDone }) {
   const [anchor, setAnchor] = useState(null);
   const [busy, setBusy] = useState(false);
   const close = () => setAnchor(null);
-  const LABELS = { warn: 'Warn', mute: 'Mute (1h)', kick: 'Kick', tempban: 'Temp-ban (24h)', ban: 'Ban permanently' };
+  const LABELS = { warn: 'Warn', mute: 'Mute (1h)', kick: 'Kick', tempban: 'Temp-ban (24h)', ban: 'Ban permanently', unmute: 'Unmute', unban: 'Unban' };
 
   const run = async (action, opts = {}) => {
     close();
@@ -144,6 +144,16 @@ function ModerationActions({ botId, groupId, userId, username, onDone }) {
         <MenuItem onClick={() => run('ban')}>
           <ListItemIcon><Block fontSize="small" color="error" /></ListItemIcon>
           <ListItemText>Ban permanently</ListItemText>
+        </MenuItem>
+        <Divider />
+        {/* Reverse actions — lift a mute/ban applied by the bot or an admin. */}
+        <MenuItem onClick={() => run('unmute')}>
+          <ListItemIcon><VolumeUp fontSize="small" color="success" /></ListItemIcon>
+          <ListItemText>Unmute (lift restriction)</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={() => run('unban')}>
+          <ListItemIcon><LockOpen fontSize="small" color="success" /></ListItemIcon>
+          <ListItemText>Unban</ListItemText>
         </MenuItem>
       </Menu>
     </>

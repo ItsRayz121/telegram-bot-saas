@@ -100,59 +100,7 @@ export default function CampaignsTab({ guildId, channels = [] }) {
         </>
       )}
     </GuildizerCollapsibleCard>
-    <ReferralsCard guildId={guildId} />
     </>
-  );
-}
-
-function ReferralsCard({ guildId }) {
-  const [data, setData] = useState(null);
-  const [xp, setXp] = useState(0);
-
-  async function load() {
-    try {
-      const { data: d } = await guildizerApi.get(`/api/guilds/${guildId}/referrals`);
-      setData(d); setXp(d.xp_per_referral);
-    } catch { /* quietly empty */ }
-  }
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [guildId]);
-
-  if (!data) return null;
-  return (
-    <GuildizerCollapsibleCard
-      id="gz.engagement.referrals"
-      title="Referrals"
-      action={(
-        <Stack direction="row" spacing={1} alignItems="center">
-          <TextField type="number" size="small" label="XP per referral" value={xp}
-            inputProps={{ min: 0, max: 1000 }} onChange={(e) => setXp(Number(e.target.value))} sx={{ width: 140 }} />
-          <Button size="small" variant="outlined"
-            onClick={() => guildizerApi.put(`/api/guilds/${guildId}/referrals/settings`, { xp_per_referral: xp }).then(load)}>
-            Save
-          </Button>
-        </Stack>
-      )}
-    >
-      <Typography variant="caption" color="text.secondary" display="block" mb={1}>
-        Members get a personal tracked invite with /invitelink. Joins are attributed automatically.
-      </Typography>
-      {data.leaderboard.length === 0
-        ? <Typography variant="body2" color="text.secondary">No attributed joins yet.</Typography>
-        : (
-          <List dense>
-            {data.leaderboard.map((r, i) => (
-              <ListItem key={r.inviter_id} disableGutters
-                secondaryAction={<Chip size="small" label={`${r.joins} joins`} />}>
-                <Typography variant="body2" fontWeight={700} color="primary.main" sx={{ width: 34 }}>#{i + 1}</Typography>
-                <ListItemText primary={r.inviter_name || r.inviter_id} />
-              </ListItem>
-            ))}
-          </List>
-        )}
-    </GuildizerCollapsibleCard>
   );
 }
 
