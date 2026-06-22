@@ -1421,32 +1421,21 @@ def hub_run_priority_extraction():
     return
 
 
+# Deferred to the in-process scheduler (app._run_hub_reminder_delivery /
+# _run_hub_digests) for the same reason as hub extraction above: calling
+# create_app() here boots the bot fleet inside the worker and hangs the task.
 @celery.task(name="backend.scheduler.hub_deliver_due_reminders")
 def hub_deliver_due_reminders():
-    """Assistant Hub: deliver reminders due within next 5 minutes (every 5 min)."""
-    try:
-        from .assistant.hub_digest import deliver_due_reminders
-        from .app import create_app
-        flask_app = create_app()
-        sent = deliver_due_reminders(flask_app)
-        if sent:
-            logger.info("hub_deliver_due_reminders: sent=%d", sent)
-    except Exception as exc:
-        logger.error("hub_deliver_due_reminders error: %s", exc)
+    """Assistant Hub: reminder delivery — deferred to the in-process scheduler."""
+    logger.info("[celery:hub_deliver_due_reminders] deferred to in-process scheduler")
+    return
 
 
 @celery.task(name="backend.scheduler.hub_send_daily_digests")
 def hub_send_daily_digests():
-    """Assistant Hub: send daily digests to users whose configured time has passed (every 10 min)."""
-    try:
-        from .assistant.hub_digest import deliver_all_due_digests
-        from .app import create_app
-        flask_app = create_app()
-        sent = deliver_all_due_digests(flask_app)
-        if sent:
-            logger.info("hub_send_daily_digests: sent=%d digests", sent)
-    except Exception as exc:
-        logger.error("hub_send_daily_digests error: %s", exc)
+    """Assistant Hub: daily digests — deferred to the in-process scheduler."""
+    logger.info("[celery:hub_send_daily_digests] deferred to in-process scheduler")
+    return
 
 
 def _get_bot_token_for_chat(chat_id, app):

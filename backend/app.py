@@ -2429,6 +2429,24 @@ def _run_hub_batch_extraction(app):
         _scheduler_log.info("[SCHEDULER] hub batch extraction processed %d group(s)", len(pairs))
 
 
+def _run_hub_reminder_delivery(app):
+    """Assistant Hub: deliver reminders due soon (in-process). Sends via
+    Config.TELEGRAM_BOT_TOKEN + safe_send_message, so no bot loop is needed —
+    see _run_hub_priority_extraction for why this lives in the web process."""
+    from .assistant.hub_digest import deliver_due_reminders
+    sent = deliver_due_reminders(app)
+    if sent:
+        _scheduler_log.info("[SCHEDULER] hub reminder delivery sent=%d", sent)
+
+
+def _run_hub_digests(app):
+    """Assistant Hub: send daily digests whose configured time has passed (in-process)."""
+    from .assistant.hub_digest import deliver_all_due_digests
+    sent = deliver_all_due_digests(app)
+    if sent:
+        _scheduler_log.info("[SCHEDULER] hub digests sent=%d", sent)
+
+
 def _scheduler_loop(app):
     import time
     _last_expiry_check = [0]
@@ -2441,6 +2459,8 @@ def _scheduler_loop(app):
     _last_member_sync = [0]
     _last_hub_priority = [0]
     _last_hub_batch = [0]
+    _last_hub_reminders = [0]
+    _last_hub_digests = [0]
     time.sleep(15)  # Wait for bots to fully start
     while True:
         try:
@@ -2502,6 +2522,13 @@ def _scheduler_loop(app):
             if now_ts - _last_hub_batch[0] > 1800:
                 _last_hub_batch[0] = now_ts
                 _run_task_with_timeout(_run_hub_batch_extraction, app, timeout=150, label="_run_hub_batch_extraction")
+            # Hub reminder delivery every 5 min; daily digests checked every 10 min.
+            if now_ts - _last_hub_reminders[0] > 300:
+                _last_hub_reminders[0] = now_ts
+                _run_task_with_timeout(_run_hub_reminder_delivery, app, timeout=60, label="_run_hub_reminder_delivery")
+            if now_ts - _last_hub_digests[0] > 600:
+                _last_hub_digests[0] = now_ts
+                _run_task_with_timeout(_run_hub_digests, app, timeout=90, label="_run_hub_digests")
         except Exception as exc:
             _scheduler_log.error(f"Scheduler loop error: {exc}")
         time.sleep(60)

@@ -32,6 +32,18 @@ function fmtDate(iso) {
   } catch { return iso; }
 }
 
+// Compact "x ago" relative time for the extraction-health banner.
+function timeAgo(iso) {
+  if (!iso) return 'never';
+  try {
+    const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+    if (s < 60) return 'just now';
+    const m = Math.floor(s / 60); if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60); if (h < 24) return `${h}h ago`;
+    return `${Math.floor(h / 24)}d ago`;
+  } catch { return iso; }
+}
+
 function fmtDateTime(iso) {
   if (!iso) return null;
   try {
@@ -161,6 +173,52 @@ function TabComingSoon({ tab }) {
 }
 
 // ── Overview ───────────────────────────────────────────────────────────────────
+// Extraction-health banner — shows whether Echo is actually reading + extracting
+// (green Active / red Stalled / grey Idle), so a silent failure is visible instead
+// of looking like an empty Hub. Official bot only; auto-refreshes every 60s.
+function HubHealthBanner() {
+  const [h, setH] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(() => {
+    hub.getExtractionHealth()
+      .then(r => setH(r.data))
+      .catch(() => setH(null))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 60000);
+    return () => clearInterval(t);
+  }, [load]);
+
+  if (loading && !h) return null;
+  if (!h) return null;
+
+  const cfg = ({
+    active:  { color: 'success', label: '🟢 Active',  help: "Echo is reading your groups and extracting items." },
+    stalled: { color: 'error',   label: '🔴 Stalled', help: "Messages are buffered but extraction hasn't run recently — items may be delayed." },
+    idle:    { color: 'default', label: '⚪ Idle',     help: 'No new messages to process right now.' },
+  })[h.status] || { color: 'default', label: 'Unknown', help: '' };
+
+  const items = h.items_last_24h?.total ?? 0;
+
+  return (
+    <Card variant="outlined" sx={{ mb: 2, ...(h.status === 'stalled' ? { borderColor: 'error.main' } : {}) }}>
+      <CardContent sx={{ p: '12px !important', display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+        <Chip size="small" color={cfg.color} label={cfg.label} />
+        <Typography variant="body2" color="text.secondary" sx={{ flex: 1, minWidth: 180 }}>
+          {cfg.help}
+        </Typography>
+        <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+          Last run {timeAgo(h.last_extraction_at)} · {h.buffered_messages} buffered · {items} item{items !== 1 ? 's' : ''}/24h
+        </Typography>
+      </CardContent>
+    </Card>
+  );
+}
+
 function HubOverview({ botData, groups, botId }) {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
@@ -191,6 +249,9 @@ function HubOverview({ botData, groups, botId }) {
 
   return (
     <Box sx={{ maxWidth: 700 }}>
+      {/* Extraction health — official bot only (endpoint resolves the official bot). */}
+      {!botId && <HubHealthBanner />}
+
       {/* Group filter */}
       {groups.length > 1 && (
         <FormControl size="small" sx={{ mb: 2, minWidth: 180 }}>

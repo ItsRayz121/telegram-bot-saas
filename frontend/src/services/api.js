@@ -1043,6 +1043,7 @@ export const hub = {
   deleteAll:            ()           => api.delete('/api/hub/delete-all', { headers: { 'X-Hub-Confirm': 'DELETE' } }),
   updateRetention:      (ttl)        => api.patch('/api/hub/bots/official/settings/retention', { buffer_ttl_hours: ttl }),
   getOverview:          (groupId, botId)    => api.get('/api/hub/overview', { params: { ...(groupId ? { group_id: groupId } : {}), ...(botId ? { bot_id: botId } : {}) } }),
+  getExtractionHealth:  ()           => api.get('/api/hub/bots/official/health'),
   listInbox:            (params)     => api.get('/api/hub/inbox', { params }),
   confirmInboxItem:     (id)         => api.patch(`/api/hub/inbox/${id}/confirm`),
   dismissInboxItem:     (id)         => api.patch(`/api/hub/inbox/${id}/dismiss`),

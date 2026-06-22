@@ -477,6 +477,88 @@ def official_bot_stats():
     })
 
 
+@hub_bp.route("/bots/official/health", methods=["GET"])
+@jwt_required()
+def official_extraction_health():
+    """Extraction-health indicator for the Echo Overview.
+
+    Answers "is Echo actually working?" without exposing raw messages: how many
+    messages are currently buffered, when extraction last ran, and how many items
+    it produced in the last 24h. Powers a green (Active) / red (Stalled) badge so a
+    silent extraction failure is visible instead of looking like an empty Hub.
+    """
+    from datetime import timedelta
+    from ..assistant.hub_models import HubExtractionBatch
+    user = _current_user()
+    bot = _get_or_create_official_bot(user.id)
+    now = datetime.utcnow()
+
+    # Most recent extraction batch for this bot.
+    last_batch = (
+        HubExtractionBatch.query
+        .filter_by(bot_id=bot.id, user_id=user.id)
+        .order_by(HubExtractionBatch.started_at.desc())
+        .first()
+    )
+    last_at = (last_batch.completed_at or last_batch.started_at) if last_batch else None
+    last_status = last_batch.status if last_batch else None
+
+    # Items created in the last 24h across all of this bot's groups.
+    since = now - timedelta(hours=24)
+
+    def _count(model):
+        return model.query.filter(
+            model.bot_id == bot.id,
+            model.user_id == user.id,
+            model.created_at >= since,
+        ).count()
+
+    items_24h = {
+        "tasks": _count(HubTask),
+        "reminders": _count(HubReminder),
+        "meetings": _count(HubMeeting),
+        "decisions": _count(HubDecision),
+        "notes": _count(HubNote),
+    }
+    items_24h["total"] = sum(items_24h.values())
+
+    # Messages currently buffered in Redis for this bot's groups (ephemeral; counts only).
+    buffered_messages = 0
+    buffered_groups = 0
+    try:
+        import os
+        import redis as _redis
+        r = _redis.from_url(
+            os.environ.get("REDIS_URL", "redis://localhost:6379/0"), decode_responses=True
+        )
+        for k in r.keys(f"assistant:buffer:{bot.id}:*"):
+            n = r.llen(k)
+            if n > 0:
+                buffered_groups += 1
+                buffered_messages += n
+    except Exception as exc:
+        _log.debug("extraction health: redis read failed: %s", exc)
+
+    # Verdict. 35-min freshness window covers the 30-min standard batch cycle.
+    fresh = bool(last_at and (now - last_at).total_seconds() < 35 * 60)
+    if fresh:
+        status = "active"
+    elif buffered_messages > 0:
+        status = "stalled"   # messages are waiting but extraction hasn't run — the alarm
+    else:
+        status = "idle"
+
+    return jsonify({
+        "status": status,                        # active | stalled | idle
+        "healthy": status != "stalled",
+        "last_extraction_at": (last_at.isoformat() + "Z") if last_at else None,
+        "last_extraction_status": last_status,   # complete | empty | failed | pending
+        "buffered_messages": buffered_messages,
+        "buffered_groups": buffered_groups,
+        "items_last_24h": items_24h,
+    })
+
+
 @hub_bp.route("/limits", methods=["GET"])
 @jwt_required()
 def plan_limits():
