@@ -79,7 +79,19 @@ async def handle_bot_added_to_group(
                 telegram_group_id=telegram_group_id,
             ).first()
             if existing and existing.consent_confirmed_at:
-                _log.debug("Hub: group %s already consented, skipping DM", telegram_group_id)
+                # Already consented. If the bot had been removed (and we flagged
+                # the row 'bot_removed'), re-adding it should silently restore
+                # the connection — no need to ask for consent again. A row the
+                # user intentionally paused ('user_paused') is left untouched.
+                if not existing.is_active and existing.pause_reason == "bot_removed":
+                    from ..models import db
+                    existing.is_active = True
+                    existing.pause_reason = None
+                    existing.group_name = group_name
+                    db.session.commit()
+                    _log.info("Hub: reactivated group %s on re-add", telegram_group_id)
+                else:
+                    _log.debug("Hub: group %s already consented, skipping DM", telegram_group_id)
                 return
 
         # Detect public group
