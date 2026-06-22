@@ -147,29 +147,26 @@ class LevelSystem:
             if settings:
                 rank_card_cfg = settings.get("levels", {}).get("rank_card", {})
 
-            color_start = _hex_to_rgb(rank_card_cfg.get("bg_color_start", "#1a1a2e"))
-            color_end = _hex_to_rgb(rank_card_cfg.get("bg_color_end", "#16213e"))
+            # Light, high-contrast card. Only the accent stays themeable; the
+            # legacy dark bg_color_start/end are intentionally ignored — the
+            # readable redesign is always a light card. (The Discord/Guildizer
+            # rank card is a separate file and is deliberately left untouched.)
             accent = _hex_to_rgb(rank_card_cfg.get("accent_color", "#2196f3"))
 
-            # 900×360 — 2.5:1 aspect ratio renders as a proper image preview in Telegram
-            width, height = 900, 360
-            img = Image.new("RGBA", (width, height), (*color_start, 255))
+            # Logical 600×160 banner, supersampled ×3 so text + rounded corners
+            # stay crisp and antialiased after Telegram downscales the photo
+            # into the chat bubble (the old 900×360 dark card rendered tiny).
+            S = 3
+            W, H = 600, 160
+
+            def px(v):
+                return int(round(v * S))
+
+            img = Image.new("RGBA", (W * S, H * S), (0, 0, 0, 0))
             draw = ImageDraw.Draw(img)
 
-            # Horizontal gradient background
-            for x in range(width):
-                t = x / width
-                r = int(color_start[0] + (color_end[0] - color_start[0]) * t)
-                g = int(color_start[1] + (color_end[1] - color_start[1]) * t)
-                b = int(color_start[2] + (color_end[2] - color_start[2]) * t)
-                for y in range(height):
-                    img.putpixel((x, y), (r, g, b, 255))
-
-            # Accent border
-            draw.rectangle([0, 0, width - 1, height - 1], outline=accent, width=3)
-
-            # Load fonts — prefer BOLD faces for a punchier, high-contrast card,
-            # falling back to regular then the PIL default.
+            # Load fonts — bold faces where available, falling back to regular
+            # then the PIL default.
             def _load_font(size, bold=True):
                 names = (
                     ("arialbd.ttf", "DejaVuSans-Bold.ttf", "LiberationSans-Bold.ttf",
@@ -184,106 +181,116 @@ class LevelSystem:
                         pass
                 return ImageFont.load_default()
 
-            font_name      = _load_font(50)
-            font_user      = _load_font(26, bold=False)
-            font_stats     = _load_font(30)
-            font_badge_lbl = _load_font(22)
-            font_badge_num = _load_font(96)
-            font_bar       = _load_font(24)
-            font_initial   = _load_font(86)
+            f_name    = _load_font(px(19))
+            f_user    = _load_font(px(13), bold=False)
+            f_rank_l  = _load_font(px(13), bold=False)
+            f_rank_v  = _load_font(px(13))
+            f_prog    = _load_font(px(12), bold=False)
+            f_xp      = _load_font(px(11))
+            f_pct     = _load_font(px(11))
+            f_lvl_lbl = _load_font(px(11))
+            f_lvl_num = _load_font(px(38))
+            f_avatar  = _load_font(px(24))
 
-            white = (255, 255, 255)
-            sub   = (175, 185, 215)
-            stat  = (214, 222, 240)
-            # A darkened tint of the accent for filled surfaces (disc / badge).
-            # `disc` for the avatar; `panel` is a subtler accent-tinted panel for the
-            # level badge. Both opaque — PIL's ImageDraw doesn't alpha-blend, so a
-            # sub-255 alpha here would render see-through in the saved PNG.
-            disc  = tuple(min(255, int(c * 0.55)) for c in accent)
-            panel = tuple(min(255, int(color_end[i] * 0.6 + disc[i] * 0.4)) for i in range(3))
+            # ── Light palette ──
+            ink       = (28, 32, 44)     # primary text
+            muted     = (122, 130, 146)  # secondary text
+            border    = (228, 231, 238)  # card hairline
+            track     = (234, 237, 243)  # progress track
+            tint      = tuple(int(255 * 0.84 + c * 0.16) for c in accent)  # light accent wash
+            accent_dk = tuple(int(c * 0.78) for c in accent)
 
-            # ── Avatar (left): filled accent disc + bold initial ──
-            pad = 36
-            avatar_size = 168
-            av_cx = pad + avatar_size // 2
-            av_cy = height // 2
-            draw.ellipse(
-                [av_cx - avatar_size // 2, av_cy - avatar_size // 2,
-                 av_cx + avatar_size // 2, av_cy + avatar_size // 2],
-                fill=(*disc, 255), outline=accent, width=5,
-            )
-            initial = (member.first_name or member.username or "?")[0].upper()
-            draw.text((av_cx, av_cy), initial, fill=white, font=font_initial, anchor="mm")
-
-            # ── Level badge (right): big number that fills the previously empty space ──
-            badge_w = badge_h = 176
-            badge_x = width - pad - badge_w
-            badge_y = (height - badge_h) // 2 - 18
+            # ── Card body: white rounded rect (transparent corners) + hairline ──
             draw.rounded_rectangle(
-                [badge_x, badge_y, badge_x + badge_w, badge_y + badge_h],
-                radius=24, fill=(*panel, 255), outline=accent, width=4,
+                [px(1), px(1), W * S - px(1), H * S - px(1)],
+                radius=px(14), fill=(255, 255, 255, 255), outline=border, width=max(1, px(1)),
             )
-            bcx = badge_x + badge_w // 2
-            draw.text((bcx, badge_y + 30), "LEVEL", fill=accent, font=font_badge_lbl, anchor="mm")
-            draw.text((bcx, badge_y + badge_h // 2 + 16), str(member.level),
-                      fill=white, font=font_badge_num, anchor="mm")
+
+            PAD = 18
+
+            # ── Avatar (left): light accent disc + initials ──
+            av_d = 58
+            av_x = PAD
+            av_cx = av_x + av_d / 2
+            av_cy = H / 2
+            draw.ellipse(
+                [px(av_x), px(av_cy - av_d / 2), px(av_x + av_d), px(av_cy + av_d / 2)],
+                fill=(*tint, 255), outline=accent, width=max(1, px(1.5)),
+            )
+            first = (member.first_name or "").strip()
+            last = (getattr(member, "last_name", None) or "").strip()
+            initials = ((first[:1] + last[:1]) or (member.username or "?")[:1] or "?").upper()
+            draw.text((px(av_cx), px(av_cy)), initials, fill=accent_dk, font=f_avatar, anchor="mm")
+
+            # ── Level chip (right): light tint panel, "LEVEL" + big number ──
+            lv_w = 92
+            lv_x = W - PAD - lv_w
+            lv_cx = lv_x + lv_w / 2
+            draw.rounded_rectangle(
+                [px(lv_x), px(34), px(lv_x + lv_w), px(H - 34)],
+                radius=px(14), fill=(*tint, 255), outline=accent, width=max(1, px(1)),
+            )
+            draw.text((px(lv_cx), px(52)), "LEVEL", fill=accent_dk, font=f_lvl_lbl, anchor="mm")
+            draw.text((px(lv_cx), px(92)), str(member.level), fill=accent, font=f_lvl_num, anchor="mm")
 
             # ── Text column ──
-            tx = pad + avatar_size + 38
-            text_right = badge_x - 24  # keep text clear of the badge
+            tx = av_x + av_d + 18
+            text_right = lv_x - 16
+            max_w = px(text_right - tx)
 
-            def _fit(text, font, max_w):
-                """Ellipsize text to fit max_w pixels."""
-                if draw.textlength(text, font=font) <= max_w:
+            def _fit(text, font, mw):
+                """Ellipsize text to fit mw pixels."""
+                if draw.textlength(text, font=font) <= mw:
                     return text
-                while text and draw.textlength(text + "…", font=font) > max_w:
+                while text and draw.textlength(text + "…", font=font) > mw:
                     text = text[:-1]
                 return (text + "…") if text else text
 
-            first = (member.first_name or "").strip()
-            last = (getattr(member, "last_name", None) or "").strip()
             full_name = " ".join(x for x in [first, last] if x) or (member.username or f"User {member.telegram_user_id}")
-            draw.text((tx, 58), _fit(full_name, font_name, text_right - tx), fill=white, font=font_name)
+            draw.text((px(tx), px(22)), _fit(full_name, f_name, max_w), fill=ink, font=f_name)
 
-            ty = 58 + 62
             if member.username:
-                draw.text((tx, ty), _fit(f"@{member.username}", font_user, text_right - tx), fill=sub, font=font_user)
-                ty += 46
-            else:
-                ty += 12
+                draw.text((px(tx), px(50)), _fit(f"@{member.username}", f_user, max_w), fill=muted, font=f_user)
 
-            # Rank + XP on one bold stat row (XP wraps to a second line if cramped).
-            rank_txt = f"Rank  #{rank_position} of {total_members}"
-            xp_txt = f"XP  {member.xp:,}"
-            draw.text((tx, ty + 6), rank_txt, fill=stat, font=font_stats)
-            xp_x = tx + draw.textlength(rank_txt, font=font_stats) + 36
-            if xp_x + draw.textlength(xp_txt, font=font_stats) <= text_right:
-                draw.text((xp_x, ty + 6), xp_txt, fill=stat, font=font_stats)
-            else:
-                draw.text((tx, ty + 44), xp_txt, fill=stat, font=font_stats)
+            # Rank row — muted label + bold value
+            rank_y = 74
+            draw.text((px(tx), px(rank_y)), "Rank ", fill=muted, font=f_rank_l)
+            rl_w = draw.textlength("Rank ", font=f_rank_l)
+            draw.text((px(tx) + rl_w, px(rank_y)), f"#{rank_position} of {total_members}",
+                      fill=ink, font=f_rank_v)
 
-            # ── XP progress bar (full width, bold) ──
-            bar_x = tx
-            bar_y = height - 64
-            bar_w = width - tx - pad
-            bar_h = 34
-
+            # ── Progress to next level ──
             current_level_xp = self._xp_for_level(member.level)
             next_level_xp = self._xp_for_level(member.level + 1)
-            remaining_xp = member.xp - current_level_xp
+            remaining_xp = max(0, member.xp - current_level_xp)
             needed_xp = max(1, next_level_xp - current_level_xp)
             progress = min(1.0, max(0.0, remaining_xp / needed_xp))
 
-            draw.rounded_rectangle([bar_x, bar_y, bar_x + bar_w, bar_y + bar_h], radius=17, fill=(38, 42, 70))
-            fill_w = max(bar_h, int(bar_w * progress))
-            draw.rounded_rectangle([bar_x, bar_y, bar_x + fill_w, bar_y + bar_h], radius=17, fill=accent)
-            draw.text(
-                (bar_x + bar_w // 2, bar_y + bar_h // 2),
-                f"{max(0, remaining_xp)} / {needed_xp} XP",
-                fill=white,
-                font=font_bar,
-                anchor="mm",
+            label_y = 100
+            draw.text((px(tx), px(label_y)), f"Progress to Level {member.level + 1}",
+                      fill=muted, font=f_prog)
+            draw.text((px(text_right), px(label_y)), f"{int(progress * 100)}%",
+                      fill=accent_dk, font=f_pct, anchor="ra")
+
+            bar_x0, bar_x1 = tx, text_right
+            bar_y0, bar_y1 = 120, 138
+            draw.rounded_rectangle(
+                [px(bar_x0), px(bar_y0), px(bar_x1), px(bar_y1)], radius=px(9), fill=track,
             )
+            fill_w = int((bar_x1 - bar_x0) * progress)
+            if fill_w >= (bar_y1 - bar_y0):  # only draw a rounded fill once it's wider than its radius
+                draw.rounded_rectangle(
+                    [px(bar_x0), px(bar_y0), px(bar_x0 + fill_w), px(bar_y1)], radius=px(9), fill=accent,
+                )
+            # XP centered on the bar; flip to white once the fill reaches the middle
+            xp_color = (255, 255, 255) if progress >= 0.5 else ink
+            draw.text(
+                (px((bar_x0 + bar_x1) / 2), px((bar_y0 + bar_y1) / 2)),
+                f"{remaining_xp} / {needed_xp} XP", fill=xp_color, font=f_xp, anchor="mm",
+            )
+
+            # Downscale for crisp antialiasing
+            img = img.resize((W, H), Image.LANCZOS)
 
             buf = io.BytesIO()
             img.save(buf, format="PNG")
