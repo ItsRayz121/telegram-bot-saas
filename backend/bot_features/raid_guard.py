@@ -48,6 +48,9 @@ _DEFAULTS = {
     #   all            → every non-admin who posts is muted (group goes read-only)
     "lockdown_scope": "recent_joiners",
     "notify": True,
+    # Auto-delete the in-group "Raid mode activated" alert after N seconds so it
+    # doesn't linger in the chat. 0 = keep it (default); e.g. 60 = remove after 1 min.
+    "notice_auto_delete_seconds": 0,
 }
 
 # Per-process sliding windows + active-lockdown registry, keyed by chat_id (str).

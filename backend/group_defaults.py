@@ -353,6 +353,9 @@ _DEFAULTS: dict = {
         #   "all"            → every non-admin who posts is muted (group read-only)
         "lockdown_scope": "recent_joiners",
         "notify": True,
+        # Auto-delete the in-group "Raid mode activated" alert after N seconds
+        # (0 = keep it). Anti-ban-safe: a single scheduled deletion, not spam.
+        "notice_auto_delete_seconds": 0,
         # Phase 4b: admin "emergency lockdown" panic button. ISO-8601 UTC expiry
         # set from the dashboard; join handlers restrict newcomers until it passes.
         # Works even when enabled=False (manual override). null = no manual lockdown.

@@ -99,8 +99,10 @@ function OnboardingCard({ botList, onAddBot, navigate, user, officialGroupCount,
   const [dismissed, setDismissed] = useState(
     () => localStorage.getItem('onboarding_dismissed') === '1'
   );
+  // Collapsed by default — the card stays available but starts closed so it
+  // doesn't dominate the dashboard. Only an explicit user-expand ('1') opens it.
   const [expanded, setExpanded] = useState(
-    () => localStorage.getItem('onboarding_expanded') !== '0'
+    () => localStorage.getItem('onboarding_expanded') === '1'
   );
   const [waitingForGroup, setWaitingForGroup] = useState(false);
   const pollRef = React.useRef(null);

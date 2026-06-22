@@ -49,12 +49,23 @@ def billing_status(guild_id: int):
     # on any of their servers, this one is Pro too (no separate per-server plan).
     # Unified subscription: a paid Telegizer plan (Pro/Enterprise) also grants
     # Guildizer Pro, so an owner who pays on telegizer.com never pays again here.
-    from admin import telegizer_token_is_pro
+    from admin import telegizer_token_is_pro, telegizer_token_tier
+    tg_tier = telegizer_token_tier()  # 'enterprise' | 'pro' | 'business' | 'free' | None
     account_pro = billing.account_is_pro(g.db, guild.owner_id) or telegizer_token_is_pro()
+    is_pro = guild.is_pro or account_pro
     via_other = account_pro and not guild.is_pro
+    # Surface the real Telegizer tier when Pro is inherited from a paid plan, so an
+    # Enterprise/Business account shows its true plan name instead of "Pro".
+    if not is_pro:
+        plan = "free"
+    elif tg_tier in ("enterprise", "business"):
+        plan = tg_tier
+    else:
+        plan = "pro"
     return jsonify(
-        plan="pro" if (guild.is_pro or account_pro) else "free",
-        is_pro=guild.is_pro or account_pro,
+        plan=plan,
+        tier=tg_tier,  # raw inherited Telegizer tier (None if not bridged)
+        is_pro=is_pro,
         account_pro=account_pro,
         via_account=via_other,  # Pro inherited from another server on this account
         plan_expires_at=guild.plan_expires_at.isoformat() + "Z" if guild.plan_expires_at else None,

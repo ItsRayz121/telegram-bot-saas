@@ -21,6 +21,12 @@ import PushNudge from '../../components/PushNudge';
 // Mirrors the backend MAX_BOTS_PER_USER (custom_bots_api.py).
 const MAX_CUSTOM_BOTS = 5;
 
+// Per request, the Servers view hides the "Invite Friends" button, the
+// notification bell, and the web-push nudge banner — these already live
+// elsewhere (Referrals page, global TopNav bell, Notifications). Hidden, not
+// removed: flip to true to restore them here.
+const SHOW_SERVER_EXTRAS = false;
+
 const BOT_STATUS_CHIP = {
   active: { color: 'success', label: 'Active' },
   error: { color: 'error', label: 'Needs attention' },
@@ -158,18 +164,20 @@ export default function GuildizerServers() {
               Admin
             </Button>
           )}
-          <Button size="small" variant="outlined" startIcon={<CardGiftcard />} onClick={() => navigate('/guildizer/referrals')}>
-            Invite Friends
-          </Button>
+          {SHOW_SERVER_EXTRAS && (
+            <Button size="small" variant="outlined" startIcon={<CardGiftcard />} onClick={() => navigate('/guildizer/referrals')}>
+              Invite Friends
+            </Button>
+          )}
           <Button size="small" variant="outlined" startIcon={<Redeem />} onClick={() => setRedeemOpen(true)}>
             Redeem code
           </Button>
-          <NotificationsBell />
+          {SHOW_SERVER_EXTRAS && <NotificationsBell />}
         </Box>
       )}
 
       {/* Soft, frequency-capped prompt to enable web push for Guildizer. */}
-      {state.connected && (
+      {SHOW_SERVER_EXTRAS && state.connected && (
         <PushNudge
           api={guildizerNotifications}
           ns="gz"

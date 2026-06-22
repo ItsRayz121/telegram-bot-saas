@@ -35,6 +35,11 @@ export default function BillingTab({ guildId }) {
   if (!data) return <Alert severity="warning">{msg || 'No billing info.'}</Alert>;
 
   const pro = data.pricing.pro;
+  // Show the real plan name (Enterprise/Business/Pro) rather than collapsing every
+  // paid tier to "Pro". Backend `plan` is 'enterprise' | 'business' | 'pro' | 'free'.
+  const planLabel = data.is_pro
+    ? ((data.plan || 'pro').charAt(0).toUpperCase() + (data.plan || 'pro').slice(1))
+    : 'Free';
 
   return (
     <Grid container spacing={2}>
@@ -43,10 +48,10 @@ export default function BillingTab({ guildId }) {
           <Typography variant="body2" color="text.secondary" mb={2}>
             Your current subscription tier and renewal date for this server.
           </Typography>
-          <Typography mb={1}>Current plan: <Chip label={data.is_pro ? 'Pro' : 'Free'} color={data.is_pro ? 'success' : 'default'} size="small" /></Typography>
+          <Typography mb={1}>Current plan: <Chip label={planLabel} color={data.is_pro ? 'success' : 'default'} size="small" /></Typography>
           {data.via_account && (
             <Alert severity="success" sx={{ mb: 1, py: 0 }}>
-              Pro is active on your account — it covers all your servers. No separate purchase needed for this one.
+              {planLabel} is active on your account — it covers all your servers. No separate purchase needed for this one.
             </Alert>
           )}
           {data.is_pro && !data.via_account && data.plan_expires_at && (

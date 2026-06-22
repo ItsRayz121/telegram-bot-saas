@@ -1309,10 +1309,11 @@ class ModerationSystem:
                               action="raid_mode_activated", commit=True)
         except Exception:
             pass
-        if not raid_guard.get_config(group.settings).get("notify", True):
+        cfg = raid_guard.get_config(group.settings)
+        if not cfg.get("notify", True):
             return
         try:
-            await bot.send_message(
+            notice = await bot.send_message(
                 chat_id=chat_id,
                 text=raid_guard.activation_notice(
                     raid_guard.seconds_remaining(chat_id),
@@ -1320,6 +1321,14 @@ class ModerationSystem:
                 ),
                 parse_mode="Markdown",
             )
+            # Optionally auto-delete the alert after N seconds so it doesn't linger.
+            try:
+                auto_del = int(cfg.get("notice_auto_delete_seconds", 0) or 0)
+            except (TypeError, ValueError):
+                auto_del = 0
+            if notice and auto_del > 0:
+                import asyncio as _aio
+                _aio.ensure_future(self._delayed_delete(bot, chat_id, notice.message_id, auto_del))
         except Exception as e:
             logger.debug(f"raid announce failed: {e}")
         try:

@@ -1586,6 +1586,17 @@ function GroupSettingsInner() {
                   label="Post an in-group alert when raid mode activates"
                 />
 
+                {rg.notify !== false && (
+                  <TextField
+                    sx={{ mt: 1, maxWidth: 360 }}
+                    fullWidth size="small" type="number"
+                    label="Auto-delete the alert after (seconds)"
+                    value={rg.notice_auto_delete_seconds ?? 0}
+                    onChange={(e) => updateSetting('raid_guard.notice_auto_delete_seconds', Math.max(0, parseInt(e.target.value || '0', 10)))}
+                    helperText="0 = keep the alert in the chat. e.g. 30 or 60 removes it after that many seconds."
+                  />
+                )}
+
                 <Divider sx={{ my: 2 }} />
                 <Typography variant="subtitle2" fontWeight={600} mb={1}>Emergency lockdown</Typography>
                 {(() => {

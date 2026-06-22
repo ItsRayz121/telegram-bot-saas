@@ -3726,11 +3726,12 @@ async def _announce_raid(bot, group_id, settings, flask_app):
                                   bot_ref="official", action="raid_mode_activated", commit=True)
     except Exception:
         pass
-    if not raid_guard.get_config(settings).get("notify", True):
+    cfg = raid_guard.get_config(settings)
+    if not cfg.get("notify", True):
         return
     try:
         if _can_send_to_group(str(group_id)):
-            await bot.send_message(
+            notice = await bot.send_message(
                 chat_id=int(group_id),
                 text=raid_guard.activation_notice(
                     raid_guard.seconds_remaining(group_id),
@@ -3738,6 +3739,17 @@ async def _announce_raid(bot, group_id, settings, flask_app):
                 ),
                 parse_mode=ParseMode.MARKDOWN,
             )
+            # Optionally auto-delete the in-group alert after N seconds (0 = keep),
+            # mirroring the custom-bot path so both lineages behave identically.
+            try:
+                auto_del = int(cfg.get("notice_auto_delete_seconds", 0) or 0)
+            except (TypeError, ValueError):
+                auto_del = 0
+            if notice and auto_del > 0:
+                asyncio.get_running_loop().call_later(
+                    auto_del,
+                    lambda: asyncio.ensure_future(_safe_delete(bot, int(group_id), notice.message_id)),
+                )
     except Exception as exc:
         _log.debug("[OfficialBot] raid announce failed: %s", exc)
     _log_event(flask_app, str(group_id), "raid_mode_activated",
