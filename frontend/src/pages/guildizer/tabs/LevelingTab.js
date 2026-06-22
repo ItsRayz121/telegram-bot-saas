@@ -91,6 +91,24 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
             value={cfg.levelup_message} inputProps={{ maxLength: 1000 }} onChange={(e) => set({ levelup_message: e.target.value })}
             helperText="Placeholders: {user} {username} {level}" />
           {numL2('Delete level-up message after (seconds, 0 = keep)', 'levelup_delete_after_seconds', 86400)}
+          <TextField
+            select size="small" margin="dense" fullWidth
+            label="Channels where /rank & /leaderboard work"
+            value={l2.command_channel_ids || []}
+            SelectProps={{
+              multiple: true,
+              renderValue: (sel) => (sel && sel.length)
+                ? `${sel.length} channel${sel.length > 1 ? 's' : ''}`
+                : 'All channels',
+            }}
+            onChange={(e) => setL2({
+              command_channel_ids: typeof e.target.value === 'string'
+                ? e.target.value.split(',')
+                : e.target.value,
+            })}
+            helperText="Leave empty to allow level commands in every channel.">
+            {textChannels.map((c) => <MenuItem key={c.id} value={c.id}># {c.name}</MenuItem>)}
+          </TextField>
         </GuildizerCollapsibleCard>
       </Grid>
 

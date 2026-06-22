@@ -2110,6 +2110,22 @@ class CoreMixin:
             db.close()
             SessionLocal.remove()
 
+    @staticmethod
+    def _xp_command_channels(guild_id):
+        """Channel IDs (ints) where /rank and /leaderboard are allowed. Empty list
+        = allowed everywhere (the default)."""
+        db = SessionLocal()
+        try:
+            row = db.get(GuildSettings, guild_id)
+            l2 = ((row.extra or {}).get("leveling2") or {}) if row else {}
+            ids = l2.get("command_channel_ids") or []
+            return [int(c) for c in ids if str(c).isdigit()]
+        except Exception:  # noqa: BLE001
+            return []
+        finally:
+            db.close()
+            SessionLocal.remove()
+
     # --- assistant DB helpers -----------------------------------------------------
     @staticmethod
     def _add_reminder(guild_id, user_id, text, seconds):
@@ -2284,6 +2300,21 @@ def attach_builtin_commands(client) -> None:
     invite_tracking.attach_invite_command(client)
     stats_runtime.attach_wallet_commands(client)
 
+    async def _xp_channel_ok(interaction: discord.Interaction) -> bool:
+        """Gate /rank & /leaderboard to the configured channels (empty = anywhere).
+        Replies ephemerally pointing at the allowed channels when blocked."""
+        try:
+            allowed = await asyncio.to_thread(CoreMixin._xp_command_channels, interaction.guild.id)
+        except Exception:  # noqa: BLE001
+            return True
+        if not allowed or interaction.channel_id in allowed:
+            return True
+        mentions = ", ".join(f"<#{c}>" for c in allowed)
+        await interaction.response.send_message(
+            f"Please use level commands in {mentions}.", ephemeral=True
+        )
+        return False
+
     @client.tree.command(name="ping", description="Check that the bot is alive.")
     async def ping(interaction: discord.Interaction) -> None:
         latency_ms = round(client.latency * 1000)
@@ -2296,6 +2327,8 @@ def attach_builtin_commands(client) -> None:
     async def rank(interaction: discord.Interaction) -> None:
         if interaction.guild is None:
             await interaction.response.send_message("Use this in a server.", ephemeral=True)
+            return
+        if not await _xp_channel_ok(interaction):
             return
         snap = await asyncio.to_thread(
             CoreMixin._rank_snapshot, interaction.guild.id, interaction.user.id
@@ -2333,6 +2366,8 @@ def attach_builtin_commands(client) -> None:
     async def leaderboard(interaction: discord.Interaction) -> None:
         if interaction.guild is None:
             await interaction.response.send_message("Use this in a server.", ephemeral=True)
+            return
+        if not await _xp_channel_ok(interaction):
             return
         rows = await asyncio.to_thread(CoreMixin._top_snapshot, interaction.guild.id, 10)
         if not rows:

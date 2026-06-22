@@ -110,6 +110,14 @@ def update_leveling(guild_id: int):
                 rewards.append({"level": _as_int(r.get("level"), 1, 1, 1000),
                                 "role_id": str(r["role_id"])})
             l2["role_rewards"] = sorted(rewards, key=lambda r: r["level"])
+        if isinstance(l_in.get("command_channel_ids"), list):
+            # Channels where /rank and /leaderboard may be used (empty = everywhere).
+            seen = []
+            for c in l_in["command_channel_ids"][:25]:
+                cid = str(c).strip()
+                if cid.isdigit() and cid not in seen:
+                    seen.append(cid)
+            l2["command_channel_ids"] = seen
         extra["leveling2"] = l2
         row.extra = extra
 

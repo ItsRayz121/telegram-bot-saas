@@ -57,6 +57,9 @@ LEVELING2_DEFAULTS = {
     "penalty_kick": 0,      # … kicked
     "penalty_ban": 0,       # … banned
     "role_rewards": [],     # [{"level": int, "role_id": str}]
+    # Channels where /rank and /leaderboard may be used. Empty = everywhere.
+    # Stored as a list of channel-id strings.
+    "command_channel_ids": [],
     # /rank image card colours (hex). Rendered by rank_card.py.
     "rank_card": {
         "bg_color_start": "#1a1a2e",
