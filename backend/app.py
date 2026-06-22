@@ -2392,6 +2392,43 @@ def _run_task_with_timeout(fn, *args, timeout=30, label="task", flask_app=None):
                 pass
 
 
+def _run_hub_priority_extraction(app):
+    """Assistant Hub: extract from groups that have time-sensitive (priority)
+    buffered messages.
+
+    Runs IN-PROCESS inside the web service — where Redis, the DB and the Echo bot
+    already live — instead of via a Celery task that calls create_app() (which
+    would boot the entire bot fleet inside the worker and hang). The per-group
+    Redis lock inside run_extraction makes this safe even if a Celery worker also
+    fires the same job.
+    """
+    from .assistant.hub_message_router import get_groups_with_buffered_messages
+    from .assistant.hub_extraction import run_extraction
+    pairs = get_groups_with_buffered_messages(priority_only=True)
+    for bot_id, group_id in pairs:
+        try:
+            run_extraction(bot_id, group_id, app)
+        except Exception as exc:
+            _scheduler_log.error("hub priority extraction bot=%s group=%s: %s", bot_id, group_id, exc)
+    if pairs:
+        _scheduler_log.info("[SCHEDULER] hub priority extraction processed %d group(s)", len(pairs))
+
+
+def _run_hub_batch_extraction(app):
+    """Assistant Hub: standard extraction pass over ALL groups with buffered
+    messages (in-process; see _run_hub_priority_extraction)."""
+    from .assistant.hub_message_router import get_groups_with_buffered_messages
+    from .assistant.hub_extraction import run_extraction
+    pairs = get_groups_with_buffered_messages(priority_only=False)
+    for bot_id, group_id in pairs:
+        try:
+            run_extraction(bot_id, group_id, app)
+        except Exception as exc:
+            _scheduler_log.error("hub batch extraction bot=%s group=%s: %s", bot_id, group_id, exc)
+    if pairs:
+        _scheduler_log.info("[SCHEDULER] hub batch extraction processed %d group(s)", len(pairs))
+
+
 def _scheduler_loop(app):
     import time
     _last_expiry_check = [0]
@@ -2402,6 +2439,8 @@ def _scheduler_loop(app):
     _last_buffer_cleanup = [0]
     _last_token_cleanup = [0]
     _last_member_sync = [0]
+    _last_hub_priority = [0]
+    _last_hub_batch = [0]
     time.sleep(15)  # Wait for bots to fully start
     while True:
         try:
@@ -2454,6 +2493,15 @@ def _scheduler_loop(app):
             if now_ts - _last_member_sync[0] > 21600:
                 _last_member_sync[0] = now_ts
                 _run_task_with_timeout(_run_member_count_sync, app, timeout=120, label="_run_member_count_sync")
+            # Assistant Hub (Echo) extraction — runs in-process so it works without a
+            # separate Celery worker. Priority (time-sensitive) every 2 min, full
+            # sweep every 30 min. Lock-guarded per group inside run_extraction.
+            if now_ts - _last_hub_priority[0] > 120:
+                _last_hub_priority[0] = now_ts
+                _run_task_with_timeout(_run_hub_priority_extraction, app, timeout=150, label="_run_hub_priority_extraction")
+            if now_ts - _last_hub_batch[0] > 1800:
+                _last_hub_batch[0] = now_ts
+                _run_task_with_timeout(_run_hub_batch_extraction, app, timeout=150, label="_run_hub_batch_extraction")
         except Exception as exc:
             _scheduler_log.error(f"Scheduler loop error: {exc}")
         time.sleep(60)

@@ -1399,42 +1399,26 @@ def hub_enforce_retention():
         logger.error("hub_enforce_retention error: %s", exc)
 
 
+# NOTE: Hub extraction now runs in the WEB process's in-process scheduler
+# (app._run_hub_priority_extraction / _run_hub_batch_extraction), where Redis, the
+# DB and the Echo bot already live. These Celery tasks are kept as no-ops only so
+# the beat schedule does not error if a worker is running. They must NOT call
+# create_app() — that boots the entire bot fleet inside the worker and hangs the
+# task (the real cause of "received but never completes"). The per-group Redis
+# lock would make a real run here safe, but the in-process path is the source of
+# truth, so we defer.
 @celery.task(name="backend.scheduler.hub_run_batch_extraction")
 def hub_run_batch_extraction():
-    """Assistant Hub: standard extraction — all groups with buffered messages (every 30 min)."""
-    try:
-        from .assistant.hub_message_router import get_groups_with_buffered_messages
-        from .assistant.hub_extraction import run_extraction
-        from .app import create_app
-        flask_app = create_app()
-        pairs = get_groups_with_buffered_messages(priority_only=False)
-        for bot_id, group_id in pairs:
-            try:
-                run_extraction(bot_id, group_id, flask_app)
-            except Exception as exc:
-                logger.error("hub_run_batch_extraction bot=%s group=%s: %s", bot_id, group_id, exc)
-        logger.info("hub_run_batch_extraction: processed %d groups", len(pairs))
-    except Exception as exc:
-        logger.error("hub_run_batch_extraction error: %s", exc)
+    """Assistant Hub: standard extraction — deferred to the in-process scheduler."""
+    logger.info("[celery:hub_run_batch_extraction] deferred to in-process scheduler")
+    return
 
 
 @celery.task(name="backend.scheduler.hub_run_priority_extraction")
 def hub_run_priority_extraction():
-    """Assistant Hub: priority extraction — groups with urgent messages (every 2 min)."""
-    try:
-        from .assistant.hub_message_router import get_groups_with_buffered_messages
-        from .assistant.hub_extraction import run_extraction
-        from .app import create_app
-        flask_app = create_app()
-        pairs = get_groups_with_buffered_messages(priority_only=True)
-        for bot_id, group_id in pairs:
-            try:
-                run_extraction(bot_id, group_id, flask_app)
-            except Exception as exc:
-                logger.error("hub_run_priority_extraction bot=%s group=%s: %s", bot_id, group_id, exc)
-        logger.info("hub_run_priority_extraction: processed %d priority groups", len(pairs))
-    except Exception as exc:
-        logger.error("hub_run_priority_extraction error: %s", exc)
+    """Assistant Hub: priority extraction — deferred to the in-process scheduler."""
+    logger.info("[celery:hub_run_priority_extraction] deferred to in-process scheduler")
+    return
 
 
 @celery.task(name="backend.scheduler.hub_deliver_due_reminders")
