@@ -380,11 +380,20 @@ def update_official_settings():
 @hub_bp.route("/bots/official/groups", methods=["GET"])
 @jwt_required()
 def list_official_groups():
-    """Return connected groups for the official bot."""
+    """Return connected groups for the official bot.
+
+    Groups the bot was removed from (pause_reason='bot_removed') are excluded —
+    they are no longer real connections and would otherwise show as stale.
+    """
     user = _current_user()
     bot = _get_or_create_official_bot(user.id)
     groups = HubConnectedGroup.query.filter_by(
         bot_id=bot.id, user_id=user.id
+    ).filter(
+        db.or_(
+            HubConnectedGroup.pause_reason.is_(None),
+            HubConnectedGroup.pause_reason != "bot_removed",
+        )
     ).order_by(HubConnectedGroup.joined_at.desc()).all()
 
     return jsonify({

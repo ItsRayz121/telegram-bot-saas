@@ -63,6 +63,38 @@ async def _on_my_chat_member(
         except Exception as exc:
             _log.debug("hub_bot_handler: consent flow error: %s", exc)
 
+    # Bot removed from the group → deactivate the connection so it stops being
+    # counted/shown. Without this, kicked/left groups linger as "active" forever.
+    elif new_status in ("left", "kicked", "banned") and flask_app:
+        try:
+            with flask_app.app_context():
+                from .hub_models import HubConnectedGroup, HubBotIdentity
+                from ..models import db
+                q = HubConnectedGroup.query.filter_by(telegram_group_id=chat.id)
+                if hub_bot_id:
+                    q = q.filter_by(bot_id=hub_bot_id)
+                else:
+                    # Official Echo carries no specific identity → only touch
+                    # official-lineage rows, never a custom bot's connection to
+                    # the same chat.
+                    q = q.join(
+                        HubBotIdentity, HubBotIdentity.id == HubConnectedGroup.bot_id
+                    ).filter(HubBotIdentity.bot_type == "official")
+                updated = 0
+                for grp in q.all():
+                    if grp.pause_reason != "bot_removed" or grp.is_active:
+                        grp.is_active = False
+                        grp.pause_reason = "bot_removed"
+                        updated += 1
+                if updated:
+                    db.session.commit()
+                    _log.info(
+                        "hub_bot_handler: deactivated %d connection(s) for chat=%s (bot removed)",
+                        updated, chat.id,
+                    )
+        except Exception as exc:
+            _log.debug("hub_bot_handler: removal cleanup error chat=%s: %s", chat.id, exc)
+
 
 # ── on_callback_query ─────────────────────────────────────────────────────────
 

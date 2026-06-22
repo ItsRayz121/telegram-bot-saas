@@ -1036,7 +1036,7 @@ export const hub = {
   deleteGroupData:      (id)         => api.delete(`/api/hub/bots/official/groups/${id}/data`),
   getOfficialStats:     ()           => api.get('/api/hub/bots/official/stats'),
   getLimits:            ()           => api.get('/api/hub/limits'),
-  disconnectGroup:      (id)         => api.delete(`/api/hub/bots/official/groups/${id}/disconnect`),
+  disconnectGroup:      (id, deleteData = false) => api.delete(`/api/hub/bots/official/groups/${id}/disconnect${deleteData ? '?delete_data=true' : ''}`),
   pauseGroup:           (id)         => api.post(`/api/hub/bots/official/groups/${id}/pause`),
   resumeGroup:          (id)         => api.post(`/api/hub/bots/official/groups/${id}/resume`),
   exportData:           ()           => api.get('/api/hub/export'),

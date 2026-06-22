@@ -8,11 +8,11 @@ import {
   Box, Tabs, Tab, Typography, Chip, Button, CircularProgress,
   Card, CardContent, Switch, FormControlLabel, Divider, Select, MenuItem,
   FormControl, InputLabel, FormHelperText, TextField, Alert, Dialog,
-  DialogTitle, DialogContent, DialogActions, IconButton,
+  DialogTitle, DialogContent, DialogActions, IconButton, Grid, Tooltip,
 } from '@mui/material';
 import {
   ArrowBack, SmartToy, Add, Delete, Edit, CheckCircleOutline,
-  AccessTime, CalendarToday,
+  AccessTime, CalendarToday, Settings as SettingsIcon, FilterList, LinkOff,
 } from '@mui/icons-material';
 import { hub } from '../services/api';
 import BotTokenConnectModal from '../components/shared/BotTokenConnectModal';
@@ -106,7 +106,7 @@ export default function HubWorkspace() {
                 </Typography>
                 <Chip label="Active" size="small" sx={{ bgcolor: 'success.main', color: '#fff', height: 18, fontSize: '0.65rem', flexShrink: 0 }} />
                 <Typography variant="caption" color="text.secondary" noWrap sx={{ flexShrink: 0 }}>
-                  @{botData?.telegram_bot_username || 'telegizer_bot'} · {botData?.group_count ?? 0} groups
+                  @{botData?.telegram_bot_username || 'telegizer_bot'} · {groups.length || (botData?.group_count ?? 0)} groups
                 </Typography>
               </>
             )}
@@ -149,7 +149,7 @@ export default function HubWorkspace() {
 // ── Tab dispatcher ─────────────────────────────────────────────────────────────
 export function TabContent({ tab, botData, groups, setGroups, botId }) {
   switch (tab) {
-    case 'overview':   return <HubOverview botData={botData} groups={groups} botId={botId} />;
+    case 'overview':   return <HubOverview botData={botData} groups={groups} setGroups={setGroups} botId={botId} />;
     case 'notes':      return <HubNotes groups={groups} botId={botId} />;
     case 'reminders':  return <HubReminders groups={groups} botId={botId} />;
     case 'tasks':      return <HubTasks groups={groups} botId={botId} />;
@@ -219,11 +219,16 @@ function HubHealthBanner() {
   );
 }
 
-function HubOverview({ botData, groups, botId }) {
+function HubOverview({ botData, groups, setGroups, botId }) {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [groupFilter, setGroupFilter] = useState('');
+  const [overlayGroup, setOverlayGroup] = useState(null);
+  const [unlinkTarget, setUnlinkTarget] = useState(null);
+  const [unlinkDeleteData, setUnlinkDeleteData] = useState(false);
+  const [unlinkLoading, setUnlinkLoading] = useState(false);
+  const [unlinkError, setUnlinkError] = useState(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -238,7 +243,30 @@ function HubOverview({ botData, groups, botId }) {
 
   const groupCount = data?.group_count ?? botData?.group_count ?? 0;
 
-  if (!loading && groupCount === 0) {
+  // Overlay edits propagate to the shared groups array (when available).
+  const handleGroupUpdated = (updated) =>
+    setGroups?.(prev => prev.map(g => g.id === updated.id ? { ...g, ...updated } : g));
+  const handleGroupDisconnected = (groupId) => {
+    setGroups?.(prev => prev.filter(g => g.id !== groupId));
+    if (groupFilter === groupId) setGroupFilter('');
+  };
+
+  const handleUnlink = async () => {
+    if (!unlinkTarget) return;
+    setUnlinkLoading(true); setUnlinkError(null);
+    try {
+      await hub.disconnectGroup(unlinkTarget.id, unlinkDeleteData);
+      handleGroupDisconnected(unlinkTarget.id);
+      setUnlinkTarget(null);
+      setUnlinkDeleteData(false);
+      load();
+    } catch (e) {
+      setUnlinkError(e?.response?.data?.error || 'Failed to unlink group.');
+    }
+    setUnlinkLoading(false);
+  };
+
+  if (!loading && groupCount === 0 && groups.length === 0) {
     return (
       <EmptyState icon="🤖" title="Add the Telegizer bot to your private groups to get started."
         body="The assistant will silently observe and surface tasks, decisions, and meetings here."
@@ -247,10 +275,42 @@ function HubOverview({ botData, groups, botId }) {
     );
   }
 
+  const activeGroup = groupFilter ? groups.find(g => g.id === groupFilter) : null;
+
   return (
-    <Box sx={{ maxWidth: 700 }}>
+    <Box sx={{ maxWidth: 900 }}>
       {/* Extraction health — official bot only (endpoint resolves the official bot). */}
       {!botId && <HubHealthBanner />}
+
+      {/* Connected groups — card grid (parity with the Groups / Servers dashboards),
+          so each group is directly accessible from the Hub landing page. */}
+      {groups.length > 0 && (
+        <Box sx={{ mb: 3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, flexWrap: 'wrap', gap: 1 }}>
+            <SectionHeader label={`Your Groups (${groups.length})`} />
+            <Button size="small" startIcon={<Add sx={{ fontSize: 16 }} />}
+              onClick={() => navigate(botId ? `/ark/bots/${botId}/settings` : '/ark/official/settings')}>
+              Add to Group
+            </Button>
+          </Box>
+          <Grid container spacing={2}>
+            {groups.map(g => (
+              <Grid item xs={12} sm={6} lg={groups.length > 2 ? 4 : 6} key={g.id}>
+                <EchoGroupCard
+                  group={g}
+                  selected={groupFilter === g.id}
+                  onViewItems={() => setGroupFilter(prev => prev === g.id ? '' : g.id)}
+                  onManage={() => setOverlayGroup(g)}
+                  onUnlink={() => { setUnlinkTarget(g); setUnlinkDeleteData(false); setUnlinkError(null); }}
+                />
+              </Grid>
+            ))}
+          </Grid>
+        </Box>
+      )}
+
+      <Box sx={{ maxWidth: 700 }}>
+      <SectionHeader label={activeGroup ? `Activity — ${activeGroup.display_name || activeGroup.group_name}` : 'Activity — All Groups'} />
 
       {/* Group filter */}
       {groups.length > 1 && (
@@ -319,7 +379,118 @@ function HubOverview({ botData, groups, botId }) {
           </OverviewSection>
         </>
       )}
+      </Box>
+
+      <GroupSettingsOverlay open={Boolean(overlayGroup)} group={overlayGroup}
+        onClose={() => setOverlayGroup(null)}
+        onUpdated={handleGroupUpdated} onDisconnected={handleGroupDisconnected} />
+
+      {/* Unlink confirmation */}
+      <Dialog open={Boolean(unlinkTarget)} onClose={() => !unlinkLoading && setUnlinkTarget(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Unlink group?</DialogTitle>
+        <DialogContent>
+          {unlinkError && <Alert severity="error" sx={{ mb: 2 }}>{unlinkError}</Alert>}
+          <Typography variant="body2">
+            Disconnect <strong>{unlinkTarget?.display_name || unlinkTarget?.group_name}</strong>? Echo will leave the group
+            (if it's still a member) and stop observing it.
+          </Typography>
+          <FormControlLabel
+            sx={{ mt: 1.5 }}
+            control={<Switch size="small" checked={unlinkDeleteData} onChange={e => setUnlinkDeleteData(e.target.checked)} />}
+            label={<Typography variant="body2">Also delete all items extracted from this group</Typography>}
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setUnlinkTarget(null)} color="inherit" size="small" disabled={unlinkLoading}>Cancel</Button>
+          <Button onClick={handleUnlink} variant="contained" color="error" size="small" disabled={unlinkLoading}>
+            {unlinkLoading ? <CircularProgress size={14} sx={{ mr: 0.5 }} /> : null}Unlink
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
+  );
+}
+
+// ── Echo group card ──────────────────────────────────────────────────────────
+// Card-grid representation of a connected group, matching the Groups / Servers
+// dashboards so each group is directly accessible from the Hub landing page.
+function EchoGroupCard({ group, selected, onViewItems, onManage, onUnlink }) {
+  const name = group.display_name || group.group_name || `Group ${group.telegram_group_id}`;
+  const paused = !group.is_active;
+  const planLimited = group.pause_reason === 'plan_limit';
+  const extracts = [
+    group.extract_tasks && 'Tasks',
+    group.extract_reminders && 'Reminders',
+    group.extract_decisions && 'Decisions',
+    group.extract_meetings && 'Meetings',
+  ].filter(Boolean);
+
+  return (
+    <Card sx={{
+      height: '100%',
+      borderColor: selected ? 'primary.main' : undefined,
+      borderWidth: selected ? 2 : undefined,
+      transition: 'box-shadow .15s, border-color .15s',
+      '&:hover': { boxShadow: 4 },
+    }} variant="outlined">
+      <CardContent>
+        {/* Title + status */}
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography variant="h6" noWrap fontWeight={600} sx={{ fontSize: '1rem' }}>{name}</Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
+              ID: {group.telegram_group_id}
+            </Typography>
+          </Box>
+          {planLimited
+            ? <Chip label="Plan limit" size="small" color="warning" sx={{ flexShrink: 0 }} />
+            : paused
+              ? <Chip label="Paused" size="small" sx={{ flexShrink: 0 }} />
+              : <Chip label="Active" size="small" color="success" sx={{ flexShrink: 0 }} />}
+        </Box>
+
+        <Divider sx={{ my: 1.5 }} />
+
+        {/* Bot type + last activity */}
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', mb: 1.5, flexWrap: 'wrap', gap: 1 }}>
+          <Box>
+            <Typography variant="caption" color="text.secondary">Assistant</Typography>
+            <Typography variant="body2" fontWeight={500}>🔵 Echo</Typography>
+          </Box>
+          <Box sx={{ textAlign: 'right' }}>
+            <Typography variant="caption" color="text.secondary" display="block">Last activity</Typography>
+            <Typography variant="body2" fontWeight={500}>{timeAgo(group.last_batch_at)}</Typography>
+          </Box>
+        </Box>
+
+        {/* What Echo extracts here */}
+        {extracts.length > 0 && (
+          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mb: 1.5 }}>
+            {extracts.map(e => (
+              <Chip key={e} label={e} size="small" variant="outlined" sx={{ height: 18, fontSize: '0.6rem' }} />
+            ))}
+          </Box>
+        )}
+
+        {/* Actions */}
+        <Box sx={{ display: 'flex', gap: 1, mt: 0.5, flexWrap: 'wrap' }}>
+          <Tooltip title={selected ? 'Showing this group below — click to show all' : 'Show only this group\'s items below'}>
+            <Button size="small" variant={selected ? 'contained' : 'outlined'} startIcon={<FilterList />}
+              onClick={onViewItems} sx={{ flex: 1 }}>
+              {selected ? 'Viewing' : 'View Items'}
+            </Button>
+          </Tooltip>
+          <Button size="small" variant="outlined" startIcon={<SettingsIcon />} onClick={onManage} sx={{ flex: 1 }}>
+            Manage
+          </Button>
+          <Tooltip title="Disconnect this group from Echo">
+            <Button size="small" variant="outlined" color="error" startIcon={<LinkOff />} onClick={onUnlink} sx={{ flex: 1 }}>
+              Unlink
+            </Button>
+          </Tooltip>
+        </Box>
+      </CardContent>
+    </Card>
   );
 }
 
