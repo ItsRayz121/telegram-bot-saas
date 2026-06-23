@@ -70,6 +70,13 @@ def _do_buffer(flask_app, telegram_group_id: int, message, hub_bot_id: str | Non
     group = q.first()
 
     if not group:
+        # TEMP DIAGNOSTIC: the message arrived but no active+consented Hub group
+        # matches this chat id — so it's silently dropped. If you see THIS, the
+        # connection row is missing/paused or the chat id doesn't match.
+        _log.info(
+            "[hub] buffer: NO connected group for chat=%s (hub_bot=%s) — message dropped",
+            telegram_group_id, hub_bot_id or "official",
+        )
         return  # group not connected to Hub or paused
 
     # Check silence window
@@ -106,10 +113,19 @@ def _do_buffer(flask_app, telegram_group_id: int, message, hub_bot_id: str | Non
     pipe.expire(buffer_key, BUFFER_TTL)
 
     # Set priority flag if message contains trigger keywords
-    if _has_trigger(text):
+    trigger = _has_trigger(text)
+    if trigger:
         pipe.set(priority_key, "1", ex=7200)   # 2-hour TTL
 
     pipe.execute()
+
+    # TEMP DIAGNOSTIC: message was successfully buffered for extraction. If you
+    # see THIS but "Last activity" stays "never", the break is downstream in
+    # extraction (e.g. no AI key) — search the logs for "hub_extraction".
+    _log.info(
+        "[hub] buffer: stored msg for group=%s chat=%s trigger=%s key=%s",
+        group.id, telegram_group_id, trigger, buffer_key,
+    )
 
 
 def _in_silence_window(now_time, start_time, end_time) -> bool:

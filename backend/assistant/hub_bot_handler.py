@@ -143,6 +143,15 @@ async def _on_message(
     if not flask_app or not chat or chat.type == ChatType.PRIVATE or not message:
         return
 
+    # TEMP DIAGNOSTIC: confirms the group-message handler is actually firing for
+    # Echo. If this line never appears in the logs when you send a group message,
+    # the webhook update isn't reaching this handler at all.
+    _log.info(
+        "[hub] on_message FIRED: chat=%s type=%s len=%d hub_bot=%s",
+        chat.id, getattr(chat, "type", "?"),
+        len((message.text or message.caption or "")), hub_bot_id or "official",
+    )
+
     try:
         from .hub_message_router import buffer_hub_message
         # Pass hub_bot_id so we buffer only under the correct HubBotIdentity's key,

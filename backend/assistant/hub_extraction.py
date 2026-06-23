@@ -98,6 +98,11 @@ def _do_extract(bot_id: str, group_id: str, r) -> dict:
     # ── Pull messages from buffer ──────────────────────────────────────────────
     buffer_key = f"assistant:buffer:{bot_id}:{group_id}"
     raw_messages = r.lrange(buffer_key, 0, -1)
+    # TEMP DIAGNOSTIC: how many buffered messages this extraction run found. If
+    # this logs >0 but no items appear, the AI call/key is the problem (the next
+    # log line will be "OpenAI call failed").
+    _log.info("[hub] hub_extraction run: bot=%s group=%s buffered=%d plan=%s",
+              bot_id, group_id, len(raw_messages), plan)
     if not raw_messages:
         return {"status": "empty"}
 
