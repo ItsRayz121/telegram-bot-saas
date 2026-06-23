@@ -161,6 +161,18 @@ def push_hub_meeting_to_calendar(user_id: int, meeting):
         "description": "\n".join(desc),
         "start": {"dateTime": _iso_utc(start_dt), "timeZone": "UTC"},
         "end":   {"dateTime": _iso_utc(end_dt),   "timeZone": "UTC"},
+        # One tidy event, but with native Google reminders mirroring the Telegram
+        # ladder (1 day / 3 hr / 1 hr / 10 min) so Calendar also nudges the user —
+        # without creating multiple events. Google caps overrides at 5.
+        "reminders": {
+            "useDefault": False,
+            "overrides": [
+                {"method": "popup", "minutes": 1440},
+                {"method": "popup", "minutes": 180},
+                {"method": "popup", "minutes": 60},
+                {"method": "popup", "minutes": 10},
+            ],
+        },
     }
     if meeting.meeting_url:
         event["location"] = meeting.meeting_url

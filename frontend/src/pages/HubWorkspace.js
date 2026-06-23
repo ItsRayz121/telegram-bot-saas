@@ -1706,6 +1706,78 @@ function HubAutomation() {
 }
 
 // ── Settings tab ───────────────────────────────────────────────────────────────
+// One-time Google Calendar connection + auto-sync, lives in the Settings tab.
+function GoogleCalendarSettingsCard() {
+  const [cal, setCal] = useState(null);   // {connected, configured, email, auto_sync_meetings}
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    googleCalendar.status()
+      .then(r => setCal(r.data))
+      .catch(() => setCal({ connected: false, configured: false }));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const connect = async () => {
+    setBusy(true);
+    try { const { data } = await googleCalendar.getAuthUrl(); window.location.href = data.auth_url; }
+    catch { setBusy(false); }
+  };
+  const disconnect = async () => {
+    if (!window.confirm('Disconnect Google Calendar? New meetings will stop syncing.')) return;
+    setBusy(true);
+    try { await googleCalendar.disconnect(); setCal({ connected: false, configured: true }); }
+    catch { /* noop */ }
+    finally { setBusy(false); }
+  };
+  const toggleAutoSync = async (val) => {
+    setCal(c => ({ ...c, auto_sync_meetings: val }));
+    try { await googleCalendar.updateSettings({ auto_sync_meetings: val }); } catch { load(); }
+  };
+
+  if (!cal) return <Card variant="outlined" sx={{ mb: 3 }}><CardContent><CircularProgress size={20} /></CardContent></Card>;
+
+  return (
+    <Card variant="outlined" sx={{ mb: 3 }}>
+      <CardContent>
+        {!cal.configured ? (
+          <Typography variant="body2" color="text.secondary">
+            Google Calendar isn't configured on this server yet.
+          </Typography>
+        ) : cal.connected ? (
+          <>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 1 }}>
+              <CheckCircleOutline sx={{ fontSize: 18, color: 'success.main', flexShrink: 0 }} />
+              <Typography variant="body2" fontWeight={600}>Connected</Typography>
+              {cal.email && <Typography variant="caption" color="text.secondary" noWrap>· {cal.email}</Typography>}
+              <Box sx={{ flex: 1 }} />
+              <Button size="small" color="error" startIcon={<LinkOff sx={{ fontSize: 15 }} />} onClick={disconnect} disabled={busy}>
+                Disconnect
+              </Button>
+            </Box>
+            <FormControlLabel sx={{ mt: 0.5 }}
+              control={<Switch size="small" checked={!!cal.auto_sync_meetings} onChange={e => toggleAutoSync(e.target.checked)} />}
+              label={<Typography variant="body2">Auto-add new meetings to my Google Calendar</Typography>}
+            />
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+              One tidy event per meeting, with reminders 1 day / 3 hr / 1 hr / 10 min before. Telegram reminders are sent separately.
+            </Typography>
+          </>
+        ) : (
+          <>
+            <Typography variant="body2" color="text.secondary" mb={1.5}>
+              Connect once — meetings Echo finds in your groups are then added to your Google Calendar automatically.
+            </Typography>
+            <Button variant="contained" size="small" startIcon={<CalendarToday sx={{ fontSize: 15 }} />} onClick={connect} disabled={busy}>
+              {busy ? 'Connecting…' : 'Connect Google Calendar'}
+            </Button>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function HubSettings({ botData, groups, setGroups, botId = null }) {
   const [, setSettings] = useState(null);
   const [personality, setPersonality] = useState('');
@@ -1846,6 +1918,9 @@ function HubSettings({ botData, groups, setGroups, botId = null }) {
           </Button>
         </CardContent>
       </Card>
+
+      <SectionHeader label="Google Calendar" />
+      <GoogleCalendarSettingsCard />
 
       <SectionHeader label="Connected Groups" />
       <Card variant="outlined" sx={{ mb: 3 }}>
