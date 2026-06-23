@@ -15,6 +15,7 @@ export const ASSISTANT_HUB_TABS = [
   { key: 'overview',   label: 'Overview' },
   { key: 'notes',      label: 'Notes' },
   { key: 'reminders',  label: 'Reminders' },
+  { key: 'meetings',   label: 'Meetings' },
   { key: 'tasks',      label: 'Tasks' },
   { key: 'templates',  label: 'Templates' },
   { key: 'knowledge',  label: 'Knowledge' },
@@ -22,7 +23,6 @@ export const ASSISTANT_HUB_TABS = [
   { key: 'settings',   label: 'Settings' },
 
   // ── Future tabs (uncomment to activate, add case in TabContent) ──────────────
-  // { key: 'meetings',   label: 'Meetings' },
   // { key: 'memory',     label: 'Memory' },
   // { key: 'crm',        label: 'CRM' },
   // { key: 'inbox',      label: 'Team Inbox' },

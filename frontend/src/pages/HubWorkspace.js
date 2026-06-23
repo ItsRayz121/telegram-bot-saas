@@ -13,6 +13,7 @@ import {
 import {
   ArrowBack, SmartToy, Add, Delete, Edit, CheckCircleOutline,
   AccessTime, CalendarToday, Settings as SettingsIcon, FilterList, LinkOff,
+  EventOutlined, VideocamOutlined, PeopleOutline, EventBusy,
 } from '@mui/icons-material';
 import { hub } from '../services/api';
 import BotTokenConnectModal from '../components/shared/BotTokenConnectModal';
@@ -152,6 +153,7 @@ export function TabContent({ tab, botData, groups, setGroups, botId }) {
     case 'overview':   return <HubOverview botData={botData} groups={groups} setGroups={setGroups} botId={botId} />;
     case 'notes':      return <HubNotes groups={groups} botId={botId} />;
     case 'reminders':  return <HubReminders groups={groups} botId={botId} />;
+    case 'meetings':   return <HubMeetings groups={groups} botId={botId} />;
     case 'tasks':      return <HubTasks groups={groups} botId={botId} />;
     case 'templates':  return <HubTemplates botId={botId} />;
     case 'knowledge':  return <HubKnowledge botId={botId} />;
@@ -818,6 +820,169 @@ function HubReminders({ groups, botId }) {
           <Button onClick={() => setDeleteTarget(null)} color="inherit" size="small">Cancel</Button>
           <Button onClick={handleDelete} variant="contained" color="error" size="small" disabled={deleteLoading}>
             {deleteLoading ? <CircularProgress size={14} sx={{ mr: 0.5 }} /> : null}Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+}
+
+// ── Meetings tab ───────────────────────────────────────────────────────────────
+// Surfaces meetings Echo extracts from connected groups (HubMeeting store — the
+// same data shown on the Overview "Upcoming Meetings" card). Read + dismiss only;
+// these are AI-extracted, not manually created. Undated meetings (where the AI
+// couldn't pin a date) get their own "Needs a date" filter so they're not lost.
+function gcalUrl({ title, startIso, durationMins = 60, description = '' }) {
+  const dt = new Date(startIso);
+  const pad = n => String(n).padStart(2, '0');
+  const fmt = d =>
+    `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}` +
+    `T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}00Z`;
+  const end = new Date(dt.getTime() + durationMins * 60000);
+  const params = new URLSearchParams({ action: 'TEMPLATE', text: title || 'Meeting', dates: `${fmt(dt)}/${fmt(end)}`, details: description });
+  return `https://calendar.google.com/calendar/render?${params}`;
+}
+
+function HubMeetings({ groups, botId }) {
+  const [meetings, setMeetings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('upcoming');
+  const [groupFilter, setGroupFilter] = useState('');
+  const [dismissTarget, setDismissTarget] = useState(null);
+  const [dismissLoading, setDismissLoading] = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    hub.listMeetings({ group_id: groupFilter || undefined, ...(botId ? { bot_id: botId } : {}) })
+      .then(r => setMeetings(r.data.meetings || []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupFilter]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleDismiss = async () => {
+    if (!dismissTarget) return;
+    setDismissLoading(true);
+    try { await hub.dismissMeeting(dismissTarget.id); } catch { /* noop */ }
+    setMeetings(prev => prev.filter(m => m.id !== dismissTarget.id));
+    setDismissLoading(false);
+    setDismissTarget(null);
+  };
+
+  const groupName = (id) => {
+    const g = groups.find(x => String(x.id) === String(id));
+    return g ? (g.group_name || g.id) : null;
+  };
+
+  // Endpoint returns all non-dismissed meetings (past + future + undated);
+  // bucket them client-side so the filter switches views without a refetch.
+  const now = Date.now();
+  const bucketOf = (m) => {
+    if (!m.scheduled_at) return 'undated';
+    return new Date(m.scheduled_at).getTime() < now ? 'past' : 'upcoming';
+  };
+  const counts = meetings.reduce((acc, m) => { acc[bucketOf(m)] = (acc[bucketOf(m)] || 0) + 1; return acc; }, {});
+  let visible = meetings.filter(m => !filter || bucketOf(m) === filter);
+  // Backend sorts scheduled_at asc; past reads better most-recent-first.
+  if (filter === 'past') visible = [...visible].reverse();
+  const otherCount = (counts.undated || 0) + (counts.past || 0);
+
+  return (
+    <Box sx={{ maxWidth: 700 }}>
+      <Box sx={{ display: 'flex', gap: 1.5, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+        <FormControl size="small" sx={{ minWidth: 140 }}>
+          <InputLabel>Filter</InputLabel>
+          <Select value={filter} label="Filter" onChange={e => setFilter(e.target.value)}>
+            <MenuItem value="upcoming">Upcoming{counts.upcoming ? ` (${counts.upcoming})` : ''}</MenuItem>
+            <MenuItem value="undated">Needs a date{counts.undated ? ` (${counts.undated})` : ''}</MenuItem>
+            <MenuItem value="past">Past{counts.past ? ` (${counts.past})` : ''}</MenuItem>
+            <MenuItem value="">All</MenuItem>
+          </Select>
+        </FormControl>
+        {groups.length > 1 && (
+          <FormControl size="small" sx={{ minWidth: 140 }}>
+            <InputLabel>Group</InputLabel>
+            <Select value={groupFilter} label="Group" onChange={e => setGroupFilter(e.target.value)}>
+              <MenuItem value="">All groups</MenuItem>
+              {groups.map(g => <MenuItem key={g.id} value={g.id}>{g.group_name || g.id}</MenuItem>)}
+            </Select>
+          </FormControl>
+        )}
+      </Box>
+
+      {loading ? (
+        <Box sx={{ textAlign: 'center', py: 6 }}><CircularProgress /></Box>
+      ) : visible.length === 0 ? (
+        <EmptyState icon="📅"
+          title={filter === 'upcoming' ? 'No upcoming meetings.' : 'No meetings here.'}
+          body={filter === 'upcoming' && otherCount
+            ? `Nothing upcoming — but you have ${otherCount} other meeting${otherCount > 1 ? 's' : ''}. Check "Needs a date" or "Past".`
+            : "Meetings Echo spots in your group discussions show up here automatically — including ones it couldn't pin a date on."}
+        />
+      ) : (
+        <Card variant="outlined">
+          {visible.map((m, i) => {
+            const undated = !m.scheduled_at;
+            const past = !undated && new Date(m.scheduled_at).getTime() < now;
+            const gname = groupName(m.source_group_id);
+            return (
+              <Box key={m.id}>
+                <Box sx={{ display: 'flex', alignItems: 'flex-start', px: 2, py: 1.25, gap: 1 }}>
+                  {undated
+                    ? <EventBusy sx={{ fontSize: 17, color: 'warning.main', mt: 0.25, flexShrink: 0 }} />
+                    : <EventOutlined sx={{ fontSize: 17, color: past ? 'text.disabled' : 'primary.main', mt: 0.25, flexShrink: 0 }} />}
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography variant="body2" fontWeight={500}>{m.title || 'Untitled meeting'}</Typography>
+                    <Typography variant="caption" sx={{ color: undated ? 'warning.main' : (past ? 'text.disabled' : 'text.secondary') }}>
+                      {undated ? 'No date set — extracted from chat' : `${fmtDateTime(m.scheduled_at)}${past ? ' · past' : ''}`}
+                    </Typography>
+                    <Box sx={{ display: 'flex', gap: 0.75, mt: 0.75, flexWrap: 'wrap', alignItems: 'center' }}>
+                      {gname && (
+                        <Chip label={gname} size="small" variant="outlined" sx={{ height: 16, fontSize: '0.6rem' }} />
+                      )}
+                      {Array.isArray(m.participants) && m.participants.length > 0 && (
+                        <Chip icon={<PeopleOutline sx={{ fontSize: '0.7rem !important' }} />} label={m.participants.join(', ')}
+                          size="small" variant="outlined" sx={{ height: 16, fontSize: '0.6rem' }} />
+                      )}
+                      {m.meeting_url && (
+                        <Chip icon={<VideocamOutlined sx={{ fontSize: '0.7rem !important' }} />} label="Join link"
+                          size="small" clickable component="a" href={m.meeting_url} target="_blank" rel="noopener noreferrer"
+                          sx={{ height: 16, fontSize: '0.6rem', bgcolor: 'primary.main', color: '#fff', '& .MuiChip-icon': { color: '#fff' } }} />
+                      )}
+                      {!undated && (
+                        <Button size="small" component="a" target="_blank" rel="noopener noreferrer"
+                          href={gcalUrl({ title: m.title, startIso: m.scheduled_at, description: (m.participants || []).length ? `With: ${m.participants.join(', ')}` : '' })}
+                          startIcon={<CalendarToday sx={{ fontSize: 13, color: '#4285f4' }} />}
+                          sx={{ fontSize: '0.65rem', borderColor: '#4285f4', color: '#4285f4', py: 0, px: 0.75, minWidth: 0 }} variant="outlined">
+                          Add to Calendar
+                        </Button>
+                      )}
+                    </Box>
+                  </Box>
+                  <Tooltip title="Dismiss">
+                    <IconButton size="small" onClick={() => setDismissTarget(m)} sx={{ flexShrink: 0 }}>
+                      <Delete sx={{ fontSize: 15 }} />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+                {i < visible.length - 1 && <Divider />}
+              </Box>
+            );
+          })}
+        </Card>
+      )}
+
+      <Dialog open={Boolean(dismissTarget)} onClose={() => setDismissTarget(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Dismiss meeting?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">Remove this meeting from your Hub? It won't be deleted from the original chat.</Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setDismissTarget(null)} color="inherit" size="small">Cancel</Button>
+          <Button onClick={handleDismiss} variant="contained" color="error" size="small" disabled={dismissLoading}>
+            {dismissLoading ? <CircularProgress size={14} sx={{ mr: 0.5 }} /> : null}Dismiss
           </Button>
         </DialogActions>
       </Dialog>
