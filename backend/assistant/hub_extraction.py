@@ -381,6 +381,12 @@ def _write_items(validated: dict, group, bot_id: str, batch_id: str, db) -> dict
     from ..assistant.hub_models import (
         HubTask, HubReminder, HubDecision, HubMeeting, HubNote, HubInboxItem, HubFollowUp,
     )
+    # Import once at the top — _enc is used by EVERY item type below (tasks,
+    # reminders, decisions, meetings, notes, follow-ups). It used to be imported
+    # inside the tasks loop, so a message that produced only a meeting/reminder
+    # (no task) left _enc unbound → "cannot access local variable '_enc'", which
+    # crashed extraction for every scheduling/meeting message.
+    from ..assistant.hub_crypto import _enc
 
     counts = {"tasks": 0, "reminders": 0, "decisions": 0, "meetings": 0, "notes": 0, "follow_ups": 0}
     user_id = group.user_id
@@ -408,7 +414,6 @@ def _write_items(validated: dict, group, bot_id: str, batch_id: str, db) -> dict
         priority = t.get("priority", "normal")
         if priority not in ("low", "normal", "high"):
             priority = "normal"
-        from ..assistant.hub_crypto import _enc
         task = HubTask(
             user_id=user_id,
             bot_id=bot_id,
