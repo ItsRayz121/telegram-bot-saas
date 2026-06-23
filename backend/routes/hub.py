@@ -1046,12 +1046,22 @@ def hub_overview():
         db.case((HubTask.due_date.isnot(None), HubTask.due_date), else_=db.literal(None)).asc().nullslast()
     ).limit(20).all()
 
-    # Meetings — upcoming (not dismissed)
+    # Meetings — upcoming (future), PLUS recently-extracted undated ones.
+    # Echo often extracts a meeting whose date the AI couldn't pin down
+    # (scheduled_at NULL). Those must still surface on the Overview or the page
+    # looks empty even though extraction worked — show undated meetings from the
+    # last 7 days so they don't silently vanish.
     meetings_q = HubMeeting.query.filter(
         HubMeeting.user_id == user.id,
         HubMeeting.bot_id == bot.id,
         HubMeeting.dismissed_at.is_(None),
-        HubMeeting.scheduled_at >= now - timedelta(hours=1),
+        db.or_(
+            HubMeeting.scheduled_at >= now - timedelta(hours=1),
+            db.and_(
+                HubMeeting.scheduled_at.is_(None),
+                HubMeeting.created_at >= now - timedelta(days=7),
+            ),
+        ),
     )
     meetings_q = _gfilter(meetings_q, HubMeeting)
     meetings = meetings_q.order_by(HubMeeting.scheduled_at.asc().nullslast()).limit(10).all()
