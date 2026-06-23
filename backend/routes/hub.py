@@ -7,7 +7,7 @@ import logging
 import uuid
 from datetime import datetime, timedelta
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
 from ..models import db, User
@@ -548,6 +548,36 @@ def official_extraction_health():
     except Exception as exc:
         _log.debug("extraction health: redis read failed: %s", exc)
 
+    # ── Root-cause signals ────────────────────────────────────────────────────
+    # 1. Is the Echo bot actually running in THIS web process? Its webhook
+    #    (/api/echo-bot-update) dispatches to flask_app.echo_bot_instance; if
+    #    ECHO_BOT_TOKEN is set only on the worker (not the web service), that
+    #    attribute is never set and the route silently drops every update — the
+    #    #1 cause of a Hub that never sees a single message.
+    bot_running = getattr(current_app._get_current_object(), "echo_bot_instance", None) is not None
+
+    # 2. Does an AI key resolve for this user? Extraction marks the batch "failed"
+    #    and never advances last_batch_at when no key is configured, so a missing
+    #    key looks identical to a delivery failure from the outside. Mirror the
+    #    exact resolution order used by hub_extraction (user key → platform
+    #    OpenRouter key) WITHOUT the quota-increment side effect of the resolver.
+    ai_key_configured = False
+    try:
+        from ..models import UserApiKey
+        from .. import secret_vault as _sv
+        has_user_key = UserApiKey.query.filter_by(user_id=user.id, is_active=True).first() is not None
+        has_platform_key = bool(_sv.get_secret("PLATFORM_OPENROUTER_API_KEY"))
+        ai_key_configured = has_user_key or has_platform_key
+    except Exception as exc:
+        _log.debug("extraction health: ai key check failed: %s", exc)
+
+    # 3. The last failure reason (so "Stalled" can say *why*).
+    last_error = (
+        last_batch.error_message
+        if last_batch and last_batch.status == "failed"
+        else None
+    )
+
     # Verdict. 35-min freshness window covers the 30-min standard batch cycle.
     fresh = bool(last_at and (now - last_at).total_seconds() < 35 * 60)
     if fresh:
@@ -562,9 +592,12 @@ def official_extraction_health():
         "healthy": status != "stalled",
         "last_extraction_at": (last_at.isoformat() + "Z") if last_at else None,
         "last_extraction_status": last_status,   # complete | empty | failed | pending
+        "last_error": last_error,
         "buffered_messages": buffered_messages,
         "buffered_groups": buffered_groups,
         "items_last_24h": items_24h,
+        "bot_running": bot_running,
+        "ai_key_configured": ai_key_configured,
     })
 
 

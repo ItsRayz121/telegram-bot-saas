@@ -204,16 +204,45 @@ function HubHealthBanner() {
 
   const items = h.items_last_24h?.total ?? 0;
 
+  // Root-cause diagnosis — most actionable problem wins. Each line tells the user
+  // exactly what to fix, so a dead Hub explains itself instead of showing a blank page.
+  let diagnosis = null;
+  if (h.bot_running === false) {
+    diagnosis = {
+      severity: 'error',
+      text: 'Echo is offline on the server — ECHO_BOT_TOKEN is not set (or wrong) on the web service, so no group messages can be received. Check Railway → web service → Variables.',
+    };
+  } else if (h.ai_key_configured === false) {
+    diagnosis = {
+      severity: 'error',
+      text: "No AI key is configured, so extraction can't run. Add one in Settings → AI, or set the platform key.",
+    };
+  } else if (h.status === 'idle' && h.buffered_messages === 0) {
+    diagnosis = {
+      severity: 'info',
+      text: 'No messages received yet. Telegram never replays old messages to a bot — send a NEW message in the group, and make sure Echo is an admin (or has Group Privacy turned off in BotFather).',
+    };
+  } else if (h.last_error) {
+    diagnosis = { severity: 'warning', text: `Last extraction failed: ${h.last_error}` };
+  }
+
   return (
     <Card variant="outlined" sx={{ mb: 2, ...(h.status === 'stalled' ? { borderColor: 'error.main' } : {}) }}>
-      <CardContent sx={{ p: '12px !important', display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
-        <Chip size="small" color={cfg.color} label={cfg.label} />
-        <Typography variant="body2" color="text.secondary" sx={{ flex: 1, minWidth: 180 }}>
-          {cfg.help}
-        </Typography>
-        <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
-          Last run {timeAgo(h.last_extraction_at)} · {h.buffered_messages} buffered · {items} item{items !== 1 ? 's' : ''}/24h
-        </Typography>
+      <CardContent sx={{ p: '12px !important' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+          <Chip size="small" color={cfg.color} label={cfg.label} />
+          <Typography variant="body2" color="text.secondary" sx={{ flex: 1, minWidth: 180 }}>
+            {cfg.help}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+            Last run {timeAgo(h.last_extraction_at)} · {h.buffered_messages} buffered · {items} item{items !== 1 ? 's' : ''}/24h
+          </Typography>
+        </Box>
+        {diagnosis && (
+          <Alert severity={diagnosis.severity} sx={{ mt: 1.5, py: 0, fontSize: '0.8rem' }}>
+            {diagnosis.text}
+          </Alert>
+        )}
       </CardContent>
     </Card>
   );
