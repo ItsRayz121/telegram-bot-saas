@@ -15,7 +15,7 @@ import {
   AccessTime, CalendarToday, Settings as SettingsIcon, FilterList, LinkOff,
   EventOutlined, VideocamOutlined, PeopleOutline, EventBusy,
 } from '@mui/icons-material';
-import { hub } from '../services/api';
+import { hub, googleCalendar } from '../services/api';
 import BotTokenConnectModal from '../components/shared/BotTokenConnectModal';
 import AddToGroupFlow from '../components/hub/AddToGroupFlow';
 import GroupSettingsOverlay from '../components/hub/GroupSettingsOverlay';
@@ -850,6 +850,8 @@ function HubMeetings({ groups, botId }) {
   const [groupFilter, setGroupFilter] = useState('');
   const [dismissTarget, setDismissTarget] = useState(null);
   const [dismissLoading, setDismissLoading] = useState(false);
+  const [cal, setCal] = useState(null);      // {connected, configured, email, auto_sync_meetings}
+  const [syncingId, setSyncingId] = useState(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -860,7 +862,36 @@ function HubMeetings({ groups, botId }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupFilter]);
 
+  const loadCal = useCallback(() => {
+    googleCalendar.status()
+      .then(r => setCal(r.data))
+      .catch(() => setCal({ connected: false, configured: false }));
+  }, []);
+
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { loadCal(); }, [loadCal]);
+
+  const connectCalendar = async () => {
+    try {
+      const { data } = await googleCalendar.getAuthUrl();
+      window.location.href = data.auth_url;
+    } catch { /* not configured on this server */ }
+  };
+
+  const toggleAutoSync = async (val) => {
+    setCal(c => ({ ...c, auto_sync_meetings: val }));
+    try { await googleCalendar.updateSettings({ auto_sync_meetings: val }); }
+    catch { loadCal(); }
+  };
+
+  const syncToCalendar = async (m) => {
+    setSyncingId(m.id);
+    try {
+      await googleCalendar.syncHubMeeting(m.id);
+      setMeetings(prev => prev.map(x => x.id === m.id ? { ...x, calendar_pushed: true } : x));
+    } catch { /* surfaced as no state change; row stays syncable */ }
+    finally { setSyncingId(null); }
+  };
 
   const handleDismiss = async () => {
     if (!dismissTarget) return;
@@ -891,6 +922,29 @@ function HubMeetings({ groups, botId }) {
 
   return (
     <Box sx={{ maxWidth: 700 }}>
+      {/* Google Calendar connection + auto-sync */}
+      {cal && cal.configured && (
+        <Box sx={{ mb: 2 }}>
+          {cal.connected ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', p: 1.25, border: '1px solid', borderColor: 'divider', borderRadius: 1, bgcolor: 'action.hover' }}>
+              <CalendarToday sx={{ fontSize: 16, color: 'success.main', flexShrink: 0 }} />
+              <Typography variant="caption" sx={{ fontWeight: 600 }}>Google Calendar connected</Typography>
+              {cal.email && <Typography variant="caption" color="text.secondary" noWrap>· {cal.email}</Typography>}
+              <Box sx={{ flex: 1 }} />
+              <FormControlLabel
+                sx={{ mr: 0 }}
+                control={<Switch size="small" checked={!!cal.auto_sync_meetings} onChange={e => toggleAutoSync(e.target.checked)} />}
+                label={<Typography variant="caption">Auto-sync new meetings</Typography>}
+              />
+            </Box>
+          ) : (
+            <Button size="small" variant="outlined" startIcon={<CalendarToday sx={{ fontSize: 15 }} />} onClick={connectCalendar}>
+              Connect Google Calendar
+            </Button>
+          )}
+        </Box>
+      )}
+
       <Box sx={{ display: 'flex', gap: 1.5, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
         <FormControl size="small" sx={{ minWidth: 140 }}>
           <InputLabel>Filter</InputLabel>
@@ -952,12 +1006,25 @@ function HubMeetings({ groups, botId }) {
                           sx={{ height: 16, fontSize: '0.6rem', bgcolor: 'primary.main', color: '#fff', '& .MuiChip-icon': { color: '#fff' } }} />
                       )}
                       {!undated && (
-                        <Button size="small" component="a" target="_blank" rel="noopener noreferrer"
-                          href={gcalUrl({ title: m.title, startIso: m.scheduled_at, description: (m.participants || []).length ? `With: ${m.participants.join(', ')}` : '' })}
-                          startIcon={<CalendarToday sx={{ fontSize: 13, color: '#4285f4' }} />}
-                          sx={{ fontSize: '0.65rem', borderColor: '#4285f4', color: '#4285f4', py: 0, px: 0.75, minWidth: 0 }} variant="outlined">
-                          Add to Calendar
-                        </Button>
+                        cal && cal.connected ? (
+                          m.calendar_pushed ? (
+                            <Chip icon={<CheckCircleOutline sx={{ fontSize: '0.72rem !important' }} />} label="On Calendar"
+                              size="small" sx={{ height: 16, fontSize: '0.6rem', bgcolor: 'success.main', color: '#fff', '& .MuiChip-icon': { color: '#fff' } }} />
+                          ) : (
+                            <Button size="small" variant="outlined" disabled={syncingId === m.id} onClick={() => syncToCalendar(m)}
+                              startIcon={syncingId === m.id ? <CircularProgress size={11} /> : <CalendarToday sx={{ fontSize: 13, color: '#4285f4' }} />}
+                              sx={{ fontSize: '0.65rem', borderColor: '#4285f4', color: '#4285f4', py: 0, px: 0.75, minWidth: 0 }}>
+                              {syncingId === m.id ? 'Syncing…' : 'Add to Google Calendar'}
+                            </Button>
+                          )
+                        ) : (
+                          <Button size="small" component="a" target="_blank" rel="noopener noreferrer"
+                            href={gcalUrl({ title: m.title, startIso: m.scheduled_at, description: (m.participants || []).length ? `With: ${m.participants.join(', ')}` : '' })}
+                            startIcon={<CalendarToday sx={{ fontSize: 13, color: '#4285f4' }} />}
+                            sx={{ fontSize: '0.65rem', borderColor: '#4285f4', color: '#4285f4', py: 0, px: 0.75, minWidth: 0 }} variant="outlined">
+                            Add to Calendar
+                          </Button>
+                        )
                       )}
                     </Box>
                   </Box>

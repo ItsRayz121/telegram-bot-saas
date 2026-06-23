@@ -26,6 +26,15 @@ _DAILY_LIMITS = {"free": 50, "pro": 500, "enterprise": 999_999}
 # ── Output schema validation ───────────────────────────────────────────────────
 _ARRAY_FIELDS = ("tasks", "reminders", "decisions", "meetings", "important_notes", "follow_ups")
 
+# ── Meeting reminder ladder ─────────────────────────────────────────────────────
+# Multiple nudges per meeting so it isn't forgotten. (minutes_before, lead label).
+_MEETING_REMINDER_LADDER = (
+    (1440, "in 1 day"),
+    (180, "in 3 hours"),
+    (60, "in 1 hour"),
+    (10, "in 10 minutes"),
+)
+
 
 def run_extraction(bot_id: str, group_id: str, flask_app) -> dict:
     """
@@ -561,26 +570,31 @@ def _run_automation_triggers(validated: dict, group, bot_id: str, batch_id: str,
             # Fall back to seed default_enabled flag stored in default_params
             return bool((auto.default_params or {}).get("default_enabled", True))
 
-        # Meeting reminders: create reminder 60 min before each meeting
+        # Meeting reminders: a ladder of nudges before each meeting so it isn't
+        # missed (1 day / 3 hours / 1 hour / 10 minutes before). Only offsets that
+        # are still in the future get a reminder; delivery is handled by the
+        # throttled, anti-ban-safe HubReminder delivery job.
         if _is_enabled("meeting_reminder"):
+            now = datetime.utcnow()
             for mtg in validated.get("meetings", []):
                 scheduled_at = _parse_datetime(mtg.get("scheduled_at"))
                 if not scheduled_at:
                     continue
-                remind_at = scheduled_at - timedelta(minutes=60)
-                if remind_at < datetime.utcnow():
-                    continue  # already past
                 title = str(mtg.get("title", "Meeting"))[:200]
-                reminder = HubReminder(
-                    user_id=user_id,
-                    bot_id=bot_id,
-                    source_group_id=group.id,
-                    content=f"Meeting in 1 hour: {title}",
-                    remind_at=remind_at,
-                    source="extracted",
-                    source_batch_id=batch_id,
-                )
-                db.session.add(reminder)
+                for minutes_before, lead_label in _MEETING_REMINDER_LADDER:
+                    remind_at = scheduled_at - timedelta(minutes=minutes_before)
+                    if remind_at < now:
+                        continue  # this lead time has already passed
+                    reminder = HubReminder(
+                        user_id=user_id,
+                        bot_id=bot_id,
+                        source_group_id=group.id,
+                        content=f"Meeting {lead_label}: {title}",
+                        remind_at=remind_at,
+                        source="extracted",
+                        source_batch_id=batch_id,
+                    )
+                    db.session.add(reminder)
 
         # Deadline alerts: DM immediately for tasks with due_date
         if _is_enabled("deadline_alert"):

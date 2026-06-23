@@ -906,6 +906,7 @@ def _meeting_dict(m):
             "scheduled_at": m.scheduled_at.isoformat() if m.scheduled_at else None,
             "participants": m.participants, "source_group_id": m.source_group_id,
             "meeting_url": m.meeting_url,
+            "calendar_pushed": bool(getattr(m, "calendar_pushed", False)),
             "created_at": m.created_at.isoformat()}
 
 def _note_dict(n):

@@ -108,6 +108,65 @@ def _save_credentials(user_id: int, creds, email: str | None = None) -> None:
     db.session.commit()
 
 
+def _iso_utc(dt) -> str:
+    """RFC3339 UTC timestamp for the Google Calendar API. Treats a naive
+    datetime as UTC (extraction stores naive-UTC scheduled_at)."""
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt.isoformat() + "Z"
+
+
+def _calendar_service(user_id: int):
+    """Build an authorized Calendar API client for a user, refreshing the token
+    if needed. Returns None if the user hasn't connected Google Calendar."""
+    row = GoogleCalendarToken.query.filter_by(user_id=user_id).first()
+    if not row:
+        return None
+    from googleapiclient.discovery import build as _gcal_build
+    from google.auth.transport.requests import Request
+
+    creds = _build_credentials(row)
+    if creds.expired and creds.refresh_token:
+        creds.refresh(Request())
+        _save_credentials(user_id, creds, row.email)
+    return _gcal_build("calendar", "v3", credentials=creds)
+
+
+def push_hub_meeting_to_calendar(user_id: int, meeting):
+    """Insert an Echo Hub meeting (HubMeeting) as a Google Calendar event.
+
+    Returns the created event dict, or None if the meeting has no date or the
+    user hasn't connected Calendar. Raises on a genuine API failure so callers
+    can decide whether to retry. Does NOT flip calendar_pushed — the caller owns
+    that, after a successful commit."""
+    if not getattr(meeting, "scheduled_at", None):
+        return None
+    service = _calendar_service(user_id)
+    if service is None:
+        return None
+
+    from ..assistant.hub_crypto import _dec as _dec_hub
+    start_dt = meeting.scheduled_at
+    end_dt = start_dt + timedelta(hours=1)
+    title = (_dec_hub(meeting.title) or "Meeting")[:200]
+    participants = meeting.participants or []
+    desc = ["Synced from Telegizer Echo."]
+    if participants:
+        desc.append(f"With: {', '.join(str(p) for p in participants)}")
+    if meeting.meeting_url:
+        desc.append(f"Link: {meeting.meeting_url}")
+
+    event = {
+        "summary": title,
+        "description": "\n".join(desc),
+        "start": {"dateTime": _iso_utc(start_dt), "timeZone": "UTC"},
+        "end":   {"dateTime": _iso_utc(end_dt),   "timeZone": "UTC"},
+    }
+    if meeting.meeting_url:
+        event["location"] = meeting.meeting_url
+    return service.events().insert(calendarId="primary", body=event).execute()
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 
@@ -177,12 +236,29 @@ def calendar_status():
     user = _current_user()
     row = GoogleCalendarToken.query.filter_by(user_id=user.id).first()
     if not row:
-        return jsonify({"connected": False})
+        return jsonify({"connected": False, "configured": _is_configured()})
     return jsonify({
         "connected": True,
         "email": row.email or "",
         "configured": _is_configured(),
+        "auto_sync_meetings": bool(getattr(row, "auto_sync_meetings", False)),
     })
+
+
+@calendar_bp.route("/settings", methods=["PATCH"])
+@jwt_required()
+@rate_limit(requests_per_minute=20)
+def update_calendar_settings():
+    """Toggle calendar preferences (currently: auto-sync new Echo meetings)."""
+    user = _current_user()
+    row = GoogleCalendarToken.query.filter_by(user_id=user.id).first()
+    if not row:
+        return jsonify({"error": "Google Calendar not connected"}), 400
+    body = request.get_json(silent=True) or {}
+    if "auto_sync_meetings" in body:
+        row.auto_sync_meetings = bool(body["auto_sync_meetings"])
+    db.session.commit()
+    return jsonify({"auto_sync_meetings": bool(row.auto_sync_meetings)})
 
 
 @calendar_bp.route("/events", methods=["GET"])
@@ -307,6 +383,37 @@ def sync_meeting_link_to_calendar(link_id):
         return jsonify({"event_id": created.get("id"), "html_link": created.get("htmlLink")})
     except Exception as exc:
         _log.warning("calendar sync-meeting-link failed for user %s link %s: %s", user.id, link_id, exc)
+        return jsonify({"error": "Failed to sync to Google Calendar"}), 502
+
+
+@calendar_bp.route("/sync-hub-meeting/<meeting_id>", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=20)
+def sync_hub_meeting(meeting_id):
+    """Create a Google Calendar event from an Echo Hub meeting (HubMeeting)."""
+    from ..assistant.hub_models import HubMeeting
+    user = _current_user()
+    if not GoogleCalendarToken.query.filter_by(user_id=user.id).first():
+        return jsonify({"error": "Google Calendar not connected"}), 400
+
+    meeting = HubMeeting.query.filter_by(id=meeting_id, user_id=user.id).first_or_404()
+    if not meeting.scheduled_at:
+        return jsonify({"error": "This meeting has no date yet — set a date before syncing."}), 400
+
+    try:
+        created = push_hub_meeting_to_calendar(user.id, meeting)
+        if not created:
+            return jsonify({"error": "Google Calendar not connected"}), 400
+        meeting.calendar_pushed = True
+        db.session.commit()
+        return jsonify({
+            "event_id": created.get("id"),
+            "html_link": created.get("htmlLink"),
+            "calendar_pushed": True,
+        })
+    except Exception as exc:
+        db.session.rollback()
+        _log.warning("calendar sync-hub-meeting failed user=%s meeting=%s: %s", user.id, meeting_id, exc)
         return jsonify({"error": "Failed to sync to Google Calendar"}), 502
 
 

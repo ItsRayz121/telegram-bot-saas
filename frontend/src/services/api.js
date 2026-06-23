@@ -1110,6 +1110,8 @@ export const googleCalendar = {
   listEvents:      ()    => api.get('/api/calendar/events'),
   syncReminder:    (id)  => api.post(`/api/calendar/sync-reminder/${id}`),
   syncMeetingLink: (id)  => api.post(`/api/calendar/sync-meeting-link/${id}`),
+  syncHubMeeting:  (id)  => api.post(`/api/calendar/sync-hub-meeting/${id}`),
+  updateSettings:  (data) => api.patch('/api/calendar/settings', data),
   disconnect:      ()    => api.delete('/api/calendar/disconnect'),
 };
 

@@ -2447,6 +2447,46 @@ def _run_hub_digests(app):
         _scheduler_log.info("[SCHEDULER] hub digests sent=%d", sent)
 
 
+def _run_calendar_auto_sync(app):
+    """For users who enabled auto-sync, push newly extracted dated meetings to
+    their Google Calendar. Idempotent via the calendar_pushed flag; a small batch
+    per user keeps each tick well within the task timeout."""
+    with app.app_context():
+        from .models import db, GoogleCalendarToken
+        from .assistant.hub_models import HubMeeting
+        from .routes.calendar import push_hub_meeting_to_calendar
+
+        now = datetime.utcnow()
+        try:
+            rows = GoogleCalendarToken.query.filter_by(auto_sync_meetings=True).all()
+        except Exception as exc:
+            _scheduler_log.debug("calendar auto-sync: token query failed: %s", exc)
+            return
+        pushed = 0
+        for row in rows:
+            meetings = HubMeeting.query.filter(
+                HubMeeting.user_id == row.user_id,
+                HubMeeting.calendar_pushed == False,  # noqa: E712
+                HubMeeting.dismissed_at.is_(None),
+                HubMeeting.scheduled_at.isnot(None),
+                HubMeeting.scheduled_at >= now - timedelta(hours=1),
+            ).limit(20).all()
+            for m in meetings:
+                try:
+                    created = push_hub_meeting_to_calendar(row.user_id, m)
+                    if created:
+                        m.calendar_pushed = True
+                        db.session.commit()
+                        pushed += 1
+                except Exception as exc:
+                    db.session.rollback()
+                    _scheduler_log.warning(
+                        "calendar auto-sync failed user=%s meeting=%s: %s", row.user_id, m.id, exc
+                    )
+        if pushed:
+            _scheduler_log.info("[SCHEDULER] calendar auto-sync pushed=%d", pushed)
+
+
 def _scheduler_loop(app):
     import time
     _last_expiry_check = [0]
@@ -2461,6 +2501,7 @@ def _scheduler_loop(app):
     _last_hub_batch = [0]
     _last_hub_reminders = [0]
     _last_hub_digests = [0]
+    _last_calendar_sync = [0]
     time.sleep(15)  # Wait for bots to fully start
     while True:
         try:
@@ -2529,6 +2570,10 @@ def _scheduler_loop(app):
             if now_ts - _last_hub_digests[0] > 600:
                 _last_hub_digests[0] = now_ts
                 _run_task_with_timeout(_run_hub_digests, app, timeout=90, label="_run_hub_digests")
+            # Google Calendar auto-sync of new Echo meetings: every 5 min
+            if now_ts - _last_calendar_sync[0] > 300:
+                _last_calendar_sync[0] = now_ts
+                _run_task_with_timeout(_run_calendar_auto_sync, app, timeout=90, label="_run_calendar_auto_sync")
         except Exception as exc:
             # During a redeploy/restart the process gets SIGTERM and the
             # interpreter starts tearing down. A scheduler tick mid-shutdown

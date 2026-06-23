@@ -902,6 +902,13 @@ def init_db():
             "admin_audit_logs (severity, resolved_at) index",
         )
 
+        # Google Calendar auto-sync toggle for Echo meetings.
+        _run_alter(
+            db.engine,
+            "ALTER TABLE google_calendar_tokens ADD COLUMN IF NOT EXISTS auto_sync_meetings BOOLEAN NOT NULL DEFAULT FALSE",
+            "google_calendar_tokens.auto_sync_meetings",
+        )
+
         # ── Backfill: create UserTelegramAccount rows for legacy User.telegram_user_id ──
         # Must run AFTER all users-table ALTER statements (including auth_provider)
         # so SQLAlchemy's User model doesn't query columns that don't exist yet.
