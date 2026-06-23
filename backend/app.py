@@ -2530,6 +2530,14 @@ def _scheduler_loop(app):
                 _last_hub_digests[0] = now_ts
                 _run_task_with_timeout(_run_hub_digests, app, timeout=90, label="_run_hub_digests")
         except Exception as exc:
+            # During a redeploy/restart the process gets SIGTERM and the
+            # interpreter starts tearing down. A scheduler tick mid-shutdown
+            # can't spin up its ThreadPoolExecutor and Python raises
+            # "cannot schedule new futures after interpreter shutdown". That's
+            # routine shutdown noise on the dying container — exit the loop
+            # quietly instead of paging us with a false high-priority alert.
+            if "interpreter shutdown" in str(exc) or "cannot schedule new futures" in str(exc):
+                break
             _scheduler_log.error(f"Scheduler loop error: {exc}")
         time.sleep(60)
 
