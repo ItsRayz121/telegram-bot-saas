@@ -65,6 +65,25 @@ def _run(bot_id: str, group_id: str) -> dict:
         r.delete(lock_key)
 
 
+def _has_ai_key(user) -> bool:
+    """Lightweight, side-effect-free check for whether ANY AI key will resolve for
+    this user — a personal/workspace key OR the platform OpenRouter key. Mirrors the
+    resolution order of resolve_ai_provider_for_group WITHOUT its quota-increment
+    side effect (so it's safe to call on every extraction tick)."""
+    try:
+        from ..models import UserApiKey
+        from .. import secret_vault as _sv
+        if UserApiKey.query.filter_by(user_id=user.id, is_active=True).first():
+            return True
+        if _sv.get_secret("PLATFORM_OPENROUTER_API_KEY"):
+            return True
+    except Exception as exc:
+        _log.debug("hub_extraction: _has_ai_key check failed: %s", exc)
+        # On error, assume a key may exist so we don't wrongly block extraction.
+        return True
+    return False
+
+
 def _do_extract(bot_id: str, group_id: str, r) -> dict:
     import redis as _redis_module
     from ..assistant.hub_models import (
@@ -84,6 +103,21 @@ def _do_extract(bot_id: str, group_id: str, r) -> dict:
     user = User.query.get(group.user_id)
     if not user:
         return {"status": "skip", "reason": "user not found"}
+
+    # ── AI key pre-check ──────────────────────────────────────────────────────
+    # Extraction only advances last_batch_at after a SUCCESSFUL AI call. If no key
+    # resolves, bail BEFORE consuming the buffer so the messages aren't lost — they
+    # stay queued and process automatically the moment a key is configured. Logged
+    # loudly so "Last activity: never" explains itself in the logs.
+    if not _has_ai_key(user):
+        buffered = r.llen(f"assistant:buffer:{bot_id}:{group_id}")
+        _log.warning(
+            "[hub] extraction SKIPPED — no AI key for user=%s. %s message(s) left "
+            "buffered (not lost). Add a key in Settings → AI or set "
+            "PLATFORM_OPENROUTER_API_KEY, then they'll process automatically.",
+            group.user_id, buffered,
+        )
+        return {"status": "no_ai_key", "buffered": buffered}
 
     # ── Daily limit check ─────────────────────────────────────────────────────
     plan = getattr(user, "subscription_tier", "free") or "free"
