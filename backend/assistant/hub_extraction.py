@@ -186,7 +186,14 @@ def _call_openai(user, group, messages: list, bot_id: str, r) -> tuple:
     from .ai_key_resolver import resolve_ai_provider_for_group, QuotaExceededError, record_token_usage
 
     try:
-        key_config = resolve_ai_provider_for_group(user.id, group_id=group.id)
+        # group.id is the Hub connected-group UUID — NOT the integer telegram_groups.id
+        # that UserApiKey.group_id expects. Passing the UUID as group_id makes Postgres
+        # reject the query ("invalid input syntax for type integer"), which aborts the
+        # whole transaction and silently kills every extraction. Match on the Telegram
+        # chat id instead (string column), then fall through to workspace/platform key.
+        key_config = resolve_ai_provider_for_group(
+            user.id, telegram_group_id=group.telegram_group_id
+        )
     except QuotaExceededError:
         raise RuntimeError("Daily AI quota exceeded")
 

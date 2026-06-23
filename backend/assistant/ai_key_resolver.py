@@ -127,8 +127,14 @@ def resolve_ai_provider_for_group(user_id: int, group_id=None, telegram_group_id
         q = UserApiKey.query.filter_by(is_active=True)
         if telegram_group_id:
             q = q.filter_by(telegram_group_id=str(telegram_group_id))
-        elif group_id:
-            q = q.filter_by(group_id=group_id)
+        elif group_id is not None:
+            # UserApiKey.group_id is an INTEGER FK to telegram_groups.id. Guard against
+            # a non-integer id (e.g. a Hub connected-group UUID) so a bad caller can't
+            # issue an invalid-integer query that aborts the whole DB transaction.
+            try:
+                q = q.filter_by(group_id=int(group_id))
+            except (TypeError, ValueError):
+                q = None
         else:
             q = None
 
@@ -149,6 +155,14 @@ def resolve_ai_provider_for_group(user_id: int, group_id=None, telegram_group_id
                     _log.error("resolve_ai_provider_for_group: group key decryption failed group=%s", group_id or telegram_group_id)
     except Exception as exc:
         _log.warning("resolve_ai_provider_for_group: group key lookup failed: %s", exc)
+        # A failed query leaves the session in an aborted-transaction state, which
+        # would make every subsequent query (workspace lookup, batch writes) fail
+        # with "current transaction is aborted". Roll back so the fallback can run.
+        try:
+            from ..models import db
+            db.session.rollback()
+        except Exception:
+            pass
 
     # 2+3. Workspace key → platform key via existing resolver
     user = User.query.get(user_id)
