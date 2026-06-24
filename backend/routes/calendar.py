@@ -31,9 +31,21 @@ from .. import secret_vault as _sv
 
 _log = logging.getLogger(__name__)
 
+# Google returns the granted scopes in a different order (and may add `openid`),
+# which makes oauthlib raise "Scope has changed" and abort the token exchange.
+# Relax that check so the callback can complete.
+os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
+
 calendar_bp = Blueprint("calendar", __name__, url_prefix="/api/calendar")
 
-_SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
+# calendar.events lets us create/read events; openid + userinfo.email let us
+# read the connected account's address (shown in Settings). Without the email
+# scope, the userinfo lookup in the callback fails and the whole connect breaks.
+_SCOPES = [
+    "https://www.googleapis.com/auth/calendar.events",
+    "https://www.googleapis.com/auth/userinfo.email",
+    "openid",
+]
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -229,10 +241,15 @@ def oauth_callback():
         flow.fetch_token(code=code)
         creds = flow.credentials
 
-        # Get user's Google email
-        service = _gcal_build("oauth2", "v2", credentials=creds)
-        user_info = service.userinfo().get().execute()
-        email = user_info.get("email", "")
+        # Get user's Google email — best-effort. Never let a userinfo hiccup
+        # break an otherwise-successful Calendar connection.
+        email = ""
+        try:
+            service = _gcal_build("oauth2", "v2", credentials=creds)
+            user_info = service.userinfo().get().execute()
+            email = user_info.get("email", "")
+        except Exception as einfo:
+            _log.warning("could not fetch Google email for user %s: %s", user_id, einfo)
 
         _save_credentials(user_id, creds, email)
         return redirect(f"{frontend_url}/settings?calendar=connected")
