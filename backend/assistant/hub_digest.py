@@ -95,8 +95,6 @@ def _build_and_deliver(bot_id: str, user_id: int, settings: dict) -> bool:
         HubConnectedGroup,
     )
     from ..models import db, User, UserTelegramAccount
-    from ..config import Config
-    import requests
 
     # Window: since previous digest (up to 25 hours ago to not miss items)
     since = datetime.utcnow() - timedelta(hours=25)
