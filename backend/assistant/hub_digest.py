@@ -148,7 +148,8 @@ def _build_and_deliver(bot_id: str, user_id: int, settings: dict) -> bool:
     if not tg_id:
         return False
 
-    bot_token = Config.TELEGRAM_BOT_TOKEN
+    from .hub_token import resolve_hub_send_token
+    bot_token = resolve_hub_send_token(bot_id)
     if not bot_token:
         return False
 
@@ -263,8 +264,7 @@ def deliver_due_reminders(flask_app=None) -> int:
 def _deliver_due_reminders() -> int:
     from ..assistant.hub_models import HubReminder
     from ..models import db, User, UserTelegramAccount
-    from ..config import Config
-    import requests
+    from .hub_token import resolve_hub_send_token
 
     now = datetime.utcnow()
     window_end = now + timedelta(minutes=5)
@@ -276,7 +276,6 @@ def _deliver_due_reminders() -> int:
         HubReminder.dismissed_at.is_(None),
     ).all()
 
-    bot_token = Config.TELEGRAM_BOT_TOKEN
     sent = 0
 
     for reminder in due:
@@ -286,6 +285,9 @@ def _deliver_due_reminders() -> int:
                 continue
             tg_account = UserTelegramAccount.query.filter_by(user_id=reminder.user_id).first()
             tg_id = (tg_account.telegram_user_id if tg_account else None) or getattr(user, "telegram_user_id", None)
+            # Reminders are assistant-lineage — send via the reminder's own Hub bot
+            # (Echo or a custom assistant bot), never the group-management bot.
+            bot_token = resolve_hub_send_token(getattr(reminder, "bot_id", None))
             if not tg_id or not bot_token:
                 continue
 

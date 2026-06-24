@@ -908,6 +908,14 @@ def init_db():
             "ALTER TABLE google_calendar_tokens ADD COLUMN IF NOT EXISTS auto_sync_meetings BOOLEAN NOT NULL DEFAULT FALSE",
             "google_calendar_tokens.auto_sync_meetings",
         )
+        # Tracks whether an Echo meeting has been pushed to Google Calendar.
+        # hub_meetings predates this column, so create_all() never adds it — the
+        # auto-sync job filters on it and would otherwise crash on every tick.
+        _run_alter(
+            db.engine,
+            "ALTER TABLE hub_meetings ADD COLUMN IF NOT EXISTS calendar_pushed BOOLEAN NOT NULL DEFAULT FALSE",
+            "hub_meetings.calendar_pushed",
+        )
 
         # ── Backfill: create UserTelegramAccount rows for legacy User.telegram_user_id ──
         # Must run AFTER all users-table ALTER statements (including auth_provider)

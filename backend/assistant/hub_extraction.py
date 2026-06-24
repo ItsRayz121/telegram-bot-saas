@@ -603,7 +603,7 @@ def _run_automation_triggers(validated: dict, group, bot_id: str, batch_id: str,
                 if isinstance(t, dict) and t.get("due_date") and t.get("title")
             ]
             if urgent_tasks:
-                _send_deadline_alert_dm(user_id, urgent_tasks)
+                _send_deadline_alert_dm(user_id, urgent_tasks, bot_id=bot_id)
 
         # High-priority task alert: DM for high-priority tasks
         if _is_enabled("high_priority_alert"):
@@ -612,7 +612,7 @@ def _run_automation_triggers(validated: dict, group, bot_id: str, batch_id: str,
                 if isinstance(t, dict) and t.get("priority") == "high" and t.get("title")
             ]
             if hp_tasks:
-                _send_deadline_alert_dm(user_id, hp_tasks, subject="🔴 High-priority tasks extracted:")
+                _send_deadline_alert_dm(user_id, hp_tasks, subject="🔴 High-priority tasks extracted:", bot_id=bot_id)
 
         # Follow-up reminder: create a reminder 2 days from now for each open follow-up
         if _is_enabled("follow_up_reminder"):
@@ -667,12 +667,11 @@ def _run_automation_triggers(validated: dict, group, bot_id: str, batch_id: str,
         _log.debug("hub_extraction: automation trigger error: %s", exc)
 
 
-def _send_deadline_alert_dm(user_id: int, tasks: list, subject: str = "⚠️ *New tasks with deadlines extracted:*\n") -> None:
+def _send_deadline_alert_dm(user_id: int, tasks: list, subject: str = "⚠️ *New tasks with deadlines extracted:*\n", bot_id: str = None) -> None:
     """Send an immediate Telegram DM for tasks with deadlines or high-priority tasks."""
     try:
         from ..models import User, UserTelegramAccount
-        from ..config import Config
-        import requests
+        from .hub_token import resolve_hub_send_token
 
         user = User.query.get(user_id)
         if not user:
@@ -684,7 +683,9 @@ def _send_deadline_alert_dm(user_id: int, tasks: list, subject: str = "⚠️ *N
         if not tg_id:
             return
 
-        bot_token = Config.TELEGRAM_BOT_TOKEN
+        # Assistant-lineage DM — send via Echo / the custom assistant bot, not the
+        # group-management bot.
+        bot_token = resolve_hub_send_token(bot_id)
         if not bot_token:
             return
 

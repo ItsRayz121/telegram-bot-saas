@@ -2463,6 +2463,7 @@ def _run_calendar_auto_sync(app):
             _scheduler_log.debug("calendar auto-sync: token query failed: %s", exc)
             return
         pushed = 0
+        candidates = 0
         for row in rows:
             meetings = HubMeeting.query.filter(
                 HubMeeting.user_id == row.user_id,
@@ -2471,6 +2472,7 @@ def _run_calendar_auto_sync(app):
                 HubMeeting.scheduled_at.isnot(None),
                 HubMeeting.scheduled_at >= now - timedelta(hours=1),
             ).limit(20).all()
+            candidates += len(meetings)
             for m in meetings:
                 try:
                     created = push_hub_meeting_to_calendar(row.user_id, m)
@@ -2478,13 +2480,29 @@ def _run_calendar_auto_sync(app):
                         m.calendar_pushed = True
                         db.session.commit()
                         pushed += 1
+                    else:
+                        # None = Calendar not connected for this user, or no date.
+                        # Shouldn't happen given the filters, so surface it.
+                        _scheduler_log.warning(
+                            "calendar auto-sync: push returned None user=%s meeting=%s "
+                            "(token missing or refresh failed?)", row.user_id, m.id
+                        )
                 except Exception as exc:
                     db.session.rollback()
                     _scheduler_log.warning(
                         "calendar auto-sync failed user=%s meeting=%s: %s", row.user_id, m.id, exc
                     )
-        if pushed:
-            _scheduler_log.info("[SCHEDULER] calendar auto-sync pushed=%d", pushed)
+        # Always log the tally (debug when idle) so we can tell "nothing to do" from
+        # "tried and failed" when a user reports meetings not syncing.
+        if pushed or candidates:
+            _scheduler_log.info(
+                "[SCHEDULER] calendar auto-sync tokens=%d candidates=%d pushed=%d",
+                len(rows), candidates, pushed,
+            )
+        else:
+            _scheduler_log.debug(
+                "[SCHEDULER] calendar auto-sync idle tokens=%d", len(rows)
+            )
 
 
 def _scheduler_loop(app):
