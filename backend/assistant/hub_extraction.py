@@ -580,7 +580,14 @@ def _run_automation_triggers(validated: dict, group, bot_id: str, batch_id: str,
                 scheduled_at = _parse_datetime(mtg.get("scheduled_at"))
                 if not scheduled_at:
                     continue
-                title = str(mtg.get("title", "Meeting"))[:200]
+                # Build a clean label. mtg.get("title", "Meeting") would return a
+                # literal None when the AI emits {"title": null}, which previously
+                # rendered as "Meeting in 1 hour: None" in the Hub, DMs and digest.
+                raw_title = str(mtg.get("title") or "").strip()
+                label = raw_title if (raw_title and raw_title.lower() != "meeting") else "Meeting"
+                # Stamp the meeting's start time so reminders are distinguishable
+                # even when several meetings share the generic "Meeting" title.
+                when = scheduled_at.strftime("%b %d, %H:%M")
                 for minutes_before, lead_label in _MEETING_REMINDER_LADDER:
                     remind_at = scheduled_at - timedelta(minutes=minutes_before)
                     if remind_at < now:
@@ -589,7 +596,7 @@ def _run_automation_triggers(validated: dict, group, bot_id: str, batch_id: str,
                         user_id=user_id,
                         bot_id=bot_id,
                         source_group_id=group.id,
-                        content=f"Meeting {lead_label}: {title}",
+                        content=f"{label} {lead_label} (starts {when})",
                         remind_at=remind_at,
                         source="extracted",
                         source_batch_id=batch_id,
