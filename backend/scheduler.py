@@ -563,6 +563,25 @@ def _send_telegram_dm(telegram_user_id: str, text: str) -> bool:
     return safe_send_message(bot_token, telegram_user_id, text, parse_mode="Markdown")
 
 
+def _fmt_local(dt_utc, tz_name: str | None, fmt: str = "%I:%M %p %Z") -> str:
+    """Format a UTC-naive datetime in the user's IANA timezone.
+
+    The assistant stores all schedule times in UTC (store-UTC/display-in-zone).
+    Proactive DMs must render in the user's selected zone, not a hardcoded "UTC",
+    so a reminder set for 2pm local reads as "2:00 PM PKT", not "9:00 AM UTC".
+    Falls back to a clearly-labelled UTC string if the zone is unknown/invalid.
+    """
+    if dt_utc is None:
+        return "TBD"
+    try:
+        from zoneinfo import ZoneInfo
+        from datetime import timezone as _tz
+        local = dt_utc.replace(tzinfo=_tz.utc).astimezone(ZoneInfo(tz_name or "UTC"))
+        return local.strftime(fmt).strip()
+    except Exception:
+        return dt_utc.strftime(fmt.replace("%Z", "").strip() + " UTC").strip()
+
+
 @celery.task(name="backend.scheduler.deliver_due_reminders")
 def deliver_due_reminders():
     """
@@ -577,8 +596,10 @@ def deliver_due_reminders():
             from datetime import datetime, timedelta
 
             now = datetime.utcnow()
-            # Grace window: deliver reminders up to 10 minutes late
-            cutoff = now - timedelta(minutes=10)
+            # Grace window: deliver reminders up to 30 minutes late. The wider
+            # window means a failed send (or a worker that was briefly down) gets
+            # retried on subsequent ticks instead of being lost.
+            cutoff = now - timedelta(minutes=30)
 
             due = (
                 WorkspaceReminder.query
@@ -602,26 +623,34 @@ def deliver_due_reminders():
                     continue
 
                 text = f"🔔 *Reminder*\n\n{reminder.reminder_text}"
-                sent = False
 
-                # Try Telegram DM first (best experience)
-                if user.telegram_user_id:
-                    sent = _send_telegram_dm(user.telegram_user_id, text)
+                # Try Telegram DM first (best experience). If the user has no TG
+                # channel, web-sidebar history is the delivery surface.
+                has_tg = bool(user.telegram_user_id)
+                sent = _send_telegram_dm(user.telegram_user_id, text) if has_tg else False
 
-                # Log as BotDMMessage so it appears in web sidebar history
-                try:
-                    log = BotDMMessage(
-                        user_id=user.id,
-                        direction="out",
-                        content=text,
-                        intent="reminder_delivery",
+                # Only mark delivered when it actually went out (or there's no TG
+                # channel to retry on). A transient TG failure leaves the reminder
+                # pending so the next tick retries it within the grace window —
+                # failed sends are never silently marked "delivered" and dropped.
+                if sent or not has_tg:
+                    try:
+                        log = BotDMMessage(
+                            user_id=user.id,
+                            direction="out",
+                            content=text,
+                            intent="reminder_delivery",
+                        )
+                        db.session.add(log)
+                    except Exception:
+                        pass
+                    reminder.is_delivered = True
+                    delivered += 1
+                else:
+                    logger.warning(
+                        "[celery:reminders] DM failed user=%s reminder=%s — will retry",
+                        user.id, reminder.id,
                     )
-                    db.session.add(log)
-                except Exception:
-                    pass
-
-                reminder.is_delivered = True
-                delivered += 1
 
             db.session.commit()
             if delivered:
@@ -660,8 +689,12 @@ def send_meeting_prealerts():
                 remind_mins = meeting.remind_before_minutes or 15
                 alert_at = meeting.scheduled_at - timedelta(minutes=remind_mins)
 
-                # Only fire if we're within the 2-minute polling window of alert_at
-                if not (alert_at <= now <= alert_at + timedelta(minutes=2)):
+                # Fire any time from the intended alert moment up until the meeting
+                # starts. Unlike the old 2-minute polling window, a missed tick
+                # (deploy/restart/queue backlog) self-heals on the next tick and
+                # the alert still lands before the meeting — meetings are the core
+                # value, so they must not depend on one perfectly-timed poll.
+                if now < alert_at:
                     continue
 
                 user = User.query.get(meeting.owner_user_id)
@@ -669,34 +702,58 @@ def send_meeting_prealerts():
                     meeting.reminder_sent = True
                     continue
 
-                # Build alert text
-                time_str = meeting.scheduled_at.strftime("%I:%M %p UTC")
-                parts = [f"📅 *{meeting.title}* starts in {remind_mins} minutes ({time_str})"]
+                # Render in the user's zone; recompute minutes-left honestly so a
+                # late-firing alert says "in 4 min", not a stale "in 15 minutes".
+                tz_name = meeting.timezone or user.timezone or "UTC"
+                time_str = _fmt_local(meeting.scheduled_at, tz_name, "%I:%M %p %Z")
+                mins_left = max(0, int((meeting.scheduled_at - now).total_seconds() // 60))
+                when = f"in {mins_left} min" if mins_left else "now"
+                parts = [f"📅 *{meeting.title}* starts {when} ({time_str})"]
+
+                if meeting.participants:
+                    who = ", ".join(str(p) for p in meeting.participants[:4] if p)
+                    if who:
+                        parts.append(f"👤 With: {who}")
                 if meeting.notes:
-                    parts.append(f"📝 Notes: {meeting.notes[:150]}")
-                if meeting.resources:
-                    for r in (meeting.resources or [])[:2]:
-                        parts.append(f"🔗 {r.get('value', '')[:80]}")
+                    parts.append(f"📝 {meeting.notes[:150]}")
+
+                # Surface a join link first (clearly labelled) so it's one tap away,
+                # then at most one other attached resource.
+                resources = meeting.resources or []
+                links = [r for r in resources if str(r.get("value", "")).startswith("http")]
+                others = [r for r in resources if not str(r.get("value", "")).startswith("http")]
+                if links:
+                    parts.append(f"🔗 Join: {str(links[0].get('value', ''))[:120]}")
+                for r in others[:1]:
+                    val = str(r.get("value", "")).strip()
+                    if val:
+                        parts.append(f"📎 {val[:80]}")
                 text = "\n".join(parts)
 
-                sent = False
-                if user.telegram_user_id:
-                    sent = _send_telegram_dm(user.telegram_user_id, text)
+                has_tg = bool(user.telegram_user_id)
+                sent = _send_telegram_dm(user.telegram_user_id, text) if has_tg else False
 
-                # Log to BotDMMessage for sidebar visibility
-                try:
-                    log = BotDMMessage(
-                        user_id=user.id,
-                        direction="out",
-                        content=text,
-                        intent="meeting_prealert",
+                # Only mark sent when it actually went out (or there's no TG channel).
+                # A transient failure leaves reminder_sent False so the next tick
+                # retries — still before the meeting starts.
+                if sent or not has_tg:
+                    try:
+                        log = BotDMMessage(
+                            user_id=user.id,
+                            direction="out",
+                            content=text,
+                            intent="meeting_prealert",
+                        )
+                        db.session.add(log)
+                    except Exception:
+                        pass
+                    meeting.reminder_sent = True
+                    alerted += 1
+                else:
+                    logger.warning(
+                        "[celery:meeting_prealerts] DM failed user=%s meeting=%s — will retry",
+                        user.id, meeting.id,
                     )
-                    db.session.add(log)
-                except Exception:
-                    pass
-
-                meeting.reminder_sent = True
-                alerted += 1
 
             if alerted:
                 db.session.commit()
@@ -742,14 +799,14 @@ def send_daily_briefings():
                     owner_user_id=user.id, is_disabled=False
                 ).all()
 
-                # Today's meetings
+                # Today's meetings (fetch a few extra so we can show "+N more")
                 meetings = (
                     Meeting.query
-                    .filter_by(user_id=user.id)
+                    .filter_by(owner_user_id=user.id)
                     .filter(Meeting.scheduled_at >= datetime.combine(today, datetime.min.time()))
                     .filter(Meeting.scheduled_at < datetime.combine(tomorrow, datetime.min.time()))
                     .order_by(Meeting.scheduled_at.asc())
-                    .limit(3)
+                    .limit(20)
                     .all()
                 )
 
@@ -760,7 +817,7 @@ def send_daily_briefings():
                     .filter(WorkspaceReminder.remind_at >= now)
                     .filter(WorkspaceReminder.remind_at < datetime.combine(tomorrow, datetime.min.time()))
                     .order_by(WorkspaceReminder.remind_at.asc())
-                    .limit(3)
+                    .limit(20)
                     .all()
                 )
 
@@ -776,19 +833,25 @@ def send_daily_briefings():
                 name = user.full_name.split()[0] if user.full_name else "there"
                 lines = [f"☀️ Good morning, {name}! Here's your Telegizer briefing:"]
 
+                user_tz = user.timezone or "UTC"
+
                 if meetings:
                     lines.append(f"\n📅 Meetings today ({len(meetings)}):")
-                    for m in meetings:
-                        t = m.scheduled_at.strftime("%H:%M UTC") if m.scheduled_at else "TBD"
+                    for m in meetings[:5]:
+                        t = _fmt_local(m.scheduled_at, m.timezone or user_tz, "%H:%M %Z")
                         lines.append(f"  • {m.title} at {t}")
+                    if len(meetings) > 5:
+                        lines.append(f"  • …and {len(meetings) - 5} more")
                 else:
                     lines.append("\n📅 No meetings today")
 
                 if reminders:
                     lines.append(f"\n🔔 Reminders due today ({len(reminders)}):")
-                    for r in reminders:
-                        t = r.remind_at.strftime("%H:%M UTC")
+                    for r in reminders[:5]:
+                        t = _fmt_local(r.remind_at, user_tz, "%H:%M %Z")
                         lines.append(f"  • {r.reminder_text[:60]} at {t}")
+                    if len(reminders) > 5:
+                        lines.append(f"  • …and {len(reminders) - 5} more")
 
                 if critical_groups:
                     lines.append("\n⚠️ Groups needing attention:")
