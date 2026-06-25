@@ -16,9 +16,31 @@ import json
 import logging
 import os
 import re
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
+
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:  # pragma: no cover
+    ZoneInfo = None
 
 _log = logging.getLogger(__name__)
+
+
+def _resolve_tz(tz_name):
+    """IANA name → tzinfo, or None (treat as UTC) on any failure."""
+    if not tz_name or ZoneInfo is None:
+        return None
+    try:
+        return ZoneInfo(tz_name)
+    except Exception:
+        return None
+
+
+def _user_timezone(user_id) -> str:
+    """The user's configured Hub timezone (IANA name), defaulting to UTC."""
+    from .hub_models import HubMemoryGlobal
+    mg = HubMemoryGlobal.query.filter_by(user_id=user_id).first()
+    return (mg.timezone if mg and mg.timezone else "UTC") or "UTC"
 
 # ── Daily limits per plan ──────────────────────────────────────────────────────
 _DAILY_LIMITS = {"free": 50, "pro": 500, "enterprise": 999_999}
@@ -113,6 +135,10 @@ def _do_extract(bot_id: str, group_id: str, r) -> dict:
     if not user:
         return {"status": "skip", "reason": "user not found"}
 
+    # The user's Hub timezone drives both how the AI interprets relative times
+    # ("in 1 hour") and how stored UTC datetimes are localised for display/DMs.
+    tz_name = _user_timezone(group.user_id)
+
     # ── AI key pre-check ──────────────────────────────────────────────────────
     # Extraction only advances last_batch_at after a SUCCESSFUL AI call. If no key
     # resolves, bail BEFORE consuming the buffer so the messages aren't lost — they
@@ -181,6 +207,7 @@ def _do_extract(bot_id: str, group_id: str, r) -> dict:
             messages=messages,
             bot_id=bot_id,
             r=r,
+            tz_name=tz_name,
         )
     except Exception as exc:
         batch.status = "failed"
@@ -196,7 +223,7 @@ def _do_extract(bot_id: str, group_id: str, r) -> dict:
     batch.model_used = model_used
 
     # ── Write extracted items ─────────────────────────────────────────────────
-    counts = _write_items(validated, group, bot_id, batch.id, db)
+    counts = _write_items(validated, group, bot_id, batch.id, db, tz_name)
 
     # Mark batch complete
     total_items = sum(counts.values())
@@ -213,7 +240,7 @@ def _do_extract(bot_id: str, group_id: str, r) -> dict:
     db.session.commit()
 
     # ── Post-extraction automation triggers ───────────────────────────────────
-    _run_automation_triggers(validated, group, bot_id, batch.id, db)
+    _run_automation_triggers(validated, group, bot_id, batch.id, db, tz_name)
 
     _log.info(
         "hub_extraction: batch=%s group=%s tasks=%d reminders=%d decisions=%d meetings=%d",
@@ -223,7 +250,7 @@ def _do_extract(bot_id: str, group_id: str, r) -> dict:
     return {"status": "complete", "counts": counts, "tokens": tokens_used}
 
 
-def _call_openai(user, group, messages: list, bot_id: str, r) -> tuple:
+def _call_openai(user, group, messages: list, bot_id: str, r, tz_name: str = "UTC") -> tuple:
     """Returns (validated_dict, tokens_used, model_used)."""
     from openai import OpenAI
     from .ai_key_resolver import resolve_ai_provider_for_group, QuotaExceededError, record_token_usage
@@ -253,7 +280,8 @@ def _call_openai(user, group, messages: list, bot_id: str, r) -> tuple:
     memory_context = _build_memory_context(user.id, group.id)
     formatted = _format_messages(messages)
     group_name = group.group_name or f"Group {group.telegram_group_id}"
-    today = datetime.utcnow().strftime("%Y-%m-%d")
+    tz = _resolve_tz(tz_name)
+    now_local = datetime.now(tz) if tz else datetime.utcnow()
 
     system_prompt = (
         "You are an intelligent meeting assistant. Extract structured information "
@@ -277,7 +305,14 @@ def _call_openai(user, group, messages: list, bot_id: str, r) -> tuple:
         "- Return JSON only, no explanation text"
     )
 
-    user_prompt = f"Conversation from {group_name} on {today}:\n\n{formatted}"
+    user_prompt = (
+        f"Conversation from {group_name}.\n"
+        f"The user's current local date and time is "
+        f"{now_local.strftime('%Y-%m-%d %H:%M')} (timezone {tz_name}).\n"
+        f"Resolve all relative times (\"in 1 hour\", \"tomorrow 3pm\", \"Friday\") "
+        f"against that, and output every date/time as ISO 8601 in the user's local "
+        f"timezone ({tz_name}).\n\n{formatted}"
+    )
 
     resp = client.chat.completions.create(
         model=model,
@@ -386,10 +421,11 @@ def _validate_output(raw_json: str) -> dict:
     return result
 
 
-def _write_items(validated: dict, group, bot_id: str, batch_id: str, db) -> dict:
+def _write_items(validated: dict, group, bot_id: str, batch_id: str, db, tz_name: str = "UTC") -> dict:
     from ..assistant.hub_models import (
         HubTask, HubReminder, HubDecision, HubMeeting, HubNote, HubInboxItem, HubFollowUp,
     )
+    tz = _resolve_tz(tz_name)
     # Import once at the top — _enc is used by EVERY item type below (tasks,
     # reminders, decisions, meetings, notes, follow-ups). It used to be imported
     # inside the tasks loop, so a message that produced only a meeting/reminder
@@ -446,7 +482,7 @@ def _write_items(validated: dict, group, bot_id: str, batch_id: str, db) -> dict
             continue
         if not group.extract_reminders:
             continue
-        remind_at = _parse_datetime(rem.get("remind_at")) or (datetime.utcnow() + timedelta(hours=24))
+        remind_at = _parse_datetime(rem.get("remind_at"), tz) or (datetime.utcnow() + timedelta(hours=24))
         reminder = HubReminder(
             user_id=user_id,
             bot_id=bot_id,
@@ -487,7 +523,7 @@ def _write_items(validated: dict, group, bot_id: str, batch_id: str, db) -> dict
         if not group.extract_meetings:
             continue
         title = str(mtg.get("title", "") or "Meeting")[:255]
-        scheduled_at = _parse_datetime(mtg.get("scheduled_at"))
+        scheduled_at = _parse_datetime(mtg.get("scheduled_at"), tz)
         participants = mtg.get("participants", [])
         if not isinstance(participants, list):
             participants = []
@@ -548,7 +584,7 @@ def _write_items(validated: dict, group, bot_id: str, batch_id: str, db) -> dict
     return counts
 
 
-def _run_automation_triggers(validated: dict, group, bot_id: str, batch_id: str, db) -> None:
+def _run_automation_triggers(validated: dict, group, bot_id: str, batch_id: str, db, tz_name: str = "UTC") -> None:
     """
     Post-extraction: check enabled automations and create follow-up items.
     Currently handles: meeting_reminder, deadline_alert.
@@ -556,6 +592,7 @@ def _run_automation_triggers(validated: dict, group, bot_id: str, batch_id: str,
     try:
         from ..assistant.hub_models import HubReminder, HubBotAutomationSetting, HubSystemAutomation
         user_id = group.user_id
+        tz = _resolve_tz(tz_name)
 
         # Determine which automations are enabled for this bot
         def _is_enabled(code: str) -> bool:
@@ -577,7 +614,7 @@ def _run_automation_triggers(validated: dict, group, bot_id: str, batch_id: str,
         if _is_enabled("meeting_reminder"):
             now = datetime.utcnow()
             for mtg in validated.get("meetings", []):
-                scheduled_at = _parse_datetime(mtg.get("scheduled_at"))
+                scheduled_at = _parse_datetime(mtg.get("scheduled_at"), tz)
                 if not scheduled_at:
                     continue
                 # Build a clean label. mtg.get("title", "Meeting") would return a
@@ -585,9 +622,14 @@ def _run_automation_triggers(validated: dict, group, bot_id: str, batch_id: str,
                 # rendered as "Meeting in 1 hour: None" in the Hub, DMs and digest.
                 raw_title = str(mtg.get("title") or "").strip()
                 label = raw_title if (raw_title and raw_title.lower() != "meeting") else "Meeting"
-                # Stamp the meeting's start time so reminders are distinguishable
-                # even when several meetings share the generic "Meeting" title.
-                when = scheduled_at.strftime("%b %d, %H:%M")
+                # Stamp the meeting's start time (in the user's local timezone) so
+                # reminders are distinguishable even when several meetings share the
+                # generic "Meeting" title. scheduled_at is naive UTC.
+                local_start = (
+                    scheduled_at.replace(tzinfo=timezone.utc).astimezone(tz)
+                    if tz else scheduled_at
+                )
+                when = local_start.strftime("%b %d, %H:%M")
                 for minutes_before, lead_label in _MEETING_REMINDER_LADDER:
                     remind_at = scheduled_at - timedelta(minutes=minutes_before)
                     if remind_at < now:
@@ -718,18 +760,29 @@ def _parse_date(value) -> "date | None":
         return None
 
 
-def _parse_datetime(value) -> "datetime | None":
+def _parse_datetime(value, tz=None) -> "datetime | None":
+    """Parse an AI-emitted datetime into NAIVE UTC for storage.
+
+    The AI is told the current local time and asked to emit datetimes in the
+    user's local timezone. ``tz`` (a tzinfo) is that timezone:
+    - tz-aware input → converted to UTC.
+    - naive input + tz given → interpreted as local wall-clock, then → UTC.
+    - naive input + no tz → assumed already UTC (legacy behaviour).
+    """
     if not value:
         return None
     try:
         s = str(value)
-        # Accept YYYY-MM-DD as date → noon UTC
+        # Accept YYYY-MM-DD as a date → noon local (so it lands on the right day).
         if len(s) == 10:
-            return datetime.fromisoformat(s).replace(hour=12, minute=0)
-        # Strip Z suffix
-        s = s.replace("Z", "+00:00")
-        dt = datetime.fromisoformat(s)
-        # Strip timezone info (store as naive UTC)
-        return dt.replace(tzinfo=None)
+            dt = datetime.fromisoformat(s).replace(hour=12, minute=0)
+        else:
+            s = s.replace("Z", "+00:00")
+            dt = datetime.fromisoformat(s)
     except (ValueError, TypeError):
         return None
+    if dt.tzinfo is not None:
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    if tz is not None:
+        return dt.replace(tzinfo=tz).astimezone(timezone.utc).replace(tzinfo=None)
+    return dt

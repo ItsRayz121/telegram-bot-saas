@@ -20,6 +20,7 @@ import BotTokenConnectModal from '../components/shared/BotTokenConnectModal';
 import AddToGroupFlow from '../components/hub/AddToGroupFlow';
 import GroupSettingsOverlay from '../components/hub/GroupSettingsOverlay';
 import { getTabsForBot } from '../config/assistantHubRegistry';
+import TimezoneSelect from '../components/TimezoneSelect';
 
 // Official bot always shows all non-customOnly tabs.
 const TABS = getTabsForBot(true).map(t => ({ label: t.label, value: t.key }));
@@ -45,17 +46,29 @@ function timeAgo(iso) {
   } catch { return iso; }
 }
 
-function fmtDateTime(iso) {
+// Backend serialises Hub datetimes as naive UTC (no trailing Z). When a `tz`
+// (IANA name) is supplied we treat the value as UTC and render it in that zone,
+// so meetings/reminders show the user's local wall-clock time consistently with
+// the Telegram DMs, digest and Google Calendar.
+function _asUtc(iso) {
+  return (iso.includes('T') && !iso.endsWith('Z') && !iso.includes('+')) ? iso + 'Z' : iso;
+}
+
+function fmtDateTime(iso, tz) {
   if (!iso) return null;
   try {
-    const d = new Date(iso);
-    return d.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    const d = new Date(tz ? _asUtc(iso) : iso);
+    return d.toLocaleString('en-GB', {
+      day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+      ...(tz ? { timeZone: tz } : {}),
+    });
   } catch { return iso; }
 }
 
 function isOverdue(isoDate) {
   if (!isoDate) return false;
-  return new Date(isoDate) < new Date();
+  // Treat naive datetimes as UTC so the comparison is timezone-independent.
+  return new Date(_asUtc(isoDate)) < new Date();
 }
 
 // ── Root component ─────────────────────────────────────────────────────────────
@@ -153,11 +166,17 @@ export default function HubWorkspace() {
 
 // ── Tab dispatcher ─────────────────────────────────────────────────────────────
 export function TabContent({ tab, botData, groups, setGroups, botId }) {
+  // The user's Hub timezone — all meeting/reminder times are stored as UTC and
+  // rendered in this zone (matching the AI extraction, DMs and calendar).
+  const [tz, setTz] = useState('UTC');
+  useEffect(() => {
+    hub.getMemoryGlobal().then(r => setTz(r.data?.timezone || 'UTC')).catch(() => {});
+  }, []);
   switch (tab) {
-    case 'overview':   return <HubOverview botData={botData} groups={groups} setGroups={setGroups} botId={botId} />;
+    case 'overview':   return <HubOverview botData={botData} groups={groups} setGroups={setGroups} botId={botId} tz={tz} />;
     case 'notes':      return <HubNotes groups={groups} botId={botId} />;
-    case 'reminders':  return <HubReminders groups={groups} botId={botId} />;
-    case 'meetings':   return <HubMeetings groups={groups} botId={botId} />;
+    case 'reminders':  return <HubReminders groups={groups} botId={botId} tz={tz} />;
+    case 'meetings':   return <HubMeetings groups={groups} botId={botId} tz={tz} />;
     case 'tasks':      return <HubTasks groups={groups} botId={botId} />;
     case 'templates':  return <HubTemplates botId={botId} />;
     case 'knowledge':  return <HubKnowledge botId={botId} />;
@@ -254,7 +273,7 @@ function HubHealthBanner() {
   );
 }
 
-function HubOverview({ botData, groups, setGroups, botId }) {
+function HubOverview({ botData, groups, setGroups, botId, tz }) {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -393,7 +412,7 @@ function HubOverview({ botData, groups, setGroups, botId }) {
             {data?.meetings?.map(m => (
               <ItemRow key={m.id}
                 label={m.title || 'Meeting'}
-                meta={[fmtDateTime(m.scheduled_at), m.participants?.length ? `${m.participants.join(', ')}` : null]}
+                meta={[fmtDateTime(m.scheduled_at, tz), m.participants?.length ? `${m.participants.join(', ')}` : null]}
                 onDismiss={() => hub.dismissMeeting(m.id).then(() => load())}
               />
             ))}
@@ -415,7 +434,7 @@ function HubOverview({ botData, groups, setGroups, botId }) {
             {data?.reminders?.map(r => (
               <ItemRow key={r.id}
                 label={r.content}
-                meta={[fmtDateTime(r.remind_at)]}
+                meta={[fmtDateTime(r.remind_at, tz)]}
               />
             ))}
           </OverviewSection>
@@ -727,7 +746,7 @@ function TaskStatusChip({ status }) {
 }
 
 // ── Reminders tab ──────────────────────────────────────────────────────────────
-function HubReminders({ groups, botId }) {
+function HubReminders({ groups, botId, tz }) {
   const [reminders, setReminders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('upcoming');
@@ -799,7 +818,7 @@ function HubReminders({ groups, botId }) {
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography variant="body2" fontWeight={500}>{r.content}</Typography>
                   <Typography variant="caption" sx={{ color: isOverdue(r.remind_at) ? 'error.main' : 'text.secondary' }}>
-                    {fmtDateTime(r.remind_at)}{isOverdue(r.remind_at) ? ' · overdue' : ''}
+                    {fmtDateTime(r.remind_at, tz)}{isOverdue(r.remind_at) ? ' · overdue' : ''}
                   </Typography>
                   {r.source === 'extracted' && (
                     <Chip label="AI" size="small" sx={{ ml: 1, height: 14, fontSize: '0.58rem', bgcolor: 'primary.main', color: '#fff' }} />
@@ -844,7 +863,8 @@ function HubReminders({ groups, botId }) {
 // these are AI-extracted, not manually created. Undated meetings (where the AI
 // couldn't pin a date) get their own "Needs a date" filter so they're not lost.
 function gcalUrl({ title, startIso, durationMins = 60, description = '' }) {
-  const dt = new Date(startIso);
+  // startIso is naive UTC from the backend — treat it as UTC, not browser-local.
+  const dt = new Date(_asUtc(startIso));
   const pad = n => String(n).padStart(2, '0');
   const fmt = d =>
     `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}` +
@@ -854,7 +874,7 @@ function gcalUrl({ title, startIso, durationMins = 60, description = '' }) {
   return `https://calendar.google.com/calendar/render?${params}`;
 }
 
-function HubMeetings({ groups, botId }) {
+function HubMeetings({ groups, botId, tz }) {
   const [meetings, setMeetings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('upcoming');
@@ -923,7 +943,7 @@ function HubMeetings({ groups, botId }) {
   const now = Date.now();
   const bucketOf = (m) => {
     if (!m.scheduled_at) return 'undated';
-    return new Date(m.scheduled_at).getTime() < now ? 'past' : 'upcoming';
+    return new Date(_asUtc(m.scheduled_at)).getTime() < now ? 'past' : 'upcoming';
   };
   const counts = meetings.reduce((acc, m) => { acc[bucketOf(m)] = (acc[bucketOf(m)] || 0) + 1; return acc; }, {});
   let visible = meetings.filter(m => !filter || bucketOf(m) === filter);
@@ -990,7 +1010,7 @@ function HubMeetings({ groups, botId }) {
         <Card variant="outlined">
           {visible.map((m, i) => {
             const undated = !m.scheduled_at;
-            const past = !undated && new Date(m.scheduled_at).getTime() < now;
+            const past = !undated && new Date(_asUtc(m.scheduled_at)).getTime() < now;
             const gname = groupName(m.source_group_id);
             return (
               <Box key={m.id}>
@@ -1001,7 +1021,7 @@ function HubMeetings({ groups, botId }) {
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography variant="body2" fontWeight={500}>{m.title || 'Untitled meeting'}</Typography>
                     <Typography variant="caption" sx={{ color: undated ? 'warning.main' : (past ? 'text.disabled' : 'text.secondary') }}>
-                      {undated ? 'No date set — extracted from chat' : `${fmtDateTime(m.scheduled_at)}${past ? ' · past' : ''}`}
+                      {undated ? 'No date set — extracted from chat' : `${fmtDateTime(m.scheduled_at, tz)}${past ? ' · past' : ''}`}
                     </Typography>
                     <Box sx={{ display: 'flex', gap: 0.75, mt: 0.75, flexWrap: 'wrap', alignItems: 'center' }}>
                       {gname && (
@@ -2449,9 +2469,14 @@ function MemoryOverlay({ open, onClose, limits }) {
               </Box>
               <TextField label="Your role" size="small" fullWidth value={globalData.role}
                 onChange={e => setGlobalData(p => ({ ...p, role: e.target.value }))} />
-              <TextField label="Timezone" size="small" fullWidth value={globalData.timezone}
-                onChange={e => setGlobalData(p => ({ ...p, timezone: e.target.value }))}
-                helperText="e.g. Asia/Dubai, Europe/London, America/New_York" />
+              <Box>
+                <TimezoneSelect label="Timezone" value={globalData.timezone}
+                  onChange={(val) => setGlobalData(p => ({ ...p, timezone: val }))} />
+                <FormHelperText>
+                  Drives how Echo reads times like "in 1 hour" and how meetings, reminders,
+                  digests and Google Calendar events are shown.
+                </FormHelperText>
+              </Box>
               <TextField label="Current priorities (one per line)" multiline minRows={3} size="small" fullWidth
                 value={prioritiesText} onChange={e => setPrioritiesText(e.target.value)}
                 helperText="e.g. Product launch Q3, Hiring engineering lead" />

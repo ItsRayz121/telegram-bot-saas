@@ -11,9 +11,32 @@ build_and_deliver_digest(bot_id, user_id, flask_app):
 Called by the scheduler cron (hub_send_daily_digests) once per day.
 """
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:  # pragma: no cover
+    ZoneInfo = None
 
 _log = logging.getLogger(__name__)
+
+
+def _fmt_local(dt, tz_name, fmt_str, fallback=""):
+    """Format a naive-UTC datetime in the user's timezone for DM display."""
+    if not dt:
+        return fallback
+    try:
+        if tz_name and ZoneInfo is not None:
+            dt = dt.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(tz_name))
+    except Exception:
+        pass
+    return dt.strftime(fmt_str)
+
+
+def _user_tz(user_id) -> str:
+    from ..assistant.hub_models import HubMemoryGlobal
+    mg = HubMemoryGlobal.query.filter_by(user_id=user_id).first()
+    return (mg.timezone if mg and mg.timezone else "UTC") or "UTC"
 
 
 def deliver_all_due_digests(flask_app=None) -> int:
@@ -135,7 +158,7 @@ def _build_and_deliver(bot_id: str, user_id: int, settings: dict) -> bool:
         return False  # nothing to send
 
     fmt = settings.get("digest_format", "compact") or "compact"
-    text = _format_digest(tasks, reminders, decisions, meetings, fmt)
+    text = _format_digest(tasks, reminders, decisions, meetings, fmt, _user_tz(user_id))
 
     # Find Telegram chat ID
     user = User.query.get(user_id)
@@ -173,7 +196,7 @@ def _build_and_deliver(bot_id: str, user_id: int, settings: dict) -> bool:
     return True
 
 
-def _format_digest(tasks, reminders, decisions, meetings, fmt: str) -> str:
+def _format_digest(tasks, reminders, decisions, meetings, fmt: str, tz_name: str = "UTC") -> str:
     now = datetime.utcnow()
     today_str = now.strftime("%B %d")
     lines = [f"*📋 Daily Digest — {today_str}*\n"]
@@ -193,7 +216,7 @@ def _format_digest(tasks, reminders, decisions, meetings, fmt: str) -> str:
         if meetings:
             lines.append(f"*Meetings ({len(meetings)})*")
             for m in meetings[:5]:
-                when = m.scheduled_at.strftime("%b %d %H:%M") if m.scheduled_at else "TBD"
+                when = _fmt_local(m.scheduled_at, tz_name, "%b %d %H:%M", "TBD")
                 lines.append(f"• {_dec(m.title) or 'Meeting'} · {when}")
             lines.append("")
 
@@ -207,7 +230,7 @@ def _format_digest(tasks, reminders, decisions, meetings, fmt: str) -> str:
         if reminders:
             lines.append(f"*Upcoming Reminders ({len(reminders)})*")
             for r in reminders[:5]:
-                when = r.remind_at.strftime("%b %d %H:%M") if r.remind_at else ""
+                when = _fmt_local(r.remind_at, tz_name, "%b %d %H:%M")
                 lines.append(f"• {_dec(r.content)[:80]} · {when}")
     else:
         # detailed
@@ -223,7 +246,7 @@ def _format_digest(tasks, reminders, decisions, meetings, fmt: str) -> str:
         if meetings:
             lines.append(f"*📅 Upcoming Meetings — {len(meetings)}*")
             for m in meetings:
-                when = m.scheduled_at.strftime("%A %b %d at %H:%M") if m.scheduled_at else "TBD"
+                when = _fmt_local(m.scheduled_at, tz_name, "%A %b %d at %H:%M", "TBD")
                 participants = f"\n  With: {', '.join(m.participants[:5])}" if m.participants else ""
                 lines.append(f"• *{_dec(m.title) or 'Meeting'}* — {when}{participants}")
             lines.append("")
@@ -238,7 +261,7 @@ def _format_digest(tasks, reminders, decisions, meetings, fmt: str) -> str:
         if reminders:
             lines.append(f"*🔔 Upcoming Reminders — {len(reminders)}*")
             for r in reminders:
-                when = r.remind_at.strftime("%A %b %d at %H:%M") if r.remind_at else ""
+                when = _fmt_local(r.remind_at, tz_name, "%A %b %d at %H:%M")
                 lines.append(f"• {_dec(r.content)}\n  _{when}_")
 
     return "\n".join(lines).strip()
