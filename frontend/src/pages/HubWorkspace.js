@@ -254,6 +254,7 @@ function HubOverview({ botData, groups, setGroups, botId }) {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [groupFilter, setGroupFilter] = useState('');
   const [overlayGroup, setOverlayGroup] = useState(null);
   const [unlinkTarget, setUnlinkTarget] = useState(null);
@@ -263,9 +264,10 @@ function HubOverview({ botData, groups, setGroups, botId }) {
 
   const load = useCallback(() => {
     setLoading(true);
+    setLoadError(false);
     hub.getOverview(groupFilter || null, botId || null)
       .then(r => setData(r.data))
-      .catch(() => {})
+      .catch(() => { setData(null); setLoadError(true); })
       .finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupFilter]);
@@ -356,6 +358,11 @@ function HubOverview({ botData, groups, setGroups, botId }) {
 
       {loading ? (
         <Box sx={{ textAlign: 'center', py: 6 }}><CircularProgress /></Box>
+      ) : loadError ? (
+        <Alert severity="error" sx={{ mb: 2 }}
+          action={<Button color="inherit" size="small" onClick={load}>Retry</Button>}>
+          Couldn't load activity. Please try again.
+        </Alert>
       ) : (
         <>
           {data?.new_inbox_items > 0 && (
@@ -531,7 +538,7 @@ function OverviewSection({ title, count, emptyText, children }) {
       <SectionHeader label={title} />
       <Card variant="outlined">
         <CardContent sx={{ p: '12px !important' }}>
-          {count === 0 ? (
+          {!count ? (
             <Typography variant="body2" color="text.secondary">{emptyText}</Typography>
           ) : children}
         </CardContent>

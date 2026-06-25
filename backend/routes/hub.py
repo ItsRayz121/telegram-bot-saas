@@ -1038,10 +1038,13 @@ def hub_overview():
             return q.filter(model.source_group_id == group_id)
         return q
 
-    # Tasks — pending, sort overdue first then by due_date
+    # Tasks — pending, sort overdue first then by due_date.
+    # (HubTask has no dismissed_at column, so there is nothing to filter here.)
     tasks_q = HubTask.query.filter_by(
         user_id=user.id, bot_id=bot.id, status="pending"
-    ).filter(HubTask.dismissed_at.is_(None) if hasattr(HubTask, "dismissed_at") else db.true())
+    )
+    if hasattr(HubTask, "dismissed_at"):
+        tasks_q = tasks_q.filter(HubTask.dismissed_at.is_(None))
     tasks_q = _gfilter(tasks_q, HubTask)
     tasks = tasks_q.order_by(
         db.case((HubTask.due_date.isnot(None), HubTask.due_date), else_=db.literal(None)).asc().nullslast()
