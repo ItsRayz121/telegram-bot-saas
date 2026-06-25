@@ -216,8 +216,15 @@ def _get_or_create_official_bot(user_id: int) -> HubBotIdentity:
 
 
 def _resolve_bot(user: User, bot_id_param: str | None = None) -> HubBotIdentity:
-    """Return the requested bot (verified owner) or fall back to the official bot."""
-    if bot_id_param:
+    """Return the requested bot (verified owner) or fall back to the official bot.
+
+    A falsy bot_id, or the sentinel string "official", both resolve to the
+    user's official Echo bot. The official bot's primary key is a UUID, never
+    the literal "official", so without this guard the frontend's
+    botId="official" would 404 every _resolve_bot-based endpoint (overview,
+    tasks, reminders, notes, templates, knowledge).
+    """
+    if bot_id_param and bot_id_param != "official":
         bot = HubBotIdentity.query.filter_by(id=bot_id_param, user_id=user.id).first()
         if bot is None:
             from flask import abort

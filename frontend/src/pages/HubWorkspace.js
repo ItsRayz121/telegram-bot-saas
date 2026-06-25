@@ -122,7 +122,11 @@ export default function HubWorkspace() {
 
       {/* Tab content */}
       <Box sx={{ flex: 1, overflow: 'auto', p: { xs: 2, sm: 3 } }}>
-        <TabContent tab={tab} botData={botData} groups={groups} setGroups={setGroups} botId="official" />
+        {/* botId is intentionally null for the official Echo bot: every downstream
+            `botId ? … : …` (data calls and navigation) treats falsy as "official".
+            Passing the literal "official" string broke _resolve_bot lookups (404)
+            and the settings/navigation ternaries. */}
+        <TabContent tab={tab} botData={botData} groups={groups} setGroups={setGroups} botId={null} />
       </Box>
 
       <BotTokenConnectModal
