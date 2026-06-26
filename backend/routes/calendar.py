@@ -588,6 +588,22 @@ def oauth_callback():
         except Exception as einfo:
             _log.warning("could not fetch Google email for user %s: %s", user_id, einfo)
 
+        # One Google account links to ONE Telegizer account only — never let the
+        # same calendar attach to a second account (avoids cross-account leakage and
+        # duplicate event ownership). Can't enforce without an email (userinfo
+        # failed); in that case we allow it and rely on the per-user token row.
+        if email:
+            clash = GoogleCalendarToken.query.filter(
+                GoogleCalendarToken.email == email,
+                GoogleCalendarToken.user_id != user_id,
+            ).first()
+            if clash:
+                _log.warning(
+                    "Google account %s already linked to user %s; refusing link for user %s",
+                    email, clash.user_id, user_id,
+                )
+                return redirect(f"{frontend_url}/settings?calendar=error&reason=already_linked")
+
         _save_credentials(user_id, creds, email)
         return redirect(f"{frontend_url}/settings?calendar=connected")
     except Exception as exc:

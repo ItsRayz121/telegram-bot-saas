@@ -1611,12 +1611,14 @@ def dismiss_meeting(meeting_id):
 
 # ── Sprint 4: Automation settings ────────────────────────────────────────────
 
-@hub_bp.route("/bots/official/automations", methods=["GET"])
+@hub_bp.route("/bots/<bot_id>/automations", methods=["GET"])
 @jwt_required()
-def get_automations():
-    """Return automation toggle states for the official bot."""
+def get_automations(bot_id):
+    """Return automation toggle states for a bot ("official" or a custom bot id).
+    Each bot has its own toggles/params so custom assistant bots don't inherit the
+    official bot's settings."""
     user = _current_user()
-    bot = _get_or_create_official_bot(user.id)
+    bot = _resolve_bot(user, bot_id)
     _ensure_seed_automations()
 
     automations = HubSystemAutomation.query.filter_by(is_active=True).all()
@@ -1648,12 +1650,12 @@ def get_automations():
     return jsonify({"automations": result, "digest": digest})
 
 
-@hub_bp.route("/bots/official/automations", methods=["PATCH"])
+@hub_bp.route("/bots/<bot_id>/automations", methods=["PATCH"])
 @jwt_required()
-def update_automations():
-    """Save automation toggle states."""
+def update_automations(bot_id):
+    """Save automation toggle states / params for a bot ("official" or custom id)."""
     user = _current_user()
-    bot = _get_or_create_official_bot(user.id)
+    bot = _resolve_bot(user, bot_id)
     _ensure_seed_automations()
     data = request.get_json(silent=True) or {}
 

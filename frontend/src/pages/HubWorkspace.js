@@ -217,7 +217,7 @@ export function TabContent({ tab, botData, groups, setGroups, botId }) {
     case 'tasks':      return <HubTasks groups={groups} botId={botId} />;
     case 'templates':  return <HubTemplates botId={botId} />;
     case 'knowledge':  return <HubKnowledge botId={botId} />;
-    case 'automation': return <HubAutomation />;
+    case 'automation': return <HubAutomation botId={botId} />;
     case 'settings':   return <HubSettings botData={botData} groups={groups} setGroups={setGroups} botId={botId} />;
     default:           return <TabComingSoon tab={tab} />;
   }
@@ -1847,7 +1847,7 @@ function KnowledgeCardModal({ open, card, onClose, onSaved, botId }) {
 }
 
 // ── Automation tab ─────────────────────────────────────────────────────────────
-function HubAutomation() {
+function HubAutomation({ botId = null }) {
   const [automations, setAutomations] = useState([]);
   const [digest, setDigest] = useState({ enabled: false, time: '21:00', format: 'compact' });
   const [loading, setLoading] = useState(true);
@@ -1855,19 +1855,20 @@ function HubAutomation() {
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    hub.getAutomations()
+    setLoading(true);
+    hub.getAutomations(botId)
       .then(r => {
         setAutomations(r.data.automations || []);
         setDigest(r.data.digest || { enabled: false, time: '21:00', format: 'compact' });
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [botId]);
 
   const handleToggle = async (code, value) => {
     setAutomations(prev => prev.map(a => a.code === code ? { ...a, is_enabled: value } : a));
     try {
-      await hub.updateAutomations({ automations: { [code]: value } });
+      await hub.updateAutomations({ automations: { [code]: value } }, botId);
     } catch (_) {}
   };
 
@@ -1875,14 +1876,14 @@ function HubAutomation() {
     setAutomations(prev => prev.map(a => a.code === code
       ? { ...a, custom_params: { ...(a.custom_params || {}), ...cparams } } : a));
     try {
-      await hub.updateAutomations({ params: { [code]: cparams } });
+      await hub.updateAutomations({ params: { [code]: cparams } }, botId);
     } catch (_) {}
   };
 
   const handleSaveDigest = async () => {
     setSaving(true);
     try {
-      await hub.updateAutomations({ digest });
+      await hub.updateAutomations({ digest }, botId);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (_) {}
@@ -1998,6 +1999,7 @@ function HubAutomation() {
 function GoogleCalendarSettingsCard() {
   const [cal, setCal] = useState(null);   // {connected, configured, email, auto_sync_meetings}
   const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState(null);  // {severity, text} from OAuth redirect
 
   const load = useCallback(() => {
     googleCalendar.status()
@@ -2005,6 +2007,20 @@ function GoogleCalendarSettingsCard() {
       .catch(() => setCal({ connected: false, configured: false }));
   }, []);
   useEffect(() => { load(); }, [load]);
+
+  // Surface the OAuth callback result (?calendar=connected|error&reason=...).
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    const status = p.get('calendar');
+    if (!status) return;
+    if (status === 'connected') {
+      setNotice({ severity: 'success', text: 'Google Calendar connected.' });
+    } else if (p.get('reason') === 'already_linked') {
+      setNotice({ severity: 'error', text: 'That Google account is already connected to another Telegizer account. Each Google Calendar can be linked to only one account.' });
+    } else {
+      setNotice({ severity: 'error', text: 'Couldn’t connect Google Calendar. Please try again.' });
+    }
+  }, []);
 
   const connect = async () => {
     setBusy(true);
@@ -2036,6 +2052,11 @@ function GoogleCalendarSettingsCard() {
   return (
     <Card variant="outlined" sx={{ mb: 3 }}>
       <CardContent>
+        {notice && (
+          <Alert severity={notice.severity} sx={{ mb: 2 }} onClose={() => setNotice(null)}>
+            {notice.text}
+          </Alert>
+        )}
         {!cal.configured ? (
           <Typography variant="body2" color="text.secondary">
             Google Calendar isn't configured on this server yet.
