@@ -401,6 +401,7 @@ def pull_calendar_events_for_user(user_id: int, window_days: int = 60, limit: in
 
     from ..routes.hub import _get_or_create_official_bot  # lazy: avoid import cycle
     tz_name = _user_timezone(user_id)
+    scope = (getattr(row, "pull_scope", "all") or "all")
     imported = updated = removed = 0
     last_err = None
     try:
@@ -434,8 +435,14 @@ def pull_calendar_events_for_user(user_id: int, window_days: int = 60, limit: in
             event_id = e.get("id")
             if not event_id:
                 continue
-            seen_ids.add(event_id)
             title, participants, url = _gcal_event_fields(e)
+            # "important" scope = only real meetings: has other attendees OR a
+            # video/conference link. Skip solo time-blocks. (Don't add to seen_ids,
+            # so a previously-imported event that's now filtered out gets cleaned up
+            # by the stale-deletion pass below.)
+            if scope == "important" and not (participants or url):
+                continue
+            seen_ids.add(event_id)
 
             existing = HubMeeting.query.filter_by(
                 user_id=user_id, calendar_event_id=event_id
@@ -602,6 +609,7 @@ def calendar_status():
         "configured": _is_configured(),
         "auto_sync_meetings": bool(getattr(row, "auto_sync_meetings", False)),
         "pull_events": bool(getattr(row, "pull_events", False)),
+        "pull_scope": getattr(row, "pull_scope", "all") or "all",
         "last_sync_error": getattr(row, "last_sync_error", None) or None,
     })
 
@@ -618,19 +626,25 @@ def update_calendar_settings():
     body = request.get_json(silent=True) or {}
     if "auto_sync_meetings" in body:
         row.auto_sync_meetings = bool(body["auto_sync_meetings"])
+    scope_changed = False
     if "pull_events" in body:
         row.pull_events = bool(body["pull_events"])
+    if "pull_scope" in body:
+        new_scope = "important" if str(body["pull_scope"]) == "important" else "all"
+        scope_changed = new_scope != (row.pull_scope or "all")
+        row.pull_scope = new_scope
     db.session.commit()
-    # Turning reverse sync on → do a first pull right away so the user sees their
-    # Calendar events in the Hub immediately instead of waiting for the next tick.
-    if body.get("pull_events"):
+    # Turning reverse sync on (or narrowing/widening its scope) → pull right away so
+    # the Hub reflects the choice immediately instead of waiting for the next tick.
+    if body.get("pull_events") or (scope_changed and row.pull_events):
         try:
             pull_calendar_events_for_user(user.id)
         except Exception as exc:
-            _log.warning("immediate reverse-sync after toggle failed user=%s: %s", user.id, exc)
+            _log.warning("immediate reverse-sync after settings change failed user=%s: %s", user.id, exc)
     return jsonify({
         "auto_sync_meetings": bool(row.auto_sync_meetings),
         "pull_events": bool(row.pull_events),
+        "pull_scope": row.pull_scope or "all",
     })
 
 

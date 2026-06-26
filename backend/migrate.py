@@ -946,6 +946,11 @@ def init_db():
             "ALTER TABLE google_calendar_tokens ADD COLUMN IF NOT EXISTS last_pull_at TIMESTAMP",
             "google_calendar_tokens.last_pull_at",
         )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE google_calendar_tokens ADD COLUMN IF NOT EXISTS pull_scope VARCHAR(20) NOT NULL DEFAULT 'all'",
+            "google_calendar_tokens.pull_scope",
+        )
         # Links meeting reminders to their HubMeeting so edits/deletes rebuild the ladder.
         _run_alter(
             db.engine,

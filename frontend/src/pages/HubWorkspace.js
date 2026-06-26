@@ -962,6 +962,14 @@ function HubMeetings({ groups, botId, tz }) {
     } catch { loadCal(); }
   };
 
+  const setScope = async (val) => {
+    setCal(c => ({ ...c, pull_scope: val }));
+    try {
+      await googleCalendar.updateSettings({ pull_scope: val });
+      load();  // server re-pulls under the new scope; refresh to reflect it
+    } catch { loadCal(); }
+  };
+
   const syncToCalendar = async (m) => {
     setSyncingId(m.id);
     setSyncError(null);
@@ -1042,6 +1050,15 @@ function HubMeetings({ groups, botId, tz }) {
                 control={<Switch size="small" checked={!!cal.pull_events} onChange={e => togglePull(e.target.checked)} />}
                 label={<Typography variant="caption">Show my Calendar events here</Typography>}
               />
+              {cal.pull_events && (
+                <FormControl size="small" sx={{ minWidth: 150 }}>
+                  <Select value={cal.pull_scope || 'all'} onChange={e => setScope(e.target.value)}
+                    sx={{ '& .MuiSelect-select': { py: 0.5, fontSize: '0.75rem' } }}>
+                    <MenuItem value="all">All events</MenuItem>
+                    <MenuItem value="important">Only meetings</MenuItem>
+                  </Select>
+                </FormControl>
+              )}
             </Box>
           ) : (
             <Button size="small" variant="outlined" startIcon={<CalendarToday sx={{ fontSize: 15 }} />} onClick={connectCalendar}>
@@ -2009,6 +2026,10 @@ function GoogleCalendarSettingsCard() {
     setCal(c => ({ ...c, pull_events: val }));
     try { await googleCalendar.updateSettings({ pull_events: val }); } catch { load(); }
   };
+  const setScope = async (val) => {
+    setCal(c => ({ ...c, pull_scope: val }));
+    try { await googleCalendar.updateSettings({ pull_scope: val }); } catch { load(); }
+  };
 
   if (!cal) return <Card variant="outlined" sx={{ mb: 3 }}><CardContent><CircularProgress size={20} /></CardContent></Card>;
 
@@ -2044,6 +2065,15 @@ function GoogleCalendarSettingsCard() {
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
               Upcoming timed events from your calendar appear under Meetings and get the same reminder ladder — even meetings created outside Telegram.
             </Typography>
+            {cal.pull_events && (
+              <FormControl size="small" sx={{ mt: 1.5, minWidth: 220 }}>
+                <InputLabel>Import</InputLabel>
+                <Select label="Import" value={cal.pull_scope || 'all'} onChange={e => setScope(e.target.value)}>
+                  <MenuItem value="all">All events (everything timed)</MenuItem>
+                  <MenuItem value="important">Only meetings (with people or a link)</MenuItem>
+                </Select>
+              </FormControl>
+            )}
             {cal.last_sync_error && (
               <Alert severity="warning" sx={{ mt: 1.5, fontSize: '0.8rem' }}
                 action={cal.last_sync_error.toLowerCase().includes('reconnect')

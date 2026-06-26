@@ -3454,6 +3454,10 @@ class GoogleCalendarToken(db.Model):
     # When true, the reverse-sync job pulls upcoming timed Google Calendar events
     # INTO Echo Meetings (and gives them Telegram reminders).
     pull_events = db.Column(db.Boolean, default=False, nullable=False)
+    # Which events reverse-sync imports: "all" (every timed event) or "important"
+    # (only events with attendees or a video/conference link). All-day entries are
+    # always skipped (usually holidays/birthdays, and they don't fit reminders).
+    pull_scope = db.Column(db.String(20), default="all", nullable=False)
     # High-water mark for the reverse-sync window already imported, so the job can
     # detect events deleted on the Google side. NULL until first pull.
     last_pull_at = db.Column(db.DateTime)
