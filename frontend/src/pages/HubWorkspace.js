@@ -1854,6 +1854,14 @@ function HubAutomation() {
     } catch (_) {}
   };
 
+  const handleParams = async (code, cparams) => {
+    setAutomations(prev => prev.map(a => a.code === code
+      ? { ...a, custom_params: { ...(a.custom_params || {}), ...cparams } } : a));
+    try {
+      await hub.updateAutomations({ params: { [code]: cparams } });
+    } catch (_) {}
+  };
+
   const handleSaveDigest = async () => {
     setSaving(true);
     try {
@@ -1924,6 +1932,31 @@ function HubAutomation() {
                 <Switch checked={a.is_enabled} size="small" sx={{ flexShrink: 0 }}
                   onChange={e => handleToggle(a.code, e.target.checked)} />
               </Box>
+              {a.code === 'meeting_reminder' && a.is_enabled && (
+                <Box sx={{ mt: 1, display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <FormControl size="small" sx={{ minWidth: 200 }}>
+                    <InputLabel>Reminders</InputLabel>
+                    <Select label="Reminders" value={(a.custom_params && a.custom_params.reminder_mode) || 'ladder'}
+                      onChange={e => handleParams('meeting_reminder', { reminder_mode: e.target.value })}>
+                      <MenuItem value="ladder">All nudges (1 day, 3 hr, 1 hr, 10 min)</MenuItem>
+                      <MenuItem value="single">Just one reminder</MenuItem>
+                    </Select>
+                  </FormControl>
+                  {a.custom_params && a.custom_params.reminder_mode === 'single' && (
+                    <FormControl size="small" sx={{ minWidth: 150 }}>
+                      <InputLabel>When</InputLabel>
+                      <Select label="When" value={String((a.custom_params && a.custom_params.offset_minutes) || 60)}
+                        onChange={e => handleParams('meeting_reminder', { reminder_mode: 'single', offset_minutes: Number(e.target.value) })}>
+                        <MenuItem value="10">10 minutes before</MenuItem>
+                        <MenuItem value="30">30 minutes before</MenuItem>
+                        <MenuItem value="60">1 hour before</MenuItem>
+                        <MenuItem value="180">3 hours before</MenuItem>
+                        <MenuItem value="1440">1 day before</MenuItem>
+                      </Select>
+                    </FormControl>
+                  )}
+                </Box>
+              )}
               {i < automations.length - 1 && <Divider sx={{ my: 1.5 }} />}
             </Box>
           ))}

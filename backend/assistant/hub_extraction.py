@@ -70,6 +70,39 @@ def _meeting_reminder_enabled(bot_id) -> bool:
     return bool((auto.default_params or {}).get("default_enabled", True))
 
 
+def _lead_label(minutes: int) -> str:
+    """Human lead-time label, e.g. 'in 1 day' / 'in 3 hours' / 'in 10 minutes'."""
+    if minutes % 1440 == 0:
+        d = minutes // 1440
+        return f"in {d} day" + ("s" if d != 1 else "")
+    if minutes % 60 == 0:
+        h = minutes // 60
+        return f"in {h} hour" + ("s" if h != 1 else "")
+    return f"in {minutes} minutes"
+
+
+def resolve_reminder_ladder(bot_id):
+    """The (minutes_before, label) offsets for this bot's meeting reminders, honoring
+    the meeting_reminder automation's custom_params:
+      reminder_mode='single' → one reminder at offset_minutes (default 60)
+      otherwise              → the full 1d/3h/1h/10m ladder."""
+    from .hub_models import HubSystemAutomation, HubBotAutomationSetting
+    params = {}
+    auto = HubSystemAutomation.query.filter_by(code="meeting_reminder", is_active=True).first()
+    if auto:
+        setting = HubBotAutomationSetting.query.filter_by(bot_id=bot_id, automation_id=auto.id).first()
+        if setting and setting.custom_params:
+            params = setting.custom_params or {}
+    if params.get("reminder_mode") == "single":
+        try:
+            mins = int(params.get("offset_minutes", 60))
+        except (TypeError, ValueError):
+            mins = 60
+        mins = max(1, mins)
+        return [(mins, _lead_label(mins))]
+    return list(_MEETING_REMINDER_LADDER)
+
+
 def rebuild_meeting_reminders(meeting, tz_name: str | None = None) -> int:
     """(Re)build the Telegram reminder ladder for ONE HubMeeting, keyed by
     meeting_id so it's idempotent on edit/re-sync. Used for manual + reverse-synced
@@ -99,7 +132,7 @@ def rebuild_meeting_reminders(meeting, tz_name: str | None = None) -> int:
 
     now = datetime.utcnow()
     created = 0
-    for minutes_before, lead_label in _MEETING_REMINDER_LADDER:
+    for minutes_before, lead_label in resolve_reminder_ladder(meeting.bot_id):
         remind_at = scheduled_at - timedelta(minutes=minutes_before)
         if remind_at < now:
             continue
@@ -682,6 +715,7 @@ def _run_automation_triggers(validated: dict, group, bot_id: str, batch_id: str,
         # throttled, anti-ban-safe HubReminder delivery job.
         if _is_enabled("meeting_reminder"):
             now = datetime.utcnow()
+            reminder_ladder = resolve_reminder_ladder(bot_id)
             for mtg in validated.get("meetings", []):
                 scheduled_at = _parse_datetime(mtg.get("scheduled_at"), tz)
                 if not scheduled_at:
@@ -699,7 +733,7 @@ def _run_automation_triggers(validated: dict, group, bot_id: str, batch_id: str,
                     if tz else scheduled_at
                 )
                 when = local_start.strftime("%b %d, %H:%M")
-                for minutes_before, lead_label in _MEETING_REMINDER_LADDER:
+                for minutes_before, lead_label in reminder_ladder:
                     remind_at = scheduled_at - timedelta(minutes=minutes_before)
                     if remind_at < now:
                         continue  # this lead time has already passed

@@ -283,11 +283,19 @@ def propagate_meeting_to_calendar(user_id: int, meeting) -> dict:
 
     - Already on Calendar (has event_id) → PATCH that event in place.
     - Not yet pushed + user has auto-sync on → insert a fresh event.
+    - Date cleared but event exists → remove the now-orphaned event.
     - No date / not connected / auto-sync off → no-op."""
-    if not getattr(meeting, "scheduled_at", None):
-        return {"ok": True, "error": None, "reconnect": False}
     row = GoogleCalendarToken.query.filter_by(user_id=user_id).first()
     if not row:
+        return {"ok": True, "error": None, "reconnect": False}
+    if not getattr(meeting, "scheduled_at", None):
+        # Date was removed — drop any event we'd previously created for it.
+        event_id = getattr(meeting, "calendar_event_id", None)
+        if event_id:
+            delete_meeting_from_calendar(user_id, event_id)
+            meeting.calendar_event_id = None
+            meeting.calendar_pushed = False
+            db.session.commit()
         return {"ok": True, "error": None, "reconnect": False}
     try:
         event_id = getattr(meeting, "calendar_event_id", None)
@@ -373,7 +381,7 @@ def _gcal_event_fields(e: dict):
     return title, participants, (url[:500] if url else None)
 
 
-def pull_calendar_events_for_user(user_id: int, window_days: int = 60, limit: int = 75) -> dict:
+def pull_calendar_events_for_user(user_id: int, window_days: int = 60, limit: int = 250) -> dict:
     """Reverse sync: import upcoming TIMED Google Calendar events into Echo Meetings
     (source='calendar') so they appear in the Hub and get Telegram reminders.
 
@@ -410,8 +418,14 @@ def pull_calendar_events_for_user(user_id: int, window_days: int = 60, limit: in
             orderBy="startTime",
         ).execute()
 
+        items = result.get("items", [])
+        # If Google paginated (or we hit the cap), seen_ids is INCOMPLETE — we must
+        # not treat "absent from this page" as "deleted", or we'd dismiss real
+        # meetings. singleEvents=True expands recurring events, so this is common.
+        truncated = bool(result.get("nextPageToken")) or len(items) >= limit
+
         seen_ids = set()
-        for e in result.get("items", []):
+        for e in items:
             if e.get("status") == "cancelled":
                 continue
             scheduled_at = _parse_gcal_start(e.get("start", {}))
@@ -467,22 +481,28 @@ def pull_calendar_events_for_user(user_id: int, window_days: int = 60, limit: in
             imported += 1
 
         # Deletions on the Google side → dismiss the mirrored calendar-origin rows.
+        # Only safe when the listing was complete, and only within the window we
+        # actually queried (events beyond window_days were never listed, so their
+        # absence from seen_ids means nothing).
         now_naive = datetime.utcnow()
-        stale = HubMeeting.query.filter(
-            HubMeeting.user_id == user_id,
-            HubMeeting.source == "calendar",
-            HubMeeting.dismissed_at.is_(None),
-            HubMeeting.scheduled_at.isnot(None),
-            HubMeeting.scheduled_at >= now_naive,
-            HubMeeting.calendar_event_id.isnot(None),
-        ).all()
-        for s in stale:
-            if s.calendar_event_id not in seen_ids:
-                s.dismissed_at = now_naive
-                HubReminder.query.filter_by(meeting_id=s.id).delete()
-                removed += 1
-        if removed:
-            db.session.commit()
+        if not truncated:
+            window_end = now_naive + timedelta(days=window_days)
+            stale = HubMeeting.query.filter(
+                HubMeeting.user_id == user_id,
+                HubMeeting.source == "calendar",
+                HubMeeting.dismissed_at.is_(None),
+                HubMeeting.scheduled_at.isnot(None),
+                HubMeeting.scheduled_at >= now_naive,
+                HubMeeting.scheduled_at <= window_end,
+                HubMeeting.calendar_event_id.isnot(None),
+            ).all()
+            for s in stale:
+                if s.calendar_event_id not in seen_ids:
+                    s.dismissed_at = now_naive
+                    HubReminder.query.filter_by(meeting_id=s.id).delete()
+                    removed += 1
+            if removed:
+                db.session.commit()
 
         row.last_pull_at = now_naive
         if row.last_sync_error:

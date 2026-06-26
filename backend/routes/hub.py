@@ -1673,6 +1673,29 @@ def update_automations():
             db.session.add(setting)
         setting.is_enabled = bool(enabled)
 
+    # Update per-automation custom params, e.g. meeting reminder mode:
+    #   {"params": {"meeting_reminder": {"reminder_mode": "single", "offset_minutes": 60}}}
+    params_updates = data.get("params", {})
+    if isinstance(params_updates, dict):
+        for code, cparams in params_updates.items():
+            if not isinstance(cparams, dict):
+                continue
+            auto = HubSystemAutomation.query.filter_by(code=code).first()
+            if not auto:
+                continue
+            setting = HubBotAutomationSetting.query.filter_by(
+                bot_id=bot.id, automation_id=auto.id
+            ).first()
+            if not setting:
+                setting = HubBotAutomationSetting(
+                    id=str(uuid.uuid4()), bot_id=bot.id, automation_id=auto.id
+                )
+                db.session.add(setting)
+            # New dict so SQLAlchemy detects the JSON change.
+            merged = dict(setting.custom_params or {})
+            merged.update(cparams)
+            setting.custom_params = merged
+
     # Update digest settings
     if "digest" in data:
         digest_data = data["digest"]
