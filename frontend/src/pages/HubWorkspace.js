@@ -954,6 +954,14 @@ function HubMeetings({ groups, botId, tz }) {
     catch { loadCal(); }
   };
 
+  const togglePull = async (val) => {
+    setCal(c => ({ ...c, pull_events: val }));
+    try {
+      await googleCalendar.updateSettings({ pull_events: val });
+      if (val) load();  // a first pull runs server-side; refresh the list to show it
+    } catch { loadCal(); }
+  };
+
   const syncToCalendar = async (m) => {
     setSyncingId(m.id);
     setSyncError(null);
@@ -1028,6 +1036,11 @@ function HubMeetings({ groups, botId, tz }) {
                 sx={{ mr: 0 }}
                 control={<Switch size="small" checked={!!cal.auto_sync_meetings} onChange={e => toggleAutoSync(e.target.checked)} />}
                 label={<Typography variant="caption">Auto-sync new meetings</Typography>}
+              />
+              <FormControlLabel
+                sx={{ mr: 0 }}
+                control={<Switch size="small" checked={!!cal.pull_events} onChange={e => togglePull(e.target.checked)} />}
+                label={<Typography variant="caption">Show my Calendar events here</Typography>}
               />
             </Box>
           ) : (
@@ -1112,6 +1125,10 @@ function HubMeetings({ groups, botId, tz }) {
                     <Box sx={{ display: 'flex', gap: 0.75, mt: 0.75, flexWrap: 'wrap', alignItems: 'center' }}>
                       {gname && (
                         <Chip label={gname} size="small" variant="outlined" sx={{ height: 16, fontSize: '0.6rem' }} />
+                      )}
+                      {m.source === 'calendar' && (
+                        <Chip icon={<CalendarToday sx={{ fontSize: '0.7rem !important' }} />} label="From Calendar"
+                          size="small" variant="outlined" sx={{ height: 16, fontSize: '0.6rem', borderColor: '#4285f4', color: '#4285f4', '& .MuiChip-icon': { color: '#4285f4' } }} />
                       )}
                       {Array.isArray(m.participants) && m.participants.length > 0 && (
                         <Chip icon={<PeopleOutline sx={{ fontSize: '0.7rem !important' }} />} label={m.participants.join(', ')}
@@ -1955,6 +1972,10 @@ function GoogleCalendarSettingsCard() {
     setCal(c => ({ ...c, auto_sync_meetings: val }));
     try { await googleCalendar.updateSettings({ auto_sync_meetings: val }); } catch { load(); }
   };
+  const togglePull = async (val) => {
+    setCal(c => ({ ...c, pull_events: val }));
+    try { await googleCalendar.updateSettings({ pull_events: val }); } catch { load(); }
+  };
 
   if (!cal) return <Card variant="outlined" sx={{ mb: 3 }}><CardContent><CircularProgress size={20} /></CardContent></Card>;
 
@@ -1982,6 +2003,13 @@ function GoogleCalendarSettingsCard() {
             />
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
               One tidy event per meeting, with reminders 1 day / 3 hr / 1 hr / 10 min before. Telegram reminders are sent separately.
+            </Typography>
+            <FormControlLabel sx={{ mt: 1 }}
+              control={<Switch size="small" checked={!!cal.pull_events} onChange={e => togglePull(e.target.checked)} />}
+              label={<Typography variant="body2">Show my Google Calendar events in Echo (with Telegram reminders)</Typography>}
+            />
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+              Upcoming timed events from your calendar appear under Meetings and get the same reminder ladder — even meetings created outside Telegram.
             </Typography>
             {cal.last_sync_error && (
               <Alert severity="warning" sx={{ mt: 1.5, fontSize: '0.8rem' }}

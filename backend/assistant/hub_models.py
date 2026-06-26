@@ -176,6 +176,10 @@ class HubReminder(db.Model):
     remind_at = db.Column(db.DateTime(timezone=True), nullable=False)
     recurrence = db.Column(db.String(20))
     source = db.Column(db.String(20), default="extracted", nullable=False)
+    # Links a reminder to the HubMeeting it nudges, so editing/dismissing/re-syncing
+    # that meeting can rebuild or remove its ladder cleanly. NULL for non-meeting
+    # reminders and legacy extracted meeting reminders.
+    meeting_id = db.Column(db.String(36), db.ForeignKey("hub_meetings.id", ondelete="CASCADE"), nullable=True)
     source_batch_id = db.Column(db.String(36), db.ForeignKey("hub_extraction_batches.id", ondelete="SET NULL"))
     delivered_at = db.Column(db.DateTime(timezone=True))
     dismissed_at = db.Column(db.DateTime(timezone=True))

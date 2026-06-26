@@ -2479,6 +2479,33 @@ def _run_calendar_auto_sync(app):
             )
 
 
+def _run_calendar_reverse_sync(app):
+    """For users who enabled it, pull upcoming timed Google Calendar events INTO
+    Echo Meetings (+ Telegram reminders). Idempotent; dedups by event id."""
+    with app.app_context():
+        from .models import GoogleCalendarToken
+        from .routes.calendar import pull_calendar_events_for_user
+
+        try:
+            rows = GoogleCalendarToken.query.filter_by(pull_events=True).all()
+        except Exception as exc:
+            _scheduler_log.debug("calendar reverse-sync: token query failed: %s", exc)
+            return
+        imported = updated = removed = 0
+        for row in rows:
+            res = pull_calendar_events_for_user(row.user_id)
+            imported += res.get("imported", 0)
+            updated += res.get("updated", 0)
+            removed += res.get("removed", 0)
+        if imported or updated or removed:
+            _scheduler_log.info(
+                "[SCHEDULER] calendar reverse-sync tokens=%d imported=%d updated=%d removed=%d",
+                len(rows), imported, updated, removed,
+            )
+        else:
+            _scheduler_log.debug("[SCHEDULER] calendar reverse-sync idle tokens=%d", len(rows))
+
+
 def _scheduler_loop(app):
     import time
     _last_expiry_check = [0]
@@ -2494,6 +2521,7 @@ def _scheduler_loop(app):
     _last_hub_reminders = [0]
     _last_hub_digests = [0]
     _last_calendar_sync = [0]
+    _last_calendar_pull = [0]
     time.sleep(15)  # Wait for bots to fully start
     while True:
         try:
@@ -2566,6 +2594,10 @@ def _scheduler_loop(app):
             if now_ts - _last_calendar_sync[0] > 300:
                 _last_calendar_sync[0] = now_ts
                 _run_task_with_timeout(_run_calendar_auto_sync, app, timeout=90, label="_run_calendar_auto_sync")
+            # Reverse sync (Google Calendar → Echo meetings + reminders): every 15 min
+            if now_ts - _last_calendar_pull[0] > 900:
+                _last_calendar_pull[0] = now_ts
+                _run_task_with_timeout(_run_calendar_reverse_sync, app, timeout=120, label="_run_calendar_reverse_sync")
         except Exception as exc:
             # During a redeploy/restart the process gets SIGTERM and the
             # interpreter starts tearing down. A scheduler tick mid-shutdown

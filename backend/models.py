@@ -3451,6 +3451,12 @@ class GoogleCalendarToken(db.Model):
     token_json = db.Column(db.Text, nullable=False)  # Fernet-encrypted JSON token blob
     # When true, the scheduler auto-pushes newly extracted dated meetings to Google Calendar.
     auto_sync_meetings = db.Column(db.Boolean, default=False, nullable=False)
+    # When true, the reverse-sync job pulls upcoming timed Google Calendar events
+    # INTO Echo Meetings (and gives them Telegram reminders).
+    pull_events = db.Column(db.Boolean, default=False, nullable=False)
+    # High-water mark for the reverse-sync window already imported, so the job can
+    # detect events deleted on the Google side. NULL until first pull.
+    last_pull_at = db.Column(db.DateTime)
     # Last sync failure reason (cleared on next success) so the UI can explain why
     # syncing stalled and prompt a reconnect. NULL = healthy.
     last_sync_error = db.Column(db.Text)

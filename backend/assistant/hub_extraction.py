@@ -58,6 +58,64 @@ _MEETING_REMINDER_LADDER = (
 )
 
 
+def _meeting_reminder_enabled(bot_id) -> bool:
+    """Whether the 'meeting_reminder' automation is on for this bot (default on)."""
+    from .hub_models import HubSystemAutomation, HubBotAutomationSetting
+    auto = HubSystemAutomation.query.filter_by(code="meeting_reminder", is_active=True).first()
+    if not auto:
+        return False
+    setting = HubBotAutomationSetting.query.filter_by(bot_id=bot_id, automation_id=auto.id).first()
+    if setting and setting.is_enabled is not None:
+        return setting.is_enabled
+    return bool((auto.default_params or {}).get("default_enabled", True))
+
+
+def rebuild_meeting_reminders(meeting, tz_name: str | None = None) -> int:
+    """(Re)build the Telegram reminder ladder for ONE HubMeeting, keyed by
+    meeting_id so it's idempotent on edit/re-sync. Used for manual + reverse-synced
+    meetings (the extraction path builds its own ladder inline). Respects the
+    meeting_reminder automation toggle and only schedules still-future offsets.
+    The caller commits."""
+    from .hub_models import HubReminder
+    from .hub_crypto import _dec
+    from ..models import db
+
+    # Wipe any prior ladder for this meeting first (idempotent rebuild).
+    HubReminder.query.filter_by(meeting_id=meeting.id).delete()
+    if not meeting.scheduled_at:
+        return 0
+    if not _meeting_reminder_enabled(meeting.bot_id):
+        return 0
+
+    scheduled_at = meeting.scheduled_at
+    if scheduled_at.tzinfo is not None:
+        scheduled_at = scheduled_at.astimezone(timezone.utc).replace(tzinfo=None)
+
+    tz = _resolve_tz(tz_name or _user_timezone(meeting.user_id))
+    raw_title = (_dec(meeting.title) or "").strip()
+    label = raw_title if (raw_title and raw_title.lower() != "meeting") else "Meeting"
+    local_start = scheduled_at.replace(tzinfo=timezone.utc).astimezone(tz) if tz else scheduled_at
+    when = local_start.strftime("%b %d, %H:%M")
+
+    now = datetime.utcnow()
+    created = 0
+    for minutes_before, lead_label in _MEETING_REMINDER_LADDER:
+        remind_at = scheduled_at - timedelta(minutes=minutes_before)
+        if remind_at < now:
+            continue
+        db.session.add(HubReminder(
+            user_id=meeting.user_id,
+            bot_id=meeting.bot_id,
+            source_group_id=meeting.source_group_id,
+            content=f"{label} {lead_label} (starts {when})",
+            remind_at=remind_at,
+            source="meeting",
+            meeting_id=meeting.id,
+        ))
+        created += 1
+    return created
+
+
 def run_extraction(bot_id: str, group_id: str, flask_app) -> dict:
     """
     Main entry point. Safe to call from Celery workers.

@@ -1536,6 +1536,10 @@ def create_meeting():
         source="manual",
     )
     db.session.add(meeting)
+    db.session.flush()
+    # Telegram reminder ladder (same nudges as extracted meetings).
+    from ..assistant.hub_extraction import rebuild_meeting_reminders
+    rebuild_meeting_reminders(meeting)
     db.session.commit()
 
     # Mirror straight to Google Calendar (immediate, best-effort).
@@ -1573,6 +1577,10 @@ def update_meeting(meeting_id):
         m.meeting_url = _clean_meeting_url(data.get("meeting_url"))
     if "source_group_id" in data:
         m.source_group_id = data.get("source_group_id") or None
+    db.session.flush()
+    # Rebuild the reminder ladder so nudges track the new time/title.
+    from ..assistant.hub_extraction import rebuild_meeting_reminders
+    rebuild_meeting_reminders(m)
     db.session.commit()
 
     sync = propagate_meeting_to_calendar(user.id, m)
@@ -1592,6 +1600,8 @@ def dismiss_meeting(meeting_id):
     m = HubMeeting.query.filter_by(id=meeting_id, user_id=user.id).first_or_404()
     m.dismissed_at = datetime.utcnow()
     event_id = getattr(m, "calendar_event_id", None)
+    # Stop its reminder ladder from firing once dismissed.
+    HubReminder.query.filter_by(meeting_id=m.id).delete()
     db.session.commit()
     # Remove the mirrored Google Calendar event too (best-effort).
     if event_id:

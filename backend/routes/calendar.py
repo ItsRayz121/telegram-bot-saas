@@ -339,6 +339,168 @@ def delete_meeting_from_calendar(user_id: int, event_id: str) -> None:
         _log.info("calendar event delete skipped user=%s event=%s: %s", user_id, event_id, exc)
 
 
+def _parse_gcal_start(start: dict):
+    """Google event 'start' → naive UTC datetime, or None for all-day events
+    (which have only a 'date', no 'dateTime')."""
+    dt_str = (start or {}).get("dateTime")
+    if not dt_str:
+        return None
+    s = dt_str.replace("Z", "+00:00")
+    try:
+        dt = datetime.fromisoformat(s)
+    except ValueError:
+        return None
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
+
+
+def _gcal_event_fields(e: dict):
+    """Pull (title, participants, url) out of a Google event for an Echo meeting."""
+    title = (e.get("summary") or "Meeting")[:255]
+    participants = []
+    for a in (e.get("attendees") or []):
+        if a.get("self"):
+            continue  # don't list the owner as a participant
+        name = a.get("displayName") or a.get("email")
+        if name:
+            participants.append(str(name)[:100])
+    participants = participants[:20]
+    url = e.get("hangoutLink")
+    if not url:
+        loc = (e.get("location") or "").strip()
+        url = loc if loc.startswith("http") else None
+    return title, participants, (url[:500] if url else None)
+
+
+def pull_calendar_events_for_user(user_id: int, window_days: int = 60, limit: int = 75) -> dict:
+    """Reverse sync: import upcoming TIMED Google Calendar events into Echo Meetings
+    (source='calendar') so they appear in the Hub and get Telegram reminders.
+
+    - Dedups by event id; events Echo itself created (source extracted/manual) are
+      left alone, never duplicated.
+    - Updates calendar-origin meetings whose time/title/details changed (and rebuilds
+      their reminder ladder when the time moves).
+    - Dismisses calendar-origin meetings whose event was deleted on Google's side.
+    Best-effort, never raises. Returns {imported, updated, removed, error}."""
+    from ..assistant.hub_models import HubMeeting, HubReminder
+    from ..assistant.hub_extraction import rebuild_meeting_reminders, _user_timezone
+    from ..assistant.hub_crypto import _enc, _dec
+
+    row = GoogleCalendarToken.query.filter_by(user_id=user_id, pull_events=True).first()
+    if not row:
+        return {"imported": 0, "updated": 0, "removed": 0, "error": None}
+
+    from ..routes.hub import _get_or_create_official_bot  # lazy: avoid import cycle
+    tz_name = _user_timezone(user_id)
+    imported = updated = removed = 0
+    last_err = None
+    try:
+        service = _calendar_service(user_id)
+        if service is None:
+            return {"imported": 0, "updated": 0, "removed": 0, "error": None}
+        bot = _get_or_create_official_bot(user_id)
+        now = datetime.now(timezone.utc)
+        result = service.events().list(
+            calendarId="primary",
+            timeMin=now.isoformat(),
+            timeMax=(now + timedelta(days=window_days)).isoformat(),
+            maxResults=limit,
+            singleEvents=True,
+            orderBy="startTime",
+        ).execute()
+
+        seen_ids = set()
+        for e in result.get("items", []):
+            if e.get("status") == "cancelled":
+                continue
+            scheduled_at = _parse_gcal_start(e.get("start", {}))
+            if not scheduled_at:
+                continue  # skip all-day / date-only entries (user chose timed events)
+            event_id = e.get("id")
+            if not event_id:
+                continue
+            seen_ids.add(event_id)
+            title, participants, url = _gcal_event_fields(e)
+
+            existing = HubMeeting.query.filter_by(
+                user_id=user_id, calendar_event_id=event_id
+            ).first()
+            if existing:
+                # Echo-origin events (we pushed them) are already represented — skip.
+                if existing.source != "calendar" or existing.dismissed_at is not None:
+                    continue
+                # Normalize the stored (tz-aware) value to naive UTC before comparing,
+                # else aware!=naive reads as "changed" every tick and churns reminders.
+                existing_at = existing.scheduled_at
+                if existing_at is not None and existing_at.tzinfo is not None:
+                    existing_at = existing_at.astimezone(timezone.utc).replace(tzinfo=None)
+                time_changed = existing_at != scheduled_at
+                if (time_changed or (_dec(existing.title) or "") != title
+                        or (existing.participants or []) != participants
+                        or (existing.meeting_url or None) != url):
+                    existing.title = _enc(title)
+                    existing.scheduled_at = scheduled_at
+                    existing.participants = participants
+                    existing.meeting_url = url
+                    if time_changed:
+                        rebuild_meeting_reminders(existing, tz_name)
+                    db.session.commit()
+                    updated += 1
+                continue
+
+            meeting = HubMeeting(
+                user_id=user_id,
+                bot_id=bot.id,
+                title=_enc(title),
+                scheduled_at=scheduled_at,
+                participants=participants,
+                meeting_url=url,
+                source="calendar",
+                calendar_pushed=True,       # it already lives on Calendar
+                calendar_event_id=event_id,
+            )
+            db.session.add(meeting)
+            db.session.flush()
+            rebuild_meeting_reminders(meeting, tz_name)
+            db.session.commit()
+            imported += 1
+
+        # Deletions on the Google side → dismiss the mirrored calendar-origin rows.
+        now_naive = datetime.utcnow()
+        stale = HubMeeting.query.filter(
+            HubMeeting.user_id == user_id,
+            HubMeeting.source == "calendar",
+            HubMeeting.dismissed_at.is_(None),
+            HubMeeting.scheduled_at.isnot(None),
+            HubMeeting.scheduled_at >= now_naive,
+            HubMeeting.calendar_event_id.isnot(None),
+        ).all()
+        for s in stale:
+            if s.calendar_event_id not in seen_ids:
+                s.dismissed_at = now_naive
+                HubReminder.query.filter_by(meeting_id=s.id).delete()
+                removed += 1
+        if removed:
+            db.session.commit()
+
+        row.last_pull_at = now_naive
+        if row.last_sync_error:
+            row.last_sync_error = None
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        last_err = classify_sync_error(exc)
+        _log.warning("calendar reverse-sync failed user=%s: %s", user_id, exc)
+        try:
+            row.last_sync_error = last_err[:300]
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+    return {"imported": imported, "updated": updated, "removed": removed, "error": last_err}
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 
@@ -419,6 +581,7 @@ def calendar_status():
         "email": row.email or "",
         "configured": _is_configured(),
         "auto_sync_meetings": bool(getattr(row, "auto_sync_meetings", False)),
+        "pull_events": bool(getattr(row, "pull_events", False)),
         "last_sync_error": getattr(row, "last_sync_error", None) or None,
     })
 
@@ -435,8 +598,20 @@ def update_calendar_settings():
     body = request.get_json(silent=True) or {}
     if "auto_sync_meetings" in body:
         row.auto_sync_meetings = bool(body["auto_sync_meetings"])
+    if "pull_events" in body:
+        row.pull_events = bool(body["pull_events"])
     db.session.commit()
-    return jsonify({"auto_sync_meetings": bool(row.auto_sync_meetings)})
+    # Turning reverse sync on → do a first pull right away so the user sees their
+    # Calendar events in the Hub immediately instead of waiting for the next tick.
+    if body.get("pull_events"):
+        try:
+            pull_calendar_events_for_user(user.id)
+        except Exception as exc:
+            _log.warning("immediate reverse-sync after toggle failed user=%s: %s", user.id, exc)
+    return jsonify({
+        "auto_sync_meetings": bool(row.auto_sync_meetings),
+        "pull_events": bool(row.pull_events),
+    })
 
 
 @calendar_bp.route("/events", methods=["GET"])

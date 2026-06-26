@@ -935,6 +935,23 @@ def init_db():
             "ALTER TABLE hub_meetings ADD COLUMN IF NOT EXISTS source VARCHAR(20) NOT NULL DEFAULT 'extracted'",
             "hub_meetings.source",
         )
+        # Reverse calendar sync (Google Calendar -> Echo): toggle + window marker.
+        _run_alter(
+            db.engine,
+            "ALTER TABLE google_calendar_tokens ADD COLUMN IF NOT EXISTS pull_events BOOLEAN NOT NULL DEFAULT FALSE",
+            "google_calendar_tokens.pull_events",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE google_calendar_tokens ADD COLUMN IF NOT EXISTS last_pull_at TIMESTAMP",
+            "google_calendar_tokens.last_pull_at",
+        )
+        # Links meeting reminders to their HubMeeting so edits/deletes rebuild the ladder.
+        _run_alter(
+            db.engine,
+            "ALTER TABLE hub_reminders ADD COLUMN IF NOT EXISTS meeting_id VARCHAR(36)",
+            "hub_reminders.meeting_id",
+        )
 
         # ── Backfill: create UserTelegramAccount rows for legacy User.telegram_user_id ──
         # Must run AFTER all users-table ALTER statements (including auth_provider)
