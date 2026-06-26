@@ -860,6 +860,9 @@ function HubReminders({ groups, botId, tz }) {
                   {r.source === 'extracted' && (
                     <Chip label="AI" size="small" sx={{ ml: 1, height: 14, fontSize: '0.58rem', bgcolor: 'primary.main', color: '#fff' }} />
                   )}
+                  {r.source === 'meeting' && (
+                    <Chip label="Meeting" size="small" sx={{ ml: 1, height: 14, fontSize: '0.58rem', bgcolor: 'success.main', color: '#fff' }} />
+                  )}
                 </Box>
                 <Box sx={{ display: 'flex', gap: 0.25, flexShrink: 0 }}>
                   <IconButton size="small" onClick={() => setEditReminder(r)}><Edit sx={{ fontSize: 15 }} /></IconButton>

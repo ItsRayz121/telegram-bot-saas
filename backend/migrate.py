@@ -957,6 +957,28 @@ def init_db():
             "ALTER TABLE hub_reminders ADD COLUMN IF NOT EXISTS meeting_id VARCHAR(36)",
             "hub_reminders.meeting_id",
         )
+        # Backfill: link legacy (pre-link) meeting-reminder rows to their meeting so
+        # dismissing/editing those meetings cleans up the ladder too. Safe + idempotent:
+        # only touches unlinked, meeting-shaped reminders ("(starts ...)") in a batch
+        # that has exactly ONE meeting (so the mapping is unambiguous); leaves
+        # follow-up/manual reminders and ambiguous multi-meeting batches alone.
+        _run_alter(
+            db.engine,
+            """
+            UPDATE hub_reminders r
+            SET meeting_id = m.id
+            FROM hub_meetings m
+            WHERE r.source_batch_id = m.source_batch_id
+              AND r.meeting_id IS NULL
+              AND r.content LIKE '%(starts %'
+              AND r.source_batch_id IN (
+                  SELECT source_batch_id FROM hub_meetings
+                  WHERE source_batch_id IS NOT NULL
+                  GROUP BY source_batch_id HAVING COUNT(*) = 1
+              )
+            """,
+            "backfill hub_reminders.meeting_id (legacy meeting reminders)",
+        )
 
         # ── Backfill: create UserTelegramAccount rows for legacy User.telegram_user_id ──
         # Must run AFTER all users-table ALTER statements (including auth_provider)
