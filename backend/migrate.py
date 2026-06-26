@@ -916,6 +916,13 @@ def init_db():
             "ALTER TABLE hub_meetings ADD COLUMN IF NOT EXISTS calendar_pushed BOOLEAN NOT NULL DEFAULT FALSE",
             "hub_meetings.calendar_pushed",
         )
+        # Last Google Calendar sync error per token, so the Meetings tab can show
+        # why auto-sync stalled (e.g. expired grant) and prompt a reconnect.
+        _run_alter(
+            db.engine,
+            "ALTER TABLE google_calendar_tokens ADD COLUMN IF NOT EXISTS last_sync_error TEXT",
+            "google_calendar_tokens.last_sync_error",
+        )
 
         # ── Backfill: create UserTelegramAccount rows for legacy User.telegram_user_id ──
         # Must run AFTER all users-table ALTER statements (including auth_provider)

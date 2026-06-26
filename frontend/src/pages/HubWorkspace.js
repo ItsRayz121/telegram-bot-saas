@@ -881,8 +881,9 @@ function HubMeetings({ groups, botId, tz }) {
   const [groupFilter, setGroupFilter] = useState('');
   const [dismissTarget, setDismissTarget] = useState(null);
   const [dismissLoading, setDismissLoading] = useState(false);
-  const [cal, setCal] = useState(null);      // {connected, configured, email, auto_sync_meetings}
+  const [cal, setCal] = useState(null);      // {connected, configured, email, auto_sync_meetings, last_sync_error}
   const [syncingId, setSyncingId] = useState(null);
+  const [syncError, setSyncError] = useState(null);   // {message, reconnect}
 
   const load = useCallback(() => {
     setLoading(true);
@@ -917,11 +918,18 @@ function HubMeetings({ groups, botId, tz }) {
 
   const syncToCalendar = async (m) => {
     setSyncingId(m.id);
+    setSyncError(null);
     try {
       await googleCalendar.syncHubMeeting(m.id);
       setMeetings(prev => prev.map(x => x.id === m.id ? { ...x, calendar_pushed: true } : x));
-    } catch { /* surfaced as no state change; row stays syncable */ }
-    finally { setSyncingId(null); }
+      setCal(c => c ? { ...c, last_sync_error: null } : c);
+    } catch (e) {
+      const data = e?.response?.data || {};
+      setSyncError({
+        message: data.error || 'Couldn’t add this meeting to Google Calendar. Please try again.',
+        reconnect: !!data.reconnect_required,
+      });
+    } finally { setSyncingId(null); }
   };
 
   const handleDismiss = async () => {
@@ -973,7 +981,27 @@ function HubMeetings({ groups, botId, tz }) {
               Connect Google Calendar
             </Button>
           )}
+          {/* Persisted sync failure (e.g. expired Google grant) — surfaced so the
+              user knows WHY meetings stopped syncing instead of silently failing. */}
+          {cal.connected && cal.last_sync_error && (
+            <Alert severity="warning" sx={{ mt: 1, py: 0, fontSize: '0.78rem' }}
+              action={
+                cal.last_sync_error.toLowerCase().includes('reconnect') ? (
+                  <Button color="inherit" size="small" onClick={connectCalendar}>Reconnect</Button>
+                ) : null
+              }>
+              {cal.last_sync_error.replace(/^reconnect_required:\s*/i, '')}
+            </Alert>
+          )}
         </Box>
+      )}
+
+      {/* Transient error from a manual "Add to Google Calendar" click. */}
+      {syncError && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setSyncError(null)}
+          action={syncError.reconnect ? <Button color="inherit" size="small" onClick={connectCalendar}>Reconnect</Button> : null}>
+          {syncError.message}
+        </Alert>
       )}
 
       <Box sx={{ display: 'flex', gap: 1.5, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -1793,6 +1821,14 @@ function GoogleCalendarSettingsCard() {
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
               One tidy event per meeting, with reminders 1 day / 3 hr / 1 hr / 10 min before. Telegram reminders are sent separately.
             </Typography>
+            {cal.last_sync_error && (
+              <Alert severity="warning" sx={{ mt: 1.5, fontSize: '0.8rem' }}
+                action={cal.last_sync_error.toLowerCase().includes('reconnect')
+                  ? <Button color="inherit" size="small" onClick={connect} disabled={busy}>Reconnect</Button>
+                  : null}>
+                {cal.last_sync_error.replace(/^reconnect_required:\s*/i, '')}
+              </Alert>
+            )}
           </>
         ) : (
           <>

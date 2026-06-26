@@ -242,6 +242,17 @@ def _do_extract(bot_id: str, group_id: str, r) -> dict:
     # ── Post-extraction automation triggers ───────────────────────────────────
     _run_automation_triggers(validated, group, bot_id, batch.id, db, tz_name)
 
+    # ── Immediate Google Calendar push ────────────────────────────────────────
+    # If the owner enabled auto-sync, push the dated meetings we just created right
+    # away instead of waiting for the 5-min scheduler tick. Best-effort: the helper
+    # never raises and records any failure on the token for the UI to surface.
+    if counts.get("meetings"):
+        try:
+            from ..routes.calendar import sync_pending_meetings_for_user
+            sync_pending_meetings_for_user(group.user_id)
+        except Exception as exc:
+            _log.warning("post-extraction calendar push failed group=%s: %s", group_id, exc)
+
     _log.info(
         "hub_extraction: batch=%s group=%s tasks=%d reminders=%d decisions=%d meetings=%d",
         batch.id, group_id, counts.get("tasks", 0), counts.get("reminders", 0),

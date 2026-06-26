@@ -2452,52 +2452,26 @@ def _run_calendar_auto_sync(app):
     their Google Calendar. Idempotent via the calendar_pushed flag; a small batch
     per user keeps each tick well within the task timeout."""
     with app.app_context():
-        from .models import db, GoogleCalendarToken
-        from .assistant.hub_models import HubMeeting
-        from .routes.calendar import push_hub_meeting_to_calendar
+        from .models import GoogleCalendarToken
+        from .routes.calendar import sync_pending_meetings_for_user
 
-        now = datetime.utcnow()
         try:
             rows = GoogleCalendarToken.query.filter_by(auto_sync_meetings=True).all()
         except Exception as exc:
             _scheduler_log.debug("calendar auto-sync: token query failed: %s", exc)
             return
         pushed = 0
-        candidates = 0
+        failed = 0
         for row in rows:
-            meetings = HubMeeting.query.filter(
-                HubMeeting.user_id == row.user_id,
-                HubMeeting.calendar_pushed == False,  # noqa: E712
-                HubMeeting.dismissed_at.is_(None),
-                HubMeeting.scheduled_at.isnot(None),
-                HubMeeting.scheduled_at >= now - timedelta(hours=1),
-            ).limit(20).all()
-            candidates += len(meetings)
-            for m in meetings:
-                try:
-                    created = push_hub_meeting_to_calendar(row.user_id, m)
-                    if created:
-                        m.calendar_pushed = True
-                        db.session.commit()
-                        pushed += 1
-                    else:
-                        # None = Calendar not connected for this user, or no date.
-                        # Shouldn't happen given the filters, so surface it.
-                        _scheduler_log.warning(
-                            "calendar auto-sync: push returned None user=%s meeting=%s "
-                            "(token missing or refresh failed?)", row.user_id, m.id
-                        )
-                except Exception as exc:
-                    db.session.rollback()
-                    _scheduler_log.warning(
-                        "calendar auto-sync failed user=%s meeting=%s: %s", row.user_id, m.id, exc
-                    )
+            res = sync_pending_meetings_for_user(row.user_id)
+            pushed += res.get("pushed", 0)
+            failed += res.get("failed", 0)
         # Always log the tally (debug when idle) so we can tell "nothing to do" from
         # "tried and failed" when a user reports meetings not syncing.
-        if pushed or candidates:
+        if pushed or failed:
             _scheduler_log.info(
-                "[SCHEDULER] calendar auto-sync tokens=%d candidates=%d pushed=%d",
-                len(rows), candidates, pushed,
+                "[SCHEDULER] calendar auto-sync tokens=%d pushed=%d failed=%d",
+                len(rows), pushed, failed,
             )
         else:
             _scheduler_log.debug(

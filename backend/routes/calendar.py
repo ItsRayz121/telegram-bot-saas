@@ -191,6 +191,85 @@ def push_hub_meeting_to_calendar(user_id: int, meeting):
     return service.events().insert(calendarId="primary", body=event).execute()
 
 
+def classify_sync_error(exc) -> str:
+    """Turn a raw Google/refresh exception into a short, user-readable reason.
+
+    Strings starting with 'reconnect_required:' tell the UI to prompt the user to
+    re-link Google Calendar (the stored grant is dead — no retry will fix it)."""
+    s = str(exc)
+    low = s.lower()
+    if (
+        "invalid_grant" in low
+        or "token has been expired or revoked" in low
+        or "refreshtoken" in low.replace(" ", "")
+        or "no refresh token" in low
+    ):
+        return ("reconnect_required: Google access expired or was revoked. "
+                "Reconnect Google Calendar to resume syncing.")
+    if "insufficient" in low or "insufficientpermissions" in low or "forbidden" in low:
+        return ("reconnect_required: Calendar permission was not granted. "
+                "Reconnect Google Calendar and allow calendar access.")
+    if "rate limit" in low or "ratelimitexceeded" in low or "quotaexceeded" in low:
+        return "Google rate-limited the sync. It will retry automatically."
+    return (s[:280] or "Google Calendar sync failed.")
+
+
+def sync_pending_meetings_for_user(user_id: int, limit: int = 20) -> dict:
+    """Push a user's not-yet-synced dated meetings to Google Calendar.
+
+    Best-effort and never raises — used by both the 5-min scheduler tick and the
+    immediate post-extraction hook. Records the last failure on the token row
+    (cleared on the next success) so the UI can show *why* sync stalled and offer
+    a reconnect. Returns {pushed, failed, error}."""
+    from ..assistant.hub_models import HubMeeting
+
+    row = GoogleCalendarToken.query.filter_by(user_id=user_id, auto_sync_meetings=True).first()
+    if not row:
+        return {"pushed": 0, "failed": 0, "error": None}
+
+    now = datetime.utcnow()
+    meetings = HubMeeting.query.filter(
+        HubMeeting.user_id == user_id,
+        HubMeeting.calendar_pushed == False,  # noqa: E712
+        HubMeeting.dismissed_at.is_(None),
+        HubMeeting.scheduled_at.isnot(None),
+        HubMeeting.scheduled_at >= now - timedelta(hours=1),
+    ).limit(limit).all()
+
+    pushed = 0
+    failed = 0
+    last_err = None
+    for m in meetings:
+        try:
+            created = push_hub_meeting_to_calendar(user_id, m)
+            if created:
+                m.calendar_pushed = True
+                db.session.commit()
+                pushed += 1
+            else:
+                # None = token vanished mid-loop; treat as a (recoverable) failure.
+                failed += 1
+        except Exception as exc:
+            db.session.rollback()
+            failed += 1
+            last_err = classify_sync_error(exc)
+            _log.warning("auto-sync push failed user=%s meeting=%s: %s", user_id, m.id, exc)
+
+    # Persist the outcome on the token so /status can surface it.
+    try:
+        token = GoogleCalendarToken.query.filter_by(user_id=user_id).first()
+        if token is not None:
+            if last_err:
+                token.last_sync_error = last_err[:300]
+            elif pushed:
+                token.last_sync_error = None
+            db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    return {"pushed": pushed, "failed": failed, "error": last_err}
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 
@@ -271,6 +350,7 @@ def calendar_status():
         "email": row.email or "",
         "configured": _is_configured(),
         "auto_sync_meetings": bool(getattr(row, "auto_sync_meetings", False)),
+        "last_sync_error": getattr(row, "last_sync_error", None) or None,
     })
 
 
@@ -429,11 +509,14 @@ def sync_hub_meeting(meeting_id):
     if not meeting.scheduled_at:
         return jsonify({"error": "This meeting has no date yet — set a date before syncing."}), 400
 
+    token = GoogleCalendarToken.query.filter_by(user_id=user.id).first()
     try:
         created = push_hub_meeting_to_calendar(user.id, meeting)
         if not created:
             return jsonify({"error": "Google Calendar not connected"}), 400
         meeting.calendar_pushed = True
+        if token is not None:
+            token.last_sync_error = None  # a manual success clears any stale banner
         db.session.commit()
         return jsonify({
             "event_id": created.get("id"),
@@ -443,7 +526,17 @@ def sync_hub_meeting(meeting_id):
     except Exception as exc:
         db.session.rollback()
         _log.warning("calendar sync-hub-meeting failed user=%s meeting=%s: %s", user.id, meeting_id, exc)
-        return jsonify({"error": "Failed to sync to Google Calendar"}), 502
+        err = classify_sync_error(exc)
+        reconnect = err.startswith("reconnect_required")
+        # Persist the reason so the banner shows even after a page refresh.
+        try:
+            if token is not None:
+                token.last_sync_error = err[:300]
+                db.session.commit()
+        except Exception:
+            db.session.rollback()
+        msg = err.split("reconnect_required:", 1)[-1].strip() if reconnect else err
+        return jsonify({"error": msg, "reconnect_required": reconnect}), 502
 
 
 @calendar_bp.route("/disconnect", methods=["DELETE"])

@@ -3451,6 +3451,9 @@ class GoogleCalendarToken(db.Model):
     token_json = db.Column(db.Text, nullable=False)  # Fernet-encrypted JSON token blob
     # When true, the scheduler auto-pushes newly extracted dated meetings to Google Calendar.
     auto_sync_meetings = db.Column(db.Boolean, default=False, nullable=False)
+    # Last sync failure reason (cleared on next success) so the UI can explain why
+    # syncing stalled and prompt a reconnect. NULL = healthy.
+    last_sync_error = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
