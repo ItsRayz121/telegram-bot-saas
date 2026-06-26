@@ -71,6 +71,43 @@ function isOverdue(isoDate) {
   return new Date(_asUtc(isoDate)) < new Date();
 }
 
+// ── Timezone-correct <input type="datetime-local"> <-> stored UTC ───────────────
+// Stored values are naive-UTC (no Z). The datetime-local input shows wall-clock
+// time in the user's SELECTED zone (tz), so we convert in both directions through
+// that zone — never relying on the browser's own timezone matching.
+function _tzOffsetMs(date, tz) {
+  // ms to add to a UTC instant to get the wall-clock reading in `tz`.
+  const dtf = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hour12: false,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  });
+  const p = {};
+  dtf.formatToParts(date).forEach(x => { if (x.type !== 'literal') p[x.type] = x.value; });
+  const asUTC = Date.UTC(+p.year, +p.month - 1, +p.day, +(p.hour % 24), +p.minute, +p.second);
+  return asUTC - date.getTime();
+}
+
+function utcToLocalInput(iso, tz) {
+  if (!iso) return '';
+  const d = new Date(_asUtc(iso));
+  if (isNaN(d.getTime())) return '';
+  if (!tz) return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  const offset = _tzOffsetMs(d, tz);
+  return new Date(d.getTime() + offset).toISOString().slice(0, 16);
+}
+
+function localInputToUtcIso(input, tz) {
+  if (!input) return null;
+  if (!tz) return new Date(input).toISOString();
+  // `input` ("YYYY-MM-DDTHH:mm") is wall-clock time in tz. Treat it as if UTC, then
+  // back out the zone offset (twice, so a DST boundary settles correctly).
+  const naive = new Date(input + ':00Z').getTime();
+  let utc = naive;
+  for (let i = 0; i < 2; i++) utc = naive - _tzOffsetMs(new Date(utc), tz);
+  return new Date(utc).toISOString();
+}
+
 // ── Root component ─────────────────────────────────────────────────────────────
 
 export default function HubWorkspace() {
@@ -884,6 +921,7 @@ function HubMeetings({ groups, botId, tz }) {
   const [cal, setCal] = useState(null);      // {connected, configured, email, auto_sync_meetings, last_sync_error}
   const [syncingId, setSyncingId] = useState(null);
   const [syncError, setSyncError] = useState(null);   // {message, reconnect}
+  const [editTarget, setEditTarget] = useState(undefined);  // undefined=closed, null=new, obj=edit
 
   const load = useCallback(() => {
     setLoading(true);
@@ -939,6 +977,22 @@ function HubMeetings({ groups, botId, tz }) {
     setMeetings(prev => prev.filter(m => m.id !== dismissTarget.id));
     setDismissLoading(false);
     setDismissTarget(null);
+  };
+
+  // After a create/edit save, fold the returned row in and surface any sync issue.
+  const handleSaved = (resp) => {
+    const saved = resp?.meeting;
+    if (saved) {
+      setMeetings(prev => {
+        const exists = prev.some(m => m.id === saved.id);
+        return exists ? prev.map(m => m.id === saved.id ? saved : m) : [...prev, saved];
+      });
+    }
+    if (resp?.sync_error) {
+      setSyncError({ message: resp.sync_error, reconnect: !!resp.reconnect_required });
+      loadCal();
+    }
+    setEditTarget(undefined);
   };
 
   const groupName = (id) => {
@@ -1023,6 +1077,10 @@ function HubMeetings({ groups, botId, tz }) {
             </Select>
           </FormControl>
         )}
+        <Box sx={{ flex: 1 }} />
+        <Button size="small" variant="contained" startIcon={<Add sx={{ fontSize: 16 }} />} onClick={() => setEditTarget(null)}>
+          New meeting
+        </Button>
       </Box>
 
       {loading ? (
@@ -1049,7 +1107,7 @@ function HubMeetings({ groups, botId, tz }) {
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography variant="body2" fontWeight={500}>{m.title || 'Untitled meeting'}</Typography>
                     <Typography variant="caption" sx={{ color: undated ? 'warning.main' : (past ? 'text.disabled' : 'text.secondary') }}>
-                      {undated ? 'No date set — extracted from chat' : `${fmtDateTime(m.scheduled_at, tz)}${past ? ' · past' : ''}`}
+                      {undated ? 'No date set — add a date to sync it to Calendar' : `${fmtDateTime(m.scheduled_at, tz)}${past ? ' · past' : ''}`}
                     </Typography>
                     <Box sx={{ display: 'flex', gap: 0.75, mt: 0.75, flexWrap: 'wrap', alignItems: 'center' }}>
                       {gname && (
@@ -1087,6 +1145,11 @@ function HubMeetings({ groups, botId, tz }) {
                       )}
                     </Box>
                   </Box>
+                  <Tooltip title="Edit details">
+                    <IconButton size="small" onClick={() => setEditTarget(m)} sx={{ flexShrink: 0 }}>
+                      <Edit sx={{ fontSize: 15 }} />
+                    </IconButton>
+                  </Tooltip>
                   <Tooltip title="Dismiss">
                     <IconButton size="small" onClick={() => setDismissTarget(m)} sx={{ flexShrink: 0 }}>
                       <Delete sx={{ fontSize: 15 }} />
@@ -1112,7 +1175,106 @@ function HubMeetings({ groups, botId, tz }) {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <MeetingModal
+        open={editTarget !== undefined}
+        meeting={editTarget || null}
+        groups={groups}
+        botId={botId}
+        tz={tz}
+        cal={cal}
+        onClose={() => setEditTarget(undefined)}
+        onSaved={handleSaved}
+      />
     </Box>
+  );
+}
+
+function MeetingModal({ open, meeting, groups, botId, tz, cal, onClose, onSaved }) {
+  const [title, setTitle] = useState('');
+  const [when, setWhen] = useState('');         // datetime-local wall time in tz
+  const [participants, setParticipants] = useState('');
+  const [url, setUrl] = useState('');
+  const [groupId, setGroupId] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!open) return;
+    if (meeting) {
+      setTitle(meeting.title && meeting.title !== 'Meeting' ? meeting.title : '');
+      setWhen(utcToLocalInput(meeting.scheduled_at, tz));
+      setParticipants(Array.isArray(meeting.participants) ? meeting.participants.join(', ') : '');
+      setUrl(meeting.meeting_url || '');
+      setGroupId(meeting.source_group_id || '');
+    } else {
+      setTitle(''); setWhen(''); setParticipants(''); setUrl(''); setGroupId('');
+    }
+    setError(null);
+  }, [meeting, open, tz]);
+
+  const handleSave = async () => {
+    if (url && !/^https?:\/\//i.test(url.trim())) { setError('Link must start with http:// or https://'); return; }
+    setSaving(true); setError(null);
+    const payload = {
+      title: title.trim() || 'Meeting',
+      scheduled_at: when ? localInputToUtcIso(when, tz) : null,
+      participants: participants.split(',').map(s => s.trim()).filter(Boolean),
+      meeting_url: url.trim() || null,
+      source_group_id: groupId || null,
+      ...(botId ? { bot_id: botId } : {}),
+    };
+    try {
+      const r = meeting ? await hub.updateMeeting(meeting.id, payload) : await hub.createMeeting(payload);
+      onSaved(r.data);
+    } catch (e) {
+      setError(e?.response?.data?.error || 'Couldn’t save the meeting. Please try again.');
+    } finally { setSaving(false); }
+  };
+
+  const willSync = cal && cal.connected && (meeting?.calendar_pushed || cal.auto_sync_meetings);
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+      <DialogTitle sx={{ pr: 6 }}>{meeting ? 'Edit meeting' : 'New meeting'}
+        <IconButton onClick={onClose} size="small" sx={{ position: 'absolute', right: 8, top: 8 }}>✕</IconButton>
+      </DialogTitle>
+      <DialogContent dividers>
+        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+        <TextField label="Title" size="small" fullWidth sx={{ mb: 1.5 }} placeholder="Meeting"
+          value={title} onChange={e => setTitle(e.target.value)} inputProps={{ maxLength: 255 }} />
+        <TextField label="Date & time" type="datetime-local" size="small" fullWidth sx={{ mb: 0.5 }}
+          value={when} onChange={e => setWhen(e.target.value)} InputLabelProps={{ shrink: true }} />
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+          {tz ? `In your timezone (${tz}).` : ''} A date & time is all that’s needed to sync to Google Calendar.
+        </Typography>
+        <TextField label="Participants (comma-separated)" size="small" fullWidth sx={{ mb: 1.5 }}
+          value={participants} onChange={e => setParticipants(e.target.value)} placeholder="Alice, Bob" />
+        <TextField label="Join link (optional)" size="small" fullWidth sx={{ mb: 1.5 }}
+          value={url} onChange={e => setUrl(e.target.value)} placeholder="https://meet.google.com/…" />
+        {groups.length > 0 && (
+          <FormControl size="small" fullWidth>
+            <InputLabel>Group (optional)</InputLabel>
+            <Select value={groupId} label="Group (optional)" onChange={e => setGroupId(e.target.value)}>
+              <MenuItem value="">None</MenuItem>
+              {groups.map(g => <MenuItem key={g.id} value={g.id}>{g.group_name || g.id}</MenuItem>)}
+            </Select>
+          </FormControl>
+        )}
+        {willSync && (
+          <Typography variant="caption" color="success.main" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 1.5 }}>
+            <CheckCircleOutline sx={{ fontSize: 14 }} />
+            {meeting?.calendar_pushed ? 'Changes will update the Google Calendar event.' : 'This will be added to your Google Calendar.'}
+          </Typography>
+        )}
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} size="small" color="inherit">Cancel</Button>
+        <Button onClick={handleSave} variant="contained" size="small" disabled={saving}>
+          {saving ? <CircularProgress size={14} sx={{ mr: 0.5 }} /> : null}Save
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }
 

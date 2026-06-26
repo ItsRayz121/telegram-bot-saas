@@ -914,6 +914,7 @@ def _meeting_dict(m):
             "participants": m.participants, "source_group_id": m.source_group_id,
             "meeting_url": m.meeting_url,
             "calendar_pushed": bool(getattr(m, "calendar_pushed", False)),
+            "source": getattr(m, "source", "extracted") or "extracted",
             "created_at": m.created_at.isoformat()}
 
 def _note_dict(n):
@@ -1479,13 +1480,122 @@ def list_meetings():
     return jsonify({"meetings": [_meeting_dict(m) for m in meetings]})
 
 
+def _parse_meeting_dt(value):
+    """Parse an ISO datetime (with or without trailing Z) into NAIVE UTC, matching
+    how Hub stores scheduled_at. Returns None for empty; raises ValueError on junk."""
+    if not value:
+        return None
+    s = str(value).strip()
+    if s.endswith("Z"):
+        s = s[:-1] + "+00:00"
+    dt = datetime.fromisoformat(s)
+    if dt.tzinfo is not None:
+        from datetime import timezone as _tz
+        dt = dt.astimezone(_tz.utc).replace(tzinfo=None)
+    return dt
+
+
+def _clean_participants(value):
+    if not isinstance(value, list):
+        return []
+    return [str(p).strip()[:100] for p in value if str(p).strip()][:20]
+
+
+def _clean_meeting_url(value):
+    raw = (value or "").strip()
+    return raw[:500] if raw.startswith("http") else None
+
+
+@hub_bp.route("/meetings", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def create_meeting():
+    """Manually add a meeting. A date is optional — undated meetings live under
+    'Needs a date' until the user sets one (which is all auto-sync requires)."""
+    from ..assistant.hub_crypto import _enc
+    from ..routes.calendar import propagate_meeting_to_calendar
+    user = _current_user()
+    data = request.get_json(silent=True) or {}
+    bot = _resolve_bot(user, data.get("bot_id"))
+
+    title = (data.get("title") or "").strip()[:255] or "Meeting"
+    try:
+        scheduled_at = _parse_meeting_dt(data.get("scheduled_at"))
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid date/time."}), 400
+    group_id = data.get("source_group_id") or None
+
+    meeting = HubMeeting(
+        user_id=user.id,
+        bot_id=bot.id,
+        source_group_id=group_id,
+        title=_enc(title),
+        scheduled_at=scheduled_at,
+        participants=_clean_participants(data.get("participants")),
+        meeting_url=_clean_meeting_url(data.get("meeting_url")),
+        source="manual",
+    )
+    db.session.add(meeting)
+    db.session.commit()
+
+    # Mirror straight to Google Calendar (immediate, best-effort).
+    sync = propagate_meeting_to_calendar(user.id, meeting)
+    db.session.refresh(meeting)
+    resp = {"meeting": _meeting_dict(meeting)}
+    if sync.get("error"):
+        resp["sync_error"] = sync["error"]
+        resp["reconnect_required"] = sync.get("reconnect", False)
+    return jsonify(resp), 201
+
+
+@hub_bp.route("/meetings/<meeting_id>", methods=["PATCH"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def update_meeting(meeting_id):
+    """Edit a meeting's details (title, date, participants, link). Any change is
+    mirrored to its Google Calendar event so the two stay in step."""
+    from ..assistant.hub_crypto import _enc
+    from ..routes.calendar import propagate_meeting_to_calendar
+    user = _current_user()
+    m = HubMeeting.query.filter_by(id=meeting_id, user_id=user.id).first_or_404()
+    data = request.get_json(silent=True) or {}
+
+    if "title" in data:
+        m.title = _enc((data.get("title") or "").strip()[:255] or "Meeting")
+    if "scheduled_at" in data:
+        try:
+            m.scheduled_at = _parse_meeting_dt(data.get("scheduled_at"))
+        except (ValueError, TypeError):
+            return jsonify({"error": "Invalid date/time."}), 400
+    if "participants" in data:
+        m.participants = _clean_participants(data.get("participants"))
+    if "meeting_url" in data:
+        m.meeting_url = _clean_meeting_url(data.get("meeting_url"))
+    if "source_group_id" in data:
+        m.source_group_id = data.get("source_group_id") or None
+    db.session.commit()
+
+    sync = propagate_meeting_to_calendar(user.id, m)
+    db.session.refresh(m)
+    resp = {"meeting": _meeting_dict(m)}
+    if sync.get("error"):
+        resp["sync_error"] = sync["error"]
+        resp["reconnect_required"] = sync.get("reconnect", False)
+    return jsonify(resp)
+
+
 @hub_bp.route("/meetings/<meeting_id>/dismiss", methods=["PATCH"])
 @jwt_required()
 def dismiss_meeting(meeting_id):
+    from ..routes.calendar import delete_meeting_from_calendar
     user = _current_user()
     m = HubMeeting.query.filter_by(id=meeting_id, user_id=user.id).first_or_404()
     m.dismissed_at = datetime.utcnow()
+    event_id = getattr(m, "calendar_event_id", None)
     db.session.commit()
+    # Remove the mirrored Google Calendar event too (best-effort).
+    if event_id:
+        delete_meeting_from_calendar(user.id, event_id)
     return jsonify({"ok": True})
 
 

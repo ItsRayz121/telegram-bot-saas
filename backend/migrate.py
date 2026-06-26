@@ -923,6 +923,18 @@ def init_db():
             "ALTER TABLE google_calendar_tokens ADD COLUMN IF NOT EXISTS last_sync_error TEXT",
             "google_calendar_tokens.last_sync_error",
         )
+        # Two-way calendar sync: store the Google event id so edits/deletes in Echo
+        # propagate to the event; tag origin so reverse-synced events don't loop.
+        _run_alter(
+            db.engine,
+            "ALTER TABLE hub_meetings ADD COLUMN IF NOT EXISTS calendar_event_id VARCHAR(255)",
+            "hub_meetings.calendar_event_id",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE hub_meetings ADD COLUMN IF NOT EXISTS source VARCHAR(20) NOT NULL DEFAULT 'extracted'",
+            "hub_meetings.source",
+        )
 
         # ── Backfill: create UserTelegramAccount rows for legacy User.telegram_user_id ──
         # Must run AFTER all users-table ALTER statements (including auth_provider)

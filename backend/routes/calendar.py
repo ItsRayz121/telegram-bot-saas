@@ -157,38 +157,12 @@ def push_hub_meeting_to_calendar(user_id: int, meeting):
     if service is None:
         return None
 
-    from ..assistant.hub_crypto import _dec as _dec_hub
-    start_dt = meeting.scheduled_at
-    end_dt = start_dt + timedelta(hours=1)
-    title = (_dec_hub(meeting.title) or "Meeting")[:200]
-    participants = meeting.participants or []
-    desc = ["Synced from Telegizer Echo."]
-    if participants:
-        desc.append(f"With: {', '.join(str(p) for p in participants)}")
-    if meeting.meeting_url:
-        desc.append(f"Link: {meeting.meeting_url}")
-
-    event = {
-        "summary": title,
-        "description": "\n".join(desc),
-        "start": {"dateTime": _iso_utc(start_dt), "timeZone": "UTC"},
-        "end":   {"dateTime": _iso_utc(end_dt),   "timeZone": "UTC"},
-        # One tidy event, but with native Google reminders mirroring the Telegram
-        # ladder (1 day / 3 hr / 1 hr / 10 min) so Calendar also nudges the user —
-        # without creating multiple events. Google caps overrides at 5.
-        "reminders": {
-            "useDefault": False,
-            "overrides": [
-                {"method": "popup", "minutes": 1440},
-                {"method": "popup", "minutes": 180},
-                {"method": "popup", "minutes": 60},
-                {"method": "popup", "minutes": 10},
-            ],
-        },
-    }
-    if meeting.meeting_url:
-        event["location"] = meeting.meeting_url
-    return service.events().insert(calendarId="primary", body=event).execute()
+    # One tidy event, with native Google reminders mirroring the Telegram ladder
+    # (1 day / 3 hr / 1 hr / 10 min) so Calendar nudges too. Built by the shared
+    # _meeting_event_body so insert and edit-patch stay identical.
+    return service.events().insert(
+        calendarId="primary", body=_meeting_event_body(meeting)
+    ).execute()
 
 
 def classify_sync_error(exc) -> str:
@@ -244,6 +218,7 @@ def sync_pending_meetings_for_user(user_id: int, limit: int = 20) -> dict:
             created = push_hub_meeting_to_calendar(user_id, m)
             if created:
                 m.calendar_pushed = True
+                m.calendar_event_id = created.get("id")
                 db.session.commit()
                 pushed += 1
             else:
@@ -268,6 +243,100 @@ def sync_pending_meetings_for_user(user_id: int, limit: int = 20) -> dict:
         db.session.rollback()
 
     return {"pushed": pushed, "failed": failed, "error": last_err}
+
+
+def _meeting_event_body(meeting):
+    """Build the Google event body for a meeting (shared by insert + update)."""
+    from ..assistant.hub_crypto import _dec as _dec_hub
+    start_dt = meeting.scheduled_at
+    end_dt = start_dt + timedelta(hours=1)
+    title = (_dec_hub(meeting.title) or "Meeting")[:200]
+    participants = meeting.participants or []
+    desc = ["Synced from Telegizer Echo."]
+    if participants:
+        desc.append(f"With: {', '.join(str(p) for p in participants)}")
+    if meeting.meeting_url:
+        desc.append(f"Link: {meeting.meeting_url}")
+    body = {
+        "summary": title,
+        "description": "\n".join(desc),
+        "start": {"dateTime": _iso_utc(start_dt), "timeZone": "UTC"},
+        "end":   {"dateTime": _iso_utc(end_dt),   "timeZone": "UTC"},
+        "reminders": {
+            "useDefault": False,
+            "overrides": [
+                {"method": "popup", "minutes": 1440},
+                {"method": "popup", "minutes": 180},
+                {"method": "popup", "minutes": 60},
+                {"method": "popup", "minutes": 10},
+            ],
+        },
+    }
+    if meeting.meeting_url:
+        body["location"] = meeting.meeting_url
+    return body
+
+
+def propagate_meeting_to_calendar(user_id: int, meeting) -> dict:
+    """After a manual create/edit, mirror the change to Google Calendar so the two
+    stay in step. Best-effort, never raises. Returns {ok, error, reconnect}.
+
+    - Already on Calendar (has event_id) → PATCH that event in place.
+    - Not yet pushed + user has auto-sync on → insert a fresh event.
+    - No date / not connected / auto-sync off → no-op."""
+    if not getattr(meeting, "scheduled_at", None):
+        return {"ok": True, "error": None, "reconnect": False}
+    row = GoogleCalendarToken.query.filter_by(user_id=user_id).first()
+    if not row:
+        return {"ok": True, "error": None, "reconnect": False}
+    try:
+        event_id = getattr(meeting, "calendar_event_id", None)
+        if event_id:
+            service = _calendar_service(user_id)
+            if service is None:
+                return {"ok": True, "error": None, "reconnect": False}
+            service.events().patch(
+                calendarId="primary", eventId=event_id, body=_meeting_event_body(meeting)
+            ).execute()
+            if row.last_sync_error:
+                row.last_sync_error = None
+                db.session.commit()
+            return {"ok": True, "error": None, "reconnect": False}
+        # Not yet on Calendar — only auto-create if the user opted into auto-sync.
+        if row.auto_sync_meetings:
+            created = push_hub_meeting_to_calendar(user_id, meeting)
+            if created:
+                meeting.calendar_pushed = True
+                meeting.calendar_event_id = created.get("id")
+                row.last_sync_error = None
+                db.session.commit()
+        return {"ok": True, "error": None, "reconnect": False}
+    except Exception as exc:
+        db.session.rollback()
+        err = classify_sync_error(exc)
+        _log.warning("propagate meeting to calendar failed user=%s meeting=%s: %s",
+                     user_id, getattr(meeting, "id", "?"), exc)
+        try:
+            row.last_sync_error = err[:300]
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+        return {"ok": False, "error": err, "reconnect": err.startswith("reconnect_required")}
+
+
+def delete_meeting_from_calendar(user_id: int, event_id: str) -> None:
+    """Best-effort delete of a meeting's Google Calendar event (on dismiss)."""
+    if not event_id:
+        return
+    try:
+        service = _calendar_service(user_id)
+        if service is None:
+            return
+        service.events().delete(calendarId="primary", eventId=event_id).execute()
+    except Exception as exc:
+        # 410 (already gone) and transient errors are non-fatal — the Echo row is
+        # what the user acted on; an orphaned event is a minor, self-correcting nit.
+        _log.info("calendar event delete skipped user=%s event=%s: %s", user_id, event_id, exc)
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -515,6 +584,7 @@ def sync_hub_meeting(meeting_id):
         if not created:
             return jsonify({"error": "Google Calendar not connected"}), 400
         meeting.calendar_pushed = True
+        meeting.calendar_event_id = created.get("id")
         if token is not None:
             token.last_sync_error = None  # a manual success clears any stale banner
         db.session.commit()
