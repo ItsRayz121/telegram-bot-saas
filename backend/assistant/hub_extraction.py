@@ -644,6 +644,11 @@ def _write_items(validated: dict, group, bot_id: str, batch_id: str, db, tz_name
         )
         db.session.add(meeting)
         db.session.flush()
+        # Build the Telegram reminder ladder LINKED to this meeting (meeting_id), so
+        # editing/dismissing it later rebuilds/removes the ladder cleanly. Unifies
+        # extracted, manual and calendar meetings on one path. Honors the
+        # meeting_reminder toggle + reminder-mode internally.
+        rebuild_meeting_reminders(meeting, tz_name)
         _add_inbox("meeting", meeting.id)
         counts["meetings"] += 1
 
@@ -709,44 +714,9 @@ def _run_automation_triggers(validated: dict, group, bot_id: str, batch_id: str,
             # Fall back to seed default_enabled flag stored in default_params
             return bool((auto.default_params or {}).get("default_enabled", True))
 
-        # Meeting reminders: a ladder of nudges before each meeting so it isn't
-        # missed (1 day / 3 hours / 1 hour / 10 minutes before). Only offsets that
-        # are still in the future get a reminder; delivery is handled by the
-        # throttled, anti-ban-safe HubReminder delivery job.
-        if _is_enabled("meeting_reminder"):
-            now = datetime.utcnow()
-            reminder_ladder = resolve_reminder_ladder(bot_id)
-            for mtg in validated.get("meetings", []):
-                scheduled_at = _parse_datetime(mtg.get("scheduled_at"), tz)
-                if not scheduled_at:
-                    continue
-                # Build a clean label. mtg.get("title", "Meeting") would return a
-                # literal None when the AI emits {"title": null}, which previously
-                # rendered as "Meeting in 1 hour: None" in the Hub, DMs and digest.
-                raw_title = str(mtg.get("title") or "").strip()
-                label = raw_title if (raw_title and raw_title.lower() != "meeting") else "Meeting"
-                # Stamp the meeting's start time (in the user's local timezone) so
-                # reminders are distinguishable even when several meetings share the
-                # generic "Meeting" title. scheduled_at is naive UTC.
-                local_start = (
-                    scheduled_at.replace(tzinfo=timezone.utc).astimezone(tz)
-                    if tz else scheduled_at
-                )
-                when = local_start.strftime("%b %d, %H:%M")
-                for minutes_before, lead_label in reminder_ladder:
-                    remind_at = scheduled_at - timedelta(minutes=minutes_before)
-                    if remind_at < now:
-                        continue  # this lead time has already passed
-                    reminder = HubReminder(
-                        user_id=user_id,
-                        bot_id=bot_id,
-                        source_group_id=group.id,
-                        content=f"{label} {lead_label} (starts {when})",
-                        remind_at=remind_at,
-                        source="extracted",
-                        source_batch_id=batch_id,
-                    )
-                    db.session.add(reminder)
+        # Meeting reminders are now built in _write_items via
+        # rebuild_meeting_reminders (linked by meeting_id) so edits/dismissals keep
+        # the ladder in sync — see that function. Nothing to do here.
 
         # Deadline alerts: DM immediately for tasks with due_date
         if _is_enabled("deadline_alert"):
