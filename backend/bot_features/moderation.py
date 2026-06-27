@@ -441,6 +441,13 @@ class ModerationSystem:
         if not settings.get("enabled", True):
             return False
 
+        # Never moderate linked-channel auto-forwards (the comment-section
+        # anchor), anonymous admins, or admin-allowlisted bots/channels. See
+        # bot_ui.is_moderation_exempt for the full rationale.
+        from .bot_ui import is_moderation_exempt
+        if is_moderation_exempt(message, settings):
+            return False
+
         text = message.text or message.caption or ""
         user_id = message.from_user.id if message.from_user else None
         chat_id = message.chat.id

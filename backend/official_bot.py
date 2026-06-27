@@ -3892,6 +3892,14 @@ async def _automod_execute(bot, message, group_id: str, flask_app, rule: str, ac
 
 async def _automod_check(bot, message, am_cfg: dict, group_id: str, flask_app) -> bool:
     """Apply all configured automod rules. Returns True if message was blocked."""
+    # Never moderate linked-channel auto-forwards (the comment-section anchor),
+    # anonymous admins, or admin-allowlisted bots/channels. Without this the
+    # channel post that opens a comment thread gets deleted as a "forwarded"
+    # message and the comment section silently disappears.
+    from .bot_features.bot_ui import is_moderation_exempt
+    if is_moderation_exempt(message, am_cfg):
+        return False
+
     text = (message.text or message.caption or "").strip()
     chat_id = message.chat_id
     user_id = message.from_user.id if message.from_user else None

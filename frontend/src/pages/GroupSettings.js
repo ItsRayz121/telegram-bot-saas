@@ -523,6 +523,7 @@ function GroupSettingsInner() {
   const [groupData, setGroupData] = useState(null);
   const [settingsData, setSettingsData] = useState(null);
   const [trustedBotInput, setTrustedBotInput] = useState('');
+  const [allowlistInput, setAllowlistInput] = useState('');
   // Snapshot of last-saved settings (JSON string) — used to enable Save only when dirty (#12)
   const [origSettings, setOrigSettings] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -992,6 +993,17 @@ function GroupSettingsInner() {
       updateSetting('bot_policy.trusted_bot_usernames', [...current, uname]);
     }
     setTrustedBotInput('');
+  };
+
+  const addAllowlistEntry = () => {
+    const token = (allowlistInput || '').trim().replace(/^@/, '');
+    if (!token) return;
+    const normalized = /^-?\d+$/.test(token) ? token : token.toLowerCase();
+    const current = (settingsData?.automod?.allowlist) || [];
+    if (!current.includes(normalized)) {
+      updateSetting('automod.allowlist', [...current, normalized]);
+    }
+    setAllowlistInput('');
   };
 
   const updateSetting = (path, value) => {
@@ -1658,6 +1670,43 @@ function GroupSettingsInner() {
                   The AI layer runs <b>only</b> when you enable Layer 3 below <b>and</b> a workspace AI key
                   is set (Settings → AI). Without a key, moderation stays rule-based.
                 </Typography>
+                {/* Trusted bots & channels — exempt from ALL moderation. Not Pro-gated:
+                    this protects core Telegram features (e.g. a linked channel's posts
+                    that open the comment section) for everyone. */}
+                <Box sx={{ p: 2, mb: 2, bgcolor: 'rgba(255,255,255,0.03)', border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+                  <Typography variant="subtitle2" fontWeight={600} mb={0.5}>
+                    🔓 Trusted bots &amp; channels
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" mb={1.5}>
+                    Messages from these are <b>never</b> moderated. Your <b>linked channel</b> (the
+                    posts that open each comment thread) and <b>anonymous admins</b> are exempt
+                    automatically — add anything extra here, like other management bots or a
+                    cross-posting channel. Use an @username or a numeric ID.
+                  </Typography>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1 }}>
+                    {((am.allowlist) || []).length === 0 && (
+                      <Typography variant="body2" color="text.disabled">
+                        Nothing added — your linked channel is still protected automatically.
+                      </Typography>
+                    )}
+                    {((am.allowlist) || []).map((u) => (
+                      <Chip key={u} label={/^-?\d+$/.test(u) ? u : '@' + u} onDelete={() => {
+                        const next = ((am.allowlist) || []).filter((x) => x !== u);
+                        updateSetting('automod.allowlist', next);
+                      }} />
+                    ))}
+                  </Box>
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <TextField
+                      fullWidth size="small" placeholder="@username or numeric ID"
+                      value={allowlistInput}
+                      onChange={(e) => setAllowlistInput(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addAllowlistEntry(); } }}
+                    />
+                    <Button variant="outlined" onClick={addAllowlistEntry}>Add</Button>
+                  </Box>
+                </Box>
+
                 <PlanGate plan="pro" userTier={userTier} feature="Smart Moderation">
                 <FormControlLabel
                   control={<Switch checked={!!(am.smart_mod || {}).enabled}

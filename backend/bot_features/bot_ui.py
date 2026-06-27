@@ -46,6 +46,80 @@ def is_anonymous_admin(update) -> bool:
     return bool(user and user.id == GROUP_ANONYMOUS_BOT_ID)
 
 
+# ── Moderation exemption (shared by official + custom bots) ───────────────────
+# Some messages must NEVER be touched by automod, or we silently destroy core
+# Telegram features. The worst case: when a channel is linked to a discussion
+# group, Telegram auto-forwards every channel post into the group — that forward
+# is the anchor that creates the post's COMMENT SECTION. Telegram sets
+# message.is_automatic_forward=True on it AND (for backward compatibility) fills
+# message.from_user with a *fake* sender user. Our automod's admin-skip check
+# fails on that fake user, so the post would get deleted as a "forwarded
+# message" / link / promo — which silently kills the comment section. We exempt
+# it centrally, before any rule runs.
+def _parse_allowlist(automod_settings):
+    """Normalize automod.allowlist into (id_set, username_set).
+
+    Accepts a flat list of strings, each either a numeric chat/user id or an
+    @username (the leading @ is optional). Stored under automod.allowlist so
+    admins can trust other management bots and cross-posting channels without
+    knowing their internal numeric ids.
+    """
+    ids, names = set(), set()
+    if not isinstance(automod_settings, dict):
+        return ids, names
+    raw = automod_settings.get("allowlist", [])
+    if isinstance(raw, dict):  # tolerate {"chats": [...], "bots": [...]} shape
+        raw = [*raw.get("chats", []), *raw.get("bots", []), *raw.get("ids", [])]
+    if not isinstance(raw, (list, tuple)):
+        return ids, names
+    for entry in raw:
+        token = str(entry or "").strip().lstrip("@").lower()
+        if not token:
+            continue
+        if token.lstrip("-").isdigit():
+            ids.add(token)
+        else:
+            names.add(token)
+    return ids, names
+
+
+def is_moderation_exempt(message, automod_settings=None) -> bool:
+    """True when a message must bypass ALL automod rules.
+
+    Covers: (1) Telegram-native linked-channel auto-forwards (the comment-section
+    anchor), (2) anonymous admins / the group posting on its own behalf, and
+    (3) the admin-configured allowlist of trusted bots & channels.
+    """
+    if message is None:
+        return False
+
+    # 1. Linked-channel auto-forward — Telegram only ever sets this flag for the
+    #    group's own linked channel, so it is safe and admin-controlled.
+    if getattr(message, "is_automatic_forward", False):
+        return True
+
+    chat = getattr(message, "chat", None)
+    sender_chat = getattr(message, "sender_chat", None)
+
+    # 2. sender_chat == this chat → anonymous admin (admins by definition).
+    if sender_chat is not None and chat is not None and sender_chat.id == chat.id:
+        return True
+
+    # 3. Admin-configured allowlist (trusted bots & channels).
+    ids, names = _parse_allowlist(automod_settings)
+    if ids or names:
+        for actor in (sender_chat, getattr(message, "from_user", None)):
+            if actor is None:
+                continue
+            if str(getattr(actor, "id", "")) in ids:
+                return True
+            uname = (getattr(actor, "username", None) or "").lower()
+            if uname and uname in names:
+                return True
+
+    return False
+
+
 # HTML-formatted so both bots (official uses Markdown elsewhere, custom uses HTML)
 # can send it with parse_mode=HTML.
 ANON_ADMIN_LINKGROUP_HTML = (
