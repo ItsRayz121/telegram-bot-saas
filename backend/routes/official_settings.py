@@ -121,6 +121,9 @@ def update_official_settings(group_id):
             "escalation", "reactions", "invites",
             # bot-spam protection (Phase 1 bot_policy, Phase 3 raid_guard)
             "bot_policy", "raid_guard",
+            # shared blocks edited by the unified frontend — were rejecting the
+            # whole save on the official board (custom board has no allow-list)
+            "assistant", "command_routing", "warning_escalation",
         }
         unknown = set(data.keys()) - _ALLOWED_SETTING_KEYS
         if unknown:
