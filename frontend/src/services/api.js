@@ -529,6 +529,9 @@ export const engagement = {
     api.post(`${campaignBase(botId, groupId)}/${id}/submissions/${subId}/review`, data),
   exportCsv: (botId, groupId, id) =>
     api.get(`${campaignBase(botId, groupId)}/${id}/submissions/export`, { responseType: 'blob' }),
+  // Screenshot/photo proof for a submission — streamed from Telegram via the bot.
+  submissionFile: (botId, groupId, id, subId) =>
+    api.get(`${campaignBase(botId, groupId)}/${id}/submissions/${subId}/file`, { responseType: 'blob' }),
   // Per-campaign leaderboard (Pro). 403 (FEATURE_REQUIRES_PRO) on a free owner.
   leaderboard: (botId, groupId, id, params) =>
     api.get(`${campaignBase(botId, groupId)}/${id}/leaderboard`, { params }),

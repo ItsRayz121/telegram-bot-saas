@@ -280,6 +280,50 @@ def publish_campaign(campaign):
         return False
 
 
+def fetch_submission_file(campaign, file_id):
+    """Download a submission's screenshot/photo from Telegram and return
+    (bytes, content_type), or None if it can't be fetched.
+
+    Uses the campaign's own lineage bot (official or custom) via _resolve_target,
+    so the same code serves both boards and we never juggle raw tokens. The file
+    lives on Telegram's servers and is only reachable with the bot token, which is
+    why the dashboard couldn't show it before. Best-effort: never raises.
+    """
+    if not file_id:
+        return None
+    try:
+        bot, loop, _chat_id, _username = _resolve_target(campaign)
+        if not bot or not loop:
+            logger.info("fetch_submission_file: bot offline for campaign %s", getattr(campaign, "id", "?"))
+            return None
+
+        tg_file = asyncio.run_coroutine_threadsafe(
+            bot.get_file(file_id), loop
+        ).result(timeout=15)
+        data = asyncio.run_coroutine_threadsafe(
+            tg_file.download_as_bytearray(), loop
+        ).result(timeout=20)
+
+        # Infer a content type from the file path extension (Telegram photos are
+        # JPEG); default to image/jpeg which every browser renders inline.
+        path = (getattr(tg_file, "file_path", "") or "").lower()
+        if path.endswith(".png"):
+            ctype = "image/png"
+        elif path.endswith(".webp"):
+            ctype = "image/webp"
+        elif path.endswith(".gif"):
+            ctype = "image/gif"
+        elif path.endswith(".pdf"):
+            ctype = "application/pdf"
+        else:
+            ctype = "image/jpeg"
+        return bytes(data), ctype
+    except Exception:
+        logger.info("fetch_submission_file failed for campaign %s file %s",
+                    getattr(campaign, "id", "?"), file_id, exc_info=True)
+        return None
+
+
 def edit_campaign_post(campaign):
     """Re-render the already-posted group announcement in place after a content
     edit — new title / reward / deadline / tasks / leaderboard button all refresh.

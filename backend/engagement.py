@@ -551,6 +551,25 @@ def list_user_submissions(scope, telegram_user_id, *, group_id=None, telegram_gr
     return out
 
 
+def get_submission_file(campaign, submission_id):
+    """Return (bytes, content_type) for a submission's uploaded screenshot/photo,
+    or None if there is no file or it can't be fetched. Validates the submission
+    belongs to this campaign so one group's owner can't read another's proof.
+
+    The image is stored only as a Telegram file_id; this downloads it through the
+    campaign's own lineage bot so the dashboard can finally display it.
+    """
+    sub = EngagementSubmission.query.filter_by(
+        id=submission_id, campaign_id=campaign.id
+    ).first()
+    if not sub:
+        raise EngagementError("Submission not found", 404)
+    if not sub.file_id:
+        return None
+    from .engagement_telegram import fetch_submission_file
+    return fetch_submission_file(campaign, sub.file_id)
+
+
 def review_submission(campaign, submission_id, action, *, reviewed_by=None, reason=None):
     """Approve or reject a submission. On approve we credit XP idempotently
     (guarded by EngagementSubmission.rewarded) and the verified row is what the

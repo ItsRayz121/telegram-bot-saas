@@ -2160,6 +2160,26 @@ def export_official_submissions(group_id, campaign_id):
         return _eng_err(e)
 
 
+@tg_groups_bp.route("/<group_id>/campaigns/<int:campaign_id>/submissions/<int:submission_id>/file", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=120)
+def official_submission_file(group_id, campaign_id, submission_id):
+    """Stream a submission's uploaded screenshot/photo so the admin can review it.
+    The proof lives on Telegram's servers; we download it via the official bot."""
+    user = _current_user()
+    if not _owns_group(user.id, group_id):
+        return jsonify({"error": "Group not found"}), 404
+    try:
+        c = eng.get_campaign(campaign_id, "official", telegram_group_id=group_id)
+        result = eng.get_submission_file(c, submission_id)
+        if not result:
+            return jsonify({"error": "No file for this submission, or it could not be fetched"}), 404
+        data, ctype = result
+        return Response(data, mimetype=ctype, headers={"Cache-Control": "private, max-age=300"})
+    except eng.EngagementError as e:
+        return _eng_err(e)
+
+
 # ── Webhooks ───────────────────────────────────────────────────────────────────
 
 @tg_groups_bp.route("/<group_id>/webhooks", methods=["GET"])

@@ -215,6 +215,59 @@ function TasksEditor({ tasks, onChange }) {
   );
 }
 
+// Click-to-view proof screenshot. The image lives on Telegram's servers and is
+// fetched on demand (one request per click) as a blob, then shown in a lightbox.
+function ScreenshotViewer({ botId, groupId, campaignId, submissionId }) {
+  const [open, setOpen] = useState(false);
+  const [url, setUrl] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const view = async () => {
+    setOpen(true);
+    if (url || loading) return;
+    setLoading(true); setErr(null);
+    try {
+      const res = await engagement.submissionFile(botId, groupId, campaignId, submissionId);
+      setUrl(URL.createObjectURL(res.data));
+    } catch (e) {
+      setErr(e.response?.status === 404
+        ? 'Image unavailable — the bot may be offline or the file expired on Telegram.'
+        : 'Failed to load image.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => () => { if (url) URL.revokeObjectURL(url); }, [url]);
+
+  return (
+    <>
+      <Button size="small" variant="text" startIcon={<Visibility fontSize="small" />}
+        onClick={view} sx={{ textTransform: 'none', p: 0, minWidth: 0 }}>
+        View screenshot
+      </Button>
+      <Dialog open={open} onClose={() => setOpen(false)} maxWidth="md">
+        <DialogTitle>Submitted screenshot</DialogTitle>
+        <DialogContent>
+          {loading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
+          ) : err ? (
+            <Alert severity="warning">{err}</Alert>
+          ) : url ? (
+            <Box component="img" src={url} alt="Submitted proof"
+              sx={{ maxWidth: '100%', maxHeight: '70vh', display: 'block', mx: 'auto', borderRadius: 1 }} />
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          {url && <Button href={url} target="_blank" rel="noopener noreferrer">Open full size</Button>}
+          <Button onClick={() => setOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+    </>
+  );
+}
+
 export default function CampaignManager({ botId, groupId, userTier = 'free' }) {
   const isPaid = userTier && userTier !== 'free';
   const [campaigns, setCampaigns] = useState([]);
@@ -897,7 +950,9 @@ function CampaignManageDialog({ botId, groupId, campaignId, onClose, onChanged }
             </Typography>
           );
         })}
-        {s.file_id && <Typography variant="caption" color="text.secondary">📎 screenshot attached</Typography>}
+        {s.file_id && (
+          <ScreenshotViewer botId={botId} groupId={groupId} campaignId={campaignId} submissionId={s.id} />
+        )}
       </Box>
     );
   };

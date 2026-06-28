@@ -1317,6 +1317,29 @@ def export_engagement_submissions(bot_id, group_id, campaign_id):
         return _eng_err(e)
 
 
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/campaigns/<int:campaign_id>/submissions/<int:submission_id>/file", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=120)
+def engagement_submission_file(bot_id, group_id, campaign_id, submission_id):
+    """Stream a submission's uploaded screenshot/photo so the admin can review it.
+    The proof lives on Telegram's servers; we download it via the custom bot."""
+    user = _get_current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    _, group, err = _get_bot_and_group(user, bot_id, group_id)
+    if err:
+        return err
+    try:
+        c = eng.get_campaign(campaign_id, "custom", group_id=group.id)
+        result = eng.get_submission_file(c, submission_id)
+        if not result:
+            return jsonify({"error": "No file for this submission, or it could not be fetched"}), 404
+        data, ctype = result
+        return Response(data, mimetype=ctype, headers={"Cache-Control": "private, max-age=300"})
+    except eng.EngagementError as e:
+        return _eng_err(e)
+
+
 # ── Auto-Responses ──────────────────────────────────────────────────────────
 
 @settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/auto-responses", methods=["GET"])
