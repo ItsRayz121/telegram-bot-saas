@@ -27,6 +27,7 @@ const RAID_GOALS = [
   { key: 'likes', label: 'Likes' },
   { key: 'retweets', label: 'Retweets' },
   { key: 'comments', label: 'Comments' },
+  { key: 'quotes', label: 'Quote tweets' },
   { key: 'follows', label: 'Follows' },
 ];
 const PLATFORMS = [
@@ -884,7 +885,9 @@ function CampaignWizard({ botId, groupId, initialType, isPaid = false, onClose, 
                     {form.auto_verify_x && isPaid && (
                       <Typography variant="caption" color="text.secondary" display="block">
                         Members are asked for their X @username so the bot can verify automatically.
-                        Anything it can’t confirm stays pending for your manual review.
+                        Retweets, comments, quote-tweets and follows verify in real time; <strong>likes
+                        can’t be auto-verified</strong> (X keeps likes private) so a raid that includes a
+                        likes goal stays pending for your manual review.
                       </Typography>
                     )}
                     {!isPaid && (

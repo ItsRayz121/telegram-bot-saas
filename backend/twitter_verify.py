@@ -9,8 +9,10 @@ engagement_verify.
 Verified against the live twitterapi.io API (2026-06):
   - retweets  → GET /twitter/tweet/retweeters?tweetId=<id>  → users[].userName
   - comments  → GET /twitter/tweet/replies?tweetId=<id>     → tweets[].author.userName
+  - quotes    → GET /twitter/tweet/quotes?tweetId=<id>       → tweets[].author.userName
   - follow    → GET /twitter/user/check_follow_relationship → data.following (bool)
-  - likes     → NOT SUPPORTED by twitterapi.io (no likers endpoint) → always manual
+  - likes     → NOT SUPPORTED by twitterapi.io (X privatized likes in 2024; there
+                is no read endpoint for who liked a tweet) → always manual review
 All list endpoints paginate with has_next_page / next_cursor and use the
 `X-API-Key` header.
 
@@ -47,6 +49,7 @@ _ACTION_ALIASES = {
     "like": "like", "likes": "like",
     "retweet": "retweet", "retweets": "retweet", "repost": "retweet", "reposts": "retweet",
     "comment": "comment", "comments": "comment", "reply": "comment", "replies": "comment",
+    "quote": "quote", "quotes": "quote", "quote_tweet": "quote", "quote_tweets": "quote",
     "follow": "follow", "follows": "follow",
 }
 
@@ -117,7 +120,8 @@ def _handles_retweeters(body):
     return [u.get("userName") for u in (body.get("users") or []) if isinstance(u, dict)]
 
 
-def _handles_replies(body):
+# Replies and quotes share the same shape: tweets[].author.userName (the actor).
+def _handles_tweet_authors(body):
     out = []
     for t in (body.get("tweets") or []):
         if isinstance(t, dict):
@@ -207,7 +211,9 @@ def verify_action(action, *, username, tweet_id=None, target_handle=None, key=No
         if act == "retweet":
             return _paged_contains("/twitter/tweet/retweeters", tweet_id, handle_lc, key, _handles_retweeters), None
         if act == "comment":
-            return _paged_contains("/twitter/tweet/replies", tweet_id, handle_lc, key, _handles_replies), None
+            return _paged_contains("/twitter/tweet/replies", tweet_id, handle_lc, key, _handles_tweet_authors), None
+        if act == "quote":
+            return _paged_contains("/twitter/tweet/quotes", tweet_id, handle_lc, key, _handles_tweet_authors), None
     except Exception as e:
         logger.info("twitter_verify verify_action(%s) failed: %s", act, e)
         return "unknown", "Verification error"

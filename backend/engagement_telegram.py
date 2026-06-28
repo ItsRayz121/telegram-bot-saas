@@ -52,7 +52,7 @@ _TYPE_EMOJI = {
 }
 
 # Human labels for raid goal keys, in display order.
-_RAID_GOALS = [("likes", "Likes"), ("retweets", "Retweets"), ("comments", "Comments"), ("follows", "Follows")]
+_RAID_GOALS = [("likes", "Likes"), ("retweets", "Retweets"), ("comments", "Comments"), ("quotes", "Quotes"), ("follows", "Follows")]
 
 
 def _status_label(campaign):
