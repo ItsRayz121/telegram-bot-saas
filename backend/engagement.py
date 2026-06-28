@@ -253,6 +253,13 @@ def create_campaign(user, data, *, scope, owner_user_id, group_id=None, telegram
         status=status, verification_mode=vmode, platform=platform,
         field_count=len(fields_in), task_count=task_count,
     )
+    # Real-time X auto-verify (raid) is a Pro/Enterprise feature; free owners can
+    # still create the raid, just without automatic verification.
+    if (data.get("settings") or {}).get("auto_verify_x") and not _is_paid(user):
+        raise EngagementError(
+            "Automatic X verification requires a Pro or Enterprise subscription.",
+            403, code="FEATURE_REQUIRES_PRO",
+        )
 
     campaign = EngagementCampaign(
         group_id=group_id,
@@ -403,6 +410,12 @@ def update_campaign(campaign, data, *, user=None):
     if isinstance(data.get("tasks"), list) and len(data["tasks"]) > 1 and not _is_paid(user):
         raise EngagementError(
             "Multi-task campaigns require a Pro or Enterprise subscription.",
+            403, code="FEATURE_REQUIRES_PRO",
+        )
+    # Enabling X auto-verify via an edit is Pro/Enterprise too.
+    if isinstance(data.get("settings"), dict) and data["settings"].get("auto_verify_x") and not _is_paid(user):
+        raise EngagementError(
+            "Automatic X verification requires a Pro or Enterprise subscription.",
             403, code="FEATURE_REQUIRES_PRO",
         )
 
@@ -684,6 +697,24 @@ def log_suspicious(campaign_id, telegram_user_id, reason):
             pass
 
 
+def _extract_x_handle(answers, fields, telegram_username=None):
+    """Find the participant's X/Twitter @handle among their submitted proof fields,
+    so raid auto-verify can match them against likers / retweeters / followers.
+    Prefers a 'username'-typed field, then any field whose key/label hints at X.
+    Never falls back to the Telegram username (different namespace)."""
+    answers = answers or {}
+    for f in (fields or []):
+        if getattr(f, "field_type", None) == "username" and answers.get(f.key):
+            return answers.get(f.key)
+    _HINTS = ("twitter", "x_user", "xuser", "x_handle", "handle", "username")
+    for f in (fields or []):
+        label = (getattr(f, "label", "") or "").lower()
+        key = (getattr(f, "key", "") or "").lower()
+        if any(h in label or h in key for h in _HINTS) and answers.get(f.key):
+            return answers.get(f.key)
+    return None
+
+
 def create_submission(campaign, *, telegram_user_id, telegram_username=None,
                       answers=None, file_id=None, file_hash=None, forced_status=None,
                       task_id=None):
@@ -764,6 +795,21 @@ def create_submission(campaign, *, telegram_user_id, telegram_username=None,
         status = "verified"
     else:
         status = "pending"
+
+    # X raid auto-verify (Pro/Enterprise): when the campaign has it enabled and a
+    # key is configured, try to confirm the participant actually performed the
+    # selected actions and upgrade pending → verified. Purely additive: it only
+    # ever upgrades on a positive match and never auto-rejects (uncertainty stays
+    # pending for manual review). See twitter_verify for the safety contract.
+    if status == "pending" and campaign.type == "raid" and (campaign.settings or {}).get("auto_verify_x"):
+        try:
+            from . import twitter_verify
+            if twitter_verify.enabled():
+                handle = _extract_x_handle(answers, spec_fields, telegram_username)
+                if handle and twitter_verify.verify_raid(campaign, handle).get("overall") == "verified":
+                    status = "verified"
+        except Exception:
+            logger.info("x raid auto-verify failed for campaign %s", campaign.id, exc_info=True)
 
     # Anti-fraud: duplicate proof / screenshot (dedup against the spec's fields).
     flagged, flag_reason = detect_duplicate(campaign, answers, file_hash, fields=spec_fields)

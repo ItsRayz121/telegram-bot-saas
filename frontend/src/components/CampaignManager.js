@@ -498,7 +498,7 @@ export default function CampaignManager({ botId, groupId, userTier = 'free' }) {
 
       {createType && (
         <CampaignWizard
-          botId={botId} groupId={groupId} initialType={createType}
+          botId={botId} groupId={groupId} initialType={createType} isPaid={isPaid}
           onClose={() => setCreateType(null)}
           onCreated={() => { setCreateType(null); load(); }}
         />
@@ -672,7 +672,7 @@ function CampaignRow({ c, botId, groupId, onChanged, onManage }) {
 
 // ── Create wizard ─────────────────────────────────────────────────────────────
 
-function CampaignWizard({ botId, groupId, initialType, onClose, onCreated }) {
+function CampaignWizard({ botId, groupId, initialType, isPaid = false, onClose, onCreated }) {
   const [step, setStep] = useState(0);
   const cfg0 = typeConfig(initialType);
   const [form, setForm] = useState({
@@ -688,6 +688,7 @@ function CampaignWizard({ botId, groupId, initialType, onClose, onCreated }) {
       : EMPTY_FORM.custom_fields,
     // Intelligent default: rank competitive types; off for one-shot collection.
     show_leaderboard: ['social_task', 'raid'].includes(initialType),
+    auto_verify_x: false,   // raid only, Pro/Enterprise
   });
   const [saving, setSaving] = useState(false);
 
@@ -724,6 +725,23 @@ function CampaignWizard({ botId, groupId, initialType, onClose, onCreated }) {
       toast.error(`${cfg.taskUrlLabel || 'Link'} is required`); setStep(0); return;
     }
     setSaving(true);
+    // Clean proof fields; when X auto-verify is on, ensure a username field exists
+    // so the bot can collect the participant's @handle to verify against.
+    const buildCustomFields = () => {
+      let out = form.custom_fields
+        .filter((f) => f.label.trim())
+        .map((f) => ({
+          label: f.label.trim(),
+          field_type: f.field_type,
+          required: f.required,
+          example: (f.example || '').trim() || null,
+        }));
+      if (form.type === 'raid' && isPaid && form.auto_verify_x
+          && !out.some((f) => f.field_type === 'username')) {
+        out = [{ label: 'Your X / Twitter @username', field_type: 'username', required: true, example: '@yourhandle' }, ...out];
+      }
+      return out;
+    };
     try {
       const payload = {
         type: form.type,
@@ -748,17 +766,11 @@ function CampaignWizard({ botId, groupId, initialType, onClose, onCreated }) {
                   if (n > 0) acc[g.key] = n;
                   return acc;
                 }, {}),
+                ...(isPaid && form.auto_verify_x ? { auto_verify_x: true } : {}),
               }
             : {}),
         },
-        custom_fields: form.multitask ? [] : form.custom_fields
-          .filter((f) => f.label.trim())
-          .map((f) => ({
-            label: f.label.trim(),
-            field_type: f.field_type,
-            required: f.required,
-            example: (f.example || '').trim() || null,
-          })),
+        custom_fields: form.multitask ? [] : buildCustomFields(),
       };
       if (form.multitask) {
         payload.tasks = form.tasks
@@ -858,6 +870,29 @@ function CampaignWizard({ botId, groupId, initialType, onClose, onCreated }) {
                         </Grid>
                       ))}
                     </Grid>
+                    <FormControlLabel
+                      sx={{ mt: 1 }}
+                      control={
+                        <Switch
+                          checked={isPaid && form.auto_verify_x}
+                          disabled={!isPaid}
+                          onChange={(e) => set('auto_verify_x', e.target.checked)}
+                        />
+                      }
+                      label="Auto-verify on X (Pro) — confirm likes / retweets / comments / follows in real time"
+                    />
+                    {form.auto_verify_x && isPaid && (
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        Members are asked for their X @username so the bot can verify automatically.
+                        Anything it can’t confirm stays pending for your manual review.
+                      </Typography>
+                    )}
+                    {!isPaid && (
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        Real-time X verification is a Pro/Enterprise feature. You can still run the raid
+                        with manual proof review.
+                      </Typography>
+                    )}
                   </Box>
                 )}
                 <FormControl fullWidth>
