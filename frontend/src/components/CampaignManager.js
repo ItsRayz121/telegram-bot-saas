@@ -38,6 +38,44 @@ const PLATFORMS = [
   { value: 'facebook', label: 'Facebook' },
   { value: 'other', label: 'Other' },
 ];
+// Per-type wizard behaviour — what each campaign type actually asks for, so the
+// five types stop looking identical. Drives field visibility, labels & defaults.
+const TYPE_CONFIG = {
+  social_task: {
+    showPlatform: true, platformRequired: true,
+    taskUrlLabel: 'Link to like / follow / join (optional)',
+    defaultVerification: 'honor',
+    proofHint: 'Social tasks are usually honor-based or a quick screenshot. Add a proof field only if you need one.',
+  },
+  proof_collection: {
+    showPlatform: false,
+    taskUrlLabel: 'Reference link (optional)',
+    defaultVerification: 'manual',
+    proofHint: 'This is the heart of a proof collection — add the fields you want to collect (UID, wallet, tx hash, screenshot…).',
+  },
+  content_submission: {
+    showPlatform: true, platformRequired: false,
+    taskUrlLabel: 'Example / brief for creators (optional)',
+    defaultVerification: 'manual',   // free-safe; Pro can switch to link-validity
+    autoUrlField: true,
+    proofHint: 'Participants submit a link to their content (YouTube / X / blog). A required link field is added for you.',
+  },
+  giveaway: {
+    showPlatform: false,
+    taskUrlLabel: 'Entry link (optional)',
+    defaultVerification: 'honor',
+    proofHint: 'Keep entry light. The reward label and the winner picker (under Manage) are what matter for a giveaway.',
+  },
+  raid: {
+    showPlatform: false,            // locked to X / Twitter
+    taskUrlLabel: 'Tweet URL',
+    taskUrlRequired: true,
+    defaultVerification: 'manual',
+    raidGoals: true,
+  },
+};
+const typeConfig = (t) => TYPE_CONFIG[t] || { showPlatform: true };
+
 const VERIFICATION_MODES = [
   { value: 'manual', label: 'Manual review (admin approves)' },
   { value: 'honor',  label: 'Honor-based (one-tap Verify)' },
@@ -636,23 +674,42 @@ function CampaignRow({ c, botId, groupId, onChanged, onManage }) {
 
 function CampaignWizard({ botId, groupId, initialType, onClose, onCreated }) {
   const [step, setStep] = useState(0);
+  const cfg0 = typeConfig(initialType);
   const [form, setForm] = useState({
     ...EMPTY_FORM,
     type: initialType || EMPTY_FORM.type,
     platform: initialType === 'raid' ? 'x' : EMPTY_FORM.platform,
+    platform_other: '',
+    // Per-type default verification (honor for social/giveaway, link for content…).
+    verification_mode: cfg0.defaultVerification || EMPTY_FORM.verification_mode,
+    // Content submissions always collect a link, so seed a required URL field.
+    custom_fields: cfg0.autoUrlField
+      ? [{ label: 'Your content link', field_type: 'url', required: true, example: 'https://...' }]
+      : EMPTY_FORM.custom_fields,
     // Intelligent default: rank competitive types; off for one-shot collection.
     show_leaderboard: ['social_task', 'raid'].includes(initialType),
   });
   const [saving, setSaving] = useState(false);
 
   const typeMeta = TYPES.find((t) => t.value === form.type) || {};
+  const cfg = typeConfig(form.type);
 
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+
+  // Resolve the platform we persist: raid is locked to X, types without a platform
+  // store null, and "Other" sends the free-text the owner typed.
+  const resolvedPlatform = () => {
+    if (form.type === 'raid') return 'x';
+    if (!cfg.showPlatform) return null;
+    if (form.platform === 'other') return form.platform_other.trim() || null;
+    return form.platform || null;
+  };
 
   const canNext = () => {
     if (step === 0) {
       if (!form.title.trim()) return false;
       if (form.multitask) return form.tasks.some((t) => (t.title || '').trim());
+      if (cfg.taskUrlRequired && !form.task_url.trim()) return false;
       return true;
     }
     return true;
@@ -663,11 +720,14 @@ function CampaignWizard({ botId, groupId, initialType, onClose, onCreated }) {
     if (form.multitask && !form.tasks.some((t) => (t.title || '').trim())) {
       toast.error('Add at least one task'); setStep(0); return;
     }
+    if (!form.multitask && cfg.taskUrlRequired && !form.task_url.trim()) {
+      toast.error(`${cfg.taskUrlLabel || 'Link'} is required`); setStep(0); return;
+    }
     setSaving(true);
     try {
       const payload = {
         type: form.type,
-        platform: form.platform || null,
+        platform: resolvedPlatform(),
         title: form.title.trim(),
         description: form.description || null,
         task_url: form.task_url || null,
@@ -764,15 +824,26 @@ function CampaignWizard({ botId, groupId, initialType, onClose, onCreated }) {
               </Stack>
             ) : (
               <>
-                <FormControl fullWidth>
-                  <InputLabel>Platform</InputLabel>
-                  <Select value={form.platform} label="Platform" onChange={(e) => set('platform', e.target.value)}>
-                    {PLATFORMS.map((p) => <MenuItem key={p.value} value={p.value}>{p.label}</MenuItem>)}
-                  </Select>
-                </FormControl>
+                {cfg.showPlatform && (
+                  <>
+                    <FormControl fullWidth>
+                      <InputLabel>{cfg.platformRequired ? 'Platform *' : 'Platform'}</InputLabel>
+                      <Select value={form.platform} label={cfg.platformRequired ? 'Platform *' : 'Platform'}
+                        onChange={(e) => set('platform', e.target.value)}>
+                        {PLATFORMS.map((p) => <MenuItem key={p.value} value={p.value}>{p.label}</MenuItem>)}
+                      </Select>
+                    </FormControl>
+                    {form.platform === 'other' && (
+                      <TextField fullWidth label="Platform name (shown to members)"
+                        placeholder="e.g. Discord, TikTok, Reddit"
+                        value={form.platform_other} onChange={(e) => set('platform_other', e.target.value)} />
+                    )}
+                  </>
+                )}
                 <TextField fullWidth multiline minRows={2} label="Instructions / Description"
                   value={form.description} onChange={(e) => set('description', e.target.value)} />
-                <TextField fullWidth label={form.type === 'raid' ? 'Tweet URL' : 'Task Link (optional)'}
+                <TextField fullWidth required={!!cfg.taskUrlRequired}
+                  label={cfg.taskUrlLabel || 'Task Link (optional)'}
                   placeholder="https://x.com/..." value={form.task_url} onChange={(e) => set('task_url', e.target.value)} />
                 {form.type === 'raid' && (
                   <Box>
@@ -798,8 +869,7 @@ function CampaignWizard({ botId, groupId, initialType, onClose, onCreated }) {
 
                 <Divider textAlign="left"><Typography variant="caption">Proof fields</Typography></Divider>
                 <Typography variant="caption" color="text.secondary">
-                  Ask participants for proof (UID, link, wallet, screenshot…). The bot collects each
-                  field privately and validates the format before accepting it.
+                  {cfg.proofHint || 'Ask participants for proof (UID, link, wallet, screenshot…). The bot collects each field privately and validates the format before accepting it.'}
                 </Typography>
                 <ProofFieldsEditor fields={form.custom_fields} onChange={(v) => set('custom_fields', v)} />
               </>
@@ -1156,11 +1226,15 @@ function CampaignEditDialog({ botId, groupId, campaign, hasSubmissions, onClose,
   // replace tasks with existing submissions — protects their data). Details,
   // reward, deadline and visibility stay editable.
   const structureLocked = hasSubmissions;
+  const cfgE = typeConfig(campaign.type);
+  // A saved platform that isn't one of the preset values is a custom "Other" name.
+  const knownPlatform = !campaign.platform || PLATFORMS.some((p) => p.value === campaign.platform);
 
   const [form, setForm] = useState({
     title: campaign.title || '',
     description: campaign.description || '',
-    platform: campaign.platform || '',
+    platform: knownPlatform ? (campaign.platform || '') : 'other',
+    platform_other: knownPlatform ? '' : (campaign.platform || ''),
     task_url: campaign.task_url || '',
     verification_mode: campaign.verification_mode || 'manual',
     reward_xp: campaign.reward_xp || 0,
@@ -1199,7 +1273,9 @@ function CampaignEditDialog({ botId, groupId, campaign, hasSubmissions, onClose,
         title: form.title.trim(),
         description: form.description || null,
         task_url: form.task_url || null,
-        platform: form.platform || null,
+        platform: !cfgE.showPlatform ? (campaign.platform || null)
+          : form.platform === 'other' ? (form.platform_other.trim() || null)
+          : (form.platform || null),
         verification_mode: form.verification_mode,
         reward_xp: parseInt(form.reward_xp) || 0,
         reward_label: form.reward_label || null,
@@ -1264,13 +1340,22 @@ function CampaignEditDialog({ botId, groupId, campaign, hasSubmissions, onClose,
 
           {!isMulti && (
             <>
-              <FormControl fullWidth>
-                <InputLabel>Platform</InputLabel>
-                <Select value={form.platform} label="Platform" onChange={(e) => set('platform', e.target.value)}>
-                  {PLATFORMS.map((p) => <MenuItem key={p.value} value={p.value}>{p.label}</MenuItem>)}
-                </Select>
-              </FormControl>
-              <TextField fullWidth label={campaign.type === 'raid' ? 'Tweet URL' : 'Task Link (optional)'}
+              {cfgE.showPlatform && (
+                <>
+                  <FormControl fullWidth>
+                    <InputLabel>Platform</InputLabel>
+                    <Select value={form.platform} label="Platform" onChange={(e) => set('platform', e.target.value)}>
+                      {PLATFORMS.map((p) => <MenuItem key={p.value} value={p.value}>{p.label}</MenuItem>)}
+                    </Select>
+                  </FormControl>
+                  {form.platform === 'other' && (
+                    <TextField fullWidth label="Platform name (shown to members)"
+                      placeholder="e.g. Discord, TikTok, Reddit"
+                      value={form.platform_other} onChange={(e) => set('platform_other', e.target.value)} />
+                  )}
+                </>
+              )}
+              <TextField fullWidth label={cfgE.taskUrlLabel || 'Task Link (optional)'}
                 placeholder="https://x.com/..." value={form.task_url} onChange={(e) => set('task_url', e.target.value)} />
               <FormControl fullWidth>
                 <InputLabel>Verification</InputLabel>
