@@ -25,6 +25,12 @@ endpoint giving a single, authoritative negative. This makes auto-verify purely
 additive: it saves admins work on true positives and never wrongly approves or
 wrongly rejects.
 
+Likes are a special case: they return the distinct status "manual" (not "unknown")
+because they are *inherently* unverifiable — X has no likers endpoint, so no key,
+retry or pagination could ever prove them. verify_raid treats "manual" as
+NON-BLOCKING so a likes-inclusive raid still auto-verifies on its provable goals
+(follow / retweet / quote) and leaves only the likes for an admin to eyeball.
+
 A platform-wide admin kill-switch (`engagement_x_autoverify_enabled` feature flag)
 gates the whole thing, and per-owner Pro/Enterprise gating is enforced at campaign
 create/update time in engagement.py — this module just does the lookups.
@@ -77,6 +83,63 @@ def enabled():
     except Exception:
         pass  # if the flag system is unavailable, fall back to key presence
     return bool(_key())
+
+
+def health_check(*, use_cache=True, cache_ttl=300):
+    """Live, Redis-cached health probe for the twitterapi.io key — for the admin
+    System Health page. Never raises. Returns one of:
+
+      "disabled"          — no key configured (optional feature, NOT an error)
+      "ok"                — the key authenticates against the live API
+      "error: <reason>"   — key is configured but the API rejected it / is down
+
+    The result is cached in Redis for `cache_ttl` seconds so repeated health-page
+    polls don't burn twitterapi.io credits on every refresh.
+    """
+    key = _key()
+    if not key:
+        return "disabled"
+
+    cache_key = "twitterapi_io:health"
+    r = None
+    if use_cache:
+        try:
+            import redis as _redis
+            from .config import Config
+            r = _redis.from_url(Config.REDIS_URL or "redis://localhost:6379/0", socket_timeout=2)
+            cached = r.get(cache_key)
+            if cached:
+                return cached.decode() if isinstance(cached, bytes) else str(cached)
+        except Exception:
+            r = None
+
+    status = _probe_key(key)
+    if r is not None:
+        try:
+            r.setex(cache_key, cache_ttl, status)
+        except Exception:
+            pass
+    return status
+
+
+def _probe_key(key):
+    """One cheap, verified call to confirm the key authenticates. We only read the
+    HTTP status, not the body. tweetId=20 is Jack Dorsey's first tweet — a stable,
+    always-public id, so a valid key reliably yields 200."""
+    try:
+        resp = _get("/twitter/tweet/retweeters", {"tweetId": "20"}, key)
+    except Exception as e:
+        return f"error: {str(e)[:50]}"
+    code = resp.status_code
+    if code == 200:
+        return "ok"
+    if code in (401, 403):
+        return "error: invalid or unauthorized key"
+    if code == 402:
+        return "error: insufficient credits"
+    if code == 429:
+        return "error: rate limited"
+    return f"error: status {code}"
 
 
 def extract_tweet_id(url):
@@ -177,8 +240,10 @@ def verify_action(action, *, username, tweet_id=None, target_handle=None, key=No
         return "unknown", f"Unsupported action: {action}"
 
     # twitterapi.io exposes no likers endpoint, so a like can't be auto-verified.
+    # Return the distinct "manual" status (not "unknown"): verify_raid uses it to
+    # leave likes for manual review WITHOUT blocking the raid's provable goals.
     if act == "like":
-        return "unknown", "Likes can't be auto-verified — review manually"
+        return "manual", "Likes can't be auto-verified — review manually"
 
     try:
         if act == "follow":
@@ -223,10 +288,19 @@ def verify_action(action, *, username, tweet_id=None, target_handle=None, key=No
 def verify_raid(campaign, username, *, goals=None):
     """Verify every selected raid goal for a participant.
 
-    Returns {"overall": "verified"|"pending", "results": {goal: {status, detail}}}.
-    overall is "verified" only when EVERY requested, verifiable goal verified;
-    otherwise "pending" so an admin still reviews (we never auto-reject). Stops at
-    the first non-verified goal to bound latency in the submission path.
+    Returns {"overall": "verified"|"pending", "results": {goal: {status, detail}}},
+    where each goal status is "verified", "failed", "unknown" or "manual".
+
+    Likes return "manual" (X has no likers endpoint) and are treated as
+    NON-BLOCKING: a likes-inclusive raid still auto-verifies on its provable goals
+    (follow / retweet / quote), leaving only the likes for an admin. Without this,
+    every raid that asked for likes would degrade to full manual review.
+
+    overall is "verified" only when at least one goal actually verified AND no
+    provable goal came back non-verified — a "failed"/"unknown" blocks it. A raid
+    of likes ALONE therefore stays "pending" (nothing was provable). We never
+    auto-reject; a blocking goal just leaves the whole submission for review. Stops
+    at the first blocking (non-verified, non-manual) goal to bound latency.
     """
     key = _key()
     settings = campaign.settings or {}
@@ -236,14 +310,20 @@ def verify_raid(campaign, username, *, goals=None):
 
     results = {}
     requested = {k: v for k, v in goals.items() if v}
-    all_verified = bool(requested)
+    verified_any = False
+    blocked = False
     for gkey in requested:
         status, detail = verify_action(
             gkey, username=username, tweet_id=tweet_id, target_handle=target, key=key,
         )
         results[gkey] = {"status": status, "detail": detail}
-        if status != "verified":
-            all_verified = False
-            break  # overall can no longer be "verified" — stop early
+        if status == "verified":
+            verified_any = True
+        elif status == "manual":
+            continue  # likes — can't prove, but don't block the provable goals
+        else:
+            blocked = True  # "failed"/"unknown" → leave the submission for review
+            break
 
-    return {"overall": "verified" if (all_verified and results) else "pending", "results": results}
+    overall = "verified" if (verified_any and not blocked) else "pending"
+    return {"overall": overall, "results": results}

@@ -4160,6 +4160,15 @@ def admin_system():
     else:
         services["celery"] = "unknown"
 
+    # twitterapi.io key health (optional X auto-verify integration). Live, cached
+    # probe: "disabled" when no key is set so a missing optional key never marks
+    # the platform degraded; "error: …" only when a CONFIGURED key is broken.
+    try:
+        from .. import twitter_verify
+        services["twitterapi.io"] = twitter_verify.health_check()
+    except Exception:
+        services["twitterapi.io"] = "unknown"
+
     # ── Environment checklist (booleans only — never values) ──
     def _set(name):
         return bool(sv.get_secret(name))
