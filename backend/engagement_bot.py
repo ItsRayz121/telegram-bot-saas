@@ -149,8 +149,19 @@ def _render_my_submission(campaign, sub):
         f"Campaign: {html.escape(campaign.title or '')}{title_extra}",
     ]
     payload = sub.payload or {}
+    # Per-action verify submissions store a structured action map, not flat fields.
+    actions = payload.get("actions") if isinstance(payload.get("actions"), dict) else None
+    if actions:
+        from . import engagement as eng
+        ordered = [a for _gk, a, _t in eng.campaign_action_goals(campaign)] or list(actions.keys())
+        lines.append("")
+        for action in ordered:
+            emoji, alabel = _ACTION_META.get(action, ("•", action.title()))
+            st = (actions.get(action) or {}).get("status")
+            mark = {"verified": "✅", "manual": "🕒", "failed": "❌"}.get(st, "⬜")
+            lines.append(f"{mark} {emoji} {alabel}")
     for key, value in payload.items():
-        if value in (None, "", "[screenshot]"):
+        if key == "actions" or value in (None, "", "[screenshot]"):
             continue
         f = fields.get(key)
         type_label = _FIELD_TYPE_LABEL.get(getattr(f, "field_type", None), None)

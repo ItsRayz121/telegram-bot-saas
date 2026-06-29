@@ -1286,14 +1286,18 @@ def submissions_csv(campaign):
     # Also surface any extra payload keys that aren't a configured field — e.g. a
     # bot-injected default proof field on a review task with no custom fields — so
     # the proof never silently drops out of the export.
+    has_actions = False
     for s in subs:
         for k in (s.payload or {}):
+            if k == "actions":
+                has_actions = True  # per-action verify map → its own flattened column
+                continue
             if k not in field_keys:
                 field_keys.append(k)
     header = [
         "submission_id", "task_id", "task_title", "telegram_user_id", "telegram_username",
         "status", "created_at", "reviewed_at", "reviewed_by", "review_reason",
-    ] + field_keys + ["file_id", "file_hash"]
+    ] + field_keys + (["actions"] if has_actions else []) + ["file_id", "file_hash"]
 
     buf = io.StringIO()
     writer = csv.writer(buf)
@@ -1307,6 +1311,12 @@ def submissions_csv(campaign):
             s.created_at.isoformat() if s.created_at else "",
             s.reviewed_at.isoformat() if s.reviewed_at else "",
             s.reviewed_by or "", s.review_reason or "",
-        ] + [payload.get(k, "") for k in field_keys] + [s.file_id or "", s.file_hash or ""]
+        ] + [payload.get(k, "") for k in field_keys]
+        if has_actions:
+            amap = payload.get("actions") or {}
+            row.append("; ".join(
+                f"{a}={(v or {}).get('status', '')}" for a, v in amap.items()
+            ) if isinstance(amap, dict) else "")
+        row += [s.file_id or "", s.file_hash or ""]
         writer.writerow(row)
     return buf.getvalue()

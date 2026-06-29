@@ -134,6 +134,8 @@ const EMPTY_FORM = {
 // Social-task action targets (stored under settings.social_targets). Mirrors
 // RAID_GOALS minus none — same provable set; "likes" is honor-only (uncountable).
 const SOCIAL_TARGETS = RAID_GOALS;
+// Goal-key (plural) → backend per-action key (singular), matching engagement.GOAL_ACTIONS.
+const ACTION_KEYS = { likes: 'like', retweets: 'retweet', comments: 'comment', quotes: 'quote', follows: 'follow' };
 
 // Default example/format hint by proof type — pre-fills the helper shown to users.
 const EXAMPLE_PLACEHOLDER = {
@@ -1139,10 +1141,23 @@ function CampaignManageDialog({ botId, groupId, campaignId, onClose, onChanged }
   };
 
   const renderPayload = (s) => {
-    const entries = Object.entries(s.payload || {}).filter(([, v]) => v !== '' && v != null && v !== '[screenshot]');
-    if (entries.length === 0 && !s.file_id) return <Typography variant="caption" color="text.disabled">—</Typography>;
+    const allEntries = Object.entries(s.payload || {}).filter(([, v]) => v !== '' && v != null && v !== '[screenshot]');
+    // Per-action verify submissions store a structured { action: {status} } map.
+    const actionsMap = (s.payload || {}).actions;
+    const entries = allEntries.filter(([k]) => k !== 'actions');
+    if (entries.length === 0 && !actionsMap && !s.file_id) return <Typography variant="caption" color="text.disabled">—</Typography>;
     return (
       <Box>
+        {actionsMap && typeof actionsMap === 'object' && (
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 0.5 }}>
+            {SOCIAL_TARGETS.map((g) => {
+              const st = (actionsMap[ACTION_KEYS[g.key]] || {}).status;
+              if (!st) return null;
+              const color = st === 'verified' ? 'success' : st === 'failed' ? 'error' : 'default';
+              return <Chip key={g.key} size="small" color={color} variant="outlined" label={`${g.label}: ${st}`} />;
+            })}
+          </Box>
+        )}
         {entries.map(([k, v]) => {
           const f = fieldMap[k];
           const typeLabel = f ? (FIELD_TYPE_LABEL[f.field_type] || f.field_type) : null;
