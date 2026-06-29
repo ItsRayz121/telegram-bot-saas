@@ -2,12 +2,130 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Box, Grid, Card, CardContent, Typography, Button, TextField, MenuItem, Switch,
   FormControlLabel, List, ListItem, ListItemText, IconButton, Chip, Alert,
-  CircularProgress, Stack, Divider, Tabs, Tab,
+  CircularProgress, Stack, Divider, Tabs, Tab, Tooltip,
+  Dialog, DialogTitle, DialogContent, DialogActions,
 } from '@mui/material';
 import { Add, Delete, ArrowBack, Download, EmojiEvents } from '@mui/icons-material';
-import guildizerApi from '../../../services/guildizerApi';
+import guildizerApi, { guildizerXVerifyKey } from '../../../services/guildizerApi';
 import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
 import { downloadCsv } from './csv';
+
+// ── X auto-verify status signal (Telegizer parity) ────────────────────────────
+// 3-state health for the "Auto-verify on X" toggle so the owner knows whether raid
+// actions confirm automatically or fall back to manual. Account-level (the owner's
+// BYO key or the platform key) → identical across guilds, fetched once with the list.
+const X_STATUS_META = {
+  live: {
+    color: 'success', dot: '🟢', label: 'X auto-verify: live',
+    detail: 'Reposts, comments, quotes & follows confirm automatically in real time. (Likes can’t be auto-verified — X keeps likes private.)',
+  },
+  rejected: {
+    color: 'warning', dot: '🟡', label: 'X auto-verify: key rejected',
+    detail: 'A key is configured but X rejected it (invalid key, no credits, or rate-limited). Until it’s fixed, submissions fall back to manual review.',
+  },
+  disabled: {
+    color: 'default', dot: '⚪', label: 'X auto-verify: not configured',
+    detail: 'No twitterapi.io key is available, so submissions go to manual review. Add your own key to confirm actions automatically.',
+  },
+};
+
+function XAutoverifyStatus({ status, enabled, onManageKey }) {
+  const meta = X_STATUS_META[status] || X_STATUS_META.disabled;
+  if (!enabled) {
+    return (
+      <Tooltip title={meta.detail}>
+        <Chip size="small" variant="outlined" color={meta.color}
+          label={`${meta.dot} ${meta.label}`} onClick={onManageKey} sx={{ mt: 1 }} />
+      </Tooltip>
+    );
+  }
+  const severity = status === 'live' ? 'success' : status === 'rejected' ? 'warning' : 'info';
+  return (
+    <Alert severity={severity} sx={{ mt: 1 }}
+      action={onManageKey && (
+        <Button color="inherit" size="small" onClick={onManageKey} sx={{ whiteSpace: 'nowrap' }}>
+          {status === 'live' ? 'Manage key' : 'Add your key'}
+        </Button>
+      )}>
+      <strong>{meta.dot} {meta.label}</strong>
+      <Typography variant="caption" display="block">{meta.detail}</Typography>
+    </Alert>
+  );
+}
+
+function XKeyDialog({ open, onClose, onSaved }) {
+  const [info, setInfo] = useState(null);
+  const [keyInput, setKeyInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setKeyInput(''); setErr(null); setLoading(true);
+    guildizerXVerifyKey.get()
+      .then((r) => setInfo(r.data)).catch(() => setInfo(null))
+      .finally(() => setLoading(false));
+  }, [open]);
+
+  async function save() {
+    if (!keyInput.trim()) return;
+    setBusy(true); setErr(null);
+    try {
+      const r = await guildizerXVerifyKey.save(keyInput.trim());
+      onSaved?.(r.data.status); onClose();
+    } catch (e) { setErr(e?.response?.data?.error || 'Failed to save key'); }
+    finally { setBusy(false); }
+  }
+  async function remove() {
+    setBusy(true); setErr(null);
+    try {
+      const r = await guildizerXVerifyKey.delete();
+      onSaved?.(r.data.status); onClose();
+    } catch (e) { setErr(e?.response?.data?.error || 'Failed to remove key'); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <Dialog open={open} onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Your twitterapi.io key</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Add your own <strong>twitterapi.io</strong> key to run X auto-verify on your own
+          credits instead of the shared platform key. It’s <strong>account-level</strong> — one
+          key covers every server you manage. Get a key at{' '}
+          <a href="https://twitterapi.io" target="_blank" rel="noopener noreferrer">twitterapi.io</a>.
+        </Typography>
+        {err && <Alert severity="error" sx={{ mb: 2 }}>{err}</Alert>}
+        {loading ? (
+          <Box sx={{ display: 'grid', placeItems: 'center', py: 2 }}><CircularProgress size={24} /></Box>
+        ) : (
+          <>
+            {info?.configured && (
+              <Alert severity={info.status === 'live' ? 'success' : info.status === 'rejected' ? 'warning' : 'info'} sx={{ mb: 2 }}>
+                Saved key {info.masked_key ? `(${info.masked_key})` : ''} — current status: <strong>{info.status}</strong>.
+              </Alert>
+            )}
+            <TextField fullWidth type="password" label="twitterapi.io API key"
+              placeholder={info?.configured ? 'Paste a new key to replace' : 'Paste your key'}
+              value={keyInput} onChange={(e) => setKeyInput(e.target.value)} autoComplete="off" />
+            <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+              We check the key against the live API before saving, so a bad key is caught here.
+            </Typography>
+          </>
+        )}
+      </DialogContent>
+      <DialogActions>
+        {info?.configured && <Button color="error" onClick={remove} disabled={busy}>Remove key</Button>}
+        <Box sx={{ flex: 1 }} />
+        <Button onClick={onClose} disabled={busy}>Cancel</Button>
+        <Button variant="contained" onClick={save} disabled={busy || !keyInput.trim()}>
+          {busy ? 'Saving…' : 'Save & verify'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
 
 const TEXT_TYPES = new Set([0, 5]);
 const TYPES = ['proof_collection', 'content_submission', 'social_task', 'raid', 'giveaway'];
@@ -22,6 +140,8 @@ const STATUS_COLOR = { draft: 'default', active: 'success', paused: 'warning', c
 export default function CampaignsTab({ guildId, channels = [] }) {
   const [campaigns, setCampaigns] = useState([]);
   const [plan, setPlan] = useState('free');
+  const [xStatus, setXStatus] = useState('disabled');
+  const [keyDialogOpen, setKeyDialogOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
   const [creating, setCreating] = useState(false);
@@ -39,15 +159,18 @@ export default function CampaignsTab({ guildId, channels = [] }) {
 
   async function load() {
     setLoading(true);
-    try { const { data } = await guildizerApi.get(`/api/guilds/${guildId}/campaigns`); setCampaigns(data.campaigns); setPlan(data.plan); }
-    finally { setLoading(false); }
+    try {
+      const { data } = await guildizerApi.get(`/api/guilds/${guildId}/campaigns`);
+      setCampaigns(data.campaigns); setPlan(data.plan);
+      if (data.x_autoverify_status) setXStatus(data.x_autoverify_status);
+    } finally { setLoading(false); }
   }
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [guildId]);
 
-  if (selected) return <CampaignDetail guildId={guildId} campaignId={selected} channels={textChannels} plan={plan} onBack={() => { setSelected(null); load(); }} />;
+  if (selected) return <CampaignDetail guildId={guildId} campaignId={selected} channels={textChannels} plan={plan} xStatus={xStatus} onXStatus={setXStatus} onBack={() => { setSelected(null); load(); }} />;
 
   return (
     <>
@@ -83,7 +206,7 @@ export default function CampaignsTab({ guildId, channels = [] }) {
         {TYPES.map((t) => <Tab key={t} value={t} label={`${TYPE_LABEL[t]} (${campaigns.filter((c) => c.type === t).length})`} />)}
       </Tabs>
 
-      {creating && <CreateForm guildId={guildId} channels={textChannels} onCreated={() => { setCreating(false); load(); }} />}
+      {creating && <CreateForm guildId={guildId} channels={textChannels} plan={plan} xStatus={xStatus} onManageKey={() => setKeyDialogOpen(true)} onCreated={() => { setCreating(false); load(); }} />}
 
       {loading ? <Box sx={{ display: 'grid', placeItems: 'center', py: 3 }}><CircularProgress /></Box> : (
         <>
@@ -100,21 +223,24 @@ export default function CampaignsTab({ guildId, channels = [] }) {
         </>
       )}
     </GuildizerCollapsibleCard>
+    <XKeyDialog open={keyDialogOpen} onClose={() => setKeyDialogOpen(false)}
+      onSaved={(s) => { if (s) setXStatus(s); load(); }} />
     </>
   );
 }
 
-function CreateForm({ guildId, channels, onCreated }) {
-  const [d, setD] = useState({ title: '', type: 'proof_collection', verification_mode: 'manual', description: '', reward_xp: 50, channel_id: '', one_per_user: true, task_url: '', raid_goals: {} });
+function CreateForm({ guildId, channels, plan, xStatus = 'disabled', onManageKey, onCreated }) {
+  const [d, setD] = useState({ title: '', type: 'proof_collection', verification_mode: 'manual', description: '', reward_xp: 50, channel_id: '', one_per_user: true, task_url: '', raid_goals: {}, auto_verify_x: false });
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const isRaid = d.type === 'raid';
+  const isPro = plan === 'pro';
 
   async function create() {
     setSaving(true); setError(null);
-    const { raid_goals, ...rest } = d;
+    const { raid_goals, auto_verify_x, ...rest } = d;
     const body = { ...rest, task_url: rest.task_url || null };
-    if (isRaid) body.settings = { raid_goals: cleanGoals(raid_goals) };
+    if (isRaid) body.settings = { raid_goals: cleanGoals(raid_goals), auto_verify_x: !!(isPro && auto_verify_x) };
     try { await guildizerApi.post(`/api/guilds/${guildId}/campaigns`, body); onCreated(); }
     catch (e) { setError(e?.response?.data?.message || e?.response?.data?.error || 'Could not create campaign.'); }
     finally { setSaving(false); }
@@ -142,6 +268,17 @@ function CreateForm({ guildId, channels, onCreated }) {
               </Grid>
             ))}
           </Grid>
+          <FormControlLabel sx={{ mt: 0.5 }}
+            control={<Switch checked={isPro && d.auto_verify_x} disabled={!isPro}
+              onChange={(e) => setD({ ...d, auto_verify_x: e.target.checked })} />}
+            label="Auto-verify on X (Pro) — confirm reposts / comments / quotes / follows in real time" />
+          {isPro ? (
+            <XAutoverifyStatus status={xStatus} enabled={d.auto_verify_x} onManageKey={onManageKey} />
+          ) : (
+            <Typography variant="caption" color="text.secondary" display="block">
+              Real-time X verification is a Pro feature. You can still run the raid with manual proof review.
+            </Typography>
+          )}
         </>
       )}
       <Grid container spacing={1}>
@@ -154,7 +291,7 @@ function CreateForm({ guildId, channels, onCreated }) {
   );
 }
 
-function CampaignDetail({ guildId, campaignId, channels, plan, onBack }) {
+function CampaignDetail({ guildId, campaignId, channels, plan, xStatus = 'disabled', onXStatus, onBack }) {
   const base = `/api/guilds/${guildId}/campaigns/${campaignId}`;
   const [c, setC] = useState(null);
   const [subs, setSubs] = useState([]);
@@ -162,6 +299,7 @@ function CampaignDetail({ guildId, campaignId, channels, plan, onBack }) {
   const [task, setTask] = useState({ title: '', reward_xp: 25, verification_mode: 'manual', task_url: '' });
   const [msg, setMsg] = useState(null);
   const [winnerCount, setWinnerCount] = useState(1);
+  const [keyDialogOpen, setKeyDialogOpen] = useState(false);
 
   async function load() {
     const { data } = await guildizerApi.get(base); setC(data);
@@ -273,7 +411,8 @@ function CampaignDetail({ guildId, campaignId, channels, plan, onBack }) {
 
         {c.type === 'raid' && (
           <Grid item xs={12}>
-            <RaidSetupCard campaign={c} onSave={patch} />
+            <RaidSetupCard campaign={c} onSave={patch} plan={plan} xStatus={xStatus}
+              onManageKey={() => setKeyDialogOpen(true)} />
           </Grid>
         )}
 
@@ -300,7 +439,8 @@ function CampaignDetail({ guildId, campaignId, channels, plan, onBack }) {
         </Grid>
 
         <Grid item xs={12}>
-          <FieldsCard guildId={guildId} campaignId={campaignId} />
+          <FieldsCard guildId={guildId} campaignId={campaignId}
+            autoVerifyActive={c.type === 'raid' && !!(c.settings || {}).auto_verify_x && plan === 'pro'} />
         </Grid>
 
         <Grid item xs={12}>
@@ -352,14 +492,18 @@ function CampaignDetail({ guildId, campaignId, channels, plan, onBack }) {
           </GuildizerCollapsibleCard>
         </Grid>
       </Grid>
+      <XKeyDialog open={keyDialogOpen} onClose={() => setKeyDialogOpen(false)}
+        onSaved={(s) => { if (s && onXStatus) onXStatus(s); }} />
     </Box>
   );
 }
 
 
-function RaidSetupCard({ campaign, onSave }) {
+function RaidSetupCard({ campaign, onSave, plan, xStatus = 'disabled', onManageKey }) {
   const [tweet, setTweet] = useState(campaign.task_url || '');
   const [goals, setGoals] = useState((campaign.settings || {}).raid_goals || {});
+  const [autoVerify, setAutoVerify] = useState(!!(campaign.settings || {}).auto_verify_x);
+  const isPro = plan === 'pro';
   return (
     <GuildizerCollapsibleCard id="gz.campaigns.raid_setup" title="🐦 Twitter Raid setup">
       <Typography variant="caption" color="text.secondary" display="block" mb={1}>
@@ -375,15 +519,36 @@ function RaidSetupCard({ campaign, onSave }) {
           </Grid>
         ))}
       </Grid>
-      <Button size="small" variant="outlined" sx={{ mt: 1.5 }}
-        onClick={() => onSave({ task_url: tweet || null, settings: { raid_goals: cleanGoals(goals) } })}>
-        Save raid setup
-      </Button>
+      <FormControlLabel sx={{ mt: 0.5 }}
+        control={<Switch checked={isPro && autoVerify} disabled={!isPro}
+          onChange={(e) => setAutoVerify(e.target.checked)} />}
+        label="Auto-verify on X (Pro) — confirm reposts / comments / quotes / follows in real time" />
+      {isPro ? (
+        <>
+          <XAutoverifyStatus status={xStatus} enabled={autoVerify} onManageKey={onManageKey} />
+          {autoVerify && (
+            <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+              Members tap the button and enter their X @username; reposts, comments, quotes and
+              follows are checked live. Likes need manual review (X keeps likes private).
+            </Typography>
+          )}
+        </>
+      ) : (
+        <Typography variant="caption" color="text.secondary" display="block">
+          Real-time X verification is a Pro feature. Members still submit proof for manual review.
+        </Typography>
+      )}
+      <Box>
+        <Button size="small" variant="outlined" sx={{ mt: 1.5 }}
+          onClick={() => onSave({ task_url: tweet || null, settings: { raid_goals: cleanGoals(goals), auto_verify_x: !!(isPro && autoVerify) } })}>
+          Save raid setup
+        </Button>
+      </Box>
     </GuildizerCollapsibleCard>
   );
 }
 
-function FieldsCard({ guildId, campaignId }) {
+function FieldsCard({ guildId, campaignId, autoVerifyActive = false }) {
   const [fields, setFields] = useState([]);
   const [label, setLabel] = useState('');
 
@@ -401,7 +566,9 @@ function FieldsCard({ guildId, campaignId }) {
   return (
     <GuildizerCollapsibleCard id="gz.campaigns.proof_form_fields" title="Proof form fields">
       <Typography variant="caption" color="text.secondary" display="block" mb={1}>
-        Extra inputs shown in the proof popup (max 4) — e.g. wallet address, username on X.
+        {autoVerifyActive
+          ? 'Auto-verify already confirms the X actions — you only need extra fields for things the bot can’t read from X (wallet, email, UID for a reward).'
+          : 'Extra inputs shown in the proof popup (max 4) — e.g. wallet address, username on X.'}
       </Typography>
       <Stack direction="row" spacing={1} alignItems="center">
         <TextField size="small" label="Field label" value={label} inputProps={{ maxLength: 45 }}

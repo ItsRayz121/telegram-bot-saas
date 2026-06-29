@@ -48,6 +48,9 @@ class User(Base):
     # Per-user UI prefs. {"cards": {"<card_id>": bool}} — open/closed state of each
     # collapsible settings card. Absent/None = closed by default. See ui_prefs_api.py.
     ui_preferences = Column(JSON, nullable=True)
+    # Account-level bring-your-own twitterapi.io key (Fernet-encrypted, crypto.py) for
+    # X raid auto-verify — one key covers all the user's guilds. NULL = use platform key.
+    twitter_api_key_encrypted = Column(Text, nullable=True)
 
     # Guilds this user personally owns (owner_id on Guild). Distinct from the
     # broader membership/manage relationship captured by UserGuild.

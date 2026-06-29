@@ -56,6 +56,8 @@ _HEAL_COLUMNS = [
     ("users", "notification_prefs", "JSON"),
     # Per-user UI prefs: open/closed state of collapsible settings cards
     ("users", "ui_preferences", "JSON"),
+    # Account-level bring-your-own twitterapi.io key (X raid auto-verify), encrypted
+    ("users", "twitter_api_key_encrypted", "TEXT"),
 ]
 
 

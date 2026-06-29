@@ -34,6 +34,10 @@ class Config:
     VISION_MODEL = os.getenv("GUILDIZER_VISION_MODEL", "gpt-4o-mini")
     AI_MAX_TOKENS = int(os.getenv("GUILDIZER_AI_MAX_TOKENS", "600"))
 
+    # twitterapi.io — shared platform key for X raid auto-verify (owners can also
+    # bring their own account-level key from the dashboard). Optional: absent = manual.
+    TWITTERAPI_IO_KEY = os.getenv("TWITTERAPI_IO_KEY", "")
+
     # Billing — NOWPayments (reuse the account; separate webhook endpoint)
     NOWPAYMENTS_API_KEY = os.getenv("NOWPAYMENTS_API_KEY", "")
     NOWPAYMENTS_IPN_SECRET = os.getenv("NOWPAYMENTS_IPN_SECRET", "")

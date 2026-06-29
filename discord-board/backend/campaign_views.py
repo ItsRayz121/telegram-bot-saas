@@ -28,15 +28,19 @@ def _result_text(status: str, reward: int) -> str:
 
 
 class ProofModal(discord.ui.Modal):
-    def __init__(self, cid: int, tid: int, title: str, fields: list[dict] | None = None) -> None:
+    def __init__(self, cid: int, tid: int, title: str, fields: list[dict] | None = None,
+                 prompt_label: str = "Your proof (link or text)",
+                 prompt_short: bool = False) -> None:
         super().__init__(title=f"Submit proof · {title}"[:45])
         self.cid = cid
         self.tid = tid
+        # For an auto-verify raid, prompt_label becomes "Your X @username" (short input)
+        # so the bot can confirm the actions live against twitterapi.io.
         self.value = discord.ui.TextInput(
-            label="Your proof (link or text)",
-            style=discord.TextStyle.paragraph,
+            label=prompt_label[:45],
+            style=discord.TextStyle.short if prompt_short else discord.TextStyle.paragraph,
             required=True,
-            max_length=500,
+            max_length=120 if prompt_short else 500,
         )
         self.add_item(self.value)
         # up to 4 admin-defined inputs (modal cap is 5 components total)
@@ -81,6 +85,14 @@ class ProofButton(discord.ui.DynamicItem[discord.ui.Button], template=r"gz:proof
             await interaction.response.send_message("This campaign is closed.", ephemeral=True)
             return
         fields = ctx.get("fields") or []
+        # Auto-verify raid: ask for the participant's X @username so the bot can
+        # confirm reposts / comments / quotes / follows live against twitterapi.io.
+        if ctx.get("type") == "raid" and ctx.get("auto_verify_x"):
+            await interaction.response.send_modal(
+                ProofModal(self.cid, self.tid, ctx["title"], fields,
+                           prompt_label="Your X @username", prompt_short=True)
+            )
+            return
         if ctx["verification_mode"] == "honor" and not fields:
             status, reward = await asyncio.to_thread(
                 cr.create_submission, self.cid, self.tid,
@@ -119,6 +131,13 @@ def build_embed(data: dict, brand: str = "Guildizer") -> discord.Embed:
         line = " · ".join(f"{_gl.get(k, k)}: {v}" for k, v in goals.items() if v)
         if line:
             embed.add_field(name="🎯 Raid goals", value=line[:1024], inline=False)
+        if data.get("auto_verify_x"):
+            embed.add_field(
+                name="⚡ Auto-verified",
+                value="Tap below and enter your X @username — reposts, comments, quotes "
+                      "and follows are confirmed automatically.",
+                inline=False,
+            )
     # White-label bots brand the footer with their own name, not ours.
     embed.set_footer(text=f"{brand} • tap a button below to submit proof")
     return embed

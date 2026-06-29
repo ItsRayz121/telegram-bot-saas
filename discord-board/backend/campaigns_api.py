@@ -26,7 +26,9 @@ from sqlalchemy.orm.attributes import flag_modified
 
 import leveling
 import access
+import twitter_verify
 from auth import login_required
+from crypto import decrypt_token, encrypt_token
 from models import (
     CAMPAIGN_STATUSES,
     CAMPAIGN_TYPES,
@@ -35,6 +37,7 @@ from models import (
     CampaignSubmission,
     CampaignTask,
     Guild,
+    User,
     UserGuild,
 )
 
@@ -121,7 +124,14 @@ def list_campaigns(guild_id: int):
         d["counts"] = _counts(c.id)
         d["task_count"] = len(c.tasks)
         out.append(d)
-    return jsonify(campaigns=out, plan=guild.plan or "free")
+    # Owner-aware 3-state for the auto-verify chip (live | rejected | disabled).
+    # The key is account-level, so this is identical across all the owner's guilds.
+    x_status = "disabled"
+    try:
+        x_status = twitter_verify.autoverify_status(guild.owner_id)
+    except Exception:
+        pass
+    return jsonify(campaigns=out, plan=guild.plan or "free", x_autoverify_status=x_status)
 
 
 @campaigns_bp.post("/api/guilds/<int:guild_id>/campaigns")
@@ -432,3 +442,69 @@ def campaign_leaderboard(guild_id: int, cid: int):
         for i, (uid, uname, cnt, xp) in enumerate(rows, start=1)
     ]
     return jsonify(leaderboard=board)
+
+
+# --- account-level bring-your-own twitterapi.io key ---------------------------
+# Account-level (one key covers every guild the user manages), so no guild in the
+# path. Lets heavy raid users verify on their own twitterapi.io credits.
+def _mask(raw: str) -> str:
+    if not raw:
+        return ""
+    return raw[:4] + "****" + raw[-4:] if len(raw) > 8 else "****"
+
+
+@campaigns_bp.get("/api/account/x-verify-key")
+@login_required
+def get_x_verify_key():
+    u = g.db.get(User, g.user_id)
+    masked = None
+    if u and getattr(u, "twitter_api_key_encrypted", None):
+        raw = decrypt_token(u.twitter_api_key_encrypted)
+        masked = _mask(raw) if raw else None
+    status = "disabled"
+    try:
+        status = twitter_verify.autoverify_status(g.user_id)
+    except Exception:
+        pass
+    return jsonify(configured=bool(masked), masked_key=masked, status=status,
+                   using_own_key=bool(masked))
+
+
+@campaigns_bp.post("/api/account/x-verify-key")
+@login_required
+def save_x_verify_key():
+    body = request.get_json(silent=True) or {}
+    api_key = str(body.get("api_key") or "").strip()
+    if not api_key or "****" in api_key:
+        return jsonify(error="Paste your twitterapi.io API key"), 400
+    # Validate live before persisting so a bad key is caught here, not silently later.
+    try:
+        probe = twitter_verify._probe_key(api_key)
+    except Exception:
+        probe = "ok"
+    if probe != "ok":
+        reason = probe.replace("error:", "").strip() or "key was rejected"
+        return jsonify(error=f"twitterapi.io rejected this key ({reason}). Double-check it and try again."), 400
+    u = g.db.get(User, g.user_id)
+    if u is None:
+        return jsonify(error="not_found"), 404
+    u.twitter_api_key_encrypted = encrypt_token(api_key)
+    g.db.commit()
+    return jsonify(configured=True, status="live", using_own_key=True,
+                   message="twitterapi.io key saved — X auto-verify is live on your own credits.")
+
+
+@campaigns_bp.delete("/api/account/x-verify-key")
+@login_required
+def delete_x_verify_key():
+    u = g.db.get(User, g.user_id)
+    if u is not None:
+        u.twitter_api_key_encrypted = None
+        g.db.commit()
+    status = "disabled"
+    try:
+        status = twitter_verify.autoverify_status(g.user_id)
+    except Exception:
+        pass
+    return jsonify(configured=False, status=status, using_own_key=False,
+                   message="Removed. X auto-verify now uses the platform key (if available).")

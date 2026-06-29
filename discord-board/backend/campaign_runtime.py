@@ -8,8 +8,9 @@ from __future__ import annotations
 from datetime import datetime
 
 import leveling
+import twitter_verify
 from database import SessionLocal
-from models import Campaign, CampaignCustomField, CampaignSubmission, CampaignTask
+from models import Campaign, CampaignCustomField, CampaignSubmission, CampaignTask, Guild
 
 
 def campaigns_to_post() -> list[tuple[int, int]]:
@@ -42,6 +43,7 @@ def load_for_post(cid: int) -> dict | None:
             "type": c.type,
             "task_url": c.task_url,
             "raid_goals": (c.settings or {}).get("raid_goals") or {},
+            "auto_verify_x": bool((c.settings or {}).get("auto_verify_x")),
             "reward_xp": c.reward_xp or 0,
             "reward_label": c.reward_label,
             "verification_mode": c.verification_mode,
@@ -104,12 +106,15 @@ def submit_context(cid: int, tid: int) -> dict | None:
                 .all()
             )
         ]
+        auto_verify_x = bool((c.settings or {}).get("auto_verify_x"))
         if tid:
             t = db.get(CampaignTask, tid)
             if t is None or t.campaign_id != cid:
                 return None
-            return {"verification_mode": t.verification_mode, "title": t.title, "fields": fields}
-        return {"verification_mode": c.verification_mode, "title": c.title, "fields": fields}
+            return {"verification_mode": t.verification_mode, "title": t.title, "fields": fields,
+                    "type": c.type, "auto_verify_x": auto_verify_x}
+        return {"verification_mode": c.verification_mode, "title": c.title, "fields": fields,
+                "type": c.type, "auto_verify_x": auto_verify_x}
     finally:
         db.close()
         SessionLocal.remove()
@@ -172,6 +177,20 @@ def create_submission(cid: int, tid: int, user_id: int, username: str, value: st
             db.commit()
             return ("verified", reward)
 
+        # Twitter Raid X auto-verify (Pro): try to confirm the participant's actions
+        # live before falling back to manual review. Purely additive — any
+        # uncertainty/error leaves the submission pending (never auto-rejects).
+        if c.type == "raid" and (c.settings or {}).get("auto_verify_x"):
+            if _raid_autoverifies(db, c, value, extra_fields):
+                sub.status = "verified"
+                sub.reward_granted = reward
+                sub.reviewed_at = datetime.utcnow()
+                if reward > 0:
+                    leveling.add_xp(db, c.guild_id, user_id, reward, username, reason=f"campaign:{cid}")
+                db.add(sub)
+                db.commit()
+                return ("verified", reward)
+
         sub.status = "pending"
         db.add(sub)
         db.commit()
@@ -179,3 +198,39 @@ def create_submission(cid: int, tid: int, user_id: int, username: str, value: st
     finally:
         db.close()
         SessionLocal.remove()
+
+
+def _extract_handle(value, extra_fields):
+    """Best-effort X handle from the participant's modal input — the main value
+    first (the raid modal asks for it directly), then any extra field."""
+    h = twitter_verify.normalize_handle(value) if value else None
+    if h:
+        return h
+    for v in (extra_fields or {}).values():
+        h = twitter_verify.normalize_handle(v)
+        if h:
+            return h
+    return None
+
+
+def _raid_autoverifies(db, c, value, extra_fields) -> bool:
+    """True iff the raid's provable goals verify live for this participant. Pro-gated
+    and key-gated; any uncertainty/error returns False (stays pending). Never raises."""
+    try:
+        guild = db.get(Guild, c.guild_id)
+        if guild is None or not guild.is_pro:
+            return False
+        owner_id = guild.owner_id
+        if not twitter_verify.enabled(owner_id):
+            return False
+        handle = _extract_handle(value, extra_fields)
+        if not handle:
+            return False
+        goals = (c.settings or {}).get("raid_goals") or {}
+        follow_target = (c.settings or {}).get("raid_follow_target")
+        result = twitter_verify.verify_raid(
+            c.task_url, goals, handle, owner_user_id=owner_id, follow_target=follow_target,
+        )
+        return result.get("overall") == "verified"
+    except Exception:
+        return False

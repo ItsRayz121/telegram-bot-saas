@@ -59,4 +59,12 @@ export const guildizerUiPrefs = {
   update: (data) => guildizerApi.put('/api/ui-prefs', data),
 };
 
+// Account-level bring-your-own twitterapi.io key for X raid auto-verify.
+// Account-scoped (one key covers every guild the user manages).
+export const guildizerXVerifyKey = {
+  get: () => guildizerApi.get('/api/account/x-verify-key'),
+  save: (apiKey) => guildizerApi.post('/api/account/x-verify-key', { api_key: apiKey }),
+  delete: () => guildizerApi.delete('/api/account/x-verify-key'),
+};
+
 export default guildizerApi;
