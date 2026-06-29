@@ -200,13 +200,24 @@ def build_campaign_message(campaign, bot_username):
         logger.debug("leaderboard button check failed", exc_info=True)
 
     # Opt-in: a richer Mini App task page (always via the OFFICIAL bot, since the
-    # Mini App validates initData against the official token only).
+    # Mini App validates initData against the official token only). Action-flow
+    # campaigns (per-action verify) run entirely in the DM, so for them this button
+    # routes to the DM flow instead of the Mini App — one consistent verify path.
     if (campaign.settings or {}).get("enable_miniapp"):
-        from .config import Config
-        official = (Config.TELEGRAM_BOT_USERNAME or "telegizer_bot").lstrip("@")
-        rows.append([
-            InlineKeyboardButton("🚀 Open in App", url=f"https://t.me/{official}?startapp=engtask_{campaign.id}")
-        ])
+        action_flow = False
+        try:
+            from . import engagement as eng
+            action_flow = eng.has_action_flow(campaign)
+        except Exception:
+            action_flow = False
+        if action_flow:
+            rows.append([InlineKeyboardButton(
+                "🚀 Open in App", url=f"https://t.me/{bot_username}?start=eng_{campaign.id}")])
+        else:
+            from .config import Config
+            official = (Config.TELEGRAM_BOT_USERNAME or "telegizer_bot").lstrip("@")
+            rows.append([InlineKeyboardButton(
+                "🚀 Open in App", url=f"https://t.me/{official}?startapp=engtask_{campaign.id}")])
 
     return text, InlineKeyboardMarkup(rows)
 

@@ -66,6 +66,12 @@ def submit_campaign(campaign_id):
     if not c:
         return jsonify({"error": "Campaign not found"}), 404
 
+    # Per-action verify campaigns (X raids / X social-tasks) run their tap-each-
+    # action-then-Verify flow only in the bot DM — the flat Mini App form can't
+    # drive it. Send the user to the chat instead of creating a mismatched row.
+    if eng.has_action_flow(c):
+        return jsonify({"error": "Please complete this campaign from the bot chat — tap “Take Part” on the group post."}), 400
+
     data = request.get_json() or {}
     answers = data.get("answers") or {}
     if not isinstance(answers, dict):
