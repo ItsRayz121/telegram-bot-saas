@@ -491,15 +491,15 @@ export default function CampaignManager({ botId, groupId, userTier = 'free' }) {
           <Table size="small" sx={{ '& td, & th': { px: { xs: 1, md: 1.25 } }, tableLayout: { md: 'fixed' } }}>
             <TableHead>
               <TableRow sx={{ '& th': { fontWeight: 700, whiteSpace: 'nowrap' } }}>
-                <TableCell sx={{ width: { md: '24%' } }}>Title</TableCell>
+                <TableCell sx={{ width: { md: '19%' } }}>Title</TableCell>
                 <TableCell sx={{ width: { md: '11%' } }}>Type</TableCell>
                 <TableCell sx={{ width: { md: '9%' } }}>Status</TableCell>
                 <TableCell sx={{ width: { md: '13%' } }}>Group post</TableCell>
-                <TableCell align="right" sx={{ width: { md: '7%' } }}>Verified</TableCell>
-                <TableCell align="right" sx={{ width: { md: '7%' } }}>Pending</TableCell>
-                <TableCell align="right" sx={{ width: { md: '6%' } }}>Total</TableCell>
-                <TableCell sx={{ width: { md: '11%' } }}>Deadline</TableCell>
-                <TableCell align="right" sx={{ width: { md: '9%' } }}>Actions</TableCell>
+                <TableCell align="center" sx={{ width: { md: '9%' } }}>Verified</TableCell>
+                <TableCell align="center" sx={{ width: { md: '9%' } }}>Pending</TableCell>
+                <TableCell align="center" sx={{ width: { md: '8%' } }}>Total</TableCell>
+                <TableCell sx={{ width: { md: '12%' } }}>Deadline</TableCell>
+                <TableCell align="right" sx={{ width: { md: '10%' } }}>Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -703,9 +703,9 @@ function CampaignRow({ c, botId, groupId, onChanged, onManage }) {
       </TableCell>
       <TableCell><Chip size="small" label={c.status} color={STATUS_COLOR[c.status] || 'default'} /></TableCell>
       <TableCell><PostStatusCell c={c} botId={botId} groupId={groupId} onChanged={onChanged} /></TableCell>
-      <TableCell align="right">{c.submissions_verified ?? 0}</TableCell>
-      <TableCell align="right">{c.submissions_pending ?? 0}</TableCell>
-      <TableCell align="right">{c.submissions_total ?? 0}</TableCell>
+      <TableCell align="center">{c.submissions_verified ?? 0}</TableCell>
+      <TableCell align="center">{c.submissions_pending ?? 0}</TableCell>
+      <TableCell align="center">{c.submissions_total ?? 0}</TableCell>
       <TableCell>
         {c.ends_at ? (
           <Tooltip title={new Date(c.ends_at).toLocaleString()}>
