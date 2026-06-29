@@ -137,9 +137,9 @@ def _panel_text(title: str, goals: dict, results: dict | None, *, status: str | 
     return "\n".join(lines)
 
 
-class RaidHandleModal(discord.ui.Modal, title="Join raid"):
+class RaidHandleModal(discord.ui.Modal):
     def __init__(self, cid: int, goals: dict, ctitle: str) -> None:
-        super().__init__()
+        super().__init__(title="Join raid")
         self.cid = cid
         self.goals = goals
         self.ctitle = ctitle

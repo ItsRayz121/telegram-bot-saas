@@ -244,19 +244,21 @@ def verify_raid_submission(cid: int, user_id: int, username: str, handle: str):
         goals = (c.settings or {}).get("raid_goals") or {}
         reward = c.reward_xp or 0
 
-        existing = None
-        if c.one_per_user:
-            existing = (
-                db.query(CampaignSubmission)
-                .filter(
-                    CampaignSubmission.campaign_id == cid,
-                    CampaignSubmission.user_id == user_id,
-                    CampaignSubmission.status != "rejected",
-                )
-                .first()
+        # A raid panel is inherently one-record-per-participant — ALWAYS reuse an
+        # existing (non-rejected) submission so repeated Verify taps are idempotent
+        # (no duplicate rows or XP farming, even when one_per_user is off).
+        existing = (
+            db.query(CampaignSubmission)
+            .filter(
+                CampaignSubmission.campaign_id == cid,
+                CampaignSubmission.user_id == user_id,
+                CampaignSubmission.status != "rejected",
             )
-            if existing is not None and existing.status == "verified":
-                return ("duplicate", 0, existing.proof.get("results", {}) if existing.proof else {})
+            .order_by(CampaignSubmission.id.desc())
+            .first()
+        )
+        if existing is not None and existing.status == "verified":
+            return ("duplicate", 0, existing.proof.get("results", {}) if existing.proof else {})
 
         # Live verification (Pro + key + auto-verify gated). Any uncertainty → pending.
         results = {}
