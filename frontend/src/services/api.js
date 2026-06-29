@@ -567,6 +567,14 @@ export const apiKeys = {
       : api.post(`/api/bots/${botId}/groups/${groupId}/api-keys/test`, data),
 };
 
+// Account-level bring-your-own twitterapi.io key for X auto-verify. Account-scoped
+// (one key covers all the user's groups), so no bot/group in the path.
+export const xVerifyKey = {
+  get: () => api.get('/api/account/x-verify-key'),
+  save: (apiKey) => api.post('/api/account/x-verify-key', { api_key: apiKey }),
+  delete: () => api.delete('/api/account/x-verify-key'),
+};
+
 export const analytics = {
   getBotAnalytics: (botId, params) =>
     api.get(`/api/bots/${botId}/analytics`, { params }),

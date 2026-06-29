@@ -12,7 +12,7 @@ import {
   CheckCircle, Cancel, Visibility, Send, Replay, ArrowDropDown,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
-import { engagement } from '../services/api';
+import { engagement, xVerifyKey } from '../services/api';
 
 const TYPES = [
   { value: 'social_task',       label: 'Social Task',         emoji: '📢', chip: 'Social',   help: 'Like / repost / follow / subscribe / join a channel.' },
@@ -322,7 +322,9 @@ export default function CampaignManager({ botId, groupId, userTier = 'free' }) {
   // Whether X auto-verify can actually run (twitterapi.io key live + admin switch on).
   // When false, the "Auto-verify on X" toggle silently degrades to manual review —
   // so the builder warns instead of leaving the owner guessing.
-  const [xAutoverifyAvailable, setXAutoverifyAvailable] = useState(true);
+  // Owner-aware 3-state for the auto-verify chip: 'live' | 'rejected' | 'disabled'.
+  const [xAutoverifyStatus, setXAutoverifyStatus] = useState('disabled');
+  const [xKeyDialogOpen, setXKeyDialogOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [createType, setCreateType] = useState(null);   // non-null => wizard open, pre-set to this type
   const [createAnchor, setCreateAnchor] = useState(null); // Create ▾ menu anchor
@@ -334,8 +336,7 @@ export default function CampaignManager({ botId, groupId, userTier = 'free' }) {
     try {
       const res = await engagement.list(botId, groupId);
       setCampaigns(res.data.campaigns || []);
-      // Default to true when the field is absent (older backend) so we never warn spuriously.
-      setXAutoverifyAvailable(res.data.x_autoverify_available !== false);
+      if (res.data.x_autoverify_status) setXAutoverifyStatus(res.data.x_autoverify_status);
     } catch {
       toast.error('Failed to load campaigns');
     } finally {
@@ -517,11 +518,18 @@ export default function CampaignManager({ botId, groupId, userTier = 'free' }) {
       {createType && (
         <CampaignWizard
           botId={botId} groupId={groupId} initialType={createType} isPaid={isPaid}
-          xAutoverifyAvailable={xAutoverifyAvailable}
+          xAutoverifyStatus={xAutoverifyStatus}
+          onManageKey={() => setXKeyDialogOpen(true)}
           onClose={() => setCreateType(null)}
           onCreated={() => { setCreateType(null); load(); }}
         />
       )}
+
+      <XKeyDialog
+        open={xKeyDialogOpen}
+        onClose={() => setXKeyDialogOpen(false)}
+        onSaved={(s) => { if (s) setXAutoverifyStatus(s); load(); }}
+      />
       {manageId != null && (
         <CampaignManageDialog
           botId={botId} groupId={groupId} campaignId={manageId}
@@ -740,10 +748,159 @@ function CampaignRow({ c, botId, groupId, onChanged, onManage }) {
   );
 }
 
+// ── X auto-verify status signal ───────────────────────────────────────────────
+// 3-state health signal for the "Auto-verify on X" toggle so the owner knows —
+// before they rely on it — whether actions will confirm automatically or fall back
+// to manual review. The status is account-level (the owner's BYO key or the shared
+// platform key), so it's identical across every group and is fetched once with the
+// campaign list — no per-group cost even with 50 groups.
+const X_STATUS_META = {
+  live: {
+    color: 'success', dot: '🟢', label: 'X auto-verify: live',
+    detail: 'Reposts, comments, quotes & follows confirm automatically in real time. (A like still needs the member to open the post for ~30s — X keeps likes private.)',
+  },
+  rejected: {
+    color: 'warning', dot: '🟡', label: 'X auto-verify: key rejected',
+    detail: 'A key is configured but X rejected it (invalid key, no credits, or rate-limited). Until it’s fixed, submissions fall back to manual review — you’ll approve them under Manage.',
+  },
+  disabled: {
+    color: 'default', dot: '⚪', label: 'X auto-verify: not configured',
+    detail: 'No twitterapi.io key is available, so submissions go to manual review. Add your own key to confirm actions automatically.',
+  },
+};
+
+function XAutoverifyStatus({ status, enabled, onManageKey }) {
+  const meta = X_STATUS_META[status] || X_STATUS_META.disabled;
+  // Toggle OFF → a compact, clickable chip so the owner can check health / add a key
+  // proactively. Toggle ON → the full confirmation so enabling never leaves them guessing.
+  if (!enabled) {
+    return (
+      <Tooltip title={meta.detail}>
+        <Chip
+          size="small" variant="outlined" color={meta.color}
+          label={`${meta.dot} ${meta.label}`}
+          onClick={onManageKey}
+          sx={{ mt: 1 }}
+        />
+      </Tooltip>
+    );
+  }
+  const severity = status === 'live' ? 'success' : status === 'rejected' ? 'warning' : 'info';
+  return (
+    <Alert
+      severity={severity}
+      sx={{ mt: 1 }}
+      action={onManageKey && (
+        <Button color="inherit" size="small" onClick={onManageKey} sx={{ whiteSpace: 'nowrap' }}>
+          {status === 'live' ? 'Manage key' : 'Add your key'}
+        </Button>
+      )}
+    >
+      <strong>{meta.dot} {meta.label}</strong>
+      <Typography variant="caption" display="block">{meta.detail}</Typography>
+    </Alert>
+  );
+}
+
+// ── Bring-your-own twitterapi.io key (account-level) ──────────────────────────
+function XKeyDialog({ open, onClose, onSaved }) {
+  const [info, setInfo] = useState(null);   // { configured, masked_key, status, using_own_key }
+  const [keyInput, setKeyInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setKeyInput('');
+    setLoading(true);
+    xVerifyKey.get()
+      .then((r) => setInfo(r.data))
+      .catch(() => setInfo(null))
+      .finally(() => setLoading(false));
+  }, [open]);
+
+  const save = async () => {
+    if (!keyInput.trim()) { toast.error('Paste your twitterapi.io key'); return; }
+    setBusy(true);
+    try {
+      const r = await xVerifyKey.save(keyInput.trim());
+      toast.success(r.data.message || 'Key saved');
+      onSaved?.(r.data.status);
+      onClose();
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Failed to save key');
+    } finally { setBusy(false); }
+  };
+
+  const remove = async () => {
+    setBusy(true);
+    try {
+      const r = await xVerifyKey.delete();
+      toast.success(r.data.message || 'Key removed');
+      onSaved?.(r.data.status);
+      onClose();
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Failed to remove key');
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <Dialog open={open} onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Your twitterapi.io key</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Add your own <strong>twitterapi.io</strong> key to run X auto-verify on your own
+          credits instead of the shared platform key. It’s <strong>account-level</strong> — one
+          key covers every group you manage. Get a key at{' '}
+          <a href="https://twitterapi.io" target="_blank" rel="noopener noreferrer">twitterapi.io</a>.
+        </Typography>
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}><CircularProgress size={24} /></Box>
+        ) : (
+          <>
+            {info?.configured && (
+              <Alert
+                severity={info.status === 'live' ? 'success' : info.status === 'rejected' ? 'warning' : 'info'}
+                sx={{ mb: 2 }}
+              >
+                Saved key {info.masked_key ? `(${info.masked_key})` : ''} — current status:{' '}
+                <strong>{info.status}</strong>.
+              </Alert>
+            )}
+            <TextField
+              fullWidth type="password" label="twitterapi.io API key"
+              placeholder={info?.configured ? 'Paste a new key to replace' : 'Paste your key'}
+              value={keyInput} onChange={(e) => setKeyInput(e.target.value)}
+              autoComplete="off"
+            />
+            <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+              We check the key against the live API before saving, so a bad key is caught here.
+            </Typography>
+          </>
+        )}
+      </DialogContent>
+      <DialogActions>
+        {info?.configured && (
+          <Button color="error" onClick={remove} disabled={busy}>Remove key</Button>
+        )}
+        <Box sx={{ flex: 1 }} />
+        <Button onClick={onClose} disabled={busy}>Cancel</Button>
+        <Button variant="contained" onClick={save} disabled={busy || !keyInput.trim()}>
+          {busy ? 'Saving…' : 'Save & verify'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 // ── Create wizard ─────────────────────────────────────────────────────────────
 
-function CampaignWizard({ botId, groupId, initialType, isPaid = false, xAutoverifyAvailable = true, onClose, onCreated }) {
+function CampaignWizard({ botId, groupId, initialType, isPaid = false, xAutoverifyStatus = 'disabled', onManageKey, onClose, onCreated }) {
   const [step, setStep] = useState(0);
+  // When auto-verify handles the X actions, proof fields are only for extra data the
+  // bot can't read from X (wallet, email, UID…), so we collapse them by default to
+  // stop them looking redundant. Owners can expand to add a field.
+  const [showProofFields, setShowProofFields] = useState(false);
   const cfg0 = typeConfig(initialType);
   const [form, setForm] = useState({
     ...EMPTY_FORM,
@@ -961,20 +1118,16 @@ function CampaignWizard({ botId, groupId, initialType, isPaid = false, xAutoveri
                       }
                       label="Auto-verify on X (Pro) — confirm likes / retweets / comments / follows in real time"
                     />
-                    {form.auto_verify_x && isPaid && !xAutoverifyAvailable && (
-                      <Alert severity="warning" sx={{ mt: 1 }}>
-                        Auto-verify needs the <strong>twitterapi.io key</strong> configured (Admin →
-                        Secrets) and the X auto-verify switch enabled. Until then, reposts / comments /
-                        quotes / follows will fall back to <strong>manual review</strong> instead of
-                        verifying in real time.
-                      </Alert>
+                    {isPaid && (
+                      <XAutoverifyStatus
+                        status={xAutoverifyStatus}
+                        enabled={form.auto_verify_x}
+                        onManageKey={onManageKey}
+                      />
                     )}
                     {form.auto_verify_x && isPaid && (
-                      <Typography variant="caption" color="text.secondary" display="block">
+                      <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
                         Members are asked for their X @username so the bot can verify automatically.
-                        Retweets, comments, quote-tweets and follows verify in real time; <strong>likes
-                        can’t be auto-verified</strong> (X keeps likes private), so a like requires the
-                        member to open the post and wait ~30s before it’s accepted.
                       </Typography>
                     )}
                     {!isPaid && (
@@ -1020,16 +1173,16 @@ function CampaignWizard({ botId, groupId, initialType, isPaid = false, xAutoveri
                           }
                           label="Auto-verify on X (Pro) — check reposts / comments / quotes / follows in real time"
                         />
-                        {form.auto_verify_x && isPaid && !xAutoverifyAvailable && (
-                          <Alert severity="warning" sx={{ mt: 1 }}>
-                            Auto-verify needs the <strong>twitterapi.io key</strong> configured (Admin →
-                            Secrets). Until then, reposts / comments / quotes / follows fall back to
-                            <strong> manual review</strong>.
-                          </Alert>
+                        {isPaid && (
+                          <XAutoverifyStatus
+                            status={xAutoverifyStatus}
+                            enabled={form.auto_verify_x}
+                            onManageKey={onManageKey}
+                          />
                         )}
-                        <Typography variant="caption" color="text.secondary" display="block">
+                        <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
                           {isPaid
-                            ? 'Members do each action in the bot DM and tap Verify; reposts, comments, quotes and follows are checked live. A like requires the member to open the post and wait ~30s before it’s accepted (X keeps real likes private). Off → everything goes to manual review.'
+                            ? 'Members do each action in the bot DM and tap Verify. Off → everything goes to manual review.'
                             : 'Real-time X verification is a Pro/Enterprise feature. On the free plan members still do the actions in the DM, but you approve them manually.'}
                         </Typography>
                       </>
@@ -1050,10 +1203,40 @@ function CampaignWizard({ botId, groupId, initialType, isPaid = false, xAutoveri
                 )}
 
                 <Divider textAlign="left"><Typography variant="caption">Proof fields</Typography></Divider>
-                <Typography variant="caption" color="text.secondary">
-                  {cfg.proofHint || 'Ask participants for proof (UID, link, wallet, screenshot…). The bot collects each field privately and validates the format before accepting it.'}
-                </Typography>
-                <ProofFieldsEditor fields={form.custom_fields} onChange={(v) => set('custom_fields', v)} />
+                {(() => {
+                  // Auto-verify is doing the action-checking, so proof fields are now
+                  // OPTIONAL extras (wallet/email/UID the bot can't read from X). Collapse
+                  // them unless the owner has some configured or chooses to add one.
+                  const autoVerifyActive = isPaid && form.auto_verify_x
+                    && (form.type === 'raid'
+                        || (form.type === 'social_task' && form.platform === 'x'));
+                  const hasFields = (form.custom_fields || []).length > 0;
+                  if (autoVerifyActive && !hasFields && !showProofFields) {
+                    return (
+                      <>
+                        <Typography variant="caption" color="text.secondary">
+                          Auto-verify already confirms the X actions, so you don’t need proof fields.
+                          Add one only for something the bot can’t read from X — a wallet address,
+                          email or UID for a reward.
+                        </Typography>
+                        <Button size="small" startIcon={<Add />} sx={{ alignSelf: 'flex-start' }}
+                          onClick={() => setShowProofFields(true)}>
+                          Add an extra proof field
+                        </Button>
+                      </>
+                    );
+                  }
+                  return (
+                    <>
+                      <Typography variant="caption" color="text.secondary">
+                        {autoVerifyActive
+                          ? 'Optional extras the bot can’t read from X (wallet, email, UID for a reward). The actions themselves are confirmed by auto-verify.'
+                          : (cfg.proofHint || 'Ask participants for proof (UID, link, wallet, screenshot…). The bot collects each field privately and validates the format before accepting it.')}
+                      </Typography>
+                      <ProofFieldsEditor fields={form.custom_fields} onChange={(v) => set('custom_fields', v)} />
+                    </>
+                  );
+                })()}
               </>
             )}
           </Stack>

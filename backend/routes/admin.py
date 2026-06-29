@@ -1505,6 +1505,8 @@ def admin_diagnostics():
     workspace_key_owners = (
         db.session.query(UserApiKey.user_id)
         .filter_by(scope="workspace", is_active=True)
+        # AI providers only — the workspace scope also stores twitterapi_io keys.
+        .filter(UserApiKey.provider.in_(("gemini", "openai", "anthropic", "openrouter", "custom")))
         .distinct().count()
     )
     ai = {

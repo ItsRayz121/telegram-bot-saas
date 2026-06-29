@@ -399,6 +399,9 @@ def get_ai_settings():
     user_key = (
         UserApiKey.query
         .filter_by(user_id=user.id, scope="workspace", is_active=True)
+        # AI providers only — the workspace scope also holds non-AI keys (e.g.
+        # provider="twitterapi_io" for X auto-verify) that must not surface here.
+        .filter(UserApiKey.provider.in_(_AI_PROVIDERS))
         .order_by(UserApiKey.updated_at.desc())
         .first()
     )
@@ -456,7 +459,11 @@ def get_ai_settings():
     })
 
 
-_VALID_PROVIDERS = {"gemini", "openai", "anthropic", "openrouter", "custom"}
+# AI providers stored under the workspace scope. The same scope also holds non-AI
+# keys (provider="twitterapi_io" for X auto-verify), so every workspace AI query must
+# filter to these to avoid cross-contaminating the two features.
+_AI_PROVIDERS = ("gemini", "openai", "anthropic", "openrouter", "custom")
+_VALID_PROVIDERS = set(_AI_PROVIDERS)
 
 
 @workspace_bp.route("/ai-settings", methods=["POST"])
@@ -478,8 +485,10 @@ def save_ai_settings():
     if not api_key:
         return jsonify({"error": "api_key is required"}), 400
 
-    # Deactivate any existing workspace key
-    for existing in UserApiKey.query.filter_by(user_id=user.id, scope="workspace", is_active=True).all():
+    # Deactivate any existing workspace AI key (leave a twitterapi_io key untouched).
+    for existing in (UserApiKey.query
+                     .filter_by(user_id=user.id, scope="workspace", is_active=True)
+                     .filter(UserApiKey.provider.in_(_AI_PROVIDERS)).all()):
         existing.is_active = False
 
     new_key = UserApiKey(
@@ -501,7 +510,9 @@ def save_ai_settings():
 @rate_limit(requests_per_minute=10)
 def delete_ai_settings():
     user = _current_user()
-    for key in UserApiKey.query.filter_by(user_id=user.id, scope="workspace", is_active=True).all():
+    for key in (UserApiKey.query
+                .filter_by(user_id=user.id, scope="workspace", is_active=True)
+                .filter(UserApiKey.provider.in_(_AI_PROVIDERS)).all()):
         key.is_active = False
     db.session.commit()
     return jsonify({"success": True})

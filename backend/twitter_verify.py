@@ -60,18 +60,62 @@ _ACTION_ALIASES = {
 }
 
 
-def _key():
-    """Resolve the twitterapi.io key DB-first (admin vault) with env fallback."""
+def _owner_key(owner_user_id):
+    """A campaign owner's own account-level twitterapi.io key, if they've set one.
+
+    Bring-your-own keys are stored as a workspace-scoped UserApiKey with
+    provider='twitterapi_io' (no migration — reuses the AI-key table), so heavy
+    users can run auto-verify on their own twitterapi.io credits instead of the
+    shared platform key. Account-level by design: one key covers all the owner's
+    groups, mirroring how verification itself is account-wide. Returns "" if none."""
+    if not owner_user_id:
+        return ""
+    try:
+        from .models import UserApiKey
+        from .utils.encryption import decrypt_value
+        rec = (UserApiKey.query
+               .filter_by(user_id=owner_user_id, provider="twitterapi_io",
+                          scope="workspace", is_active=True)
+               .order_by(UserApiKey.updated_at.desc())
+               .first())
+        if rec and rec.api_key_encrypted:
+            return decrypt_value(rec.api_key_encrypted) or ""
+    except Exception:
+        # A failed/aborted query would poison the session for the submit path —
+        # roll back so verification can still fall through to the platform key.
+        try:
+            from .models import db
+            db.session.rollback()
+        except Exception:
+            pass
+    return ""
+
+
+def _platform_key():
+    """The shared platform twitterapi.io key — admin vault first, env fallback."""
     try:
         from . import secret_vault as _sv
-        return _sv.get_secret("TWITTERAPI_IO_KEY")
+        v = _sv.get_secret("TWITTERAPI_IO_KEY")
+        if v:
+            return v
     except Exception:
-        from .config import Config
-        return getattr(Config, "TWITTERAPI_IO_KEY", "") or ""
+        pass
+    from .config import Config
+    return getattr(Config, "TWITTERAPI_IO_KEY", "") or ""
 
 
-def enabled():
-    """True iff X auto-verify can run: the admin kill-switch is on AND a key is set.
+def _key(owner_user_id=None):
+    """Resolve the effective twitterapi.io key for a campaign owner: their own
+    account-level BYO key first, then the shared platform key (admin vault → env).
+
+    Pass the campaign's owner_user_id everywhere in the verify path so BYO owners
+    verify on their own credits; omit it (or pass None) for the platform key."""
+    return _owner_key(owner_user_id) or _platform_key()
+
+
+def enabled(owner_user_id=None):
+    """True iff X auto-verify can run for this owner: the admin kill-switch is on
+    AND a key (the owner's BYO key or the platform key) is set.
 
     The feature flag lets an admin enable/disable the whole feature from the panel
     at any time without a redeploy; with it off, every raid degrades to manual
@@ -82,25 +126,20 @@ def enabled():
             return False
     except Exception:
         pass  # if the flag system is unavailable, fall back to key presence
-    return bool(_key())
+    return bool(_key(owner_user_id))
 
 
-def health_check(*, use_cache=True, cache_ttl=300):
-    """Live, Redis-cached health probe for the twitterapi.io key — for the admin
-    System Health page. Never raises. Returns one of:
+def _cached_probe(key, *, use_cache=True, cache_ttl=300):
+    """Probe a specific twitterapi.io key, Redis-cached by a short hash of the key.
 
-      "disabled"          — no key configured (optional feature, NOT an error)
-      "ok"                — the key authenticates against the live API
-      "error: <reason>"   — key is configured but the API rejected it / is down
-
-    The result is cached in Redis for `cache_ttl` seconds so repeated health-page
-    polls don't burn twitterapi.io credits on every refresh.
-    """
-    key = _key()
+    Hashing the key into the cache name means a BYO key and the platform key cache
+    independently, and rotating a key re-probes instead of serving a stale verdict.
+    Returns "ok" or "error: <reason>". Never raises."""
     if not key:
-        return "disabled"
-
-    cache_key = "twitterapi_io:health"
+        return "error: no key"
+    import hashlib
+    kh = hashlib.sha256(key.encode("utf-8")).hexdigest()[:16]
+    cache_key = f"twitterapi_io:health:{kh}"
     r = None
     if use_cache:
         try:
@@ -120,6 +159,50 @@ def health_check(*, use_cache=True, cache_ttl=300):
         except Exception:
             pass
     return status
+
+
+def health_check(*, use_cache=True, cache_ttl=300):
+    """Live, Redis-cached health probe for the PLATFORM twitterapi.io key — for the
+    admin System Health page. Never raises. Returns one of:
+
+      "disabled"          — no platform key configured (optional feature, NOT an error)
+      "ok"                — the key authenticates against the live API
+      "error: <reason>"   — key is configured but the API rejected it / is down
+
+    The result is cached in Redis for `cache_ttl` seconds so repeated health-page
+    polls don't burn twitterapi.io credits on every refresh.
+    """
+    key = _platform_key()
+    if not key:
+        return "disabled"
+    return _cached_probe(key, use_cache=use_cache, cache_ttl=cache_ttl)
+
+
+def autoverify_status(owner_user_id=None, *, use_cache=True):
+    """Owner-aware 3-state status for the campaign-builder chip. Returns one of:
+
+      "live"     — the effective key (owner's BYO or platform) authenticates, so
+                   actions confirm automatically.
+      "rejected" — a key IS configured but the live probe was rejected (bad key,
+                   no credits, rate-limited) → submissions fall back to manual review.
+      "disabled" — no key for this owner, or the admin kill-switch is off → manual.
+
+    Cheap and scale-safe: the probe is Redis-cached per key (300s) and the key is
+    account-level, so the answer is identical across all of an owner's groups and
+    costs at most one probe per 5 min no matter how many groups they run. Never raises."""
+    try:
+        from . import platform_config
+        if not platform_config.is_feature_enabled("engagement_x_autoverify_enabled", True):
+            return "disabled"
+    except Exception:
+        pass
+    key = _key(owner_user_id)
+    if not key:
+        return "disabled"
+    try:
+        return "live" if _cached_probe(key, use_cache=use_cache) == "ok" else "rejected"
+    except Exception:
+        return "rejected"
 
 
 def _probe_key(key):
@@ -302,7 +385,7 @@ def verify_raid(campaign, username, *, goals=None):
     auto-reject; a blocking goal just leaves the whole submission for review. Stops
     at the first blocking (non-verified, non-manual) goal to bound latency.
     """
-    key = _key()
+    key = _key(getattr(campaign, "owner_user_id", None))
     settings = campaign.settings or {}
     goals = goals or (settings.get("raid_goals") or {})
     tweet_id = extract_tweet_id(campaign.task_url)

@@ -206,6 +206,127 @@ def test_api_key(bot_id, group_id):
         return jsonify({"success": False, "error": str(e)}), 400
 
 
+# ── Account-level twitterapi.io key (BYO X auto-verify) ───────────────────────
+# Stored as a workspace-scoped UserApiKey(provider="twitterapi_io") — no migration,
+# account-level by design (one key covers all the owner's groups, mirroring how X
+# verification itself is account-wide). Lets heavy users run auto-verify on their
+# own twitterapi.io credits instead of the shared platform key.
+
+_X_PROVIDER = "twitterapi_io"
+
+
+def _x_key_record(user):
+    return (UserApiKey.query
+            .filter_by(user_id=user.id, provider=_X_PROVIDER, scope="workspace", is_active=True)
+            .order_by(UserApiKey.updated_at.desc())
+            .first())
+
+
+@api_keys_bp.route("/account/x-verify-key", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def get_x_verify_key():
+    """Return the owner's BYO twitterapi.io key state + the live 3-state status the
+    campaign builder chip reflects (BYO key if set, else the platform key)."""
+    user = _get_current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    rec = _x_key_record(user)
+    masked = None
+    if rec:
+        try:
+            raw = decrypt_value(rec.api_key_encrypted) if rec.api_key_encrypted else ""
+            masked = mask_key(raw) if raw else None
+        except Exception:
+            masked = None
+    status = "disabled"
+    try:
+        from .. import twitter_verify
+        status = twitter_verify.autoverify_status(user.id)
+    except Exception:
+        pass
+    return jsonify({
+        "configured": bool(rec),
+        "masked_key": masked,
+        "status": status,                 # live | rejected | disabled
+        "using_own_key": bool(rec),
+    })
+
+
+@api_keys_bp.route("/account/x-verify-key", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=10)
+def save_x_verify_key():
+    """Save/replace the owner's account-level twitterapi.io key. Probes the key live
+    before saving so a bad key is rejected up-front rather than silently degrading."""
+    user = _get_current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    data = request.get_json() or {}
+    api_key = (data.get("api_key") or "").strip()
+    if not api_key or "****" in api_key:
+        return jsonify({"error": "Paste your twitterapi.io API key"}), 400
+
+    # Validate against the live API before persisting.
+    try:
+        from .. import twitter_verify
+        probe = twitter_verify._probe_key(api_key)
+    except Exception:
+        probe = "ok"  # never block saving on a probe infrastructure error
+    if probe != "ok":
+        reason = probe.replace("error:", "").strip() or "key was rejected"
+        return jsonify({"error": f"twitterapi.io rejected this key ({reason}). Double-check it and try again."}), 400
+
+    encrypted = encrypt_value(api_key)
+    if not encrypted:
+        return jsonify({"error": "Failed to encrypt key. Check server configuration."}), 500
+
+    from datetime import datetime
+    rec = _x_key_record(user)
+    if rec:
+        rec.api_key_encrypted = encrypted
+        rec.updated_at = datetime.utcnow()
+    else:
+        rec = UserApiKey(
+            user_id=user.id, provider=_X_PROVIDER, scope="workspace",
+            api_key_encrypted=encrypted, is_active=True,
+        )
+        db.session.add(rec)
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"save_x_verify_key error: {e}", exc_info=True)
+        return jsonify({"error": "Failed to save key"}), 500
+    return jsonify({"configured": True, "status": "live", "using_own_key": True,
+                    "message": "twitterapi.io key saved — X auto-verify is live on your own credits."})
+
+
+@api_keys_bp.route("/account/x-verify-key", methods=["DELETE"])
+@jwt_required()
+@rate_limit(requests_per_minute=20)
+def delete_x_verify_key():
+    """Remove the owner's BYO key — auto-verify falls back to the platform key."""
+    user = _get_current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    try:
+        UserApiKey.query.filter_by(user_id=user.id, provider=_X_PROVIDER, scope="workspace").delete()
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"delete_x_verify_key error: {e}", exc_info=True)
+        return jsonify({"error": "Failed to remove key"}), 500
+    status = "disabled"
+    try:
+        from .. import twitter_verify
+        status = twitter_verify.autoverify_status(user.id)
+    except Exception:
+        pass
+    return jsonify({"configured": False, "status": status, "using_own_key": False,
+                    "message": "Removed. X auto-verify now uses the platform key (if available)."})
+
+
 def _test_connection(provider, api_key, base_url=None, model_name=None):
     """Returns (success: bool, message: str)."""
     if provider in ("openai", "openrouter", "custom"):

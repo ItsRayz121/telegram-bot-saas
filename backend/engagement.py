@@ -806,7 +806,7 @@ def create_submission(campaign, *, telegram_user_id, telegram_username=None,
     if status == "pending" and campaign.type == "raid" and (campaign.settings or {}).get("auto_verify_x"):
         try:
             from . import twitter_verify
-            if twitter_verify.enabled():
+            if twitter_verify.enabled(campaign.owner_user_id):
                 handle = _extract_x_handle(answers, spec_fields, telegram_username)
                 if handle and twitter_verify.verify_raid(campaign, handle).get("overall") == "verified":
                     status = "verified"
@@ -1146,7 +1146,7 @@ def verify_user_action(campaign, *, telegram_user_id, telegram_username, action,
             from . import twitter_verify
             live = (campaign_owner_is_paid(campaign)
                     and bool((campaign.settings or {}).get("auto_verify_x"))
-                    and twitter_verify.enabled())
+                    and twitter_verify.enabled(campaign.owner_user_id))
         except Exception:
             live = False
         if not live:
@@ -1159,6 +1159,7 @@ def verify_user_action(campaign, *, telegram_user_id, telegram_username, action,
                           or twitter_verify.extract_author_handle(campaign.task_url))
                 vstatus, vdetail = twitter_verify.verify_action(
                     action, username=handle, tweet_id=tweet_id, target_handle=target,
+                    key=twitter_verify._key(campaign.owner_user_id),
                 )
                 if vstatus == "verified":
                     status, detail = "verified", vdetail or "Verified on X"

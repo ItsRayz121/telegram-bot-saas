@@ -183,9 +183,13 @@ def get_workspace_ai_key(user) -> dict:
     """
     from ..models import UserApiKey
 
+    # Restrict to AI providers — the same workspace scope also stores non-AI keys
+    # (e.g. provider="twitterapi_io" for X auto-verify), which must never be returned
+    # here or AI calls would try to talk to twitterapi.io.
     user_key = (
         UserApiKey.query
         .filter_by(user_id=user.id, scope="workspace", is_active=True)
+        .filter(UserApiKey.provider.in_(("openai", "openrouter", "anthropic", "gemini", "custom")))
         .order_by(UserApiKey.updated_at.desc())
         .first()
     )
