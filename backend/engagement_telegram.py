@@ -51,8 +51,50 @@ _TYPE_EMOJI = {
     "raid": "🐦",
 }
 
-# Human labels for raid goal keys, in display order.
+# Human labels for raid/social goal keys, in display order.
 _RAID_GOALS = [("likes", "Likes"), ("retweets", "Retweets"), ("comments", "Comments"), ("quotes", "Quotes"), ("follows", "Follows")]
+
+
+def _campaign_targets(campaign):
+    """Return (goals_dict, show_publicly) for the action-quota block.
+
+    Raids always advertise their goals; social tasks only show targets when the
+    owner opted in (settings.show_targets). Everything else has no quota block."""
+    s = campaign.settings or {}
+    if campaign.type == "raid":
+        return (s.get("raid_goals") or {}), True
+    if campaign.type == "social_task":
+        return (s.get("social_targets") or {}), bool(s.get("show_targets"))
+    return {}, False
+
+
+def _verified_count(campaign):
+    """Count verified submissions for a campaign — the live progress number behind
+    the quota countdown. Honor-based tasks verify one submission per participant,
+    so this doubles as "how many people have completed the actions". Best-effort:
+    any error yields 0 so the post still renders."""
+    try:
+        from .models import EngagementSubmission
+        return EngagementSubmission.query.filter_by(
+            campaign_id=campaign.id, status="verified",
+        ).count()
+    except Exception:
+        logger.debug("verified_count failed for %s", getattr(campaign, "id", "?"), exc_info=True)
+        return 0
+
+
+def _targets_line(goals, done):
+    """Render the per-action quota with live progress, e.g.
+    "🎯 Goals: ✅ 8/50 Likes · ✅ 8/20 Retweets". `done` is the verified count,
+    clamped per goal so it never shows more done than the target."""
+    parts = []
+    for key, label in _RAID_GOALS:
+        target = goals.get(key)
+        if not target:
+            continue
+        d = min(int(done), int(target))
+        parts.append(f"{d}/{target} {label}")
+    return "🎯 <b>Goals:</b> " + " · ".join(parts) if parts else None
 
 
 def _status_label(campaign):
@@ -107,12 +149,13 @@ def build_campaign_message(campaign, bot_username):
             lines.append(f"• {html.escape(t.title or '')}{xp}")
         lines.append("")
 
-    # Raid goals checklist (e.g. 50 likes · 20 retweets).
-    if campaign.type == "raid":
-        goals = (campaign.settings or {}).get("raid_goals") or {}
-        parts = [f"{goals[k]} {label}" for k, label in _RAID_GOALS if goals.get(k)]
-        if parts:
-            lines.append("🎯 <b>Goals:</b> " + " · ".join(parts))
+    # Action-quota checklist with live progress (raids always; social tasks when
+    # the owner opted to show targets), e.g. "🎯 Goals: ✅ 8/50 Likes · 8/20 Retweets".
+    goals, show_targets = _campaign_targets(campaign)
+    if show_targets and goals:
+        line = _targets_line(goals, _verified_count(campaign))
+        if line:
+            lines.append(line)
 
     if campaign.reward_label:
         lines.append(f"🎁 <b>Reward:</b> {html.escape(campaign.reward_label)}")
@@ -368,6 +411,52 @@ def edit_campaign_post(campaign):
         return True
     except Exception:
         logger.info("edit_campaign_post failed for %s", getattr(campaign, "id", "?"), exc_info=True)
+        return False
+
+
+# In-process throttle for the live progress refresh — Telegram rate-limits edits
+# and re-editing on every single verification would risk a 429 (anti-ban rule).
+# A dropped edit is harmless: the next verification re-renders the true count.
+import time as _time
+_PROGRESS_MIN_INTERVAL = 4.0   # seconds between progress edits per campaign
+_last_progress_edit = {}
+
+
+def refresh_post_progress(campaign):
+    """Re-render the group post to update the live action-quota countdown after a
+    submission verifies. No-op unless the campaign actually shows a target block,
+    so we never edit posts that have no countdown. Throttled per-campaign and
+    pin-preserving (unlike edit_campaign_post, it never re-pins). Best-effort."""
+    try:
+        if campaign.status != "active" or not campaign.telegram_message_id:
+            return False
+        goals, show_targets = _campaign_targets(campaign)
+        if not (show_targets and goals):
+            return False
+        now = _time.monotonic()
+        if now - _last_progress_edit.get(campaign.id, 0) < _PROGRESS_MIN_INTERVAL:
+            return False
+        _last_progress_edit[campaign.id] = now
+
+        bot, loop, chat_id, username = _resolve_target(campaign)
+        if not bot or not loop:
+            return False
+        text, keyboard = build_campaign_message(campaign, username)
+        try:
+            asyncio.run_coroutine_threadsafe(
+                bot.edit_message_text(
+                    chat_id=chat_id, message_id=campaign.telegram_message_id,
+                    text=text, parse_mode="HTML", reply_markup=keyboard,
+                    disable_web_page_preview=True,
+                ),
+                loop,
+            ).result(timeout=15)
+        except Exception as e:
+            if "not modified" not in str(e).lower():
+                raise
+        return True
+    except Exception:
+        logger.info("refresh_post_progress failed for %s", getattr(campaign, "id", "?"), exc_info=True)
         return False
 
 

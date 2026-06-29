@@ -606,6 +606,7 @@ def review_submission(campaign, submission_id, action, *, reviewed_by=None, reas
     db.session.commit()
     if action == "approve":
         award_submission(campaign, sub)  # credits XP, then commits
+        _refresh_post_progress(campaign)  # update the live quota countdown
     _notify_review(campaign, sub, approved=(action == "approve"), reason=reason)
     _submission_event(
         campaign, sub,
@@ -841,8 +842,20 @@ def create_submission(campaign, *, telegram_user_id, telegram_username=None,
     _submission_event(campaign, sub, "campaign.submission.created")
     if sub.status == "verified":
         _submission_event(campaign, sub, "campaign.submission.verified")
+        _refresh_post_progress(campaign)
 
     return sub, None
+
+
+def _refresh_post_progress(campaign):
+    """Best-effort: nudge the live quota countdown in the group post after a
+    submission verifies. No-op unless the campaign shows a target block (the
+    refresh function self-guards and throttles)."""
+    try:
+        from .engagement_telegram import refresh_post_progress
+        refresh_post_progress(campaign)
+    except Exception:
+        logger.debug("post-progress refresh failed for %s", getattr(campaign, "id", "?"), exc_info=True)
 
 
 def award_submission(campaign, submission):

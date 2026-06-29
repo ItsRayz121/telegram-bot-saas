@@ -126,7 +126,13 @@ const EMPTY_FORM = {
   multitask: false,   // Pro: campaign holds several sub-tasks
   tasks: [],
   raid_goals: {},     // raid type: { likes, retweets, comments, follows }
+  social_targets: {}, // social_task: per-action quota { likes, retweets, comments, quotes, follows }
+  show_targets: false, // social_task: show the targets/quota live in the group post
 };
+
+// Social-task action targets (stored under settings.social_targets). Mirrors
+// RAID_GOALS minus none — same provable set; "likes" is honor-only (uncountable).
+const SOCIAL_TARGETS = RAID_GOALS;
 
 // Default example/format hint by proof type — pre-fills the helper shown to users.
 const EXAMPLE_PLACEHOLDER = {
@@ -603,6 +609,34 @@ function PostStatusCell({ c, botId, groupId, onChanged }) {
   );
 }
 
+// Collapse a long title to a few words; click to expand the full text inline.
+// Long titles were wrapping into many rows and making the whole table look messy.
+const TITLE_PREVIEW_CHARS = 38;
+function TruncatedTitle({ title }) {
+  const [open, setOpen] = useState(false);
+  const full = title || '';
+  const isLong = full.length > TITLE_PREVIEW_CHARS;
+  if (!isLong) {
+    return <Typography variant="body2" fontWeight={500}>{full || '—'}</Typography>;
+  }
+  const preview = full.slice(0, TITLE_PREVIEW_CHARS).trimEnd();
+  return (
+    <Tooltip title={open ? '' : full} placement="top-start">
+      <Typography
+        variant="body2"
+        fontWeight={500}
+        onClick={() => setOpen((v) => !v)}
+        sx={{ cursor: 'pointer', maxWidth: 240, wordBreak: 'break-word' }}
+      >
+        {open ? full : `${preview}…`}
+        <Typography component="span" variant="caption" color="primary.main" sx={{ ml: 0.5, whiteSpace: 'nowrap' }}>
+          {open ? 'less' : 'more'}
+        </Typography>
+      </Typography>
+    </Tooltip>
+  );
+}
+
 function CampaignRow({ c, botId, groupId, onChanged, onManage }) {
   const [anchor, setAnchor] = useState(null);
   const [editOpen, setEditOpen] = useState(false);
@@ -628,9 +662,9 @@ function CampaignRow({ c, botId, groupId, onChanged, onManage }) {
 
   return (
     <TableRow hover sx={{ opacity: c.status === 'archived' ? 0.55 : 1 }}>
-      <TableCell>
-        <Typography variant="body2" fontWeight={500}>{c.title}</Typography>
-        {c.platform && <Typography variant="caption" color="text.secondary">{c.platform}</Typography>}
+      <TableCell sx={{ verticalAlign: 'top' }}>
+        <TruncatedTitle title={c.title} />
+        {c.platform && <Typography variant="caption" color="text.secondary" display="block">{c.platform}</Typography>}
       </TableCell>
       <TableCell>
         <Typography variant="caption">{(TYPES.find(t => t.value === c.type) || {}).label || c.type}</Typography>
@@ -770,6 +804,16 @@ function CampaignWizard({ botId, groupId, initialType, isPaid = false, onClose, 
                 ...(isPaid && form.auto_verify_x ? { auto_verify_x: true } : {}),
               }
             : {}),
+          ...(form.type === 'social_task'
+            ? {
+                social_targets: SOCIAL_TARGETS.reduce((acc, g) => {
+                  const n = parseInt(form.social_targets[g.key]);
+                  if (n > 0) acc[g.key] = n;
+                  return acc;
+                }, {}),
+                show_targets: !!form.show_targets,
+              }
+            : {}),
         },
         custom_fields: form.multitask ? [] : buildCustomFields(),
       };
@@ -896,6 +940,33 @@ function CampaignWizard({ botId, groupId, initialType, isPaid = false, onClose, 
                         with manual proof review.
                       </Typography>
                     )}
+                  </Box>
+                )}
+                {form.type === 'social_task' && (
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">
+                      Targets (optional) — how many of each action you want
+                    </Typography>
+                    <Grid container spacing={1} sx={{ mt: 0.5 }}>
+                      {SOCIAL_TARGETS.map((g) => (
+                        <Grid item xs={6} key={g.key}>
+                          <TextField fullWidth size="small" type="number" label={g.label}
+                            value={form.social_targets[g.key] || ''}
+                            onChange={(e) => set('social_targets', { ...form.social_targets, [g.key]: e.target.value })}
+                            inputProps={{ min: 0 }} />
+                        </Grid>
+                      ))}
+                    </Grid>
+                    <FormControlLabel
+                      sx={{ mt: 1 }}
+                      control={<Switch checked={form.show_targets} onChange={(e) => set('show_targets', e.target.checked)} />}
+                      label="Show targets publicly — display a live quota in the group post"
+                    />
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      {form.show_targets
+                        ? 'The group post shows each target and updates as people are verified (e.g. “40 reposts left”). Likes are honor-based and counted by verified submissions — X keeps real likes private.'
+                        : 'Targets stay private — you’ll see verified progress in Manage. Turn this on to show a live countdown to members.'}
+                    </Typography>
                   </Box>
                 )}
                 <FormControl fullWidth>
@@ -1295,6 +1366,8 @@ function CampaignEditDialog({ botId, groupId, campaign, hasSubmissions, onClose,
       })),
     })),
     raid_goals: (campaign.settings || {}).raid_goals || {},
+    social_targets: (campaign.settings || {}).social_targets || {},
+    show_targets: !!(campaign.settings || {}).show_targets,
   });
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
@@ -1333,6 +1406,16 @@ function CampaignEditDialog({ botId, groupId, campaign, hasSubmissions, onClose,
                   if (n > 0) acc[g.key] = n;
                   return acc;
                 }, {}),
+              }
+            : {}),
+          ...(campaign.type === 'social_task'
+            ? {
+                social_targets: SOCIAL_TARGETS.reduce((acc, g) => {
+                  const n = parseInt(form.social_targets[g.key]);
+                  if (n > 0) acc[g.key] = n;
+                  return acc;
+                }, {}),
+                show_targets: !!form.show_targets,
               }
             : {}),
         },
@@ -1417,6 +1500,26 @@ function CampaignEditDialog({ botId, groupId, campaign, hasSubmissions, onClose,
                   </Grid>
                 ))}
               </Grid>
+            </Box>
+          )}
+
+          {campaign.type === 'social_task' && (
+            <Box>
+              <Typography variant="caption" color="text.secondary">Targets (optional) — how many of each action you want</Typography>
+              <Grid container spacing={1} sx={{ mt: 0.5 }}>
+                {SOCIAL_TARGETS.map((g) => (
+                  <Grid item xs={6} key={g.key}>
+                    <TextField fullWidth size="small" type="number" label={g.label}
+                      value={form.social_targets[g.key] || ''}
+                      onChange={(e) => set('social_targets', { ...form.social_targets, [g.key]: e.target.value })}
+                      inputProps={{ min: 0 }} />
+                  </Grid>
+                ))}
+              </Grid>
+              <FormControlLabel
+                sx={{ mt: 1 }}
+                control={<Switch checked={form.show_targets} onChange={(e) => set('show_targets', e.target.checked)} />}
+                label="Show targets publicly — display a live quota in the group post" />
             </Box>
           )}
 
