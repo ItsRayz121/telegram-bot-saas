@@ -45,6 +45,7 @@ class GuildizerBot(bot_core.CoreMixin, discord.AutoShardedClient):
         log.info("Global slash commands synced.")
         # Persistent campaign proof buttons survive restarts via DynamicItem.
         self.add_dynamic_items(campaign_views.ProofButton)
+        self.add_dynamic_items(campaign_views.RaidStartButton)
         self.add_dynamic_items(verification.VerifyButton,
                                bot_policy.TrustBotButton, bot_policy.KickBotButton)
         self.add_dynamic_items(self_roles.SelfRoleButton)

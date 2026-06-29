@@ -105,6 +105,115 @@ class ProofButton(discord.ui.DynamicItem[discord.ui.Button], template=r"gz:proof
             )
 
 
+# ── Ephemeral raid panel (no DM) ──────────────────────────────────────────────
+# An auto-verify raid posts ONE public "Start raid" button. Each member who taps it
+# gets a PRIVATE (ephemeral) panel in the same channel: an X-handle prompt, a live
+# per-action checklist and a Verify button. Only they ever see their own progress or
+# rejection — Discord-native, no DMs.
+_GOAL_LABELS = {"likes": "❤️ Like", "retweets": "🔁 Repost",
+                "comments": "💬 Comment", "quotes": "❝ Quote", "follows": "➕ Follow"}
+
+
+def _panel_text(title: str, goals: dict, results: dict | None, *, status: str | None = None) -> str:
+    lines = [f"**{title[:200]}**", "_Tap Verify after you’ve done the actions on X._", ""]
+    for k, v in goals.items():
+        if not v:
+            continue
+        r = (results or {}).get(k) or {}
+        st = r.get("status")
+        if st == "verified":
+            mark, note = "✅", ""
+        elif k == "likes":
+            mark, note = "❤️", " — counted (likes can’t be auto-verified)"
+        elif st == "failed":
+            mark, note = "❌", " — not detected yet"
+        else:
+            mark, note = "⬜", ""
+        lines.append(f"{mark} {_GOAL_LABELS.get(k, k)}{note}")
+    if status == "verified":
+        lines += ["", "✅ **All done — reward granted!**"]
+    elif status == "pending":
+        lines += ["", "⏳ Not all actions confirmed yet. Do them on X, wait ~30s, then tap **Verify** again."]
+    return "\n".join(lines)
+
+
+class RaidHandleModal(discord.ui.Modal, title="Join raid"):
+    def __init__(self, cid: int, goals: dict, ctitle: str) -> None:
+        super().__init__()
+        self.cid = cid
+        self.goals = goals
+        self.ctitle = ctitle
+        self.handle = discord.ui.TextInput(
+            label="Your X @username", placeholder="@yourhandle",
+            style=discord.TextStyle.short, required=True, max_length=120,
+        )
+        self.add_item(self.handle)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        view = RaidPanelView(self.cid, str(self.handle.value), self.goals, self.ctitle)
+        await interaction.response.send_message(
+            _panel_text(self.ctitle, self.goals, {}), view=view, ephemeral=True,
+        )
+
+
+class RaidPanelView(discord.ui.View):
+    """The participant's private (ephemeral) panel. Not persistent — it's a live
+    session; if the bot restarts the member just taps the public Start button again."""
+
+    def __init__(self, cid: int, handle: str, goals: dict, ctitle: str) -> None:
+        super().__init__(timeout=600)
+        self.cid = cid
+        self.handle = handle
+        self.goals = goals
+        self.ctitle = ctitle
+
+    @discord.ui.button(label="Verify my actions", style=discord.ButtonStyle.success)
+    async def verify(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.defer()
+        status, reward, results = await asyncio.to_thread(
+            cr.verify_raid_submission, self.cid, interaction.user.id,
+            str(interaction.user), self.handle,
+        )
+        if status in ("closed", "not_raid"):
+            await interaction.edit_original_response(content="This raid is closed.", view=None)
+            return
+        if status in ("verified", "duplicate"):
+            for child in self.children:
+                child.disabled = True
+            await interaction.edit_original_response(
+                content=_panel_text(self.ctitle, self.goals, results, status="verified"), view=None)
+        else:
+            await interaction.edit_original_response(
+                content=_panel_text(self.ctitle, self.goals, results, status="pending"), view=self)
+
+    @discord.ui.button(label="Change handle", style=discord.ButtonStyle.secondary)
+    async def change_handle(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(RaidHandleModal(self.cid, self.goals, self.ctitle))
+
+
+class RaidStartButton(discord.ui.DynamicItem[discord.ui.Button], template=r"gz:raidstart:(?P<cid>\d+)"):
+    """Persistent public button on an auto-verify raid post — survives restarts."""
+
+    def __init__(self, cid: int) -> None:
+        self.cid = cid
+        super().__init__(discord.ui.Button(
+            label="🐦 Start raid", style=discord.ButtonStyle.primary,
+            custom_id=f"gz:raidstart:{cid}",
+        ))
+
+    @classmethod
+    async def from_custom_id(cls, interaction, item, match):
+        return cls(int(match["cid"]))
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        ctx = await asyncio.to_thread(cr.raid_context, self.cid)
+        if ctx is None:
+            await interaction.response.send_message("This raid is closed.", ephemeral=True)
+            return
+        await interaction.response.send_modal(
+            RaidHandleModal(self.cid, ctx["goals"], ctx["title"]))
+
+
 def build_embed(data: dict, brand: str = "Guildizer") -> discord.Embed:
     embed = discord.Embed(title=data["title"][:256], description=(data["description"] or None), color=ACCENT)
     if data["tasks"]:
@@ -134,8 +243,8 @@ def build_embed(data: dict, brand: str = "Guildizer") -> discord.Embed:
         if data.get("auto_verify_x"):
             embed.add_field(
                 name="⚡ Auto-verified",
-                value="Tap below and enter your X @username — reposts, comments, quotes "
-                      "and follows are confirmed automatically.",
+                value="Tap **Start raid**, enter your X @username, and verify — reposts, "
+                      "comments, quotes and follows are confirmed automatically, privately to you.",
                 inline=False,
             )
     # White-label bots brand the footer with their own name, not ours.
@@ -145,6 +254,11 @@ def build_embed(data: dict, brand: str = "Guildizer") -> discord.Embed:
 
 def build_view(data: dict) -> discord.ui.View:
     view = discord.ui.View(timeout=None)
+    # Auto-verify raid → ONE public "Start raid" button; each member gets a private
+    # ephemeral panel (no DM). All other campaigns keep the per-task proof buttons.
+    if data.get("type") == "raid" and data.get("auto_verify_x"):
+        view.add_item(RaidStartButton(data["id"]))
+        return view
     tasks = data["tasks"][:25]
     if tasks:
         for t in tasks:

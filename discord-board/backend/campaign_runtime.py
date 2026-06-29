@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from sqlalchemy.orm.attributes import flag_modified
+
 import leveling
 import twitter_verify
 from database import SessionLocal
@@ -195,6 +197,107 @@ def create_submission(cid: int, tid: int, user_id: int, username: str, value: st
         db.add(sub)
         db.commit()
         return ("pending", 0)
+    finally:
+        db.close()
+        SessionLocal.remove()
+
+
+def raid_context(cid: int) -> dict | None:
+    """What the ephemeral raid panel needs: title, goals, open state, auto-verify flag.
+    Returns None if the campaign is gone or closed."""
+    db = SessionLocal()
+    try:
+        c = db.get(Campaign, cid)
+        if c is None or not c.is_open:
+            return None
+        return {
+            "title": c.title,
+            "goals": (c.settings or {}).get("raid_goals") or {},
+            "auto_verify_x": bool((c.settings or {}).get("auto_verify_x")),
+            "type": c.type,
+        }
+    finally:
+        db.close()
+        SessionLocal.remove()
+
+
+def verify_raid_submission(cid: int, user_id: int, username: str, handle: str):
+    """Run a raid's live X verification for one participant and record the result.
+
+    Powers the ephemeral in-channel panel (no DM): returns
+    (status, reward, results) where
+      status  ∈ verified | pending | duplicate | closed | not_raid
+      results = {goal: {status, detail}} from twitter_verify (for the checklist).
+
+    one-per-user: an already-verified submission returns "duplicate"; a pending one
+    is reused so the member can retry after X propagates (~30s golden period)."""
+    db = SessionLocal()
+    try:
+        c = db.get(Campaign, cid)
+        if c is None or not c.is_open:
+            return ("closed", 0, {})
+        if c.type != "raid":
+            return ("not_raid", 0, {})
+        guild = db.get(Guild, c.guild_id)
+        pro = bool(guild and guild.is_pro)
+        owner_id = guild.owner_id if guild else None
+        goals = (c.settings or {}).get("raid_goals") or {}
+        reward = c.reward_xp or 0
+
+        existing = None
+        if c.one_per_user:
+            existing = (
+                db.query(CampaignSubmission)
+                .filter(
+                    CampaignSubmission.campaign_id == cid,
+                    CampaignSubmission.user_id == user_id,
+                    CampaignSubmission.status != "rejected",
+                )
+                .first()
+            )
+            if existing is not None and existing.status == "verified":
+                return ("duplicate", 0, existing.proof.get("results", {}) if existing.proof else {})
+
+        # Live verification (Pro + key + auto-verify gated). Any uncertainty → pending.
+        results = {}
+        overall = "pending"
+        if pro and (c.settings or {}).get("auto_verify_x") and twitter_verify.enabled(owner_id):
+            h = twitter_verify.normalize_handle(handle)
+            if h:
+                r = twitter_verify.verify_raid(
+                    c.task_url, goals, h, owner_user_id=owner_id,
+                    follow_target=(c.settings or {}).get("raid_follow_target"),
+                )
+                results = r.get("results") or {}
+                overall = r.get("overall") or "pending"
+
+        sub = existing or CampaignSubmission(
+            campaign_id=cid, task_id=None, user_id=user_id,
+            username=(username or "")[:120], proof={},
+        )
+        sub.username = (username or "")[:120]
+        proof = dict(sub.proof or {})
+        proof["x_handle"] = (handle or "")[:120]
+        proof["results"] = results
+        sub.proof = proof
+        flag_modified(sub, "proof")
+
+        if overall == "verified":
+            if sub.status != "verified":
+                sub.status = "verified"
+                sub.reward_granted = reward
+                sub.reviewed_at = datetime.utcnow()
+                if reward > 0:
+                    leveling.add_xp(db, c.guild_id, user_id, reward, username, reason=f"campaign:{cid}")
+            status = "verified"
+        else:
+            sub.status = "pending"
+            status = "pending"
+
+        if existing is None:
+            db.add(sub)
+        db.commit()
+        return (status, reward if status == "verified" else 0, results)
     finally:
         db.close()
         SessionLocal.remove()

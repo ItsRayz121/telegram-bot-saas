@@ -51,6 +51,7 @@ class CustomBotClient(bot_core.CoreMixin, discord.Client):
         # answers /ping, /rank, etc. under their own name and avatar.
         await self.tree.sync()
         self.add_dynamic_items(campaign_views.ProofButton)
+        self.add_dynamic_items(campaign_views.RaidStartButton)
         self.add_dynamic_items(verification.VerifyButton,
                                bot_policy.TrustBotButton, bot_policy.KickBotButton)
         self.add_dynamic_items(self_roles.SelfRoleButton)
