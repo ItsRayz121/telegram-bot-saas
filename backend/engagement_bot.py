@@ -409,24 +409,36 @@ async def on_start(update, context, payload, *, flask_app, lineage, bot_id=None)
             await msg.reply_text("This campaign is closed. The submission window has ended.")
             return True
 
-        # Multi-task → show a task picker; the chosen task is handled in on_callback.
-        if campaign.tasks.count() > 0:
-            done = _completed_task_ids(campaign.id, user.id)
-            await msg.reply_text(
-                f"🚀 <b>{html.escape(campaign.title or '')}</b>\nChoose a task to complete:",
-                parse_mode="HTML", reply_markup=_task_picker(campaign, done),
-            )
-            return True
+        # Any unexpected failure below must give the member feedback rather than
+        # dead silence — a swallowed exception here is exactly what makes "Join
+        # Raid" look broken (the user just sees /start with no reply).
+        try:
+            # Multi-task → show a task picker; the chosen task is handled in on_callback.
+            if campaign.tasks.count() > 0:
+                done = _completed_task_ids(campaign.id, user.id)
+                await msg.reply_text(
+                    f"🚀 <b>{html.escape(campaign.title or '')}</b>\nChoose a task to complete:",
+                    parse_mode="HTML", reply_markup=_task_picker(campaign, done),
+                )
+                return True
 
-        # X raid / X social-task with targets → per-action DM verify flow.
-        from . import engagement as eng
-        if eng.has_action_flow(campaign):
-            await _begin_action_flow(msg, context, campaign,
-                                     user=user, lineage=lineage, bot_id=bot_id)
-            return True
+            # X raid / X social-task with targets → per-action DM verify flow.
+            from . import engagement as eng
+            if eng.has_action_flow(campaign):
+                await _begin_action_flow(msg, context, campaign,
+                                         user=user, lineage=lineage, bot_id=bot_id)
+                return True
 
-        await _begin_task(msg, context, campaign, campaign, None,
-                          user=user, lineage=lineage, bot_id=bot_id, flask_app=flask_app)
+            await _begin_task(msg, context, campaign, campaign, None,
+                              user=user, lineage=lineage, bot_id=bot_id, flask_app=flask_app)
+        except Exception:
+            logger.exception("engagement participation failed (campaign %s)", campaign_id)
+            try:
+                await msg.reply_text(
+                    "⚠️ Something went wrong starting this task. Please try again in a moment."
+                )
+            except Exception:
+                pass
     return True
 
 

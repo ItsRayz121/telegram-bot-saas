@@ -480,18 +480,20 @@ export default function CampaignManager({ botId, groupId, userTier = 'free' }) {
         </Card>
       ) : (
         <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', overflowX: 'auto' }}>
-          <Table size="small">
+          {/* Tight padding + compact cells so all 9 columns fit on a desktop
+              viewport without a horizontal scroll (falls back to scroll on mobile). */}
+          <Table size="small" sx={{ '& td, & th': { px: { xs: 1, md: 1.25 } }, tableLayout: { md: 'fixed' } }}>
             <TableHead>
               <TableRow sx={{ '& th': { fontWeight: 700, whiteSpace: 'nowrap' } }}>
-                <TableCell>Title</TableCell>
-                <TableCell>Type</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>Group post</TableCell>
-                <TableCell align="right">Verified</TableCell>
-                <TableCell align="right">Pending</TableCell>
-                <TableCell align="right">Total</TableCell>
-                <TableCell>Deadline</TableCell>
-                <TableCell align="right">Actions</TableCell>
+                <TableCell sx={{ width: { md: '24%' } }}>Title</TableCell>
+                <TableCell sx={{ width: { md: '11%' } }}>Type</TableCell>
+                <TableCell sx={{ width: { md: '9%' } }}>Status</TableCell>
+                <TableCell sx={{ width: { md: '13%' } }}>Group post</TableCell>
+                <TableCell align="right" sx={{ width: { md: '7%' } }}>Verified</TableCell>
+                <TableCell align="right" sx={{ width: { md: '7%' } }}>Pending</TableCell>
+                <TableCell align="right" sx={{ width: { md: '6%' } }}>Total</TableCell>
+                <TableCell sx={{ width: { md: '11%' } }}>Deadline</TableCell>
+                <TableCell align="right" sx={{ width: { md: '9%' } }}>Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -615,12 +617,29 @@ function PostStatusCell({ c, botId, groupId, onChanged }) {
 // Collapse a long title to a few words; click to expand the full text inline.
 // Long titles were wrapping into many rows and making the whole table look messy.
 const TITLE_PREVIEW_CHARS = 38;
+
+// Compact two-line deadline ("30 Jun 2026 / 06:56") so the column stays narrow
+// enough for the whole table to fit a desktop viewport without horizontal scroll.
+// The full locale timestamp is still available on hover (see the Deadline cell).
+function fmtDeadline(value) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '—';
+  const date = d.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+  const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  return (
+    <>
+      {date}
+      <br />
+      {time}
+    </>
+  );
+}
 function TruncatedTitle({ title }) {
   const [open, setOpen] = useState(false);
   const full = title || '';
   const isLong = full.length > TITLE_PREVIEW_CHARS;
   if (!isLong) {
-    return <Typography variant="body2" fontWeight={500}>{full || '—'}</Typography>;
+    return <Typography variant="body2" fontWeight={500} sx={{ wordBreak: 'break-word' }}>{full || '—'}</Typography>;
   }
   const preview = full.slice(0, TITLE_PREVIEW_CHARS).trimEnd();
   return (
@@ -629,7 +648,7 @@ function TruncatedTitle({ title }) {
         variant="body2"
         fontWeight={500}
         onClick={() => setOpen((v) => !v)}
-        sx={{ cursor: 'pointer', maxWidth: 240, wordBreak: 'break-word' }}
+        sx={{ cursor: 'pointer', maxWidth: { xs: 240, md: '100%' }, wordBreak: 'break-word' }}
       >
         {open ? full : `${preview}…`}
         <Typography component="span" variant="caption" color="primary.main" sx={{ ml: 0.5, whiteSpace: 'nowrap' }}>
@@ -681,9 +700,15 @@ function CampaignRow({ c, botId, groupId, onChanged, onManage }) {
       <TableCell align="right">{c.submissions_pending ?? 0}</TableCell>
       <TableCell align="right">{c.submissions_total ?? 0}</TableCell>
       <TableCell>
-        <Typography variant="caption" sx={{ whiteSpace: 'nowrap' }}>
-          {c.ends_at ? new Date(c.ends_at).toLocaleString() : '—'}
-        </Typography>
+        {c.ends_at ? (
+          <Tooltip title={new Date(c.ends_at).toLocaleString()}>
+            <Typography variant="caption" sx={{ lineHeight: 1.25, display: 'block' }}>
+              {fmtDeadline(c.ends_at)}
+            </Typography>
+          </Tooltip>
+        ) : (
+          <Typography variant="caption">—</Typography>
+        )}
       </TableCell>
       <TableCell align="right">
         <Tooltip title="Manage & review"><IconButton size="small" onClick={onManage}><Visibility fontSize="small" /></IconButton></Tooltip>

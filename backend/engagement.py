@@ -931,11 +931,33 @@ def _normalize_handle(value):
         return v or None
 
 
+def _ensure_social_table():
+    """Self-heal: create social_identities if a deploy shipped this code before the
+    migration created the table (the per-action raid flow is the first thing to
+    touch it, so a missing table would silently kill 'Join Raid'). Idempotent."""
+    try:
+        db.session.rollback()
+    except Exception:
+        pass
+    try:
+        SocialIdentity.__table__.create(bind=db.engine, checkfirst=True)
+        return True
+    except Exception:
+        logger.exception("could not ensure social_identities table")
+        return False
+
+
 def get_social_handle(telegram_user_id, platform="x"):
     """The stored handle for this user+platform, or None — so the bot asks once."""
-    row = SocialIdentity.query.filter_by(
-        telegram_user_id=str(telegram_user_id), platform=platform
-    ).first()
+    try:
+        row = SocialIdentity.query.filter_by(
+            telegram_user_id=str(telegram_user_id), platform=platform
+        ).first()
+    except Exception:
+        # Table not there yet on this deploy → create it and treat as "no handle".
+        if not _ensure_social_table():
+            return None
+        return None
     return row.handle if row else None
 
 
@@ -945,16 +967,25 @@ def set_social_handle(telegram_user_id, handle, platform="x"):
     norm = _normalize_handle(handle)
     if not norm:
         return None
-    row = SocialIdentity.query.filter_by(
-        telegram_user_id=str(telegram_user_id), platform=platform
-    ).first()
-    if row:
-        row.handle = norm
-    else:
-        row = SocialIdentity(telegram_user_id=str(telegram_user_id), platform=platform, handle=norm)
-        db.session.add(row)
-    db.session.commit()
-    return norm
+    for _attempt in (1, 2):
+        try:
+            row = SocialIdentity.query.filter_by(
+                telegram_user_id=str(telegram_user_id), platform=platform
+            ).first()
+            if row:
+                row.handle = norm
+            else:
+                row = SocialIdentity(telegram_user_id=str(telegram_user_id), platform=platform, handle=norm)
+                db.session.add(row)
+            db.session.commit()
+            return norm
+        except Exception:
+            db.session.rollback()
+            if _attempt == 1 and _ensure_social_table():
+                continue  # table just created — retry the upsert once
+            logger.exception("set_social_handle failed")
+            return None
+    return None
 
 
 def campaign_owner_is_paid(campaign):
