@@ -186,14 +186,25 @@ def _completed_task_ids(campaign_id, telegram_user_id):
 
 
 def _task_picker(campaign, done_ids):
-    """Inline keyboard with one button per task (✓ on already-submitted tasks)."""
+    """Inline keyboard with one button per task (✓ on already-submitted tasks).
+    When settings.sequential_tasks is on, a task stays 🔒 locked until every task
+    before it (by order) is done — so members complete them in sequence."""
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    sequential = bool((campaign.settings or {}).get("sequential_tasks"))
     rows = []
+    prior_all_done = True
     for t in campaign.tasks.all():
-        mark = "✅ " if t.id in done_ids else ""
+        is_done = t.id in done_ids
         xp = f" (+{t.reward_xp} XP)" if t.reward_xp else ""
-        label = f"{mark}{t.title}{xp}"[:64]
-        rows.append([InlineKeyboardButton(label, callback_data=f"engtask_{campaign.id}_{t.id}")])
+        locked = sequential and not is_done and not prior_all_done
+        if locked:
+            label = f"🔒 {t.title}{xp}"[:64]
+            rows.append([InlineKeyboardButton(label, callback_data=f"englock_{campaign.id}")])
+        else:
+            mark = "✅ " if is_done else ""
+            label = f"{mark}{t.title}{xp}"[:64]
+            rows.append([InlineKeyboardButton(label, callback_data=f"engtask_{campaign.id}_{t.id}")])
+        prior_all_done = prior_all_done and is_done
     return InlineKeyboardMarkup(rows)
 
 
@@ -237,6 +248,91 @@ async def _ask_field(message, field, *, error=None):
         parse_mode="HTML",
         reply_markup=_cancel_keyboard(),
     )
+
+
+# ── Per-action verify flow (Engagement V3) ────────────────────────────────────
+# X raids / X social-tasks: the member does each action (Like/Repost/Comment/
+# Quote/Follow) in the DM and taps Verify per action. Likes auto-accept; the rest
+# verify live (paid owner) or go to manual review (free owner). The X handle is
+# asked ONCE and reused (engagement.get_social_handle / set_social_handle).
+
+_ACTION_META = {
+    "like":    ("👍", "Like"),
+    "retweet": ("🔁", "Repost"),
+    "comment": ("💬", "Comment"),
+    "quote":   ("🗨️", "Quote"),
+    "follow":  ("➕", "Follow"),
+}
+_ACTION_VERIFY_LABEL = {
+    "verified": "✅ Done",
+    "manual": "🕒 In review",
+    "failed": "🔁 Verify again",
+}
+
+
+def _action_link(campaign, action):
+    """The URL the action button opens — X Web Intent where one exists (so the
+    repost/quote/follow dialog pops), else the tweet itself (like/comment)."""
+    from urllib.parse import quote
+    from . import twitter_verify as _tv
+    url = campaign.task_url or ""
+    tweet_id = _tv.extract_tweet_id(url)
+    if action == "retweet" and tweet_id:
+        return f"https://x.com/intent/retweet?tweet_id={tweet_id}"
+    if action == "quote" and url:
+        return f"https://x.com/intent/tweet?url={quote(url, safe='')}"
+    if action == "follow":
+        target = _tv.normalize_handle((campaign.settings or {}).get("raid_follow_target")) \
+            or _tv.extract_author_handle(url)
+        if target:
+            return f"https://x.com/intent/follow?screen_name={target}"
+    return url or "https://x.com"
+
+
+def _action_panel(campaign, user_id, handle):
+    """Return (html_text, InlineKeyboardMarkup) for the DM action panel."""
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    from . import engagement as eng
+
+    status_map = eng.action_status_map(campaign, user_id)
+    lines = [
+        f"🚀 <b>{html.escape(campaign.title or '')}</b>",
+        "",
+        f"Verifying as <b>@{html.escape(handle)}</b>",
+        "",
+        "Do each action, then tap <b>Verify</b> next to it:",
+    ]
+    rows = []
+    for _gk, action, _target in eng.campaign_action_goals(campaign):
+        emoji, label = _ACTION_META.get(action, ("•", action.title()))
+        st = status_map.get(action)
+        verify_label = _ACTION_VERIFY_LABEL.get(st, "✅ Verify")
+        rows.append([
+            InlineKeyboardButton(f"{emoji} {label}", url=_action_link(campaign, action)),
+            InlineKeyboardButton(verify_label, callback_data=f"engv_{campaign.id}_{action}"),
+        ])
+    rows.append([InlineKeyboardButton("✏️ Change @username", callback_data=f"engh_{campaign.id}")])
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+async def _begin_action_flow(msg, context, campaign, *, user, lineage, bot_id):
+    """Entry to the per-action flow: ensure we have the user's X handle (ask once),
+    then show the action panel."""
+    from . import engagement as eng
+    if not campaign.is_open:
+        await msg.reply_text("This campaign is closed. The submission window has ended.")
+        return
+    handle = eng.get_social_handle(user.id, "x")
+    if not handle:
+        context.user_data["eng_handle"] = {"cid": campaign.id, "lineage": lineage, "bot_id": bot_id}
+        await msg.reply_text(
+            "First, what's your X (Twitter) <b>@username</b>? "
+            "We'll remember it so you won't be asked again.",
+            parse_mode="HTML", reply_markup=_cancel_keyboard(),
+        )
+        return
+    text, kb = _action_panel(campaign, user.id, handle)
+    await msg.reply_text(text, parse_mode="HTML", reply_markup=kb, disable_web_page_preview=True)
 
 
 # ── Entry: /start eng_<id>  and  /start engmy_<id> ────────────────────────────
@@ -309,6 +405,13 @@ async def on_start(update, context, payload, *, flask_app, lineage, bot_id=None)
                 f"🚀 <b>{html.escape(campaign.title or '')}</b>\nChoose a task to complete:",
                 parse_mode="HTML", reply_markup=_task_picker(campaign, done),
             )
+            return True
+
+        # X raid / X social-task with targets → per-action DM verify flow.
+        from . import engagement as eng
+        if eng.has_action_flow(campaign):
+            await _begin_action_flow(msg, context, campaign,
+                                     user=user, lineage=lineage, bot_id=bot_id)
             return True
 
         await _begin_task(msg, context, campaign, campaign, None,
@@ -437,6 +540,32 @@ def _verify_chat_ref(campaign, lineage, spec=None):
 
 async def on_private(update, context, *, flask_app, lineage, bot_id=None):
     """Consume a DM only if a campaign flow is active. Returns True if consumed."""
+    # Handle-collection flow (per-action verify): the user is typing their X @username.
+    hstate = context.user_data.get("eng_handle")
+    if hstate:
+        msg = update.effective_message
+        user = update.effective_user
+        if not msg or not user:
+            return False
+        from . import engagement as eng
+        with flask_app.app_context():
+            handle = eng.set_social_handle(user.id, (msg.text or ""), platform="x")
+            if not handle:
+                await msg.reply_text(
+                    "That doesn't look like a username. Please send your X handle, e.g. <code>@yourname</code>.",
+                    parse_mode="HTML", reply_markup=_cancel_keyboard(),
+                )
+                return True
+            context.user_data.pop("eng_handle", None)
+            campaign = _load_campaign(hstate.get("cid"), lineage, bot_id)
+            if not campaign:
+                await msg.reply_text(f"Saved @{handle}. This campaign is no longer available.")
+                return True
+            text, kb = _action_panel(campaign, user.id, handle)
+            await msg.reply_text(f"Saved <b>@{html.escape(handle)}</b> ✅", parse_mode="HTML")
+            await msg.reply_text(text, parse_mode="HTML", reply_markup=kb, disable_web_page_preview=True)
+        return True
+
     state = context.user_data.get("eng")
     if not state:
         return False
@@ -513,16 +642,45 @@ async def on_private(update, context, *, flask_app, lineage, bot_id=None):
 
 async def on_callback(update, context, *, flask_app, lineage, bot_id=None):
     query = update.callback_query
-    if not query or not (query.data or "").startswith(("eng_", "engtask_")):
+    if not query or not (query.data or "").startswith(("eng_", "engtask_", "engv_", "engh_", "englock_")):
         return False
     data = query.data
     if data == "eng_cancel":
         context.user_data.pop("eng", None)
+        context.user_data.pop("eng_handle", None)
         await query.answer("Cancelled")
         try:
             await query.edit_message_text("Submission cancelled.")
         except Exception:
             pass
+        return True
+
+    # Change @username → re-collect the handle.
+    if data.startswith("engh_"):
+        await query.answer()
+        try:
+            cid = int(data[len("engh_"):])
+        except (ValueError, TypeError):
+            return True
+        context.user_data["eng_handle"] = {"cid": cid, "lineage": lineage, "bot_id": bot_id}
+        try:
+            await query.message.reply_text(
+                "Send your new X (Twitter) <b>@username</b>:",
+                parse_mode="HTML", reply_markup=_cancel_keyboard(),
+            )
+        except Exception:
+            pass
+        return True
+
+    # Locked sequential task → tell the user to finish the previous one first.
+    if data.startswith("englock_"):
+        await query.answer("Finish the previous task first 🔒", show_alert=True)
+        return True
+
+    # Per-action Verify tap.
+    if data.startswith("engv_"):
+        await _handle_action_verify(query, context, data, flask_app=flask_app,
+                                    lineage=lineage, bot_id=bot_id)
         return True
 
     # Multi-task picker → begin the chosen task's proof collection.
@@ -556,6 +714,83 @@ async def on_callback(update, context, *, flask_app, lineage, bot_id=None):
 
     await query.answer()
     return True
+
+
+async def _handle_action_verify(query, context, data, *, flask_app, lineage, bot_id):
+    """Verify one action (engv_<cid>_<action>): enforce the golden-period cooldown,
+    run/record the check, toast the result, and refresh the panel in place."""
+    from . import engagement as eng
+    user = query.from_user
+    msg = query.message
+    if not user or not msg:
+        await query.answer()
+        return
+    try:
+        _, cid, action = data.split("_", 2)
+        campaign_id = int(cid)
+    except (ValueError, TypeError):
+        await query.answer()
+        return
+
+    with flask_app.app_context():
+        campaign = _load_campaign(campaign_id, lineage, bot_id)
+        if not campaign:
+            await query.answer("This campaign is no longer available.", show_alert=True)
+            return
+        if not campaign.is_open:
+            await query.answer("This campaign is closed.", show_alert=True)
+            return
+
+        handle = eng.get_social_handle(user.id, "x")
+        if not handle:
+            # Shouldn't happen (panel needs a handle), but recover gracefully.
+            context.user_data["eng_handle"] = {"cid": campaign_id, "lineage": lineage, "bot_id": bot_id}
+            await query.answer()
+            await msg.reply_text(
+                "First, send your X (Twitter) <b>@username</b>:",
+                parse_mode="HTML", reply_markup=_cancel_keyboard(),
+            )
+            return
+
+        # Already done? Don't re-check (saves API credits).
+        if eng.action_status_map(campaign, user.id).get(action) == "verified":
+            await query.answer("Already verified ✅")
+            return
+
+        wait = eng.action_retry_remaining(campaign, user.id, action)
+        if wait > 0:
+            await query.answer(f"Please wait {wait}s, then verify again.", show_alert=True)
+            return
+
+        result = eng.verify_user_action(
+            campaign, telegram_user_id=user.id, telegram_username=user.username,
+            action=action, handle=handle,
+        )
+        status = result["status"]
+        if status == "verified":
+            await query.answer("Verified ✅")
+        elif status == "manual":
+            await query.answer("Submitted for review 🕒")
+        else:
+            await query.answer(result.get("detail") or "Couldn't detect it — try again shortly.",
+                               show_alert=True)
+
+        # Refresh the panel so the button labels reflect the new state.
+        try:
+            text, kb = _action_panel(campaign, user.id, handle)
+            await query.edit_message_text(text, parse_mode="HTML", reply_markup=kb,
+                                          disable_web_page_preview=True)
+        except Exception:
+            pass
+
+        if result.get("completed"):
+            footer = _promo_footer(campaign, lineage, str(user.id))
+            reward = campaign.reward_xp
+            bonus = f" +{reward} XP" if reward else ""
+            await msg.reply_text(
+                f"🎉 All done!{bonus} Thanks for taking part.{footer}",
+                parse_mode="HTML", disable_web_page_preview=True,
+            )
 
 
 # ── Finalize: create the submission + reply ───────────────────────────────────

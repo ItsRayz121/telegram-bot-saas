@@ -26,6 +26,7 @@ from .models import (
     EngagementCustomField,
     EngagementTask,
     EngagementSubmission,
+    SocialIdentity,
     CAMPAIGN_TYPES,
     CAMPAIGN_VERIFICATION_MODES,
     CAMPAIGN_STATUSES,
@@ -900,6 +901,220 @@ def award_submission(campaign, submission):
             db.session.rollback()
         except Exception:
             pass
+
+
+# ── Per-action verify flow (Engagement V3) ────────────────────────────────────
+# Raids / X social-tasks where the member does each action (Like/Repost/Comment/
+# Quote/Follow) in the bot DM and taps Verify. One submission per (campaign,user),
+# with each action's status stored in payload["actions"]. Likes auto-accept (X has
+# no likers endpoint); the rest verify live via twitterapi.io for Pro/Enterprise
+# owners, or fall back to manual review for free owners.
+
+# Campaign goal-key (plural) → twitter_verify canonical action (singular).
+GOAL_ACTIONS = [
+    ("likes", "like"), ("retweets", "retweet"), ("comments", "comment"),
+    ("quotes", "quote"), ("follows", "follow"),
+]
+GOAL_TO_ACTION = dict(GOAL_ACTIONS)
+# Actions that can never be auto-verified (no read endpoint) → always accepted.
+AUTO_ACCEPT_ACTIONS = {"like"}
+# Golden-period: seconds a user must wait between verify attempts on one action.
+ACTION_RETRY_COOLDOWN_DEFAULT = 30
+
+
+def _normalize_handle(value):
+    try:
+        from . import twitter_verify
+        return twitter_verify.normalize_handle(value)
+    except Exception:
+        v = (value or "").strip().lstrip("@")
+        return v or None
+
+
+def get_social_handle(telegram_user_id, platform="x"):
+    """The stored handle for this user+platform, or None — so the bot asks once."""
+    row = SocialIdentity.query.filter_by(
+        telegram_user_id=str(telegram_user_id), platform=platform
+    ).first()
+    return row.handle if row else None
+
+
+def set_social_handle(telegram_user_id, handle, platform="x"):
+    """Upsert the user's handle (normalized). Returns the stored handle or None if
+    the input wasn't a usable username."""
+    norm = _normalize_handle(handle)
+    if not norm:
+        return None
+    row = SocialIdentity.query.filter_by(
+        telegram_user_id=str(telegram_user_id), platform=platform
+    ).first()
+    if row:
+        row.handle = norm
+    else:
+        row = SocialIdentity(telegram_user_id=str(telegram_user_id), platform=platform, handle=norm)
+        db.session.add(row)
+    db.session.commit()
+    return norm
+
+
+def campaign_owner_is_paid(campaign):
+    """True if the campaign owner is on a paid tier (Pro/Enterprise). Live X
+    verification is gated to paid owners; free owners get manual review."""
+    return _is_paid(_campaign_owner(campaign))
+
+
+def campaign_action_goals(campaign):
+    """Ordered [(goal_key, action, target)] for the actions this campaign targets,
+    reading raid_goals (raid) or social_targets (social_task)."""
+    s = campaign.settings or {}
+    goals = s.get("raid_goals") if campaign.type == "raid" else s.get("social_targets")
+    goals = goals or {}
+    return [(gk, act, goals[gk]) for gk, act in GOAL_ACTIONS if goals.get(gk)]
+
+
+def has_action_flow(campaign):
+    """True if this campaign uses the per-action DM verify flow (an X raid or an
+    X social-task that targets at least one action)."""
+    if campaign.type == "raid":
+        return bool(campaign_action_goals(campaign))
+    if campaign.type == "social_task":
+        if (campaign.platform or "").lower() not in ("x", "twitter"):
+            return False
+        return bool(campaign_action_goals(campaign))
+    return False
+
+
+def _action_submission(campaign, telegram_user_id, telegram_username=None, create=False):
+    """The single (campaign, user) submission that holds the per-action map. The
+    action flow is campaign-level, so task_id is always NULL here."""
+    sub = EngagementSubmission.query.filter_by(
+        campaign_id=campaign.id, task_id=None,
+        telegram_user_id=str(telegram_user_id),
+    ).order_by(EngagementSubmission.created_at.desc()).first()
+    if sub or not create:
+        return sub
+    scope = "official" if campaign.telegram_group_id else "custom"
+    member_id = None
+    if scope == "official":
+        from .models import OfficialMember
+        m = OfficialMember.query.filter_by(
+            telegram_group_id=campaign.telegram_group_id,
+            telegram_user_id=str(telegram_user_id),
+        ).first()
+        member_id = m.id if m else None
+    sub = EngagementSubmission(
+        campaign_id=campaign.id, task_id=None,
+        telegram_user_id=str(telegram_user_id), telegram_username=telegram_username,
+        member_id=member_id, scope=scope, status="pending",
+        payload={"actions": {}},
+    )
+    db.session.add(sub)
+    db.session.commit()
+    return sub
+
+
+def action_status_map(campaign, telegram_user_id):
+    """{action: status} for this user's submission, or {} if none yet."""
+    sub = _action_submission(campaign, telegram_user_id)
+    if not sub:
+        return {}
+    return {a: (v or {}).get("status") for a, v in ((sub.payload or {}).get("actions") or {}).items()}
+
+
+def action_retry_remaining(campaign, telegram_user_id, action):
+    """Seconds left in the golden-period cooldown for this action, else 0."""
+    sub = _action_submission(campaign, telegram_user_id)
+    if not sub:
+        return 0
+    rec = ((sub.payload or {}).get("actions") or {}).get(action) or {}
+    last = rec.get("last_attempt")
+    if not last:
+        return 0
+    cooldown = int((campaign.settings or {}).get("action_retry_cooldown", ACTION_RETRY_COOLDOWN_DEFAULT))
+    try:
+        elapsed = (datetime.utcnow() - datetime.fromisoformat(last)).total_seconds()
+    except Exception:
+        return 0
+    return max(0, int(cooldown - elapsed))
+
+
+def verify_user_action(campaign, *, telegram_user_id, telegram_username, action, handle):
+    """Run/record one action verify for a participant and return a result dict
+    {status, detail, completed} where status ∈ {verified, failed, manual, cooldown}.
+
+    - like (and any AUTO_ACCEPT action) → instantly "verified" (we can't and don't
+      check it — XP is still awarded; never auto-pays a cash reward).
+    - retweet/comment/quote/follow → live twitterapi.io check for paid owners with
+      auto-verify on; otherwise recorded "manual" for admin review.
+    `completed` is True when this tap completed every targeted action → the whole
+    submission flips to verified and XP is awarded."""
+    sub = _action_submission(campaign, telegram_user_id, telegram_username, create=True)
+    payload = dict(sub.payload or {})
+    actions = dict(payload.get("actions") or {})
+    rec = dict(actions.get(action) or {})
+    now_iso = datetime.utcnow().isoformat()
+
+    if action in AUTO_ACCEPT_ACTIONS:
+        status, detail = "verified", "Accepted (likes can't be auto-checked)"
+    else:
+        # Record the attempt timestamp up-front so the golden-period cooldown
+        # counts from each try (the bot checks action_retry_remaining before calling).
+        rec["last_attempt"] = now_iso
+        live = False
+        try:
+            from . import twitter_verify
+            live = (campaign_owner_is_paid(campaign)
+                    and bool((campaign.settings or {}).get("auto_verify_x"))
+                    and twitter_verify.enabled())
+        except Exception:
+            live = False
+        if not live:
+            status, detail = "manual", "Submitted for manual review"
+        else:
+            try:
+                from . import twitter_verify
+                tweet_id = twitter_verify.extract_tweet_id(campaign.task_url)
+                target = ((campaign.settings or {}).get("raid_follow_target")
+                          or twitter_verify.extract_author_handle(campaign.task_url))
+                vstatus, vdetail = twitter_verify.verify_action(
+                    action, username=handle, tweet_id=tweet_id, target_handle=target,
+                )
+                if vstatus == "verified":
+                    status, detail = "verified", vdetail or "Verified on X"
+                elif vstatus == "failed":
+                    status, detail = "failed", vdetail or "Not detected on X"
+                else:  # unknown / manual → couldn't confirm; let them retry
+                    status, detail = "failed", "Couldn't detect it yet — try again shortly"
+            except Exception:
+                logger.info("verify_user_action live check failed for %s", campaign.id, exc_info=True)
+                status, detail = "failed", "Verification error — try again shortly"
+
+    rec["status"] = status
+    actions[action] = rec
+    payload["actions"] = actions
+    sub.payload = payload
+    sub.telegram_username = telegram_username or sub.telegram_username
+    from sqlalchemy.orm.attributes import flag_modified
+    flag_modified(sub, "payload")
+
+    # Completed when every targeted action is verified OR accepted-for-manual.
+    targeted = [act for _, act, _ in campaign_action_goals(campaign)]
+    done = all((actions.get(a) or {}).get("status") in ("verified", "manual") for a in targeted)
+    all_provable_verified = all((actions.get(a) or {}).get("status") == "verified" for a in targeted)
+    completed = False
+    if done and all_provable_verified:
+        sub.status = "verified"
+        completed = True
+    elif done:
+        sub.status = "pending"   # has manual actions awaiting admin review
+    db.session.commit()
+
+    if completed:
+        award_submission(campaign, sub)
+        _refresh_post_progress(campaign)
+        _submission_event(campaign, sub, "campaign.submission.verified")
+
+    return {"status": status, "detail": detail, "completed": completed}
 
 
 # ── Leaderboards (premium) ─────────────────────────────────────────────────────

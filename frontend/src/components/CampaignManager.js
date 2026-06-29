@@ -124,6 +124,7 @@ const EMPTY_FORM = {
   show_leaderboard: false,   // Pro: surface a ranked board (default set per type)
   custom_fields: [],
   multitask: false,   // Pro: campaign holds several sub-tasks
+  sequential_tasks: false,  // multi-task: lock each task until the previous is done
   tasks: [],
   raid_goals: {},     // raid type: { likes, retweets, comments, follows }
   social_targets: {}, // social_task: per-action quota { likes, retweets, comments, quotes, follows }
@@ -812,8 +813,10 @@ function CampaignWizard({ botId, groupId, initialType, isPaid = false, onClose, 
                   return acc;
                 }, {}),
                 show_targets: !!form.show_targets,
+                ...(isPaid && form.auto_verify_x && form.platform === 'x' ? { auto_verify_x: true } : {}),
               }
             : {}),
+          ...(form.multitask && form.sequential_tasks ? { sequential_tasks: true } : {}),
         },
         custom_fields: form.multitask ? [] : buildCustomFields(),
       };
@@ -878,6 +881,10 @@ function CampaignWizard({ botId, groupId, initialType, isPaid = false, onClose, 
                   value={form.description} onChange={(e) => set('description', e.target.value)} />
                 <Divider textAlign="left"><Typography variant="caption">Tasks</Typography></Divider>
                 <TasksEditor tasks={form.tasks} onChange={(v) => set('tasks', v)} />
+                <FormControlLabel
+                  control={<Switch checked={form.sequential_tasks} onChange={(e) => set('sequential_tasks', e.target.checked)} />}
+                  label="Sequential — lock each task until the previous one is completed"
+                />
               </Stack>
             ) : (
               <>
@@ -967,6 +974,23 @@ function CampaignWizard({ botId, groupId, initialType, isPaid = false, onClose, 
                         ? 'The group post shows each target and updates as people are verified (e.g. “40 reposts left”). Likes are honor-based and counted by verified submissions — X keeps real likes private.'
                         : 'Targets stay private — you’ll see verified progress in Manage. Turn this on to show a live countdown to members.'}
                     </Typography>
+                    {form.platform === 'x' && (
+                      <>
+                        <FormControlLabel
+                          sx={{ mt: 1 }}
+                          control={
+                            <Switch checked={isPaid && form.auto_verify_x} disabled={!isPaid}
+                              onChange={(e) => set('auto_verify_x', e.target.checked)} />
+                          }
+                          label="Auto-verify on X (Pro) — check reposts / comments / quotes / follows in real time"
+                        />
+                        <Typography variant="caption" color="text.secondary" display="block">
+                          {isPaid
+                            ? 'Members do each action in the bot DM and tap Verify; reposts, comments, quotes and follows are checked live, likes are accepted automatically (X keeps likes private). Off → everything goes to manual review.'
+                            : 'Real-time X verification is a Pro/Enterprise feature. On the free plan members still do the actions in the DM, but you approve them manually.'}
+                        </Typography>
+                      </>
+                    )}
                   </Box>
                 )}
                 <FormControl fullWidth>
@@ -1368,6 +1392,8 @@ function CampaignEditDialog({ botId, groupId, campaign, hasSubmissions, onClose,
     raid_goals: (campaign.settings || {}).raid_goals || {},
     social_targets: (campaign.settings || {}).social_targets || {},
     show_targets: !!(campaign.settings || {}).show_targets,
+    auto_verify_x: !!(campaign.settings || {}).auto_verify_x,
+    sequential_tasks: !!(campaign.settings || {}).sequential_tasks,
   });
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
@@ -1416,8 +1442,10 @@ function CampaignEditDialog({ botId, groupId, campaign, hasSubmissions, onClose,
                   return acc;
                 }, {}),
                 show_targets: !!form.show_targets,
+                auto_verify_x: campaign.platform === 'x' ? !!form.auto_verify_x : false,
               }
             : {}),
+          ...(isMulti ? { sequential_tasks: !!form.sequential_tasks } : {}),
         },
       };
       // Only touch tasks / fields when they're editable (no submissions yet).
@@ -1520,6 +1548,11 @@ function CampaignEditDialog({ botId, groupId, campaign, hasSubmissions, onClose,
                 sx={{ mt: 1 }}
                 control={<Switch checked={form.show_targets} onChange={(e) => set('show_targets', e.target.checked)} />}
                 label="Show targets publicly — display a live quota in the group post" />
+              {campaign.platform === 'x' && (
+                <FormControlLabel
+                  control={<Switch checked={form.auto_verify_x} onChange={(e) => set('auto_verify_x', e.target.checked)} />}
+                  label="Auto-verify on X (Pro) — check reposts / comments / quotes / follows in real time" />
+              )}
             </Box>
           )}
 
@@ -1553,6 +1586,11 @@ function CampaignEditDialog({ botId, groupId, campaign, hasSubmissions, onClose,
               <Divider textAlign="left"><Typography variant="caption">Proof fields</Typography></Divider>
               <ProofFieldsEditor fields={form.custom_fields} onChange={(v) => set('custom_fields', v)} />
             </>
+          )}
+          {isMulti && (
+            <FormControlLabel
+              control={<Switch checked={form.sequential_tasks} onChange={(e) => set('sequential_tasks', e.target.checked)} />}
+              label="Sequential — lock each task until the previous one is completed" />
           )}
           {!structureLocked && isMulti && (
             <>

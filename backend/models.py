@@ -3892,3 +3892,33 @@ class EngagementSubmission(db.Model):
             "created_at": self.created_at.isoformat(),
             "reviewed_at": self.reviewed_at.isoformat() if self.reviewed_at else None,
         }
+
+
+class SocialIdentity(db.Model):
+    """A participant's social-media handle, stored ONCE and reused across every
+    campaign so the bot never re-asks. Anchored on the numeric telegram_user_id
+    (Telegram @usernames change; the id never does), one row per (user, platform).
+
+    Honor-based and editable: there is no cheap ownership proof on X, so a wrong
+    handle simply means that user's action checks never verify (self-correcting),
+    and the user can update it any time via the bot's "Change handle" button."""
+    __tablename__ = "social_identities"
+
+    id = db.Column(db.Integer, primary_key=True)
+    telegram_user_id = db.Column(db.String(64), nullable=False, index=True)
+    platform = db.Column(db.String(32), nullable=False, default="x")  # x | youtube | instagram | …
+    handle = db.Column(db.String(255), nullable=False)                # bare username, no leading @
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint("telegram_user_id", "platform", name="uq_social_identity_user_platform"),
+    )
+
+    def to_dict(self):
+        return {
+            "telegram_user_id": self.telegram_user_id,
+            "platform": self.platform,
+            "handle": self.handle,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }

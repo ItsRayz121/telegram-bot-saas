@@ -3235,7 +3235,8 @@ class BotInstance:
             ),
             group=-1,
         )
-        app.add_handler(CallbackQueryHandler(_eng_cb, pattern=r"^(eng_|engtask_)"), group=-1)
+        # Matches every engagement callback: eng_, engtask_, engv_, engh_, englock_.
+        app.add_handler(CallbackQueryHandler(_eng_cb, pattern=r"^eng"), group=-1)
 
         app.add_handler(CommandHandler("start", self.handle_start))
         app.add_handler(CommandHandler("help", self.handle_help))
