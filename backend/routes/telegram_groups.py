@@ -1971,6 +1971,18 @@ def _eng_err(e: "eng.EngagementError"):
     return jsonify(body), status
 
 
+def _x_autoverify_available():
+    """Whether real-time X auto-verify can actually run right now — i.e. a
+    twitterapi.io key is configured AND the admin kill-switch is on. Cheap (no API
+    call). The campaign builder uses this to warn when the 'Auto-verify on X' toggle
+    would silently degrade to manual review for lack of a key."""
+    try:
+        from .. import twitter_verify
+        return bool(twitter_verify.enabled())
+    except Exception:
+        return False
+
+
 @tg_groups_bp.route("/<group_id>/campaigns", methods=["GET"])
 @jwt_required()
 @rate_limit(requests_per_minute=60)
@@ -1979,7 +1991,7 @@ def list_official_campaigns(group_id):
     if not _owns_group(user.id, group_id):
         return jsonify({"error": "Group not found"}), 404
     campaigns = eng.list_campaigns("official", telegram_group_id=group_id, status=request.args.get("status"))
-    return jsonify({"campaigns": campaigns}), 200
+    return jsonify({"campaigns": campaigns, "x_autoverify_available": _x_autoverify_available()}), 200
 
 
 @tg_groups_bp.route("/<group_id>/campaigns", methods=["POST"])

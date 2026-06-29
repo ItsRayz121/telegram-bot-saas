@@ -916,10 +916,18 @@ GOAL_ACTIONS = [
     ("quotes", "quote"), ("follows", "follow"),
 ]
 GOAL_TO_ACTION = dict(GOAL_ACTIONS)
-# Actions that can never be auto-verified (no read endpoint) → always accepted.
+# Actions that can never be auto-verified (no read endpoint) → behavioural gate.
+# These can't be proven via the API (X has no likers endpoint), so instead of
+# blindly auto-accepting we require the participant to actually OPEN the post
+# (tap the action button, which stamps opened_at) and let it SOAK for a few
+# seconds before they may Verify — killing the "tap Verify without doing anything"
+# abuse. See record_action_open + the like branch of verify_user_action.
 AUTO_ACCEPT_ACTIONS = {"like"}
 # Golden-period: seconds a user must wait between verify attempts on one action.
 ACTION_RETRY_COOLDOWN_DEFAULT = 30
+# Like soak: seconds that must pass AFTER the user opens the post before a like
+# can be confirmed (per-campaign overridable via settings.like_soak_seconds).
+LIKE_SOAK_SECONDS = 30
 
 
 def _normalize_handle(value):
@@ -1069,12 +1077,38 @@ def action_retry_remaining(campaign, telegram_user_id, action):
     return max(0, int(cooldown - elapsed))
 
 
+def record_action_open(campaign, *, telegram_user_id, telegram_username, action):
+    """Record that the participant OPENED the post for `action` (tapped the action
+    button). Stamps opened_at once so the like soak-gate can measure from the first
+    real open. Returns the opened_at iso string. No-op (idempotent) if already set.
+
+    Only meaningful for AUTO_ACCEPT actions (likes) — provable actions are proven by
+    the API, not by an open — but it's harmless to record for any action."""
+    sub = _action_submission(campaign, telegram_user_id, telegram_username, create=True)
+    payload = dict(sub.payload or {})
+    actions = dict(payload.get("actions") or {})
+    rec = dict(actions.get(action) or {})
+    if not rec.get("opened_at"):
+        rec["opened_at"] = datetime.utcnow().isoformat()
+        actions[action] = rec
+        payload["actions"] = actions
+        sub.payload = payload
+        sub.telegram_username = telegram_username or sub.telegram_username
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(sub, "payload")
+        db.session.commit()
+    return rec["opened_at"]
+
+
 def verify_user_action(campaign, *, telegram_user_id, telegram_username, action, handle):
     """Run/record one action verify for a participant and return a result dict
-    {status, detail, completed} where status ∈ {verified, failed, manual, cooldown}.
+    {status, detail, completed} where status ∈ {verified, failed, manual, cooldown,
+    need_open}.
 
-    - like (and any AUTO_ACCEPT action) → instantly "verified" (we can't and don't
-      check it — XP is still awarded; never auto-pays a cash reward).
+    - like (and any AUTO_ACCEPT action) → can't be API-checked, so we gate on real
+      behaviour: the user must have OPENED the post (need_open if not) and let it
+      soak ≥ like_soak_seconds (cooldown if too soon); only then "verified". XP is
+      still awarded; we never auto-pay a cash reward off a like.
     - retweet/comment/quote/follow → live twitterapi.io check for paid owners with
       auto-verify on; otherwise recorded "manual" for admin review.
     `completed` is True when this tap completed every targeted action → the whole
@@ -1086,7 +1120,23 @@ def verify_user_action(campaign, *, telegram_user_id, telegram_username, action,
     now_iso = datetime.utcnow().isoformat()
 
     if action in AUTO_ACCEPT_ACTIONS:
-        status, detail = "verified", "Accepted (likes can't be auto-checked)"
+        # Behavioural anti-fraud gate (no API can prove a like — X privatised them).
+        opened = rec.get("opened_at")
+        if not opened:
+            return {"status": "need_open", "completed": False, "all_submitted": False,
+                    "detail": "Tap the 👍 Like button to open the post and like it first, "
+                              "then come back and tap Verify."}
+        soak = int((campaign.settings or {}).get("like_soak_seconds", LIKE_SOAK_SECONDS))
+        try:
+            elapsed = (datetime.utcnow() - datetime.fromisoformat(opened)).total_seconds()
+        except Exception:
+            elapsed = soak  # unparseable timestamp → don't trap the user forever
+        if elapsed < soak:
+            wait = max(1, int(soak - elapsed))
+            return {"status": "cooldown", "completed": False, "all_submitted": False,
+                    "wait": wait,
+                    "detail": f"Like the post, then tap Verify in {wait}s."}
+        status, detail = "verified", "Accepted (post opened & liked)"
     else:
         # Record the attempt timestamp up-front so the golden-period cooldown
         # counts from each try (the bot checks action_retry_remaining before calling).

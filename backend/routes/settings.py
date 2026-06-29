@@ -1103,7 +1103,13 @@ def list_engagement_campaigns(bot_id, group_id):
     if err:
         return err
     campaigns = eng.list_campaigns("custom", group_id=group.id, status=request.args.get("status"))
-    return jsonify({"campaigns": campaigns})
+    x_autoverify_available = False
+    try:
+        from .. import twitter_verify
+        x_autoverify_available = bool(twitter_verify.enabled())
+    except Exception:
+        x_autoverify_available = False
+    return jsonify({"campaigns": campaigns, "x_autoverify_available": x_autoverify_available})
 
 
 @settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/campaigns", methods=["POST"])

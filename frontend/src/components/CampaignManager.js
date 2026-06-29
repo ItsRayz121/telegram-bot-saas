@@ -319,6 +319,10 @@ function ScreenshotViewer({ botId, groupId, campaignId, submissionId }) {
 export default function CampaignManager({ botId, groupId, userTier = 'free' }) {
   const isPaid = userTier && userTier !== 'free';
   const [campaigns, setCampaigns] = useState([]);
+  // Whether X auto-verify can actually run (twitterapi.io key live + admin switch on).
+  // When false, the "Auto-verify on X" toggle silently degrades to manual review —
+  // so the builder warns instead of leaving the owner guessing.
+  const [xAutoverifyAvailable, setXAutoverifyAvailable] = useState(true);
   const [loading, setLoading] = useState(true);
   const [createType, setCreateType] = useState(null);   // non-null => wizard open, pre-set to this type
   const [createAnchor, setCreateAnchor] = useState(null); // Create ▾ menu anchor
@@ -330,6 +334,8 @@ export default function CampaignManager({ botId, groupId, userTier = 'free' }) {
     try {
       const res = await engagement.list(botId, groupId);
       setCampaigns(res.data.campaigns || []);
+      // Default to true when the field is absent (older backend) so we never warn spuriously.
+      setXAutoverifyAvailable(res.data.x_autoverify_available !== false);
     } catch {
       toast.error('Failed to load campaigns');
     } finally {
@@ -511,6 +517,7 @@ export default function CampaignManager({ botId, groupId, userTier = 'free' }) {
       {createType && (
         <CampaignWizard
           botId={botId} groupId={groupId} initialType={createType} isPaid={isPaid}
+          xAutoverifyAvailable={xAutoverifyAvailable}
           onClose={() => setCreateType(null)}
           onCreated={() => { setCreateType(null); load(); }}
         />
@@ -735,7 +742,7 @@ function CampaignRow({ c, botId, groupId, onChanged, onManage }) {
 
 // ── Create wizard ─────────────────────────────────────────────────────────────
 
-function CampaignWizard({ botId, groupId, initialType, isPaid = false, onClose, onCreated }) {
+function CampaignWizard({ botId, groupId, initialType, isPaid = false, xAutoverifyAvailable = true, onClose, onCreated }) {
   const [step, setStep] = useState(0);
   const cfg0 = typeConfig(initialType);
   const [form, setForm] = useState({
@@ -954,12 +961,20 @@ function CampaignWizard({ botId, groupId, initialType, isPaid = false, onClose, 
                       }
                       label="Auto-verify on X (Pro) — confirm likes / retweets / comments / follows in real time"
                     />
+                    {form.auto_verify_x && isPaid && !xAutoverifyAvailable && (
+                      <Alert severity="warning" sx={{ mt: 1 }}>
+                        Auto-verify needs the <strong>twitterapi.io key</strong> configured (Admin →
+                        Secrets) and the X auto-verify switch enabled. Until then, reposts / comments /
+                        quotes / follows will fall back to <strong>manual review</strong> instead of
+                        verifying in real time.
+                      </Alert>
+                    )}
                     {form.auto_verify_x && isPaid && (
                       <Typography variant="caption" color="text.secondary" display="block">
                         Members are asked for their X @username so the bot can verify automatically.
                         Retweets, comments, quote-tweets and follows verify in real time; <strong>likes
-                        can’t be auto-verified</strong> (X keeps likes private) so a raid that includes a
-                        likes goal stays pending for your manual review.
+                        can’t be auto-verified</strong> (X keeps likes private), so a like requires the
+                        member to open the post and wait ~30s before it’s accepted.
                       </Typography>
                     )}
                     {!isPaid && (
@@ -1005,21 +1020,34 @@ function CampaignWizard({ botId, groupId, initialType, isPaid = false, onClose, 
                           }
                           label="Auto-verify on X (Pro) — check reposts / comments / quotes / follows in real time"
                         />
+                        {form.auto_verify_x && isPaid && !xAutoverifyAvailable && (
+                          <Alert severity="warning" sx={{ mt: 1 }}>
+                            Auto-verify needs the <strong>twitterapi.io key</strong> configured (Admin →
+                            Secrets). Until then, reposts / comments / quotes / follows fall back to
+                            <strong> manual review</strong>.
+                          </Alert>
+                        )}
                         <Typography variant="caption" color="text.secondary" display="block">
                           {isPaid
-                            ? 'Members do each action in the bot DM and tap Verify; reposts, comments, quotes and follows are checked live, likes are accepted automatically (X keeps likes private). Off → everything goes to manual review.'
+                            ? 'Members do each action in the bot DM and tap Verify; reposts, comments, quotes and follows are checked live. A like requires the member to open the post and wait ~30s before it’s accepted (X keeps real likes private). Off → everything goes to manual review.'
                             : 'Real-time X verification is a Pro/Enterprise feature. On the free plan members still do the actions in the DM, but you approve them manually.'}
                         </Typography>
                       </>
                     )}
                   </Box>
                 )}
-                <FormControl fullWidth>
-                  <InputLabel>Verification</InputLabel>
-                  <Select value={form.verification_mode} label="Verification" onChange={(e) => set('verification_mode', e.target.value)}>
-                    {VERIFICATION_MODES.map((v) => <MenuItem key={v.value} value={v.value}>{v.label}</MenuItem>)}
-                  </Select>
-                </FormControl>
+                {/* A raid is driven entirely by the per-action DM verify flow (each
+                    action is checked live or sent to review on its own), so the
+                    campaign-level Verification mode doesn't apply — showing it only
+                    contradicts the Auto-verify toggle. Hide it for raids. */}
+                {form.type !== 'raid' && (
+                  <FormControl fullWidth>
+                    <InputLabel>Verification</InputLabel>
+                    <Select value={form.verification_mode} label="Verification" onChange={(e) => set('verification_mode', e.target.value)}>
+                      {VERIFICATION_MODES.map((v) => <MenuItem key={v.value} value={v.value}>{v.label}</MenuItem>)}
+                    </Select>
+                  </FormControl>
+                )}
 
                 <Divider textAlign="left"><Typography variant="caption">Proof fields</Typography></Divider>
                 <Typography variant="caption" color="text.secondary">
@@ -1208,7 +1236,17 @@ function CampaignManageDialog({ botId, groupId, campaignId, onClose, onChanged }
             <Stack direction="row" spacing={2} sx={{ mb: 2, flexWrap: 'wrap' }}>
               <Typography variant="body2"><strong>Type:</strong> {campaign.type}</Typography>
               {campaign.platform && <Typography variant="body2"><strong>Platform:</strong> {campaign.platform}</Typography>}
-              <Typography variant="body2"><strong>Verification:</strong> {campaign.verification_mode}</Typography>
+              {/* Raids verify per-action (live X auto-verify or review), so the
+                  campaign-level verification_mode is meaningless here — show the
+                  auto-verify state instead of a misleading "manual". */}
+              {campaign.type === 'raid' ? (
+                <Typography variant="body2">
+                  <strong>Verification:</strong>{' '}
+                  {(campaign.settings || {}).auto_verify_x ? 'Auto-verify on X' : 'Manual review'}
+                </Typography>
+              ) : (
+                <Typography variant="body2"><strong>Verification:</strong> {campaign.verification_mode}</Typography>
+              )}
               {campaign.reward_xp ? <Typography variant="body2"><strong>XP:</strong> {campaign.reward_xp}</Typography> : null}
               {campaign.reward_label && <Typography variant="body2"><strong>Reward:</strong> {campaign.reward_label}</Typography>}
               {campaign.ends_at && <Typography variant="body2"><strong>Ends:</strong> {new Date(campaign.ends_at).toLocaleString()}</Typography>}
@@ -1540,12 +1578,16 @@ function CampaignEditDialog({ botId, groupId, campaign, hasSubmissions, onClose,
               )}
               <TextField fullWidth label={cfgE.taskUrlLabel || 'Task Link (optional)'}
                 placeholder="https://x.com/..." value={form.task_url} onChange={(e) => set('task_url', e.target.value)} />
-              <FormControl fullWidth>
-                <InputLabel>Verification</InputLabel>
-                <Select value={form.verification_mode} label="Verification" onChange={(e) => set('verification_mode', e.target.value)}>
-                  {VERIFICATION_MODES.map((v) => <MenuItem key={v.value} value={v.value}>{v.label}</MenuItem>)}
-                </Select>
-              </FormControl>
+              {/* Raids are driven by the per-action DM verify flow, so the
+                  campaign-level Verification mode doesn't apply — hide it. */}
+              {campaign.type !== 'raid' && (
+                <FormControl fullWidth>
+                  <InputLabel>Verification</InputLabel>
+                  <Select value={form.verification_mode} label="Verification" onChange={(e) => set('verification_mode', e.target.value)}>
+                    {VERIFICATION_MODES.map((v) => <MenuItem key={v.value} value={v.value}>{v.label}</MenuItem>)}
+                  </Select>
+                </FormControl>
+              )}
             </>
           )}
 

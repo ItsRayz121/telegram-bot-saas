@@ -27,6 +27,12 @@ logger = logging.getLogger(__name__)
 _PARTICIPATE_COOLDOWN = 3.0
 _last_participate = {}
 
+# How long a pending X @username entry stays "armed" (seconds). After this, the
+# next stray DM is NOT hijacked as a username — the entry expires and the member
+# must tap ✏️ Change again. Keeps the change window short (the owner asked for a
+# 1–3 min cap) so a forgotten prompt can't silently swallow an unrelated message.
+_HANDLE_ENTRY_TTL = 180.0
+
 # ── Growth promo (Phase 8) — official bot ONLY, subtle, frequency-capped ───────
 # Custom bots are white-label and NEVER show Telegizer branding. The footer only
 # appears in the participant's private DM (never the group post), at most once per
@@ -187,6 +193,13 @@ def _cancel_keyboard():
     return InlineKeyboardMarkup([[InlineKeyboardButton("✖ Cancel", callback_data="eng_cancel")]])
 
 
+def _handle_entry_state(cid, lineage, bot_id):
+    """Build the 'awaiting X @username' state, stamped with an expiry so a forgotten
+    prompt can't hijack a later unrelated DM as a username (see _HANDLE_ENTRY_TTL)."""
+    return {"cid": cid, "lineage": lineage, "bot_id": bot_id,
+            "expires_at": time.monotonic() + _HANDLE_ENTRY_TTL}
+
+
 def _completed_task_ids(campaign_id, telegram_user_id):
     """Task ids the user has a verified/pending (i.e. non-rejected) submission for."""
     from .models import EngagementSubmission
@@ -318,11 +331,27 @@ def _action_panel(campaign, user_id, handle):
         emoji, label = _ACTION_META.get(action, ("•", action.title()))
         st = status_map.get(action)
         verify_label = _ACTION_VERIFY_LABEL.get(st, "✅ Verify")
+        # Likes can't be API-verified, so the action button is a CALLBACK that
+        # records the open (stamps opened_at) before sending the X link — that's
+        # what lets the soak-gate require a real tap + wait before Verify. Every
+        # provable action stays a direct url-button (the API is the real proof).
+        if action in eng.AUTO_ACCEPT_ACTIONS:
+            action_btn = InlineKeyboardButton(
+                f"{emoji} {label}", callback_data=f"engopen_{campaign.id}_{action}")
+        else:
+            action_btn = InlineKeyboardButton(
+                f"{emoji} {label}", url=_action_link(campaign, action))
         rows.append([
-            InlineKeyboardButton(f"{emoji} {label}", url=_action_link(campaign, action)),
+            action_btn,
             InlineKeyboardButton(verify_label, callback_data=f"engv_{campaign.id}_{action}"),
         ])
-    rows.append([InlineKeyboardButton("✏️ Change @username", callback_data=f"engh_{campaign.id}")])
+    # Show the saved handle (tap → reveals it) alongside a Change button, so the
+    # member can confirm who they're verifying as without conflating it with the
+    # change step (two distinct buttons rather than one ambiguous "Change").
+    rows.append([
+        InlineKeyboardButton(f"👤 @{handle}", callback_data=f"engme_{campaign.id}"),
+        InlineKeyboardButton("✏️ Change", callback_data=f"engh_{campaign.id}"),
+    ])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
@@ -335,7 +364,7 @@ async def _begin_action_flow(msg, context, campaign, *, user, lineage, bot_id):
         return
     handle = eng.get_social_handle(user.id, "x")
     if not handle:
-        context.user_data["eng_handle"] = {"cid": campaign.id, "lineage": lineage, "bot_id": bot_id}
+        context.user_data["eng_handle"] = _handle_entry_state(campaign.id, lineage, bot_id)
         await msg.reply_text(
             "First, what's your X (Twitter) <b>@username</b>? "
             "We'll remember it so you won't be asked again.",
@@ -570,6 +599,15 @@ async def on_private(update, context, *, flask_app, lineage, bot_id=None):
         user = update.effective_user
         if not msg or not user:
             return False
+        # Expired entry → don't hijack this DM as a username; make them re-arm it.
+        exp = hstate.get("expires_at")
+        if exp and time.monotonic() > exp:
+            context.user_data.pop("eng_handle", None)
+            await msg.reply_text(
+                "⌛ That username entry timed out. Tap ✏️ Change (or re-open the campaign) "
+                "to set your X @username again."
+            )
+            return True
         from . import engagement as eng
         with flask_app.app_context():
             handle = eng.set_social_handle(user.id, (msg.text or ""), platform="x")
@@ -665,7 +703,9 @@ async def on_private(update, context, *, flask_app, lineage, bot_id=None):
 
 async def on_callback(update, context, *, flask_app, lineage, bot_id=None):
     query = update.callback_query
-    if not query or not (query.data or "").startswith(("eng_", "engtask_", "engv_", "engh_", "englock_")):
+    if not query or not (query.data or "").startswith(
+        ("eng_", "engtask_", "engv_", "engopen_", "engh_", "engme_", "englock_")
+    ):
         return False
     data = query.data
     if data == "eng_cancel":
@@ -678,17 +718,32 @@ async def on_callback(update, context, *, flask_app, lineage, bot_id=None):
             pass
         return True
 
-    # Change @username → re-collect the handle.
+    # Show the saved X @username (the "👤 @handle" button).
+    if data.startswith("engme_"):
+        from . import engagement as eng
+        saved = None
+        if query.from_user:
+            with flask_app.app_context():
+                saved = eng.get_social_handle(query.from_user.id, "x")
+        if saved:
+            await query.answer(f"Your saved X username: @{saved}\nTap ✏️ Change to update it.",
+                               show_alert=True)
+        else:
+            await query.answer("No X username saved yet.", show_alert=True)
+        return True
+
+    # Change @username → re-collect the handle (armed for a short window).
     if data.startswith("engh_"):
         await query.answer()
         try:
             cid = int(data[len("engh_"):])
         except (ValueError, TypeError):
             return True
-        context.user_data["eng_handle"] = {"cid": cid, "lineage": lineage, "bot_id": bot_id}
+        context.user_data["eng_handle"] = _handle_entry_state(cid, lineage, bot_id)
+        mins = int(_HANDLE_ENTRY_TTL // 60)
         try:
             await query.message.reply_text(
-                "Send your new X (Twitter) <b>@username</b>:",
+                f"Send your new X (Twitter) <b>@username</b> within {mins} min:",
                 parse_mode="HTML", reply_markup=_cancel_keyboard(),
             )
         except Exception:
@@ -698,6 +753,13 @@ async def on_callback(update, context, *, flask_app, lineage, bot_id=None):
     # Locked sequential task → tell the user to finish the previous one first.
     if data.startswith("englock_"):
         await query.answer("Finish the previous task first 🔒", show_alert=True)
+        return True
+
+    # Per-action "open the post" tap (likes) → record the open, then hand over the
+    # X link so the soak-gate can require a real tap + wait before Verify.
+    if data.startswith("engopen_"):
+        await _handle_action_open(query, context, data, flask_app=flask_app,
+                                  lineage=lineage, bot_id=bot_id)
         return True
 
     # Per-action Verify tap.
@@ -739,6 +801,54 @@ async def on_callback(update, context, *, flask_app, lineage, bot_id=None):
     return True
 
 
+async def _handle_action_open(query, context, data, *, flask_app, lineage, bot_id):
+    """Open-the-post tap for a like (engopen_<cid>_<action>): record opened_at, then
+    send the X link as a url-button. The user opens it, likes the post, and may then
+    Verify once the soak window has elapsed (enforced in engagement.verify_user_action)."""
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    from . import engagement as eng
+    user = query.from_user
+    msg = query.message
+    if not user or not msg:
+        await query.answer()
+        return
+    try:
+        _, cid, action = data.split("_", 2)
+        campaign_id = int(cid)
+    except (ValueError, TypeError):
+        await query.answer()
+        return
+
+    with flask_app.app_context():
+        campaign = _load_campaign(campaign_id, lineage, bot_id)
+        if not campaign:
+            await query.answer("This campaign is no longer available.", show_alert=True)
+            return
+        if not campaign.is_open:
+            await query.answer("This campaign is closed.", show_alert=True)
+            return
+        try:
+            eng.record_action_open(
+                campaign, telegram_user_id=user.id,
+                telegram_username=user.username, action=action,
+            )
+        except Exception:
+            logger.info("record_action_open failed for campaign %s", campaign_id, exc_info=True)
+        link = _action_link(campaign, action)
+        soak = int((campaign.settings or {}).get("like_soak_seconds", eng.LIKE_SOAK_SECONDS))
+    await query.answer()
+    try:
+        await msg.reply_text(
+            f"👍 Open the post, tap <b>Like</b> on X, then come back and tap "
+            f"<b>Verify</b> in ~{soak}s.",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("👍 Open the post on X", url=link)]]),
+            disable_web_page_preview=True,
+        )
+    except Exception:
+        pass
+
+
 async def _handle_action_verify(query, context, data, *, flask_app, lineage, bot_id):
     """Verify one action (engv_<cid>_<action>): enforce the golden-period cooldown,
     run/record the check, toast the result, and refresh the panel in place."""
@@ -767,7 +877,7 @@ async def _handle_action_verify(query, context, data, *, flask_app, lineage, bot
         handle = eng.get_social_handle(user.id, "x")
         if not handle:
             # Shouldn't happen (panel needs a handle), but recover gracefully.
-            context.user_data["eng_handle"] = {"cid": campaign_id, "lineage": lineage, "bot_id": bot_id}
+            context.user_data["eng_handle"] = _handle_entry_state(campaign_id, lineage, bot_id)
             await query.answer()
             await msg.reply_text(
                 "First, send your X (Twitter) <b>@username</b>:",
@@ -794,6 +904,10 @@ async def _handle_action_verify(query, context, data, *, flask_app, lineage, bot
             await query.answer("Verified ✅")
         elif status == "manual":
             await query.answer("Submitted for review 🕒")
+        elif status in ("need_open", "cooldown"):
+            # Behavioural like-gate: must open the post, like it, and let it soak.
+            await query.answer(result.get("detail") or "Open the post and like it first.",
+                               show_alert=True)
         else:
             await query.answer(result.get("detail") or "Couldn't detect it — try again shortly.",
                                show_alert=True)
