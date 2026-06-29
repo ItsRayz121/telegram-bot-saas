@@ -763,10 +763,10 @@ function CampaignWizard({ botId, groupId, initialType, isPaid = false, onClose, 
       toast.error(`${cfg.taskUrlLabel || 'Link'} is required`); setStep(0); return;
     }
     setSaving(true);
-    // Clean proof fields; when X auto-verify is on, ensure a username field exists
-    // so the bot can collect the participant's @handle to verify against.
-    const buildCustomFields = () => {
-      let out = form.custom_fields
+    // Clean proof fields. The per-action DM verify flow now collects the X handle
+    // once and reuses it (SocialIdentity), so we no longer inject a username field.
+    const buildCustomFields = () =>
+      form.custom_fields
         .filter((f) => f.label.trim())
         .map((f) => ({
           label: f.label.trim(),
@@ -774,12 +774,6 @@ function CampaignWizard({ botId, groupId, initialType, isPaid = false, onClose, 
           required: f.required,
           example: (f.example || '').trim() || null,
         }));
-      if (form.type === 'raid' && isPaid && form.auto_verify_x
-          && !out.some((f) => f.field_type === 'username')) {
-        out = [{ label: 'Your X / Twitter @username', field_type: 'username', required: true, example: '@yourhandle' }, ...out];
-      }
-      return out;
-    };
     try {
       const payload = {
         type: form.type,

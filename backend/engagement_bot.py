@@ -802,6 +802,13 @@ async def _handle_action_verify(query, context, data, *, flask_app, lineage, bot
                 f"🎉 All done!{bonus} Thanks for taking part.{footer}",
                 parse_mode="HTML", disable_web_page_preview=True,
             )
+        elif result.get("all_submitted"):
+            # Every action recorded but some await manual review (free owner).
+            await msg.reply_text(
+                "✅ All actions submitted — your proof is now under review. "
+                "You'll be notified once it's approved.",
+                disable_web_page_preview=True,
+            )
 
 
 # ── Finalize: create the submission + reply ───────────────────────────────────

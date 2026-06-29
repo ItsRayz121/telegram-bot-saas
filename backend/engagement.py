@@ -1114,7 +1114,9 @@ def verify_user_action(campaign, *, telegram_user_id, telegram_username, action,
         _refresh_post_progress(campaign)
         _submission_event(campaign, sub, "campaign.submission.verified")
 
-    return {"status": status, "detail": detail, "completed": completed}
+    # `all_submitted` is True once every action has a result, even if some are
+    # awaiting manual review (free owner) — lets the bot post a clear summary.
+    return {"status": status, "detail": detail, "completed": completed, "all_submitted": done}
 
 
 # ── Leaderboards (premium) ─────────────────────────────────────────────────────
