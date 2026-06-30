@@ -9,7 +9,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import {
   Schedule, CheckCircle, AutoAwesome, Bolt, Warning, TrendingDown,
   AccessTime, ArrowForward, CurrencyBitcoin, Lock, Telegram, Forum, SmartToy,
-  Notes as NotesIcon, Link as LinkIcon, EventNote, AccountTree,
+  Notes as NotesIcon, Link as LinkIcon, EventNote, AccountTree, Close,
 } from '@mui/icons-material';
 import PlatformSwitcher from '../components/PlatformSwitcher';
 import { useNavigate } from 'react-router-dom';
@@ -40,6 +40,24 @@ const PAIN_POINTS = [
     desc: 'That article, that thread, that doc — saved nowhere, found never, gone when it matters.',
   },
 ];
+
+// Before → After (BAB framework). Same you, same day — minus the mental load.
+const BEFORE_AFTER = {
+  before: [
+    'Reminders scattered across five apps',
+    'Notes live everywhere and nowhere',
+    'You re-type your to-do list by hand',
+    'Saved links vanish when you need them',
+    'You rely on memory and hope',
+  ],
+  after: [
+    'One reminder system, right in your chat',
+    'Every note searchable in one place',
+    'Tasks captured the moment you think of them',
+    'Links saved, summarized, and resurfaced',
+    'Echo remembers so you don\'t have to',
+  ],
+};
 
 const FEATURES = [
   {
@@ -182,6 +200,7 @@ export default function EchoLanding() {
 
   const [painRef, painVisible] = useScrollReveal(0.08);
   const [solutionRef, solutionVisible] = useScrollReveal(0.15);
+  const [babRef, babVisible] = useScrollReveal(0.1);
   const [featuresRef, featuresVisible] = useScrollReveal(0.05);
   const [stepsRef, stepsVisible] = useScrollReveal(0.1);
   const [pricingRef, pricingVisible] = useScrollReveal(0.05);
@@ -371,6 +390,71 @@ export default function EchoLanding() {
             Send Echo a note, a task, a link, or a reminder in plain language — it files it, recalls it,
             and nudges you at the right moment. Everything lives in Telegram, where you already are.
           </Typography>
+        </Container>
+      </Box>
+
+      {/* ── Before / After (BAB) ── */}
+      <Box ref={babRef} sx={{ bgcolor: '#07101f', borderBottom: '1px solid', borderColor: 'divider', py: { xs: 8, md: 11 }, ...reveal(babVisible) }}>
+        <Container maxWidth="lg">
+          <Box sx={{ textAlign: 'center', mb: 6 }}>
+            <Typography variant="overline" sx={{ color: ACCENT }} fontWeight={700} letterSpacing={2}>The Difference</Typography>
+            <Typography variant="h4" fontWeight={800} mt={1} mb={1}>
+              Before Echo vs{' '}
+              <Box component="span" sx={{ background: `linear-gradient(135deg, ${ACCENT}, ${ACCENT2})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>after</Box>
+            </Typography>
+            <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 560, mx: 'auto' }}>
+              Same you, same day — minus the mental load.
+            </Typography>
+          </Box>
+          <Grid container spacing={{ xs: 3, md: 0 }} alignItems="stretch" justifyContent="center">
+            {/* Before */}
+            <Grid item xs={12} md={5} sx={reveal(babVisible, 80)}>
+              <Card sx={{ height: '100%', p: 1, borderColor: 'rgba(211,47,47,0.25)', bgcolor: 'rgba(211,47,47,0.04)' }}>
+                <CardContent>
+                  <Typography variant="overline" color="error.main" fontWeight={700} letterSpacing={1}>
+                    Without Echo
+                  </Typography>
+                  <Stack spacing={1.5} mt={1.5}>
+                    {BEFORE_AFTER.before.map((t) => (
+                      <Box key={t} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                        <Close fontSize="small" sx={{ color: 'error.main', mt: '2px', flexShrink: 0 }} />
+                        <Typography variant="body2" color="text.secondary" lineHeight={1.6}>{t}</Typography>
+                      </Box>
+                    ))}
+                  </Stack>
+                </CardContent>
+              </Card>
+            </Grid>
+            {/* Bridge arrow */}
+            <Grid item xs={12} md={2} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: { xs: 1, md: 0 } }}>
+              <Box sx={{
+                width: 52, height: 52, borderRadius: '50%', bgcolor: ACCENT,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: `0 8px 28px ${ACCENT}73`,
+                transform: { xs: 'rotate(90deg)', md: 'none' },
+              }}>
+                <ArrowForward sx={{ color: '#fff' }} />
+              </Box>
+            </Grid>
+            {/* After */}
+            <Grid item xs={12} md={5} sx={reveal(babVisible, 160)}>
+              <Card sx={{ height: '100%', p: 1, borderColor: 'rgba(102,187,106,0.3)', bgcolor: 'rgba(102,187,106,0.04)' }}>
+                <CardContent>
+                  <Typography variant="overline" color="success.main" fontWeight={700} letterSpacing={1}>
+                    With Echo
+                  </Typography>
+                  <Stack spacing={1.5} mt={1.5}>
+                    {BEFORE_AFTER.after.map((t) => (
+                      <Box key={t} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                        <CheckCircle fontSize="small" sx={{ color: 'success.main', mt: '2px', flexShrink: 0 }} />
+                        <Typography variant="body2" color="text.primary" lineHeight={1.6}>{t}</Typography>
+                      </Box>
+                    ))}
+                  </Stack>
+                </CardContent>
+              </Card>
+            </Grid>
+          </Grid>
         </Container>
       </Box>
 

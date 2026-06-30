@@ -10,7 +10,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import {
   SmartToy, Shield, Schedule, BarChart, People, CheckCircle,
   AutoAwesome, Bolt, Warning, TrendingDown, AccessTime,
-  ArrowForward, CurrencyBitcoin, Lock, Telegram, Forum,
+  ArrowForward, CurrencyBitcoin, Lock, Telegram, Forum, Close,
 } from '@mui/icons-material';
 import TelegizerLogo from '../components/TelegizerLogo';
 import PlatformSwitcher from '../components/PlatformSwitcher';
@@ -39,6 +39,24 @@ const PAIN_POINTS = [
     desc: 'No growth metrics, no activity data, no way to know which content keeps people coming back.',
   },
 ];
+
+// Before → After (BAB framework). Same group, same admin — minus the manual grind.
+const BEFORE_AFTER = {
+  before: [
+    'Spam piles up until you manually clear it',
+    'You type every welcome message by hand',
+    'Posts only go out when you\'re online',
+    'You\'re guessing what actually drives growth',
+    'Moderation eats into your evenings',
+  ],
+  after: [
+    'AutoMod removes spam the second it lands',
+    'New members welcomed automatically, 24/7',
+    'Content publishes on schedule, in any timezone',
+    'Analytics show exactly which links convert',
+    'The bot runs it all — you build the community',
+  ],
+};
 
 const FEATURES = [
   {
@@ -424,6 +442,7 @@ export default function Landing() {
   const [proofRef, proofVisible] = useScrollReveal(0.1);
   const [painRef, painVisible] = useScrollReveal(0.08);
   const [solutionRef, solutionVisible] = useScrollReveal(0.15);
+  const [babRef, babVisible] = useScrollReveal(0.1);
   const [featuresRef, featuresVisible] = useScrollReveal(0.05);
   const [stepsRef, stepsVisible] = useScrollReveal(0.1);
   const [testimonialsRef, testimonialsVisible] = useScrollReveal(0.1);
@@ -708,6 +727,73 @@ export default function Landing() {
             scheduled posts, welcome messages, analytics. Telegizer runs it in the background
             so you can focus on your community, not the admin work.
           </Typography>
+        </Container>
+      </Box>
+
+      {/* ── Before / After (BAB) ── */}
+      <Box ref={babRef} sx={{ bgcolor: '#07101f', borderBottom: '1px solid', borderColor: 'divider', py: { xs: 8, md: 11 }, ...reveal(babVisible) }}>
+        <Container maxWidth="lg">
+          <Box sx={{ textAlign: 'center', mb: 6 }}>
+            <Typography variant="overline" color="primary.main" fontWeight={700} letterSpacing={2}>
+              The Difference
+            </Typography>
+            <Typography variant="h4" fontWeight={800} mt={1} mb={1}>
+              Before Telegizer vs{' '}
+              <Box component="span" className="gradient-text">after</Box>
+            </Typography>
+            <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 560, mx: 'auto' }}>
+              Same group, same you — minus the manual grind.
+            </Typography>
+          </Box>
+          <Grid container spacing={{ xs: 3, md: 0 }} alignItems="stretch" justifyContent="center">
+            {/* Before */}
+            <Grid item xs={12} md={5} sx={reveal(babVisible, 80)}>
+              <Card sx={{ height: '100%', p: 1, borderColor: 'rgba(211,47,47,0.25)', bgcolor: 'rgba(211,47,47,0.04)' }}>
+                <CardContent>
+                  <Typography variant="overline" color="error.main" fontWeight={700} letterSpacing={1}>
+                    Without Telegizer
+                  </Typography>
+                  <Stack spacing={1.5} mt={1.5}>
+                    {BEFORE_AFTER.before.map((t) => (
+                      <Box key={t} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                        <Close fontSize="small" sx={{ color: 'error.main', mt: '2px', flexShrink: 0 }} />
+                        <Typography variant="body2" color="text.secondary" lineHeight={1.6}>{t}</Typography>
+                      </Box>
+                    ))}
+                  </Stack>
+                </CardContent>
+              </Card>
+            </Grid>
+            {/* Bridge arrow */}
+            <Grid item xs={12} md={2} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: { xs: 1, md: 0 } }}>
+              <Box sx={{
+                width: 52, height: 52, borderRadius: '50%', bgcolor: 'primary.main',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 8px 28px rgba(33,150,243,0.45)',
+                transform: { xs: 'rotate(90deg)', md: 'none' },
+              }}>
+                <ArrowForward sx={{ color: '#fff' }} />
+              </Box>
+            </Grid>
+            {/* After */}
+            <Grid item xs={12} md={5} sx={reveal(babVisible, 160)}>
+              <Card sx={{ height: '100%', p: 1, borderColor: 'rgba(102,187,106,0.3)', bgcolor: 'rgba(102,187,106,0.04)' }}>
+                <CardContent>
+                  <Typography variant="overline" color="success.main" fontWeight={700} letterSpacing={1}>
+                    With Telegizer
+                  </Typography>
+                  <Stack spacing={1.5} mt={1.5}>
+                    {BEFORE_AFTER.after.map((t) => (
+                      <Box key={t} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                        <CheckCircle fontSize="small" sx={{ color: 'success.main', mt: '2px', flexShrink: 0 }} />
+                        <Typography variant="body2" color="text.primary" lineHeight={1.6}>{t}</Typography>
+                      </Box>
+                    ))}
+                  </Stack>
+                </CardContent>
+              </Card>
+            </Grid>
+          </Grid>
         </Container>
       </Box>
 
