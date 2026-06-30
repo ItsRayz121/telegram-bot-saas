@@ -51,6 +51,8 @@ function RichEditor({ initialHTML, onChange, onImageUpload }) {
     emit();
   };
 
+  const escHtml = (t) => (t || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
   const onFile = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = '';
@@ -59,9 +61,13 @@ function RichEditor({ initialHTML, onChange, onImageUpload }) {
       const url = await onImageUpload(file);
       const alt = (window.prompt('Image alt text (helps SEO & accessibility):') || '')
         .replace(/"/g, '&quot;');
+      const caption = (window.prompt('Optional caption shown under the image (leave blank for none):') || '').trim();
+      const img = `<img src="${url}" alt="${alt}" loading="lazy">`;
+      const html = caption
+        ? `<figure>${img}<figcaption>${escHtml(caption)}</figcaption></figure><p><br></p>`
+        : `${img}<p><br></p>`;
       ref.current?.focus();
-      document.execCommand('insertHTML', false,
-        `<img src="${url}" alt="${alt}" loading="lazy"><p><br></p>`);
+      document.execCommand('insertHTML', false, html);
       emit();
     } catch {
       toast.error('Image upload failed.');
@@ -71,9 +77,15 @@ function RichEditor({ initialHTML, onChange, onImageUpload }) {
   const addEmbed = () => {
     const url = window.prompt('Paste a YouTube, Vimeo or Google Drive video link:');
     if (!url) return;
+    const title = (window.prompt('Optional video title / caption (leave blank for none):') || '').trim();
+    const safeUrl = url.replace(/"/g, '&quot;');
+    const label = title ? escHtml(title) : 'Embedded video';
+    const placeholder = `<div class="tg-embed" data-embed="${safeUrl}">📹 ${label} — plays on the published page</div>`;
+    const html = title
+      ? `<figure>${placeholder}<figcaption>${escHtml(title)}</figcaption></figure><p><br></p>`
+      : `${placeholder}<p><br></p>`;
     ref.current?.focus();
-    document.execCommand('insertHTML', false,
-      `<div class="tg-embed" data-embed="${url.replace(/"/g, '&quot;')}">📹 Embedded video — plays on the published page</div><p><br></p>`);
+    document.execCommand('insertHTML', false, html);
     emit();
   };
 
@@ -145,6 +157,8 @@ function RichEditor({ initialHTML, onChange, onImageUpload }) {
           '& h3': { fontSize: '1.2rem', mt: 1.5, mb: 0.75, fontWeight: 700 },
           '& p': { my: 1 },
           '& img': { maxWidth: '100%', height: 'auto', display: 'block', my: 1.5, borderRadius: 1 },
+          '& figure': { m: 0, my: 1.5 },
+          '& figcaption': { fontSize: '0.85rem', color: 'text.secondary', textAlign: 'center', mt: 0.5 },
           '& blockquote': { borderLeft: `3px solid ${PALETTE.purpleLt}`, pl: 2, ml: 0, color: 'text.secondary', fontStyle: 'italic' },
           '& ul, & ol': { pl: 3 },
           '& a': { color: PALETTE.blueLt },
