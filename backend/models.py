@@ -3922,3 +3922,105 @@ class SocialIdentity(db.Model):
             "handle": self.handle,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
+
+
+# ── Blog / Content (unified site-wide blog: Telegizer + Guildizer share it) ─────
+# One blog for the whole site so all SEO authority lands on telegizer.com. Public
+# pages are SERVER-RENDERED by backend/routes/blog.py (crawlable by Google / Bing
+# / AI engines); the admin writes posts from the SPA via the JSON API. Tables are
+# created automatically by db.create_all() — no manual migration needed.
+class BlogMedia(db.Model):
+    """Uploaded blog image, stored in Postgres so no external object store is
+    needed. Pillow re-encodes + caps dimensions on upload; served with a long
+    cache at /blog/media/<id>. Upgrade path (S3/R2) is a drop-in later."""
+    __tablename__ = "blog_media"
+
+    id = db.Column(db.Integer, primary_key=True)
+    filename = db.Column(db.String(255), nullable=True)
+    content_type = db.Column(db.String(64), nullable=False, default="image/webp")
+    data = db.Column(db.LargeBinary, nullable=False)
+    width = db.Column(db.Integer, nullable=True)
+    height = db.Column(db.Integer, nullable=True)
+    byte_size = db.Column(db.Integer, nullable=True)
+    alt_text = db.Column(db.String(300), nullable=True)
+    uploaded_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    def url(self):
+        return f"/blog/media/{self.id}"
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "url": self.url(),
+            "filename": self.filename,
+            "content_type": self.content_type,
+            "width": self.width,
+            "height": self.height,
+            "byte_size": self.byte_size,
+            "alt_text": self.alt_text,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class BlogPost(db.Model):
+    __tablename__ = "blog_posts"
+
+    id = db.Column(db.Integer, primary_key=True)
+    slug = db.Column(db.String(220), unique=True, nullable=False, index=True)
+    title = db.Column(db.String(255), nullable=False)
+    # Short summary shown on the index + used as the default meta description.
+    excerpt = db.Column(db.Text, nullable=True)
+    # Sanitised HTML produced by the editor (bleach-cleaned on save).
+    body_html = db.Column(db.Text, nullable=False, default="")
+    cover_image_url = db.Column(db.String(500), nullable=True)
+    author_name = db.Column(db.String(120), nullable=False, default="Telegizer Team")
+    category = db.Column(db.String(80), nullable=True)
+    tags = db.Column(db.JSON, nullable=True)            # list[str]
+    status = db.Column(db.String(20), nullable=False, default="draft", index=True)  # draft | published
+
+    # SEO fields
+    focus_keyword = db.Column(db.String(120), nullable=True)
+    meta_title = db.Column(db.String(255), nullable=True)         # overrides <title> when set
+    meta_description = db.Column(db.String(320), nullable=True)
+    og_image_url = db.Column(db.String(500), nullable=True)
+    canonical_url = db.Column(db.String(500), nullable=True)
+    noindex = db.Column(db.Boolean, nullable=False, default=False)
+
+    reading_minutes = db.Column(db.Integer, nullable=True)
+    views = db.Column(db.Integer, nullable=False, default=0)
+
+    published_at = db.Column(db.DateTime, nullable=True, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    author_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+
+    def to_dict(self, *, full=False):
+        d = {
+            "id": self.id,
+            "slug": self.slug,
+            "title": self.title,
+            "excerpt": self.excerpt or "",
+            "cover_image_url": self.cover_image_url,
+            "author_name": self.author_name,
+            "category": self.category,
+            "tags": self.tags or [],
+            "status": self.status,
+            "reading_minutes": self.reading_minutes or 1,
+            "views": self.views or 0,
+            "published_at": self.published_at.isoformat() if self.published_at else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+        if full:
+            d.update({
+                "body_html": self.body_html or "",
+                "focus_keyword": self.focus_keyword or "",
+                "meta_title": self.meta_title or "",
+                "meta_description": self.meta_description or "",
+                "og_image_url": self.og_image_url or "",
+                "canonical_url": self.canonical_url or "",
+                "noindex": bool(self.noindex),
+            })
+        return d

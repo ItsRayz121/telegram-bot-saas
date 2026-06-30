@@ -11,3 +11,4 @@ Disallow: /register
 Disallow: /api/
 
 Sitemap: https://telegizer.com/sitemap.xml
+Sitemap: https://telegizer.com/blog-sitemap.xml

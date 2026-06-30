@@ -10,7 +10,7 @@ import {
   TrendingUp, Verified, Flag, People, Security, VerifiedUser, Warning,
   FolderOpen, Groups, SmartToy, MonitorHeart, NetworkCheck, Insights,
   Campaign, Timeline, History, AttachMoney, Psychology, Tune, Key, Dns,
-  Gavel, Payment, SpaceDashboard, Settings, ShowChart,
+  Gavel, Payment, SpaceDashboard, Settings, ShowChart, Article,
 } from '@mui/icons-material';
 
 export const ADMIN_CATEGORIES = [
@@ -77,6 +77,7 @@ export const ADMIN_CATEGORIES = [
     icon: Gavel,
     items: [
       { key: 'compliance', label: 'Compliance', permission: 'moderation.view', icon: Gavel },
+      { key: 'blog', label: 'Blog', permission: 'announcements.manage', icon: Article },
       { key: 'announce', label: 'Announcements', permission: 'announcements.manage', icon: Campaign },
       { key: 'promo', label: 'Promo Codes', permission: 'billing.view', icon: Payment },
     ],

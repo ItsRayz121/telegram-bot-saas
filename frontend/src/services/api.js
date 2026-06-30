@@ -644,6 +644,17 @@ export const admin = {
   unbanUser: (id) => api.post(`/api/admin/users/${id}/unban`),
   updateUserNotes: (id, data) => api.put(`/api/admin/users/${id}/notes`, data),
   deleteUser: (id) => api.delete(`/api/admin/users/${id}`),
+  // Blog / Content (one unified site blog: Telegizer + Guildizer)
+  listBlogPosts: (params) => api.get('/api/admin/blog/posts', { params }),
+  getBlogPost: (id) => api.get(`/api/admin/blog/posts/${id}`),
+  createBlogPost: (data) => api.post('/api/admin/blog/posts', data),
+  updateBlogPost: (id, data) => api.put(`/api/admin/blog/posts/${id}`, data),
+  deleteBlogPost: (id) => api.delete(`/api/admin/blog/posts/${id}`),
+  uploadBlogMedia: (formData) => api.post('/api/admin/blog/media', formData, {
+    // Let the browser set multipart/form-data WITH its boundary (the instance
+    // default of application/json would otherwise break file parsing).
+    headers: { 'Content-Type': undefined },
+  }),
   // Stats & Revenue
   getStats: () => api.get('/api/admin/stats'),
   getRevenue: () => api.get('/api/admin/revenue'),

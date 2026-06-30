@@ -18,6 +18,7 @@ const TODAY = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
 const PAGES = [
   { loc: '/',               changefreq: 'weekly',  priority: '1.0' },
   { loc: '/pricing',        changefreq: 'weekly',  priority: '0.9' },
+  { loc: '/blog',           changefreq: 'daily',   priority: '0.8' },
   { loc: '/directory',      changefreq: 'daily',   priority: '0.8' },
   { loc: '/marketplace',    changefreq: 'weekly',  priority: '0.7' },
   { loc: '/about',          changefreq: 'monthly', priority: '0.8' },

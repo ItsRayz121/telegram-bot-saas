@@ -50,7 +50,7 @@
       ]
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!blog$|blog/).*)",
       "headers": [
         {
           "key": "Content-Security-Policy",
@@ -61,11 +61,39 @@
         { "key": "Permissions-Policy",             "value": "camera=(), microphone=(), geolocation=()" },
         { "key": "Strict-Transport-Security",      "value": "max-age=63072000; includeSubDomains; preload" }
       ]
+    },
+    {
+      "source": "/blog",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; base-uri 'self'; form-action 'self'; frame-src https://www.youtube-nocookie.com https://www.youtube.com https://player.vimeo.com https://drive.google.com https://telegram.org; frame-ancestors 'self';"
+        },
+        { "key": "X-Content-Type-Options",        "value": "nosniff" },
+        { "key": "Referrer-Policy",                "value": "strict-origin-when-cross-origin" },
+        { "key": "Strict-Transport-Security",      "value": "max-age=63072000; includeSubDomains; preload" }
+      ]
+    },
+    {
+      "source": "/blog/:path*",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; base-uri 'self'; form-action 'self'; frame-src https://www.youtube-nocookie.com https://www.youtube.com https://player.vimeo.com https://drive.google.com https://telegram.org; frame-ancestors 'self';"
+        },
+        { "key": "X-Content-Type-Options",        "value": "nosniff" },
+        { "key": "Referrer-Policy",                "value": "strict-origin-when-cross-origin" },
+        { "key": "Strict-Transport-Security",      "value": "max-age=63072000; includeSubDomains; preload" }
+      ]
     }
   ],
   "rewrites": [
+    { "source": "/blog", "destination": "https://api.telegizer.com/blog" },
+    { "source": "/blog/feed.xml", "destination": "https://api.telegizer.com/blog/feed.xml" },
+    { "source": "/blog-sitemap.xml", "destination": "https://api.telegizer.com/blog-sitemap.xml" },
+    { "source": "/blog/:path*", "destination": "https://api.telegizer.com/blog/:path*" },
     {
-      "source": "/((?!api|static|sw\\.js|tg-boot\\.js|manifest\\.json|offline\\.html|favicon\\.ico|sitemap\\.xml|robots\\.txt|\\.well-known).*)",
+      "source": "/((?!api|static|sw\\.js|tg-boot\\.js|manifest\\.json|offline\\.html|favicon\\.ico|sitemap\\.xml|blog-sitemap\\.xml|blog|robots\\.txt|\\.well-known).*)",
       "destination": "/index.html"
     }
   ]
