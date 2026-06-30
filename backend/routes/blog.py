@@ -155,9 +155,13 @@ def _embed_iframe(url: str) -> str | None:
             parts = parts[1:]
         if len(parts) >= 2 and parts[1].isdigit():
             ch, mid = _html.escape(parts[0]), _html.escape(parts[1])
+            # scrolling="auto" (not "no"): our CSP blocks Telegram's resizer JS,
+            # so the iframe stays at the fixed CSS height. With "no", a post taller
+            # than that gets clipped and is unreachable; "auto" lets readers scroll
+            # to the rest. Short posts show no scrollbar, so there's no regression.
             return ('<div class="tg-post"><iframe '
                     f'src="https://t.me/{ch}/{mid}?embed=1" '
-                    'frameborder="0" scrolling="no"></iframe></div>')
+                    'frameborder="0" scrolling="auto"></iframe></div>')
         return None
     if not src:
         return None
