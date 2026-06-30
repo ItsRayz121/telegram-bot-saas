@@ -90,6 +90,8 @@ def warning_text(category: str) -> str:
         return "🚫 That message was removed — disguised/look-alike characters aren't allowed."
     if category == "flood":
         return "🚫 Slow down — you're sending messages too quickly."
+    if category == "slow_mode":
+        return "🐢 Slow mode is on — please wait a bit before posting again."
     if category in ("attachment", "sticker", "voice_message", "photo", "video", "gif"):
         return "🚫 That content type isn't allowed in this server."
     if category == "email_detection":

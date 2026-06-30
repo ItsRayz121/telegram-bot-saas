@@ -34,6 +34,7 @@ import campaign_views
 import command_registrar
 import digest_runtime
 import flood_guard
+import slow_mode
 import knowledge
 import content_runtime
 import governor
@@ -205,6 +206,7 @@ def _sweep_rate_maps() -> None:
         for key in [k for k, ts in m.items() if ts < cutoff]:
             m.pop(key, None)
     flood_guard.sweep(_RATE_MAP_MAX_AGE)
+    slow_mode.sweep(_RATE_MAP_MAX_AGE)
 
 
 # ── Emoji-reaction sentiment + text-command heuristics (dashboard parity) ───────
@@ -504,6 +506,25 @@ class CoreMixin:
             # Per-user flood guard (stateful) — runs even when the message itself
             # is clean, since flooding is about rate, not content.
             decision = flood_guard.check(message.guild.id, message.author.id, cfg)
+        if decision is None:
+            # Smart per-user slow mode (stateful) — a steady minimum gap between
+            # one member's messages. Distinct from flood (bursts) and Discord's
+            # native per-channel Slowmode. Baseline advances only on accepted
+            # messages; the optional high-level exemption does its DB lookup only
+            # on a would-be violation, keeping the common path DB-free.
+            sd = slow_mode.check(message.guild.id, message.author.id, cfg)
+            if sd is not None:
+                sc = (cfg.get("automod") or {}).get("slow_mode") or {}
+                min_lvl = int(sc.get("exempt_min_level") or 0)
+                if min_lvl > 0:
+                    lvl = await asyncio.to_thread(
+                        self._member_level, message.guild.id, message.author.id)
+                    if lvl >= min_lvl:
+                        slow_mode.accept(message.guild.id, message.author.id)
+                        sd = None
+                if sd and sd["action"] == "warn" and not sc.get("notify", True):
+                    sd["action"] = "delete"  # silent removal
+            decision = sd
         if decision is None:
             # Smart Moderation Layer 2 (rule-based) — trusted admins bypass it.
             sm = (cfg.get("automod") or {}).get("smart_mod") or {}
@@ -2017,6 +2038,19 @@ class CoreMixin:
         db = SessionLocal()
         try:
             return protection.load_snapshot(db, guild_id)
+        finally:
+            db.close()
+            SessionLocal.remove()
+
+    @staticmethod
+    def _member_level(guild_id, user_id):
+        """Current leveling level for a member (0 if unknown). Only called on a
+        slow-mode would-be violation when a level exemption is configured."""
+        db = SessionLocal()
+        try:
+            from models import Member
+            m = db.get(Member, {"guild_id": guild_id, "user_id": user_id})
+            return int(m.level or 0) if m else 0
         finally:
             db.close()
             SessionLocal.remove()

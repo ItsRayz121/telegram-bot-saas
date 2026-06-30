@@ -105,6 +105,8 @@ def update_moderation(guild_id: int):
         am_in = body["automod"]
         am = dict(extra.get("automod") or {})
         for section, defaults in protection.EXTRA_DEFAULTS["automod"].items():
+            if section == "slow_mode":
+                continue  # validated explicitly below (exempt_min_level must allow 0)
             if not isinstance(am_in.get(section), dict):
                 continue
             cur = dict(am.get(section) or {})
@@ -132,6 +134,24 @@ def update_moderation(guild_id: int):
                 elif isinstance(default_val, int):
                     cur[key] = _as_int(val, default_val, 1, 1000)
             am[section] = cur
+        # Smart slow mode — validated on its own so exempt_min_level can be 0
+        # (the generic int handler clamps to >= 1).
+        if isinstance(am_in.get("slow_mode"), dict):
+            sm_in = am_in["slow_mode"]
+            sm = dict(am.get("slow_mode") or {})
+            if "enabled" in sm_in:
+                sm["enabled"] = bool(sm_in["enabled"])
+            if "seconds_between_messages" in sm_in:
+                sm["seconds_between_messages"] = _as_int(sm_in["seconds_between_messages"], 60, 5, 3600)
+            if sm_in.get("action") in ("delete", "warn", "timeout"):
+                sm["action"] = sm_in["action"]
+            if "timeout_minutes" in sm_in:
+                sm["timeout_minutes"] = _as_int(sm_in["timeout_minutes"], 5, 1, 40320)
+            if "exempt_min_level" in sm_in:
+                sm["exempt_min_level"] = _as_int(sm_in["exempt_min_level"], 0, 0, 1000)
+            if "notify" in sm_in:
+                sm["notify"] = bool(sm_in["notify"])
+            am["slow_mode"] = sm
         extra["automod"] = am
     if isinstance(body.get("warnings"), dict):
         w_in = body["warnings"]
@@ -374,6 +394,42 @@ def set_lockdown(guild_id: int):
     row.updated_at = datetime.utcnow()
     g.db.commit()
     return jsonify(row.to_dict())
+
+
+@protection_bp.post("/api/guilds/<int:guild_id>/native-slowmode")
+@login_required
+def set_native_slowmode(guild_id: int):
+    """Set a channel's native Discord Slowmode (rate_limit_per_user) from the
+    dashboard. Discord bots *can* do this (unlike Telegram), so it's a real
+    one-click control — complements the smart per-user slow mode below it."""
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return err
+    guild = g.db.get(Guild, guild_id)
+    if guild is None:
+        return jsonify(error="not_found"), 404
+    if not guild.bot_present:
+        return jsonify(error="bot_not_in_server"), 409
+    body = request.get_json(silent=True) or {}
+    ch_raw = str(body.get("channel_id") or "")
+    if not ch_raw.isdigit():
+        return jsonify(error="bad_channel_id"), 400
+    seconds = _as_int(body.get("seconds", 0), 0, 0, 21600)
+
+    import discord_api
+    try:
+        discord_api.set_channel_slowmode(
+            int(ch_raw), seconds, "Guildizer dashboard: native Slowmode")
+    except Exception:
+        return jsonify(error="discord_action_failed"), 502
+
+    detail = (f"Native Slowmode set to {seconds}s" if seconds
+              else "Native Slowmode turned off") + f" · channel {ch_raw}"
+    g.db.add(ProtectionEvent(
+        guild_id=guild_id, category="moderation", action="slowmode", detail=detail[:255],
+    ))
+    g.db.commit()
+    return jsonify(ok=True, seconds=seconds)
 
 
 @protection_bp.get("/api/guilds/<int:guild_id>/protection/events")

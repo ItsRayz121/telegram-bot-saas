@@ -41,6 +41,14 @@ EXTRA_DEFAULTS = {
         # flood_guard.py; distinct from raid_guard's multi-user detection).
         "flood": {"enabled": False, "max_messages": 5, "window_seconds": 10,
                   "action": "timeout", "timeout_minutes": 10},
+        # Telegizer parity — smart per-user slow mode (enforced by slow_mode.py):
+        # a steady minimum gap between one member's messages, with per-level
+        # exemptions. Distinct from flood (bursts) and from Discord's native
+        # per-channel Slowmode (rate_limit_per_user). Validated explicitly in
+        # protection_api (exempt_min_level must allow 0).
+        "slow_mode": {"enabled": False, "seconds_between_messages": 60,
+                      "action": "delete", "timeout_minutes": 5,
+                      "exempt_min_level": 0, "notify": True},
         # Phase 1 parity — mixed-script (Cyrillic/Greek) look-alike spoofing.
         "homoglyphs": {"enabled": False, "action": "delete"},
         "media": {"block_attachments": False, "block_stickers": False,

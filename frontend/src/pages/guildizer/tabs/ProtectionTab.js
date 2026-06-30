@@ -14,6 +14,12 @@ import { useSaveBar } from './saveBar';
 
 const TEXT_TYPES = new Set([0, 5]);
 const CF_ACTIONS = ['delete', 'warn', 'timeout', 'kick', 'ban'];
+// Discord's own native-Slowmode presets (rate_limit_per_user, seconds).
+const NATIVE_SLOWMODE_INTERVALS = [
+  [0, 'Off'], [5, '5s'], [10, '10s'], [15, '15s'], [30, '30s'],
+  [60, '1 min'], [120, '2 min'], [300, '5 min'], [600, '10 min'],
+  [900, '15 min'], [1800, '30 min'], [3600, '1 hour'], [7200, '2 hours'], [21600, '6 hours'],
+];
 const RG_ACTIONS = ['timeout', 'kick'];
 const LADDER_ACTIONS = ['timeout', 'kick', 'ban'];
 const CAT_LABEL = {
@@ -61,6 +67,11 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
   const [error, setError] = useState(null);
   const [orig, setOrig] = useState(null);
   const [eventsLoading, setEventsLoading] = useState(false);
+  // Native Slowmode control — an immediate Discord action, separate from the save bar.
+  const [nsChannel, setNsChannel] = useState('');
+  const [nsSeconds, setNsSeconds] = useState(30);
+  const [nsBusy, setNsBusy] = useState(false);
+  const [nsMsg, setNsMsg] = useState(null);
 
   const textChannels = channels.filter((c) => TEXT_TYPES.has(c.type));
 
@@ -148,6 +159,32 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
   async function lockdown(minutes) {
     const { data } = await guildizerApi.post(`/api/guilds/${guildId}/moderation/lockdown`, { minutes });
     setCfg(data); loadEvents();
+  }
+
+  async function applyNativeSlowmode() {
+    if (!nsChannel) return;
+    setNsBusy(true); setNsMsg(null);
+    try {
+      await guildizerApi.post(`/api/guilds/${guildId}/native-slowmode`,
+        { channel_id: nsChannel, seconds: nsSeconds });
+      const ch = textChannels.find((c) => String(c.id) === String(nsChannel));
+      const preset = NATIVE_SLOWMODE_INTERVALS.find(([v]) => v === nsSeconds);
+      const label = preset ? preset[1] : `${nsSeconds}s`;
+      setNsMsg({
+        sev: 'success',
+        text: nsSeconds
+          ? `Native Slowmode set to ${label} on #${ch?.name || nsChannel}.`
+          : `Native Slowmode turned off on #${ch?.name || nsChannel}.`,
+      });
+    } catch (e) {
+      const code = e?.response?.data?.error;
+      setNsMsg({
+        sev: 'error',
+        text: code === 'bot_not_in_server'
+          ? 'Guildizer isn\'t in this server yet.'
+          : 'Couldn\'t set Slowmode — check the bot has the Manage Channels permission.',
+      });
+    } finally { setNsBusy(false); }
   }
 
   const dirty = useMemo(
@@ -269,21 +306,10 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
               </Typography>
 
               <Alert severity="info" icon={false} sx={{ mb: 2 }}>
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                  <b>Want Discord's native Slowmode</b> (the box shows a live "you can send again in …"
-                  countdown that blocks posting up front)? It's set <b>per channel</b>, and any admin can
-                  turn it on in seconds:
-                </Typography>
-                <Typography component="ol" variant="caption" color="text.secondary"
-                  sx={{ pl: 2.5, m: 0, mt: 0.75, '& li': { mb: 0.25 } }}>
-                  <li>Hover the channel → <b>Edit Channel</b> (gear) → <b>Overview</b>.</li>
-                  <li>Set <b>Slowmode</b> to an interval (5s – 6h) and save.</li>
-                  <li>Done — Discord shows every member a per-user cooldown timer in that channel.</li>
-                </Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
-                  Run both together — they don't conflict. Native Slowmode paces the steady drip per
-                  channel; the flood control below catches bursts across the whole server and can
-                  timeout repeat offenders.
+                <Typography variant="caption" color="text.secondary">
+                  Flood control catches a single member firing <b>bursts</b>. For a steady
+                  per-message cooldown (Discord's native Slowmode, or smart per-level pacing
+                  across the server), see the <b>🐢 Slow Mode</b> card below — they don't conflict.
                 </Typography>
               </Alert>
 
@@ -320,6 +346,99 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                     </Grid>
                   )}
                 </Grid>
+              )}
+          </GuildizerCollapsibleCard>
+
+          {/* 1c ── Slow Mode (native control + smart per-user) ───────────────── */}
+          <GuildizerCollapsibleCard id="gz.moderation.slow_mode" title="🐢 Slow Mode" sx={{ mb: 2 }}>
+              <Typography variant="body2" color="text.secondary" mb={2}>
+                Enforces a <b>minimum gap between each member's messages</b>. Two layers you can
+                run together: Discord's <b>native per-channel Slowmode</b> (set it right here —
+                it blocks posting up front with a live "send again in …" countdown) and
+                Guildizer's <b>smart slow mode</b> (per-level exemptions and harsher actions
+                across the whole server). Unlike the burst-based flood control above, this keeps
+                a steady pace. Admins are always exempt.
+              </Typography>
+
+              {/* Native Slowmode — a real one-click control. Discord bots CAN set
+                  rate_limit_per_user (unlike Telegram's native slow mode). */}
+              <Typography variant="subtitle2" fontWeight={600} mb={0.5}>Native Slowmode — per channel</Typography>
+              <Typography variant="body2" color="text.secondary" mb={1.5}>
+                Sets Discord's own cooldown on one channel — every member sees a per-user timer,
+                and it keeps working even when Guildizer is offline. Needs the <b>Manage Channels</b> permission.
+              </Typography>
+              <Grid container spacing={2} alignItems="flex-start">
+                <Grid item xs={12} sm={5}>
+                  <TextField select size="small" fullWidth label="Channel" value={nsChannel}
+                    onChange={(e) => setNsChannel(e.target.value)}>
+                    <MenuItem value="">— pick a channel —</MenuItem>
+                    {textChannels.map((c) => <MenuItem key={c.id} value={c.id}># {c.name}</MenuItem>)}
+                  </TextField>
+                </Grid>
+                <Grid item xs={7} sm={4}>
+                  <TextField select size="small" fullWidth label="Cooldown" value={nsSeconds}
+                    onChange={(e) => setNsSeconds(Number(e.target.value))}>
+                    {NATIVE_SLOWMODE_INTERVALS.map(([v, l]) => <MenuItem key={v} value={v}>{l}</MenuItem>)}
+                  </TextField>
+                </Grid>
+                <Grid item xs={5} sm={3}>
+                  <Button fullWidth variant="contained" sx={{ height: 40 }}
+                    disabled={!nsChannel || nsBusy} onClick={applyNativeSlowmode}>
+                    {nsBusy ? '…' : 'Apply'}
+                  </Button>
+                </Grid>
+              </Grid>
+              {nsMsg && (
+                <Alert severity={nsMsg.sev} sx={{ mt: 1.5 }} onClose={() => setNsMsg(null)}>
+                  {nsMsg.text}
+                </Alert>
+              )}
+
+              <Divider sx={{ my: 2 }} />
+
+              {/* Smart slow mode — reactive layer, whole server, per-level exemptions. */}
+              <Typography variant="subtitle2" fontWeight={600} mb={1}>Smart slow mode — whole server</Typography>
+              <FormControlLabel
+                control={<Switch checked={!!am.slow_mode?.enabled} onChange={(e) => setAm('slow_mode', { enabled: e.target.checked })} />}
+                label="Enable smart slow mode"
+              />
+              {am.slow_mode?.enabled && (
+                <>
+                  <Grid container spacing={2} sx={{ mt: 0.5 }}>
+                    <Grid item xs={12} sm={6}>
+                      <TextField type="number" size="small" fullWidth label="Seconds between messages"
+                        value={am.slow_mode?.seconds_between_messages ?? 60} inputProps={{ min: 5, max: 3600 }}
+                        helperText="Minimum wait after a member's previous message."
+                        onChange={(e) => setAm('slow_mode', { seconds_between_messages: Math.max(5, Number(e.target.value)) })} />
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <TextField type="number" size="small" fullWidth label="Exempt members at level ≥"
+                        value={am.slow_mode?.exempt_min_level ?? 0} inputProps={{ min: 0, max: 1000 }}
+                        helperText="0 = no level exemption. Admins always bypass."
+                        onChange={(e) => setAm('slow_mode', { exempt_min_level: Math.max(0, Number(e.target.value)) })} />
+                    </Grid>
+                  </Grid>
+                  <FormControl fullWidth size="small" sx={{ mt: 2 }}>
+                    <InputLabel>Action on a too-fast message</InputLabel>
+                    <Select label="Action on a too-fast message"
+                      value={am.slow_mode?.action || 'delete'} onChange={(e) => setAm('slow_mode', { action: e.target.value })}>
+                      <MenuItem value="delete">Delete silently (recommended)</MenuItem>
+                      <MenuItem value="warn">Delete + warn (notice throttled to once per gap)</MenuItem>
+                      <MenuItem value="timeout">Delete + time the member out</MenuItem>
+                    </Select>
+                  </FormControl>
+                  {(am.slow_mode?.action || 'delete') === 'warn' && (
+                    <FormControlLabel sx={{ mt: 1 }}
+                      control={<Switch checked={am.slow_mode?.notify !== false} onChange={(e) => setAm('slow_mode', { notify: e.target.checked })} />}
+                      label="Post the warning notice (off = silent delete)"
+                    />
+                  )}
+                  {(am.slow_mode?.action || 'delete') === 'timeout' && (
+                    <TextField type="number" size="small" fullWidth sx={{ mt: 2 }} label="Timeout (minutes)"
+                      value={am.slow_mode?.timeout_minutes ?? 5} inputProps={{ min: 1, max: 1440 }}
+                      onChange={(e) => setAm('slow_mode', { timeout_minutes: Math.max(1, Number(e.target.value)) })} />
+                  )}
+                </>
               )}
           </GuildizerCollapsibleCard>
 

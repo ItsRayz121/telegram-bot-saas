@@ -198,6 +198,19 @@ def unban_member(guild_id: int, user_id: int, reason: str | None = None) -> None
     resp.raise_for_status()
 
 
+def set_channel_slowmode(channel_id: int, seconds: int, reason: str | None = None) -> None:
+    """Set a text channel's native Slowmode (rate_limit_per_user). Discord allows
+    0–21600s (0 disables). Needs the Manage Channels permission on the channel."""
+    secs = max(0, min(21600, int(seconds)))
+    resp = requests.patch(
+        f"{API_BASE}/channels/{channel_id}",
+        headers=_mod_headers(reason),
+        json={"rate_limit_per_user": secs},
+        timeout=_TIMEOUT,
+    )
+    resp.raise_for_status()
+
+
 # --- White-label custom bot validation (arbitrary bot token) -------------------
 # Application flags that report whether the privileged-intent toggles are ON in
 # the app owner's Developer Portal. The *_LIMITED variants are what unverified
