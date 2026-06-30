@@ -10,6 +10,7 @@ import {
   FormatListNumbered, FormatQuote, Link as LinkIcon, Image as ImageIcon,
   OndemandVideo, FormatClear, Add, ArrowBack, Visibility, Delete,
   CheckCircle, Warning, RadioButtonUnchecked, Title as TitleIcon,
+  Code, HorizontalRule, Schedule,
 } from '@mui/icons-material';
 import { admin } from '../../services/api';
 import { toast } from 'react-toastify';
@@ -23,6 +24,15 @@ const slugify = (s) => (s || '')
   .replace(/[\s_-]+/g, '-')
   .replace(/^-+|-+$/g, '')
   .slice(0, 200);
+
+// ISO → value for <input type="datetime-local"> (local time, no seconds).
+const toLocalInput = (iso) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
 
 // Empty post template
 const emptyPost = () => ({
@@ -135,6 +145,8 @@ function RichEditor({ initialHTML, onChange, onImageUpload }) {
         <Btn title="Bulleted list" onClick={() => exec('insertUnorderedList')}><FormatListBulleted fontSize="small" /></Btn>
         <Btn title="Numbered list" onClick={() => exec('insertOrderedList')}><FormatListNumbered fontSize="small" /></Btn>
         <Btn title="Quote" onClick={() => exec('formatBlock', 'blockquote')}><FormatQuote fontSize="small" /></Btn>
+        <Btn title="Code block" onClick={() => exec('formatBlock', 'pre')}><Code fontSize="small" /></Btn>
+        <Btn title="Divider line" onClick={() => exec('insertHorizontalRule')}><HorizontalRule fontSize="small" /></Btn>
         <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
         <Btn title="Insert link" onClick={addLink}><LinkIcon fontSize="small" /></Btn>
         <Btn title="Upload image" onClick={() => fileRef.current?.click()}><ImageIcon fontSize="small" /></Btn>
@@ -160,6 +172,8 @@ function RichEditor({ initialHTML, onChange, onImageUpload }) {
           '& figure': { m: 0, my: 1.5 },
           '& figcaption': { fontSize: '0.85rem', color: 'text.secondary', textAlign: 'center', mt: 0.5 },
           '& blockquote': { borderLeft: `3px solid ${PALETTE.purpleLt}`, pl: 2, ml: 0, color: 'text.secondary', fontStyle: 'italic' },
+          '& pre': { bgcolor: PALETTE.bg2, border: `1px solid ${PALETTE.border1}`, borderRadius: 1, p: 1.5, overflowX: 'auto', fontFamily: 'monospace', fontSize: '0.9rem' },
+          '& hr': { border: 'none', borderTop: `1px solid ${PALETTE.border1}`, my: 2 },
           '& ul, & ol': { pl: 3 },
           '& a': { color: PALETTE.blueLt },
           '& .tg-embed': {
@@ -251,6 +265,7 @@ export default function BlogAdminTab({ onAdminError }) {
   const [slugTouched, setSlugTouched] = useState(false);
   const [tagInput, setTagInput] = useState('');
   const [saving, setSaving] = useState(false);
+  const [scheduleAt, setScheduleAt] = useState('');
 
   const load = useCallback(() => {
     setLoading(true);
@@ -270,7 +285,8 @@ export default function BlogAdminTab({ onAdminError }) {
   };
 
   const openNew = () => {
-    setPost(emptyPost()); setBodyHtml(''); setSlugTouched(false); setView('edit');
+    setPost(emptyPost()); setBodyHtml(''); setSlugTouched(false);
+    setScheduleAt(''); setView('edit');
   };
   const openEdit = async (id) => {
     try {
@@ -278,6 +294,7 @@ export default function BlogAdminTab({ onAdminError }) {
       setPost({ ...emptyPost(), ...data.post });
       setBodyHtml(data.post.body_html || '');
       setSlugTouched(true);
+      setScheduleAt(data.post.status === 'scheduled' ? toLocalInput(data.post.published_at) : '');
       setView('edit');
     } catch (e) { onAdminError?.(e, 'Failed to open post'); }
   };
@@ -288,10 +305,19 @@ export default function BlogAdminTab({ onAdminError }) {
 
   const save = async (status) => {
     if (!post.title.trim()) { toast.error('Add a title first.'); return; }
+    let publishedAt = post.published_at;
+    if (status === 'scheduled') {
+      if (!scheduleAt) { toast.error('Pick a date & time to schedule.'); return; }
+      const when = new Date(scheduleAt);
+      if (isNaN(when.getTime()) || when <= new Date()) {
+        toast.error('Pick a future date & time.'); return;
+      }
+      publishedAt = when.toISOString();
+    }
     setSaving(true);
     const payload = {
       ...post, body_html: bodyHtml, slug: effectiveSlug,
-      status: status || post.status,
+      status: status || post.status, published_at: publishedAt,
     };
     try {
       let saved;
@@ -303,7 +329,11 @@ export default function BlogAdminTab({ onAdminError }) {
       setPost({ ...emptyPost(), ...saved.post });
       setBodyHtml(saved.post.body_html || '');
       setSlugTouched(true);
-      toast.success(status === 'published' ? 'Published!' : status === 'draft' ? 'Saved as draft.' : 'Saved.');
+      setScheduleAt(saved.post.status === 'scheduled' ? toLocalInput(saved.post.published_at) : '');
+      toast.success(
+        saved.post.status === 'published' ? 'Published!'
+          : saved.post.status === 'scheduled' ? `Scheduled for ${new Date(saved.post.published_at).toLocaleString()}.`
+            : status === 'draft' ? 'Saved as draft.' : 'Saved.');
       load();
     } catch (e) { onAdminError?.(e, 'Save failed'); }
     finally { setSaving(false); }
@@ -367,8 +397,9 @@ export default function BlogAdminTab({ onAdminError }) {
                       <Typography variant="caption" color="text.disabled">/blog/{p.slug}</Typography>
                     </TableCell>
                     <TableCell>
-                      <Chip size="small" label={p.status} color={p.status === 'published' ? 'success' : 'default'}
-                        variant={p.status === 'published' ? 'filled' : 'outlined'} />
+                      <Chip size="small" label={p.status}
+                        color={p.status === 'published' ? 'success' : p.status === 'scheduled' ? 'warning' : 'default'}
+                        variant={p.status === 'draft' ? 'outlined' : 'filled'} />
                     </TableCell>
                     <TableCell><Typography variant="caption">{p.category || '—'}</Typography></TableCell>
                     <TableCell align="right"><Typography variant="caption">{p.views}</Typography></TableCell>
@@ -436,6 +467,33 @@ export default function BlogAdminTab({ onAdminError }) {
         {/* Sidebar */}
         <Grid item xs={12} md={4}>
           <Stack spacing={2}>
+            {/* Publishing / schedule */}
+            <Card sx={{ bgcolor: PALETTE.bg1, border: `1px solid ${PALETTE.border1}` }}>
+              <CardContent>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                  <Schedule fontSize="small" sx={{ color: 'text.secondary' }} />
+                  <Typography variant="subtitle2" fontWeight={700}>Publishing</Typography>
+                </Box>
+                <Chip size="small" label={post.status}
+                  color={post.status === 'published' ? 'success' : post.status === 'scheduled' ? 'warning' : 'default'}
+                  variant={post.status === 'draft' ? 'outlined' : 'filled'} sx={{ mb: 1 }} />
+                {post.published_at && (
+                  <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+                    {post.status === 'scheduled' ? 'Goes live: ' : 'Published: '}
+                    {new Date(post.published_at).toLocaleString()}
+                  </Typography>
+                )}
+                <TextField type="datetime-local" size="small" fullWidth label="Schedule for later"
+                  value={scheduleAt} onChange={(e) => setScheduleAt(e.target.value)}
+                  InputLabelProps={{ shrink: true }} sx={{ mt: 1 }} />
+                <Button fullWidth variant="outlined" sx={{ mt: 1 }} disabled={!scheduleAt || saving}
+                  onClick={() => save('scheduled')}>Schedule</Button>
+                <Typography variant="caption" color="text.disabled" display="block" mt={1}>
+                  The post auto-goes-live at that time — no need to come back.
+                </Typography>
+              </CardContent>
+            </Card>
+
             {/* Cover image */}
             <Card sx={{ bgcolor: PALETTE.bg1, border: `1px solid ${PALETTE.border1}` }}>
               <CardContent>

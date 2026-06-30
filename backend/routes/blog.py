@@ -22,13 +22,16 @@ import os
 import re
 import html as _html
 from datetime import datetime
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, quote
 
 from flask import Blueprint, request, jsonify, Response, abort
 from flask_jwt_extended import get_jwt_identity
+from sqlalchemy import or_, and_
 
 from ..models import db, BlogPost, BlogMedia
 from .admin import admin_required
+
+PER_PAGE = 9  # posts per page on listings
 
 try:
     import bleach
@@ -221,6 +224,37 @@ def _apply_post_fields(post: BlogPost, body: dict):
     post.reading_minutes = _reading_minutes(post.body_html)
 
 
+def _parse_iso(s):
+    """Parse an ISO datetime (accepts trailing Z) into naive UTC, or None."""
+    if not s:
+        return None
+    try:
+        return datetime.fromisoformat(str(s).replace("Z", "+00:00")).replace(tzinfo=None)
+    except Exception:
+        return None
+
+
+def _apply_status(post: BlogPost, body: dict):
+    """Apply draft / published / scheduled with the right published_at.
+
+    'scheduled' with a future date keeps the post hidden until that time (the
+    public queries reveal it automatically — no cron needed). A missing/past
+    date just publishes now."""
+    if body.get("status") in ("draft", "published", "scheduled"):
+        post.status = body["status"]
+    if post.status == "scheduled":
+        dt = _parse_iso(body.get("published_at"))
+        if dt and dt > datetime.utcnow():
+            post.published_at = dt
+        else:
+            post.status = "published"
+            post.published_at = datetime.utcnow()
+    elif post.status == "published" and not post.published_at:
+        post.published_at = datetime.utcnow()
+    if body.get("republish"):
+        post.published_at = datetime.utcnow()
+
+
 @blog_bp.post("/api/admin/blog/posts")
 @admin_required
 def admin_create_post():
@@ -230,10 +264,7 @@ def admin_create_post():
     post = BlogPost(slug=slug, title=title, body_html="", status="draft",
                     author_id=_current_user_id())
     _apply_post_fields(post, body)
-    # Honour publish-on-create (e.g. the editor's "Publish" on a new post).
-    if body.get("status") == "published":
-        post.status = "published"
-        post.published_at = datetime.utcnow()
+    _apply_status(post, body)   # publish / schedule on create
     db.session.add(post)
     db.session.commit()
     return jsonify(post=post.to_dict(full=True)), 201
@@ -253,17 +284,7 @@ def admin_update_post(post_id):
         post.slug = _unique_slug(desired, exclude_id=post.id)
 
     _apply_post_fields(post, body)
-
-    # Publish lifecycle
-    if "status" in body and body["status"] in ("draft", "published"):
-        was = post.status
-        post.status = body["status"]
-        if post.status == "published" and not post.published_at:
-            post.published_at = datetime.utcnow()
-        if post.status == "draft" and was == "published":
-            pass  # keep published_at for history
-    if body.get("republish"):  # update the public date
-        post.published_at = datetime.utcnow()
+    _apply_status(post, body)   # draft / publish / schedule lifecycle
 
     db.session.commit()
     return jsonify(post=post.to_dict(full=True))
@@ -342,17 +363,25 @@ def serve_media(media_id):
 
 
 # ════════════════════════════ PUBLIC: JSON (optional) ══════════════════════════
+def _live_filter():
+    """SQLAlchemy filter for posts the public may see: published, or scheduled
+    whose time has arrived (so scheduled posts go live with no background job)."""
+    now = datetime.utcnow()
+    return or_(BlogPost.status == "published",
+               and_(BlogPost.status == "scheduled", BlogPost.published_at <= now))
+
+
 @blog_bp.get("/api/blog/posts")
 def public_list_posts():
     limit = min(int(request.args.get("limit", 20) or 20), 50)
-    posts = (BlogPost.query.filter_by(status="published")
+    posts = (BlogPost.query.filter(_live_filter())
              .order_by(BlogPost.published_at.desc()).limit(limit).all())
     return jsonify(posts=[p.to_dict() for p in posts])
 
 
 @blog_bp.get("/api/blog/posts/<slug>")
 def public_get_post(slug):
-    post = BlogPost.query.filter_by(slug=slug, status="published").first()
+    post = BlogPost.query.filter(_live_filter(), BlogPost.slug == slug).first()
     if not post:
         return jsonify(error="not_found"), 404
     d = post.to_dict(full=True)
@@ -364,6 +393,50 @@ def public_get_post(slug):
 def _meta_desc(post: BlogPost) -> str:
     return (post.meta_description or post.excerpt
             or _auto_excerpt(post.body_html))[:300]
+
+
+def _fmt_date(dt):
+    if not dt:
+        return ""
+    try:
+        return dt.strftime("%b %-d, %Y") if os.name != "nt" else dt.strftime("%b %d, %Y")
+    except Exception:
+        return dt.strftime("%b %d, %Y")
+
+
+def _post_card(p):
+    cover = (f'<a href="{SITE_URL}/blog/{p.slug}" class="thumb" '
+             f"style=\"background-image:url('{_html.escape(p.cover_image_url)}')\"></a>"
+             if p.cover_image_url else
+             f'<a href="{SITE_URL}/blog/{p.slug}" class="thumb noimg"></a>')
+    return (f'<article class="card">{cover}<div class="card-body">'
+            f'<div class="card-meta">{_html.escape(p.category or "Article")} · {p.reading_minutes or 1} min read</div>'
+            f'<h2><a href="{SITE_URL}/blog/{p.slug}">{_html.escape(p.title)}</a></h2>'
+            f'<p>{_html.escape(p.excerpt or "")}</p>'
+            f'<div class="card-foot">{_html.escape(p.author_name or BRAND)} · {_fmt_date(p.published_at)}</div>'
+            f'</div></article>')
+
+
+def _render_listing(*, items, page, base_path, h1, lede, title, description,
+                    canonical_base, jsonld=None):
+    """Paginated grid of post cards — shared by the index + category/tag pages."""
+    page = max(1, page)
+    total_pages = max(1, (len(items) + PER_PAGE - 1) // PER_PAGE)
+    page = min(page, total_pages)
+    start = (page - 1) * PER_PAGE
+    shown = items[start:start + PER_PAGE]
+    grid = ("".join(_post_card(p) for p in shown) if shown
+            else '<p class="empty">No posts yet — check back soon.</p>')
+    pager = ""
+    if total_pages > 1:
+        prev = f'<a href="{base_path}?page={page - 1}">← Newer</a>' if page > 1 else '<span></span>'
+        nxt = f'<a href="{base_path}?page={page + 1}">Older →</a>' if page < total_pages else '<span></span>'
+        pager = f'<nav class="pager">{prev}<span class="pageno">Page {page} of {total_pages}</span>{nxt}</nav>'
+    body = (f'<section class="hero-blog"><h1>{_html.escape(h1)}</h1>'
+            f'<p class="lede">{_html.escape(lede)}</p></section>'
+            f'<section class="grid">{grid}</section>{pager}')
+    canonical = canonical_base if page == 1 else f"{canonical_base}?page={page}"
+    return _page(title, description, body, canonical=canonical, jsonld=jsonld)
 
 
 def _page(title, description, body, *, canonical, og_image=None, noindex=False,
@@ -409,39 +482,49 @@ def _page(title, description, body, *, canonical, og_image=None, noindex=False,
 
 @blog_bp.get("/blog")
 def blog_index():
-    posts = (BlogPost.query.filter_by(status="published")
+    page = request.args.get("page", 1, type=int) or 1
+    items = (BlogPost.query.filter(_live_filter())
              .order_by(BlogPost.published_at.desc()).all())
-    cards = []
-    for p in posts:
-        cover = (f'<a href="{SITE_URL}/blog/{p.slug}" class="thumb" '
-                 f'style="background-image:url(\'{_html.escape(p.cover_image_url)}\')"></a>'
-                 if p.cover_image_url else
-                 f'<a href="{SITE_URL}/blog/{p.slug}" class="thumb noimg"></a>')
-        date = p.published_at.strftime("%b %-d, %Y") if hasattr(p.published_at, "strftime") and os.name != "nt" \
-            else (p.published_at.strftime("%b %d, %Y") if p.published_at else "")
-        cards.append(f"""<article class="card">{cover}
-<div class="card-body">
-<div class="card-meta">{_html.escape(p.category or 'Article')} · {p.reading_minutes or 1} min read</div>
-<h2><a href="{SITE_URL}/blog/{p.slug}">{_html.escape(p.title)}</a></h2>
-<p>{_html.escape(p.excerpt or '')}</p>
-<div class="card-foot">{_html.escape(p.author_name or BRAND)} · {date}</div>
-</div></article>""")
-    grid = ("".join(cards) if cards
-            else '<p class="empty">No posts yet — check back soon.</p>')
-    body = f"""<section class="hero-blog">
-<h1>The {BRAND} Blog</h1>
-<p class="lede">Guides on growing, moderating and automating Telegram &amp; Discord communities.</p>
-</section><section class="grid">{grid}</section>"""
     jsonld = ('{"@context":"https://schema.org","@type":"Blog","name":"%s Blog",'
               '"url":"%s/blog"}' % (BRAND, SITE_URL))
-    return _page(f"{BRAND} Blog — Telegram & Discord community guides",
-                 f"Guides on growing, moderating and automating Telegram and Discord communities, from {BRAND}.",
-                 body, canonical=f"{SITE_URL}/blog", jsonld=jsonld)
+    return _render_listing(
+        items=items, page=page, base_path=f"{SITE_URL}/blog",
+        h1=f"The {BRAND} Blog",
+        lede="Guides on growing, moderating and automating Telegram & Discord communities.",
+        title=f"{BRAND} Blog — Telegram & Discord community guides",
+        description=f"Guides on growing, moderating and automating Telegram and Discord communities, from {BRAND}.",
+        canonical_base=f"{SITE_URL}/blog", jsonld=jsonld)
+
+
+@blog_bp.get("/blog/category/<cat>")
+def blog_category(cat):
+    page = request.args.get("page", 1, type=int) or 1
+    items = (BlogPost.query.filter(_live_filter(), BlogPost.category.ilike(cat))
+             .order_by(BlogPost.published_at.desc()).all())
+    return _render_listing(
+        items=items, page=page, base_path=f"{SITE_URL}/blog/category/{quote(cat)}",
+        h1=cat, lede=f"{BRAND} articles in {cat}.",
+        title=f"{cat} — {BRAND} Blog", description=f"{BRAND} guides and articles about {cat}.",
+        canonical_base=f"{SITE_URL}/blog/category/{quote(cat)}")
+
+
+@blog_bp.get("/blog/tag/<tag>")
+def blog_tag(tag):
+    page = request.args.get("page", 1, type=int) or 1
+    live = (BlogPost.query.filter(_live_filter())
+            .order_by(BlogPost.published_at.desc()).all())
+    tl = tag.lower()
+    items = [p for p in live if tl in [str(t).lower() for t in (p.tags or [])]]
+    return _render_listing(
+        items=items, page=page, base_path=f"{SITE_URL}/blog/tag/{quote(tag)}",
+        h1=f"#{tag}", lede=f"{BRAND} articles tagged “{tag}”.",
+        title=f"#{tag} — {BRAND} Blog", description=f"{BRAND} articles tagged {tag}.",
+        canonical_base=f"{SITE_URL}/blog/tag/{quote(tag)}")
 
 
 @blog_bp.get("/blog/<slug>")
 def blog_post(slug):
-    post = BlogPost.query.filter_by(slug=slug, status="published").first()
+    post = BlogPost.query.filter(_live_filter(), BlogPost.slug == slug).first()
     if not post:
         # Minimal 404 (still server-rendered) so crawlers get a clean 404.
         return _page(f"Not found — {BRAND} Blog", "This article could not be found.",
@@ -451,6 +534,9 @@ def blog_post(slug):
 
     try:
         post.views = (post.views or 0) + 1
+        # A scheduled post whose time has arrived self-corrects to published.
+        if post.status == "scheduled" and post.published_at and post.published_at <= datetime.utcnow():
+            post.status = "published"
         db.session.commit()
     except Exception:
         db.session.rollback()
@@ -466,17 +552,58 @@ def blog_post(slug):
     canonical = post.canonical_url or f"{SITE_URL}/blog/{post.slug}"
     og_image = post.og_image_url or post.cover_image_url or f"{SITE_URL}/og-image.png"
 
+    # Clickable category chip + crumb
+    cat_name = post.category or "Article"
+    cat_link = f'{SITE_URL}/blog/category/{quote(cat_name)}'
+    cat_html = f'<div class="cat"><a href="{cat_link}">{_html.escape(cat_name)}</a></div>'
+    crumb_cat = f'<a href="{cat_link}">{_html.escape(cat_name)}</a> › '
+
+    # Clickable tag chips
+    tags = "".join(
+        f'<a class="tag" href="{SITE_URL}/blog/tag/{quote(t)}">#{_html.escape(t)}</a>'
+        for t in (post.tags or []))
+
+    # Social share (pure links — no JS, CSP-safe)
+    su, st = quote(canonical, safe=""), quote(post.title, safe="")
+    share = (
+        '<div class="share"><span>Share:</span>'
+        f'<a href="https://twitter.com/intent/tweet?url={su}&text={st}" target="_blank" rel="noopener">X</a>'
+        f'<a href="https://t.me/share/url?url={su}&text={st}" target="_blank" rel="noopener">Telegram</a>'
+        f'<a href="https://www.linkedin.com/sharing/share-offsite/?url={su}" target="_blank" rel="noopener">LinkedIn</a>'
+        f'<a href="https://www.facebook.com/sharer/sharer.php?u={su}" target="_blank" rel="noopener">Facebook</a>'
+        f'<a href="https://api.whatsapp.com/send?text={st}%20{su}" target="_blank" rel="noopener">WhatsApp</a>'
+        f'<a href="https://www.reddit.com/submit?url={su}&title={st}" target="_blank" rel="noopener">Reddit</a>'
+        '</div>')
+
+    # Related posts: same category first, then most recent, excluding self.
+    related = (BlogPost.query.filter(_live_filter(), BlogPost.id != post.id,
+                                     BlogPost.category == post.category)
+               .order_by(BlogPost.published_at.desc()).limit(3).all())
+    if len(related) < 3:
+        seen = {p.id for p in related} | {post.id}
+        for m in (BlogPost.query.filter(_live_filter())
+                  .order_by(BlogPost.published_at.desc()).limit(8).all()):
+            if m.id not in seen:
+                related.append(m); seen.add(m.id)
+            if len(related) >= 3:
+                break
+    related_html = (f'<section class="related"><h2>Related articles</h2>'
+                    f'<div class="grid">{"".join(_post_card(p) for p in related)}</div></section>'
+                    if related else "")
+
     body = f"""<article class="article">
-<nav class="crumbs"><a href="{SITE_URL}/">Home</a> › <a href="{SITE_URL}/blog">Blog</a> › <span>{_html.escape(post.title)}</span></nav>
-<div class="cat">{_html.escape(post.category or 'Article')}</div>
+<nav class="crumbs"><a href="{SITE_URL}/">Home</a> › <a href="{SITE_URL}/blog">Blog</a> › {crumb_cat}<span>{_html.escape(post.title)}</span></nav>
+{cat_html}
 <h1>{_html.escape(post.title)}</h1>
 <div class="byline">By {_html.escape(post.author_name or BRAND)} · <time datetime="{date_iso}">{date_h}</time> · {post.reading_minutes or 1} min read</div>
 {cover}
 <div class="prose">{body_html}</div>
 <div class="tags">{tags}</div>
+{share}
 <div class="endcta"><h3>Run your community on autopilot</h3>
 <p>{BRAND} moderates, engages and grows your Telegram &amp; Discord groups 24/7.</p>
 <a class="cta" href="{SITE_URL}/register">Start free</a></div>
+{related_html}
 <p class="back"><a href="{SITE_URL}/blog">← Back to all articles</a></p>
 </article>"""
 
@@ -508,7 +635,7 @@ def _json_str(s: str) -> str:
 # ════════════════════════════ PUBLIC: sitemap + RSS ════════════════════════════
 @blog_bp.get("/blog-sitemap.xml")
 def blog_sitemap():
-    posts = (BlogPost.query.filter_by(status="published")
+    posts = (BlogPost.query.filter(_live_filter())
              .filter(BlogPost.noindex.is_(False))
              .order_by(BlogPost.published_at.desc()).all())
     urls = [f"<url><loc>{SITE_URL}/blog</loc><changefreq>daily</changefreq><priority>0.8</priority></url>"]
@@ -526,7 +653,7 @@ def blog_sitemap():
 
 @blog_bp.get("/blog/feed.xml")
 def blog_rss():
-    posts = (BlogPost.query.filter_by(status="published")
+    posts = (BlogPost.query.filter(_live_filter())
              .order_by(BlogPost.published_at.desc()).limit(30).all())
     items = []
     for p in posts:
@@ -595,7 +722,16 @@ main{max-width:1080px;margin:0 auto;padding:0 24px}
 .tg-video{position:relative;padding-bottom:56.25%;height:0;margin:1.8em 0;border-radius:12px;overflow:hidden}
 .tg-video iframe{position:absolute;top:0;left:0;width:100%;height:100%;border:0}
 .tags{margin:28px 0;display:flex;flex-wrap:wrap;gap:8px}
-.tag{background:var(--bg2);border:1px solid var(--bd);color:var(--mut);padding:4px 12px;border-radius:20px;font-size:.8rem}
+.tag{background:var(--bg2);border:1px solid var(--bd);color:var(--mut);padding:4px 12px;border-radius:20px;font-size:.8rem;text-decoration:none}
+.tag:hover{border-color:var(--pl);color:var(--tx);text-decoration:none}
+.share{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:24px 0;padding:14px 0;border-top:1px solid var(--bd);border-bottom:1px solid var(--bd)}
+.share span{color:var(--mut);font-size:.85rem;font-weight:600}
+.share a{font-size:.82rem;font-weight:600;color:var(--tx);background:var(--bg2);border:1px solid var(--bd);padding:6px 14px;border-radius:8px;text-decoration:none}
+.share a:hover{border-color:var(--bl);text-decoration:none}
+.related{margin:48px 0 0;border-top:1px solid var(--bd);padding-top:28px}
+.related h2{font-size:1.4rem;margin:0 0 18px}
+.pager{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:20px 0 60px;color:var(--mut)}
+.pager a{font-weight:600}.pageno{font-size:.85rem}
 .endcta{background:linear-gradient(135deg,rgba(157,108,247,.12),rgba(61,142,248,.1));border:1px solid var(--bd);border-radius:16px;padding:28px;text-align:center;margin:36px 0}
 .endcta h3{margin:0 0 8px;font-size:1.3rem}.endcta p{color:var(--mut);margin:0 0 18px}
 .back{margin-top:30px}
