@@ -4026,3 +4026,25 @@ class BlogPost(db.Model):
                 "noindex": bool(self.noindex),
             })
         return d
+
+
+class BlogSubscriber(db.Model):
+    """Newsletter signups captured from the public blog (footer + sidebar forms).
+
+    Stored here so the blog stays self-contained; emails can be exported or piped
+    into an ESP later. Table is created automatically by db.create_all()."""
+    __tablename__ = "blog_subscribers"
+
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(254), unique=True, nullable=False, index=True)
+    source = db.Column(db.String(40), nullable=True)     # 'footer' | 'sidebar' | …
+    confirmed = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "email": self.email,
+            "source": self.source,
+            "created_at": (self.created_at.isoformat() + "Z") if self.created_at else None,
+        }

@@ -28,7 +28,7 @@ from flask import Blueprint, request, jsonify, Response, abort
 from flask_jwt_extended import get_jwt_identity
 from sqlalchemy import or_, and_
 
-from ..models import db, BlogPost, BlogMedia
+from ..models import db, BlogPost, BlogMedia, BlogSubscriber
 from .admin import admin_required
 
 PER_PAGE = 9  # posts per page on listings
@@ -191,6 +191,113 @@ def _render_embeds(html_str: str) -> str:
     return re.sub(
         r'<div[^>]*class="tg-embed"[^>]*data-embed="([^"]+)"[^>]*>.*?</div>',
         repl, html_str or "", flags=re.I | re.S)
+
+
+# ── Conversion chrome: social icons, table of contents, sidebar widgets ─────────
+# Inline SVGs (markup, not script) — allowed by the blog CSP. Brand handles are
+# the real ones used elsewhere in the app (see frontend/src/config/support.js).
+_SVG_X = ('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308'
+          'l-7.227 8.26 8.502 11.24h-6.65l-5.21-6.817L4.99 21.75H1.68l7.73-8.835'
+          'L1.254 2.25H8.08l4.71 6.231zm-1.16 17.52h1.833L7.084 4.126H5.117z"/></svg>')
+_SVG_TG = ('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11.944 0A12 12 0 0 0 0 12'
+           'a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224'
+           'c.1-.002.321.023.464.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502'
+           '-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124'
+           '-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15'
+           '-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.139-5.061 3.345-.479.329-.913.489-1.302.481'
+           '-.428-.009-1.252-.242-1.865-.442-.751-.244-1.349-.374-1.297-.789.027-.216.325-.437.893-.663'
+           '3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>')
+_SVG_DISCORD = ('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.317 4.369a19.79 19.79 0 0 0'
+                '-4.885-1.515.074.074 0 0 0-.079.037c-.211.375-.444.864-.608 1.25a18.27 18.27 0 0 0'
+                '-5.487 0 12.6 12.6 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.74 19.74 0 0 0 3.677 4.37'
+                'a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0'
+                ' 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106'
+                ' 13.1 13.1 0 0 1-1.872-.892.077.077 0 0 1-.008-.128c.126-.094.252-.192.372-.291a.074.074 0 0 1'
+                ' .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.009c.12.099.246.198.373.292'
+                'a.077.077 0 0 1-.006.127 12.3 12.3 0 0 1-1.873.891.077.077 0 0 0-.041.107c.36.698.772 1.362'
+                ' 1.225 1.993a.076.076 0 0 0 .084.028 19.84 19.84 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054'
+                'c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.331c-1.183 0-2.157-1.085'
+                '-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418'
+                '-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0'
+                ' 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>')
+
+
+def _social_icons():
+    links = (
+        ("https://x.com/TelegizerApp", "X", _SVG_X),
+        ("https://t.me/telegizer", "Telegram", _SVG_TG),
+        (f"{SITE_URL}/guildizer-landing", "Discord", _SVG_DISCORD),
+    )
+    return "".join(
+        f'<a href="{u}" target="_blank" rel="noopener" aria-label="{lbl}" title="{lbl}">{svg}</a>'
+        for u, lbl, svg in links)
+
+
+def _add_toc(html_str):
+    """Inject ids into <h2> tags (at render time only) and collect a table of
+    contents. Returns (html_with_ids, [(id, text), …])."""
+    items, used = [], set()
+
+    def repl(m):
+        attrs, inner = m.group(1), m.group(2)
+        text = re.sub(r"<[^>]+>", "", inner).strip()
+        if not text:
+            return m.group(0)
+        base = _slugify(text) or "section"
+        hid, n = base, 2
+        while hid in used:
+            hid = f"{base}-{n}"; n += 1
+        used.add(hid)
+        items.append((hid, text))
+        return f'<h2 id="{hid}"{attrs}>{inner}</h2>'
+
+    out = re.sub(r"<h2([^>]*)>(.*?)</h2>", repl, html_str or "", flags=re.I | re.S)
+    return out, items
+
+
+def _toc_widget(items):
+    if len(items) < 2:   # not worth a TOC for a single section
+        return ""
+    lis = "".join(f'<li><a href="#{hid}">{_html.escape(t)}</a></li>' for hid, t in items)
+    return f'<div class="widget toc"><h3>On this page</h3><ul>{lis}</ul></div>'
+
+
+def _search_form(klass="widget search", with_heading=True):
+    fields = ('<input type="search" name="q" placeholder="Search articles…" '
+              'aria-label="Search articles"><button type="submit">Search</button>')
+    if klass == "hero-search":
+        # The <form> itself is the flex row (no wrapping div).
+        return (f'<form class="hero-search" action="/blog/search" method="get" '
+                f'role="search">{fields}</form>')
+    head = "<h3>Search</h3>" if with_heading else ""
+    return (f'<div class="{klass}">{head}'
+            f'<form action="/blog/search" method="get" role="search">{fields}</form></div>')
+
+
+def _newsletter_form(source="footer"):
+    return (f'<div class="widget newsletter"><h3>Growth tips in your inbox</h3>'
+            '<p>Join the newsletter for Telegram &amp; Discord community guides. No spam, unsubscribe anytime.</p>'
+            '<form action="/blog/subscribe" method="post">'
+            '<input type="email" name="email" required placeholder="you@email.com" aria-label="Email address">'
+            f'<input type="hidden" name="source" value="{_html.escape(source, quote=True)}">'
+            '<button type="submit">Subscribe</button></form></div>')
+
+
+def _article_sidebar(post, toc_items):
+    cta = (f'<div class="widget cta-card"><h3>Run your community on autopilot</h3>'
+           f'<p>{BRAND} moderates, engages and grows your Telegram &amp; Discord groups 24/7 — free to start.</p>'
+           f'<a class="cta" href="{SITE_URL}/register">Start free</a></div>')
+    recents = (BlogPost.query.filter(_live_filter(), BlogPost.id != post.id)
+               .order_by(BlogPost.published_at.desc()).limit(5).all())
+    recent = ""
+    if recents:
+        lis = "".join(
+            f'<li><a href="{SITE_URL}/blog/{p.slug}">{_html.escape(p.title)}</a>'
+            f'<span>{_html.escape(p.category or "Article")} · {_fmt_date(p.published_at)}</span></li>'
+            for p in recents)
+        recent = f'<div class="widget recent"><h3>Recent posts</h3><ul>{lis}</ul></div>'
+    return (cta + _toc_widget(toc_items) + _search_form()
+            + recent + _newsletter_form(source="sidebar"))
 
 
 # ════════════════════════════ ADMIN JSON API ═══════════════════════════════════
@@ -452,7 +559,7 @@ def _post_card(p):
 
 
 def _render_listing(*, items, page, base_path, h1, lede, title, description,
-                    canonical_base, jsonld=None):
+                    canonical_base, jsonld=None, noindex=False, hero_extra=""):
     """Paginated grid of post cards — shared by the index + category/tag pages."""
     page = max(1, page)
     total_pages = max(1, (len(items) + PER_PAGE - 1) // PER_PAGE)
@@ -460,21 +567,24 @@ def _render_listing(*, items, page, base_path, h1, lede, title, description,
     start = (page - 1) * PER_PAGE
     shown = items[start:start + PER_PAGE]
     grid = ("".join(_post_card(p) for p in shown) if shown
-            else '<p class="empty">No posts yet — check back soon.</p>')
+            else '<p class="empty">No posts found — try another search or check back soon.</p>')
+    # base_path may already carry a query (e.g. ?q=…) — pick the right separator.
+    sep = '&' if '?' in base_path else '?'
     pager = ""
     if total_pages > 1:
-        prev = f'<a href="{base_path}?page={page - 1}">← Newer</a>' if page > 1 else '<span></span>'
-        nxt = f'<a href="{base_path}?page={page + 1}">Older →</a>' if page < total_pages else '<span></span>'
+        prev = f'<a href="{base_path}{sep}page={page - 1}">← Newer</a>' if page > 1 else '<span></span>'
+        nxt = f'<a href="{base_path}{sep}page={page + 1}">Older →</a>' if page < total_pages else '<span></span>'
         pager = f'<nav class="pager">{prev}<span class="pageno">Page {page} of {total_pages}</span>{nxt}</nav>'
     body = (f'<section class="hero-blog"><h1>{_html.escape(h1)}</h1>'
-            f'<p class="lede">{_html.escape(lede)}</p></section>'
+            f'<p class="lede">{_html.escape(lede)}</p>{hero_extra}</section>'
             f'<section class="grid">{grid}</section>{pager}')
-    canonical = canonical_base if page == 1 else f"{canonical_base}?page={page}"
-    return _page(title, description, body, canonical=canonical, jsonld=jsonld)
+    csep = '&' if '?' in canonical_base else '?'
+    canonical = canonical_base if page == 1 else f"{canonical_base}{csep}page={page}"
+    return _page(title, description, body, canonical=canonical, jsonld=jsonld, noindex=noindex)
 
 
 def _page(title, description, body, *, canonical, og_image=None, noindex=False,
-          jsonld=None, og_type="website"):
+          jsonld=None, og_type="website", sidebar=None):
     desc = _html.escape((description or "")[:300], quote=True)
     title_e = _html.escape(title)
     og_image = _html.escape(og_image or f"{SITE_URL}/og-image.png", quote=True)
@@ -484,6 +594,27 @@ def _page(title, description, body, *, canonical, og_image=None, noindex=False,
     # the script block (e.g. a post title containing </script>).
     ld = (f'<script type="application/ld+json">{jsonld.replace("</", "<\\/")}</script>'
           if jsonld else "")
+    # Two-column layout (article + sidebar) when a sidebar is supplied; otherwise
+    # a single centred column (index, category, tag, search, 404, thank-you).
+    main = (f'<main class="has-side"><div class="content">{body}</div>'
+            f'<aside class="sidebar"><div class="side-inner">{sidebar}</div></aside></main>'
+            if sidebar else f'<main>{body}</main>')
+    year = datetime.utcnow().year
+    footer = f"""<footer><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><div class="brand">{BRAND}</div>
+<p>Run your Telegram &amp; Discord communities on autopilot — moderation, engagement and growth, 24/7.</p>
+<div class="socials">{_social_icons()}</div></div>
+<div class="foot-col"><h4>Product</h4>
+<a href="{SITE_URL}/">Telegram</a><a href="{SITE_URL}/guildizer-landing">Guildizer (Discord)</a>
+<a href="{SITE_URL}/pricing">Pricing</a><a href="{SITE_URL}/register">Start free</a></div>
+<div class="foot-col"><h4>Resources</h4>
+<a href="{SITE_URL}/blog">Blog</a><a href="{SITE_URL}/blog/feed.xml">RSS feed</a>
+<a href="{SITE_URL}/blog/search">Search</a></div>
+<div class="foot-news">{_newsletter_form(source="footer")}</div>
+</div>
+<div class="foot-bottom">© {year} {BRAND}. All rights reserved.</div>
+</div></footer>"""
     return Response(f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -509,12 +640,11 @@ def _page(title, description, body, *, canonical, og_image=None, noindex=False,
 <style>{_CSS}</style>
 </head>
 <body>
-<header class="nav"><a class="brand" href="{SITE_URL}/">{BRAND}</a>
-<nav><a href="{SITE_URL}/blog">Blog</a><a href="{SITE_URL}/pricing">Pricing</a>
-<a class="cta" href="{SITE_URL}/register">Get started</a></nav></header>
-<main>{body}</main>
-<footer><div class="wrap"><p>© {datetime.utcnow().year} {BRAND}. Manage Telegram &amp; Discord communities on autopilot.</p>
-<p><a href="{SITE_URL}/">Home</a> · <a href="{SITE_URL}/blog">Blog</a> · <a href="{SITE_URL}/pricing">Pricing</a> · <a href="{SITE_URL}/guildizer-landing">Guildizer (Discord)</a></p></div></footer>
+<header class="topbar"><div class="nav"><a class="brand" href="{SITE_URL}/">{BRAND}</a>
+<nav><a href="{SITE_URL}/blog">Blog</a>
+<a class="cta" href="{SITE_URL}/register">Start free</a></nav></div></header>
+{main}
+{footer}
 </body></html>""", content_type="text/html; charset=utf-8")
 
 
@@ -531,7 +661,69 @@ def blog_index():
         lede="Guides on growing, moderating and automating Telegram & Discord communities.",
         title=f"{BRAND} Blog — Telegram & Discord community guides",
         description=f"Guides on growing, moderating and automating Telegram and Discord communities, from {BRAND}.",
-        canonical_base=f"{SITE_URL}/blog", jsonld=jsonld)
+        canonical_base=f"{SITE_URL}/blog", jsonld=jsonld,
+        hero_extra=_search_form(klass="hero-search", with_heading=False))
+
+
+@blog_bp.get("/blog/search")
+def blog_search():
+    """No-JS, server-rendered search across title/excerpt/body (noindex)."""
+    q = (request.args.get("q") or "").strip()[:120]
+    page = request.args.get("page", 1, type=int) or 1
+    items = []
+    if q:
+        like = f"%{q}%"
+        items = (BlogPost.query.filter(
+                    _live_filter(),
+                    or_(BlogPost.title.ilike(like),
+                        BlogPost.excerpt.ilike(like),
+                        BlogPost.body_html.ilike(like)))
+                 .order_by(BlogPost.published_at.desc()).all())
+    if q:
+        h1 = f"Search results for “{q}”"
+        lede = f'{len(items)} article{"" if len(items) == 1 else "s"} found.'
+        base = f"{SITE_URL}/blog/search?q={quote(q)}"
+    else:
+        h1, lede = "Search the blog", "Type a term to search every article."
+        base = f"{SITE_URL}/blog/search"
+    return _render_listing(
+        items=items, page=page, base_path=base, h1=h1, lede=lede,
+        title=(f"Search: {q} — {BRAND} Blog" if q else f"Search — {BRAND} Blog"),
+        description=f"Search the {BRAND} blog for Telegram & Discord community guides.",
+        canonical_base=f"{SITE_URL}/blog/search", noindex=True,
+        hero_extra=_search_form(klass="hero-search", with_heading=False))
+
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+@blog_bp.post("/blog/subscribe")
+def blog_subscribe():
+    """Capture a newsletter email (footer/sidebar form). No-JS: renders a
+    server-side confirmation page. Stored in blog_subscribers (deduped)."""
+    email = (request.form.get("email") or "").strip().lower()[:254]
+    source = (request.form.get("source") or "blog").strip()[:40]
+    ok = bool(_EMAIL_RE.match(email))
+    if ok:
+        try:
+            if not BlogSubscriber.query.filter_by(email=email).first():
+                db.session.add(BlogSubscriber(email=email, source=source))
+                db.session.commit()
+        except Exception:
+            db.session.rollback()
+    if ok:
+        inner = (f'<h1>You’re subscribed 🎉</h1>'
+                 f'<p>Thanks — we’ll send {_html.escape(email)} our best Telegram &amp; '
+                 f'Discord community guides. No spam, unsubscribe anytime.</p>'
+                 f'<p><a class="cta" href="{SITE_URL}/register">Start free</a></p>'
+                 f'<p class="back"><a href="{SITE_URL}/blog">← Back to the blog</a></p>')
+    else:
+        inner = ('<h1>That email didn’t look right</h1>'
+                 '<p>Please go back and enter a valid email address.</p>'
+                 f'<p class="back"><a href="{SITE_URL}/blog">← Back to the blog</a></p>')
+    body = f'<section class="article notice">{inner}</section>'
+    return _page(f"Newsletter — {BRAND} Blog", "Newsletter subscription.",
+                 body, canonical=f"{SITE_URL}/blog", noindex=True)
 
 
 @blog_bp.get("/blog/category/<cat>")
@@ -580,6 +772,7 @@ def blog_post(slug):
         db.session.rollback()
 
     body_html = _render_embeds(post.body_html or "")
+    body_html, toc_items = _add_toc(body_html)
     # Stored naive UTC → mark as UTC for schema.org / <time> correctness.
     date_iso = (post.published_at.isoformat() + "Z") if post.published_at else ""
     mod_iso = (post.updated_at.isoformat() + "Z") if post.updated_at else date_iso
@@ -663,7 +856,7 @@ def blog_post(slug):
     title = post.meta_title or f"{post.title} — {BRAND} Blog"
     return _page(title, _meta_desc(post), body, canonical=canonical,
                  og_image=og_image, noindex=post.noindex, jsonld=jsonld,
-                 og_type="article")
+                 og_type="article", sidebar=_article_sidebar(post, toc_items))
 
 
 def _json_str(s: str) -> str:
@@ -715,17 +908,46 @@ def blog_rss():
 _CSS = """
 :root{--bg:#0b0d12;--bg2:#12151c;--card:#151922;--bd:#222836;--tx:#e7eaf0;--mut:#9aa3b2;--pl:#9d6cf7;--bl:#3d8ef8}
 *{box-sizing:border-box}
+html{scroll-behavior:smooth}
 body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.7 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
 a{color:var(--bl);text-decoration:none}a:hover{text-decoration:underline}
-.nav{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;max-width:1080px;margin:0 auto}
+.topbar{position:sticky;top:0;z-index:50;background:rgba(11,13,18,.82);backdrop-filter:saturate(160%) blur(10px);-webkit-backdrop-filter:saturate(160%) blur(10px);border-bottom:1px solid var(--bd)}
+.nav{display:flex;align-items:center;justify-content:space-between;padding:13px 24px;max-width:1180px;margin:0 auto}
 .brand{font-weight:800;font-size:1.2rem;color:#fff}
-.nav nav{display:flex;gap:18px;align-items:center}
+.nav nav{display:flex;gap:20px;align-items:center}
+.nav nav a:not(.cta){color:var(--mut);font-weight:600}.nav nav a:not(.cta):hover{color:var(--tx);text-decoration:none}
 .nav .cta,.cta{background:linear-gradient(135deg,var(--pl),var(--bl));color:#fff;padding:9px 16px;border-radius:9px;font-weight:600;display:inline-block}
 .cta:hover{text-decoration:none;opacity:.92}
-main{max-width:1080px;margin:0 auto;padding:0 24px}
+main{max-width:1180px;margin:0 auto;padding:0 24px}
+main.has-side{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:48px;align-items:start}
+.content{min-width:0}
+.content .article{max-width:760px;margin:0;padding-top:28px}
+.sidebar{position:sticky;top:78px}
+.side-inner{display:flex;flex-direction:column}
+.widget{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:18px;margin-bottom:18px}
+.widget h3{margin:0 0 12px;font-size:1rem;color:var(--tx)}
+.widget.cta-card{background:linear-gradient(135deg,rgba(157,108,247,.16),rgba(61,142,248,.12));border-color:#2c3550}
+.widget.cta-card p{color:var(--mut);font-size:.9rem;margin:0 0 14px}
+.widget.cta-card .cta{display:block;text-align:center}
+.toc ul,.recent ul{list-style:none;margin:0;padding:0}
+.toc li{margin:.45em 0}.toc a{font-size:.9rem;color:var(--mut)}.toc a:hover{color:var(--tx)}
+.recent li{padding:.6em 0;border-top:1px solid var(--bd)}.recent li:first-child{border-top:none;padding-top:0}
+.recent li a{display:block;font-size:.9rem;color:var(--tx);font-weight:600;line-height:1.35}
+.recent li a:hover{color:var(--pl);text-decoration:none}
+.recent li span{display:block;color:var(--mut);font-size:.74rem;margin-top:3px}
+.search form,.newsletter form{display:flex;flex-direction:column;gap:9px}
+.search input,.newsletter input[type=email]{background:var(--bg2);border:1px solid var(--bd);border-radius:9px;padding:10px 12px;color:var(--tx);font-size:.92rem;width:100%}
+.search input:focus,.newsletter input:focus,.hero-search input:focus{outline:none;border-color:var(--pl)}
+.search button,.newsletter button{background:linear-gradient(135deg,var(--pl),var(--bl));color:#fff;border:0;border-radius:9px;padding:10px;font-weight:700;cursor:pointer;font-size:.92rem}
+.search button:hover,.newsletter button:hover,.hero-search button:hover{opacity:.92}
+.newsletter p{color:var(--mut);font-size:.85rem;margin:0 0 12px}
+.hero-search{margin-top:20px;display:flex;gap:8px;max-width:460px}
+.hero-search input{flex:1;background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:11px 14px;color:var(--tx);font-size:.95rem}
+.hero-search button{background:linear-gradient(135deg,var(--pl),var(--bl));color:#fff;border:0;border-radius:10px;padding:11px 20px;font-weight:700;cursor:pointer}
+.notice{text-align:center;padding:60px 0}
 .hero-blog{padding:48px 0 28px;border-bottom:1px solid var(--bd);margin-bottom:32px}
-.hero-blog h1{font-size:2.4rem;margin:0 0 10px;letter-spacing:-.02em}
-.lede{color:var(--mut);font-size:1.1rem;margin:0}
+.hero-blog h1{font-size:2.2rem;margin:0 0 10px;letter-spacing:-.02em}
+.lede{color:var(--mut);font-size:1.1rem;margin:0;max-width:640px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:22px;padding-bottom:60px}
 .card{background:var(--card);border:1px solid var(--bd);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;transition:transform .15s,border-color .15s}
 .card:hover{transform:translateY(-3px);border-color:#33405c}
@@ -746,7 +968,7 @@ main{max-width:1080px;margin:0 auto;padding:0 24px}
 .byline{color:var(--mut);font-size:.9rem;margin-bottom:24px}
 .cover{width:100%;height:auto;border-radius:14px;margin:0 0 28px;display:block}
 .prose{font-size:1.08rem}
-.prose h2{font-size:1.6rem;margin:2em 0 .6em;letter-spacing:-.01em}
+.prose h2{font-size:1.6rem;margin:2em 0 .6em;letter-spacing:-.01em;scroll-margin-top:90px}
 .prose h3{font-size:1.28rem;margin:1.6em 0 .5em}
 .prose p{margin:0 0 1.2em}
 .prose img{max-width:100%;height:auto;display:block;margin:1.6em auto;border-radius:12px}
@@ -778,7 +1000,20 @@ main{max-width:1080px;margin:0 auto;padding:0 24px}
 .endcta{background:linear-gradient(135deg,rgba(157,108,247,.12),rgba(61,142,248,.1));border:1px solid var(--bd);border-radius:16px;padding:28px;text-align:center;margin:36px 0}
 .endcta h3{margin:0 0 8px;font-size:1.3rem}.endcta p{color:var(--mut);margin:0 0 18px}
 .back{margin-top:30px}
-footer{border-top:1px solid var(--bd);margin-top:40px;padding:28px 24px;color:var(--mut);font-size:.88rem}
-footer .wrap{max-width:1080px;margin:0 auto}footer p{margin:.3em 0}
-@media(max-width:600px){.hero-blog h1{font-size:1.9rem}.article h1{font-size:1.7rem}.nav nav a:not(.cta){display:none}}
+footer{border-top:1px solid var(--bd);margin-top:60px;padding:48px 24px 26px;color:var(--mut);font-size:.9rem;background:var(--bg2)}
+footer .wrap{max-width:1180px;margin:0 auto}
+.foot-grid{display:grid;grid-template-columns:1.5fr 1fr 1fr 1.7fr;gap:36px}
+.foot-brand .brand{color:#fff;font-size:1.2rem;font-weight:800;margin-bottom:8px}
+.foot-brand p{margin:.4em 0 16px;max-width:280px;color:var(--mut)}
+.socials{display:flex;gap:10px}
+.socials a{display:grid;place-items:center;width:38px;height:38px;border:1px solid var(--bd);border-radius:9px;color:var(--mut);background:var(--card)}
+.socials a:hover{color:#fff;border-color:var(--pl);text-decoration:none}
+.socials svg{width:18px;height:18px;fill:currentColor}
+.foot-col h4{color:var(--tx);font-size:.95rem;margin:0 0 12px}
+.foot-col a{display:block;color:var(--mut);margin:.55em 0}.foot-col a:hover{color:var(--tx)}
+.foot-news .widget{margin:0}
+.foot-bottom{border-top:1px solid var(--bd);margin-top:34px;padding-top:20px;text-align:center;color:var(--mut);font-size:.82rem}
+@media(max-width:980px){main.has-side{grid-template-columns:1fr}.sidebar{position:static;margin-top:44px}.content .article{max-width:none}}
+@media(max-width:860px){.foot-grid{grid-template-columns:1fr 1fr}.foot-news{grid-column:1/-1}}
+@media(max-width:600px){.hero-blog h1{font-size:1.8rem}.article h1{font-size:1.7rem}.foot-grid{grid-template-columns:1fr}.hero-search{flex-wrap:wrap}}
 """
