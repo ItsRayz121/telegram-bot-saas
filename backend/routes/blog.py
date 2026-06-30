@@ -174,6 +174,13 @@ def _render_embeds(html_str: str) -> str:
         if iframe:
             return iframe
         # Unrecognised host → a safe clickable link instead of vanishing.
+        # Only http(s) links become anchors (never javascript:/data: etc.).
+        try:
+            scheme = urlparse(url).scheme.lower()
+        except Exception:
+            scheme = ""
+        if scheme not in ("http", "https"):
+            return ""
         safe = _html.escape(url, quote=True)
         return (f'<p class="video-link"><a href="{safe}" target="_blank" '
                 f'rel="noopener">▶ Watch the video</a></p>')
@@ -261,17 +268,21 @@ def _apply_status(post: BlogPost, body: dict):
     date just publishes now."""
     if body.get("status") in ("draft", "published", "scheduled"):
         post.status = body["status"]
+    now = datetime.utcnow()
     if post.status == "scheduled":
         dt = _parse_iso(body.get("published_at"))
-        if dt and dt > datetime.utcnow():
+        if dt and dt > now:
             post.published_at = dt
         else:
             post.status = "published"
-            post.published_at = datetime.utcnow()
-    elif post.status == "published" and not post.published_at:
-        post.published_at = datetime.utcnow()
+            post.published_at = now
+    elif post.status == "published":
+        # A published post must not carry a future date (e.g. left over from a
+        # prior schedule) — that would show a future byline and sort wrong.
+        if not post.published_at or post.published_at > now:
+            post.published_at = now
     if body.get("republish"):
-        post.published_at = datetime.utcnow()
+        post.published_at = now
 
 
 @blog_bp.post("/api/admin/blog/posts")
@@ -462,9 +473,13 @@ def _page(title, description, body, *, canonical, og_image=None, noindex=False,
           jsonld=None, og_type="website"):
     desc = _html.escape((description or "")[:300], quote=True)
     title_e = _html.escape(title)
-    og_image = og_image or f"{SITE_URL}/og-image.png"
+    og_image = _html.escape(og_image or f"{SITE_URL}/og-image.png", quote=True)
+    canonical = _html.escape(canonical, quote=True)
     robots = "noindex,nofollow" if noindex else "index,follow,max-image-preview:large"
-    ld = f'<script type="application/ld+json">{jsonld}</script>' if jsonld else ""
+    # Neutralise any "</script>" inside the JSON-LD so a value can't break out of
+    # the script block (e.g. a post title containing </script>).
+    ld = (f'<script type="application/ld+json">{jsonld.replace("</", "<\\/")}</script>'
+          if jsonld else "")
     return Response(f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -561,7 +576,9 @@ def blog_post(slug):
         db.session.rollback()
 
     body_html = _render_embeds(post.body_html or "")
-    date_iso = post.published_at.isoformat() if post.published_at else ""
+    # Stored naive UTC → mark as UTC for schema.org / <time> correctness.
+    date_iso = (post.published_at.isoformat() + "Z") if post.published_at else ""
+    mod_iso = (post.updated_at.isoformat() + "Z") if post.updated_at else date_iso
     date_h = post.published_at.strftime("%B %d, %Y") if post.published_at else ""
     cover = (f'<img class="cover" src="{_html.escape(post.cover_image_url)}" '
              f'alt="{_html.escape(post.title)}" loading="eager">'
@@ -633,7 +650,7 @@ def blog_post(slug):
         f'"description":{_json_str(_meta_desc(post))},'
         f'"image":["{img_for_ld}"],'
         f'"datePublished":"{date_iso}",'
-        f'"dateModified":"{post.updated_at.isoformat() if post.updated_at else date_iso}",'
+        f'"dateModified":"{mod_iso}",'
         f'"author":{{"@type":"Organization","name":{_json_str(post.author_name or BRAND)}}},'
         f'"publisher":{{"@type":"Organization","name":"{BRAND}",'
         f'"logo":{{"@type":"ImageObject","url":"{SITE_URL}/icons/icon-192.png"}}}},'

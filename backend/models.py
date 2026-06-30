@@ -3959,7 +3959,7 @@ class BlogMedia(db.Model):
             "height": self.height,
             "byte_size": self.byte_size,
             "alt_text": self.alt_text,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "created_at": (self.created_at.isoformat() + "Z") if self.created_at else None,
         }
 
 
@@ -4009,9 +4009,11 @@ class BlogPost(db.Model):
             "status": self.status,
             "reading_minutes": self.reading_minutes or 1,
             "views": self.views or 0,
-            "published_at": self.published_at.isoformat() if self.published_at else None,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            # Stored as naive UTC — emit with 'Z' so the browser parses as UTC
+            # (otherwise new Date() reads them as local time and scheduling drifts).
+            "published_at": (self.published_at.isoformat() + "Z") if self.published_at else None,
+            "created_at": (self.created_at.isoformat() + "Z") if self.created_at else None,
+            "updated_at": (self.updated_at.isoformat() + "Z") if self.updated_at else None,
         }
         if full:
             d.update({
