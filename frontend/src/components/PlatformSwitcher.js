@@ -80,7 +80,14 @@ export default function PlatformSwitcher({ active = 'telegram:group' }) {
 
       {/* Level 2 — Telegram sub-mode (Group vs Assistant) */}
       <Collapse in={activePlatform === 'telegram'} unmountOnExit>
-        <Stack direction="row" spacing={1} justifyContent="center" sx={{ mb: 3 }}>
+        <Stack
+          direction="row"
+          spacing={1}
+          useFlexGap
+          flexWrap="wrap"
+          justifyContent="center"
+          sx={{ mb: 3, px: 1 }}
+        >
           {PLATFORMS[0].modes.map((m) => {
             const selected = activePlatform === 'telegram' && activeMode === m.key;
             const go = () => navigate(m.to);
@@ -96,6 +103,7 @@ export default function PlatformSwitcher({ active = 'telegram:group' }) {
                   cursor: 'pointer', userSelect: 'none',
                   display: 'flex', alignItems: 'center', gap: 0.5,
                   minHeight: 40, px: { xs: 1.5, sm: 2 }, borderRadius: '999px',
+                  whiteSpace: 'nowrap',
                   fontWeight: 600, fontSize: { xs: '0.76rem', sm: '0.82rem' },
                   border: '1px solid',
                   borderColor: selected ? 'rgba(33,150,243,0.6)' : 'rgba(255,255,255,0.12)',
