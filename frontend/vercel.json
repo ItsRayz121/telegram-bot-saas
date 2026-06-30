@@ -67,7 +67,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; base-uri 'self'; form-action 'self'; frame-src https://www.youtube-nocookie.com https://www.youtube.com https://player.vimeo.com https://drive.google.com https://telegram.org; frame-ancestors 'self';"
+          "value": "default-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; base-uri 'self'; form-action 'self'; frame-src https://www.youtube-nocookie.com https://www.youtube.com https://player.vimeo.com https://drive.google.com https://t.me https://telegram.org; frame-ancestors 'self';"
         },
         { "key": "X-Content-Type-Options",        "value": "nosniff" },
         { "key": "Referrer-Policy",                "value": "strict-origin-when-cross-origin" },
@@ -79,7 +79,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; base-uri 'self'; form-action 'self'; frame-src https://www.youtube-nocookie.com https://www.youtube.com https://player.vimeo.com https://drive.google.com https://telegram.org; frame-ancestors 'self';"
+          "value": "default-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; base-uri 'self'; form-action 'self'; frame-src https://www.youtube-nocookie.com https://www.youtube.com https://player.vimeo.com https://drive.google.com https://t.me https://telegram.org; frame-ancestors 'self';"
         },
         { "key": "X-Content-Type-Options",        "value": "nosniff" },
         { "key": "Referrer-Policy",                "value": "strict-origin-when-cross-origin" },

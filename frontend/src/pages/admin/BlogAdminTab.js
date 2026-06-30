@@ -85,7 +85,7 @@ function RichEditor({ initialHTML, onChange, onImageUpload }) {
   };
 
   const addEmbed = () => {
-    const url = window.prompt('Paste a YouTube, Vimeo or Google Drive video link:');
+    const url = window.prompt('Paste a video link (YouTube, Vimeo, Google Drive or Telegram post):');
     if (!url) return;
     const title = (window.prompt('Optional video title / caption (leave blank for none):') || '').trim();
     const safeUrl = url.replace(/"/g, '&quot;');
@@ -150,7 +150,7 @@ function RichEditor({ initialHTML, onChange, onImageUpload }) {
         <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
         <Btn title="Insert link" onClick={addLink}><LinkIcon fontSize="small" /></Btn>
         <Btn title="Upload image" onClick={() => fileRef.current?.click()}><ImageIcon fontSize="small" /></Btn>
-        <Btn title="Embed video (YouTube / Vimeo / Drive)" onClick={addEmbed}><OndemandVideo fontSize="small" /></Btn>
+        <Btn title="Embed video (YouTube / Vimeo / Drive / Telegram)" onClick={addEmbed}><OndemandVideo fontSize="small" /></Btn>
         <Btn title="Clear formatting" onClick={() => exec('removeFormat')}><FormatClear fontSize="small" /></Btn>
         <input ref={fileRef} type="file" hidden accept="image/*" onChange={onFile} />
       </Box>

@@ -69,7 +69,8 @@ ALLOWED_PROTOCOLS = ["http", "https", "mailto", "data"]
 
 # Hosts we will turn a placeholder embed into a real iframe for.
 _EMBED_HOSTS = ("youtube.com", "youtu.be", "www.youtube.com", "vimeo.com",
-                "player.vimeo.com", "drive.google.com")
+                "player.vimeo.com", "drive.google.com", "t.me", "telegram.me",
+                "www.t.me")
 
 
 def _slugify(text: str) -> str:
@@ -146,6 +147,18 @@ def _embed_iframe(url: str) -> str | None:
         m = re.search(r"/d/([^/]+)", p.path)
         if m:
             src = f"https://drive.google.com/file/d/{_html.escape(m.group(1))}/preview"
+    elif host in ("t.me", "telegram.me", "www.t.me"):
+        # t.me/<channel>/<id> (or /s/<channel>/<id>) → embeddable post iframe.
+        # No JS needed; Telegram serves an iframe-ready page at ?embed=1.
+        parts = [seg for seg in p.path.split("/") if seg]
+        if parts and parts[0] == "s":
+            parts = parts[1:]
+        if len(parts) >= 2 and parts[1].isdigit():
+            ch, mid = _html.escape(parts[0]), _html.escape(parts[1])
+            return ('<div class="tg-post"><iframe '
+                    f'src="https://t.me/{ch}/{mid}?embed=1" '
+                    'frameborder="0" scrolling="no"></iframe></div>')
+        return None
     if not src:
         return None
     return (f'<div class="tg-video"><iframe src="{src}" loading="lazy" '
@@ -157,7 +170,13 @@ def _render_embeds(html_str: str) -> str:
     """Replace stored embed placeholders with safe responsive iframes."""
     def repl(m):
         url = _html.unescape(m.group(1))
-        return _embed_iframe(url) or ""
+        iframe = _embed_iframe(url)
+        if iframe:
+            return iframe
+        # Unrecognised host → a safe clickable link instead of vanishing.
+        safe = _html.escape(url, quote=True)
+        return (f'<p class="video-link"><a href="{safe}" target="_blank" '
+                f'rel="noopener">▶ Watch the video</a></p>')
     return re.sub(
         r'<div[^>]*class="tg-embed"[^>]*data-embed="([^"]+)"[^>]*>.*?</div>',
         repl, html_str or "", flags=re.I | re.S)
@@ -721,6 +740,9 @@ main{max-width:1080px;margin:0 auto;padding:0 24px}
 .prose th,.prose td{border:1px solid var(--bd);padding:8px 12px;text-align:left}
 .tg-video{position:relative;padding-bottom:56.25%;height:0;margin:1.8em 0;border-radius:12px;overflow:hidden}
 .tg-video iframe{position:absolute;top:0;left:0;width:100%;height:100%;border:0}
+.tg-post{margin:1.8em auto;max-width:520px}
+.tg-post iframe{width:100%;height:560px;border:0;border-radius:12px}
+.video-link a{display:inline-block;margin:1.2em 0;padding:10px 18px;background:var(--bg2);border:1px solid var(--bd);border-radius:10px;font-weight:600}
 .tags{margin:28px 0;display:flex;flex-wrap:wrap;gap:8px}
 .tag{background:var(--bg2);border:1px solid var(--bd);color:var(--mut);padding:4px 12px;border-radius:20px;font-size:.8rem;text-decoration:none}
 .tag:hover{border-color:var(--pl);color:var(--tx);text-decoration:none}
