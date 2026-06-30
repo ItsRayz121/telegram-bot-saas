@@ -1336,6 +1336,25 @@ function GroupSettingsInner() {
                   and you can let high-level members skip it. Requires AutoMod to be enabled.
                 </Typography>
 
+                <Alert severity="info" icon={false} sx={{ mb: 2 }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                    <b>Want Telegram's native cooldown</b> (greyed-out box + live countdown that blocks
+                    sending before it even happens)? Bots can't switch that on — only a human admin can,
+                    in Telegram itself:
+                  </Typography>
+                  <Typography component="ol" variant="caption" color="text.secondary"
+                    sx={{ pl: 2.5, m: 0, mt: 0.75, '& li': { mb: 0.25 } }}>
+                    <li>Open your group → <b>Edit</b> (pencil) → <b>group settings</b>.</li>
+                    <li>Tap <b>Slow Mode</b> and pick an interval (10s – 1h).</li>
+                    <li>Done — Telegram now shows every member a per-user "write again in …" timer.</li>
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+                    You can run both at once — they don't conflict. Telegram's timer stops the message
+                    up front; our smart slow mode below adds per-level exemptions and harsher actions
+                    (mute/warn) on top.
+                  </Typography>
+                </Alert>
+
                 <FormControlLabel
                   control={<Switch checked={!!sm.enabled}
                     onChange={(e) => updateSetting('automod.slow_mode.enabled', e.target.checked)} />}
