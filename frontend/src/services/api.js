@@ -655,6 +655,7 @@ export const admin = {
     // default of application/json would otherwise break file parsing).
     headers: { 'Content-Type': undefined },
   }),
+  listBlogSubscribers: () => api.get('/api/admin/blog/subscribers'),
   // Stats & Revenue
   getStats: () => api.get('/api/admin/stats'),
   getRevenue: () => api.get('/api/admin/revenue'),

@@ -234,32 +234,62 @@ def _social_icons():
 
 
 def _add_toc(html_str):
-    """Inject ids into <h2> tags (at render time only) and collect a table of
-    contents. Returns (html_with_ids, [(id, text), …])."""
-    items, used = [], set()
+    """Inject ids into H2/H3 headings (at render time only) and build a NESTED
+    table of contents. Returns (html_with_ids, sections) where sections is
+    [(h2_id, h2_text, [(h3_id, h3_text), …]), …]. H3s nest under the H2 above
+    them so the TOC can show a collapsible dropdown per section."""
+    sections, used = [], set()
 
-    def repl(m):
-        attrs, inner = m.group(1), m.group(2)
-        text = re.sub(r"<[^>]+>", "", inner).strip()
-        if not text:
-            return m.group(0)
+    def uid(text):
         base = _slugify(text) or "section"
         hid, n = base, 2
         while hid in used:
             hid = f"{base}-{n}"; n += 1
         used.add(hid)
-        items.append((hid, text))
-        return f'<h2 id="{hid}"{attrs}>{inner}</h2>'
+        return hid
 
-    out = re.sub(r"<h2([^>]*)>(.*?)</h2>", repl, html_str or "", flags=re.I | re.S)
-    return out, items
+    def repl(m):
+        tag = m.group(1).lower()           # 'h2' | 'h3'
+        attrs, inner = m.group(2), m.group(3)
+        # Strip tags AND decode entities (e.g. &nbsp;) so the TOC label is clean.
+        text = _html.unescape(re.sub(r"<[^>]+>", "", inner)).strip()
+        if not text:
+            return m.group(0)
+        hid = uid(text)
+        if tag == "h2" or not sections:
+            sections.append((hid, text, []))
+        else:
+            sections[-1][2].append((hid, text))
+        return f'<{tag} id="{hid}"{attrs}>{inner}</{tag}>'
+
+    out = re.sub(r"<(h2|h3)([^>]*)>(.*?)</\1>", repl, html_str or "", flags=re.I | re.S)
+    return out, sections
 
 
-def _toc_widget(items):
-    if len(items) < 2:   # not worth a TOC for a single section
+def _toc_widget(sections):
+    """Numbered, nested 'On this page' list. Sections with H3 children get a
+    pure-CSS collapsible dropdown (hidden-checkbox + label — no JS, CSP-safe)."""
+    total = sum(1 + len(ch) for _, _, ch in sections)
+    if total < 2:   # not worth a TOC for a single heading
         return ""
-    lis = "".join(f'<li><a href="#{hid}">{_html.escape(t)}</a></li>' for hid, t in items)
-    return f'<div class="widget toc"><h3>On this page</h3><ul>{lis}</ul></div>'
+    lis = []
+    for i, (hid, text, children) in enumerate(sections, 1):
+        num = f'<span class="toc-n">{i}</span>'
+        link = f'<a href="#{_html.escape(hid, quote=True)}">{_html.escape(text)}</a>'
+        if children:
+            cid_html = "".join(
+                f'<li><a href="#{_html.escape(c0, quote=True)}">{_html.escape(c1)}</a></li>'
+                for c0, c1 in children)
+            lis.append(
+                f'<li class="toc-item has-sub">'
+                f'<input class="toc-toggle" id="toc-{i}" type="checkbox" checked hidden>'
+                f'<div class="toc-row">{num}{link}'
+                f'<label class="toc-caret" for="toc-{i}" aria-label="Toggle subsections"></label></div>'
+                f'<ul class="toc-sub">{cid_html}</ul></li>')
+        else:
+            lis.append(f'<li class="toc-item"><div class="toc-row">{num}{link}</div></li>')
+    return (f'<div class="widget toc"><h3>On this page</h3>'
+            f'<ol class="toc-list">{"".join(lis)}</ol></div>')
 
 
 def _search_form(klass="widget search", with_heading=True):
@@ -296,7 +326,8 @@ def _article_sidebar(post, toc_items):
             f'<span>{_html.escape(p.category or "Article")} · {_fmt_date(p.published_at)}</span></li>'
             for p in recents)
         recent = f'<div class="widget recent"><h3>Recent posts</h3><ul>{lis}</ul></div>'
-    return (cta + _toc_widget(toc_items) + _search_form()
+    # Order: CTA → Search (above the TOC, per request) → On-this-page → Recent → Newsletter.
+    return (cta + _search_form() + _toc_widget(toc_items)
             + recent + _newsletter_form(source="sidebar"))
 
 
@@ -442,6 +473,14 @@ def admin_delete_post(post_id):
     return jsonify(ok=True)
 
 
+@blog_bp.get("/api/admin/blog/subscribers")
+@admin_required
+def admin_list_subscribers():
+    """Newsletter signups for the admin Blog tab (newest first)."""
+    subs = BlogSubscriber.query.order_by(BlogSubscriber.created_at.desc()).all()
+    return jsonify(subscribers=[s.to_dict() for s in subs], count=len(subs))
+
+
 @blog_bp.post("/api/admin/blog/media")
 @admin_required
 def admin_upload_media():
@@ -545,16 +584,27 @@ def _fmt_date(dt):
         return dt.strftime("%b %d, %Y")
 
 
+def _fmt_views(n):
+    """Compact view count: 1234 → '1.2k', 1500000 → '1.5M'."""
+    n = int(n or 0)
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}M".replace(".0M", "M")
+    if n >= 1_000:
+        return f"{n / 1_000:.1f}k".replace(".0k", "k")
+    return str(n)
+
+
 def _post_card(p):
     cover = (f'<a href="{SITE_URL}/blog/{p.slug}" class="thumb" '
              f"style=\"background-image:url('{_html.escape(p.cover_image_url)}')\"></a>"
              if p.cover_image_url else
              f'<a href="{SITE_URL}/blog/{p.slug}" class="thumb noimg"></a>')
+    views = f' · {_fmt_views(p.views)} views' if (p.views or 0) else ''
     return (f'<article class="card">{cover}<div class="card-body">'
             f'<div class="card-meta">{_html.escape(p.category or "Article")} · {p.reading_minutes or 1} min read</div>'
             f'<h2><a href="{SITE_URL}/blog/{p.slug}">{_html.escape(p.title)}</a></h2>'
             f'<p>{_html.escape(p.excerpt or "")}</p>'
-            f'<div class="card-foot">{_html.escape(p.author_name or BRAND)} · {_fmt_date(p.published_at)}</div>'
+            f'<div class="card-foot">{_html.escape(p.author_name or BRAND)} · {_fmt_date(p.published_at)}{views}</div>'
             f'</div></article>')
 
 
@@ -828,7 +878,7 @@ def blog_post(slug):
 <nav class="crumbs"><a href="{SITE_URL}/">Home</a> › <a href="{SITE_URL}/blog">Blog</a> › {crumb_cat}<span>{_html.escape(post.title)}</span></nav>
 {cat_html}
 <h1>{_html.escape(post.title)}</h1>
-<div class="byline">By {_html.escape(post.author_name or BRAND)} · <time datetime="{date_iso}">{date_h}</time> · {post.reading_minutes or 1} min read</div>
+<div class="byline">By {_html.escape(post.author_name or BRAND)} · <time datetime="{date_iso}">{date_h}</time> · {post.reading_minutes or 1} min read · {_fmt_views(post.views)} views</div>
 {cover}
 <div class="prose">{body_html}</div>
 <div class="tags">{tags}</div>
@@ -929,8 +979,24 @@ main.has-side{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:48px;al
 .widget.cta-card{background:linear-gradient(135deg,rgba(157,108,247,.16),rgba(61,142,248,.12));border-color:#2c3550}
 .widget.cta-card p{color:var(--mut);font-size:.9rem;margin:0 0 14px}
 .widget.cta-card .cta{display:block;text-align:center}
-.toc ul,.recent ul{list-style:none;margin:0;padding:0}
-.toc li{margin:.45em 0}.toc a{font-size:.9rem;color:var(--mut)}.toc a:hover{color:var(--tx)}
+.recent ul{list-style:none;margin:0;padding:0}
+.toc-list{list-style:none;margin:0;padding:0}
+.toc-item{margin:0}
+.toc-row{display:flex;align-items:flex-start;gap:9px;padding:5px 0}
+.toc-n{flex:none;width:20px;height:20px;border-radius:6px;background:var(--bg2);border:1px solid var(--bd);color:var(--mut);font-size:.7rem;font-weight:700;display:grid;place-items:center;margin-top:1px}
+.toc-row a{flex:1;font-size:.9rem;color:var(--mut);line-height:1.4}
+.toc-row a:hover{color:var(--tx)}
+.toc-caret{flex:none;width:20px;height:20px;cursor:pointer;position:relative;border-radius:5px}
+.toc-caret:hover{background:var(--bg2)}
+.toc-caret::before{content:"";position:absolute;top:50%;left:50%;width:6px;height:6px;border-right:2px solid var(--mut);border-bottom:2px solid var(--mut);transform:translate(-60%,-50%) rotate(-45deg);transition:transform .18s}
+.toc-toggle:checked ~ .toc-row .toc-caret::before{transform:translate(-50%,-70%) rotate(45deg)}
+.toc-caret:hover::before{border-color:var(--tx)}
+.toc-sub{list-style:none;margin:0 0 4px 9px;padding:0 0 0 18px;border-left:1px solid var(--bd)}
+.toc-sub li{margin:0}
+.toc-sub a{display:block;font-size:.84rem;color:var(--mut);padding:3px 0}
+.toc-sub a::before{content:"›";margin-right:6px;color:var(--pl)}
+.toc-sub a:hover{color:var(--tx)}
+.toc-toggle:not(:checked) ~ .toc-sub{display:none}
 .recent li{padding:.6em 0;border-top:1px solid var(--bd)}.recent li:first-child{border-top:none;padding-top:0}
 .recent li a{display:block;font-size:.9rem;color:var(--tx);font-weight:600;line-height:1.35}
 .recent li a:hover{color:var(--pl);text-decoration:none}

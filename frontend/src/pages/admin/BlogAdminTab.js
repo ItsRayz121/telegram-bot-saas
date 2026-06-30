@@ -3,14 +3,14 @@ import {
   Box, Grid, Card, CardContent, Typography, Button, IconButton, TextField,
   MenuItem, Chip, Stack, Divider, Tooltip, CircularProgress, Switch,
   FormControlLabel, LinearProgress, Table, TableBody, TableCell, TableHead,
-  TableRow,
+  TableRow, InputAdornment,
 } from '@mui/material';
 import {
   FormatBold, FormatItalic, FormatUnderlined, FormatListBulleted,
   FormatListNumbered, FormatQuote, Link as LinkIcon, Image as ImageIcon,
   OndemandVideo, FormatClear, Add, ArrowBack, Visibility, Delete,
   CheckCircle, Warning, RadioButtonUnchecked, Title as TitleIcon,
-  Code, HorizontalRule, Schedule,
+  Code, HorizontalRule, Schedule, Search as SearchIcon, Download, MailOutline,
 } from '@mui/icons-material';
 import { admin } from '../../services/api';
 import { toast } from 'react-toastify';
@@ -266,6 +266,9 @@ export default function BlogAdminTab({ onAdminError }) {
   const [tagInput, setTagInput] = useState('');
   const [saving, setSaving] = useState(false);
   const [scheduleAt, setScheduleAt] = useState('');
+  const [postSearch, setPostSearch] = useState('');
+  const [subscribers, setSubscribers] = useState([]);
+  const [subsLoading, setSubsLoading] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -276,6 +279,27 @@ export default function BlogAdminTab({ onAdminError }) {
   }, [onAdminError]);
 
   useEffect(() => { load(); }, [load]);
+
+  const loadSubscribers = useCallback(() => {
+    setSubsLoading(true);
+    admin.listBlogSubscribers()
+      .then(({ data }) => setSubscribers(data.subscribers || []))
+      .catch((e) => onAdminError?.(e, 'Failed to load subscribers'))
+      .finally(() => setSubsLoading(false));
+  }, [onAdminError]);
+
+  const openSubscribers = () => { setView('subscribers'); loadSubscribers(); };
+
+  const exportSubscribersCsv = () => {
+    const rows = [['email', 'source', 'subscribed_at'],
+      ...subscribers.map((s) => [s.email, s.source || '', s.created_at || ''])];
+    const csv = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'blog-subscribers.csv'; a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const uploadImage = async (file) => {
     const fd = new FormData();
@@ -356,8 +380,61 @@ export default function BlogAdminTab({ onAdminError }) {
     focusKeyword: post.focus_keyword, html: bodyHtml, slug: effectiveSlug,
   }), [post.meta_title, post.title, post.meta_description, post.focus_keyword, bodyHtml, effectiveSlug]);
 
+  // ── Subscribers view ──
+  if (view === 'subscribers') {
+    return (
+      <Box sx={{ p: { xs: 2, md: 3 } }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+          <Button startIcon={<ArrowBack />} onClick={() => setView('list')}>Back to posts</Button>
+          <Button variant="outlined" startIcon={<Download />} disabled={!subscribers.length}
+            onClick={exportSubscribersCsv}>Export CSV</Button>
+        </Box>
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="h5" fontWeight={800}>Newsletter subscribers</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Emails captured from the blog footer & sidebar signup forms. {subscribers.length} total.
+          </Typography>
+        </Box>
+        <Card sx={{ bgcolor: PALETTE.bg1, border: `1px solid ${PALETTE.border1}` }}>
+          {subsLoading ? (
+            <Box sx={{ display: 'grid', placeItems: 'center', py: 6 }}><CircularProgress /></Box>
+          ) : subscribers.length === 0 ? (
+            <Box sx={{ py: 6, textAlign: 'center' }}>
+              <MailOutline sx={{ fontSize: 36, color: 'text.disabled', mb: 1 }} />
+              <Typography color="text.secondary">No subscribers yet — they’ll appear here as readers sign up.</Typography>
+            </Box>
+          ) : (
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Email</TableCell>
+                  <TableCell>Source</TableCell>
+                  <TableCell>Subscribed</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {subscribers.map((s) => (
+                  <TableRow key={s.id} hover>
+                    <TableCell><Typography variant="body2">{s.email}</Typography></TableCell>
+                    <TableCell><Chip size="small" label={s.source || 'blog'} variant="outlined" /></TableCell>
+                    <TableCell><Typography variant="caption" color="text.secondary">
+                      {s.created_at ? new Date(s.created_at).toLocaleString() : '—'}</Typography></TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </Card>
+      </Box>
+    );
+  }
+
   // ── List view ──
   if (view === 'list') {
+    const filteredPosts = postSearch.trim()
+      ? posts.filter((p) => (p.title || '').toLowerCase().includes(postSearch.trim().toLowerCase())
+          || (p.slug || '').toLowerCase().includes(postSearch.trim().toLowerCase()))
+      : posts;
     return (
       <Box sx={{ p: { xs: 2, md: 3 } }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 1 }}>
@@ -367,8 +444,18 @@ export default function BlogAdminTab({ onAdminError }) {
               One blog for the whole site — published posts go live instantly at telegizer.com/blog.
             </Typography>
           </Box>
-          <Button variant="contained" startIcon={<Add />} onClick={openNew}>New post</Button>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Button variant="outlined" startIcon={<MailOutline />} onClick={openSubscribers}>Subscribers</Button>
+            <Button variant="contained" startIcon={<Add />} onClick={openNew}>New post</Button>
+          </Stack>
         </Box>
+        {posts.length > 0 && (
+          <TextField size="small" fullWidth placeholder="Search posts by title or slug…"
+            value={postSearch} onChange={(e) => setPostSearch(e.target.value)} sx={{ mb: 2, maxWidth: 420 }}
+            InputProps={{ startAdornment: (
+              <InputAdornment position="start"><SearchIcon fontSize="small" sx={{ color: 'text.disabled' }} /></InputAdornment>
+            ) }} />
+        )}
         <Card sx={{ bgcolor: PALETTE.bg1, border: `1px solid ${PALETTE.border1}` }}>
           {loading ? (
             <Box sx={{ display: 'grid', placeItems: 'center', py: 6 }}><CircularProgress /></Box>
@@ -376,6 +463,10 @@ export default function BlogAdminTab({ onAdminError }) {
             <Box sx={{ py: 6, textAlign: 'center' }}>
               <Typography color="text.secondary" mb={2}>No posts yet. Write your first one.</Typography>
               <Button variant="outlined" startIcon={<Add />} onClick={openNew}>New post</Button>
+            </Box>
+          ) : filteredPosts.length === 0 ? (
+            <Box sx={{ py: 6, textAlign: 'center' }}>
+              <Typography color="text.secondary">No posts match “{postSearch}”.</Typography>
             </Box>
           ) : (
             <Table size="small">
@@ -390,7 +481,7 @@ export default function BlogAdminTab({ onAdminError }) {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {posts.map((p) => (
+                {filteredPosts.map((p) => (
                   <TableRow key={p.id} hover>
                     <TableCell sx={{ maxWidth: 320 }}>
                       <Typography variant="body2" fontWeight={600} noWrap>{p.title}</Typography>
