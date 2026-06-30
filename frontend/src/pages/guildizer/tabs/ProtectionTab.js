@@ -267,6 +267,26 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                 Catches a single member firing off messages too fast. (Coordinated multi-user
                 raids are handled separately under <b>Behavior → Raid Protection</b>.)
               </Typography>
+
+              <Alert severity="info" icon={false} sx={{ mb: 2 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                  <b>Want Discord's native Slowmode</b> (the box shows a live "you can send again in …"
+                  countdown that blocks posting up front)? It's set <b>per channel</b>, and any admin can
+                  turn it on in seconds:
+                </Typography>
+                <Typography component="ol" variant="caption" color="text.secondary"
+                  sx={{ pl: 2.5, m: 0, mt: 0.75, '& li': { mb: 0.25 } }}>
+                  <li>Hover the channel → <b>Edit Channel</b> (gear) → <b>Overview</b>.</li>
+                  <li>Set <b>Slowmode</b> to an interval (5s – 6h) and save.</li>
+                  <li>Done — Discord shows every member a per-user cooldown timer in that channel.</li>
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+                  Run both together — they don't conflict. Native Slowmode paces the steady drip per
+                  channel; the flood control below catches bursts across the whole server and can
+                  timeout repeat offenders.
+                </Typography>
+              </Alert>
+
               <FormControlLabel
                 control={<Switch checked={!!am.flood?.enabled} onChange={(e) => setAm('flood', { enabled: e.target.checked })} />}
                 label="Enable per-member flood control"
