@@ -222,6 +222,38 @@ _SVG_DISCORD = ('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.317 4.
                 ' 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>')
 
 
+# Day/night toggle icons (markup only — CSP-safe, no JS).
+_SVG_SUN = ('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 17a5 5 0 100-10 5 5 0 000 10zm0-13a1 1 0 011 1v1'
+            'a1 1 0 11-2 0V5a1 1 0 011-1zm0 15a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM4 12a1 1 0 011-1h1a1 1 0 110 2H5'
+            'a1 1 0 01-1-1zm14 0a1 1 0 011-1h1a1 1 0 110 2h-1a1 1 0 01-1-1zM6.34 6.34a1 1 0 011.42 0l.7.7a1 1 0 11-1.41 1.42'
+            'l-.71-.71a1 1 0 010-1.41zm9.9 9.9a1 1 0 011.42 0l.7.7a1 1 0 01-1.41 1.42l-.71-.71a1 1 0 010-1.41zM17.66 6.34'
+            'a1 1 0 010 1.41l-.71.71a1 1 0 11-1.41-1.42l.7-.7a1 1 0 011.42 0zM7.76 16.24a1 1 0 010 1.41l-.71.71'
+            'a1 1 0 01-1.41-1.42l.7-.7a1 1 0 011.42 0z"/></svg>')
+_SVG_MOON = ('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>')
+
+
+def _current_theme() -> str:
+    """The reader's saved blog theme ('light' or 'dark'; default dark)."""
+    return "light" if request.cookies.get("blog_theme") == "light" else "dark"
+
+
+def _theme_toggle() -> str:
+    """A no-JS day/night switch: a POST form that flips the theme cookie and
+    reloads the same page. Shown in the header. In dark mode it offers the sun
+    (switch to day); in light mode the moon (switch to night)."""
+    theme = _current_theme()
+    target = "dark" if theme == "light" else "light"
+    icon = _SVG_MOON if theme == "light" else _SVG_SUN
+    label = f"Switch to {target} mode"
+    cur = (request.full_path or "/blog").rstrip("?")   # path (+query) of this page
+    cur_e = _html.escape(cur, quote=True)
+    return (f'<form class="theme-form" method="post" action="{SITE_URL}/blog/theme">'
+            f'<input type="hidden" name="next" value="{cur_e}">'
+            f'<input type="hidden" name="theme" value="{target}">'
+            f'<button class="theme-toggle" type="submit" aria-label="{label}" title="{label}">{icon}</button>'
+            f'</form>')
+
+
 def _social_icons():
     links = (
         ("https://x.com/TelegizerApp", "X", _SVG_X),
@@ -665,8 +697,9 @@ def _page(title, description, body, *, canonical, og_image=None, noindex=False,
 </div>
 <div class="foot-bottom">© {year} {BRAND}. All rights reserved.</div>
 </div></footer>"""
+    theme_attr = ' data-theme="light"' if _current_theme() == "light" else ''
     return Response(f"""<!DOCTYPE html>
-<html lang="en">
+<html lang="en"{theme_attr}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -691,7 +724,7 @@ def _page(title, description, body, *, canonical, og_image=None, noindex=False,
 </head>
 <body>
 <header class="topbar"><div class="nav"><a class="brand" href="{SITE_URL}/">{BRAND}</a>
-<nav><a href="{SITE_URL}/blog">Blog</a>
+<nav>{_theme_toggle()}<a href="{SITE_URL}/blog">Blog</a>
 <a class="cta" href="{SITE_URL}/register">Start free</a></nav></div></header>
 {main}
 {footer}
@@ -745,6 +778,34 @@ def blog_search():
         description=f"Search the {BRAND} blog for Telegram & Discord community guides.",
         canonical_base=f"{SITE_URL}/blog/search", noindex=True, empty_msg=empty_msg,
         hero_extra=_search_form(klass="hero-search", with_heading=False))
+
+
+def _safe_next(raw: str) -> str:
+    """Turn a user-supplied 'next' into a safe same-site blog URL (no open
+    redirect): only /blog* paths are honoured, query preserved, fragment dropped."""
+    try:
+        p = urlparse((raw or "").strip())
+    except Exception:
+        p = None
+    path = (p.path if p else "") or "/blog"
+    if not path.startswith("/blog") or path.startswith("/blog/theme"):
+        path = "/blog"
+    q = f"?{p.query}" if (p and p.query) else ""
+    return f"{SITE_URL}{path}{q}"
+
+
+@blog_bp.post("/blog/theme")
+def blog_set_theme():
+    """Persist the reader's day/night choice in a cookie and reload the page.
+    No JS: this is the target of the header toggle form."""
+    theme = "light" if (request.form.get("theme") == "light") else "dark"
+    nxt = _safe_next(request.form.get("next"))
+    resp = Response(status=303)
+    resp.headers["Location"] = nxt
+    # 1-year, same-site, https-only. Not HttpOnly (there's no secret here).
+    resp.set_cookie("blog_theme", theme, max_age=31536000, path="/blog",
+                    samesite="Lax", secure=True)
+    return resp
 
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -1085,4 +1146,15 @@ footer .wrap{max-width:1180px;margin:0 auto}
 @media(max-width:980px){main.has-side{grid-template-columns:1fr}.sidebar{position:static;margin-top:44px}.content .article{max-width:none}}
 @media(max-width:860px){.foot-grid{grid-template-columns:1fr 1fr}.foot-news{grid-column:1/-1}}
 @media(max-width:600px){.hero-blog h1{font-size:1.8rem}.article h1{font-size:1.7rem}.foot-grid{grid-template-columns:1fr}.hero-search{flex-wrap:wrap}}
+/* ── Day/night toggle button (header) ─────────────────────────────────────── */
+.theme-form{display:flex;margin:0;padding:0}
+.theme-toggle{display:grid;place-items:center;width:38px;height:38px;background:var(--bg2);border:1px solid var(--bd);border-radius:9px;color:var(--mut);cursor:pointer;padding:0}
+.theme-toggle:hover{color:var(--tx);border-color:var(--pl)}
+.theme-toggle svg{width:18px;height:18px;fill:currentColor}
+/* ── Light (day) palette — applied when the reader picks day mode ──────────── */
+:root[data-theme=light]{--bg:#ffffff;--bg2:#f4f6fa;--card:#ffffff;--bd:#e4e8ef;--tx:#171a21;--mut:#5b6472;--pl:#7c3aed;--bl:#2563eb}
+[data-theme=light] .topbar{background:rgba(255,255,255,.85)}
+[data-theme=light] .brand,[data-theme=light] .foot-brand .brand,[data-theme=light] .card h2 a{color:#171a21}
+[data-theme=light] .prose pre{background:#f4f6fa;border-color:var(--bd)}
+[data-theme=light] .thumb{background-color:#e9edf3}
 """
