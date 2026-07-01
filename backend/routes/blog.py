@@ -609,7 +609,8 @@ def _post_card(p):
 
 
 def _render_listing(*, items, page, base_path, h1, lede, title, description,
-                    canonical_base, jsonld=None, noindex=False, hero_extra=""):
+                    canonical_base, jsonld=None, noindex=False, hero_extra="",
+                    empty_msg="No posts found — try another search or check back soon."):
     """Paginated grid of post cards — shared by the index + category/tag pages."""
     page = max(1, page)
     total_pages = max(1, (len(items) + PER_PAGE - 1) // PER_PAGE)
@@ -617,7 +618,7 @@ def _render_listing(*, items, page, base_path, h1, lede, title, description,
     start = (page - 1) * PER_PAGE
     shown = items[start:start + PER_PAGE]
     grid = ("".join(_post_card(p) for p in shown) if shown
-            else '<p class="empty">No posts found — try another search or check back soon.</p>')
+            else f'<p class="empty">{_html.escape(empty_msg)}</p>')
     # base_path may already carry a query (e.g. ?q=…) — pick the right separator.
     sep = '&' if '?' in base_path else '?'
     pager = ""
@@ -659,7 +660,7 @@ def _page(title, description, body, *, canonical, og_image=None, noindex=False,
 <a href="{SITE_URL}/">Telegram</a><a href="{SITE_URL}/guildizer-landing">Guildizer (Discord)</a>
 <a href="{SITE_URL}/pricing">Pricing</a><a href="{SITE_URL}/register">Start free</a></div>
 <div class="foot-col"><h4>Resources</h4>
-<a href="{SITE_URL}/blog">Blog</a><a href="{SITE_URL}/blog/feed.xml">RSS feed</a>
+<a href="{SITE_URL}/blog">Blog</a>
 <a href="{SITE_URL}/blog/search">Search</a></div>
 <div class="foot-news">{_newsletter_form(source="footer")}</div>
 </div>
@@ -733,14 +734,17 @@ def blog_search():
         h1 = f"Search results for “{q}”"
         lede = f'{len(items)} article{"" if len(items) == 1 else "s"} found.'
         base = f"{SITE_URL}/blog/search?q={quote(q)}"
+        empty_msg = f"No articles match “{q}”. Try a different word."
     else:
         h1, lede = "Search the blog", "Type a term to search every article."
         base = f"{SITE_URL}/blog/search"
+        # No search run yet — don't imply the blog is empty.
+        empty_msg = "Type a search term above and hit Search to find articles."
     return _render_listing(
         items=items, page=page, base_path=base, h1=h1, lede=lede,
         title=(f"Search: {q} — {BRAND} Blog" if q else f"Search — {BRAND} Blog"),
         description=f"Search the {BRAND} blog for Telegram & Discord community guides.",
-        canonical_base=f"{SITE_URL}/blog/search", noindex=True,
+        canonical_base=f"{SITE_URL}/blog/search", noindex=True, empty_msg=empty_msg,
         hero_extra=_search_form(klass="hero-search", with_heading=False))
 
 
