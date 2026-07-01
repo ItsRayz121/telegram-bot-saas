@@ -51,6 +51,9 @@ export const guildizerNotifications = {
   vapidKey: () => guildizerApi.get('/api/notifications/vapid-public-key'),
   subscribePush: (subscription) => guildizerApi.post('/api/notifications/subscribe', subscription),
   unsubscribePush: (data) => guildizerApi.post('/api/notifications/unsubscribe', data || {}),
+  // Top-of-app announcement banner (show once, dismissible)
+  getBanner: () => guildizerApi.get('/api/notifications/banner'),
+  dismissBanner: (id) => guildizerApi.post(`/api/notifications/banner/${id}/dismiss`),
 };
 
 // Per-user UI preferences (open/closed state of collapsible settings cards).

@@ -975,22 +975,74 @@ def list_announcements():
     return jsonify(announcements=[r.to_dict() for r in rows])
 
 
+_ANN_CHANNELS = ("banner", "inapp")
+
+
+def _announcement_audience_users(db, audience: str):
+    """User rows in the audience. Guildizer audiences are coarse (all) since a
+    user can manage guilds on mixed tiers; kept for parity with Telegizer."""
+    from models import User
+    return db.query(User).all()
+
+
+def _reach_breakdown(db, audience: str) -> dict:
+    from web_push import get_prefs
+    users = _announcement_audience_users(db, audience)
+    total = len(users)
+    opted_in = sum(1 for u in users if get_prefs(u).get("announcements", True))
+    return {"total": total, "inapp": opted_in, "banner": opted_in}
+
+
+@admin_bp.get("/api/admin/announcements/reach")
+@admin_required
+def announcement_reach():
+    return jsonify(reach=_reach_breakdown(g.db, request.args.get("audience", "all")))
+
+
 @admin_bp.post("/api/admin/announcements")
 @admin_required
 def create_announcement():
+    from datetime import datetime
     from admin import audit
-    from models import AdminAnnouncement
+    from access import notify
+    from web_push import get_prefs
+    from models import AdminAnnouncement, User
     body = request.get_json(silent=True) or {}
     title = (str(body.get("title") or "")).strip()[:200]
     if not title:
         return jsonify(error="title_required"), 400
     level = body.get("level") if body.get("level") in ("info", "warning", "critical") else "info"
+    audience = body.get("audience") if body.get("audience") in ("all", "free", "pro") else "all"
+
+    channels = body.get("channels")
+    if not channels:
+        channels = ["banner"]  # legacy default
+    channels = [c for c in channels if c in _ANN_CHANNELS]
+    if not channels:
+        return jsonify(error="no_valid_channel"), 400
+
+    text = (str(body.get("body") or "")).strip()[:2000]
     row = AdminAnnouncement(
-        title=title, body=(str(body.get("body") or "")).strip()[:2000],
-        level=level, active=bool(body.get("active", True)), created_by=g.user_id,
+        title=title, body=text, level=level,
+        active=("banner" in channels), audience=audience,
+        channels=",".join(channels), created_by=g.user_id,
     )
     g.db.add(row)
-    audit(g.db, g.user_id, "announce_create", title, f"level={level}")
+    g.db.flush()
+
+    users = _announcement_audience_users(g.db, audience)
+    opted_in = [u for u in users if get_prefs(u).get("announcements", True)]
+    row.reach_count = len(opted_in)
+    delivered = 0
+    if "inapp" in channels:
+        kind = "error" if level == "critical" else ("warning" if level == "warning" else "info")
+        for u in opted_in:
+            notify(g.db, u.id, title, text, kind=kind)
+            delivered += 1
+    row.delivered_count = delivered
+    row.sent_at = datetime.utcnow()
+
+    audit(g.db, g.user_id, "announce_create", title, f"level={level} ch={','.join(channels)}")
     g.db.commit()
     return jsonify(announcement=row.to_dict()), 201
 
@@ -1003,6 +1055,19 @@ def toggle_announcement(aid: int):
     if row is None:
         return jsonify(error="not_found"), 404
     row.active = not row.active
+    g.db.commit()
+    return jsonify(announcement=row.to_dict())
+
+
+@admin_bp.post("/api/admin/announcements/<int:aid>/retire")
+@admin_required
+def retire_announcement(aid: int):
+    """Take a live banner down without deleting the announcement or its stats."""
+    from models import AdminAnnouncement
+    row = g.db.get(AdminAnnouncement, aid)
+    if row is None:
+        return jsonify(error="not_found"), 404
+    row.active = False
     g.db.commit()
     return jsonify(announcement=row.to_dict())
 

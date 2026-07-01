@@ -1106,6 +1106,17 @@ def change_password():
     user.password_hash = bcrypt.hashpw(new_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
     db.session.commit()
 
+    # Security event — important enough to notify across every channel the user opted into.
+    try:
+        from .notifications import create_notification
+        create_notification(
+            user.id, "password_changed", "Your password was changed",
+            "If this wasn't you, reset your password immediately and contact support.",
+            metadata={"url": "/settings"},
+        )
+    except Exception:
+        pass
+
     return jsonify({"message": "Password updated successfully"}), 200
 
 

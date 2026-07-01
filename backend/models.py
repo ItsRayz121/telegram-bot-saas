@@ -137,6 +137,11 @@ class User(db.Model):
     # JSON shape: {"sound": bool, "push": bool, "categories": {"billing": bool, ...}}
     # None = all defaults on. See routes/notifications.py NOTIF_PREF_DEFAULTS.
     notification_prefs = db.Column(db.JSON, nullable=True)
+    # Anti-ban: set True when a proactive bot DM is rejected with 403 Forbidden
+    # ("bot was blocked by the user"). Once set, we never message this user again
+    # via the bot until they re-/start it (which clears the flag). See
+    # routes/notifications.py create_notification + telegram_safe.send_status.
+    bot_blocked = db.Column(db.Boolean, default=False, nullable=False)
     # Per-user UI preferences. JSON shape: {"cards": {"<card_id>": bool, ...}}
     # where each card_id maps to whether that collapsible settings card is open.
     # Absent/None = closed by default. See routes/ui_prefs.py.
@@ -3140,14 +3145,32 @@ class AdminAnnouncement(db.Model):
     body          = db.Column(db.Text, nullable=False)
     # Audience: all | free | pro | enterprise | with_bots
     audience      = db.Column(db.String(50), nullable=False, default="all")
-    # Channel: inapp | email | both
+    # Legacy single channel (kept for back-compat): inapp | email | both
     channel       = db.Column(db.String(20), nullable=False, default="inapp")
+    # Multi-channel CSV of: banner | inapp | bot | email. Preferred over `channel`.
+    channels      = db.Column(db.String(120), nullable=True)
     # Type: info | warning | critical
     announcement_type = db.Column(db.String(20), nullable=False, default="info")
     sent          = db.Column(db.Boolean, default=False, nullable=False)
     sent_at       = db.Column(db.DateTime, nullable=True)
     delivered_count = db.Column(db.Integer, default=0, nullable=False)
+    # Bot-DM sends that failed (blocked / never-started / flood). Delivery stats.
+    failed_count  = db.Column(db.Integer, default=0, nullable=False)
+    # Estimated audience size captured at send time (reach preview).
+    reach_count   = db.Column(db.Integer, default=0, nullable=False)
+    # Whether a "banner" channel announcement is still live at the top of the app.
+    # Retiring a banner sets this False without deleting the announcement/stats.
+    active        = db.Column(db.Boolean, default=True, nullable=False)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    def channel_list(self):
+        """Return the effective list of channels, migrating the legacy field."""
+        if self.channels:
+            return [c for c in (self.channels or "").split(",") if c]
+        # Legacy back-compat: map the old single `channel` value.
+        if self.channel == "both":
+            return ["inapp", "email"]
+        return [self.channel] if self.channel else ["inapp"]
 
     def to_dict(self):
         return {
@@ -3157,10 +3180,14 @@ class AdminAnnouncement(db.Model):
             "body": self.body,
             "audience": self.audience,
             "channel": self.channel,
+            "channels": self.channel_list(),
             "announcement_type": self.announcement_type,
             "sent": self.sent,
             "sent_at": self.sent_at.isoformat() if self.sent_at else None,
             "delivered_count": self.delivered_count,
+            "failed_count": self.failed_count,
+            "reach_count": self.reach_count,
+            "active": self.active,
             "created_at": self.created_at.isoformat(),
         }
 

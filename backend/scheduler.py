@@ -1779,3 +1779,88 @@ def recompute_xp_periods():
         except Exception:
             pass
         logger.error("recompute_xp_periods failed: %s", exc)
+
+
+# ── Admin announcement broadcasts (bot DM + email) ────────────────────────────
+# Fan-out for the announcement "bot" and "email" channels. Kept off the request
+# path (a broadcast to thousands of users, paced for anti-ban, would time out an
+# HTTP request) and made resilient: each send is best-effort and delivery stats
+# are written back onto the AdminAnnouncement row.
+
+@celery.task(name="backend.scheduler.send_announcement_bot_dms")
+def send_announcement_bot_dms(announcement_id, user_ids):
+    """Deliver an admin announcement as a private bot DM to opted-in users.
+
+    Anti-ban (BINDING): every send goes through the paced, 429-safe
+    `telegram_safe.send_status`; a user who has blocked the bot is flagged
+    `bot_blocked=True` and never messaged again. Never raises."""
+    try:
+        import os
+        from .app import create_app
+        from .telegram_safe import send_status
+        app = create_app()
+        with app.app_context():
+            from .models import db, User, AdminAnnouncement
+            ann = AdminAnnouncement.query.get(announcement_id)
+            if not ann:
+                return
+            bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+            if not bot_token:
+                return
+            base = os.environ.get("FRONTEND_URL", "https://telegizer.com").rstrip("/")
+            text = f"*{ann.title}*\n{ann.body}\n\n{base}/notifications"
+            delivered = failed = 0
+            for uid in (user_ids or []):
+                user = User.query.get(uid)
+                if not user or getattr(user, "bot_blocked", False) or not user.telegram_user_id:
+                    failed += 1
+                    continue
+                ok, blocked = send_status(bot_token, user.telegram_user_id, text,
+                                          parse_mode="Markdown", disable_web_page_preview=True)
+                if ok:
+                    delivered += 1
+                else:
+                    failed += 1
+                    if blocked:
+                        user.bot_blocked = True
+                        db.session.commit()
+            ann.delivered_count = (ann.delivered_count or 0) + delivered
+            ann.failed_count = (ann.failed_count or 0) + failed
+            db.session.commit()
+            logger.info("announcement %s bot DM: %s delivered, %s failed",
+                        announcement_id, delivered, failed)
+    except Exception as exc:
+        logger.error("send_announcement_bot_dms error: %s", exc)
+
+
+@celery.task(name="backend.scheduler.send_announcement_emails")
+def send_announcement_emails(announcement_id, user_ids):
+    """Deliver an admin announcement by email (best-effort)."""
+    try:
+        from .app import create_app
+        app = create_app()
+        with app.app_context():
+            from .models import db, User, AdminAnnouncement
+            from .notifications import send_email
+            ann = AdminAnnouncement.query.get(announcement_id)
+            if not ann:
+                return
+            delivered = failed = 0
+            html = f"<h2>{ann.title}</h2><p>{ann.body}</p>"
+            for uid in (user_ids or []):
+                user = User.query.get(uid)
+                if not user or not getattr(user, "email", None):
+                    failed += 1
+                    continue
+                try:
+                    send_email(user.email, ann.title, html, text_body=ann.body)
+                    delivered += 1
+                except Exception:
+                    failed += 1
+            ann.delivered_count = (ann.delivered_count or 0) + delivered
+            ann.failed_count = (ann.failed_count or 0) + failed
+            db.session.commit()
+            logger.info("announcement %s email: %s delivered, %s failed",
+                        announcement_id, delivered, failed)
+    except Exception as exc:
+        logger.error("send_announcement_emails error: %s", exc)

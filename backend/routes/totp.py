@@ -128,6 +128,15 @@ def enable_totp():
         db.session.commit()
 
         logger.info("2FA enabled for user %s", user.id)
+        try:
+            from .notifications import create_notification
+            create_notification(
+                user.id, "twofa_changed", "Two-factor authentication enabled",
+                "2FA is now protecting your account. If this wasn't you, contact support.",
+                metadata={"url": "/settings"},
+            )
+        except Exception:
+            pass
         return jsonify({
             "message": "2FA enabled successfully.",
             "backup_codes": plain_codes,
@@ -171,6 +180,15 @@ def disable_totp():
     db.session.commit()
 
     logger.info("2FA disabled for user %s", user.id)
+    try:
+        from .notifications import create_notification
+        create_notification(
+            user.id, "twofa_changed", "Two-factor authentication disabled",
+            "2FA was turned off for your account. If this wasn't you, re-enable it and contact support.",
+            metadata={"url": "/settings"},
+        )
+    except Exception:
+        pass
     return jsonify({"message": "2FA disabled successfully."})
 
 

@@ -1917,16 +1917,33 @@ function DirectoryTab({ onAdminError }) {
 // TAB 7 — ANNOUNCEMENTS
 // ═══════════════════════════════════════════════════════════════════════════════
 
+const ANN_CHANNELS = [
+  { key: 'banner', label: 'Website banner', hint: 'Dismissible bar at the top of the app (shows once).' },
+  { key: 'inapp', label: 'In-app bell', hint: 'Lands in every recipient’s notification center.' },
+  { key: 'bot', label: 'Telegram bot DM', hint: 'Private bot message — only reaches users who /started the bot AND opted in.' },
+  { key: 'email', label: 'Email', hint: 'Sent via your configured email provider.' },
+];
+
 function AnnouncementsTab({ onAdminError }) {
   const [announcements, setAnnouncements] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
+  const [step, setStep] = useState('compose'); // 'compose' | 'review'
   const [sending, setSending] = useState(false);
+  const [reach, setReach] = useState(null);
+  const [reachLoading, setReachLoading] = useState(false);
   const [form, setForm] = useState({
-    title: '', body: '', audience: 'all', channel: 'inapp', announcement_type: 'info',
+    title: '', body: '', audience: 'all',
+    channels: { banner: false, inapp: true, bot: false, email: false },
+    announcement_type: 'info',
   });
+
+  const selectedChannels = useMemo(
+    () => Object.keys(form.channels).filter((k) => form.channels[k]),
+    [form.channels]
+  );
 
   const fetch = useCallback(async (p = 1) => {
     setLoading(true);
@@ -1940,35 +1957,75 @@ function AnnouncementsTab({ onAdminError }) {
 
   useEffect(() => { fetch(); }, [fetch]);
 
-  const handleSend = async () => {
+  // Refresh the reach preview whenever the audience changes (while composing).
+  useEffect(() => {
+    if (!composeOpen) return;
+    let cancelled = false;
+    setReachLoading(true);
+    admin.getAnnouncementReach(form.audience)
+      .then((res) => { if (!cancelled) setReach(res.data.reach); })
+      .catch(() => { if (!cancelled) setReach(null); })
+      .finally(() => { if (!cancelled) setReachLoading(false); });
+    return () => { cancelled = true; };
+  }, [composeOpen, form.audience]);
+
+  const openCompose = () => {
+    setForm({
+      title: '', body: '', audience: 'all',
+      channels: { banner: false, inapp: true, bot: false, email: false },
+      announcement_type: 'info',
+    });
+    setStep('compose');
+    setComposeOpen(true);
+  };
+
+  const goReview = () => {
     if (!form.title.trim() || !form.body.trim()) { toast.error('Title and body are required'); return; }
+    if (selectedChannels.length === 0) { toast.error('Pick at least one channel'); return; }
+    setStep('review');
+  };
+
+  const handleSend = async () => {
     setSending(true);
     try {
-      const res = await admin.createAnnouncement(form);
+      const res = await admin.createAnnouncement({
+        title: form.title, body: form.body, audience: form.audience,
+        channels: selectedChannels, announcement_type: form.announcement_type,
+      });
       toast.success(res.data.message || 'Announcement sent');
       setComposeOpen(false);
-      setForm({ title: '', body: '', audience: 'all', channel: 'inapp', announcement_type: 'info' });
       fetch(1);
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to send announcement');
     } finally { setSending(false); }
   };
 
+  const handleRetire = async (id) => {
+    if (!window.confirm('Take this banner down? Users will stop seeing it. Stats are kept.')) return;
+    try { await admin.retireAnnouncement(id); toast.success('Banner retired'); fetch(page); }
+    catch { toast.error('Failed to retire banner'); }
+  };
+
   const handleDelete = async (id) => {
-    if (!window.confirm('Delete this announcement?')) return;
+    if (!window.confirm('Delete this announcement? (An announcement cannot be unsent.)')) return;
     try { await admin.deleteAnnouncement(id); toast.success('Deleted'); fetch(page); }
     catch { toast.error('Failed to delete'); }
   };
 
   const pages = Math.ceil(total / 20);
-
   const typeColor = { info: 'info', warning: 'warning', critical: 'error', security: 'error' };
+
+  // Estimated reach for the selected channels (max across chosen channels).
+  const reviewReach = () => {
+    if (!reach) return null;
+    return selectedChannels.map((c) => ({ channel: c, count: reach[c] ?? 0 }));
+  };
 
   return (
     <Box>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
         <Typography variant="body2" color="text.secondary">{total} announcements sent</Typography>
-        <Button variant="contained" startIcon={<Campaign />} onClick={() => setComposeOpen(true)}>
+        <Button variant="contained" startIcon={<Campaign />} onClick={openCompose}>
           New Announcement
         </Button>
       </Stack>
@@ -1978,16 +2035,22 @@ function AnnouncementsTab({ onAdminError }) {
           {announcements.length === 0 ? (
             <Alert severity="info">No announcements yet. Click "New Announcement" to send your first one.</Alert>
           ) : (
-            announcements.map((a) => (
+            announcements.map((a) => {
+              const chans = a.channels || (a.channel === 'both' ? ['inapp', 'email'] : [a.channel]);
+              const isLiveBanner = chans.includes('banner') && a.active;
+              return (
               <Card key={a.id} sx={{ mb: 1.5, borderLeft: '4px solid', borderLeftColor: `${typeColor[a.announcement_type]}.main` }}>
                 <CardContent sx={{ pb: '12px !important' }}>
                   <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
                     <Box flex={1} mr={2}>
-                      <Stack direction="row" spacing={1} alignItems="center" mb={0.5}>
+                      <Stack direction="row" spacing={1} alignItems="center" mb={0.5} flexWrap="wrap" useFlexGap>
                         <Chip label={a.announcement_type} size="small" color={typeColor[a.announcement_type]} />
                         <Chip label={a.audience} size="small" variant="outlined" />
-                        <Chip label={a.channel} size="small" variant="outlined" />
+                        {chans.map((c) => <Chip key={c} label={c} size="small" variant="outlined" />)}
+                        {isLiveBanner && <Chip label="banner live" size="small" color="warning" />}
                         {a.sent && <Chip label={`${a.delivered_count} delivered`} size="small" color="success" variant="outlined" />}
+                        {a.failed_count > 0 && <Chip label={`${a.failed_count} failed`} size="small" color="error" variant="outlined" />}
+                        {a.reach_count > 0 && <Chip label={`reach ${a.reach_count}`} size="small" variant="outlined" />}
                       </Stack>
                       <Typography variant="subtitle2" fontWeight={600}>{a.title}</Typography>
                       <Typography variant="body2" color="text.secondary" mt={0.5}
@@ -1998,75 +2061,130 @@ function AnnouncementsTab({ onAdminError }) {
                         Sent {fmtDateTime(a.sent_at || a.created_at)}
                       </Typography>
                     </Box>
-                    <IconButton size="small" color="error" onClick={() => handleDelete(a.id)}><Delete fontSize="small" /></IconButton>
+                    <Stack direction="row" spacing={0.5}>
+                      {isLiveBanner && (
+                        <Tooltip title="Retire live banner">
+                          <IconButton size="small" color="warning" onClick={() => handleRetire(a.id)}><Cancel fontSize="small" /></IconButton>
+                        </Tooltip>
+                      )}
+                      <IconButton size="small" color="error" onClick={() => handleDelete(a.id)}><Delete fontSize="small" /></IconButton>
+                    </Stack>
                   </Stack>
                 </CardContent>
               </Card>
-            ))
+              );
+            })
           )}
           {pages > 1 && <Box display="flex" justifyContent="center" mt={2}><Pagination count={pages} page={page} onChange={(_, p) => { setPage(p); fetch(p); }} color="primary" /></Box>}
         </>
       )}
 
-      {/* Compose dialog */}
+      {/* Compose / Review dialog */}
       <Dialog open={composeOpen} onClose={() => setComposeOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>New Announcement</DialogTitle>
+        <DialogTitle>{step === 'compose' ? 'New Announcement' : 'Review & Send'}</DialogTitle>
         <DialogContent>
-          <Stack spacing={2} mt={1}>
-            <TextField
-              label="Title" fullWidth size="small" value={form.title}
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
-              inputProps={{ maxLength: 200 }}
-              helperText={`${form.title.length}/200`}
-            />
-            <TextField
-              label="Body" fullWidth multiline rows={4} value={form.body}
-              onChange={(e) => setForm({ ...form, body: e.target.value })}
-            />
-            <Stack direction="row" spacing={1.5}>
-              <FormControl size="small" fullWidth>
-                <InputLabel>Audience</InputLabel>
-                <Select value={form.audience} label="Audience" onChange={(e) => setForm({ ...form, audience: e.target.value })}>
-                  <MenuItem value="all">All Users</MenuItem>
-                  <MenuItem value="free">Free Users</MenuItem>
-                  <MenuItem value="pro">Pro Users</MenuItem>
-                  <MenuItem value="enterprise">Enterprise Users</MenuItem>
-                  <MenuItem value="with_bots">Users with Bots</MenuItem>
-                </Select>
-              </FormControl>
-              <FormControl size="small" fullWidth>
-                <InputLabel>Channel</InputLabel>
-                <Select value={form.channel} label="Channel" onChange={(e) => setForm({ ...form, channel: e.target.value })}>
-                  <MenuItem value="inapp">In-App Only</MenuItem>
-                  <MenuItem value="email">Email Only</MenuItem>
-                  <MenuItem value="both">In-App + Email</MenuItem>
-                </Select>
-              </FormControl>
-              <FormControl size="small" fullWidth>
-                <InputLabel>Type</InputLabel>
-                <Select value={form.announcement_type} label="Type" onChange={(e) => setForm({ ...form, announcement_type: e.target.value })}>
-                  <MenuItem value="info">Info</MenuItem>
-                  <MenuItem value="warning">Warning</MenuItem>
-                  <MenuItem value="critical">Critical</MenuItem>
-                  <MenuItem value="security">🔒 Urgent Security Notice</MenuItem>
-                </Select>
-              </FormControl>
+          {step === 'compose' ? (
+            <Stack spacing={2} mt={1}>
+              <TextField
+                label="Title" fullWidth size="small" value={form.title}
+                onChange={(e) => setForm({ ...form, title: e.target.value })}
+                inputProps={{ maxLength: 200 }}
+                helperText={`${form.title.length}/200`}
+              />
+              <TextField
+                label="Body" fullWidth multiline rows={4} value={form.body}
+                onChange={(e) => setForm({ ...form, body: e.target.value })}
+              />
+              <Stack direction="row" spacing={1.5}>
+                <FormControl size="small" fullWidth>
+                  <InputLabel>Audience</InputLabel>
+                  <Select value={form.audience} label="Audience" onChange={(e) => setForm({ ...form, audience: e.target.value })}>
+                    <MenuItem value="all">All Users</MenuItem>
+                    <MenuItem value="free">Free Users</MenuItem>
+                    <MenuItem value="pro">Pro Users</MenuItem>
+                    <MenuItem value="enterprise">Enterprise Users</MenuItem>
+                    <MenuItem value="with_bots">Users with Bots</MenuItem>
+                  </Select>
+                </FormControl>
+                <FormControl size="small" fullWidth>
+                  <InputLabel>Type</InputLabel>
+                  <Select value={form.announcement_type} label="Type" onChange={(e) => setForm({ ...form, announcement_type: e.target.value })}>
+                    <MenuItem value="info">Info</MenuItem>
+                    <MenuItem value="warning">Warning</MenuItem>
+                    <MenuItem value="critical">Critical</MenuItem>
+                  </Select>
+                </FormControl>
+              </Stack>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom>Channels</Typography>
+                <Stack>
+                  {ANN_CHANNELS.map((c) => (
+                    <FormControlLabel key={c.key}
+                      control={<Switch size="small" checked={!!form.channels[c.key]}
+                        onChange={(e) => setForm({ ...form, channels: { ...form.channels, [c.key]: e.target.checked } })} />}
+                      label={<Box>
+                        <Typography variant="body2">{c.label}</Typography>
+                        <Typography variant="caption" color="text.secondary">{c.hint}</Typography>
+                      </Box>}
+                    />
+                  ))}
+                </Stack>
+              </Box>
+
+              {form.channels.bot && (
+                <Alert severity="warning" icon={<Security />}>
+                  The bot DM channel is rate-limited and can only be used every 10 minutes. It reaches
+                  only users who /started the bot and turned on bot messages, so its reach is usually
+                  small. Users who blocked the bot are skipped automatically.
+                </Alert>
+              )}
             </Stack>
-            {form.announcement_type === 'critical' && (
-              <Alert severity="error">Critical announcements appear as a full-screen modal for all recipients on their next app load.</Alert>
-            )}
-            {form.announcement_type === 'security' && (
-              <Alert severity="error" icon={<Security />}>
-                Urgent Security Notices are delivered immediately to all users regardless of audience setting, with a red banner that persists until dismissed.
-              </Alert>
-            )}
-          </Stack>
+          ) : (
+            <Stack spacing={2} mt={1}>
+              <Alert severity="warning">Announcements can’t be unsent. Review the reach below, then confirm.</Alert>
+              <Box>
+                <Typography variant="overline" color="text.secondary">{form.announcement_type} · {form.audience}</Typography>
+                <Typography variant="subtitle1" fontWeight={700}>{form.title}</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>{form.body}</Typography>
+              </Box>
+              <Divider />
+              <Box>
+                <Typography variant="subtitle2" gutterBottom>Estimated reach</Typography>
+                {reachLoading ? <CircularProgress size={18} /> : (
+                  <Stack spacing={0.5}>
+                    {(reviewReach() || []).map(({ channel, count }) => (
+                      <Stack key={channel} direction="row" justifyContent="space-between">
+                        <Typography variant="body2">{ANN_CHANNELS.find((x) => x.key === channel)?.label || channel}</Typography>
+                        <Typography variant="body2" fontWeight={600}>{count} user{count === 1 ? '' : 's'}</Typography>
+                      </Stack>
+                    ))}
+                    {reach && (
+                      <Typography variant="caption" color="text.disabled" mt={0.5}>
+                        {reach.total} users in this audience; {reach.total - (reach.inapp ?? reach.total)} opted out of announcements.
+                      </Typography>
+                    )}
+                  </Stack>
+                )}
+              </Box>
+            </Stack>
+          )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setComposeOpen(false)}>Cancel</Button>
-          <Button variant="contained" onClick={handleSend} disabled={sending} startIcon={sending ? <CircularProgress size={16} /> : <Campaign />}>
-            Send Announcement
-          </Button>
+          {step === 'compose' ? (
+            <>
+              <Button onClick={() => setComposeOpen(false)}>Cancel</Button>
+              <Button variant="contained" onClick={goReview} startIcon={<Campaign />}>Review</Button>
+            </>
+          ) : (
+            <>
+              <Button onClick={() => setStep('compose')}>Back</Button>
+              <Button variant="contained" color="warning" onClick={handleSend} disabled={sending}
+                startIcon={sending ? <CircularProgress size={16} /> : <Campaign />}>
+                Confirm & Send
+              </Button>
+            </>
+          )}
         </DialogActions>
       </Dialog>
     </Box>

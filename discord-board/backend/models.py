@@ -1567,8 +1567,21 @@ class AdminAnnouncement(Base):
     body = Column(Text, default="")
     level = Column(String(16), default="info")   # info | warning | critical
     active = Column(Boolean, default=True, nullable=False)
+    # Audience: all | free | pro (tier of the guilds the user manages).
+    audience = Column(String(50), default="all")
+    # Multi-channel CSV of: banner | inapp.
+    channels = Column(String(120), nullable=True)
+    delivered_count = Column(Integer, default=0)
+    failed_count = Column(Integer, default=0)
+    reach_count = Column(Integer, default=0)
+    sent_at = Column(DateTime, nullable=True)
     created_by = Column(BigInteger, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    def channel_list(self) -> list:
+        if self.channels:
+            return [c for c in (self.channels or "").split(",") if c]
+        return ["banner"]  # legacy rows were banner-only
 
     def to_dict(self) -> dict:
         return {
@@ -1577,6 +1590,12 @@ class AdminAnnouncement(Base):
             "body": self.body or "",
             "level": self.level or "info",
             "active": bool(self.active),
+            "audience": self.audience or "all",
+            "channels": self.channel_list(),
+            "delivered_count": self.delivered_count or 0,
+            "failed_count": self.failed_count or 0,
+            "reach_count": self.reach_count or 0,
+            "sent_at": self.sent_at.isoformat() + "Z" if self.sent_at else None,
             "created_by": str(self.created_by) if self.created_by else None,
             "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
         }

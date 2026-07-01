@@ -980,6 +980,36 @@ def init_db():
             "backfill hub_reminders.meeting_id (legacy meeting reminders)",
         )
 
+        # ── Notification & announcement system ────────────────────────────────────
+        # users.bot_blocked: persistent flag set when a proactive bot DM is rejected
+        # with 403 (user blocked the bot). Cleared when they re-/start the bot.
+        _run_alter(
+            db.engine,
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS bot_blocked BOOLEAN NOT NULL DEFAULT FALSE",
+            "users.bot_blocked",
+        )
+        # admin_announcements: multi-channel + delivery-stats + retire-able banner.
+        _run_alter(
+            db.engine,
+            "ALTER TABLE admin_announcements ADD COLUMN IF NOT EXISTS channels VARCHAR(120)",
+            "admin_announcements.channels",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE admin_announcements ADD COLUMN IF NOT EXISTS failed_count INTEGER NOT NULL DEFAULT 0",
+            "admin_announcements.failed_count",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE admin_announcements ADD COLUMN IF NOT EXISTS reach_count INTEGER NOT NULL DEFAULT 0",
+            "admin_announcements.reach_count",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE admin_announcements ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE",
+            "admin_announcements.active",
+        )
+
         # ── Backfill: create UserTelegramAccount rows for legacy User.telegram_user_id ──
         # Must run AFTER all users-table ALTER statements (including auth_provider)
         # so SQLAlchemy's User model doesn't query columns that don't exist yet.

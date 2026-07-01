@@ -16,6 +16,7 @@ import {
 import guildizerApi, { guildizerLoginUrl, guildizerNotifications } from '../../services/guildizerApi';
 import { ConnectWizard } from './GuildizerBots';
 import NotificationBell from '../../components/NotificationBell';
+import AnnouncementBanner from '../../components/AnnouncementBanner';
 import PushNudge from '../../components/PushNudge';
 
 // Mirrors the backend MAX_BOTS_PER_USER (custom_bots_api.py).
@@ -131,6 +132,10 @@ export default function GuildizerServers() {
 
   return (
     <Container maxWidth="xl" sx={{ py: 2.5 }}>
+      {/* Platform announcement banner (show once, dismissible) */}
+      <Box sx={{ mx: -3, mt: -2.5, mb: 2 }}>
+        <AnnouncementBanner api={guildizerNotifications} />
+      </Box>
       {/* Page header */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
         <Forum color="primary" />

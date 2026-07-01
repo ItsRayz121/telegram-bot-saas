@@ -93,6 +93,12 @@ export default function GuildizerNotifications() {
     savePrefs({ categories });
   };
 
+  const handleAnnouncementsToggle = (e) => {
+    const on = e.target.checked;
+    setPrefs(p => ({ ...(p || {}), announcements: on }));
+    savePrefs({ announcements: on });
+  };
+
   const handlePushToggle = async (e) => {
     const on = e.target.checked;
     setPushBusy(true);
@@ -184,6 +190,20 @@ export default function GuildizerNotifications() {
               </Box>
             </Box>
             <Switch checked={prefs ? prefs.sound !== false : true} onChange={handleSoundToggle} />
+          </Box>
+
+          <Divider sx={{ my: 2 }} />
+
+          {/* Announcements opt-out — never affects transactional/system alerts */}
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2 }}>
+            <Box>
+              <Typography variant="body2" fontWeight={600}>Product announcements</Typography>
+              <Typography variant="caption" color="text.secondary">
+                Platform news, new features, and notices. Turning this off never silences
+                your important account notifications.
+              </Typography>
+            </Box>
+            <Switch checked={prefs ? prefs.announcements !== false : true} onChange={handleAnnouncementsToggle} />
           </Box>
         </CardContent>
       </Card>

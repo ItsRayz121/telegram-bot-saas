@@ -3,7 +3,8 @@ import { useParams, Navigate, useNavigate } from 'react-router-dom';
 import {
   Box, Grid, Card, CardContent, Typography, Button, Chip, Stack, Alert,
   Table, TableHead, TableBody, TableRow, TableCell, TextField, List, ListItem, ListItemText,
-  LinearProgress, ToggleButtonGroup, ToggleButton,
+  LinearProgress, ToggleButtonGroup, ToggleButton, Switch, FormControlLabel, Divider,
+  CircularProgress,
 } from '@mui/material';
 import {
   Groups, SmartToy, WorkspacePremium, People, Campaign, Verified,
@@ -1068,47 +1069,127 @@ function ComplianceSection() {
 }
 
 // ── Compliance & Comms / Announcements (compliance/announce) ─────────────────
+const GZ_ANN_CHANNELS = [
+  { key: 'banner', label: 'Website banner', hint: 'Dismissible bar at the top of the dashboard (shows once).' },
+  { key: 'inapp', label: 'In-app bell', hint: 'Lands in every recipient’s notification center + web push.' },
+];
+
 function AnnouncementsSection() {
   const [rows, setRows] = useState(null);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [level, setLevel] = useState('info');
+  const [channels, setChannels] = useState({ banner: true, inapp: false });
+  const [step, setStep] = useState('compose'); // 'compose' | 'review'
+  const [reach, setReach] = useState(null);
+  const [sending, setSending] = useState(false);
+
   const load = () => guildizerApi.get('/api/admin/announcements').then(({ data }) => setRows(data.announcements)).catch(() => {});
   useEffect(() => { load(); }, []);
 
-  const create = () =>
-    guildizerApi.post('/api/admin/announcements', { title, body, level })
-      .then(() => { setTitle(''); setBody(''); setLevel('info'); load(); }).catch(() => {});
+  const selected = Object.keys(channels).filter((k) => channels[k]);
+
+  const goReview = () => {
+    if (!title.trim() || selected.length === 0) return;
+    setReach(null);
+    guildizerApi.get('/api/admin/announcements/reach', { params: { audience: 'all' } })
+      .then(({ data }) => setReach(data.reach)).catch(() => setReach(null));
+    setStep('review');
+  };
+
+  const create = () => {
+    setSending(true);
+    guildizerApi.post('/api/admin/announcements', { title, body, level, channels: selected })
+      .then(() => {
+        setTitle(''); setBody(''); setLevel('info');
+        setChannels({ banner: true, inapp: false }); setStep('compose');
+        load();
+      })
+      .catch(() => {})
+      .finally(() => setSending(false));
+  };
 
   if (!rows) return null;
   const levelColor = { info: 'info', warning: 'warning', critical: 'error' };
   return (
     <>
       <Card variant="outlined" sx={{ mb: 2 }}><CardContent>
-        <Typography variant="subtitle1" fontWeight={700} mb={1.5}>New announcement</Typography>
-        <Stack spacing={1.5}>
-          <TextField size="small" label="Title" value={title} onChange={(e) => setTitle(e.target.value)} fullWidth />
-          <TextField size="small" label="Body" value={body} onChange={(e) => setBody(e.target.value)} fullWidth multiline minRows={2} />
-          <Stack direction="row" spacing={1} alignItems="center">
+        <Typography variant="subtitle1" fontWeight={700} mb={1.5}>
+          {step === 'compose' ? 'New announcement' : 'Review & send'}
+        </Typography>
+        {step === 'compose' ? (
+          <Stack spacing={1.5}>
+            <TextField size="small" label="Title" value={title} onChange={(e) => setTitle(e.target.value)} fullWidth inputProps={{ maxLength: 200 }} />
+            <TextField size="small" label="Body" value={body} onChange={(e) => setBody(e.target.value)} fullWidth multiline minRows={2} />
             <TextField select size="small" label="Level" value={level} onChange={(e) => setLevel(e.target.value)}
               SelectProps={{ native: true }} sx={{ width: 130 }}>
               <option value="info">info</option>
               <option value="warning">warning</option>
               <option value="critical">critical</option>
             </TextField>
-            <Button variant="contained" disabled={!title.trim()} onClick={create}>Publish</Button>
+            <Box>
+              <Typography variant="subtitle2" gutterBottom>Channels</Typography>
+              {GZ_ANN_CHANNELS.map((c) => (
+                <FormControlLabel key={c.key}
+                  control={<Switch size="small" checked={!!channels[c.key]}
+                    onChange={(e) => setChannels({ ...channels, [c.key]: e.target.checked })} />}
+                  label={<Box>
+                    <Typography variant="body2">{c.label}</Typography>
+                    <Typography variant="caption" color="text.secondary">{c.hint}</Typography>
+                  </Box>} />
+              ))}
+            </Box>
+            <Box>
+              <Button variant="contained" disabled={!title.trim() || selected.length === 0} onClick={goReview}>Review</Button>
+            </Box>
           </Stack>
-        </Stack>
+        ) : (
+          <Stack spacing={1.5}>
+            <Alert severity="warning">Announcements can’t be unsent. Review the reach, then confirm.</Alert>
+            <Box>
+              <Typography variant="overline" color="text.secondary">{level}</Typography>
+              <Typography variant="subtitle1" fontWeight={700}>{title}</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>{body}</Typography>
+            </Box>
+            <Divider />
+            <Box>
+              <Typography variant="subtitle2" gutterBottom>Estimated reach</Typography>
+              {!reach ? <CircularProgress size={18} /> : (
+                <Stack spacing={0.5}>
+                  {selected.map((c) => (
+                    <Stack key={c} direction="row" justifyContent="space-between">
+                      <Typography variant="body2">{GZ_ANN_CHANNELS.find((x) => x.key === c)?.label || c}</Typography>
+                      <Typography variant="body2" fontWeight={600}>{reach[c] ?? 0} users</Typography>
+                    </Stack>
+                  ))}
+                  <Typography variant="caption" color="text.disabled">{reach.total} users total in audience.</Typography>
+                </Stack>
+              )}
+            </Box>
+            <Stack direction="row" spacing={1}>
+              <Button color="inherit" onClick={() => setStep('compose')}>Back</Button>
+              <Button variant="contained" color="warning" disabled={sending} onClick={create}>
+                {sending ? 'Sending…' : 'Confirm & send'}
+              </Button>
+            </Stack>
+          </Stack>
+        )}
       </CardContent></Card>
 
       <Card variant="outlined"><CardContent>
         <Typography variant="subtitle1" fontWeight={700} mb={1}>Announcements ({rows.length})</Typography>
         {rows.length === 0 && <Typography variant="body2" color="text.secondary">None yet.</Typography>}
         <List dense>
-          {rows.map((a) => (
+          {rows.map((a) => {
+            const chans = a.channels || ['banner'];
+            const liveBanner = chans.includes('banner') && a.active;
+            return (
             <ListItem key={a.id} disableGutters
               secondaryAction={
                 <Stack direction="row" spacing={0.5}>
+                  {liveBanner && (
+                    <Button size="small" color="warning" onClick={() => guildizerApi.post(`/api/admin/announcements/${a.id}/retire`).then(load)}>Retire</Button>
+                  )}
                   <Button size="small" color="inherit" onClick={() => guildizerApi.post(`/api/admin/announcements/${a.id}/toggle`).then(load)}>
                     {a.active ? 'Disable' : 'Enable'}
                   </Button>
@@ -1117,10 +1198,16 @@ function AnnouncementsSection() {
               }>
               <Chip size="small" variant="outlined" color={levelColor[a.level] || 'default'} label={a.level} sx={{ mr: 1 }} />
               <ListItemText primary={a.title}
-                secondary={a.active ? 'active' : 'inactive'}
+                secondary={[
+                  a.active ? 'active' : 'inactive',
+                  chans.join('+'),
+                  a.delivered_count ? `${a.delivered_count} delivered` : null,
+                  a.reach_count ? `reach ${a.reach_count}` : null,
+                ].filter(Boolean).join(' · ')}
                 primaryTypographyProps={{ variant: 'body2', sx: { opacity: a.active ? 1 : 0.55 } }} />
             </ListItem>
-          ))}
+            );
+          })}
         </List>
       </CardContent></Card>
     </>

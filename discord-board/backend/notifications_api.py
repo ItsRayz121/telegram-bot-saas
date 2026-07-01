@@ -79,6 +79,8 @@ def update_preferences():
         prefs["sound"] = bool(body["sound"])
     if "push" in body:
         prefs["push"] = bool(body["push"])
+    if "announcements" in body:
+        prefs["announcements"] = bool(body["announcements"])
     cats = body.get("categories")
     if isinstance(cats, dict):
         for c in web_push.NOTIF_CATEGORIES:
@@ -144,4 +146,42 @@ def unsubscribe_push():
         prefs["push"] = False
         user.notification_prefs = prefs
     g.db.commit()
+    return jsonify(ok=True)
+
+
+# --- announcement banner (top-of-app) -----------------------------------------
+@notifications_extra_bp.get("/api/notifications/banner")
+@login_required
+def active_banner():
+    """Newest live banner this user hasn't dismissed / opted out of (or None)."""
+    from models import AdminAnnouncement
+    user = g.db.get(User, g.user_id)
+    if not user or not web_push.get_prefs(user).get("announcements", True):
+        return jsonify(banner=None)
+    rows = (
+        g.db.query(AdminAnnouncement)
+        .filter(AdminAnnouncement.active.is_(True))
+        .order_by(AdminAnnouncement.created_at.desc())
+        .limit(10).all()
+    )
+    dismissed = set((getattr(user, "notification_prefs", None) or {}).get("dismissed_banners", []))
+    for a in rows:
+        if "banner" in a.channel_list() and a.id not in dismissed:
+            return jsonify(banner=a.to_dict())
+    return jsonify(banner=None)
+
+
+@notifications_extra_bp.post("/api/notifications/banner/<int:ann_id>/dismiss")
+@login_required
+def dismiss_banner(ann_id: int):
+    user = g.db.get(User, g.user_id)
+    if not user:
+        return jsonify(error="not_found"), 404
+    prefs = dict(getattr(user, "notification_prefs", None) or {})
+    dismissed = list(prefs.get("dismissed_banners", []))
+    if ann_id not in dismissed:
+        dismissed.append(ann_id)
+        prefs["dismissed_banners"] = dismissed[-50:]
+        user.notification_prefs = prefs
+        g.db.commit()
     return jsonify(ok=True)

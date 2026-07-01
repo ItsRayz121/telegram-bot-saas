@@ -333,8 +333,13 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if flask_app:
         try:
             with flask_app.app_context():
-                from .models import db, TelegramBotStarted
+                from .models import db, TelegramBotStarted, User as _U
                 TelegramBotStarted.record(user.id)
+                # Re-/starting the bot clears a prior "blocked" flag so proactive
+                # DMs (if opted-in) can resume — they've plainly un-blocked it.
+                _acct = _U.query.filter_by(telegram_user_id=str(user.id)).first()
+                if _acct is not None and getattr(_acct, "bot_blocked", False):
+                    _acct.bot_blocked = False
                 db.session.commit()
         except Exception as _exc:
             _log.debug("TelegramBotStarted.record failed: %s", _exc)

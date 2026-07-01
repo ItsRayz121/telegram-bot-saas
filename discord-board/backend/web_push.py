@@ -25,6 +25,9 @@ NOTIF_CATEGORIES = ["moderation", "campaigns", "ai", "members", "billing", "syst
 NOTIF_PREF_DEFAULTS = {
     "sound": True,
     "push": False,
+    # Admin announcements — OPT-OUT (on by default). Turning off silences broadcast
+    # announcements on every channel, but NEVER the user's transactional alerts.
+    "announcements": True,
     "categories": {c: True for c in NOTIF_CATEGORIES},
 }
 
@@ -38,6 +41,8 @@ def get_prefs(user: User) -> dict:
             prefs["sound"] = bool(stored["sound"])
         if "push" in stored:
             prefs["push"] = bool(stored["push"])
+        if "announcements" in stored:
+            prefs["announcements"] = bool(stored["announcements"])
         cats = stored.get("categories")
         if isinstance(cats, dict):
             for c in NOTIF_CATEGORIES:

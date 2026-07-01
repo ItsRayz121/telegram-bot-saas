@@ -154,6 +154,9 @@ export const notifications = {
   vapidKey: () => api.get('/api/notifications/vapid-public-key'),
   subscribePush: (subscription) => api.post('/api/notifications/subscribe', subscription),
   unsubscribePush: (data) => api.post('/api/notifications/unsubscribe', data || {}),
+  // Top-of-app announcement banner (show once, dismissible)
+  getBanner: () => api.get('/api/notifications/banner'),
+  dismissBanner: (id) => api.post(`/api/notifications/banner/${id}/dismiss`),
 };
 
 // Per-user UI preferences (open/closed state of collapsible settings cards).
@@ -702,7 +705,9 @@ export const admin = {
   moderateDirectory: (id, data) => api.post(`/api/admin/directory/${id}/moderate`, data),
   // Announcements
   getAnnouncements: (params) => api.get('/api/admin/announcements', { params }),
+  getAnnouncementReach: (audience) => api.get('/api/admin/announcements/reach', { params: { audience } }),
   createAnnouncement: (data) => api.post('/api/admin/announcements', data),
+  retireAnnouncement: (id) => api.post(`/api/admin/announcements/${id}/retire`),
   deleteAnnouncement: (id) => api.delete(`/api/admin/announcements/${id}`),
   // Audit Logs
   getAuditLogs: (params) => api.get('/api/admin/audit-logs', { params }),

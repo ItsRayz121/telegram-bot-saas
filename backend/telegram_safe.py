@@ -74,14 +74,58 @@ def safe_send_message(
     if message_thread_id:
         payload["message_thread_id"] = message_thread_id
 
+    ok, _blocked = send_status(
+        bot_token, chat_id, text,
+        parse_mode=parse_mode, reply_to_message_id=reply_to_message_id,
+        reply_markup=reply_markup, disable_web_page_preview=disable_web_page_preview,
+        message_thread_id=message_thread_id, timeout=timeout,
+    )
+    return ok
+
+
+def send_status(
+    bot_token: str,
+    chat_id,
+    text: str,
+    *,
+    parse_mode: str | None = None,
+    reply_to_message_id=None,
+    reply_markup=None,
+    disable_web_page_preview=None,
+    message_thread_id=None,
+    timeout: int = 10,
+) -> tuple[bool, bool]:
+    """Like `safe_send_message` but returns (ok, blocked).
+
+    `blocked` is True only when Telegram reports the user has blocked the bot or
+    the chat can never receive a message (403 Forbidden). Callers can use it to
+    persist a `bot_blocked` flag and stop messaging that user for good. Never
+    raises. Non-block failures (network, 4xx other than 403, exhausted 429) come
+    back as (False, False).
+    """
+    if not bot_token or chat_id in (None, ""):
+        return False, False
+
+    payload = {"chat_id": chat_id, "text": text}
+    if parse_mode:
+        payload["parse_mode"] = parse_mode
+    if reply_to_message_id:
+        payload["reply_to_message_id"] = reply_to_message_id
+    if reply_markup is not None:
+        payload["reply_markup"] = reply_markup
+    if disable_web_page_preview is not None:
+        payload["disable_web_page_preview"] = disable_web_page_preview
+    if message_thread_id:
+        payload["message_thread_id"] = message_thread_id
+
     url = _API.format(token=bot_token)
     for _attempt in range(2):
         _pace()
         try:
             resp = requests.post(url, json=payload, timeout=timeout)
         except Exception as exc:  # network / timeout — give up quietly
-            _log.warning("safe_send_message: network error chat=%s: %s", chat_id, exc)
-            return False
+            _log.warning("safe_send: network error chat=%s: %s", chat_id, exc)
+            return False, False
 
         if resp.status_code == 429:
             retry_after = 1
@@ -90,13 +134,19 @@ def safe_send_message(
             except Exception:
                 pass
             wait = min(max(retry_after, 1), _MAX_RETRY_AFTER)
-            _log.warning("safe_send_message: 429 flood-wait %ss chat=%s", wait, chat_id)
+            _log.warning("safe_send: 429 flood-wait %ss chat=%s", wait, chat_id)
             time.sleep(wait)
             continue  # retry once after honoring the flood wait
 
-        if not resp.ok:
-            _log.info("safe_send_message: send failed chat=%s status=%s", chat_id, resp.status_code)
-            return False
-        return True
+        if resp.status_code == 403:
+            # "Forbidden: bot was blocked by the user" (or deactivated/kicked).
+            # Permanent for a proactive DM — the caller should stop messaging them.
+            _log.info("safe_send: 403 forbidden (blocked) chat=%s", chat_id)
+            return False, True
 
-    return False
+        if not resp.ok:
+            _log.info("safe_send: send failed chat=%s status=%s", chat_id, resp.status_code)
+            return False, False
+        return True, False
+
+    return False, False

@@ -2138,6 +2138,63 @@ def list_announcements():
     })
 
 
+_ANN_CHANNELS = ("banner", "inapp", "bot", "email")
+# Anti-ban: never let bot broadcasts go out back-to-back. A bot-channel
+# announcement can only be sent this often (minutes). See [[anti_ban_rule]].
+_BOT_BROADCAST_MIN_INTERVAL_MIN = 10
+
+
+def _announcement_recipients(audience):
+    """Base recipient query for an audience (excludes banned users)."""
+    q = User.query.filter_by(is_banned=False)
+    if audience == "free":
+        q = q.filter_by(subscription_tier="free")
+    elif audience == "pro":
+        q = q.filter_by(subscription_tier="pro")
+    elif audience == "enterprise":
+        q = q.filter_by(subscription_tier="enterprise")
+    elif audience == "with_bots":
+        bot_user_ids = db.session.query(Bot.owner_id).distinct()
+        q = q.filter(User.id.in_(bot_user_ids))
+    return q
+
+
+def _reach_breakdown(audience):
+    """How many users each channel would actually reach for this audience.
+
+    Bot reach is deliberately conservative: only users who linked Telegram,
+    /started the bot, haven't blocked it, and opted IN to bot messages — so by
+    default it's near-zero until users opt in (honors 'never DM users')."""
+    from ..routes.notifications import get_prefs
+    recipients = _announcement_recipients(audience).all()
+    total = len(recipients)
+    inapp = banner = email = bot = 0
+    for u in recipients:
+        prefs = get_prefs(u)
+        if not prefs.get("announcements", True):
+            continue  # opted out of announcements → skip every channel
+        inapp += 1
+        banner += 1
+        if getattr(u, "email", None):
+            email += 1
+        if (getattr(u, "telegram_user_id", None) and not getattr(u, "bot_blocked", False)
+                and prefs.get("bot_dm")):
+            from ..models import TelegramBotStarted
+            if TelegramBotStarted.has_started(u.telegram_user_id):
+                bot += 1
+    return {"total": total, "inapp": inapp, "banner": banner, "email": email, "bot": bot}
+
+
+@admin_bp.route("/announcements/reach", methods=["GET"])
+@require_permission(rbac.P_ANNOUNCEMENTS_MANAGE)
+@rate_limit(requests_per_minute=30)
+def announcement_reach():
+    audience = request.args.get("audience", "all")
+    if audience not in ("all", "free", "pro", "enterprise", "with_bots"):
+        return jsonify({"error": "Invalid audience"}), 400
+    return jsonify({"reach": _reach_breakdown(audience)})
+
+
 @admin_bp.route("/announcements", methods=["POST"])
 @require_permission(rbac.P_ANNOUNCEMENTS_MANAGE)
 @rate_limit(requests_per_minute=10)
@@ -2156,51 +2213,65 @@ def create_announcement():
     if audience not in ("all", "free", "pro", "enterprise", "with_bots"):
         return jsonify({"error": "Invalid audience"}), 400
 
-    channel = data.get("channel", "inapp")
-    if channel not in ("inapp", "email", "both"):
-        return jsonify({"error": "Invalid channel"}), 400
+    # Channels: prefer the multi-select `channels` list; fall back to legacy `channel`.
+    channels = data.get("channels")
+    if not channels:
+        legacy = data.get("channel", "inapp")
+        channels = ["inapp", "email"] if legacy == "both" else [legacy]
+    channels = [c for c in channels if c in _ANN_CHANNELS]
+    if not channels:
+        return jsonify({"error": "Select at least one valid channel"}), 400
 
     announcement_type = data.get("announcement_type", "info")
     if announcement_type not in ("info", "warning", "critical"):
         return jsonify({"error": "Invalid announcement_type"}), 400
+
+    # Anti-ban broadcast throttle for the bot channel.
+    if "bot" in channels:
+        cutoff = datetime.utcnow() - timedelta(minutes=_BOT_BROADCAST_MIN_INTERVAL_MIN)
+        recent_bot = (
+            AdminAnnouncement.query
+            .filter(AdminAnnouncement.sent == True,  # noqa: E712
+                    AdminAnnouncement.sent_at >= cutoff)
+            .order_by(AdminAnnouncement.sent_at.desc()).all()
+        )
+        if any("bot" in a.channel_list() for a in recent_bot):
+            return jsonify({
+                "error": f"A bot broadcast went out in the last "
+                         f"{_BOT_BROADCAST_MIN_INTERVAL_MIN} minutes. Please wait before "
+                         f"sending another to protect the bot from rate limits."
+            }), 429
+
+    from ..routes.notifications import get_prefs
 
     announcement = AdminAnnouncement(
         admin_id=admin_user.id,
         title=title,
         body=body,
         audience=audience,
-        channel=channel,
+        channel=channels[0],
+        channels=",".join(channels),
         announcement_type=announcement_type,
+        active=("banner" in channels),
     )
     db.session.add(announcement)
     db.session.flush()  # get the ID before sending
 
-    # Build recipient query
-    recipient_query = User.query.filter_by(is_banned=False)
-    if audience == "free":
-        recipient_query = recipient_query.filter_by(subscription_tier="free")
-    elif audience == "pro":
-        recipient_query = recipient_query.filter_by(subscription_tier="pro")
-    elif audience == "enterprise":
-        recipient_query = recipient_query.filter_by(subscription_tier="enterprise")
-    elif audience == "with_bots":
-        from ..models import Bot as BotModel
-        bot_user_ids = db.session.query(BotModel.owner_id).distinct()
-        recipient_query = recipient_query.filter(User.id.in_(bot_user_ids))
-
-    recipients = recipient_query.all()
+    recipients = _announcement_recipients(audience).all()
+    # Respect the per-user announcement opt-out on every channel.
+    opted_in = [u for u in recipients if get_prefs(u).get("announcements", True)]
+    announcement.reach_count = len(opted_in)
     delivered = 0
 
-    # Deliver in-app notifications
-    if channel in ("inapp", "both"):
-        for user in recipients:
-            notif = UserNotification(
+    # In-app notifications (immediate).
+    if "inapp" in channels:
+        for user in opted_in:
+            db.session.add(UserNotification(
                 user_id=user.id,
                 type=f"announcement_{announcement_type}",
                 title=title,
                 message=body,
-            )
-            db.session.add(notif)
+            ))
             delivered += 1
 
     announcement.sent = True
@@ -2208,19 +2279,50 @@ def create_announcement():
     announcement.delivered_count = delivered
     db.session.commit()
 
-    # Email delivery via Celery (fire and forget)
-    if channel in ("email", "both"):
+    # Email delivery via Celery (best-effort).
+    if "email" in channels:
         try:
-            from ..tasks import send_announcement_emails
-            send_announcement_emails.delay(announcement.id, [u.id for u in recipients])
+            from ..scheduler import send_announcement_emails
+            send_announcement_emails.delay(announcement.id, [u.id for u in opted_in])
         except Exception:
-            pass  # Email task is best-effort; in-app delivery already done
+            pass
+
+    # Bot DM broadcast via Celery — filtered to opted-in, /started, unblocked users.
+    if "bot" in channels:
+        try:
+            from ..models import TelegramBotStarted
+            bot_targets = [
+                u.id for u in opted_in
+                if getattr(u, "telegram_user_id", None)
+                and not getattr(u, "bot_blocked", False)
+                and get_prefs(u).get("bot_dm")
+                and TelegramBotStarted.has_started(u.telegram_user_id)
+            ]
+            from ..scheduler import send_announcement_bot_dms
+            send_announcement_bot_dms.delay(announcement.id, bot_targets)
+        except Exception:
+            pass
 
     return jsonify({
         "announcement": announcement.to_dict(),
         "delivered_count": delivered,
-        "message": f"Announcement sent to {delivered} users",
+        "message": f"Announcement sent ({', '.join(channels)}) — {delivered} in-app now"
+                   + (", bot/email delivering in the background" if (
+                       "bot" in channels or "email" in channels) else ""),
     }), 201
+
+
+@admin_bp.route("/announcements/<int:ann_id>/retire", methods=["POST"])
+@require_permission(rbac.P_ANNOUNCEMENTS_MANAGE)
+@rate_limit(requests_per_minute=20)
+def retire_announcement(ann_id):
+    """Take a live banner down without deleting the announcement or its stats."""
+    ann = AdminAnnouncement.query.get(ann_id)
+    if not ann:
+        return jsonify({"error": "Announcement not found"}), 404
+    ann.active = False
+    db.session.commit()
+    return jsonify({"announcement": ann.to_dict(), "message": "Banner retired"})
 
 
 @admin_bp.route("/announcements/<int:ann_id>", methods=["DELETE"])

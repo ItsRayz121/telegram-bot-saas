@@ -58,6 +58,13 @@ _HEAL_COLUMNS = [
     ("users", "ui_preferences", "JSON"),
     # Account-level bring-your-own twitterapi.io key (X raid auto-verify), encrypted
     ("users", "twitter_api_key_encrypted", "TEXT"),
+    # Notification & announcement system: multi-channel broadcast + delivery stats.
+    ("admin_announcements", "channels", "VARCHAR(120)"),
+    ("admin_announcements", "audience", "VARCHAR(50)"),
+    ("admin_announcements", "delivered_count", "INTEGER"),
+    ("admin_announcements", "failed_count", "INTEGER"),
+    ("admin_announcements", "reach_count", "INTEGER"),
+    ("admin_announcements", "sent_at", "TIMESTAMP"),
 ]
 
 

@@ -12,6 +12,8 @@ import Sidebar, { SIDEBAR_WIDTH, SIDEBAR_COLLAPSED_WIDTH } from '../components/S
 // import { DesktopAssistantSidebar, MobileAssistantFab } from '../components/AssistantSidebar';
 import TelegizerLogo from '../components/TelegizerLogo';
 import NotificationBell from '../components/NotificationBell';
+import AnnouncementBanner from '../components/AnnouncementBanner';
+import { notifications as notificationsApi } from '../services/api';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 export default function AppLayout({ children }) {
@@ -154,6 +156,7 @@ export default function AppLayout({ children }) {
           {maintenance && (
             <Alert severity="warning" sx={{ borderRadius: 0 }}>{maintenance}</Alert>
           )}
+          <AnnouncementBanner api={notificationsApi} />
           {children}
         </Box>
 

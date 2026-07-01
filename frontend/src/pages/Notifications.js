@@ -15,6 +15,7 @@ const SOUND_KEY = 'telegizer_notif_sound';
 
 const CATEGORY_LABELS = {
   billing: 'Billing & subscription',
+  security: 'Security & account',
   moderation: 'Moderation & protection',
   campaigns: 'Engagement campaigns',
   ai: 'AI activity & errors',
@@ -33,6 +34,7 @@ export default function Notifications() {
   const [loadingMore, setLoadingMore] = useState(false);
 
   const [prefs, setPrefs] = useState(null);
+  const [telegramConnected, setTelegramConnected] = useState(false);
   const [pushSupportedFlag, setPushSupportedFlag] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
   const [savingPrefs, setSavingPrefs] = useState(false);
@@ -67,6 +69,7 @@ export default function Notifications() {
           ...serverPrefs,
           push: serverPrefs.push && pr.data.push_subscribed,
         });
+        setTelegramConnected(Boolean(pr.data.telegram_connected));
         setPushSupportedFlag(pushSupported() && pr.data.push_supported);
       } catch { /* ignore */ }
     })();
@@ -101,6 +104,18 @@ export default function Notifications() {
     const on = e.target.checked;
     setPrefs(p => ({ ...(p || {}), daily_briefing: on }));
     savePrefs({ daily_briefing: on });
+  };
+
+  const handleBotDmToggle = (e) => {
+    const on = e.target.checked;
+    setPrefs(p => ({ ...(p || {}), bot_dm: on }));
+    savePrefs({ bot_dm: on });
+  };
+
+  const handleAnnouncementsToggle = (e) => {
+    const on = e.target.checked;
+    setPrefs(p => ({ ...(p || {}), announcements: on }));
+    savePrefs({ announcements: on });
   };
 
   const handleCategoryToggle = (cat) => (e) => {
@@ -246,6 +261,46 @@ export default function Notifications() {
             <Switch
               checked={Boolean(prefs?.daily_briefing)}
               onChange={handleDailyBriefingToggle}
+            />
+          </Box>
+
+          <Divider sx={{ my: 2 }} />
+
+          {/* Important-event bot DM — opt-in (off by default), Telegram only */}
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2 }}>
+            <Box>
+              <Typography variant="body2" fontWeight={600}>
+                Telegram DM for important events
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Get a private message from the bot for money & security events (payments,
+                plan changes, sign-in and account alerts). Off by default.
+                {!telegramConnected && ' Connect Telegram to use this.'}
+              </Typography>
+            </Box>
+            <Switch
+              checked={Boolean(prefs?.bot_dm)}
+              onChange={handleBotDmToggle}
+              disabled={!telegramConnected}
+            />
+          </Box>
+
+          <Divider sx={{ my: 2 }} />
+
+          {/* Announcements opt-out — never affects transactional/security alerts */}
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2 }}>
+            <Box>
+              <Typography variant="body2" fontWeight={600}>
+                Product announcements
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Company-wide news, new features, and notices. Turning this off never
+                silences your billing or security notifications.
+              </Typography>
+            </Box>
+            <Switch
+              checked={prefs ? prefs.announcements !== false : true}
+              onChange={handleAnnouncementsToggle}
             />
           </Box>
         </CardContent>

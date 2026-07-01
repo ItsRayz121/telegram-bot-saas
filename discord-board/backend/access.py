@@ -35,11 +35,36 @@ def team_guild_ids(db, user_id: int) -> list[int]:
 
 
 def notify(db, user_id: int, title: str, body: str = "", kind: str = "info") -> None:
-    """Queue a dashboard notification (caller commits) + best-effort web push."""
-    db.add(UserNotification(
-        user_id=user_id, kind=kind if kind in ("info", "warning", "error") else "info",
-        title=(title or "")[:120], body=(body or "")[:500] or None,
-    ))
+    """Queue a dashboard notification (caller commits) + best-effort web push.
+
+    Coalesces bursts: if an unread notification with the same title landed in the
+    last 90s, it's updated in place (buzz once, then update quietly) instead of
+    stacking up a flood."""
+    from datetime import datetime, timedelta
+    kind = kind if kind in ("info", "warning", "error") else "info"
+    title = (title or "")[:120]
+    body = (body or "")[:500] or None
+    try:
+        cutoff = datetime.utcnow() - timedelta(seconds=90)
+        recent = (
+            db.query(UserNotification)
+            .filter(
+                UserNotification.user_id == user_id,
+                UserNotification.title == title,
+                UserNotification.read.is_(False),
+                UserNotification.created_at >= cutoff,
+            )
+            .order_by(UserNotification.created_at.desc())
+            .first()
+        )
+    except Exception:
+        recent = None
+    if recent is not None:
+        recent.body = body
+        recent.kind = kind
+        recent.created_at = datetime.utcnow()
+        return  # quiet update — no second push buzz
+    db.add(UserNotification(user_id=user_id, kind=kind, title=title, body=body))
     # Fan out an OS-level push if the user opted in. Best-effort; never raises.
     try:
         from web_push import maybe_push_notification
