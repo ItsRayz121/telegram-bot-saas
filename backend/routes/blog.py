@@ -660,8 +660,7 @@ def _page(title, description, body, *, canonical, og_image=None, noindex=False,
 <a href="{SITE_URL}/">Telegram</a><a href="{SITE_URL}/guildizer-landing">Guildizer (Discord)</a>
 <a href="{SITE_URL}/pricing">Pricing</a><a href="{SITE_URL}/register">Start free</a></div>
 <div class="foot-col"><h4>Resources</h4>
-<a href="{SITE_URL}/blog">Blog</a>
-<a href="{SITE_URL}/blog/search">Search</a></div>
+<a href="{SITE_URL}/blog">Blog</a></div>
 <div class="foot-news">{_newsletter_form(source="footer")}</div>
 </div>
 <div class="foot-bottom">© {year} {BRAND}. All rights reserved.</div>
