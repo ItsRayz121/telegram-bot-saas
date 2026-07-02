@@ -214,21 +214,21 @@ export function SchedulerCard({ guildId, messages, channels, onChanged }) {
       </Stack>
       <List dense sx={{ mt: 1 }}>
         {messages.map((m) => (
-          <ListItem key={m.id} disableGutters
-            secondaryAction={(
-              <Stack direction="row" spacing={0.5} alignItems="center">
-                <Switch size="small" checked={m.enabled}
-                  onChange={(e) => guildizerApi.put(`/api/guilds/${guildId}/scheduled-messages/${m.id}`, { enabled: e.target.checked }).then(onChanged)} />
-                <IconButton size="small" onClick={() => startEdit(m)}><EditIcon fontSize="small" /></IconButton>
-                <IconButton size="small" onClick={() => guildizerApi.delete(`/api/guilds/${guildId}/scheduled-messages/${m.id}`).then(onChanged)}>
-                  <Delete fontSize="small" />
-                </IconButton>
-              </Stack>
-            )}>
+          <ListItem key={m.id} disableGutters sx={{ gap: 1, alignItems: 'center' }}>
             <ListItemText
+              sx={{ my: 0, minWidth: 0 }}
               primary={m.content || m.embed?.title || m.embed?.description || '(embed)'}
               secondary={`${m.embed ? 'embed · ' : ''}${m.recurrence !== 'none' ? `${m.recurrence} · ` : ''}next: ${m.next_run_at ? new Date(m.next_run_at).toLocaleString() : '—'}`}
-              primaryTypographyProps={{ variant: 'body2', noWrap: true }} />
+              primaryTypographyProps={{ variant: 'body2', noWrap: true }}
+              secondaryTypographyProps={{ variant: 'caption', noWrap: true }} />
+            <Stack direction="row" spacing={0.25} alignItems="center" sx={{ flexShrink: 0 }}>
+              <Switch size="small" checked={m.enabled}
+                onChange={(e) => guildizerApi.put(`/api/guilds/${guildId}/scheduled-messages/${m.id}`, { enabled: e.target.checked }).then(onChanged)} />
+              <IconButton size="small" onClick={() => startEdit(m)}><EditIcon fontSize="small" /></IconButton>
+              <IconButton size="small" color="error" onClick={() => guildizerApi.delete(`/api/guilds/${guildId}/scheduled-messages/${m.id}`).then(onChanged)}>
+                <Delete fontSize="small" />
+              </IconButton>
+            </Stack>
           </ListItem>
         ))}
         {messages.length === 0 && <Typography variant="body2" color="text.secondary">Nothing scheduled.</Typography>}
@@ -353,33 +353,33 @@ export function PollsCard({ guildId, polls, channels, onChanged }) {
 
       <List dense sx={{ mt: 1 }}>
         {polls.map((p) => (
-          <ListItem key={p.id} disableGutters alignItems="flex-start"
-            secondaryAction={(
-              <Stack direction="row" spacing={0.5} alignItems="center">
-                {(p.status === 'draft' || p.status === 'scheduled') && (
-                  <Tooltip title="Post now"><IconButton size="small" color="primary" onClick={() => act(p.id, 'post')}><Send fontSize="small" /></IconButton></Tooltip>
-                )}
-                {['draft', 'pending', 'scheduled'].includes(p.status) && (
-                  <Tooltip title="Edit"><IconButton size="small" onClick={() => startEdit(p)}><EditIcon fontSize="small" /></IconButton></Tooltip>
-                )}
-                {p.status === 'open' && (
-                  <Tooltip title="End poll now"><IconButton size="small" color="warning" onClick={() => act(p.id, 'end')}><StopCircle fontSize="small" /></IconButton></Tooltip>
-                )}
-                {p.status !== 'open' && (
-                  <IconButton size="small" onClick={() => del(p.id)} title="Delete"><Delete fontSize="small" /></IconButton>
-                )}
-              </Stack>
-            )}>
+          <ListItem key={p.id} disableGutters sx={{ gap: 1, alignItems: 'flex-start' }}>
             <Chip size="small" variant="outlined" label={POLL_STATUS_LABEL[p.status] || p.status}
-              color={STATUS_COLOR[p.status] || 'default'} sx={{ mr: 1, mt: 0.3 }} />
+              color={STATUS_COLOR[p.status] || 'default'} sx={{ flexShrink: 0, mt: 0.3 }} />
             <ListItemText
+              sx={{ my: 0, minWidth: 0 }}
               primary={p.question}
               secondary={p.status === 'ended'
                 ? (Object.entries(p.results || {}).map(([a, v]) => `${a}: ${v}`).join(' · ') || 'no votes')
                 : p.status === 'scheduled' && p.scheduled_at
                   ? `${(p.answers || []).length} options · posts ${new Date(p.scheduled_at).toLocaleString()}`
                   : `${(p.answers || []).length} options${p.ends_at ? ` · ends ${new Date(p.ends_at).toLocaleString()}` : ''}`}
-              primaryTypographyProps={{ variant: 'body2', noWrap: true }} />
+              primaryTypographyProps={{ variant: 'body2', noWrap: true }}
+              secondaryTypographyProps={{ variant: 'caption', sx: { wordBreak: 'break-word' } }} />
+            <Stack direction="row" spacing={0.25} alignItems="center" sx={{ flexShrink: 0 }}>
+              {(p.status === 'draft' || p.status === 'scheduled') && (
+                <Tooltip title="Post now"><IconButton size="small" color="primary" onClick={() => act(p.id, 'post')}><Send fontSize="small" /></IconButton></Tooltip>
+              )}
+              {['draft', 'pending', 'scheduled'].includes(p.status) && (
+                <Tooltip title="Edit"><IconButton size="small" onClick={() => startEdit(p)}><EditIcon fontSize="small" /></IconButton></Tooltip>
+              )}
+              {p.status === 'open' && (
+                <Tooltip title="End poll now"><IconButton size="small" color="warning" onClick={() => act(p.id, 'end')}><StopCircle fontSize="small" /></IconButton></Tooltip>
+              )}
+              {p.status !== 'open' && (
+                <IconButton size="small" color="error" onClick={() => del(p.id)} title="Delete"><Delete fontSize="small" /></IconButton>
+              )}
+            </Stack>
           </ListItem>
         ))}
         {polls.length === 0 && <Typography variant="body2" color="text.secondary">No polls yet.</Typography>}
@@ -441,26 +441,25 @@ export function AutoResponsesCard({ guildId, responses, onChanged }) {
         label={<Typography variant="body2">Use as AI knowledge for /ask</Typography>} />
       <List dense sx={{ mt: 1 }}>
         {responses.map((r) => (
-          <ListItem key={r.id} disableGutters
-            secondaryAction={(
-              <Stack direction="row" spacing={0.5} alignItems="center">
-                <Tooltip title="Let the /ask AI answer from this trigger">
-                  <Chip size="small" label="AI" clickable
-                    color={r.use_as_ai_knowledge ? 'primary' : 'default'}
-                    variant={r.use_as_ai_knowledge ? 'filled' : 'outlined'}
-                    onClick={() => guildizerApi.put(`/api/guilds/${guildId}/auto-responses/${r.id}`, { use_as_ai_knowledge: !r.use_as_ai_knowledge }).then(onChanged)}
-                    sx={{ height: 20, fontSize: '0.65rem' }} />
-                </Tooltip>
-                <Switch size="small" checked={r.enabled}
-                  onChange={(e) => guildizerApi.put(`/api/guilds/${guildId}/auto-responses/${r.id}`, { enabled: e.target.checked }).then(onChanged)} />
-                <IconButton size="small" onClick={() => guildizerApi.delete(`/api/guilds/${guildId}/auto-responses/${r.id}`).then(onChanged)}>
-                  <Delete fontSize="small" />
-                </IconButton>
-              </Stack>
-            )}>
+          <ListItem key={r.id} disableGutters sx={{ gap: 1, alignItems: 'center' }}>
             <ListItemText
+              sx={{ my: 0, minWidth: 0 }}
               primary={`"${r.trigger}" (${r.match_type}) → ${r.response}`}
               primaryTypographyProps={{ variant: 'body2', noWrap: true }} />
+            <Stack direction="row" spacing={0.5} alignItems="center" sx={{ flexShrink: 0 }}>
+              <Tooltip title="Let the /ask AI answer from this trigger">
+                <Chip size="small" label="AI" clickable
+                  color={r.use_as_ai_knowledge ? 'primary' : 'default'}
+                  variant={r.use_as_ai_knowledge ? 'filled' : 'outlined'}
+                  onClick={() => guildizerApi.put(`/api/guilds/${guildId}/auto-responses/${r.id}`, { use_as_ai_knowledge: !r.use_as_ai_knowledge }).then(onChanged)}
+                  sx={{ height: 20, fontSize: '0.65rem' }} />
+              </Tooltip>
+              <Switch size="small" checked={r.enabled}
+                onChange={(e) => guildizerApi.put(`/api/guilds/${guildId}/auto-responses/${r.id}`, { enabled: e.target.checked }).then(onChanged)} />
+              <IconButton size="small" color="error" onClick={() => guildizerApi.delete(`/api/guilds/${guildId}/auto-responses/${r.id}`).then(onChanged)}>
+                <Delete fontSize="small" />
+              </IconButton>
+            </Stack>
           </ListItem>
         ))}
         {responses.length === 0 && <Typography variant="body2" color="text.secondary">No auto-responses yet.</Typography>}

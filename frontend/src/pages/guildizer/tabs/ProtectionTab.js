@@ -566,49 +566,6 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                 helperText="Comma-separated user IDs the guard never acts on. The server owner and the bot are always exempt." />
           </GuildizerCollapsibleCard>
 
-          {/* 5 ── Protection Activity feed ─────────────────────────────────── */}
-          <GuildizerCollapsibleCard
-            id="gz.moderation.protection_activity"
-            title="📋 Protection Activity"
-            sx={{ mb: 2 }}
-            action={(
-              <Button size="small" onClick={loadEvents} disabled={eventsLoading}>
-                {eventsLoading ? 'Refreshing…' : 'Refresh'}
-              </Button>
-            )}
-          >
-              <Typography variant="body2" color="text.secondary" mb={2}>
-                What the bot did at <b>join time</b> and during raids — restricting/banning bots,
-                locking down raids and containing nukes. These never appear in the normal moderation log.
-              </Typography>
-              {events.length === 0 ? (
-                <Typography variant="body2" color="text.disabled">
-                  {eventsLoading ? 'Loading…' : 'No protection events yet.'}
-                </Typography>
-              ) : (
-                <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-                  {events.map((e) => (
-                    <Box key={e.id} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, py: 0.75, borderBottom: '1px solid', borderColor: 'divider' }}>
-                      <Chip size="small" label={CAT_LABEL[e.category] || e.category} color={CAT_COLOR[e.category] || 'default'} variant="outlined" sx={{ mt: 0.25 }} />
-                      <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                        <Typography variant="body2" fontWeight={600} noWrap>
-                          {e.action}{e.username ? ` — ${e.username}` : ''}
-                        </Typography>
-                        {e.detail && (
-                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', wordBreak: 'break-word' }}>
-                            {e.detail}
-                          </Typography>
-                        )}
-                      </Box>
-                      <Typography variant="caption" color="text.disabled" sx={{ whiteSpace: 'nowrap' }}>
-                        {new Date(e.created_at).toLocaleString()}
-                      </Typography>
-                    </Box>
-                  ))}
-                </Box>
-              )}
-          </GuildizerCollapsibleCard>
-
           {/* 6 ── Smart Moderation — 3-layer system (Pro) ─────────────────── */}
           <GuildizerCollapsibleCard id="gz.moderation.smart_moderation" title="Smart Moderation" badge={<ProBadge />} sx={{ mt: 2, mb: 2 }}>
               <Box sx={{ mb: 1 }}>
@@ -902,6 +859,50 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                 which also control whether the command is visible to members.
               </Typography>
           </GuildizerCollapsibleCard>
+
+          {/* Protection Activity feed — kept LAST on the AutoMod page (it's a
+              read-only log, not a setting) so the configurable rules come first. */}
+          <GuildizerCollapsibleCard
+            id="gz.moderation.protection_activity"
+            title="📋 Protection Activity"
+            sx={{ mt: 2, mb: 2 }}
+            action={(
+              <Button size="small" onClick={loadEvents} disabled={eventsLoading}>
+                {eventsLoading ? 'Refreshing…' : 'Refresh'}
+              </Button>
+            )}
+          >
+              <Typography variant="body2" color="text.secondary" mb={2}>
+                What the bot did at <b>join time</b> and during raids — restricting/banning bots,
+                locking down raids and containing nukes. These never appear in the normal moderation log.
+              </Typography>
+              {events.length === 0 ? (
+                <Typography variant="body2" color="text.disabled">
+                  {eventsLoading ? 'Loading…' : 'No protection events yet.'}
+                </Typography>
+              ) : (
+                <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                  {events.map((e) => (
+                    <Box key={e.id} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, py: 0.75, borderBottom: '1px solid', borderColor: 'divider' }}>
+                      <Chip size="small" label={CAT_LABEL[e.category] || e.category} color={CAT_COLOR[e.category] || 'default'} variant="outlined" sx={{ mt: 0.25 }} />
+                      <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                        <Typography variant="body2" fontWeight={600} noWrap>
+                          {e.action}{e.username ? ` — ${e.username}` : ''}
+                        </Typography>
+                        {e.detail && (
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', wordBreak: 'break-word' }}>
+                            {e.detail}
+                          </Typography>
+                        )}
+                      </Box>
+                      <Typography variant="caption" color="text.disabled" sx={{ whiteSpace: 'nowrap' }}>
+                        {new Date(e.created_at).toLocaleString()}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Box>
+              )}
+          </GuildizerCollapsibleCard>
         </>
       )}
 
@@ -940,26 +941,31 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                 Each step fires when a member reaches that warning count (counted within the step's window). Warnings aren't reset between steps, so higher steps stay reachable.
               </Typography>
               {(cfg.warn_ladder?.steps || []).map((s, i) => (
-                <Stack key={i} direction="row" spacing={1} alignItems="center" mb={1} useFlexGap flexWrap="wrap">
-                  <TextField type="number" size="small" label="At warning #" value={s.at}
-                    inputProps={{ min: 1, max: 20 }} sx={{ width: 120 }}
-                    onChange={(e) => setWl({ steps: cfg.warn_ladder.steps.map((x, j) => j === i ? { ...x, at: Number(e.target.value) } : x) })} />
-                  <TextField select size="small" label="Action" value={s.action} sx={{ width: 130 }}
-                    onChange={(e) => setWl({ steps: cfg.warn_ladder.steps.map((x, j) => j === i ? { ...x, action: e.target.value } : x) })}>
-                    {LADDER_ACTIONS.map((a) => <MenuItem key={a} value={a}>{a}</MenuItem>)}
-                  </TextField>
-                  {s.action === 'timeout' && (
-                    <TextField type="number" size="small" label="Minutes" value={s.minutes}
-                      inputProps={{ min: 1, max: 40320 }} sx={{ width: 110 }}
-                      onChange={(e) => setWl({ steps: cfg.warn_ladder.steps.map((x, j) => j === i ? { ...x, minutes: Number(e.target.value) } : x) })} />
-                  )}
-                  <TextField type="number" size="small" label="Within (hrs, 0=all)" value={s.window_hours}
-                    inputProps={{ min: 0, max: 720 }} sx={{ width: 150 }}
-                    onChange={(e) => setWl({ steps: cfg.warn_ladder.steps.map((x, j) => j === i ? { ...x, window_hours: Number(e.target.value) } : x) })} />
-                  <IconButton size="small" onClick={() => setWl({ steps: cfg.warn_ladder.steps.filter((_, j) => j !== i) })}>
+                // Bordered step card: equal-width fields in a wrapping grid with the
+                // delete control pinned top-right (never stranded between fields).
+                <Box key={i} sx={{ position: 'relative', border: '1px solid', borderColor: 'divider', borderRadius: 1.5, p: 1.25, pt: 1.5, pr: 5, mb: 1 }}>
+                  <IconButton size="small" color="error" sx={{ position: 'absolute', top: 4, right: 4 }}
+                    onClick={() => setWl({ steps: cfg.warn_ladder.steps.filter((_, j) => j !== i) })}>
                     <Delete fontSize="small" />
                   </IconButton>
-                </Stack>
+                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                    <TextField type="number" size="small" label="At warning #" value={s.at}
+                      inputProps={{ min: 1, max: 20 }} sx={{ flex: '1 1 120px', minWidth: 0 }}
+                      onChange={(e) => setWl({ steps: cfg.warn_ladder.steps.map((x, j) => j === i ? { ...x, at: Number(e.target.value) } : x) })} />
+                    <TextField select size="small" label="Action" value={s.action} sx={{ flex: '1 1 120px', minWidth: 0 }}
+                      onChange={(e) => setWl({ steps: cfg.warn_ladder.steps.map((x, j) => j === i ? { ...x, action: e.target.value } : x) })}>
+                      {LADDER_ACTIONS.map((a) => <MenuItem key={a} value={a}>{a}</MenuItem>)}
+                    </TextField>
+                    {s.action === 'timeout' && (
+                      <TextField type="number" size="small" label="Minutes" value={s.minutes}
+                        inputProps={{ min: 1, max: 40320 }} sx={{ flex: '1 1 120px', minWidth: 0 }}
+                        onChange={(e) => setWl({ steps: cfg.warn_ladder.steps.map((x, j) => j === i ? { ...x, minutes: Number(e.target.value) } : x) })} />
+                    )}
+                    <TextField type="number" size="small" label="Within (hrs, 0=all)" value={s.window_hours}
+                      inputProps={{ min: 0, max: 720 }} sx={{ flex: '1 1 120px', minWidth: 0 }}
+                      onChange={(e) => setWl({ steps: cfg.warn_ladder.steps.map((x, j) => j === i ? { ...x, window_hours: Number(e.target.value) } : x) })} />
+                  </Box>
+                </Box>
               ))}
               <Button size="small" startIcon={<Add />}
                 disabled={(cfg.warn_ladder?.steps || []).length >= 5}

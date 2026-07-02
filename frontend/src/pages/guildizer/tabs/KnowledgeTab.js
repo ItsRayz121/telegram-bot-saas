@@ -165,26 +165,27 @@ function DocRow({ guildId, doc, onChanged }) {
 
   return (
     <>
-      <ListItem disableGutters divider
-        secondaryAction={(
-          <Stack direction="row" spacing={0.5} alignItems="center">
-            {isFile && <Chip size="small" label={(doc.file_type || '').toUpperCase()} sx={{ mr: 0.5, height: 20, fontSize: '0.65rem' }} />}
-            <Switch size="small" checked={doc.enabled}
-              onChange={(e) => guildizerApi.put(`/api/guilds/${guildId}/knowledge/${doc.id}`, { enabled: e.target.checked }).then(onChanged)} />
-            {!isFile && (
-              <IconButton size="small" onClick={() => setOpen((v) => !v)}>
-                {open ? <ExpandLess /> : <ExpandMore />}
-              </IconButton>
-            )}
-            <IconButton size="small" color="error"
-              onClick={() => guildizerApi.delete(`/api/guilds/${guildId}/knowledge/${doc.id}`).then(onChanged)}>
-              <Delete fontSize="small" />
+      {/* Flex row (not absolute secondaryAction) so the filename/meta truncate and
+          the badge + toggles never overlap them. */}
+      <ListItem disableGutters divider sx={{ gap: 1, alignItems: 'center' }}>
+        {isFile && <Description sx={{ color: 'text.secondary', fontSize: 18, flexShrink: 0 }} />}
+        <ListItemText sx={{ my: 0, minWidth: 0 }} primary={doc.filename || doc.title} secondary={meta}
+          primaryTypographyProps={{ variant: 'body2', fontWeight: 700, noWrap: true }}
+          secondaryTypographyProps={{ variant: 'caption', noWrap: true }} />
+        <Stack direction="row" spacing={0.5} alignItems="center" sx={{ flexShrink: 0 }}>
+          {isFile && <Chip size="small" label={(doc.file_type || '').toUpperCase()} sx={{ height: 20, fontSize: '0.65rem' }} />}
+          <Switch size="small" checked={doc.enabled}
+            onChange={(e) => guildizerApi.put(`/api/guilds/${guildId}/knowledge/${doc.id}`, { enabled: e.target.checked }).then(onChanged)} />
+          {!isFile && (
+            <IconButton size="small" onClick={() => setOpen((v) => !v)}>
+              {open ? <ExpandLess /> : <ExpandMore />}
             </IconButton>
-          </Stack>
-        )}>
-        {isFile && <Description sx={{ mr: 1, color: 'text.secondary', fontSize: 18 }} />}
-        <ListItemText primary={doc.filename || doc.title} secondary={meta}
-          primaryTypographyProps={{ variant: 'body2', fontWeight: 700, noWrap: true }} />
+          )}
+          <IconButton size="small" color="error"
+            onClick={() => guildizerApi.delete(`/api/guilds/${guildId}/knowledge/${doc.id}`).then(onChanged)}>
+            <Delete fontSize="small" />
+          </IconButton>
+        </Stack>
       </ListItem>
       {!isFile && (
         <Collapse in={open}>

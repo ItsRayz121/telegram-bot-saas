@@ -6,7 +6,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   Box, Grid, Typography, TextField, MenuItem, Button, Chip,
   CircularProgress, Alert, List, ListItem, ListItemText, Stack,
-  FormControlLabel, Switch,
+  FormControlLabel, Switch, IconButton, Tooltip,
 } from '@mui/material';
 import { RocketLaunch, Send, DeleteOutline } from '@mui/icons-material';
 import guildizerApi from '../../../services/guildizerApi';
@@ -223,12 +223,23 @@ export function InviteLinksSubtab({ guildId }) {
           {data.recent.length === 0 && <Typography variant="body2" color="text.secondary">Nothing yet.</Typography>}
           <List dense>
             {data.recent.map((j) => (
-              <ListItem key={j.id} disableGutters
-                secondaryAction={<Typography variant="caption" color="text.disabled">{new Date(j.created_at).toLocaleString()}</Typography>}>
+              // Timestamp on its own line (not an absolute secondaryAction) so it
+              // never overlaps the "invited by …" text on narrow screens.
+              <ListItem key={j.id} disableGutters sx={{ alignItems: 'flex-start' }}>
                 <ListItemText
-                  primary={`${j.joiner_name || j.joiner_id} joined`}
+                  primary={
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
+                      <Box component="span" sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {`${j.joiner_name || j.joiner_id} joined`}
+                      </Box>
+                      <Box component="span" sx={{ flexShrink: 0, fontSize: '0.7rem', color: 'text.disabled' }}>
+                        {new Date(j.created_at).toLocaleDateString()}
+                      </Box>
+                    </Box>
+                  }
                   secondary={j.inviter_name ? `invited by ${j.inviter_name}${j.code ? ` · ${j.code}` : ''}` : (j.code || 'unknown invite')}
-                  primaryTypographyProps={{ variant: 'body2', noWrap: true }} />
+                  primaryTypographyProps={{ variant: 'body2' }}
+                  secondaryTypographyProps={{ variant: 'caption', sx: { wordBreak: 'break-word' } }} />
               </ListItem>
             ))}
           </List>
@@ -563,7 +574,7 @@ export function EventsSubtab({ guildId, channels = [] }) {
             <TextField type="datetime-local" size="small" margin="dense" label="Ends (optional)"
               InputLabelProps={{ shrink: true }} value={endAt} onChange={(e) => setEndAt(e.target.value)} sx={{ flex: 1 }} />
           </Stack>
-          <Stack direction="row" spacing={1}>
+          <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
             <TextField type="number" size="small" margin="dense" label="Remind (min before, 0 = off)"
               value={remind} inputProps={{ min: 0, max: 1440 }}
               onChange={(e) => setRemind(Number(e.target.value))} sx={{ flex: 1 }} />
@@ -591,26 +602,32 @@ export function EventsSubtab({ guildId, channels = [] }) {
           {events.length === 0 && <Typography variant="body2" color="text.secondary">No events yet.</Typography>}
           <List dense>
             {events.map((ev) => (
-              <ListItem key={ev.id} disableGutters
-                secondaryAction={(
-                  <Stack direction="row" spacing={0.5}>
-                    {ev.status === 'draft' && (
-                      <Button size="small" startIcon={<RocketLaunch />} onClick={() => publish(ev.id)}>
-                        Publish
-                      </Button>
-                    )}
-                    <Button size="small" color="inherit"
-                      onClick={() => guildizerApi.delete(`/api/guilds/${guildId}/events/${ev.id}`).then(reload)}>
-                      {ev.status === 'created' ? 'Cancel' : 'Remove'}
-                    </Button>
-                  </Stack>
-                )}>
+              // Flex row (not absolute secondaryAction) so the title truncates and
+              // the actions stay clear of it — icon delete keeps it compact.
+              <ListItem key={ev.id} disableGutters sx={{ gap: 1, alignItems: 'flex-start' }}>
                 <Chip size="small" label={ev.status} color={EVENT_STATUS_COLOR[ev.status] || 'default'}
-                  variant="outlined" sx={{ mr: 1 }} />
+                  variant="outlined" sx={{ flexShrink: 0, mt: 0.25 }} />
                 <ListItemText
+                  sx={{ my: 0, minWidth: 0 }}
                   primary={ev.name}
                   secondary={`${new Date(ev.start_at).toLocaleString()}${ev.error ? ` · ${ev.error}` : ''}`}
-                  primaryTypographyProps={{ variant: 'body2', noWrap: true }} />
+                  primaryTypographyProps={{ variant: 'body2', noWrap: true }}
+                  secondaryTypographyProps={{ variant: 'caption', noWrap: true }} />
+                <Box sx={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 0.25 }}>
+                  {ev.status === 'draft' && (
+                    <Tooltip title="Publish now">
+                      <IconButton size="small" color="primary" onClick={() => publish(ev.id)}>
+                        <RocketLaunch fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                  <Tooltip title={ev.status === 'created' ? 'Cancel event' : 'Remove'}>
+                    <IconButton size="small" color="error"
+                      onClick={() => guildizerApi.delete(`/api/guilds/${guildId}/events/${ev.id}`).then(reload)}>
+                      <DeleteOutline fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
               </ListItem>
             ))}
           </List>
