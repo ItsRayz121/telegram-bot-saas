@@ -147,8 +147,9 @@ export default function Terms() {
 
         <Section title="5. Free Plan">
           <P>
-            The Free plan is available at no cost and includes basic features (1 custom bot
-            with up to 3 groups, plus unlimited groups on the shared @telegizer_bot). New
+            The Free plan is available at no cost and includes core features on the shared
+            @telegizer_bot with unlimited groups. Custom (bring-your-own-token) bots and AI
+            features are available on the Pro and Enterprise plans. New
             accounts also receive a one-time 14-day Pro trial, which downgrades to the Free
             plan automatically when it ends — no payment is taken. We reserve the right to
             modify, limit, or discontinue the Free plan at any time with reasonable notice

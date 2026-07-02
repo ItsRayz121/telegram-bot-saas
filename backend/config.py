@@ -168,15 +168,18 @@ class Config:
         )
 
     # Max custom bots per user (Bot model — bring-your-own running bots)
+    # Free = 0: free users run on the shared @telegizer_bot only. Bringing
+    # your own bot token is a paid (Pro/Enterprise) feature.
     MAX_BOTS = {
-        "free": 1,
+        "free": 0,
         "pro": 3,
         "enterprise": 50,
     }
 
     # Max bring-your-own-token custom bots (CustomBot model — token stored, not running)
+    # Free = 0 for the same reason — custom bots are a Pro/Enterprise upsell.
     MAX_CUSTOM_BOTS = {
-        "free": 1,
+        "free": 0,
         "pro": 3,
         "enterprise": 50,
     }
@@ -198,8 +201,10 @@ class Config:
     }
 
     # AI token daily budgets (platform Gemini key)
+    # Free = 0: platform AI (auto-reply, digests, Echo) is Pro/Enterprise only,
+    # so free users are not granted any platform AI credits.
     AI_TOKEN_LIMITS = {
-        "free": 10_000,
+        "free": 0,
         "pro": 500_000,
         "enterprise": 500_000,
     }
@@ -211,17 +216,16 @@ class Config:
         "free": {
             "name": "Free",
             "price": 0,
-            "max_bots": 1,
-            "ai_tokens_day": 10_000,
+            "max_bots": 0,
+            "ai_tokens_day": 0,
             "features": [
-                "1 custom bot · 3 groups per bot",
                 "@telegizer_bot · unlimited groups",
                 "Welcome messages",
                 "Basic moderation",
                 "Verification system",
                 "XP & levels",
-                "Scheduled messages",
-                "10k AI credits / day",
+                "Scheduled messages & polls",
+                "Custom commands",
             ],
         },
         "pro": {

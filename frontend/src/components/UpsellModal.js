@@ -12,8 +12,8 @@ import { useNavigate } from 'react-router-dom';
 import { track } from '../services/analytics';
 
 const PRO_FEATURES = [
-  { icon: SmartToy,   label: '3 custom bots',          sub: 'vs 1 on free plan' },
-  { icon: Groups,     label: 'Up to 5 linked groups',   sub: 'vs 1 on free plan' },
+  { icon: SmartToy,   label: '3 custom bots',          sub: 'not available on Free' },
+  { icon: Groups,     label: 'Unlimited linked groups', sub: 'on your own bots' },
   { icon: Psychology, label: 'AI Assistant & Hub',       sub: 'Full knowledge base & digests' },
   { icon: BarChart,   label: 'Advanced analytics',       sub: 'Member growth, engagement charts' },
   { icon: Campaign,   label: 'Scheduled messages',       sub: 'Unlimited broadcasts' },

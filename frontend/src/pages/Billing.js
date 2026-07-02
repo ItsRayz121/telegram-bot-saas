@@ -21,7 +21,7 @@ import { billing } from '../services/api';
 import { track } from '../services/analytics';
 
 const TIER_FEATURES = {
-  free: ['1 bot', '3 groups per bot', 'Basic moderation', 'Welcome messages', 'XP system'],
+  free: ['Shared @telegizer_bot', 'Unlimited groups', 'Basic moderation', 'Welcome messages', 'XP system'],
   pro: ['3 bots', 'Unlimited groups', 'Advanced AutoMod', 'Scheduled messages', 'Analytics dashboard', 'Priority support'],
   enterprise: ['50 bots', 'Unlimited groups', 'All Pro features', 'API access', 'SLA guarantee', 'Dedicated support'],
 };

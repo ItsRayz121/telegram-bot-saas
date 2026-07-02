@@ -22,14 +22,13 @@ const PLANS = [
     color: 'default',
     tagline: 'Perfect to get started',
     features: [
-      '1 custom bot · 3 groups per bot',
       '@telegizer_bot · unlimited groups',
       'Welcome messages',
       'Verification system',
       'XP & levels',
       'Scheduled messages & polls',
       'Basic moderation',
-      '10k AI credits / day',
+      'Custom commands',
     ],
   },
   {
@@ -82,8 +81,8 @@ const PLANS = [
 
 // Full feature comparison table rows
 const COMPARISON = [
-  { label: 'Custom bots',                   free: '1',       pro: '3',         ent: '50' },
-  { label: 'Groups per custom bot',         free: '3',       pro: 'Unlimited', ent: 'Unlimited' },
+  { label: 'Custom bots',                   free: '—',       pro: '3',         ent: '50' },
+  { label: 'Groups per custom bot',         free: '—',       pro: 'Unlimited', ent: 'Unlimited' },
   { label: '@telegizer_bot groups',         free: 'Unlimited', pro: 'Unlimited', ent: 'Unlimited' },
   { label: 'Members per group',       free: 'Unlimited', pro: 'Unlimited',       ent: 'Unlimited' },
   { label: 'Welcome messages',        free: true,        pro: true,              ent: true },
@@ -99,7 +98,7 @@ const COMPARISON = [
   { label: 'AI auto-reply (Q&A)',     free: false,       pro: true,              ent: true },
   { label: 'AI group digests',        free: false,       pro: true,              ent: true },
   { label: 'Echo AI assistant',         free: false,       pro: true,              ent: true },
-  { label: 'AI credits / day',        free: '10k',       pro: '500k',            ent: '500k' },
+  { label: 'AI credits / day',        free: '—',         pro: '500k',            ent: '500k' },
   { label: 'Bring your own API key',  free: false,       pro: true,              ent: true },
   { label: 'Message forwarding',      free: false,       pro: true,              ent: true },
   { label: 'Automation workflows',    free: false,       pro: true,              ent: true },

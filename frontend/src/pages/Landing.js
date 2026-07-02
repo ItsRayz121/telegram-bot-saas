@@ -139,7 +139,7 @@ const PLANS = [
     daily: null,
     period: 'forever',
     color: 'default',
-    features: ['1 bot', '3 groups per bot', 'Basic moderation', 'Welcome messages', 'XP system'],
+    features: ['Shared @telegizer_bot', 'Unlimited groups', 'Basic moderation', 'Welcome messages', 'XP system'],
     cta: 'Start Free',
     ctaVariant: 'outlined',
     tier: null,
@@ -1044,7 +1044,7 @@ export default function Landing() {
             },
             {
               q: 'What is included in Free vs Pro vs Enterprise?',
-              a: 'Free: 1 custom bot (3 groups per bot), basic moderation, welcome messages, XP system — plus unlimited groups on the shared @telegizer_bot. Pro ($9/mo): 3 custom bots, unlimited groups, advanced AutoMod, scheduled messages, analytics, AI knowledge base. Enterprise ($49/mo): 50 custom bots, all Pro features plus API access, dedicated support, SLA. Every new account also starts with a free 14-day Pro trial.'
+              a: 'Free: unlimited groups on the shared @telegizer_bot, with basic moderation, welcome messages, custom commands and the XP system. Pro ($9/mo): your own custom bots (up to 3), unlimited groups, advanced AutoMod, scheduled messages, analytics, AI knowledge base and AI credits. Enterprise ($49/mo): 50 custom bots, all Pro features plus API access, dedicated support, SLA. Every new account also starts with a free 14-day Pro trial.'
             },
             {
               q: 'Do you store my bot token securely?',
