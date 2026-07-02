@@ -15,11 +15,12 @@ import {
   CheckCircleOutline, Cancel, Circle, Flag,
   Security, AccountTree, TrendingDown, Payment, FileDownload,
   MonitorHeart, NetworkCheck, Tune, Key, Psychology, AttachMoney as MoneyIcon,
-  Gavel, Dns, Insights, Verified, Timeline, InfoOutlined, Article,
+  Gavel, Dns, Insights, Verified, Timeline, InfoOutlined, Article, SupportAgent,
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ADMIN_CATEGORIES, findAdminItem } from '../config/adminNav';
 import BlogAdminTab from './admin/BlogAdminTab';
+import SupportInboxTab from './admin/SupportInboxTab';
 import { useAdmin } from '../contexts/AdminContext';
 import { toast } from 'react-toastify';
 import { admin } from '../services/api';
@@ -5525,6 +5526,8 @@ export default function AdminPanel() {
       render: () => <AIUsageTab onAdminError={handleAdminError} /> },
     { key: 'compliance', label: 'Compliance', icon: <Gavel fontSize="small" />, permission: 'moderation.view',
       render: () => <ComplianceTab onAdminError={handleAdminError} /> },
+    { key: 'support', label: 'Live Chat', icon: <SupportAgent fontSize="small" />, permission: 'support.manage',
+      render: () => <SupportInboxTab onAdminError={handleAdminError} /> },
     { key: 'blog', label: 'Blog', icon: <Article fontSize="small" />, permission: 'announcements.manage',
       render: () => <BlogAdminTab onAdminError={handleAdminError} /> },
     { key: 'promo', label: 'Promo Codes', icon: <Payment fontSize="small" />, permission: 'billing.view',

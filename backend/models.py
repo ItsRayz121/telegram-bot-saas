@@ -4075,3 +4075,105 @@ class BlogSubscriber(db.Model):
             "source": self.source,
             "created_at": (self.created_at.isoformat() + "Z") if self.created_at else None,
         }
+
+
+class SupportConversation(db.Model):
+    """A user's PERMANENT live-chat support thread — exactly one row per user.
+
+    The whole support history for a user lives here (on both the widget and the
+    admin inbox), so a returning user never spawns a second thread. Activity is
+    broken into SupportSession episodes: ``status`` reflects whether an episode
+    is currently open. Created automatically by db.create_all() — no migration.
+
+    Unread flags drive the badges on both ends:
+      • unread_admin — the user sent something the team hasn't opened yet
+      • unread_user  — an admin replied and the user hasn't opened the widget yet
+    """
+    __tablename__ = "support_conversations"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True, unique=True)
+    status = db.Column(db.String(16), nullable=False, default="open", index=True)  # open (active episode) | closed (idle)
+    unread_admin = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    unread_user = db.Column(db.Boolean, nullable=False, default=False)
+    last_message_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+    last_message_preview = db.Column(db.String(200), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    user = db.relationship("User", foreign_keys=[user_id])
+
+    def to_dict(self, *, with_user=False):
+        d = {
+            "id": self.id,
+            "status": self.status,
+            "unread_admin": bool(self.unread_admin),
+            "unread_user": bool(self.unread_user),
+            "last_message_at": (self.last_message_at.isoformat() + "Z") if self.last_message_at else None,
+            "last_message_preview": self.last_message_preview or "",
+            "created_at": (self.created_at.isoformat() + "Z") if self.created_at else None,
+        }
+        if with_user:
+            u = self.user
+            d["user"] = {
+                "id": u.id if u else self.user_id,
+                "name": (getattr(u, "full_name", None) or getattr(u, "telegram_username", None) or "User") if u else "User",
+                "email": getattr(u, "email", None) if u else None,
+                "tier": getattr(u, "subscription_tier", None) if u else None,
+            }
+        return d
+
+
+class SupportSession(db.Model):
+    """One activity episode inside a user's permanent SupportConversation.
+
+    Each time the user starts chatting after the thread has gone idle, a new
+    session opens with its own ``started_at``; it closes (``ended_at`` +
+    ``close_reason``) when the team/user closes it or after IDLE_CLOSE minutes of
+    inactivity. Sessions render as dated dividers in the thread so past issues
+    stay visible and separable — the admin can see what a user asked before and
+    whether it was resolved."""
+    __tablename__ = "support_sessions"
+
+    id = db.Column(db.Integer, primary_key=True)
+    conversation_id = db.Column(db.Integer, db.ForeignKey("support_conversations.id"), nullable=False, index=True)
+    status = db.Column(db.String(16), nullable=False, default="open", index=True)  # open | closed
+    started_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    ended_at = db.Column(db.DateTime, nullable=True)
+    close_reason = db.Column(db.String(20), nullable=True)  # auto_idle | admin | user
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "status": self.status,
+            "started_at": (self.started_at.isoformat() + "Z") if self.started_at else None,
+            "ended_at": (self.ended_at.isoformat() + "Z") if self.ended_at else None,
+            "close_reason": self.close_reason,
+        }
+
+
+class SupportMessage(db.Model):
+    """One message inside a SupportConversation (and its SupportSession). Body is
+    stored as plain text and MUST be rendered as text (never as HTML) on both the
+    widget and the admin inbox to avoid stored XSS."""
+    __tablename__ = "support_messages"
+
+    id = db.Column(db.Integer, primary_key=True)
+    conversation_id = db.Column(db.Integer, db.ForeignKey("support_conversations.id"), nullable=False, index=True)
+    session_id = db.Column(db.Integer, db.ForeignKey("support_sessions.id"), nullable=True, index=True)
+    author = db.Column(db.String(10), nullable=False)   # 'user' | 'admin'
+    admin_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)  # which admin replied
+    admin_name = db.Column(db.String(120), nullable=True)
+    body = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "conversation_id": self.conversation_id,
+            "session_id": self.session_id,
+            "author": self.author,
+            "admin_name": self.admin_name if self.author == "admin" else None,
+            "body": self.body,
+            "created_at": (self.created_at.isoformat() + "Z") if self.created_at else None,
+        }

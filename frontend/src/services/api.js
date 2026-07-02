@@ -159,6 +159,13 @@ export const notifications = {
   dismissBanner: (id) => api.post(`/api/notifications/banner/${id}/dismiss`),
 };
 
+// Live chat support widget (user side). Short-polls poll(since) for new replies.
+export const support = {
+  getChat: () => api.get('/api/support/chat'),
+  poll: (since) => api.get('/api/support/chat/poll', { params: { since: since || 0 } }),
+  send: (message) => api.post('/api/support/chat', { message }),
+};
+
 // Per-user UI preferences (open/closed state of collapsible settings cards).
 export const uiPrefs = {
   get: () => api.get('/api/ui-prefs'),
@@ -659,6 +666,12 @@ export const admin = {
     headers: { 'Content-Type': undefined },
   }),
   listBlogSubscribers: () => api.get('/api/admin/blog/subscribers'),
+  // Live chat support inbox
+  supportUnreadCount: () => api.get('/api/admin/support/unread-count'),
+  supportConversations: (params) => api.get('/api/admin/support/conversations', { params }),
+  supportThread: (id) => api.get(`/api/admin/support/conversations/${id}`),
+  supportReply: (id, message) => api.post(`/api/admin/support/conversations/${id}/reply`, { message }),
+  supportSetStatus: (id, status) => api.post(`/api/admin/support/conversations/${id}/status`, { status }),
   // Stats & Revenue
   getStats: () => api.get('/api/admin/stats'),
   getRevenue: () => api.get('/api/admin/revenue'),

@@ -7,7 +7,7 @@ import {
 import {
   Home, Dashboard, Groups, SmartToy, CreditCard, Settings,
   HelpOutline, Campaign, People, Email, OpenInNew, CardGiftcard,
-  AdminPanelSettings,
+  AdminPanelSettings, ChatBubbleOutline,
 } from '@mui/icons-material';
 import TelegizerLogo from './TelegizerLogo';
 import UniversalSearchBar from './UniversalSearchBar';
@@ -15,6 +15,7 @@ import { PALETTE } from '../theme';
 import { SUPPORT_LINKS as SUPPORT_HREFS, openSupportEmail } from '../config/support';
 
 const SUPPORT_LINKS = [
+  { label: 'Live Chat',        sub: 'Chat with our team now',  href: null,                    icon: ChatBubbleOutline, isChat: true  },
   { label: 'Official Channel', sub: 'Updates & announcements', href: SUPPORT_HREFS.channel,   icon: Campaign, isEmail: false },
   { label: 'Community Group',  sub: 'Help from other users',   href: SUPPORT_HREFS.community, icon: People,   isEmail: false },
   { label: 'Email Support',    sub: 'Click to contact us',     href: null,                    icon: Email,    isEmail: true  },
@@ -64,10 +65,16 @@ function SupportPopover() {
         </Box>
         <Divider />
         <List dense disablePadding sx={{ py: 0.75 }}>
-          {SUPPORT_LINKS.map(({ label, sub, href, icon: Icon, isEmail }) => (
+          {SUPPORT_LINKS.map(({ label, sub, href, icon: Icon, isEmail, isChat }) => {
+            const isAction = isEmail || isChat;   // in-app action (not an external link)
+            return (
             <ListItemButton
               key={label}
-              {...(isEmail
+              {...(isChat
+                ? {
+                    onClick: () => { setAnchor(null); window.dispatchEvent(new Event('open-support-chat')); },
+                  }
+                : isEmail
                 ? {
                     onClick: (e) => { e.preventDefault(); setAnchor(null); openSupportEmail(); },
                   }
@@ -84,13 +91,13 @@ function SupportPopover() {
                 cursor: 'pointer',
                 transition: 'background 0.15s ease, box-shadow 0.15s ease',
                 '&:hover': {
-                  bgcolor: isEmail ? `${PALETTE.blue}14` : 'rgba(255,255,255,0.05)',
-                  boxShadow: isEmail ? `0 0 0 1px ${PALETTE.blue}30` : 'none',
+                  bgcolor: isAction ? `${PALETTE.blue}14` : 'rgba(255,255,255,0.05)',
+                  boxShadow: isAction ? `0 0 0 1px ${PALETTE.blue}30` : 'none',
                 },
               }}
             >
               <ListItemIcon sx={{ minWidth: 36 }}>
-                <Icon sx={{ fontSize: 18, color: isEmail ? PALETTE.blue : 'text.secondary' }} />
+                <Icon sx={{ fontSize: 18, color: isAction ? PALETTE.blue : 'text.secondary' }} />
               </ListItemIcon>
               <ListItemText
                 primary={label}
@@ -98,9 +105,12 @@ function SupportPopover() {
                 primaryTypographyProps={{ fontSize: '0.83rem', fontWeight: 600, lineHeight: 1.3 }}
                 secondaryTypographyProps={{ fontSize: '0.71rem', mt: 0.2 }}
               />
-              <OpenInNew sx={{ fontSize: 12, color: 'text.disabled', ml: 1, flexShrink: 0 }} />
+              {!isAction && (
+                <OpenInNew sx={{ fontSize: 12, color: 'text.disabled', ml: 1, flexShrink: 0 }} />
+              )}
             </ListItemButton>
-          ))}
+            );
+          })}
         </List>
         <Divider />
         <Box sx={{ px: 2, py: 1.25, textAlign: 'center' }}>

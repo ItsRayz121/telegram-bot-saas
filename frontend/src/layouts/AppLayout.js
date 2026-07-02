@@ -13,6 +13,7 @@ import Sidebar, { SIDEBAR_WIDTH, SIDEBAR_COLLAPSED_WIDTH } from '../components/S
 import TelegizerLogo from '../components/TelegizerLogo';
 import NotificationBell from '../components/NotificationBell';
 import AnnouncementBanner from '../components/AnnouncementBanner';
+import ChatWidget from '../components/ChatWidget';
 import { notifications as notificationsApi } from '../services/api';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -216,6 +217,9 @@ export default function AppLayout({ children }) {
       {/* {!isMobile && !isGroupsContext && <DesktopAssistantSidebar />} */}
 
     </Box>
+
+    {/* Global floating live-chat launcher (self-hides on /admin + for guests) */}
+    <ChatWidget />
     </>
   );
 }
