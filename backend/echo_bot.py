@@ -111,7 +111,13 @@ class EchoBotRunner:
         _log.info("[EchoBot] Thread exited")
 
     async def _poll(self, flask_app):
-        self.application = Application.builder().token(Config.ECHO_BOT_TOKEN).build()
+        from .bot_ratelimit import make_rate_limiter
+        self.application = (
+            Application.builder()
+            .token(Config.ECHO_BOT_TOKEN)
+            .rate_limiter(make_rate_limiter())
+            .build()
+        )
         self.application.bot_data["flask_app"] = flask_app
 
         # Expose the application on flask_app so the webhook route can forward updates.

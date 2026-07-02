@@ -6378,7 +6378,13 @@ class OfficialBotRunner:
 
     async def _poll(self, flask_app):
         _load_pending_verifications_from_db(flask_app)
-        self.application = Application.builder().token(Config.TELEGRAM_BOT_TOKEN).build()
+        from .bot_ratelimit import make_rate_limiter
+        self.application = (
+            Application.builder()
+            .token(Config.TELEGRAM_BOT_TOKEN)
+            .rate_limiter(make_rate_limiter())
+            .build()
+        )
         # Re-register timeout handlers for verifications restored from DB
         loop = asyncio.get_event_loop()
         for _vkey, _vpending in list(_pending_verifications.items()):

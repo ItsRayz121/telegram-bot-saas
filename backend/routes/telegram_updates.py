@@ -105,7 +105,8 @@ def receive_telegram_update(token_hash: str):
 async def _dispatch_assistant(payload: dict, bot_token: str, flask_app, assistant_bot_id: int):
     """Dispatch an update for a legacy AssistantBot."""
     from ..assistant.assistant_bot_handler import handle_update
-    bot = Bot(token=bot_token)
+    from ..bot_ratelimit import make_rate_limiter
+    bot = Bot(token=bot_token, rate_limiter=make_rate_limiter())
     async with bot:
         # Re-parse with bot reference so callback queries can call answer()
         update = Update.de_json(payload, bot)
@@ -120,7 +121,8 @@ async def _dispatch_hub_custom_bot(payload: dict, bot_token: str, flask_app, hub
     Dispatch an update for a custom Hub assistant bot (HubBotIdentity, bot_type='custom').
     Routes all hub-specific handling through the shared hub_bot_handler engine.
     """
-    bot = Bot(token=bot_token)
+    from ..bot_ratelimit import make_rate_limiter
+    bot = Bot(token=bot_token, rate_limiter=make_rate_limiter())
     async with bot:
         update = Update.de_json(payload, bot)
 

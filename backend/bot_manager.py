@@ -3198,9 +3198,11 @@ class BotInstance:
         # held in a long-lived attribute after the Application object owns it.
         _token = self.token
         self.token = None
+        from .bot_ratelimit import make_rate_limiter
         self.application = (
             Application.builder()
             .token(_token)
+            .rate_limiter(make_rate_limiter())
             .build()
         )
         del _token
