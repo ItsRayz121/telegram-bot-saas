@@ -11,7 +11,7 @@ import {
 } from '@mui/icons-material';
 import { admin } from '../../services/api';
 import { PALETTE } from '../../theme';
-import { buildThreadItems, closeReasonLabel, fmtDivider } from '../../utils/supportThread';
+import { buildThreadItems, closeReasonLabel, fmtDivider, productMeta, PRODUCTS } from '../../utils/supportThread';
 
 const LIST_POLL_MS = 15000;
 const THREAD_POLL_MS = 5000;
@@ -36,6 +36,7 @@ export default function SupportInboxTab({ onAdminError }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [status, setStatus] = useState('open');
   const [search, setSearch] = useState('');
+  const [productFilter, setProductFilter] = useState('');   // '' = all products
   const [conversations, setConversations] = useState([]);
   const [loadingList, setLoadingList] = useState(true);
 
@@ -57,14 +58,14 @@ export default function SupportInboxTab({ onAdminError }) {
 
   const fetchList = useCallback(async () => {
     try {
-      const { data } = await admin.supportConversations({ status, search: search.trim() });
+      const { data } = await admin.supportConversations({ status, search: search.trim(), product: productFilter });
       setConversations(data.conversations || []);
     } catch (err) {
       onAdminError?.(err);
     } finally {
       setLoadingList(false);
     }
-  }, [status, search, onAdminError]);
+  }, [status, search, productFilter, onAdminError]);
 
   const openThread = useCallback(async (cid, { silent } = {}) => {
     if (!silent) { setLoadingThread(true); setActiveId(cid); threadMaxRef.current = 0; }
@@ -186,6 +187,30 @@ export default function SupportInboxTab({ onAdminError }) {
               onChange={(e) => setSearch(e.target.value)}
               InputProps={{ startAdornment: <InputAdornment position="start"><Search fontSize="small" /></InputAdornment> }}
             />
+            {/* Product filter — one chat serves Telegizer / Echo / Guildizer */}
+            <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+              <Chip
+                label="All" size="small" onClick={() => setProductFilter('')}
+                variant={productFilter === '' ? 'filled' : 'outlined'}
+                sx={{ height: 22, fontSize: '0.66rem', cursor: 'pointer' }}
+              />
+              {PRODUCTS.map((p) => {
+                const sel = productFilter === p.value;
+                return (
+                  <Chip
+                    key={p.value} label={p.label} size="small"
+                    onClick={() => setProductFilter(sel ? '' : p.value)}
+                    variant={sel ? 'filled' : 'outlined'}
+                    sx={{
+                      height: 22, fontSize: '0.66rem', cursor: 'pointer',
+                      borderColor: `${p.color}66`, color: sel ? '#fff' : p.color,
+                      bgcolor: sel ? p.color : 'transparent',
+                      '&:hover': { bgcolor: sel ? p.color : `${p.color}1f` },
+                    }}
+                  />
+                );
+              })}
+            </Box>
           </Box>
           <Divider />
           <List sx={{ flex: 1, overflowY: 'auto', p: 0 }}>
@@ -215,6 +240,14 @@ export default function SupportInboxTab({ onAdminError }) {
                   <Typography fontSize="0.72rem" color="text.secondary" noWrap>
                     {c.last_message_preview || '—'}
                   </Typography>
+                  {productMeta(c.last_product) && (
+                    <Chip
+                      label={productMeta(c.last_product).label} size="small"
+                      sx={{ mt: 0.5, height: 16, fontSize: '0.56rem',
+                        bgcolor: `${productMeta(c.last_product).color}22`, color: productMeta(c.last_product).color,
+                        '& .MuiChip-label': { px: 0.75 } }}
+                    />
+                  )}
                 </Box>
               </ListItemButton>
             ))}
@@ -238,6 +271,10 @@ export default function SupportInboxTab({ onAdminError }) {
                     {conv.user?.email || '—'}{conv.user?.tier ? ` · ${conv.user.tier}` : ''}
                   </Typography>
                 </Box>
+                {productMeta(conv.last_product) && (
+                  <Chip size="small" label={productMeta(conv.last_product).label}
+                    sx={{ height: 20, fontSize: '0.65rem', bgcolor: `${productMeta(conv.last_product).color}22`, color: productMeta(conv.last_product).color }} />
+                )}
                 <Chip size="small" label={conv.status} color={conv.status === 'open' ? 'success' : 'default'} sx={{ height: 20, fontSize: '0.65rem' }} />
                 {conv.status === 'open' ? (
                   <Button size="small" startIcon={<CheckCircle />} onClick={() => setConvStatus('closed')}>Close</Button>
@@ -251,12 +288,17 @@ export default function SupportInboxTab({ onAdminError }) {
                   <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}><CircularProgress size={22} /></Box>
                 ) : buildThreadItems(thread.messages, thread.sessions).map((it) => {
                   if (it.kind === 'start') {
+                    const pm = productMeta(it.session?.product);
                     return (
                       <Box key={it.key} sx={{ display: 'flex', alignItems: 'center', gap: 1, my: 1.5 }}>
                         <Box sx={{ flex: 1, height: '1px', bgcolor: PALETTE.border1 }} />
                         <Typography fontSize="0.65rem" sx={{ color: 'text.disabled', whiteSpace: 'nowrap' }}>
-                          Conversation started · {fmtDivider(it.at)}
+                          Started · {fmtDivider(it.at)}
                         </Typography>
+                        {pm && (
+                          <Chip label={pm.label} size="small"
+                            sx={{ height: 17, fontSize: '0.58rem', bgcolor: `${pm.color}22`, color: pm.color, '& .MuiChip-label': { px: 0.75 } }} />
+                        )}
                         <Box sx={{ flex: 1, height: '1px', bgcolor: PALETTE.border1 }} />
                       </Box>
                     );

@@ -44,6 +44,8 @@ support_bp = Blueprint("support", __name__)
 
 MAX_MESSAGE_LEN = 4000
 PREVIEW_LEN = 180
+VALID_PRODUCTS = ("telegizer", "echo", "guildizer")
+DEFAULT_PRODUCT = "telegizer"
 # A thread with no activity for this long auto-closes its current episode. The
 # next message the user sends opens a fresh, separately-dated session.
 IDLE_CLOSE_SECONDS = 600  # 10 minutes
@@ -60,6 +62,22 @@ def _clean_body(raw) -> str:
     if len(body) > MAX_MESSAGE_LEN:
         body = body[:MAX_MESSAGE_LEN]
     return body
+
+
+def _clean_product(raw) -> str:
+    return raw if raw in VALID_PRODUCTS else DEFAULT_PRODUCT
+
+
+def _latest_session_product(conv: SupportConversation):
+    """Product of the most recent prior episode, so an admin-reopened session
+    inherits the topic instead of showing blank."""
+    prev = (
+        SupportSession.query
+        .filter_by(conversation_id=conv.id)
+        .order_by(SupportSession.id.desc())
+        .first()
+    )
+    return prev.product if prev else None
 
 
 def _conversation_for(user_id: int):
@@ -235,9 +253,11 @@ def post_my_message():
     user = _get_user()
     if not user:
         return jsonify({"error": "User not found"}), 404
-    body = _clean_body((request.get_json(silent=True) or {}).get("message"))
+    payload = request.get_json(silent=True) or {}
+    body = _clean_body(payload.get("message"))
     if not body:
         return jsonify({"error": "Message is empty"}), 400
+    product = _clean_product(payload.get("product"))
 
     now = datetime.utcnow()
     conv = _conversation_for(user.id)
@@ -256,6 +276,11 @@ def post_my_message():
                 db.session.add(conv)
                 db.session.flush()
     sess = _ensure_open_session(conv)
+    # Tag the episode with the chosen product on its first message; leave an
+    # already-tagged (mid-conversation) session untouched.
+    if sess.product is None:
+        sess.product = product
+    conv.last_product = sess.product
 
     # created_at is set here explicitly: the column's default only materialises at
     # flush, so reading msg.created_at before flush would yield None and write NULL
@@ -301,6 +326,7 @@ def admin_list_conversations():
     """
     status = (request.args.get("status", "open") or "open").lower()
     search = (request.args.get("search", "") or "").strip()
+    product = (request.args.get("product", "") or "").lower()
 
     # Sweep only episodes actually idle past the threshold (active/recent ones
     # can't close yet), so a busy inbox poll stays cheap.
@@ -318,6 +344,8 @@ def admin_list_conversations():
     elif status == "closed":
         q = q.filter(SupportConversation.status == "closed",
                      SupportConversation.unread_admin == False)  # noqa: E712
+    if product in VALID_PRODUCTS:
+        q = q.filter(SupportConversation.last_product == product)
     if search:
         like = f"%{search}%"
         q = q.join(User, User.id == SupportConversation.user_id).filter(
@@ -362,7 +390,13 @@ def admin_reply(cid):
         return jsonify({"error": "Message is empty"}), 400
 
     now = datetime.utcnow()
+    inherited = _latest_session_product(conv)
     sess = _ensure_open_session(conv)
+    # A reopened (fresh) episode inherits the previous topic so it isn't blank.
+    if sess.product is None:
+        sess.product = inherited or conv.last_product
+    if sess.product:
+        conv.last_product = sess.product
     admin_name = (getattr(admin, "full_name", None) or "Support") if admin else "Support"
     msg = SupportMessage(
         conversation_id=conv.id, session_id=sess.id, author="admin",

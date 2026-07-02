@@ -2,14 +2,14 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
   Box, Paper, IconButton, Fab, Typography, TextField, Badge, Avatar,
-  CircularProgress, Tooltip, Zoom, useMediaQuery, useTheme,
+  CircularProgress, Tooltip, Zoom, Chip, useMediaQuery, useTheme,
 } from '@mui/material';
 import {
   ChatBubbleOutline, Close, Send, SupportAgent,
 } from '@mui/icons-material';
 import { support } from '../services/api';
 import { PALETTE } from '../theme';
-import { buildThreadItems, closeReasonLabel, fmtDivider } from '../utils/supportThread';
+import { buildThreadItems, closeReasonLabel, fmtDivider, productMeta, defaultProductForPath, PRODUCTS } from '../utils/supportThread';
 
 // Persisted "last message id the user has seen", so the unread dot survives page
 // reloads without depending on a server flag.
@@ -40,6 +40,16 @@ export default function ChatWidget() {
   const [sending, setSending] = useState(false);
   const [draft, setDraft] = useState('');
   const [hasUnread, setHasUnread] = useState(false);
+  const [product, setProduct] = useState(() => defaultProductForPath(pathname));
+
+  // The next message starts a NEW episode whenever there's no open session, so
+  // that's when we ask "what's this about?".
+  const needsProduct = !sessions.some((s) => s.status === 'open');
+  // Reset the picker to a smart default each time a fresh episode begins (a user
+  // tap after this won't be overwritten — deps don't change on setProduct).
+  useEffect(() => {
+    if (needsProduct) setProduct(defaultProductForPath(pathname));
+  }, [needsProduct, pathname]);
 
   const lastIdRef = useRef(0);            // newest message id we hold
   const listRef = useRef(null);
@@ -136,7 +146,7 @@ export default function ChatWidget() {
     setMessages((prev) => [...prev, { id: tempId, session_id: optimisticSid, author: 'user', body, created_at: new Date().toISOString(), _pending: true }]);
     scrollToBottom();
     try {
-      const { data } = await support.send(body);
+      const { data } = await support.send(body, product);
       const real = data.message;
       setMessages((prev) => prev.map((m) => (m.id === tempId ? real : m)));
       setConvStatus(data.conversation?.status || 'open');
@@ -212,12 +222,17 @@ export default function ChatWidget() {
             ) : (
               buildThreadItems(messages, sessions).map((it) => {
                 if (it.kind === 'start') {
+                  const pm = productMeta(it.session?.product);
                   return (
                     <Box key={it.key} sx={{ display: 'flex', alignItems: 'center', gap: 1, my: 1.25 }}>
                       <Box sx={{ flex: 1, height: '1px', bgcolor: 'rgba(255,255,255,0.08)' }} />
                       <Typography fontSize="0.6rem" sx={{ color: 'text.disabled', whiteSpace: 'nowrap' }}>
-                        Conversation started · {fmtDivider(it.at)}
+                        Started · {fmtDivider(it.at)}
                       </Typography>
+                      {pm && (
+                        <Chip label={pm.label} size="small"
+                          sx={{ height: 16, fontSize: '0.55rem', bgcolor: `${pm.color}22`, color: pm.color, '& .MuiChip-label': { px: 0.75 } }} />
+                      )}
                       <Box sx={{ flex: 1, height: '1px', bgcolor: 'rgba(255,255,255,0.08)' }} />
                     </Box>
                   );
@@ -262,8 +277,34 @@ export default function ChatWidget() {
             )}
           </Box>
 
+          {/* Product picker — asked once when a new episode is about to start */}
+          {needsProduct && (
+            <Box sx={{ px: 1.25, pt: 1, pb: 0.5, flexShrink: 0, bgcolor: PALETTE.bg0, borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+              <Typography fontSize="0.62rem" sx={{ color: 'text.disabled', mb: 0.6 }}>What's this about?</Typography>
+              <Box sx={{ display: 'flex', gap: 0.6, flexWrap: 'wrap' }}>
+                {PRODUCTS.map((p) => {
+                  const sel = p.value === product;
+                  return (
+                    <Chip
+                      key={p.value} label={p.label} size="small"
+                      onClick={() => setProduct(p.value)}
+                      variant={sel ? 'filled' : 'outlined'}
+                      sx={{
+                        height: 24, fontSize: '0.68rem', cursor: 'pointer',
+                        borderColor: `${p.color}66`,
+                        color: sel ? '#fff' : p.color,
+                        bgcolor: sel ? p.color : 'transparent',
+                        '&:hover': { bgcolor: sel ? p.color : `${p.color}1f` },
+                      }}
+                    />
+                  );
+                })}
+              </Box>
+            </Box>
+          )}
+
           {/* Composer */}
-          <Box sx={{ p: 1, borderTop: '1px solid rgba(255,255,255,0.07)', display: 'flex', gap: 0.75, alignItems: 'flex-end', flexShrink: 0, bgcolor: PALETTE.bg0 }}>
+          <Box sx={{ p: 1, borderTop: needsProduct ? 'none' : '1px solid rgba(255,255,255,0.07)', display: 'flex', gap: 0.75, alignItems: 'flex-end', flexShrink: 0, bgcolor: PALETTE.bg0 }}>
             <TextField
               value={draft}
               onChange={(e) => setDraft(e.target.value)}

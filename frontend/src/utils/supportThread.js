@@ -40,6 +40,28 @@ export function closeReasonLabel(reason) {
   return REASON_LABELS[reason] || 'closed';
 }
 
+// One shared chat serves all three products; each episode is tagged with one.
+export const PRODUCTS = [
+  { value: 'telegizer', label: 'Telegizer', color: '#3d8ef8' },
+  { value: 'echo', label: 'Telegizer Echo', color: '#2dd4bf' },
+  { value: 'guildizer', label: 'Guildizer', color: '#9d6cf7' },
+];
+
+const PRODUCT_MAP = PRODUCTS.reduce((m, p) => { m[p.value] = p; return m; }, {});
+
+export function productMeta(value) {
+  return PRODUCT_MAP[value] || null;
+}
+
+// Pick a sensible default product from the current route so the picker usually
+// needs zero taps.
+export function defaultProductForPath(pathname) {
+  const p = pathname || '';
+  if (p.startsWith('/guildizer')) return 'guildizer';
+  if (p.startsWith('/ark') || p.startsWith('/echo')) return 'echo';
+  return 'telegizer';
+}
+
 export function fmtDivider(iso) {
   if (!iso) return '';
   const d = new Date(iso);

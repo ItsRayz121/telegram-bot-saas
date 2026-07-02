@@ -163,7 +163,7 @@ export const notifications = {
 export const support = {
   getChat: () => api.get('/api/support/chat'),
   poll: (since) => api.get('/api/support/chat/poll', { params: { since: since || 0 } }),
-  send: (message) => api.post('/api/support/chat', { message }),
+  send: (message, product) => api.post('/api/support/chat', { message, product }),
 };
 
 // Per-user UI preferences (open/closed state of collapsible settings cards).

@@ -4098,6 +4098,9 @@ class SupportConversation(db.Model):
     unread_user = db.Column(db.Boolean, nullable=False, default=False)
     last_message_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
     last_message_preview = db.Column(db.String(200), nullable=True)
+    # Product of the most recent episode (telegizer | echo | guildizer) — one
+    # shared chat serves all three products; denormalised here for the inbox chip.
+    last_product = db.Column(db.String(20), nullable=True, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
@@ -4111,6 +4114,7 @@ class SupportConversation(db.Model):
             "unread_user": bool(self.unread_user),
             "last_message_at": (self.last_message_at.isoformat() + "Z") if self.last_message_at else None,
             "last_message_preview": self.last_message_preview or "",
+            "last_product": self.last_product,
             "created_at": (self.created_at.isoformat() + "Z") if self.created_at else None,
         }
         if with_user:
@@ -4138,6 +4142,8 @@ class SupportSession(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     conversation_id = db.Column(db.Integer, db.ForeignKey("support_conversations.id"), nullable=False, index=True)
     status = db.Column(db.String(16), nullable=False, default="open", index=True)  # open | closed
+    # Which product this episode is about: telegizer | echo | guildizer.
+    product = db.Column(db.String(20), nullable=True)
     started_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     ended_at = db.Column(db.DateTime, nullable=True)
     close_reason = db.Column(db.String(20), nullable=True)  # auto_idle | admin | user
@@ -4146,6 +4152,7 @@ class SupportSession(db.Model):
         return {
             "id": self.id,
             "status": self.status,
+            "product": self.product,
             "started_at": (self.started_at.isoformat() + "Z") if self.started_at else None,
             "ended_at": (self.ended_at.isoformat() + "Z") if self.ended_at else None,
             "close_reason": self.close_reason,
