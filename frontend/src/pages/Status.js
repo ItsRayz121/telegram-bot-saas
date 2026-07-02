@@ -10,6 +10,7 @@ import {
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import usePageMeta from '../hooks/usePageMeta';
+import PageHeader from '../components/PageHeader';
 
 const darkTheme = createTheme({
   palette: {
@@ -83,8 +84,9 @@ export default function Status() {
   return (
     <ThemeProvider theme={darkTheme}>
       <CssBaseline />
-      <Box sx={{ minHeight: '100vh', bgcolor: 'background.default', py: 6 }}>
-        <Container maxWidth="sm">
+      <PageHeader />
+      <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
+        <Container maxWidth="sm" sx={{ py: 6 }}>
           <Box sx={{ textAlign: 'center', mb: 4 }}>
             <Typography variant="h4" fontWeight={700} gutterBottom>
               Telegizer Status

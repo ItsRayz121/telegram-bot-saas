@@ -1,7 +1,7 @@
 import React from 'react';
 import { openSupportEmail, SUPPORT_LINKS } from '../config/support';
 import {
-  Box, AppBar, Toolbar, Typography, Button, Container, Divider,
+  Box, Typography, Button, Container, Divider,
   Card, CardContent, Grid, Chip, Avatar,
 } from '@mui/material';
 import {
@@ -9,24 +9,9 @@ import {
   CheckCircle, Favorite, OpenInNew, Email, Telegram,
 } from '@mui/icons-material';
 import TelegizerLogo from '../components/TelegizerLogo';
+import PageHeader from '../components/PageHeader';
 import { useNavigate } from 'react-router-dom';
 import usePageMeta from '../hooks/usePageMeta';
-
-function PageNav() {
-  const navigate = useNavigate();
-  return (
-    <AppBar position="sticky" elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.default' }}>
-      <Toolbar>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer', flexGrow: 1 }} onClick={() => navigate('/')}>
-          <TelegizerLogo size="sm" variant="icon" />
-          <Typography variant="h6" fontWeight={700}>Telegizer</Typography>
-        </Box>
-        <Button size="small" onClick={() => navigate('/login')} sx={{ mr: 1 }}>Sign In</Button>
-        <Button size="small" variant="contained" onClick={() => navigate('/register')}>Get Started Free</Button>
-      </Toolbar>
-    </AppBar>
-  );
-}
 
 const PILLARS = [
   {
@@ -97,7 +82,7 @@ export default function About() {
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
-      <PageNav />
+      <PageHeader />
 
       {/* Hero */}
       <Box sx={{ py: { xs: 8, md: 12 }, textAlign: 'center', background: 'linear-gradient(160deg, rgba(37,99,235,0.08) 0%, rgba(124,58,237,0.06) 100%)' }}>

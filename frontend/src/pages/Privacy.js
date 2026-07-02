@@ -1,8 +1,8 @@
 import React from 'react';
 import {
-  Box, AppBar, Toolbar, Typography, Button, Container, Divider, Link,
+  Box, Typography, Container, Divider, Link,
 } from '@mui/material';
-import TelegizerLogo from '../components/TelegizerLogo';
+import PageHeader from '../components/PageHeader';
 import { useNavigate } from 'react-router-dom';
 import usePageMeta from '../hooks/usePageMeta';
 import { SUPPORT_EMAIL } from '../config/support';
@@ -10,20 +10,6 @@ import { SUPPORT_EMAIL } from '../config/support';
 const LAST_UPDATED = 'May 9, 2026';
 const PRIVACY_EMAIL = SUPPORT_EMAIL;
 
-function PageNav() {
-  const navigate = useNavigate();
-  return (
-    <AppBar position="sticky" elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.default' }}>
-      <Toolbar>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer', flexGrow: 1 }} onClick={() => navigate('/')}>
-          <TelegizerLogo size="sm" variant="icon" />
-          <Typography variant="h6" fontWeight={700}>Telegizer</Typography>
-        </Box>
-        <Button size="small" onClick={() => navigate('/register')}>Get Started</Button>
-      </Toolbar>
-    </AppBar>
-  );
-}
 
 function Section({ title, children }) {
   return (
@@ -88,7 +74,7 @@ export default function Privacy() {
   );
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
-      <PageNav />
+      <PageHeader />
       <Container maxWidth="md" sx={{ py: 6 }}>
         <Typography variant="h4" fontWeight={800} mb={1}>Privacy Policy</Typography>
         <Typography variant="body2" color="text.disabled" mb={4}>Last updated: {LAST_UPDATED}</Typography>

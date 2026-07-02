@@ -7,6 +7,7 @@ import { Block, CheckCircle, OpenInNew } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import TelegizerLogo from '../components/TelegizerLogo';
 import usePageMeta from '../hooks/usePageMeta';
+import PageHeader from '../components/PageHeader';
 import { SUPPORT_EMAIL } from '../config/support';
 
 const PROHIBITED = [
@@ -38,8 +39,9 @@ export default function AcceptableUse() {
   const navigate = useNavigate();
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default', py: 6 }}>
-      <Container maxWidth="md">
+    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
+      <PageHeader />
+      <Container maxWidth="md" sx={{ py: 6 }}>
         <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}>
           <TelegizerLogo size="lg" />
         </Box>

@@ -142,6 +142,20 @@ function GATracker() {
   return null;
 }
 
+// Reset scroll to the top on every route change. Without this, navigating
+// from a scrolled page (e.g. a footer link) lands on the next page still
+// scrolled to the bottom.
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    if ('scrollRestoration' in window.history) {
+      window.history.scrollRestoration = 'manual';
+    }
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+}
+
 // Forces GroupSettings remount when groupId (or botId) changes, preventing stale state/race conditions
 function KeyedGroupSettings() {
   const params = useParams();
@@ -251,6 +265,7 @@ export default function App() {
       <ErrorBoundary>
         <BrowserRouter>
           <GATracker />
+          <ScrollToTop />
           <Routes>
 
             {/* ── Public (no sidebar) ─────────────────────────────────────── */}
