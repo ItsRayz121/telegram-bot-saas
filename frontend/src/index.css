@@ -60,6 +60,19 @@ body::before {
   max-width: 100vw;
 }
 
+/* ── Responsiveness safety net ──────────────────────────────────────────────────
+   Catches the two most common horizontal-overflow causes on any page/device:
+   media that ignores its container, and long unbreakable strings (URLs, wallet
+   addresses, tx hashes) that would otherwise push the layout wider than the
+   viewport. Complements #root/body overflow-x:hidden above. */
+img, video, canvas {
+  max-width: 100%;
+  height: auto;
+}
+body {
+  overflow-wrap: break-word;
+}
+
 a {
   color: inherit;
   text-decoration: none;
