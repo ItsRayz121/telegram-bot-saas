@@ -56,7 +56,6 @@ export default function ChatWidget() {
     if (!needsProduct) productTouchedRef.current = false;
   }, [needsProduct, pathname]);
 
-  const chooseProduct = (value) => { productTouchedRef.current = true; setProduct(value); };
 
   const lastIdRef = useRef(0);            // newest message id we hold
   const listRef = useRef(null);
@@ -133,17 +132,30 @@ export default function ChatWidget() {
     return () => window.removeEventListener('open-support-chat', handler);
   }, []);
 
+  // Cross-navigation deep link: a public page (e.g. Contact) can ask the chat to
+  // open after the user lands on the dashboard by setting this flag before it
+  // navigates. We consume it once on mount.
+  useEffect(() => {
+    try {
+      if (localStorage.getItem('open_support_chat_pending')) {
+        localStorage.removeItem('open_support_chat_pending');
+        setOpen(true);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
   useEffect(() => {
     if (open && messages.length === 0) loadChat();
     if (open) setHasUnread(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const handleSend = async () => {
-    const body = draft.trim();
-    if (!body || sending) return;
+  // Core sender — posts one message tagged with `prod` and reconciles the
+  // optimistic bubble. Returns true on success, false on failure (caller decides
+  // whether to restore a draft). Never throws.
+  const postMessage = async (body, prod) => {
+    if (!body || sending) return false;
     setSending(true);
-    setDraft('');
     // Optimistic bubble so the UI feels instant. Tag it with the currently-open
     // session (if any) so it groups correctly; otherwise a sentinel so it starts
     // its own "new conversation" divider until the server assigns a real session.
@@ -153,7 +165,7 @@ export default function ChatWidget() {
     setMessages((prev) => [...prev, { id: tempId, session_id: optimisticSid, author: 'user', body, created_at: new Date().toISOString(), _pending: true }]);
     scrollToBottom();
     try {
-      const { data } = await support.send(body, product);
+      const { data } = await support.send(body, prod);
       const real = data.message;
       setMessages((prev) => prev.map((m) => (m.id === tempId ? real : m)));
       setConvStatus(data.conversation?.status || 'open');
@@ -164,14 +176,38 @@ export default function ChatWidget() {
         });
       }
       if (real?.id > lastIdRef.current) { lastIdRef.current = real.id; writeLastSeen(real.id); }
+      return true;
     } catch (err) {
-      // Roll the optimistic message back and restore the draft.
+      // Roll the optimistic message back so the thread reflects reality.
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
-      setDraft(body);
       if (err?.response?.status === 401 || err?.response?.status === 422) setEnabled(false);
+      return false;
     } finally {
       setSending(false);
     }
+  };
+
+  const handleSend = async () => {
+    const body = draft.trim();
+    if (!body || sending) return;
+    setDraft('');
+    const ok = await postMessage(body, product);
+    if (!ok) setDraft(body);   // restore the draft so the user doesn't lose it
+  };
+
+  // Picking a product commits the episode to that topic: it posts an opener (or
+  // the user's already-typed message) tagged with the product, which opens the
+  // session. From then on the picker is hidden, so the topic stays locked to that
+  // product until the chat closes — you can't switch mid-conversation.
+  const chooseProduct = async (value) => {
+    productTouchedRef.current = true;
+    setProduct(value);
+    if (!needsProduct || sending) return;   // already in an episode → just select
+    const label = (PRODUCTS.find((p) => p.value === value) || {}).label || 'Telegizer';
+    const typed = draft.trim();
+    if (typed) setDraft('');
+    const ok = await postMessage(typed || `Hi 👋 I'd like to discuss ${label}.`, value);
+    if (!ok && typed) setDraft(typed);
   };
 
   // Hidden for unauthenticated users and inside the admin panel (admins have the

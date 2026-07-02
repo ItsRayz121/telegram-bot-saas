@@ -1010,6 +1010,23 @@ def init_db():
             "admin_announcements.active",
         )
 
+        # ── Live-chat support: per-episode product tag ───────────────────────────
+        # The support_* tables may have been created (db.create_all) BEFORE the
+        # product columns were added to the models. create_all never adds columns
+        # to existing tables, so on those deployments posting a message would 500
+        # (INSERT/UPDATE referencing a missing column) — the widget then rolled the
+        # optimistic bubble back, looking like the message "un-sent" itself.
+        _run_alter(
+            db.engine,
+            "ALTER TABLE support_conversations ADD COLUMN IF NOT EXISTS last_product VARCHAR(20)",
+            "support_conversations.last_product",
+        )
+        _run_alter(
+            db.engine,
+            "ALTER TABLE support_sessions ADD COLUMN IF NOT EXISTS product VARCHAR(20)",
+            "support_sessions.product",
+        )
+
         # ── Backfill: create UserTelegramAccount rows for legacy User.telegram_user_id ──
         # Must run AFTER all users-table ALTER statements (including auth_provider)
         # so SQLAlchemy's User model doesn't query columns that don't exist yet.

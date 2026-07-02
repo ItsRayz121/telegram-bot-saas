@@ -6,6 +6,7 @@ import {
 } from '@mui/material';
 import {
   Email, Telegram, Twitter, HelpOutline, BugReport, Business, Schedule,
+  ChatBubbleOutline,
 } from '@mui/icons-material';
 import PageHeader from '../components/PageHeader';
 import { useNavigate } from 'react-router-dom';
@@ -223,6 +224,36 @@ export default function Contact() {
             </Grid>
           ))}
         </Grid>
+
+        {/* Live chat */}
+        <Card sx={{ mb: 6 }}>
+          <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flex: 1, minWidth: 220 }}>
+              <Box sx={{ color: '#2563EB' }}><ChatBubbleOutline /></Box>
+              <Box>
+                <Typography variant="subtitle2" fontWeight={700}>Live Chat</Typography>
+                <Typography variant="body2" color="text.secondary" lineHeight={1.6}>
+                  Chat with our team in real time from your dashboard — we reply within a few minutes.
+                </Typography>
+              </Box>
+            </Box>
+            <Button
+              variant="contained"
+              startIcon={<ChatBubbleOutline fontSize="small" />}
+              onClick={() => {
+                const loggedIn = typeof window !== 'undefined' && !!localStorage.getItem('token');
+                if (loggedIn) {
+                  try { localStorage.setItem('open_support_chat_pending', '1'); } catch { /* ignore */ }
+                  navigate('/dashboard');
+                } else {
+                  navigate('/login');
+                }
+              }}
+            >
+              Start Live Chat
+            </Button>
+          </CardContent>
+        </Card>
 
         {/* Community */}
         <Typography variant="h5" fontWeight={700} mb={3} sx={{ fontSize: { xs: '1.2rem', sm: '1.5rem' } }}>Community & Social</Typography>
