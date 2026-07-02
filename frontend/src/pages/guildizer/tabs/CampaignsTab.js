@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Box, Grid, Card, CardContent, Typography, Button, TextField, MenuItem, Switch,
-  FormControlLabel, List, ListItem, ListItemText, IconButton, Chip, Alert,
+  FormControlLabel, List, ListItem, ListItemButton, ListItemText, IconButton, Chip, Alert,
   CircularProgress, Stack, Divider, Tabs, Tab, Tooltip,
   Dialog, DialogTitle, DialogContent, DialogActions,
 } from '@mui/material';
@@ -213,10 +213,18 @@ export default function CampaignsTab({ guildId, channels = [] }) {
           {shown.length === 0 && <Typography variant="body2" color="text.secondary">No campaigns{typeFilter !== 'all' ? ' of this type' : ''} yet.</Typography>}
           <List dense>
             {shown.map((c) => (
-              <ListItem key={c.id} button onClick={() => setSelected(c.id)} divider
-                secondaryAction={<Typography variant="caption" color="text.secondary">{c.counts.verified}✓ / {c.counts.pending}⏳</Typography>}>
-                <Chip size="small" label={c.status} color={STATUS_COLOR[c.status]} sx={{ mr: 1.5 }} />
-                <ListItemText primary={c.title} secondary={`${TYPE_LABEL[c.type] || c.type} · ${c.task_count} tasks`} />
+              // ListItemButton (not `<ListItem button secondaryAction>`, which
+              // silently breaks the row click) so the whole row opens the campaign.
+              // Counts sit inside the button so tapping them still opens detail.
+              <ListItem key={c.id} disablePadding divider>
+                <ListItemButton onClick={() => setSelected(c.id)} sx={{ gap: 1 }}>
+                  <Chip size="small" label={c.status} color={STATUS_COLOR[c.status]} sx={{ flexShrink: 0 }} />
+                  <ListItemText sx={{ minWidth: 0 }} primary={c.title} secondary={`${TYPE_LABEL[c.type] || c.type} · ${c.task_count} tasks`}
+                    primaryTypographyProps={{ noWrap: true }} secondaryTypographyProps={{ noWrap: true }} />
+                  <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
+                    {c.counts.verified}✓ / {c.counts.pending}⏳
+                  </Typography>
+                </ListItemButton>
               </ListItem>
             ))}
           </List>
