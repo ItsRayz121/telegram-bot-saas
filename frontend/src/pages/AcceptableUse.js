@@ -7,6 +7,7 @@ import { Block, CheckCircle, OpenInNew } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import TelegizerLogo from '../components/TelegizerLogo';
 import usePageMeta from '../hooks/usePageMeta';
+import { SUPPORT_EMAIL } from '../config/support';
 
 const PROHIBITED = [
   'Sending unsolicited bulk messages (spam) to Telegram users or groups',
@@ -136,7 +137,7 @@ export default function AcceptableUse() {
             <Typography variant="h6" fontWeight={700} mb={1}>Contact</Typography>
             <Typography variant="body2" color="text.secondary">
               If you have questions about this policy or want to report abuse, contact us at{' '}
-              <Link href="mailto:support@telegizer.com">support@telegizer.com</Link>.
+              <Link href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</Link>.
             </Typography>
           </CardContent>
         </Card>

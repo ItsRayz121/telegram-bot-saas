@@ -1,5 +1,5 @@
 import React from 'react';
-import { openSupportEmail } from '../config/support';
+import { openSupportEmail, SUPPORT_LINKS } from '../config/support';
 import {
   Box, AppBar, Toolbar, Typography, Button, Container, Divider,
   Card, CardContent, Grid, Chip, Avatar,
@@ -284,7 +284,7 @@ export default function About() {
                   size="small"
                   variant="outlined"
                   startIcon={<Telegram fontSize="small" />}
-                  href="https://t.me/telegizer_support"
+                  href={SUPPORT_LINKS.community}
                   target="_blank"
                   rel="noopener noreferrer"
                   sx={{ fontSize: '0.75rem' }}

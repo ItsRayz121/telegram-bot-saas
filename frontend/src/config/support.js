@@ -15,14 +15,18 @@ const _gmailParams = new URLSearchParams({ view: 'cm', fs: '1', to: SUPPORT_EMAI
 export const SUPPORT_GMAIL_URL = `https://mail.google.com/mail/?${_gmailParams.toString()}`;
 
 /**
- * Opens the Gmail compose window in a new tab.
+ * Opens the Gmail compose window in a new tab, pre-filled to our single
+ * support address. Pass a `subject` to categorize the enquiry (e.g.
+ * "Bug Report", "Enterprise & Partnership") — the body stays the same.
  * Falls back to mailto: if the popup is blocked.
  */
-export function openSupportEmail() {
-  const win = window.open(SUPPORT_GMAIL_URL, '_blank', 'noopener,noreferrer');
+export function openSupportEmail(subject = SUBJECT, body = BODY) {
+  const params = new URLSearchParams({ view: 'cm', fs: '1', to: SUPPORT_EMAIL, su: subject, body });
+  const gmailUrl = `https://mail.google.com/mail/?${params.toString()}`;
+  const win = window.open(gmailUrl, '_blank', 'noopener,noreferrer');
   if (!win || win.closed || typeof win.closed === 'undefined') {
     // Popup was blocked — fall back to mailto
-    window.location.href = SUPPORT_MAILTO;
+    window.location.href = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   }
 }
 

@@ -5,9 +5,9 @@ import {
 import TelegizerLogo from '../components/TelegizerLogo';
 import { useNavigate } from 'react-router-dom';
 import usePageMeta from '../hooks/usePageMeta';
+import { SUPPORT_EMAIL } from '../config/support';
 
 const LAST_UPDATED = 'May 9, 2026';
-const SUPPORT_EMAIL = 'support@telegizer.com';
 
 function PageNav() {
   const navigate = useNavigate();

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { SUPPORT_EMAIL, openSupportEmail } from '../config/support';
+import { SUPPORT_EMAIL, openSupportEmail, SUPPORT_LINKS } from '../config/support';
 import {
   Box, AppBar, Toolbar, Typography, Button, Container, Divider,
   Card, CardContent, Grid, TextField, Alert, CircularProgress, Link, Chip,
@@ -28,14 +28,14 @@ function PageNav() {
   );
 }
 
+// Every enquiry goes to the one real support inbox; the subject just
+// tells us what it's about. No separate/fake addresses.
 const CONTACT_CHANNELS = [
   {
     icon: <Email />,
     title: 'General Support',
     desc: 'Account issues, billing questions, feature help',
-    value: SUPPORT_EMAIL,
-    href: '#',
-    onClick: (e) => { e.preventDefault(); openSupportEmail(); },
+    subject: 'General Support',
     color: '#2563EB',
     responseTime: '< 24 hours',
   },
@@ -43,8 +43,7 @@ const CONTACT_CHANNELS = [
     icon: <BugReport />,
     title: 'Bug Reports',
     desc: 'Found something broken? Tell us and we\'ll fix it fast.',
-    value: 'bugs@telegizer.com',
-    href: 'mailto:bugs@telegizer.com',
+    subject: 'Bug Report',
     color: '#ef4444',
     responseTime: '< 12 hours',
   },
@@ -52,8 +51,7 @@ const CONTACT_CHANNELS = [
     icon: <Business />,
     title: 'Enterprise & Partnerships',
     desc: 'Custom plans, white-label, API access, partnerships',
-    value: 'enterprise@telegizer.com',
-    href: 'mailto:enterprise@telegizer.com',
+    subject: 'Enterprise & Partnership',
     color: '#7C3AED',
     responseTime: '< 48 hours',
   },
@@ -61,8 +59,7 @@ const CONTACT_CHANNELS = [
     icon: <HelpOutline />,
     title: 'Privacy & Data',
     desc: 'GDPR requests, data deletion, privacy concerns',
-    value: 'privacy@telegizer.com',
-    href: 'mailto:privacy@telegizer.com',
+    subject: 'Privacy & Data',
     color: '#06B6D4',
     responseTime: '< 30 days (GDPR)',
   },
@@ -72,17 +69,18 @@ const SOCIAL_CHANNELS = [
   {
     icon: <Telegram />,
     title: 'Telegram Community',
-    desc: 'Join our official support group for quick answers and announcements.',
-    label: '@TelegizerSupport',
-    href: 'https://t.me/TelegizerSupport',
+    desc: 'Join our official community group for quick answers and announcements.',
+    label: '@telegizer_community',
+    href: SUPPORT_LINKS.community,
     color: '#0088cc',
   },
   {
     icon: <Twitter />,
     title: 'Twitter / X',
     desc: 'Follow us for updates, tips, and product news.',
-    label: '@TelegizerApp',
-    href: 'https://twitter.com/TelegizerApp',
+    label: 'Coming soon',
+    href: null,
+    comingSoon: true,
     color: '#1DA1F2',
   },
 ];
@@ -227,9 +225,15 @@ export default function Contact() {
                   <Typography variant="body2" color="text.secondary" mb={1.5} lineHeight={1.7}>
                     {ch.desc}
                   </Typography>
-                  <Link href={ch.href} color="primary.main" underline="hover" variant="body2" fontFamily="monospace">
-                    {ch.value}
-                  </Link>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<Email fontSize="small" />}
+                    onClick={() => openSupportEmail(`Telegizer — ${ch.subject}`)}
+                    sx={{ fontSize: '0.78rem' }}
+                  >
+                    Send Email
+                  </Button>
                 </CardContent>
               </Card>
             </Grid>
@@ -250,9 +254,13 @@ export default function Contact() {
                   <Typography variant="body2" color="text.secondary" mb={1.5} lineHeight={1.7}>
                     {ch.desc}
                   </Typography>
-                  <Link href={ch.href} target="_blank" rel="noopener noreferrer" color="primary.main" underline="hover" variant="body2">
-                    {ch.label}
-                  </Link>
+                  {ch.comingSoon ? (
+                    <Chip label={ch.label} size="small" variant="outlined" sx={{ color: 'text.disabled' }} />
+                  ) : (
+                    <Link href={ch.href} target="_blank" rel="noopener noreferrer" color="primary.main" underline="hover" variant="body2">
+                      {ch.label}
+                    </Link>
+                  )}
                 </CardContent>
               </Card>
             </Grid>

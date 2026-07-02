@@ -79,7 +79,7 @@ function PlatformAIPanel({ settings, userTier }) {
           sx={{ mb: 2, fontSize: '0.82rem' }}
         >
           {plan.platform_ai_included
-            ? 'Telegizer AI is included in your plan but is not yet activated on this server. No action needed on your end — contact support@telegizer.com to enable it, or use your own API key below in the meantime.'
+            ? 'Telegizer AI is included in your plan but is not yet activated on this server. No action needed on your end — contact support to enable it, or use your own API key below in the meantime.'
             : 'Platform AI is not available on the free plan. Upgrade to Pro or Enterprise, or add your own API key below.'}
         </Alert>
       )}
