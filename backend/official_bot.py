@@ -5313,7 +5313,7 @@ async def _show_rank(update: Update, context: ContextTypes.DEFAULT_TYPE, target_
             tgt_id = update.effective_user.id
             tgt_name = target_name
         target_id, target_name = tgt_id, tgt_name
-    xp, level, rank = 0, 1, None
+    xp, level, rank, total_members = 0, 1, None, 0
     role_name = ""
     if flask_app:
         try:
@@ -5323,6 +5323,9 @@ async def _show_rank(update: Update, context: ContextTypes.DEFAULT_TYPE, target_
                     telegram_group_id=group_id,
                     telegram_user_id=str(target_id),
                 ).first()
+                total_members = OfficialMember.query.filter_by(
+                    telegram_group_id=group_id,
+                ).count()
                 if m:
                     xp, level = m.xp, m.level
                     role_name = getattr(m, "role", "") or ""
@@ -5341,17 +5344,27 @@ async def _show_rank(update: Update, context: ContextTypes.DEFAULT_TYPE, target_
                             break
         except Exception:
             pass
-    bar_filled = min(int((xp % 100) / 10), 10)
-    bar = "█" * bar_filled + "░" * (10 - bar_filled)
+    # Progress within the current level (level = every 100 XP), shown as a 10-cell
+    # bar plus the exact XP remaining so the next milestone is obvious at a glance.
+    xp_into_level = xp % 100
     next_xp = max(xp + 1, ((xp // 100) + 1) * 100)
-    text = (
-        f"🏅 *{target_name}*\n"
-        f"Level: {level}{' — ' + role_name if role_name else ''}\n"
-        f"XP: {xp:,}  [{bar}]\n"
-        f"Next level: {next_xp:,} XP"
+    to_next = next_xp - xp
+    bar_filled = min(int(xp_into_level / 10), 10)
+    bar = "█" * bar_filled + "░" * (10 - bar_filled)
+    pct = int(xp_into_level)  # 0–99 → percent through the level
+
+    rank_line = (
+        f"🥇 *Rank #{rank}*" + (f" of {total_members}" if total_members else "")
+        if rank else "🥇 *Unranked* — send a message to start earning XP"
     )
-    if rank:
-        text += f"\nRank: #{rank} in this group"
+    role_line = f"\n🎖 Role: *{role_name}*" if role_name else ""
+    text = (
+        f"🏅 *{target_name}*  ·  Level *{level}*\n"
+        f"{rank_line}{role_line}\n\n"
+        f"⭐ XP: *{xp:,}*\n"
+        f"`[{bar}]` {pct}%\n"
+        f"⏭ *{to_next:,} XP* to Level {level + 1} (at {next_xp:,} XP)"
+    )
     await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
 
