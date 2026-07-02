@@ -278,15 +278,10 @@ export default function MyGroups() {
           <Alert
             severity="info"
             icon={<Groups fontSize="small" />}
-            sx={{ mb: 2, borderRadius: 2, alignItems: 'center' }}
-            action={
-              <Button size="small" startIcon={<ArrowBack />} onClick={() => navigate('/dashboard')}>
-                Back
-              </Button>
-            }
+            sx={{ mb: 2, borderRadius: 2, alignItems: 'center', '& .MuiAlert-message': { minWidth: 0 } }}
           >
-            Showing groups connected to <strong>Official Telegizer Bot (@{BOT_USERNAME})</strong> only.{' '}
-            <Button size="small" sx={{ p: 0, minWidth: 0, textTransform: 'none', fontWeight: 600 }} onClick={() => navigate('/groups')}>
+            <strong>@{BOT_USERNAME}</strong> groups only.{' '}
+            <Button size="small" sx={{ p: 0, minWidth: 0, textTransform: 'none', fontWeight: 600, verticalAlign: 'baseline' }} onClick={() => navigate('/groups')}>
               View all groups
             </Button>
           </Alert>

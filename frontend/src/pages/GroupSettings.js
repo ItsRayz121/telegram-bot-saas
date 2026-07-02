@@ -415,9 +415,9 @@ function InlineCmdRouting({ id, cmds, title, description, cmdRouting, setCmdRout
           const rule = (cmdRouting.commands || {})[cmd] || { scope: 'all_group', topic_ids: [] };
           return (
             <Box key={cmd} sx={{ mb: 2 }}>
-              <Stack direction="row" alignItems="center" spacing={2} flexWrap="wrap" mb={1}>
-                <Typography fontWeight={600} sx={{ minWidth: 130, fontFamily: 'monospace' }}>{cmd}</Typography>
-                <FormControl size="small" sx={{ minWidth: 200 }}>
+              <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'stretch', sm: 'center' }} spacing={{ xs: 1, sm: 2 }} mb={1}>
+                <Typography fontWeight={600} sx={{ minWidth: { sm: 130 }, fontFamily: 'monospace' }}>{cmd}</Typography>
+                <FormControl size="small" sx={{ minWidth: 200, width: { xs: '100%', sm: 'auto' } }}>
                   <InputLabel>Access</InputLabel>
                   <Select
                     value={rule.scope}
@@ -3003,9 +3003,9 @@ function GroupSettingsInner() {
                   const topics = cmdRouting.topics || [];
                   return (
                     <Box key={cmd} sx={{ mb: 2 }}>
-                      <Stack direction="row" alignItems="center" spacing={2} flexWrap="wrap" mb={1}>
-                        <Typography fontWeight={600} sx={{ minWidth: 130, fontFamily: 'monospace' }}>{cmd}</Typography>
-                        <FormControl size="small" sx={{ minWidth: 200 }}>
+                      <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'stretch', sm: 'center' }} spacing={{ xs: 1, sm: 2 }} mb={1}>
+                        <Typography fontWeight={600} sx={{ minWidth: { sm: 130 }, fontFamily: 'monospace' }}>{cmd}</Typography>
+                        <FormControl size="small" sx={{ minWidth: 200, width: { xs: '100%', sm: 'auto' } }}>
                           <InputLabel>Access</InputLabel>
                           <Select
                             value={rule.scope}
@@ -3661,10 +3661,12 @@ function GroupSettingsInner() {
           return (
           <>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, mb: 1.5 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <EmojiEvents color="primary" />
-                <Typography variant="h6" fontWeight={600}>XP Leaderboard</Typography>
-                <Typography variant="body2" color="text.secondary">— top members ranked by XP</Typography>
+              <Box sx={{ minWidth: 0 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <EmojiEvents color="primary" />
+                  <Typography variant="h6" fontWeight={600}>XP Leaderboard</Typography>
+                </Box>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>Top members ranked by XP</Typography>
               </Box>
               <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', alignItems: 'center' }}>
                 {[
@@ -4332,11 +4334,12 @@ function GroupSettingsInner() {
                           const selected = selIds.includes(admin.user_id);
                           return (
                             <Box key={admin.user_id} sx={{
-                              display: 'flex', alignItems: 'center', gap: 1.5,
+                              display: 'flex', alignItems: 'center', gap: 1,
                               p: 1, border: '1px solid', borderRadius: 1.5,
                               borderColor: selected ? 'primary.main' : 'divider',
                               opacity: admin.can_dm ? 1 : 0.65,
                               cursor: admin.can_dm ? 'pointer' : 'default',
+                              minWidth: 0, overflow: 'hidden',
                             }}
                               onClick={() => {
                                 if (!admin.can_dm) return;
@@ -4354,16 +4357,18 @@ function GroupSettingsInner() {
                                 });
                               }}
                             >
-                              <Switch size="small" checked={selected} disabled={!admin.can_dm} onChange={() => {}} />
-                              <Typography variant="body2" sx={{ flexGrow: 1 }}>
+                              <Switch size="small" checked={selected} disabled={!admin.can_dm} onChange={() => {}} sx={{ flexShrink: 0 }} />
+                              <Typography variant="body2" sx={{ flexGrow: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                 {admin.first_name}{admin.username ? ` (@${admin.username})` : ''}
                               </Typography>
-                              {admin.can_dm
-                                ? <Chip label="✓ Can receive DM" color="success" size="small" />
-                                : <Tooltip title="Ask this admin to open @telegizer_bot and press Start.">
-                                    <Chip label="⚠ Must start bot" color="warning" size="small" />
-                                  </Tooltip>
-                              }
+                              <Box sx={{ flexShrink: 0, width: { xs: 108, sm: 132 }, display: 'flex', justifyContent: 'flex-end' }}>
+                                {admin.can_dm
+                                  ? <Chip label="✓ Can receive DM" color="success" size="small" sx={{ maxWidth: '100%', '& .MuiChip-label': { px: 0.75, fontSize: '0.68rem' } }} />
+                                  : <Tooltip title="Ask this admin to open @telegizer_bot and press Start.">
+                                      <Chip label="⚠ Must start bot" color="warning" size="small" sx={{ maxWidth: '100%', '& .MuiChip-label': { px: 0.75, fontSize: '0.68rem' } }} />
+                                    </Tooltip>
+                                }
+                              </Box>
                             </Box>
                           );
                         })}
@@ -4567,16 +4572,18 @@ function GroupSettingsInner() {
                       those actions will appear here.
                     </Typography>
                   ) : (
-                    <Table size="small">
-                      <TableBody>
-                        {aiActivity.events.map((e) => (
-                          <AIActivityRow
-                            key={e.id} e={e} botId={botId} groupId={groupId}
-                            fmtTs={fmtTs} onDone={fetchAIActivity}
-                          />
-                        ))}
-                      </TableBody>
-                    </Table>
+                    <TableContainer sx={{ overflowX: 'auto', mx: -1, px: 1 }}>
+                      <Table size="small" sx={{ minWidth: 520 }}>
+                        <TableBody>
+                          {aiActivity.events.map((e) => (
+                            <AIActivityRow
+                              key={e.id} e={e} botId={botId} groupId={groupId}
+                              fmtTs={fmtTs} onDone={fetchAIActivity}
+                            />
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
                   )}
                 </CardContent>
               </Card>

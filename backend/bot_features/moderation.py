@@ -130,6 +130,40 @@ def normalize_hidden_urls(text: str) -> str:
     return text
 
 
+# Invisible characters spammers wedge between link chars ("t‌.me", "t.m‍e") so a
+# naive `t.me/` scan misses the link. Stripped before any link check.
+_ZERO_WIDTH_LINK = re.compile(r"[​‌‍⁠﻿­͏᠎]")
+
+
+def normalize_link_surface(text: str) -> str:
+    """Collapse the common ways a link is disguised so TELEGRAM_LINK_PATTERN /
+    URL_PATTERN can still see it. NFKC folds fullwidth chars (ｔ.ｍｅ) and the
+    one-dot-leader (t․me) back to ASCII; then strip zero-width joiners and run
+    the textual obfuscation rules (hxxp, t(.)me, t_me, "dot", spacing)."""
+    if not text:
+        return ""
+    t = unicodedata.normalize("NFKC", text)
+    t = _ZERO_WIDTH_LINK.sub("", t)
+    return normalize_hidden_urls(t)
+
+
+def collect_link_surface(message, text=""):
+    """Every place a link can hide in one message: the visible text/caption PLUS
+    URLs behind hyperlinked text (TextLink entities) and inline-button URLs.
+    Ordinary users can't attach buttons/hidden links, so scanning these closes
+    the gap where 't.me/…bot?start=XxX' rode in behind 'click here' or a button."""
+    parts = [text or ""]
+    try:
+        from . import content_filter as _cf
+        _btn_texts, btn_urls = _cf.extract_buttons(message)
+        parts.extend(btn_urls)
+        parts.extend(_btn_texts)
+        parts.extend(_cf.extract_entity_urls(message))
+    except Exception as e:
+        logger.debug(f"collect_link_surface extraction failed: {e}")
+    return normalize_link_surface("  ".join(p for p in parts if p))
+
+
 def format_violation_message(username: str, reason: str, group_topic: str = "") -> str:
     topic_clause = f" Please keep discussion relevant to {group_topic}." if group_topic else ""
     return f"@{username}, your message was removed — {reason}.{topic_clause}"
@@ -849,15 +883,20 @@ class ModerationSystem:
         if not cfg.get("enabled", False):
             return False
 
-        if not URL_PATTERN.search(text):
+        # Scan the full link surface: visible text + hyperlinked (TextLink) URLs
+        # + inline-button URLs, all de-obfuscated. Catches links hidden behind
+        # "click here" text or riding on buttons that plain-text scans miss.
+        scan = collect_link_surface(message, text)
+
+        if not URL_PATTERN.search(scan):
             return False
 
         # Never block platform-generated invite links for this group
-        if self._is_platform_invite_link(group.id, text):
+        if self._is_platform_invite_link(group.id, scan):
             return False
 
         whitelist = cfg.get("whitelist", [])
-        urls = URL_PATTERN.findall(text)
+        urls = URL_PATTERN.findall(scan)
         for url in urls:
             if not any(allowed in url for allowed in whitelist):
                 await self.execute_automod_action(
@@ -885,9 +924,14 @@ class ModerationSystem:
         if not cfg.get("enabled", False):
             return False
 
-        if TELEGRAM_LINK_PATTERN.search(text):
+        # Full link surface (text + hidden TextLink URLs + button URLs), with
+        # zero-width / fullwidth / one-dot-leader obfuscation folded away so
+        # 't‌.me/…bot?start=XxX' and 'ｔ.ｍｅ/…' are still detected.
+        scan = collect_link_surface(message, text)
+
+        if TELEGRAM_LINK_PATTERN.search(scan):
             # Never block platform-generated invite links for this group
-            if self._is_platform_invite_link(group.id, text):
+            if self._is_platform_invite_link(group.id, scan):
                 return False
             await self.execute_automod_action(
                 bot, message, group, cfg.get("action", "delete"),

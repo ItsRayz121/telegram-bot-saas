@@ -538,12 +538,13 @@ function OfficialBotSection({ user, navigate, officialGroupCount }) {
           {officialGroupCount} group{officialGroupCount !== 1 ? 's' : ''} linked · Free for all verified users
         </Typography>
       </CardContent>
-      <CardActions sx={{ px: 2, pb: 2, pt: 1, gap: 1 }}>
+      <CardActions sx={{ px: 2, pb: 2, pt: 1, gap: 1, flexWrap: 'wrap' }}>
         <Button size="small" variant="contained" component="a" href={addGroupUrl} target="_blank" rel="noopener noreferrer"
-          startIcon={<Add />}>
+          startIcon={<Add />} sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
           Add to Group
         </Button>
-        <Button size="small" startIcon={<Groups />} onClick={() => navigate('/groups?bot_type=official')}>
+        <Button size="small" startIcon={<Groups />} onClick={() => navigate('/groups?bot_type=official')}
+          sx={{ whiteSpace: 'nowrap', flexShrink: 0, ml: '0 !important' }}>
           Manage Groups ({officialGroupCount})
         </Button>
       </CardActions>

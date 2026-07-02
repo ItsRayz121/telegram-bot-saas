@@ -66,7 +66,14 @@ def _set_miniapp_cookies(response, access_token: str, refresh_token: str = None)
 miniapp_bp = Blueprint("miniapp", __name__, url_prefix="/api/miniapp")
 _log = logging.getLogger(__name__)
 
-_MAX_AGE_SECONDS = 3600  # reject initData older than 1 hour
+# initData is HMAC-signed by the bot token, so the signature alone proves
+# authenticity. The auth_date window only limits replay of a *leaked* initData.
+# A 1-hour window was too tight: Telegram's persistent chat Menu Button reuses a
+# cached WebView, so reopening "Open Dashboard" hours later replays initData with
+# a stale auth_date and got rejected — while the inline "Open Telegizer App"
+# button (fresh initData each tap) worked. 24h matches common practice and fixes
+# the menu-button path without meaningfully weakening replay protection.
+_MAX_AGE_SECONDS = 86400  # reject initData older than 24 hours
 _OTP_EXPIRY_MINUTES = 10
 
 

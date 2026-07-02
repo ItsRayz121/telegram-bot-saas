@@ -114,28 +114,31 @@ export default function MiniApp() {
   const { status, authError } = useTelegram();
   const navigate = useNavigate();
 
+  const hasStoredSession = typeof window !== 'undefined' && !!localStorage.getItem('token');
+
   useEffect(() => {
     if (status === 'ok') {
       navigate(resolveStartDestination(), { replace: true });
     }
-    if (status === 'no_init_data') {
-      // initData missing but WebApp object exists — if a prior session exists, use it.
-      const token = localStorage.getItem('token');
-      if (token) navigate(resolveStartDestination(), { replace: true });
+    // initData missing OR rejected (e.g. the persistent Menu Button replayed a
+    // stale-auth_date session) — if a prior valid session exists, use it so the
+    // user still lands in the app instead of a failure screen.
+    if ((status === 'no_init_data' || status === 'error') && hasStoredSession) {
+      navigate(resolveStartDestination(), { replace: true });
     }
-  }, [status, navigate]);
+  }, [status, navigate, hasStoredSession]);
 
-  // NOTE: temporary diagnostics. Previously no_webapp silently redirected to '/',
-  // which hid the failure reason. Show the live Telegram state instead.
+  // Rejected by the server. If a prior session exists we fall through to it
+  // above; otherwise show the live Telegram state to diagnose.
   if (status === 'error') {
+    if (hasStoredSession) return <LoadingScreen />;
     return <DiagnosticScreen title="Authentication failed" message="Telegram session reached the server but was rejected." authError={authError} />;
   }
   if (status === 'no_webapp') {
     return <DiagnosticScreen title="Not detected as Telegram" message="window.Telegram.WebApp was never provided by the client." authError={authError} />;
   }
   if (status === 'no_init_data') {
-    const hasToken = !!localStorage.getItem('token');
-    if (!hasToken) return <DiagnosticScreen title="No Telegram session data" message="The WebApp object exists, but initData was empty." authError={authError} />;
+    if (!hasStoredSession) return <DiagnosticScreen title="No Telegram session data" message="The WebApp object exists, but initData was empty." authError={authError} />;
     return <LoadingScreen />;
   }
 

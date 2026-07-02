@@ -145,7 +145,7 @@ export default function TopNav({ title, subtitle, actions, breadcrumb, hasSideba
 
   return (
     <AppBar position="sticky" elevation={0}>
-      <Toolbar sx={{ gap: 1, flexWrap: 'wrap', minHeight: { xs: 52, sm: 60 } }}>
+      <Toolbar sx={{ gap: 1, rowGap: 0.5, flexWrap: 'wrap', minHeight: { xs: 52, sm: 60 }, py: { xs: 0.5, sm: 0 } }}>
 
         {/* Logo — hidden on mobile (AppLayout's mobile bar already shows it),
             so this row reads as a focused page action/context bar, not a
@@ -186,11 +186,12 @@ export default function TopNav({ title, subtitle, actions, breadcrumb, hasSideba
         )}
         {hasSidebar && <Box sx={{ flex: 1 }} />}
 
-        {/* Universal search */}
+        {/* Universal search — grows to fill on mobile so trailing icons (?, settings)
+            stay on the same row instead of stranding on a line of their own. */}
         {hasSidebar && (
           <UniversalSearchBar
             placeholder="Search…"
-            sx={{ width: { xs: 120, sm: 200, md: 260 }, mr: 1, flexShrink: 1 }}
+            sx={{ flexGrow: { xs: 1, md: 0 }, width: { xs: 'auto', sm: 200, md: 260 }, minWidth: { xs: 90, sm: 160 }, mr: 1, flexShrink: 1 }}
           />
         )}
 
