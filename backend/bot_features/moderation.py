@@ -148,11 +148,16 @@ def normalize_link_surface(text: str) -> str:
 
 
 def collect_link_surface(message, text=""):
-    """Every place a link can hide in one message: the visible text/caption PLUS
-    URLs behind hyperlinked text (TextLink entities) and inline-button URLs.
-    Ordinary users can't attach buttons/hidden links, so scanning these closes
-    the gap where 't.me/…bot?start=XxX' rode in behind 'click here' or a button."""
-    parts = [text or ""]
+    """Every place a link can hide in one message, gathered into one scan string.
+
+    Text styling — bold, italic, underline, strikethrough, spoiler, monospace/
+    code, blockquote — is purely visual: the raw URL characters stay in
+    message.text/caption, so scanning the plain body already sees through all of
+    them. The only style that truly hides the URL is a hyperlink (TextLink
+    entity: visible "click here", real URL in the entity) — plus inline-button
+    URLs — which we pull in explicitly. Ordinary users can't attach buttons or
+    hidden links, so their presence is itself a strong spam signal."""
+    parts = [text or "", getattr(message, "text", "") or "", getattr(message, "caption", "") or ""]
     try:
         from . import content_filter as _cf
         _btn_texts, btn_urls = _cf.extract_buttons(message)
@@ -161,7 +166,13 @@ def collect_link_surface(message, text=""):
         parts.extend(_cf.extract_entity_urls(message))
     except Exception as e:
         logger.debug(f"collect_link_surface extraction failed: {e}")
-    return normalize_link_surface("  ".join(p for p in parts if p))
+    # De-dup while preserving order so the scan string stays compact.
+    seen, uniq = set(), []
+    for p in parts:
+        if p and p not in seen:
+            seen.add(p)
+            uniq.append(p)
+    return normalize_link_surface("  ".join(uniq))
 
 
 def format_violation_message(username: str, reason: str, group_topic: str = "") -> str:
