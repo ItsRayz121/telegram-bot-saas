@@ -17,6 +17,19 @@ TELEGRAM_LINK_PATTERN = re.compile(
 URL_PATTERN = re.compile(
     r"https?://[^\s]+|www\.[^\s]+", re.IGNORECASE
 )
+# Bare domains typed WITHOUT a scheme ("visit scamsite.xyz", "deal at earn-now.top/join").
+# URL_PATTERN only sees http(s):// or www., so spammers drop the scheme to slip
+# past link blocking. Match a hostname ending in a common/abused TLD too, kept to
+# an allow-list so it doesn't fire on ordinary "filename.txt" / "3.5" / "node.js"
+# style text. t.me/@handles remain the telegram_links check's job.
+DOMAIN_PATTERN = re.compile(
+    r"\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+"
+    r"(?:com|net|org|io|me|xyz|co|app|link|live|online|site|shop|store|"
+    r"info|biz|tech|club|vip|gg|to|cc|tv|ru|cn|ly|pro|dev|ai|finance|"
+    r"fund|cash|money|top|win|bet|casino|trade|pw|su|tk|ml|ga|cf)\b"
+    r"(?:/[^\s]*)?",
+    re.IGNORECASE,
+)
 EMOJI_PATTERN = re.compile(
     "[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF"
     "\U0001F680-\U0001F6FF\U0001F1E0-\U0001F1FF"
@@ -899,7 +912,12 @@ class ModerationSystem:
         # "click here" text or riding on buttons that plain-text scans miss.
         scan = collect_link_surface(message, text)
 
-        if not URL_PATTERN.search(scan):
+        # Also catch scheme-less bare domains ("scamsite.xyz") unless disabled.
+        catch_bare = cfg.get("bare_domains", True)
+        urls = URL_PATTERN.findall(scan)
+        if catch_bare:
+            urls += DOMAIN_PATTERN.findall(scan)
+        if not urls:
             return False
 
         # Never block platform-generated invite links for this group
@@ -907,7 +925,6 @@ class ModerationSystem:
             return False
 
         whitelist = cfg.get("whitelist", [])
-        urls = URL_PATTERN.findall(scan)
         for url in urls:
             if not any(allowed in url for allowed in whitelist):
                 await self.execute_automod_action(

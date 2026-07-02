@@ -1345,8 +1345,10 @@ function GroupSettingsInner() {
                   </Typography>
                   <Typography component="ol" variant="caption" color="text.secondary"
                     sx={{ pl: 2.5, m: 0, mt: 0.75, '& li': { mb: 0.25 } }}>
-                    <li>Open your group → <b>Edit</b> (pencil) → <b>group settings</b>.</li>
-                    <li>Tap <b>Slow Mode</b> and pick an interval (10s – 1h).</li>
+                    <li>Open your group and tap its <b>name/title</b> at the top to open Group Info.</li>
+                    <li>Tap <b>Edit</b> (the pencil icon).</li>
+                    <li>Open <b>Permissions</b> (the lock / key icon).</li>
+                    <li>Scroll down to <b>Slow Mode</b> and pick an interval (5s – 1h).</li>
                     <li>Done — Telegram now shows every member a per-user "write again in …" timer.</li>
                   </Typography>
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>

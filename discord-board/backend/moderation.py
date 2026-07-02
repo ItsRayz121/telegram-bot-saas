@@ -116,7 +116,10 @@ def evaluate_automod(text: str, cfg: dict) -> dict | None:
 
     links = am.get("external_links") or {}
     if links.get("enabled"):
-        for url in cf.extract_urls(text):
+        urls = list(cf.extract_urls(text))
+        if links.get("bare_domains", True):
+            urls += cf.extract_bare_domains(text)
+        for url in urls:
             if not cf.domain_allowed(url, links.get("whitelist") or []):
                 return {"category": "external_link", "action": _norm_action(links.get("action", "delete")),
                         "matched": url, "detail": f"Non-whitelisted link: {cf._domain(url)}"}

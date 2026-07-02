@@ -124,6 +124,17 @@ _SUSPICIOUS_TLDS = {
 }
 _URL_RE = re.compile(r"https?://[^\s<>()]+", re.I)
 _URL_DOMAIN_RE = re.compile(r"https?://([^/\s:]+)", re.I)
+# Bare domains typed WITHOUT a scheme ("scamsite.xyz", "earn-now.top/join") that
+# _URL_RE misses. Kept to a common/abused TLD allow-list so it doesn't fire on
+# ordinary "file.txt" / "node.js" / "3.5" text.
+_BARE_DOMAIN_RE = re.compile(
+    r"\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+"
+    r"(?:com|net|org|io|me|xyz|co|app|link|live|online|site|shop|store|"
+    r"info|biz|tech|club|vip|gg|to|cc|tv|ru|cn|ly|pro|dev|ai|finance|"
+    r"fund|cash|money|top|win|bet|casino|trade|pw|su|tk|ml|ga|cf)\b"
+    r"(?:/[^\s]*)?",
+    re.I,
+)
 # Discord invite surfaces: discord.gg/x, discord.com/invite/x, dsc.gg/x, etc.
 _DISCORD_INVITE_RE = re.compile(
     r"(discord\.gg/|discord(?:app)?\.com/invite/|discord\.me/|dsc\.gg/|invite\.gg/)\S+",
@@ -135,11 +146,19 @@ def extract_urls(text: str) -> list[str]:
     return _URL_RE.findall(text or "")
 
 
+def extract_bare_domains(text: str) -> list[str]:
+    """Scheme-less domains ('scamsite.xyz') that extract_urls (http/https only)
+    misses — spammers drop the scheme to slip past link filters."""
+    return _BARE_DOMAIN_RE.findall(text or "")
+
+
 def _domain(url: str) -> str:
     m = _URL_DOMAIN_RE.search(url or "")
-    if not m:
-        return ""
-    host = m.group(1).lower()
+    if m:
+        host = m.group(1).lower()
+    else:
+        # Scheme-less bare domain like "scamsite.xyz/path" — take the host part.
+        host = (url or "").strip().lower().split("/")[0].split(":")[0]
     return host[4:] if host.startswith("www.") else host
 
 
