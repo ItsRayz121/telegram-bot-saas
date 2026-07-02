@@ -4,6 +4,7 @@ import {
   FormControlLabel, List, ListItem, ListItemButton, ListItemText, IconButton, Chip, Alert,
   CircularProgress, Stack, Divider, Tabs, Tab, Tooltip,
   Dialog, DialogTitle, DialogContent, DialogActions,
+  Stepper, Step, StepLabel,
 } from '@mui/material';
 import { Add, Delete, ArrowBack, Download, EmojiEvents } from '@mui/icons-material';
 import guildizerApi, { guildizerXVerifyKey } from '../../../services/guildizerApi';
@@ -135,6 +136,16 @@ const RAID_GOALS = [['likes', 'Likes'], ['retweets', 'Retweets'], ['comments', '
 const cleanGoals = (g) => Object.fromEntries(
   RAID_GOALS.map(([k]) => [k, parseInt(g?.[k], 10)]).filter(([, v]) => v > 0));
 const VMODES = ['manual', 'honor', 'link'];
+// Typed proof fields — 1:1 with Telegizer's CampaignManager FIELD_TYPES.
+const FIELD_TYPES = [
+  { value: 'text', label: 'Text' },
+  { value: 'url', label: 'URL / Link' },
+  { value: 'uid', label: 'Exchange UID' },
+  { value: 'wallet', label: 'Wallet address' },
+  { value: 'screenshot', label: 'Screenshot' },
+  { value: 'tx_hash', label: 'Transaction hash' },
+  { value: 'username', label: 'Username / handle' },
+];
 const STATUS_COLOR = { draft: 'default', active: 'success', paused: 'warning', closed: 'default' };
 
 export default function CampaignsTab({ guildId, channels = [] }) {
@@ -237,12 +248,16 @@ export default function CampaignsTab({ guildId, channels = [] }) {
   );
 }
 
+const WIZARD_STEPS = ['Task & Proof', 'Schedule & Reward'];
+
 function CreateForm({ guildId, channels, plan, xStatus = 'disabled', onManageKey, onCreated }) {
   const [d, setD] = useState({ title: '', type: 'proof_collection', verification_mode: 'manual', description: '', reward_xp: 50, channel_id: '', one_per_user: true, task_url: '', raid_goals: {}, auto_verify_x: false });
+  const [step, setStep] = useState(0);
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const isRaid = d.type === 'raid';
   const isPro = plan === 'pro';
+  const step0Valid = !!d.title.trim();
 
   async function create() {
     setSaving(true); setError(null);
@@ -256,45 +271,67 @@ function CreateForm({ guildId, channels, plan, xStatus = 'disabled', onManageKey
 
   return (
     <Box sx={{ p: 2, mb: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
+      <Stepper activeStep={step} sx={{ mb: 2 }}>
+        {WIZARD_STEPS.map((s) => <Step key={s}><StepLabel>{s}</StepLabel></Step>)}
+      </Stepper>
       {error && <Alert severity="error" sx={{ mb: 1 }}>{error}</Alert>}
-      <TextField size="small" fullWidth margin="dense" label="Title" value={d.title} inputProps={{ maxLength: 200 }} onChange={(e) => setD({ ...d, title: e.target.value })} />
-      <Grid container spacing={1}>
-        <Grid item xs={6}><TextField select size="small" fullWidth margin="dense" label="Type" value={d.type} onChange={(e) => setD({ ...d, type: e.target.value })}>{TYPES.map((t) => <MenuItem key={t} value={t}>{TYPE_LABEL[t]}</MenuItem>)}</TextField></Grid>
-        <Grid item xs={6}><TextField select size="small" fullWidth margin="dense" label="Verification" value={d.verification_mode} onChange={(e) => setD({ ...d, verification_mode: e.target.value })}>{VMODES.map((m) => <MenuItem key={m} value={m}>{m}</MenuItem>)}</TextField></Grid>
-      </Grid>
-      <TextField size="small" fullWidth margin="dense" label="Description" multiline minRows={2} value={d.description} inputProps={{ maxLength: 2000 }} onChange={(e) => setD({ ...d, description: e.target.value })} />
-      {isRaid && (
+
+      {step === 0 && (
         <>
-          <TextField size="small" fullWidth margin="dense" label="Tweet URL" placeholder="https://x.com/…"
-            value={d.task_url} onChange={(e) => setD({ ...d, task_url: e.target.value })} />
-          <Typography variant="caption" color="text.secondary" display="block" mt={1}>Raid goals (shown as targets in the announcement)</Typography>
+          <TextField size="small" fullWidth margin="dense" label="Title" value={d.title} inputProps={{ maxLength: 200 }} onChange={(e) => setD({ ...d, title: e.target.value })} />
           <Grid container spacing={1}>
-            {RAID_GOALS.map(([k, label]) => (
-              <Grid item xs={6} sm={3} key={k}>
-                <TextField type="number" size="small" fullWidth margin="dense" label={label} inputProps={{ min: 0 }}
-                  value={d.raid_goals[k] || ''} onChange={(e) => setD({ ...d, raid_goals: { ...d.raid_goals, [k]: e.target.value } })} />
-              </Grid>
-            ))}
+            <Grid item xs={6}><TextField select size="small" fullWidth margin="dense" label="Type" value={d.type} onChange={(e) => setD({ ...d, type: e.target.value })}>{TYPES.map((t) => <MenuItem key={t} value={t}>{TYPE_LABEL[t]}</MenuItem>)}</TextField></Grid>
+            <Grid item xs={6}><TextField select size="small" fullWidth margin="dense" label="Verification" value={d.verification_mode} onChange={(e) => setD({ ...d, verification_mode: e.target.value })}>{VMODES.map((m) => <MenuItem key={m} value={m}>{m}</MenuItem>)}</TextField></Grid>
           </Grid>
-          <FormControlLabel sx={{ mt: 0.5 }}
-            control={<Switch checked={isPro && d.auto_verify_x} disabled={!isPro}
-              onChange={(e) => setD({ ...d, auto_verify_x: e.target.checked })} />}
-            label="Auto-verify on X (Pro) — confirm reposts / comments / quotes / follows in real time" />
-          {isPro ? (
-            <XAutoverifyStatus status={xStatus} enabled={d.auto_verify_x} onManageKey={onManageKey} />
-          ) : (
-            <Typography variant="caption" color="text.secondary" display="block">
-              Real-time X verification is a Pro feature. You can still run the raid with manual proof review.
-            </Typography>
+          <TextField size="small" fullWidth margin="dense" label="Description" multiline minRows={2} value={d.description} inputProps={{ maxLength: 2000 }} onChange={(e) => setD({ ...d, description: e.target.value })} />
+          {isRaid && (
+            <>
+              <TextField size="small" fullWidth margin="dense" label="Tweet URL" placeholder="https://x.com/…"
+                value={d.task_url} onChange={(e) => setD({ ...d, task_url: e.target.value })} />
+              <Typography variant="caption" color="text.secondary" display="block" mt={1}>Raid goals (shown as targets in the announcement)</Typography>
+              <Grid container spacing={1}>
+                {RAID_GOALS.map(([k, label]) => (
+                  <Grid item xs={6} sm={3} key={k}>
+                    <TextField type="number" size="small" fullWidth margin="dense" label={label} inputProps={{ min: 0 }}
+                      value={d.raid_goals[k] || ''} onChange={(e) => setD({ ...d, raid_goals: { ...d.raid_goals, [k]: e.target.value } })} />
+                  </Grid>
+                ))}
+              </Grid>
+              <FormControlLabel sx={{ mt: 0.5 }}
+                control={<Switch checked={isPro && d.auto_verify_x} disabled={!isPro}
+                  onChange={(e) => setD({ ...d, auto_verify_x: e.target.checked })} />}
+                label="Auto-verify on X (Pro) — confirm reposts / comments / quotes / follows in real time" />
+              {isPro ? (
+                <XAutoverifyStatus status={xStatus} enabled={d.auto_verify_x} onManageKey={onManageKey} />
+              ) : (
+                <Typography variant="caption" color="text.secondary" display="block">
+                  Real-time X verification is a Pro feature. You can still run the raid with manual proof review.
+                </Typography>
+              )}
+            </>
           )}
+          <Typography variant="caption" color="text.secondary" display="block" mt={1.5}>
+            After creating, add sub-tasks and custom proof fields from the campaign's detail view.
+          </Typography>
         </>
       )}
-      <Grid container spacing={1}>
-        <Grid item xs={6}><TextField type="number" size="small" fullWidth margin="dense" label="Reward XP" value={d.reward_xp} onChange={(e) => setD({ ...d, reward_xp: Number(e.target.value) })} /></Grid>
-        <Grid item xs={6}><TextField select size="small" fullWidth margin="dense" label="Announce channel" value={d.channel_id} onChange={(e) => setD({ ...d, channel_id: e.target.value })}><MenuItem value="">— none —</MenuItem>{channels.map((c) => <MenuItem key={c.id} value={c.id}># {c.name}</MenuItem>)}</TextField></Grid>
-      </Grid>
-      <FormControlLabel control={<Switch checked={d.one_per_user} onChange={(e) => setD({ ...d, one_per_user: e.target.checked })} />} label="One submission per user" />
-      <Box><Button variant="contained" onClick={create} disabled={saving || !d.title.trim()}>{saving ? 'Creating…' : 'Create campaign'}</Button></Box>
+
+      {step === 1 && (
+        <>
+          <Grid container spacing={1}>
+            <Grid item xs={6}><TextField type="number" size="small" fullWidth margin="dense" label="Reward XP" value={d.reward_xp} onChange={(e) => setD({ ...d, reward_xp: Number(e.target.value) })} /></Grid>
+            <Grid item xs={6}><TextField select size="small" fullWidth margin="dense" label="Announce channel" value={d.channel_id} onChange={(e) => setD({ ...d, channel_id: e.target.value })}><MenuItem value="">— none —</MenuItem>{channels.map((c) => <MenuItem key={c.id} value={c.id}># {c.name}</MenuItem>)}</TextField></Grid>
+          </Grid>
+          <FormControlLabel control={<Switch checked={d.one_per_user} onChange={(e) => setD({ ...d, one_per_user: e.target.checked })} />} label="One submission per user" />
+        </>
+      )}
+
+      <Stack direction="row" spacing={1} justifyContent="flex-end" mt={2}>
+        {step > 0 && <Button onClick={() => setStep((s) => s - 1)} disabled={saving}>Back</Button>}
+        {step < WIZARD_STEPS.length - 1
+          ? <Button variant="contained" onClick={() => setStep((s) => s + 1)} disabled={!step0Valid}>Next</Button>
+          : <Button variant="contained" onClick={create} disabled={saving || !step0Valid}>{saving ? 'Creating…' : 'Create campaign'}</Button>}
+      </Stack>
     </Box>
   );
 }
@@ -562,6 +599,7 @@ function RaidSetupCard({ campaign, onSave, plan, xStatus = 'disabled', onManageK
 function FieldsCard({ guildId, campaignId, autoVerifyActive = false }) {
   const [fields, setFields] = useState([]);
   const [label, setLabel] = useState('');
+  const [fieldType, setFieldType] = useState('text');
 
   async function load() {
     try {
@@ -574,6 +612,8 @@ function FieldsCard({ guildId, campaignId, autoVerifyActive = false }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campaignId]);
 
+  const typeLabel = (t) => (FIELD_TYPES.find((x) => x.value === t) || {}).label || 'Text';
+
   return (
     <GuildizerCollapsibleCard id="gz.campaigns.proof_form_fields" title="Proof form fields">
       <Typography variant="caption" color="text.secondary" display="block" mb={1}>
@@ -581,11 +621,15 @@ function FieldsCard({ guildId, campaignId, autoVerifyActive = false }) {
           ? 'Auto-verify already confirms the X actions — you only need extra fields for things the bot can’t read from X (wallet, email, UID for a reward).'
           : 'Extra inputs shown in the proof popup (max 4) — e.g. wallet address, username on X.'}
       </Typography>
-      <Stack direction="row" spacing={1} alignItems="center">
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ xs: 'stretch', sm: 'center' }}>
         <TextField size="small" label="Field label" value={label} inputProps={{ maxLength: 45 }}
           onChange={(e) => setLabel(e.target.value)} sx={{ flex: 1 }} />
+        <TextField select size="small" label="Type" value={fieldType}
+          onChange={(e) => setFieldType(e.target.value)} sx={{ minWidth: 150 }}>
+          {FIELD_TYPES.map((t) => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)}
+        </TextField>
         <Button size="small" variant="outlined" disabled={!label.trim() || fields.length >= 4}
-          onClick={() => guildizerApi.post(`/api/guilds/${guildId}/campaigns/${campaignId}/fields`, { label }).then(() => { setLabel(''); load(); })}>
+          onClick={() => guildizerApi.post(`/api/guilds/${guildId}/campaigns/${campaignId}/fields`, { label, field_type: fieldType }).then(() => { setLabel(''); setFieldType('text'); load(); })}>
           Add
         </Button>
       </Stack>
@@ -598,7 +642,7 @@ function FieldsCard({ guildId, campaignId, autoVerifyActive = false }) {
                 <Delete fontSize="small" />
               </IconButton>
             )}>
-            <ListItemText primary={f.label} secondary={f.required ? 'required' : 'optional'} />
+            <ListItemText primary={f.label} secondary={`${typeLabel(f.field_type)} · ${f.required ? 'required' : 'optional'}`} />
           </ListItem>
         ))}
         {fields.length === 0 && <Typography variant="body2" color="text.secondary">No extra fields.</Typography>}

@@ -74,8 +74,12 @@ def create_field(guild_id: int, cid: int):
     label = str(body.get("label") or "").strip()[:45]
     if not label:
         return jsonify(error="label_required"), 400
+    _FIELD_TYPES = {"text", "url", "uid", "wallet", "screenshot", "tx_hash", "username"}
+    field_type = str(body.get("field_type") or "text").strip()
+    if field_type not in _FIELD_TYPES:
+        field_type = "text"
     row = CampaignCustomField(
-        campaign_id=cid, label=label,
+        campaign_id=cid, label=label, field_type=field_type,
         required=bool(body.get("required", True)), position=count,
     )
     g.db.add(row)

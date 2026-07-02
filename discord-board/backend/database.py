@@ -50,6 +50,8 @@ _HEAL_COLUMNS = [
     ("knowledge_documents", "chunks", "JSON"),
     # Auto-responses can double as AI knowledge for /ask
     ("auto_responses", "use_as_ai_knowledge", "BOOLEAN"),
+    # Typed proof fields (Telegizer parity): text / url / uid / wallet / screenshot / …
+    ("campaign_custom_fields", "field_type", "VARCHAR(20)"),
     # First-message verification: member passed the captcha once
     ("members", "verified", "BOOLEAN"),
     # Notification preferences (sound / web push opt-in / per-category mute)

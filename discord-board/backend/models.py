@@ -1268,6 +1268,8 @@ class CampaignCustomField(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     campaign_id = Column(Integer, ForeignKey("campaigns.id"), nullable=False, index=True)
     label = Column(String(45), nullable=False)
+    # Typed proof input (Telegizer parity): text/url/uid/wallet/screenshot/tx_hash/username.
+    field_type = Column(String(20), default="text")
     required = Column(Boolean, default=True)
     position = Column(Integer, default=0)
 
@@ -1275,6 +1277,7 @@ class CampaignCustomField(Base):
         return {
             "id": self.id,
             "label": self.label,
+            "field_type": self.field_type or "text",
             "required": bool(self.required),
             "position": self.position or 0,
         }
