@@ -41,15 +41,22 @@ export default function ChatWidget() {
   const [draft, setDraft] = useState('');
   const [hasUnread, setHasUnread] = useState(false);
   const [product, setProduct] = useState(() => defaultProductForPath(pathname));
+  // Once the user manually picks a product for the current episode, stop
+  // re-seeding it from the route (otherwise navigating mid-compose would silently
+  // overwrite their choice). Reset when a fresh episode begins.
+  const productTouchedRef = useRef(false);
 
   // The next message starts a NEW episode whenever there's no open session, so
   // that's when we ask "what's this about?".
   const needsProduct = !sessions.some((s) => s.status === 'open');
-  // Reset the picker to a smart default each time a fresh episode begins (a user
-  // tap after this won't be overwritten — deps don't change on setProduct).
   useEffect(() => {
-    if (needsProduct) setProduct(defaultProductForPath(pathname));
+    // While the user hasn't chosen, keep the picker on the route-smart default.
+    if (needsProduct && !productTouchedRef.current) setProduct(defaultProductForPath(pathname));
+    // Episode is active again → arm the next episode to re-seed from the route.
+    if (!needsProduct) productTouchedRef.current = false;
   }, [needsProduct, pathname]);
+
+  const chooseProduct = (value) => { productTouchedRef.current = true; setProduct(value); };
 
   const lastIdRef = useRef(0);            // newest message id we hold
   const listRef = useRef(null);
@@ -287,7 +294,7 @@ export default function ChatWidget() {
                   return (
                     <Chip
                       key={p.value} label={p.label} size="small"
-                      onClick={() => setProduct(p.value)}
+                      onClick={() => chooseProduct(p.value)}
                       variant={sel ? 'filled' : 'outlined'}
                       sx={{
                         height: 24, fontSize: '0.68rem', cursor: 'pointer',

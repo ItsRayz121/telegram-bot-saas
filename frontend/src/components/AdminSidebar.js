@@ -2,13 +2,13 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Box, List, ListItem, ListItemButton, ListItemIcon, ListItemText,
-  Typography, Avatar, Chip, Divider, Tooltip, IconButton,
+  Typography, Avatar, Chip, Divider, Tooltip, IconButton, Badge,
 } from '@mui/material';
 import {
   ChevronLeft, ChevronRight, ArrowBack, Logout, Shield,
 } from '@mui/icons-material';
 import TelegizerLogo from './TelegizerLogo';
-import { auth as authApi } from '../services/api';
+import { auth as authApi, admin as adminApi } from '../services/api';
 import { PALETTE } from '../theme';
 import { ADMIN_CATEGORIES } from '../config/adminNav';
 
@@ -35,7 +35,7 @@ function activeKeyFromPath(pathname) {
   return 'dashboard';
 }
 
-function NavItem({ label, icon: Icon, active, collapsed, onClick }) {
+function NavItem({ label, icon: Icon, active, collapsed, onClick, badge = 0 }) {
   const content = (
     <ListItemButton
       onClick={onClick}
@@ -55,7 +55,9 @@ function NavItem({ label, icon: Icon, active, collapsed, onClick }) {
     >
       {Icon && (
         <ListItemIcon sx={{ minWidth: collapsed ? 0 : 30, color: 'inherit', justifyContent: 'center' }}>
-          <Icon sx={{ fontSize: 17 }} />
+          <Badge color="error" variant="dot" invisible={!collapsed || badge <= 0}>
+            <Icon sx={{ fontSize: 17 }} />
+          </Badge>
         </ListItemIcon>
       )}
       {!collapsed && (
@@ -63,6 +65,15 @@ function NavItem({ label, icon: Icon, active, collapsed, onClick }) {
           primary={label}
           primaryTypographyProps={{ fontSize: '0.82rem', fontWeight: active ? 600 : 400, noWrap: true }}
         />
+      )}
+      {!collapsed && badge > 0 && (
+        <Box sx={{
+          ml: 'auto', minWidth: 18, height: 18, px: 0.5, borderRadius: 9,
+          bgcolor: '#ef4444', color: '#fff', fontSize: '0.62rem', fontWeight: 700,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+        }}>
+          {badge > 99 ? '99+' : badge}
+        </Box>
       )}
     </ListItemButton>
   );
@@ -106,6 +117,20 @@ export default function AdminSidebar({ collapsed, onToggle, onClose, user: userP
   const perms = useMemo(() => user?.admin_permissions || [], [user]);
   const can = useCallback((p) => !p || perms.includes(p), [perms]);
   const activeKey = activeKeyFromPath(pathname);
+
+  // Live-chat unread count → badge on the "Live Chat" nav item.
+  const [supportUnread, setSupportUnread] = useState(0);
+  const canSupport = can('support.manage');
+  useEffect(() => {
+    if (!canSupport) return undefined;
+    let alive = true;
+    const load = () => adminApi.supportUnreadCount()
+      .then((r) => { if (alive) setSupportUnread(r.data?.unread || 0); })
+      .catch(() => {});
+    load();
+    const id = setInterval(load, 20000);
+    return () => { alive = false; clearInterval(id); };
+  }, [canSupport]);
 
   const go = useCallback((category, key) => {
     if (onClose) onClose();
@@ -153,6 +178,7 @@ export default function AdminSidebar({ collapsed, onToggle, onClose, user: userP
             <NavItem
               key={item.key} label={item.label} icon={item.icon}
               active={activeKey === item.key} collapsed
+              badge={item.key === 'support' ? supportUnread : 0}
               onClick={() => go(item.category, item.key)}
             />
           ))}
@@ -230,6 +256,7 @@ export default function AdminSidebar({ collapsed, onToggle, onClose, user: userP
                 <NavItem
                   key={item.key} label={item.label} icon={item.icon}
                   active={activeKey === item.key}
+                  badge={item.key === 'support' ? supportUnread : 0}
                   onClick={() => go(item.category, item.key)}
                 />
               ))}

@@ -237,9 +237,10 @@ def poll_my_chat():
     if conv is None:
         return jsonify({"conversation": None, "messages": [], "sessions": []})
     _sweep_idle(conv)
-    if conv.unread_user:
-        conv.unread_user = False
-        db.session.commit()
+    # NB: do NOT clear unread_user here — the widget polls in the background while
+    # closed, so clearing on poll would wipe "admin replied, user hasn't opened
+    # yet". It's cleared only in get_my_chat (an explicit open). The widget's own
+    # unread dot is client-side (localStorage), independent of this flag.
     since = request.args.get("since", 0, type=int)
     return jsonify(_thread_payload(conv, since=since))
 

@@ -96,6 +96,10 @@ export default function NotificationBell({
     }
     const url = n.metadata && n.metadata.url;
     navigate(url || viewAllPath);
+    // Support replies deep-link to the dashboard AND pop the live-chat widget.
+    if (n.metadata && n.metadata.open_support) {
+      window.dispatchEvent(new Event('open-support-chat'));
+    }
   };
 
   return (
