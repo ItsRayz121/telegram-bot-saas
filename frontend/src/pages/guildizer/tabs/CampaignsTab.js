@@ -457,20 +457,23 @@ function CampaignDetail({ guildId, campaignId, channels, plan, xStatus = 'disabl
             {subs.length === 0 && <Typography variant="body2" color="text.secondary">Nothing to review.</Typography>}
             <List dense>
               {subs.map((s) => (
-                <ListItem key={s.id} disableGutters secondaryAction={
-                  <Stack direction="row" spacing={0.5}>
-                    <Button size="small" onClick={() => review(s.id, 'verify')}>Verify</Button>
-                    <Button size="small" color="error" onClick={() => review(s.id, 'reject')}>Reject</Button>
-                  </Stack>}>
+                // Flex row so the proof text truncates and the Verify/Reject
+                // buttons stay clear of it on narrow screens.
+                <ListItem key={s.id} disableGutters sx={{ gap: 1, alignItems: 'flex-start', flexWrap: 'wrap' }}>
                   {s.proof?.link_check && (
-                    <Chip size="small" sx={{ mr: 1 }} variant="outlined"
+                    <Chip size="small" sx={{ flexShrink: 0, mt: 0.25 }} variant="outlined"
                       color={s.proof.link_check === 'valid' ? 'success' : s.proof.link_check === 'invalid' ? 'error' : 'default'}
                       label={`link ${s.proof.link_check}`} />
                   )}
                   <ListItemText
+                    sx={{ my: 0, minWidth: 0, flex: '1 1 160px' }}
                     primary={s.username || s.user_id}
                     secondary={[s.proof?.value, s.proof?.fields && Object.entries(s.proof.fields).map(([k, v]) => `${k}: ${v}`).join(' · ')].filter(Boolean).join(' — ') || '(no proof text)'}
-                    secondaryTypographyProps={{ noWrap: true }} />
+                    secondaryTypographyProps={{ sx: { wordBreak: 'break-word' } }} />
+                  <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0, ml: 'auto' }}>
+                    <Button size="small" variant="outlined" onClick={() => review(s.id, 'verify')}>Verify</Button>
+                    <Button size="small" variant="outlined" color="error" onClick={() => review(s.id, 'reject')}>Reject</Button>
+                  </Stack>
                 </ListItem>
               ))}
             </List>
