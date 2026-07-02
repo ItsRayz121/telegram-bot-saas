@@ -622,7 +622,7 @@ export default function Landing() {
               {/* Chart + activity row */}
               <Grid container spacing={1.5}>
                 <Grid item xs={12} sm={8}>
-                  <Box sx={{ bgcolor: '#1e293b', borderRadius: 2, p: 2, border: '1px solid rgba(255,255,255,0.06)', height: 120 }}>
+                  <Box sx={{ bgcolor: '#1e293b', borderRadius: 2, p: 2, border: '1px solid rgba(255,255,255,0.06)', height: '100%', minHeight: 120 }}>
                     <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={1.5}>Member Growth</Typography>
                     {/* Simulated bar chart */}
                     <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: '4px', height: 72 }}>
@@ -633,7 +633,7 @@ export default function Landing() {
                   </Box>
                 </Grid>
                 <Grid item xs={12} sm={4}>
-                  <Box sx={{ bgcolor: '#1e293b', borderRadius: 2, p: 2, border: '1px solid rgba(255,255,255,0.06)', height: 120 }}>
+                  <Box sx={{ bgcolor: '#1e293b', borderRadius: 2, p: 2, border: '1px solid rgba(255,255,255,0.06)', height: '100%', minHeight: 120 }}>
                     <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={1}>Recent Actions</Typography>
                     {[
                       { text: 'Spam removed', color: 'error.main' },
@@ -1185,7 +1185,6 @@ export default function Landing() {
             <Grid item xs={12} sm sx={{ textAlign: { xs: 'left', sm: 'center' } }}>
               <Stack direction="row" spacing={1} flexWrap="wrap" justifyContent={{ xs: 'flex-start', sm: 'center' }}>
                 <Button size="small" onClick={() => navigate('/pricing')} sx={{ color: 'text.secondary' }}>Pricing</Button>
-                <Button size="small" onClick={() => navigate('/directory')} sx={{ color: 'text.secondary' }}>Directory</Button>
                 <Button size="small" onClick={() => navigate('/about')} sx={{ color: 'text.secondary' }}>About</Button>
                 <Button size="small" onClick={() => navigate('/contact')} sx={{ color: 'text.secondary' }}>Contact</Button>
                 <Button size="small" onClick={() => navigate('/login')} sx={{ color: 'text.secondary' }}>Sign In</Button>
@@ -1193,7 +1192,6 @@ export default function Landing() {
                 <Button size="small" onClick={() => navigate('/terms')} sx={{ color: 'text.secondary' }}>Terms</Button>
                 <Button size="small" onClick={() => navigate('/privacy')} sx={{ color: 'text.secondary' }}>Privacy</Button>
                 <Button size="small" onClick={() => navigate('/acceptable-use')} sx={{ color: 'text.secondary' }}>Acceptable Use</Button>
-                <Button size="small" onClick={() => navigate('/status')} sx={{ color: 'text.secondary' }}>Status</Button>
               </Stack>
             </Grid>
             <Grid item xs={12} sm="auto" sx={{ textAlign: { xs: 'left', sm: 'right' } }}>

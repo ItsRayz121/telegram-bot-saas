@@ -299,7 +299,7 @@ export default function EchoLanding() {
             </Grid>
             <Grid container spacing={1.5}>
               <Grid item xs={12} sm={8}>
-                <Box sx={{ bgcolor: '#241a3d', borderRadius: 2, p: 2, border: '1px solid rgba(255,255,255,0.06)', height: 120 }}>
+                <Box sx={{ bgcolor: '#241a3d', borderRadius: 2, p: 2, border: '1px solid rgba(255,255,255,0.06)', height: '100%', minHeight: 120 }}>
                   <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={1.5}>Tasks Completed</Typography>
                   <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: '4px', height: 72 }}>
                     {[40, 55, 48, 70, 62, 85, 78, 95, 88, 100, 92, 110].map((h, i) => (
@@ -309,7 +309,7 @@ export default function EchoLanding() {
                 </Box>
               </Grid>
               <Grid item xs={12} sm={4}>
-                <Box sx={{ bgcolor: '#241a3d', borderRadius: 2, p: 2, border: '1px solid rgba(255,255,255,0.06)', height: 120 }}>
+                <Box sx={{ bgcolor: '#241a3d', borderRadius: 2, p: 2, border: '1px solid rgba(255,255,255,0.06)', height: '100%', minHeight: 120 }}>
                   <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={1}>Recent Activity</Typography>
                   {[
                     { text: 'Reminder fired', color: 'warning.main' },

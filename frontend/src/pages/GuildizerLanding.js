@@ -316,7 +316,7 @@ export default function GuildizerLanding() {
             </Grid>
             <Grid container spacing={1.5}>
               <Grid item xs={12} sm={8}>
-                <Box sx={{ bgcolor: '#1e2140', borderRadius: 2, p: 2, border: '1px solid rgba(255,255,255,0.06)', height: 120 }}>
+                <Box sx={{ bgcolor: '#1e2140', borderRadius: 2, p: 2, border: '1px solid rgba(255,255,255,0.06)', height: '100%', minHeight: 120 }}>
                   <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={1.5}>Member Growth</Typography>
                   <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: '4px', height: 72 }}>
                     {[40, 55, 48, 70, 62, 85, 78, 95, 88, 100, 92, 110].map((h, i) => (
@@ -326,7 +326,7 @@ export default function GuildizerLanding() {
                 </Box>
               </Grid>
               <Grid item xs={12} sm={4}>
-                <Box sx={{ bgcolor: '#1e2140', borderRadius: 2, p: 2, border: '1px solid rgba(255,255,255,0.06)', height: 120 }}>
+                <Box sx={{ bgcolor: '#1e2140', borderRadius: 2, p: 2, border: '1px solid rgba(255,255,255,0.06)', height: '100%', minHeight: 120 }}>
                   <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={1}>Recent Actions</Typography>
                   {[
                     { text: 'Raid blocked', color: 'error.main' },
