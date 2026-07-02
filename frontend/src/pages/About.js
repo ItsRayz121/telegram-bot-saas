@@ -71,11 +71,12 @@ const FEATURES = [
 ];
 
 const TIMELINE = [
-  { year: '2024', label: 'Founded', desc: 'Started as a simple bot manager for a small Telegram community.' },
-  { year: 'Q1 2025', label: 'First 100 Groups', desc: 'AutoMod, scheduled messages, and basic analytics launched.' },
-  { year: 'Q2 2025', label: 'AI Features', desc: 'AI Daily Digest, Auto-Reply, and Echo (AI Assistant) went live.' },
-  { year: 'Q4 2025', label: 'Mini App', desc: 'Telegram Mini App launched — manage your community without leaving Telegram.' },
-  { year: '2026', label: 'Full Platform', desc: 'Workspace, CRM, Channels, Marketplace, and Custom Bot Builder shipped.' },
+  { year: 'Jan 2026', label: 'Founded', desc: 'Started as a simple bot manager for a small Telegram community.' },
+  { year: 'Feb 2026', label: 'First Groups', desc: 'AutoMod, scheduled messages, and basic analytics launched.' },
+  { year: 'Mar 2026', label: 'AI Features', desc: 'AI Daily Digest, Auto-Reply, and Echo (AI Assistant) went live.' },
+  { year: 'Apr 2026', label: 'Telegram Mini App', desc: 'Manage your community without ever leaving Telegram.' },
+  { year: 'Jun 2026', label: 'Guildizer & Campaigns', desc: 'Discord support via Guildizer, plus engagement campaigns and raids.' },
+  { year: 'Today', label: 'Full Platform', desc: 'Workspace, Member CRM, Channels, and the Custom Bot Builder.' },
 ];
 
 const VALUES = [
@@ -169,15 +170,15 @@ export default function About() {
             12+ features that work together — not a dozen separate bots you have to juggle.
           </Typography>
         </Box>
-        <Grid container spacing={1.5} mb={10} justifyContent="center">
+        <Grid container spacing={1.5} mb={10}>
           {FEATURES.map((f) => (
-            <Grid item key={f.label}>
+            <Grid item xs={6} sm={4} md={3} key={f.label}>
               <Box sx={{
                 display: 'flex', alignItems: 'center', gap: 1,
-                px: 2, py: 1, bgcolor: 'background.paper',
+                px: 2, py: 1.25, height: '100%', bgcolor: 'background.paper',
                 border: '1px solid', borderColor: 'divider', borderRadius: 2,
               }}>
-                <Box sx={{ color: 'primary.main' }}>{f.icon}</Box>
+                <Box sx={{ color: 'primary.main', display: 'flex', flexShrink: 0 }}>{f.icon}</Box>
                 <Typography variant="body2" fontWeight={500}>{f.label}</Typography>
               </Box>
             </Grid>
@@ -261,7 +262,7 @@ export default function About() {
               <Typography variant="h6" fontWeight={700} mb={0.5}>Fazal Elahi</Typography>
               <Typography variant="body2" color="text.secondary" mb={0.5}>Founder & Developer</Typography>
               <Typography variant="caption" color="text.disabled" display="block" mb={2.5}>
-                Building Telegizer since 2024
+                Building Telegizer since 2026
               </Typography>
               <Typography variant="body2" color="text.secondary" lineHeight={1.8} mb={3} textAlign="left">
                 I started Telegizer because I was managing multiple Telegram communities and spending
