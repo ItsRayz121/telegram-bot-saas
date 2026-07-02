@@ -4,7 +4,7 @@ import {
   IconButton, Badge, Menu, Box, Typography, Button, MenuItem, Divider, Tooltip,
 } from '@mui/material';
 import {
-  Notifications, NotificationsNone, VolumeUp, VolumeOff,
+  Notifications, NotificationsNone, VolumeUp, VolumeOff, ChatBubbleOutline,
 } from '@mui/icons-material';
 import { notifications as notificationsApi } from '../services/api';
 import { playBellSound } from '../utils/push';
@@ -148,9 +148,20 @@ export default function NotificationBell({
           </MenuItem>
         ))}
         <Divider />
-        <Box sx={{ p: 1 }}>
+        <Box sx={{ p: 1, display: 'flex', gap: 1 }}>
+          {/* Live chat lives in the Telegizer app (ChatWidget). Offer it alongside
+              notifications; skip in Guildizer where no chat widget is mounted. */}
+          {typeof window !== 'undefined' && !window.location.pathname.startsWith('/guildizer') && (
+            <Button
+              size="small" variant="outlined" startIcon={<ChatBubbleOutline fontSize="small" />}
+              onClick={() => { setAnchor(null); window.dispatchEvent(new Event('open-support-chat')); }}
+              sx={{ flexShrink: 0 }}
+            >
+              Live Chat
+            </Button>
+          )}
           <Button fullWidth size="small" onClick={() => { setAnchor(null); navigate(viewAllPath); }}>
-            View all notifications
+            View all
           </Button>
         </Box>
       </Menu>

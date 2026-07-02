@@ -330,8 +330,10 @@ export default function ChatWidget() {
         </Paper>
       </Zoom>
 
-      {/* Launcher bubble — hidden while the full-screen mobile panel is open */}
-      {!(isMobile && open) && (
+      {/* Launcher bubble — desktop only. On mobile it covered content, so the
+          entry points are the sidebar Support dropdown and the notification bell
+          (both dispatch 'open-support-chat'); the panel opens full-screen. */}
+      {!isMobile && !open && (
         <Tooltip title="Live Support" placement="left" arrow>
           <Badge
             color="error" variant="dot" overlap="circular" invisible={!hasUnread}

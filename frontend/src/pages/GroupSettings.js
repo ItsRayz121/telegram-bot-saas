@@ -14,6 +14,7 @@ import {
   Send, Assessment, People, SmartToy, Refresh,
   Warning as WarningIcon, EmojiEvents, FileDownload,
   Search, Block, Gavel, VolumeOff, VolumeUp, LockOpen, PersonRemove,
+  Campaign,
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -2284,64 +2285,72 @@ function GroupSettingsInner() {
                 <Typography variant="body2" color="text.secondary" mb={2} mt={1}>
                   Instead of a single action, apply progressive punishments as warning count increases.
                 </Typography>
-                {(mod.escalation_steps || []).map((step, idx) => (
-                  <Box key={idx} sx={{ display: 'flex', gap: 1, mb: 1, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <TextField size="small" type="number" label="At warning #" sx={{ width: 110 }}
-                      value={step.at_warning}
-                      onChange={(e) => {
-                        const steps = [...(mod.escalation_steps || [])];
-                        steps[idx] = { ...steps[idx], at_warning: parseInt(e.target.value) };
-                        updateSetting('moderation.escalation_steps', steps);
-                      }} />
-                    <FormControl size="small" sx={{ width: 110 }}>
-                      <InputLabel>Action</InputLabel>
-                      <Select value={step.action || 'mute'} label="Action"
-                        onChange={(e) => {
-                          const steps = [...(mod.escalation_steps || [])];
-                          steps[idx] = { ...steps[idx], action: e.target.value };
-                          updateSetting('moderation.escalation_steps', steps);
-                        }}>
-                        <MenuItem value="mute">Mute</MenuItem>
-                        <MenuItem value="tempban">Temp Ban</MenuItem>
-                        <MenuItem value="ban">Ban</MenuItem>
-                      </Select>
-                    </FormControl>
-                    {step.action === 'mute' && (
-                      <TextField size="small" type="number" label="Minutes" sx={{ width: 90 }}
-                        value={step.duration_minutes || 60}
-                        onChange={(e) => {
-                          const steps = [...(mod.escalation_steps || [])];
-                          steps[idx] = { ...steps[idx], duration_minutes: parseInt(e.target.value) };
-                          updateSetting('moderation.escalation_steps', steps);
-                        }} />
-                    )}
-                    {step.action === 'tempban' && (
-                      <TextField size="small" type="number" label="Hours" sx={{ width: 90 }}
-                        value={step.duration_hours || 24}
-                        onChange={(e) => {
-                          const steps = [...(mod.escalation_steps || [])];
-                          steps[idx] = { ...steps[idx], duration_hours: parseInt(e.target.value) };
-                          updateSetting('moderation.escalation_steps', steps);
-                        }} />
-                    )}
-                    <Tooltip title="Only count warnings from the last N hours toward this step. Leave blank to count all of the user's warnings.">
-                      <TextField size="small" type="number" label="Count within (hrs)" placeholder="All time" sx={{ width: 150 }}
-                        value={step.time_window_hours ?? ''}
-                        onChange={(e) => {
-                          const steps = [...(mod.escalation_steps || [])];
-                          const val = e.target.value === '' ? null : parseInt(e.target.value);
-                          steps[idx] = { ...steps[idx], time_window_hours: val };
-                          updateSetting('moderation.escalation_steps', steps);
-                        }} />
-                    </Tooltip>
+                {(mod.escalation_steps || []).map((step, idx) => {
+                  // Equal-width fields in a wrapping grid (2-up on mobile), with the
+                  // delete control pinned to the step card's top-right — never
+                  // stranded between fields.
+                  const cell = { flex: '1 1 120px', minWidth: 0 };
+                  return (
+                  <Box key={idx} sx={{ position: 'relative', border: '1px solid', borderColor: 'divider', borderRadius: 1.5, p: 1.25, pt: 1.5, pr: 5, mb: 1 }}>
                     <IconButton size="small" color="error" onClick={() => {
                       const steps = (mod.escalation_steps || []).filter((_, i) => i !== idx);
                       updateSetting('moderation.escalation_steps', steps);
-                    }}>
+                    }} sx={{ position: 'absolute', top: 4, right: 4 }}>
                       <Delete fontSize="small" />
                     </IconButton>
+                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                      <TextField size="small" type="number" label="At warning #" sx={cell}
+                        value={step.at_warning}
+                        onChange={(e) => {
+                          const steps = [...(mod.escalation_steps || [])];
+                          steps[idx] = { ...steps[idx], at_warning: parseInt(e.target.value) };
+                          updateSetting('moderation.escalation_steps', steps);
+                        }} />
+                      <FormControl size="small" sx={cell}>
+                        <InputLabel>Action</InputLabel>
+                        <Select value={step.action || 'mute'} label="Action"
+                          onChange={(e) => {
+                            const steps = [...(mod.escalation_steps || [])];
+                            steps[idx] = { ...steps[idx], action: e.target.value };
+                            updateSetting('moderation.escalation_steps', steps);
+                          }}>
+                          <MenuItem value="mute">Mute</MenuItem>
+                          <MenuItem value="tempban">Temp Ban</MenuItem>
+                          <MenuItem value="ban">Ban</MenuItem>
+                        </Select>
+                      </FormControl>
+                      {step.action === 'mute' && (
+                        <TextField size="small" type="number" label="Minutes" sx={cell}
+                          value={step.duration_minutes || 60}
+                          onChange={(e) => {
+                            const steps = [...(mod.escalation_steps || [])];
+                            steps[idx] = { ...steps[idx], duration_minutes: parseInt(e.target.value) };
+                            updateSetting('moderation.escalation_steps', steps);
+                          }} />
+                      )}
+                      {step.action === 'tempban' && (
+                        <TextField size="small" type="number" label="Hours" sx={cell}
+                          value={step.duration_hours || 24}
+                          onChange={(e) => {
+                            const steps = [...(mod.escalation_steps || [])];
+                            steps[idx] = { ...steps[idx], duration_hours: parseInt(e.target.value) };
+                            updateSetting('moderation.escalation_steps', steps);
+                          }} />
+                      )}
+                      <Tooltip title="Only count warnings from the last N hours toward this step. Leave blank to count all of the user's warnings.">
+                        <TextField size="small" type="number" label="Count within (hrs)" placeholder="All time" sx={cell}
+                          value={step.time_window_hours ?? ''}
+                          onChange={(e) => {
+                            const steps = [...(mod.escalation_steps || [])];
+                            const val = e.target.value === '' ? null : parseInt(e.target.value);
+                            steps[idx] = { ...steps[idx], time_window_hours: val };
+                            updateSetting('moderation.escalation_steps', steps);
+                          }} />
+                      </Tooltip>
+                    </Box>
                   </Box>
-                ))}
+                  );
+                })}
                 <Button size="small" startIcon={<Add />} onClick={() => {
                   const steps = [...(mod.escalation_steps || [])];
                   steps.push({ at_warning: (steps[steps.length - 1]?.at_warning || 1) + 1, action: 'mute', duration_minutes: 60 });
@@ -3254,24 +3263,23 @@ function GroupSettingsInner() {
             COMMUNITY
         ══════════════════════════════════════════════════════════ */}
 
-        {/* COMMUNITY › Raids */}
+        {/* COMMUNITY › Raids — the standalone "Create Raid" button was removed;
+            raids are now created as a campaign (Campaigns → Twitter Raid) so there
+            is a single, richer creation flow. This tab just points there. */}
         {cat === 'community' && subTab === 0 && (
           <Card>
             <CardContent>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                <Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <Typography variant="h6" fontWeight={600}>Raid Manager</Typography>
-                    <ProBadge />
-                  </Box>
-                  <Typography variant="body2" color="text.secondary">
-                    Coordinate Twitter/X raids with your community. Members earn XP for participating.
-                  </Typography>
-                </Box>
-                <Button variant="contained" startIcon={<Add />} onClick={() => setRaidOpen(true)}>
-                  Create Raid
-                </Button>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                <Typography variant="h6" fontWeight={600}>Raid Manager</Typography>
+                <ProBadge />
               </Box>
+              <Typography variant="body2" color="text.secondary" mb={2}>
+                Coordinate Twitter/X raids with your community. Members earn XP for participating.
+                Raids are now created as a campaign — pick <strong>Twitter Raid</strong> when creating one.
+              </Typography>
+              <Button variant="contained" startIcon={<Campaign />} onClick={() => { setCat('community'); setSubTab(2); }}>
+                Go to Campaigns
+              </Button>
             </CardContent>
           </Card>
         )}

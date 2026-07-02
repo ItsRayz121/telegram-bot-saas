@@ -489,7 +489,7 @@ export default function CampaignManager({ botId, groupId, userTier = 'free' }) {
         <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', overflowX: 'auto' }}>
           {/* Tight padding + compact cells so all 9 columns fit on a desktop
               viewport without a horizontal scroll (falls back to scroll on mobile). */}
-          <Table size="small" sx={{ '& td, & th': { px: { xs: 1, md: 1.25 } }, tableLayout: { md: 'fixed' } }}>
+          <Table size="small" sx={{ minWidth: { xs: 680, md: 0 }, '& td, & th': { px: { xs: 1, md: 1.25 } }, tableLayout: { md: 'fixed' } }}>
             <TableHead>
               <TableRow sx={{ '& th': { fontWeight: 700, whiteSpace: 'nowrap' } }}>
                 <TableCell sx={{ width: { md: '19%' } }}>Title</TableCell>
@@ -1416,7 +1416,8 @@ function CampaignManageDialog({ botId, groupId, campaignId, onClose, onChanged }
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
         ) : (
           <>
-            <Stack direction="row" spacing={2} sx={{ mb: 2, flexWrap: 'wrap' }}>
+            <Stack direction="row" useFlexGap flexWrap="wrap" sx={{ mb: 2, gap: 1, rowGap: 0.75,
+              '& > p': { bgcolor: 'action.hover', px: 1, py: 0.4, borderRadius: 1, whiteSpace: 'nowrap' } }}>
               <Typography variant="body2"><strong>Type:</strong> {campaign.type}</Typography>
               {campaign.platform && <Typography variant="body2"><strong>Platform:</strong> {campaign.platform}</Typography>}
               {/* Raids verify per-action (live X auto-verify or review), so the

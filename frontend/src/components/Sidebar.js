@@ -13,13 +13,17 @@ import {
   Psychology, ChevronLeft, ChevronRight,
   EmojiEvents, CheckCircle, RadioButtonUnchecked,
   CheckBox, LibraryBooks, ManageAccounts, VideoCall,
-  NewReleases, Forum,
+  NewReleases, Forum, SupportAgent, ChatBubbleOutline, Campaign, People, Email,
 } from '@mui/icons-material';
 import TelegizerLogo from './TelegizerLogo';
 import { auth as authApi } from '../services/api';
 import { APP_VERSION, BUILD_TIME } from '../version';
 import { PALETTE } from '../theme';
 import useAssistantName from '../hooks/useAssistantName';
+import { SUPPORT_LINKS, openSupportEmail } from '../config/support';
+
+// Opens the in-app live-chat panel from anywhere (ChatWidget listens for this).
+const openLiveChat = () => window.dispatchEvent(new Event('open-support-chat'));
 
 const SIDEBAR_WIDTH = 240;
 const SIDEBAR_COLLAPSED_WIDTH = 56;
@@ -306,6 +310,7 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
 
   const [user, setUser] = useState(null);
   const [anchorEl, setAnchorEl] = useState(null);
+  const [supportAnchor, setSupportAnchor] = useState(null);
   const [whatsNewOpen, setWhatsNewOpen] = useState(false);
   const hasNewChangelog = localStorage.getItem(CHANGELOG_KEY) !== CHANGELOG_VERSION;
 
@@ -528,7 +533,36 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
 
         <NavItem label="Settings" path="/settings" icon={Settings} active={isActive('/settings')} onClick={() => nav('/settings')} tourId="tour-settings" />
 
+        {/* SUPPORT — dropdown: live chat, channel, community, email. Replaces the
+            floating chat bubble as the primary entry point (esp. on mobile). */}
+        <NavItem label="Support" icon={SupportAgent} active={Boolean(supportAnchor)} onClick={(e) => setSupportAnchor(e.currentTarget)} />
+
       </List>
+
+      {/* ── Support menu ── */}
+      <Menu
+        anchorEl={supportAnchor}
+        open={Boolean(supportAnchor)}
+        onClose={() => setSupportAnchor(null)}
+        PaperProps={{ sx: { minWidth: 210 } }}
+      >
+        <MenuItem dense onClick={() => { setSupportAnchor(null); openLiveChat(); }}>
+          <ListItemIcon><ChatBubbleOutline fontSize="small" sx={{ color: PALETTE.blue }} /></ListItemIcon>
+          Live Chat
+        </MenuItem>
+        <MenuItem dense component="a" href={SUPPORT_LINKS.channel} target="_blank" rel="noopener noreferrer" onClick={() => setSupportAnchor(null)}>
+          <ListItemIcon><Campaign fontSize="small" /></ListItemIcon>
+          Official Channel
+        </MenuItem>
+        <MenuItem dense component="a" href={SUPPORT_LINKS.community} target="_blank" rel="noopener noreferrer" onClick={() => setSupportAnchor(null)}>
+          <ListItemIcon><People fontSize="small" /></ListItemIcon>
+          Community Group
+        </MenuItem>
+        <MenuItem dense onClick={() => { setSupportAnchor(null); openSupportEmail(); }}>
+          <ListItemIcon><Email fontSize="small" /></ListItemIcon>
+          Email Support
+        </MenuItem>
+      </Menu>
 
       {/* ── Plan upgrade banner ── */}
       {plan === 'free' && (
