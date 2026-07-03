@@ -230,6 +230,7 @@ class Config:
                 "XP & levels",
                 "Scheduled messages & polls",
                 "Custom commands",
+                "AI features with your own API key",
             ],
         },
         "pro": {
@@ -245,8 +246,7 @@ class Config:
                 "AI Auto-Reply (knowledge base Q&A)",
                 "AI Group Digests (daily/weekly)",
                 "Echo — AI Assistant (notes, tasks, queries)",
-                "500k AI credits / day",
-                "Bring your own AI API key",
+                "500k AI credits / day included",
                 "Advanced analytics (90 days)",
                 "Message forwarding & automations",
                 "Webhook integrations",

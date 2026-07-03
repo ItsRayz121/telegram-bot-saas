@@ -85,7 +85,7 @@ const FAQ = [
   },
   {
     q: 'Is there a free plan?',
-    a: 'Yes. The Free plan lets you manage unlimited groups on the shared @telegizer_bot with all core features — moderation, custom commands, XP, and scheduled messages. Your own custom bot and AI features are on Pro. No credit card required.',
+    a: 'Yes. The Free plan lets you manage unlimited groups on the shared @telegizer_bot with all core features — moderation, custom commands, XP, and scheduled messages. AI features work on Free too if you bring your own API key. Custom bots and included AI credits are on Pro. No credit card required.',
   },
   {
     q: 'How do I request a refund?',
