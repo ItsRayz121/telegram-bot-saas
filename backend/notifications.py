@@ -4,6 +4,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from flask import current_app
 from . import secret_vault as _sv
+from .config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -374,7 +375,7 @@ def send_payment_failed(to_email, full_name):
     content = f"""
     <p>Hi <strong>{full_name}</strong>,</p>
     <p>We were unable to process your payment. Please retry or contact
-    <a href="mailto:support@telegizer.com" style="color:#667eea;">support@telegizer.com</a>
+    <a href="mailto:{Config.SUPPORT_EMAIL}" style="color:#667eea;">{Config.SUPPORT_EMAIL}</a>
     if you believe this is an error.</p>
     <a href="{pricing_url}" class="btn">Retry Payment</a>
     """
@@ -383,7 +384,7 @@ def send_payment_failed(to_email, full_name):
         "Telegizer Payment Failed — Action Required",
         _base_template(content, "Payment Failed"),
         text_body=f"Hi {full_name}, we couldn't process your payment. "
-                  f"Please retry at {pricing_url} or contact support@telegizer.com",
+                  f"Please retry at {pricing_url} or contact {Config.SUPPORT_EMAIL}",
     )
 
 

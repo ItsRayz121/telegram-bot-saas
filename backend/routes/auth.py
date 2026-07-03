@@ -1242,7 +1242,7 @@ def delete_account():
         db.session.rollback()
         logger.error("Account deletion failed for user %s: %s", user.id, exc, exc_info=True)
         return jsonify({
-            "error": "Account deletion failed. Please contact support@telegizer.com and we will delete your account manually.",
+            "error": f"Account deletion failed. Please contact {Config.SUPPORT_EMAIL} and we will delete your account manually.",
             "code": "DELETE_FAILED",
         }), 500
     return jsonify({"message": "Account deleted successfully"}), 200

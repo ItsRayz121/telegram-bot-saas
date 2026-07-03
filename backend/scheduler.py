@@ -1638,12 +1638,13 @@ def generate_gdpr_export(user_id: int):
 
             export_json = json.dumps(export, indent=2, default=str)
 
+            from .config import Config
             subject = "Your Telegizer Data Export"
             html_body = f"""
 <h2>Your data export is ready</h2>
 <p>Hi {user.full_name or user.email},</p>
 <p>As requested, here is your Telegizer account data. The JSON file is attached to this email.</p>
-<p>If you have questions about your data, contact us at support@telegizer.com.</p>
+<p>If you have questions about your data, contact us at {Config.SUPPORT_EMAIL}.</p>
 <p style="color:#888;font-size:12px">This export was generated on {_dt.datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}.</p>
 """
             # Send with attachment

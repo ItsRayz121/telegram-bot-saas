@@ -21,9 +21,14 @@ URL_PATTERN = re.compile(
 # URL_PATTERN only sees http(s):// or www., so spammers drop the scheme to slip
 # past link blocking. Match a hostname ending in a common/abused TLD too, kept to
 # an allow-list so it doesn't fire on ordinary "filename.txt" / "3.5" / "node.js"
-# style text. t.me/@handles remain the telegram_links check's job.
+# style text. The lookbehind keeps it from firing on the domain half of an email
+# address (that's the email_detection check's job); the t.me lookahead leaves
+# Telegram links/@handles to the telegram_links check (which already matches
+# scheme-less t.me) — but "t.me.evil.com"-style subdomain tricks still match.
 DOMAIN_PATTERN = re.compile(
-    r"\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+"
+    r"(?<![\w@.-])"
+    r"(?!(?:t|telegram)\.me(?![\w.-]))"
+    r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+"
     r"(?:com|net|org|io|me|xyz|co|app|link|live|online|site|shop|store|"
     r"info|biz|tech|club|vip|gg|to|cc|tv|ru|cn|ly|pro|dev|ai|finance|"
     r"fund|cash|money|top|win|bet|casino|trade|pw|su|tk|ml|ga|cf)\b"

@@ -219,6 +219,14 @@ def get_workspace_ai_key(user) -> dict:
     tier = user.subscription_tier
     daily_limit = ai_config.daily_token_limit(tier)
 
+    # Tiers with no platform AI allowance (free) get a clear upsell message
+    # instead of a confusing "limit (0) reached" quota error.
+    if daily_limit <= 0:
+        raise QuotaExceededError(
+            "Platform AI isn't included in the Free plan. "
+            "Upgrade to Pro, or add your own API key in AI Settings."
+        )
+
     # 1. Platform cost circuit breaker — hard stop if daily budget exceeded
     _check_platform_cost_circuit()
 

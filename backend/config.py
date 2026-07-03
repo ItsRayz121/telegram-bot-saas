@@ -143,6 +143,10 @@ class Config:
     # When not set, the assistant hub falls back to TELEGRAM_BOT_USERNAME for display.
     ECHO_BOT_TOKEN = os.environ.get("ECHO_BOT_TOKEN", "")
     ECHO_BOT_USERNAME = os.environ.get("ECHO_BOT_USERNAME", "")
+
+    # The ONE real support inbox, shown in user-facing emails/errors. Mirrors
+    # frontend/src/config/support.js — change both together (or set the env var).
+    SUPPORT_EMAIL = os.environ.get("SUPPORT_EMAIL", "fazalelahi5577@gmail.com")
     _admin_env = os.environ.get("ADMIN_EMAILS", "")
     ADMIN_EMAILS = [e.strip().lower() for e in _admin_env.split(",") if e.strip()]
 

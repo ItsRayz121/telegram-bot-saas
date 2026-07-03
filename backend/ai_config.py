@@ -31,7 +31,9 @@ AI_DEFAULTS = {
     # Spend / token limits
     "ai_daily_spend_cap_usd": float(getattr(Config, "MAX_DAILY_AI_SPEND_USD", 50) or 50),
     "ai_max_tokens_per_request": 2048,
-    "ai_tokens_free": 10000,
+    # Free = 0: platform AI (auto-reply, digests, Echo) is Pro/Enterprise only
+    # (matches Config.AI_TOKEN_LIMITS and the pricing page).
+    "ai_tokens_free": 0,
     "ai_tokens_pro": 200000,
     "ai_tokens_enterprise": 500000,
     # Cost model (USD per 1M tokens) — drives the AI usage ledger cost computation.

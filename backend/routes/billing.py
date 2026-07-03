@@ -347,7 +347,7 @@ def crypto_checkout():
         logger.warning("[BILLING] Blocked checkout for suspicious user %d", user.id)
         return jsonify({
             "error": "Your account has been flagged for review. "
-                     "Please contact support@telegizer.com to resolve this before upgrading.",
+                     f"Please contact {Config.SUPPORT_EMAIL} to resolve this before upgrading.",
             "code": "ACCOUNT_FLAGGED",
         }), 403
 

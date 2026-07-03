@@ -126,9 +126,15 @@ _URL_RE = re.compile(r"https?://[^\s<>()]+", re.I)
 _URL_DOMAIN_RE = re.compile(r"https?://([^/\s:]+)", re.I)
 # Bare domains typed WITHOUT a scheme ("scamsite.xyz", "earn-now.top/join") that
 # _URL_RE misses. Kept to a common/abused TLD allow-list so it doesn't fire on
-# ordinary "file.txt" / "node.js" / "3.5" text.
+# ordinary "file.txt" / "node.js" / "3.5" text. The lookbehind keeps it from
+# firing on the domain half of an email address (email_detection's job); the
+# invite-host lookahead leaves bare discord.gg/… links to the invite filter
+# (_DISCORD_INVITE_RE already matches them scheme-less) — but
+# "discord.gg.evil.com"-style subdomain tricks still match.
 _BARE_DOMAIN_RE = re.compile(
-    r"\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+"
+    r"(?<![\w@.-])"
+    r"(?!(?:discord\.(?:gg|com|me)|discordapp\.com|dsc\.gg|invite\.gg)(?![\w.-]))"
+    r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+"
     r"(?:com|net|org|io|me|xyz|co|app|link|live|online|site|shop|store|"
     r"info|biz|tech|club|vip|gg|to|cc|tv|ru|cn|ly|pro|dev|ai|finance|"
     r"fund|cash|money|top|win|bet|casino|trade|pw|su|tk|ml|ga|cf)\b"

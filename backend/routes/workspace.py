@@ -274,7 +274,8 @@ def _token_limit(user: User) -> int:
         return 500000
     if tier == "pro":
         return 200000
-    return 10000
+    # Free = 0: platform AI is Pro/Enterprise only (matches pricing + ai_config).
+    return 0
 
 
 def _maybe_reset_tokens(user: User) -> None:
@@ -428,10 +429,10 @@ def get_ai_settings():
         },
         "free": {
             "label": "Free",
-            "platform_ai_included": bool(Config.PLATFORM_OPENROUTER_API_KEY),
-            "description": "Limited platform AI access",
-            "models": ["GPT-4o Mini"],
-            "token_limit": 10000,
+            "platform_ai_included": False,
+            "description": "Platform AI is available on Pro & Enterprise plans",
+            "models": [],
+            "token_limit": 0,
             "priority": None,
         },
     }

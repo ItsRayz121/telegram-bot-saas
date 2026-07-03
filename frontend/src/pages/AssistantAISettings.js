@@ -37,7 +37,7 @@ function StatusDot({ active }) {
 
 function PlatformAIPanel({ settings, userTier }) {
   const plan = settings?.plan || {};
-  const usage = settings?.token_usage || { used: 0, limit: 10000 };
+  const usage = settings?.token_usage || { used: 0, limit: 0 };
   const usagePct = Math.min(100, (usage.used / (usage.limit || 1)) * 100);
   const atLimit = usagePct >= 100;
   const platformActive = settings?.platform_key_active;
