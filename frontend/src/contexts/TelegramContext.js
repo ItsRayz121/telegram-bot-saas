@@ -67,7 +67,7 @@ export function TelegramProvider({ children }) {
   const [appUser, setAppUser] = useState(null);
   const [groups, setGroups] = useState([]);
   const [tgTheme, setTgTheme] = useState(null);
-  const [status, setStatus] = useState('loading'); // loading | ok | error | no_webapp | no_init_data
+  const [status, setStatus] = useState('loading'); // loading | ok | error | network_error | no_webapp | no_init_data
   const [authError, setAuthError] = useState(null);
   const [emailLinked, setEmailLinked] = useState(false);
   const [referralLink, setReferralLink] = useState(null);
@@ -96,9 +96,16 @@ export function TelegramProvider({ children }) {
         })
         .catch(err => {
           if (cancelled) return;
-          const msg = err.response?.data?.error || null;
-          setAuthError(msg);
-          setStatus('error');
+          // Distinguish a server rejection (has an HTTP response + JSON error) from a
+          // pure network failure (no response — DNS/VPN/offline). The latter never
+          // reached the server, so "authentication failed" is the wrong story to tell.
+          if (err.response) {
+            setAuthError(err.response.data?.error || null);
+            setStatus('error');
+          } else {
+            setAuthError('Could not reach the server — check your connection or VPN, then retry.');
+            setStatus('network_error');
+          }
         });
     };
 

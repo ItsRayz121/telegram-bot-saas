@@ -121,9 +121,10 @@ export default function MiniApp() {
       navigate(resolveStartDestination(), { replace: true });
     }
     // initData missing OR rejected (e.g. the persistent Menu Button replayed a
-    // stale-auth_date session) — if a prior valid session exists, use it so the
-    // user still lands in the app instead of a failure screen.
-    if ((status === 'no_init_data' || status === 'error') && hasStoredSession) {
+    // stale-auth_date session), OR the auth request never reached the server
+    // (network_error) — if a prior valid session exists, use it so the user
+    // still lands in the app instead of a failure screen.
+    if ((status === 'no_init_data' || status === 'error' || status === 'network_error') && hasStoredSession) {
       navigate(resolveStartDestination(), { replace: true });
     }
   }, [status, navigate, hasStoredSession]);
@@ -133,6 +134,12 @@ export default function MiniApp() {
   if (status === 'error') {
     if (hasStoredSession) return <LoadingScreen />;
     return <DiagnosticScreen title="Authentication failed" message="Telegram session reached the server but was rejected." authError={authError} />;
+  }
+  // The auth request never got an HTTP response — DNS/VPN/offline, not an auth
+  // rejection. Say so plainly so users don't chase a Telegram/account problem.
+  if (status === 'network_error') {
+    if (hasStoredSession) return <LoadingScreen />;
+    return <DiagnosticScreen title="Can't reach Telegizer" message="The app couldn't connect to the server. If you're on a VPN, turn it off and tap Retry." authError={authError} />;
   }
   if (status === 'no_webapp') {
     return <DiagnosticScreen title="Not detected as Telegram" message="window.Telegram.WebApp was never provided by the client." authError={authError} />;
