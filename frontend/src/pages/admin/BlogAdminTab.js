@@ -3,7 +3,7 @@ import {
   Box, Grid, Card, CardContent, Typography, Button, IconButton, TextField,
   MenuItem, Chip, Stack, Divider, Tooltip, CircularProgress, Switch,
   FormControlLabel, LinearProgress, Table, TableBody, TableCell, TableHead,
-  TableRow, InputAdornment,
+  TableRow, InputAdornment, Dialog, DialogContent,
 } from '@mui/material';
 import {
   FormatBold, FormatItalic, FormatUnderlined, FormatListBulleted,
@@ -11,6 +11,7 @@ import {
   OndemandVideo, FormatClear, Add, ArrowBack, Visibility, Delete,
   CheckCircle, Warning, RadioButtonUnchecked, Title as TitleIcon,
   Code, HorizontalRule, Schedule, Search as SearchIcon, Download, MailOutline,
+  Close, OpenInNew,
 } from '@mui/icons-material';
 import { admin } from '../../services/api';
 import { toast } from 'react-toastify';
@@ -255,6 +256,88 @@ function SeoChecklist({ result }) {
   );
 }
 
+// ───────────────────────── Post preview dialog (in-app) ──────────────────────
+// Renders the current editor content — including unsaved drafts — the way it will
+// look once live, so you can review before hitting Publish. Video embeds show the
+// same placeholder as the editor (they only play on the real published page).
+function PostPreviewDialog({ open, onClose, post, bodyHtml, liveUrl }) {
+  const dateLabel = post.published_at
+    ? new Date(post.published_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
+    : 'Not published yet';
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth
+      PaperProps={{ sx: { bgcolor: PALETTE.bg1, backgroundImage: 'none' } }}>
+      <Box sx={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        px: 2, py: 1, borderBottom: `1px solid ${PALETTE.border1}`,
+        position: 'sticky', top: 0, bgcolor: PALETTE.bg1, zIndex: 1,
+      }}>
+        <Stack direction="row" spacing={1} alignItems="center">
+          <Visibility fontSize="small" sx={{ color: 'text.secondary' }} />
+          <Typography variant="subtitle2" fontWeight={700}>Preview</Typography>
+          <Chip size="small" label={post.status}
+            color={post.status === 'published' ? 'success' : post.status === 'scheduled' ? 'warning' : 'default'}
+            variant={post.status === 'draft' ? 'outlined' : 'filled'} />
+        </Stack>
+        <Stack direction="row" spacing={0.5} alignItems="center">
+          {liveUrl && (
+            <Tooltip title="Open the live page">
+              <IconButton size="small" component="a" href={liveUrl} target="_blank" rel="noopener">
+                <OpenInNew fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
+          <IconButton size="small" onClick={onClose}><Close fontSize="small" /></IconButton>
+        </Stack>
+      </Box>
+      <DialogContent sx={{ px: { xs: 2, md: 5 }, py: 3 }}>
+        <Box sx={{ maxWidth: 720, mx: 'auto' }}>
+          {post.category && (
+            <Chip size="small" label={post.category} sx={{ mb: 1.5 }} />
+          )}
+          <Typography variant="h4" fontWeight={800} sx={{ lineHeight: 1.2, mb: 1 }}>
+            {post.title || 'Untitled post'}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            {post.author_name || 'Telegizer Team'} · {dateLabel}
+          </Typography>
+          {post.cover_image_url && (
+            <Box component="img" src={post.cover_image_url} alt=""
+              sx={{ width: '100%', borderRadius: 2, mb: 3, display: 'block' }} />
+          )}
+          {post.excerpt && (
+            <Typography variant="h6" color="text.secondary"
+              sx={{ fontWeight: 400, lineHeight: 1.5, mb: 3 }}>
+              {post.excerpt}
+            </Typography>
+          )}
+          <Box
+            dangerouslySetInnerHTML={{ __html: bodyHtml || '<p style="opacity:.6">No content yet.</p>' }}
+            sx={{
+              fontSize: '1.05rem', lineHeight: 1.75, color: 'text.primary',
+              '& h2': { fontSize: '1.6rem', mt: 3, mb: 1.5, fontWeight: 700 },
+              '& h3': { fontSize: '1.25rem', mt: 2.5, mb: 1, fontWeight: 700 },
+              '& p': { my: 1.5 },
+              '& img': { maxWidth: '100%', height: 'auto', display: 'block', my: 2, borderRadius: 1 },
+              '& figure': { m: 0, my: 2 },
+              '& figcaption': { fontSize: '0.85rem', color: 'text.secondary', textAlign: 'center', mt: 0.5 },
+              '& blockquote': { borderLeft: `3px solid ${PALETTE.purpleLt}`, pl: 2, ml: 0, color: 'text.secondary', fontStyle: 'italic' },
+              '& pre': { bgcolor: PALETTE.bg2, border: `1px solid ${PALETTE.border1}`, borderRadius: 1, p: 1.5, overflowX: 'auto', fontFamily: 'monospace', fontSize: '0.9rem' },
+              '& hr': { border: 'none', borderTop: `1px solid ${PALETTE.border1}`, my: 3 },
+              '& ul, & ol': { pl: 3, my: 1.5 },
+              '& a': { color: PALETTE.blueLt },
+              '& .tg-embed': {
+                border: `1px dashed ${PALETTE.border1}`, borderRadius: 1, p: 1.5, my: 2,
+                color: 'text.secondary', bgcolor: PALETTE.bg2, fontSize: '0.9rem', textAlign: 'center',
+              },
+            }}
+          />
+        </Box>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ───────────────────────────────── Main tab ───────────────────────────────────
 export default function BlogAdminTab({ onAdminError }) {
   const [view, setView] = useState('list');      // list | edit
@@ -269,6 +352,7 @@ export default function BlogAdminTab({ onAdminError }) {
   const [postSearch, setPostSearch] = useState('');
   const [subscribers, setSubscribers] = useState([]);
   const [subsLoading, setSubsLoading] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -527,16 +611,21 @@ export default function BlogAdminTab({ onAdminError }) {
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, gap: 1, flexWrap: 'wrap' }}>
         <Button startIcon={<ArrowBack />} onClick={() => { setView('list'); load(); }}>All posts</Button>
         <Stack direction="row" spacing={1} alignItems="center">
-          {post.id && post.status === 'published' && (
-            <Button size="small" startIcon={<Visibility />} component="a"
-              href={`/blog/${post.slug}`} target="_blank" rel="noopener">Preview</Button>
-          )}
+          <Button startIcon={<Visibility />} onClick={() => setPreviewOpen(true)}>Preview</Button>
           <Button variant="outlined" disabled={saving} onClick={() => save('draft')}>Save draft</Button>
           <Button variant="contained" disabled={saving} onClick={() => save('published')}>
             {saving ? <CircularProgress size={18} /> : post.status === 'published' ? 'Update' : 'Publish'}
           </Button>
         </Stack>
       </Box>
+
+      <PostPreviewDialog
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        post={post}
+        bodyHtml={bodyHtml}
+        liveUrl={post.id && post.status === 'published' ? `/blog/${post.slug}` : null}
+      />
 
       <Grid container spacing={2}>
         {/* Main column */}
