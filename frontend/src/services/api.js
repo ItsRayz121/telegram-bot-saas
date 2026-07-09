@@ -235,6 +235,17 @@ export const settings = {
       ? api.put(`/api/official-groups/${groupId}/settings`, data)
       : api.put(`/api/bots/${botId}/groups/${groupId}/settings`, data),
 
+  exportGroupSettings: (botId, groupId) =>
+    botId === 'official'
+      ? api.get(`/api/official-groups/${groupId}/settings/export`)
+      : api.get(`/api/bots/${botId}/groups/${groupId}/settings/export`),
+
+  // dryRun=true returns the preview; dryRun=false applies the identical merge.
+  importGroupSettings: (botId, groupId, file, dryRun) =>
+    botId === 'official'
+      ? api.post(`/api/official-groups/${groupId}/settings/import`, { file, dry_run: dryRun })
+      : api.post(`/api/bots/${botId}/groups/${groupId}/settings/import`, { file, dry_run: dryRun }),
+
   // Official groups: real OfficialMember directory with pagination/search/filters
   getMembers: (botId, groupId, params) =>
     botId === 'official'

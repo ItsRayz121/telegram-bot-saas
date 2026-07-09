@@ -22,6 +22,7 @@ import BillingTab from './tabs/BillingTab';
 import MembersTab from './tabs/MembersTab';
 import AnalyticsTab from './tabs/AnalyticsTab';
 import TeamTab from './tabs/TeamTab';
+import SettingsTransfer from '../../components/SettingsTransfer';
 import {
   SchedulerSubtab, AutoReplySubtab, PollsSubtab, ForwardingSubtab,
   WorkflowsSubtab, WebhooksSubtab, ThreadsSubtab,
@@ -56,7 +57,10 @@ const AREAS = [
   // Telegizer Analytics lands on "Members" first; the Guildizer-only "Overview" trails so the
   // default landing subtab and the shared subtab order both match Telegizer 1:1.
   { label: 'Analytics', icon: Assessment, subs: ['Members', 'Leaderboard', 'Audit Log', 'Warnings', 'Digest', 'AI Activity', 'Overview'] },
-  { label: 'Settings', icon: SettingsIcon, subs: ['Overview', 'Commands', 'Team', 'Billing'] },
+  // "Import & Export" moves bot configuration between servers. Named to avoid any
+  // confusion with Settings › Overview's "Server backups", which snapshots Discord
+  // roles/channels instead.
+  { label: 'Settings', icon: SettingsIcon, subs: ['Overview', 'Commands', 'Team', 'Billing', 'Import & Export'] },
 ];
 
 // Old flat-tab deep links → new area/subtab so saved URLs keep working. The
@@ -278,6 +282,17 @@ function GuildizerServerDetailInner() {
             {key === 'Settings/Commands' && <CommandsTab guildId={guildId} />}
             {key === 'Settings/Team' && <TeamTab guildId={guildId} />}
             {key === 'Settings/Billing' && <BillingTab guildId={guildId} />}
+            {key === 'Settings/Import & Export' && (
+              <SettingsTransfer
+                scopeLabel="server"
+                fileStem={`guildizer-${(guild?.name || 'server').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'server'}`}
+                isPaid={!!guild?.is_pro}
+                gatesOnFree={false}
+                onExport={() => guildizerApi.get(`/api/guilds/${guildId}/settings/export`)}
+                onImport={(file, dryRun) =>
+                  guildizerApi.post(`/api/guilds/${guildId}/settings/import`, { file, dry_run: dryRun })}
+              />
+            )}
 
             {/* MODERATION */}
             {key === 'Moderation/AutoMod' && <ProtectionTab guildId={guildId} channels={channels} section="automod" />}

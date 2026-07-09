@@ -2,6 +2,8 @@
 
   GET  /api/guilds/<id>/settings
   PUT  /api/guilds/<id>/settings
+  GET  /api/guilds/<id>/settings/export
+  POST /api/guilds/<id>/settings/import
   GET  /api/guilds/<id>/commands
   POST /api/guilds/<id>/commands
   PUT  /api/guilds/<id>/commands/<cmd_id>
@@ -17,6 +19,7 @@ import re
 from flask import Blueprint, g, jsonify, request
 
 import settings as settings_mod
+import settings_transfer
 import access
 from auth import login_required
 from models import CustomCommand, Guild, UserGuild
@@ -231,3 +234,53 @@ def _validate_name(db, guild_id: int, name: str, *, exclude_id: int | None = Non
 def _mark_dirty(guild_id: int) -> None:
     row = settings_mod.get_or_create(g.db, guild_id)
     row.commands_dirty = True
+
+
+# --- settings import / export -------------------------------------------------
+@settings_bp.get("/api/guilds/<int:guild_id>/settings/export")
+@login_required
+def export_settings(guild_id: int):
+    ok, err = _manage_or_403(guild_id)
+    if err:
+        return err
+    _, guild = ok
+    envelope = settings_transfer.build_export(g.db, guild_id, guild.name or "")
+    g.db.commit()   # build_export may have created the defaulted settings row
+    return jsonify(envelope)
+
+
+@settings_bp.post("/api/guilds/<int:guild_id>/settings/import")
+@login_required
+def import_settings(guild_id: int):
+    """dry_run=true returns the preview; dry_run=false applies the same merge."""
+    ok, err = _manage_or_403(guild_id)
+    if err:
+        return err
+
+    # A settings export is a few dozen KB. Anything larger is not one of ours.
+    if (request.content_length or 0) > 512 * 1024:
+        return jsonify(error="That file is too large to be a settings export.",
+                       code="INVALID_EXPORT_FILE"), 413
+
+    body = request.get_json(silent=True) or {}
+    raw_file = body.get("file")
+    if not isinstance(raw_file, dict):
+        return jsonify(error="No settings file provided."), 400
+
+    payload, parse_err = settings_transfer.parse_export(raw_file)
+    if parse_err:
+        return jsonify(error=parse_err, code="INVALID_EXPORT_FILE"), 400
+
+    dry_run = bool(body.get("dry_run", True))
+    result = settings_transfer.plan_import(g.db, guild_id, payload, apply=not dry_run)
+    if dry_run:
+        # plan_import wrote nothing, but get_or_create may have added the
+        # defaulted settings row. Persist that, same as GET /settings does.
+        g.db.commit()
+
+    meta = raw_file.get("guildizer_settings_export") or {}
+    result["bindings_excluded"] = meta.get("bindings_excluded", [])
+    result["source_group"] = meta.get("source_server", "")
+    if not dry_run:
+        result["message"] = f"Imported {len(result['changes'])} setting(s)."
+    return jsonify(result)

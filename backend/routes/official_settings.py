@@ -9,7 +9,8 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from ..models import db, User, TelegramGroup, TelegramBotStarted, BotEvent, OfficialMember, OfficialWarning, OfficialScheduledMessage, OfficialPoll
 from ..middleware.rate_limit import rate_limit
-from .settings import _check_gated_settings, _deep_merge
+from .settings import _check_gated_settings, _deep_merge, _ALLOWED_SETTING_KEYS, plan_import
+from .. import settings_transfer as st
 from ..config import Config
 
 logger = logging.getLogger(__name__)
@@ -111,20 +112,6 @@ def update_official_settings(group_id):
         data = request.get_json()
         if not data:
             return jsonify({"error": "No data provided"}), 400
-        _ALLOWED_SETTING_KEYS = {
-            "verification", "welcome", "levels", "automod", "moderation",
-            "auto_clean", "reports", "knowledge_base", "auto_responses",
-            "digest", "xp", "timezone",
-            # features added post-launch
-            "social_replies", "image_ai", "raids", "admin_alerts",
-            # sections missing from original list — added to fix silent save failures
-            "escalation", "reactions", "invites",
-            # bot-spam protection (Phase 1 bot_policy, Phase 3 raid_guard)
-            "bot_policy", "raid_guard",
-            # shared blocks edited by the unified frontend — were rejecting the
-            # whole save on the official board (custom board has no allow-list)
-            "assistant", "command_routing", "warning_escalation",
-        }
         unknown = set(data.keys()) - _ALLOWED_SETTING_KEYS
         if unknown:
             return jsonify({"error": f"Unknown settings keys: {sorted(unknown)}"}), 400
@@ -157,6 +144,97 @@ def update_official_settings(group_id):
         return jsonify({"settings": tg.settings, "timezone": tg.timezone or "UTC", "message": "Settings updated"})
     except Exception as e:
         logger.error(f"update_official_settings error: {e}", exc_info=True)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return jsonify({"error": str(e)}), 500
+
+
+@official_settings_bp.route("/<group_id>/settings/export", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=10)
+def export_official_settings(group_id):
+    try:
+        user = _get_current_user()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        tg, err = _get_official_group(user, group_id)
+        if err:
+            return err
+        envelope = st.build_export(tg.settings or {}, group_title=tg.title or "", scope="official")
+        return jsonify(envelope)
+    except st.SecretLeakError as e:
+        logger.error(f"export_official_settings blocked: {e}")
+        return jsonify({"error": "Export is temporarily unavailable for this group."}), 500
+    except Exception as e:
+        logger.error(f"export_official_settings error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@official_settings_bp.route("/<group_id>/settings/import", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=10)
+def import_official_settings(group_id):
+    """dry_run=true returns the preview; dry_run=false applies the same merge."""
+    try:
+        user = _get_current_user()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        tg, err = _get_official_group(user, group_id)
+        if err:
+            return err
+
+        body = request.get_json() or {}
+        raw_file = body.get("file")
+        if not isinstance(raw_file, dict):
+            return jsonify({"error": "No settings file provided."}), 400
+        dry_run = bool(body.get("dry_run", True))
+
+        result, plan_err = plan_import(user, tg.settings or {}, raw_file)
+        if plan_err:
+            return plan_err
+
+        if dry_run:
+            return jsonify({
+                "applied": False,
+                "changes": result["changes"],
+                "skipped": result["skipped"],
+                "bindings_excluded": result["bindings_excluded"],
+                "source_group": result["source_group"],
+            })
+
+        tg.settings = result["merged"]
+        flag_modified(tg, "settings")
+        tz = result["merged"].get("timezone")
+        if isinstance(tz, str) and tz.strip():
+            tg.timezone = tz.strip()
+        db.session.commit()
+
+        try:
+            from ..feature_usage import log_settings_saved
+            log_settings_saved(
+                "official", sorted({c["path"].split(".")[0] for c in result["changes"]}),
+                group_ref=str(group_id), bot_ref="official",
+                user_ref=str(user.id), db=db,
+            )
+        except Exception:
+            pass
+
+        logger.info(
+            f"settings import applied group={group_id} user={user.id} "
+            f"changes={len(result['changes'])} skipped={len(result['skipped'])}"
+        )
+        return jsonify({
+            "applied": True,
+            "changes": result["changes"],
+            "skipped": result["skipped"],
+            "bindings_excluded": result["bindings_excluded"],
+            "settings": tg.settings,
+            "message": f"Imported {len(result['changes'])} setting(s).",
+        })
+    except Exception as e:
+        logger.error(f"import_official_settings error: {e}", exc_info=True)
         try:
             db.session.rollback()
         except Exception:

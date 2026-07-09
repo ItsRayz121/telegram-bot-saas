@@ -1,3 +1,4 @@
+import copy
 import logging
 from datetime import datetime, timedelta
 import requests as _http
@@ -6,8 +7,27 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..models import db, User, Bot, Group, Member, AuditLog, ScheduledMessage, Raid, AutoResponse, ReportedMessage, TelegramBotStarted, UserTelegramAccount, EscalationEvent
 from ..middleware.rate_limit import rate_limit
 from .. import engagement as eng
+from .. import settings_transfer as st
 
 _PAID_TIERS = {"pro", "enterprise"}
+
+# Settings sections a client is allowed to write. Shared by the official board's
+# PUT, and by import on both boards, so a section can never be importable but
+# not saveable.
+_ALLOWED_SETTING_KEYS = {
+    "verification", "welcome", "levels", "automod", "moderation",
+    "auto_clean", "reports", "knowledge_base", "auto_responses",
+    "digest", "xp", "timezone",
+    # features added post-launch
+    "social_replies", "image_ai", "raids", "admin_alerts",
+    # sections missing from original list — added to fix silent save failures
+    "escalation", "reactions", "invites",
+    # bot-spam protection (Phase 1 bot_policy, Phase 3 raid_guard)
+    "bot_policy", "raid_guard",
+    # shared blocks edited by the unified frontend — were rejecting the
+    # whole save on the official board (custom board has no allow-list)
+    "assistant", "command_routing", "warning_escalation",
+}
 
 
 def _require_paid(user, feature="This feature"):
@@ -72,36 +92,100 @@ _FEATURE_LABELS = {
 }
 
 
-def _check_gated_settings(user, incoming_data: dict, _depth: int = 0):
-    """Walk the settings payload and return 403 if a free/expired user tries
-    to enable any Pro-gated feature. Depth-limited to 10 to prevent DoS.
+def partition_gated_settings(user, incoming_data: dict, current: dict = None, _depth: int = 0):
+    """Split a settings payload by what `user`'s plan allows.
+
+    Returns (allowed, skipped). `allowed` is a copy of the payload with every
+    out-of-plan feature turned off rather than removed — the configuration stays
+    put, so upgrading later is a single toggle instead of a re-entry. `skipped`
+    lists {"key", "label", "requires"} for each one, which drives both the PUT
+    403 and the import screen's "needs Pro" list.
+
+    `current` is the group's existing settings, if any. A gated feature that is
+    ALREADY on is left alone and not reported — otherwise importing a stock
+    config would warn about levels/raids/knowledge_base, which ship enabled by
+    default, and would flip flags the user never set. Callers that have no
+    "current" (a direct save) pass None, which gates every enable.
+
+    Depth-limited to 10 to prevent DoS via deeply nested payloads.
 
     Two gate types:
-    - _GATED_SECTIONS: top-level section keys; gated when nested 'enabled' is True.
+    - _GATED_SECTIONS: section keys; gated when nested 'enabled' is True.
     - _GATED_KEYS: flat boolean keys; gated when the value is truthy.
     """
     if _depth > 10:
-        return None
+        return incoming_data, []
 
     is_paid = user.subscription_tier in _PAID_TIERS
     is_expired = is_paid and not user.subscription_active
     is_enterprise = user.subscription_tier == "enterprise" and not is_expired
 
-    def _403_pro(key):
-        label = _FEATURE_LABELS.get(key, key)
-        return (
-            jsonify({
-                "error": f"{label} requires a Pro or Enterprise subscription.",
-                "code": "FEATURE_REQUIRES_PRO",
-                "feature": key,
-                "feature_label": label,
-                "upgrade_url": "/pricing",
-            }),
-            403,
-        )
+    if is_paid and not is_expired and is_enterprise:
+        return incoming_data, []
 
-    def _403_enterprise(key):
-        label = _FEATURE_LABELS.get(key, key)
+    current = current if isinstance(current, dict) else {}
+    allowed, skipped = {}, []
+
+    def _note(key, requires):
+        skipped.append({
+            "key": key,
+            "label": _FEATURE_LABELS.get(key, key),
+            "requires": requires,
+        })
+
+    def _recurse(key, value):
+        sub_allowed, sub_skipped = partition_gated_settings(
+            user, value, current.get(key), _depth + 1
+        )
+        skipped.extend(sub_skipped)
+        return sub_allowed
+
+    for key, value in incoming_data.items():
+        if key in _ENTERPRISE_ONLY_KEYS and value and not current.get(key):
+            _note(key, "enterprise")
+            allowed[key] = False
+            continue
+
+        # Active paid (non-enterprise): everything but enterprise keys is fine.
+        if is_paid and not is_expired:
+            allowed[key] = _recurse(key, value) if isinstance(value, dict) else value
+            continue
+
+        # Free or expired.
+        if key in _GATED_KEYS and value and not current.get(key):
+            _note(key, "pro")
+            allowed[key] = False
+            continue
+
+        if key in _GATED_SECTIONS and isinstance(value, dict):
+            sub_allowed = _recurse(key, value)
+            existing = current.get(key)
+            already_on = isinstance(existing, dict) and bool(existing.get("enabled"))
+            if value.get("enabled") and not already_on:
+                _note(key, "pro")
+                sub_allowed = {**sub_allowed, "enabled": False}
+            allowed[key] = sub_allowed
+            continue
+
+        allowed[key] = _recurse(key, value) if isinstance(value, dict) else value
+
+    return allowed, skipped
+
+
+def _check_gated_settings(user, incoming_data: dict, _depth: int = 0):
+    """Return a 403 response tuple if the payload enables anything out of plan.
+
+    Direct saves gate every enable (current=None), so this keeps rejecting a
+    free user who flips a Pro toggle. Import instead passes the group's current
+    settings, filters the payload, and reports what it turned off.
+    """
+    _, skipped = partition_gated_settings(user, incoming_data, None, _depth)
+    if not skipped:
+        return None
+
+    first = skipped[0]
+    label, key = first["label"], first["key"]
+    if first["requires"] == "enterprise":
         return (
             jsonify({
                 "error": f"{label} requires an Enterprise subscription.",
@@ -112,36 +196,16 @@ def _check_gated_settings(user, incoming_data: dict, _depth: int = 0):
             }),
             403,
         )
-
-    if is_paid and not is_expired:
-        # Active paid user — only block enterprise-only keys for non-enterprise
-        if not is_enterprise:
-            for key, value in incoming_data.items():
-                if key in _ENTERPRISE_ONLY_KEYS and value:
-                    return _403_enterprise(key)
-                if isinstance(value, dict):
-                    err = _check_gated_settings(user, value, _depth + 1)
-                    if err:
-                        return err
-        return None
-
-    # Free or expired — gate both section enablement and direct flag keys
-    for key, value in incoming_data.items():
-        # Section gate: {"verification": {"enabled": true, ...}}
-        if key in _GATED_SECTIONS and isinstance(value, dict) and value.get("enabled"):
-            return _403_pro(key)
-        # Direct key gate: {"raids_enabled": true}
-        if key in _GATED_KEYS and value:
-            return _403_pro(key)
-        # Enterprise keys
-        if key in _ENTERPRISE_ONLY_KEYS and value:
-            return _403_enterprise(key)
-        # Recurse into nested dicts
-        if isinstance(value, dict):
-            err = _check_gated_settings(user, value, _depth + 1)
-            if err:
-                return err
-    return None
+    return (
+        jsonify({
+            "error": f"{label} requires a Pro or Enterprise subscription.",
+            "code": "FEATURE_REQUIRES_PRO",
+            "feature": key,
+            "feature_label": label,
+            "upgrade_url": "/pricing",
+        }),
+        403,
+    )
 
 logger = logging.getLogger(__name__)
 settings_bp = Blueprint("settings", __name__, url_prefix="/api")
@@ -154,6 +218,48 @@ def _deep_merge(base: dict, override: dict):
             _deep_merge(base[key], value)
         else:
             base[key] = value
+
+
+# A settings export is a few dozen KB. Anything larger is not one of ours.
+MAX_IMPORT_BYTES = 512 * 1024
+
+
+def plan_import(user, current_settings: dict, raw_file):
+    """Shared export/import brain for both the official and custom-bot boards.
+
+    Returns (result, error_response). `result` describes exactly what an apply
+    would do — the caller decides whether to write it, so preview and apply can
+    never disagree.
+    """
+    if (request.content_length or 0) > MAX_IMPORT_BYTES:
+        return None, (jsonify({
+            "error": "That file is too large to be a settings export.",
+            "code": "INVALID_EXPORT_FILE",
+        }), 413)
+
+    incoming, parse_err = st.parse_export(raw_file)
+    if parse_err:
+        return None, (jsonify({"error": parse_err, "code": "INVALID_EXPORT_FILE"}), 400)
+
+    unknown = set(incoming) - _ALLOWED_SETTING_KEYS
+    if unknown:
+        return None, (jsonify({
+            "error": f"That file has settings this bot doesn't support: {', '.join(sorted(unknown))}",
+            "code": "INVALID_EXPORT_FILE",
+        }), 400)
+
+    allowed, skipped = partition_gated_settings(user, incoming, current_settings or {})
+
+    merged = copy.deepcopy(dict(current_settings or {}))
+    _deep_merge(merged, allowed)
+
+    return {
+        "merged": merged,
+        "changes": st.diff_settings(current_settings or {}, allowed),
+        "skipped": skipped,
+        "bindings_excluded": (raw_file.get("telegizer_settings_export") or {}).get("bindings_excluded", []),
+        "source_group": (raw_file.get("telegizer_settings_export") or {}).get("source_group", ""),
+    }, None
 
 
 def _get_current_user():
@@ -197,6 +303,90 @@ def get_group_settings(bot_id, group_id):
         return jsonify({"settings": group.settings, "group": group.to_dict(), "escalation_dm_status": escalation_dm_status})
     except Exception as e:
         logger.error(f"get_group_settings error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/settings/export", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=10)
+def export_group_settings(bot_id, group_id):
+    try:
+        user = _get_current_user()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        bot, group, err = _get_bot_and_group(user, bot_id, group_id)
+        if err:
+            return err
+        envelope = st.build_export(
+            group.settings or {}, group_title=group.group_name or "", scope="custom"
+        )
+        return jsonify(envelope)
+    except st.SecretLeakError as e:
+        logger.error(f"export_group_settings blocked: {e}")
+        return jsonify({"error": "Export is temporarily unavailable for this group."}), 500
+    except Exception as e:
+        logger.error(f"export_group_settings error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/settings/import", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=10)
+def import_group_settings(bot_id, group_id):
+    """dry_run=true returns the preview; dry_run=false applies the same merge."""
+    try:
+        user = _get_current_user()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        bot, group, err = _get_bot_and_group(user, bot_id, group_id)
+        if err:
+            return err
+
+        body = request.get_json() or {}
+        raw_file = body.get("file")
+        if not isinstance(raw_file, dict):
+            return jsonify({"error": "No settings file provided."}), 400
+        dry_run = bool(body.get("dry_run", True))
+
+        result, plan_err = plan_import(user, group.settings or {}, raw_file)
+        if plan_err:
+            return plan_err
+
+        if dry_run:
+            return jsonify({
+                "applied": False,
+                "changes": result["changes"],
+                "skipped": result["skipped"],
+                "bindings_excluded": result["bindings_excluded"],
+                "source_group": result["source_group"],
+            })
+
+        from sqlalchemy.orm.attributes import flag_modified
+        group.settings = result["merged"]
+        flag_modified(group, "settings")
+        tz = result["merged"].get("timezone")
+        if isinstance(tz, str) and tz.strip():
+            group.timezone = tz.strip()
+        db.session.commit()
+
+        logger.info(
+            f"settings import applied bot={bot_id} group={group_id} user={user.id} "
+            f"changes={len(result['changes'])} skipped={len(result['skipped'])}"
+        )
+        return jsonify({
+            "applied": True,
+            "changes": result["changes"],
+            "skipped": result["skipped"],
+            "bindings_excluded": result["bindings_excluded"],
+            "settings": group.settings,
+            "message": f"Imported {len(result['changes'])} setting(s).",
+        })
+    except Exception as e:
+        logger.error(f"import_group_settings error: {e}", exc_info=True)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
         return jsonify({"error": str(e)}), 500
 
 

@@ -13,7 +13,7 @@
  */
 
 import {
-  Group, Shield, People, AutoAwesome, Bolt, BarChart,
+  Group, Shield, People, AutoAwesome, Bolt, BarChart, Settings as SettingsIcon,
 } from '@mui/icons-material';
 
 // ── Tab + SubTab Registry ─────────────────────────────────────────────────────
@@ -83,6 +83,16 @@ export const FEATURE_TABS = [
       { label: 'Warnings',    officialOnly: false },
       { label: 'Digest',      officialOnly: false },
       { label: 'AI Activity', officialOnly: false },
+    ],
+  },
+  {
+    // Mirrors Guildizer's Settings tab. Import & Export writes every section at
+    // once, so it lives here rather than among Analytics' read-only reports.
+    id: 'settings',
+    label: 'Settings',
+    icon: SettingsIcon,
+    subTabs: [
+      { label: 'Import & Export', officialOnly: false },
     ],
   },
 ];

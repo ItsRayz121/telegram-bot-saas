@@ -41,6 +41,7 @@ import PlanGate from '../components/PlanGate';
 import { UiPrefsProvider, useUiPrefs } from '../context/UiPrefsContext';
 import CollapsibleCard from '../components/CollapsibleCard';
 import BlockedWordPresets from '../components/BlockedWordPresets';
+import SettingsTransfer from '../components/SettingsTransfer';
 import { TELEGRAM_PACKS } from '../data/blockedWordPacks';
 
 function ProBadge() {
@@ -923,6 +924,7 @@ function GroupSettingsInner() {
   const workflowsSubTabIdx    = getSubTabIndex(CATEGORIES, 'automation', 'Workflows');
   const webhooksSubTabIdx     = getSubTabIndex(CATEGORIES, 'automation', 'Webhooks');
   const escalationSubTabIdx   = getSubTabIndex(CATEGORIES, 'ai', 'Escalation');
+  const importExportSubTabIdx = getSubTabIndex(CATEGORIES, 'settings', 'Import & Export');
   // Telegram chat id of this group — forwarding/workflows key on it.
   const groupChatId = groupData?.telegram_group_id || groupId;
   const groupDisplayName = groupData?.title || groupData?.group_name || groupData?.name || null;
@@ -1211,7 +1213,7 @@ function GroupSettingsInner() {
             variant="contained"
             startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <Save />}
             onClick={handleSave}
-            disabled={saving || cat === 'analytics' || !isDirty}
+            disabled={saving || cat === 'analytics' || cat === 'settings' || !isDirty}
           >
             {saving ? 'Saving…' : isDirty ? 'Save' : 'Saved'}
           </Button>
@@ -4599,6 +4601,25 @@ function GroupSettingsInner() {
               </Card>
             </>
           )
+        )}
+
+        {/* ── Settings › Import & Export ── */}
+        {cat === 'settings' && subTab === importExportSubTabIdx && importExportSubTabIdx >= 0 && (
+          <SettingsTransfer
+            scopeLabel="group"
+            fileStem={`telegizer-${(groupData?.group_name || 'group').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'group'}`}
+            isPaid={userTier !== 'free'}
+            onExport={() => settings.exportGroupSettings(botId, groupId)}
+            onImport={(file, dryRun) => settings.importGroupSettings(botId, groupId, file, dryRun)}
+            onImported={(next) => {
+              if (next) {
+                setSettingsData(next);
+                setOrigSettings(JSON.stringify(next || {}));
+              } else {
+                fetchSettings();
+              }
+            }}
+          />
         )}
 
       </Box>
