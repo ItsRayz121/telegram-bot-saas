@@ -45,6 +45,9 @@ class GuildizerBot(bot_core.CoreMixin, discord.AutoShardedClient):
         log.info("Global slash commands synced.")
         # Persistent campaign proof buttons survive restarts via DynamicItem.
         self.add_dynamic_items(campaign_views.ProofButton)
+        # ActionStartButton is the current per-action entry point; RaidStartButton
+        # stays registered so raid posts made before it was generalized still work.
+        self.add_dynamic_items(campaign_views.ActionStartButton)
         self.add_dynamic_items(campaign_views.RaidStartButton)
         self.add_dynamic_items(verification.VerifyButton,
                                bot_policy.TrustBotButton, bot_policy.KickBotButton)

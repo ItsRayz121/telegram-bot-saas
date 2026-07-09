@@ -459,9 +459,13 @@ class XpEvent(Base):
 
 
 CAMPAIGN_TYPES = ("proof_collection", "content_submission", "social_task", "raid", "giveaway")
-CAMPAIGN_VERIFICATION_MODES = ("manual", "honor", "link")
-CAMPAIGN_STATUSES = ("draft", "active", "paused", "closed")
+# 1:1 with Telegizer's VERIFICATION_MODES. "auto" verifies server membership
+# (Telegizer's equivalent verifies a Telegram channel join).
+CAMPAIGN_VERIFICATION_MODES = ("manual", "honor", "screenshot", "link", "auto")
+CAMPAIGN_STATUSES = ("draft", "active", "paused", "closed", "archived")
 SUBMISSION_STATUSES = ("pending", "verified", "rejected")
+# Proof field types, 1:1 with Telegizer's FIELD_TYPES.
+CAMPAIGN_FIELD_TYPES = ("text", "url", "uid", "wallet", "screenshot", "tx_hash", "username")
 
 
 class Campaign(Base):
@@ -473,10 +477,11 @@ class Campaign(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     guild_id = Column(BigInteger, ForeignKey("guilds.id"), nullable=False, index=True)
     type = Column(String(32), default="proof_collection")
+    platform = Column(String(40), nullable=True)          # x | youtube | discord | <free text>
     title = Column(String(200), nullable=False)
     description = Column(Text, default="")
     task_url = Column(String(2000), nullable=True)
-    verification_mode = Column(String(20), default="manual")  # manual|honor|link
+    verification_mode = Column(String(20), default="manual")  # manual|honor|screenshot|link|auto
     reward_xp = Column(Integer, default=0)
     reward_label = Column(String(200), nullable=True)
 
@@ -484,13 +489,20 @@ class Campaign(Base):
     starts_at = Column(DateTime, nullable=True)
     ends_at = Column(DateTime, nullable=True)
     one_per_user = Column(Boolean, default=True)
+    max_participants = Column(Integer, nullable=True)
+    pin_message = Column(Boolean, default=False)          # pin the channel announcement
 
     # Discord post tracking + coordination flag the bot's post loop watches.
     channel_id = Column(BigInteger, nullable=True)        # where to announce
     message_id = Column(BigInteger, nullable=True)        # posted announcement
+    # Where message_id actually lives. Differs from channel_id the moment an admin
+    # re-points the campaign, and is what we delete the old announcement from.
+    posted_channel_id = Column(BigInteger, nullable=True)
     needs_post = Column(Boolean, default=False)           # API asked the bot to (re)post
+    needs_unpost = Column(Boolean, default=False)         # API asked the bot to delete the post
     post_status = Column(String(16), default="none")      # none|posted|failed
     post_error = Column(String(255), nullable=True)
+    posted_at = Column(DateTime, nullable=True)
 
     settings = Column(JSON, default=dict)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -501,6 +513,10 @@ class Campaign(Base):
     )
     submissions = relationship(
         "CampaignSubmission", back_populates="campaign", cascade="all, delete-orphan"
+    )
+    custom_fields = relationship(
+        "CampaignCustomField", back_populates="campaign",
+        cascade="all, delete-orphan", order_by="CampaignCustomField.position",
     )
 
     @property
@@ -519,6 +535,7 @@ class Campaign(Base):
             "id": self.id,
             "guild_id": str(self.guild_id),
             "type": self.type,
+            "platform": self.platform,
             "title": self.title,
             "description": self.description or "",
             "task_url": self.task_url,
@@ -530,15 +547,21 @@ class Campaign(Base):
             "starts_at": self.starts_at.isoformat() + "Z" if self.starts_at else None,
             "ends_at": self.ends_at.isoformat() + "Z" if self.ends_at else None,
             "one_per_user": bool(self.one_per_user),
+            "max_participants": self.max_participants,
+            "pin_message": bool(self.pin_message),
             "channel_id": str(self.channel_id) if self.channel_id else None,
             "message_id": str(self.message_id) if self.message_id else None,
             "post_status": self.post_status or "none",
             "post_error": self.post_error,
+            "posted_at": self.posted_at.isoformat() + "Z" if self.posted_at else None,
             "settings": self.settings or {},
             "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
+            # Campaign-level proof fields only; task-level ones ride on their task.
+            "custom_fields": [f.to_dict() for f in self.custom_fields if not f.task_id],
         }
         if include_tasks:
             d["tasks"] = [t.to_dict() for t in self.tasks]
+            d["is_multitask"] = len(self.tasks) > 0
         return d
 
 
@@ -553,11 +576,19 @@ class CampaignTask(Base):
     title = Column(String(200), nullable=False)
     description = Column(Text, default="")
     type = Column(String(32), default="social_task")
+    platform = Column(String(40), nullable=True)
     task_url = Column(String(2000), nullable=True)
     verification_mode = Column(String(20), default="manual")
     reward_xp = Column(Integer, default=0)
+    reward_label = Column(String(200), nullable=True)
 
     campaign = relationship("Campaign", back_populates="tasks")
+    # No delete-orphan here: a task-level field is also in Campaign.custom_fields,
+    # which owns the orphan cascade. Deleting a task removes its fields explicitly.
+    custom_fields = relationship(
+        "CampaignCustomField", back_populates="task",
+        order_by="CampaignCustomField.position",
+    )
 
     def to_dict(self) -> dict:
         return {
@@ -567,9 +598,12 @@ class CampaignTask(Base):
             "title": self.title,
             "description": self.description or "",
             "type": self.type,
+            "platform": self.platform,
             "task_url": self.task_url,
             "verification_mode": self.verification_mode,
             "reward_xp": self.reward_xp or 0,
+            "reward_label": self.reward_label,
+            "custom_fields": [f.to_dict() for f in self.custom_fields],
         }
 
 
@@ -585,10 +619,19 @@ class CampaignSubmission(Base):
     username = Column(String(120))
     status = Column(String(16), default="pending")        # pending|verified|rejected
     proof = Column(JSON, default=dict)                    # {"value": "...url/text"}
+    file_url = Column(String(500), nullable=True)         # Discord CDN url of a screenshot
     reward_granted = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     reviewed_at = Column(DateTime, nullable=True)
     reviewer_id = Column(BigInteger, nullable=True)
+    reviewer_name = Column(String(120), nullable=True)
+    review_reason = Column(String(500), nullable=True)    # shown to the member on reject
+    # Cross-campaign duplicate detection (same UID / wallet / handle reused).
+    flagged = Column(Boolean, default=False)
+    flag_reason = Column(String(255), nullable=True)
+    # Review-outcome DM outbox, drained by the bot (the web process has no gateway).
+    notify_status = Column(String(16), default="none")    # none|pending|sent|failed
+    notify_error = Column(String(255), nullable=True)
 
     campaign = relationship("Campaign", back_populates="submissions")
 
@@ -601,9 +644,16 @@ class CampaignSubmission(Base):
             "username": self.username,
             "status": self.status,
             "proof": self.proof or {},
+            "file_url": self.file_url,
             "reward_granted": self.reward_granted or 0,
             "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
             "reviewed_at": self.reviewed_at.isoformat() + "Z" if self.reviewed_at else None,
+            "reviewed_by": self.reviewer_name,
+            "review_reason": self.review_reason,
+            "flagged": bool(self.flagged),
+            "flag_reason": self.flag_reason,
+            "notify_status": self.notify_status or "none",
+            "notify_error": self.notify_error,
         }
 
 
@@ -1261,24 +1311,37 @@ class InviteJoin(Base):
 
 class CampaignCustomField(Base):
     """An extra input collected in the proof modal (Phase 14). Up to 4 per
-    campaign (Discord modals cap at 5 components incl. the proof field)."""
+    campaign (Discord modals cap at 5 components incl. the proof field).
+
+    A field belongs to a campaign, and optionally to one of its tasks — task-level
+    fields are asked only when that task's proof button is used (Telegizer parity)."""
 
     __tablename__ = "campaign_custom_fields"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     campaign_id = Column(Integer, ForeignKey("campaigns.id"), nullable=False, index=True)
+    task_id = Column(Integer, ForeignKey("campaign_tasks.id"), nullable=True, index=True)
+    # Stable slug the submission payload is keyed by (labels can be edited/renamed).
+    key = Column(String(64), nullable=True)
     label = Column(String(45), nullable=False)
     # Typed proof input (Telegizer parity): text/url/uid/wallet/screenshot/tx_hash/username.
     field_type = Column(String(20), default="text")
     required = Column(Boolean, default=True)
+    example = Column(String(200), nullable=True)          # format hint shown to members
     position = Column(Integer, default=0)
+
+    campaign = relationship("Campaign", back_populates="custom_fields")
+    task = relationship("CampaignTask", back_populates="custom_fields")
 
     def to_dict(self) -> dict:
         return {
             "id": self.id,
+            "task_id": self.task_id,
+            "key": self.key or self.label,
             "label": self.label,
             "field_type": self.field_type or "text",
             "required": bool(self.required),
+            "example": self.example,
             "position": self.position or 0,
         }
 

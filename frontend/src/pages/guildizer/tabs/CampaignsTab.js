@@ -1,28 +1,812 @@
-import React, { useEffect, useMemo, useState } from 'react';
+// Guildizer Campaigns — a 1:1 port of Telegizer's CampaignManager, adapted to
+// Discord: an announce channel instead of a group, Discord user ids instead of
+// Telegram ones, and screenshots served from the Discord CDN rather than fetched
+// through the bot. Keep the two files in step; the UX is meant to be identical.
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  Box, Grid, Card, CardContent, Typography, Button, TextField, MenuItem, Switch,
-  FormControlLabel, List, ListItem, ListItemButton, ListItemText, IconButton, Chip, Alert,
-  CircularProgress, Stack, Divider, Tabs, Tab, Tooltip,
-  Dialog, DialogTitle, DialogContent, DialogActions,
-  Stepper, Step, StepLabel,
+  Box, Card, CardContent, Typography, Button, TextField, Grid,
+  Dialog, DialogTitle, DialogContent, DialogActions, IconButton,
+  Chip, Alert, Table, TableBody, TableCell, TableContainer, TableHead,
+  TableRow, Paper, FormControl, InputLabel, Select, MenuItem, Switch,
+  FormControlLabel, Stepper, Step, StepLabel, Divider, Menu, Tooltip,
+  CircularProgress, Stack, Tabs, Tab,
 } from '@mui/material';
-import { Add, Delete, ArrowBack, Download, EmojiEvents } from '@mui/icons-material';
-import guildizerApi, { guildizerXVerifyKey } from '../../../services/guildizerApi';
-import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
+import {
+  Add, Delete, DeleteOutline, Edit, MoreVert, Download, EmojiEvents, Campaign as CampaignIcon,
+  CheckCircle, Cancel, Visibility, Send, Replay, ArrowDropDown,
+} from '@mui/icons-material';
+import { toast } from 'react-toastify';
+import { guildizerEngagement as engagement, guildizerXVerifyKey } from '../../../services/guildizerApi';
 import { downloadCsv } from './csv';
 
-// ── X auto-verify status signal (Telegizer parity) ────────────────────────────
-// 3-state health for the "Auto-verify on X" toggle so the owner knows whether raid
-// actions confirm automatically or fall back to manual. Account-level (the owner's
-// BYO key or the platform key) → identical across guilds, fetched once with the list.
+// Discord text channels (0 = GUILD_TEXT, 5 = GUILD_ANNOUNCEMENT).
+const TEXT_TYPES = new Set([0, 5]);
+
+const TYPES = [
+  { value: 'social_task',       label: 'Social Task',         emoji: '📢', chip: 'Social',   help: 'Like / repost / follow / subscribe / join a channel.' },
+  { value: 'proof_collection',  label: 'Proof Collection',   emoji: '📋', chip: 'Proof',    help: 'Collect UID, wallet, referral link, screenshot or custom fields.' },
+  { value: 'content_submission', label: 'Content Submission', emoji: '📝', chip: 'Content',  help: 'Users submit a link (YouTube / X / blog) for review.' },
+  { value: 'giveaway',          label: 'Giveaway',            emoji: '🎁', chip: 'Giveaway', help: 'Entry on completion of the task.' },
+  { value: 'raid',              label: 'Twitter Raid',        emoji: '🐦', chip: 'Raid',     help: 'Coordinate a like/retweet/comment raid on a tweet. Members verify in a private panel.' },
+];
+
+// Raid goal fields (stored under settings.raid_goals).
+const RAID_GOALS = [
+  { key: 'likes', label: 'Likes' },
+  { key: 'retweets', label: 'Retweets' },
+  { key: 'comments', label: 'Comments' },
+  { key: 'quotes', label: 'Quote tweets' },
+  { key: 'follows', label: 'Follows' },
+];
+const PLATFORMS = [
+  { value: '', label: '—' },
+  { value: 'x', label: 'X / Twitter' },
+  { value: 'youtube', label: 'YouTube' },
+  { value: 'discord', label: 'Discord' },
+  { value: 'instagram', label: 'Instagram' },
+  { value: 'facebook', label: 'Facebook' },
+  { value: 'other', label: 'Other' },
+];
+// Per-type wizard behaviour — what each campaign type actually asks for, so the
+// five types stop looking identical. Drives field visibility, labels & defaults.
+const TYPE_CONFIG = {
+  social_task: {
+    showPlatform: true, platformRequired: true,
+    taskUrlLabel: 'Link to like / follow / join (optional)',
+    defaultVerification: 'honor',
+    proofHint: 'Social tasks are usually honor-based or a quick screenshot. Add a proof field only if you need one.',
+  },
+  proof_collection: {
+    showPlatform: false,
+    taskUrlLabel: 'Reference link (optional)',
+    defaultVerification: 'manual',
+    proofHint: 'This is the heart of a proof collection — add the fields you want to collect (UID, wallet, tx hash, screenshot…).',
+  },
+  content_submission: {
+    showPlatform: true, platformRequired: false,
+    taskUrlLabel: 'Example / brief for creators (optional)',
+    defaultVerification: 'manual',   // free-safe; Pro can switch to link-validity
+    autoUrlField: true,
+    proofHint: 'Participants submit a link to their content (YouTube / X / blog). A required link field is added for you.',
+  },
+  giveaway: {
+    showPlatform: false,
+    taskUrlLabel: 'Entry link (optional)',
+    defaultVerification: 'honor',
+    proofHint: 'Keep entry light. The reward label and the winner picker (under Manage) are what matter for a giveaway.',
+  },
+  raid: {
+    showPlatform: false,            // locked to X / Twitter
+    taskUrlLabel: 'Tweet URL',
+    taskUrlRequired: true,
+    defaultVerification: 'manual',
+    raidGoals: true,
+  },
+};
+const typeConfig = (t) => TYPE_CONFIG[t] || { showPlatform: true };
+
+const VERIFICATION_MODES = [
+  { value: 'manual', label: 'Manual review (admin approves)' },
+  { value: 'honor',  label: 'Honor-based (one-tap Verify)' },
+  { value: 'screenshot', label: 'Screenshot proof' },
+  { value: 'link',   label: 'Link-validity check (Pro)' },
+  { value: 'auto',   label: 'Auto-verify (server membership)' },
+];
+const FIELD_TYPES = [
+  { value: 'text', label: 'Text' },
+  { value: 'url', label: 'URL / Link' },
+  { value: 'uid', label: 'Exchange UID' },
+  { value: 'wallet', label: 'Wallet address' },
+  { value: 'screenshot', label: 'Screenshot' },
+  { value: 'tx_hash', label: 'Transaction hash' },
+  { value: 'username', label: 'Username / handle' },
+];
+const DURATIONS = [
+  { value: 24, label: '24 hours' },
+  { value: 48, label: '48 hours' },
+  { value: 72, label: '3 days' },
+  { value: 168, label: '7 days' },
+  { value: 0, label: 'No deadline' },
+];
+
+const STATUS_COLOR = {
+  draft: 'default', active: 'success', paused: 'warning',
+  closed: 'default', archived: 'default',
+};
+
+const EMPTY_FORM = {
+  type: 'proof_collection',
+  platform: '',
+  title: '',
+  description: '',
+  task_url: '',
+  verification_mode: 'manual',
+  duration_hours: 24,
+  reward_xp: 0,
+  reward_label: '',
+  max_participants: '',
+  channel_id: '',
+  one_per_user: true,
+  pin_message: true,
+  publishNow: false,
+  allow_resubmit: false,
+  show_leaderboard: false,   // Pro: surface a ranked board (default set per type)
+  custom_fields: [],
+  multitask: false,   // Pro: campaign holds several sub-tasks
+  sequential_tasks: false,  // multi-task: lock each task until the previous is done
+  tasks: [],
+  raid_goals: {},     // raid type: { likes, retweets, comments, quotes, follows }
+  social_targets: {}, // social_task: per-action quota
+  show_targets: false, // social_task: show the targets/quota live in the channel post
+};
+
+// Social-task action targets (stored under settings.social_targets). Mirrors
+// RAID_GOALS — same provable set; "likes" is honor-only (uncountable).
+const SOCIAL_TARGETS = RAID_GOALS;
+// Goal-key (plural) → backend per-action key (singular), matching campaign_runtime.GOAL_ACTIONS.
+const ACTION_KEYS = { likes: 'like', retweets: 'retweet', comments: 'comment', quotes: 'quote', follows: 'follow' };
+
+// Default example/format hint by proof type — pre-fills the helper shown to users.
+const EXAMPLE_PLACEHOLDER = {
+  text: 'e.g. your answer',
+  url: 'https://x.com/yourpost/status/123',
+  uid: '123456789 or ABC123',
+  wallet: '0x… or your chain address',
+  screenshot: '',
+  tx_hash: '0x… transaction hash',
+  username: '@username',
+};
+
+// A proof field given a type (URL/UID/wallet…) but no prompt label would
+// otherwise be silently dropped on save (the label-empty filter), leaving the
+// campaign with zero fields — so the bot falls back to asking for a screenshot.
+// Derive a sensible label from the type so the chosen field type is honored.
+const FIELD_DEFAULT_LABEL = {
+  text: 'Your answer',
+  url: 'Proof link',
+  uid: 'Your exchange UID',
+  wallet: 'Your wallet address',
+  screenshot: 'Proof screenshot',
+  tx_hash: 'Transaction hash',
+  username: 'Your username / handle',
+};
+// Normalize proof fields for saving. Only truly-empty rows (default 'text' type
+// AND no label) are dropped; a typed field with a blank prompt keeps a default
+// label so its type survives to the bot.
+const normalizeProofFields = (arr) => (arr || [])
+  .filter((f) => (f.label || '').trim() || f.field_type !== 'text')
+  .map((f) => ({
+    label: (f.label || '').trim() || FIELD_DEFAULT_LABEL[f.field_type] || 'Your answer',
+    field_type: f.field_type,
+    required: f.required,
+    example: (f.example || '').trim() || null,
+  }));
+
+// Type is chosen up-front (via the Create ▾ menu), so the wizard no longer asks
+// for it — it opens straight on the task definition. Platform now lives in step 1.
+const WIZARD_STEPS = ['Task & Proof', 'Schedule & Reward'];
+
+const EMPTY_TASK = { title: '', type: 'social_task', platform: '', task_url: '', verification_mode: 'manual', reward_xp: 0, reward_label: '', custom_fields: [] };
+
+// A ranked board is meaningful for competitive / XP-bearing campaigns, not
+// one-shot collection (UID/wallet/proof).
+const leaderboardDefaultOn = (c) =>
+  (parseInt(c.reward_xp) || 0) > 0 || (c.tasks?.length || 0) > 0 || ['social_task', 'raid'].includes(c.type);
+
+// Resolve the effective "show leaderboard" state from a campaign's saved settings,
+// falling back to the intelligent default when the owner hasn't set a preference.
+const leaderboardSettingFor = (c) => {
+  const pref = (c.settings || {}).leaderboard;
+  return pref === true ? true : pref === false ? false : leaderboardDefaultOn(c);
+};
+
+const errText = (e, fallback) =>
+  e?.response?.data?.error || e?.response?.data?.message || fallback;
+
+// Reusable proof-fields editor — used for campaign-level fields and per task.
+function ProofFieldsEditor({ fields, onChange }) {
+  const add = () => onChange([...fields, { label: '', field_type: 'text', required: true, example: '' }]);
+  const upd = (i, k, v) => onChange(fields.map((f, idx) => (idx === i ? { ...f, [k]: v } : f)));
+  const del = (i) => onChange(fields.filter((_, idx) => idx !== i));
+  return (
+    <>
+      {fields.map((f, i) => (
+        <Box key={i} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+            <TextField size="small" label="Prompt" placeholder="Submit your Bitget UID" value={f.label}
+              onChange={(e) => upd(i, 'label', e.target.value)} sx={{ flex: 1 }} />
+            <FormControl size="small" sx={{ minWidth: 130 }}>
+              <Select value={f.field_type} onChange={(e) => upd(i, 'field_type', e.target.value)}>
+                {FIELD_TYPES.map((t) => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)}
+              </Select>
+            </FormControl>
+            <Tooltip title={f.required ? 'Required' : 'Optional'}>
+              <Switch size="small" checked={f.required} onChange={(e) => upd(i, 'required', e.target.checked)} />
+            </Tooltip>
+            <IconButton size="small" color="error" onClick={() => del(i)}><Delete fontSize="small" /></IconButton>
+          </Box>
+          {f.field_type !== 'screenshot' && (
+            <TextField size="small" fullWidth sx={{ mt: 1 }}
+              label="Example / format (optional, shown to users)"
+              placeholder={EXAMPLE_PLACEHOLDER[f.field_type] || ''}
+              value={f.example || ''}
+              onChange={(e) => upd(i, 'example', e.target.value)} />
+          )}
+        </Box>
+      ))}
+      {fields.length >= 4 ? (
+        <Typography variant="caption" color="text.secondary">
+          Discord modals allow at most 4 extra proof fields.
+        </Typography>
+      ) : (
+        <Button size="small" startIcon={<Add />} onClick={add} sx={{ alignSelf: 'flex-start' }}>
+          Add proof field
+        </Button>
+      )}
+    </>
+  );
+}
+
+// Multi-task editor — each task carries its own type/platform/verification/reward
+// and proof fields. (Pro feature; backend rejects >1 task for free plans.)
+function TasksEditor({ tasks, onChange }) {
+  const add = () => onChange([...tasks, { ...EMPTY_TASK }]);
+  const upd = (i, k, v) => onChange(tasks.map((t, idx) => (idx === i ? { ...t, [k]: v } : t)));
+  const del = (i) => onChange(tasks.filter((_, idx) => idx !== i));
+  return (
+    <Stack spacing={2}>
+      <Typography variant="caption" color="text.secondary">
+        Members complete each task separately and earn that task's XP. Each task has its own
+        verification and proof fields, and gets its own button on the channel post.
+      </Typography>
+      {tasks.map((t, i) => (
+        <Box key={i} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+            <Typography variant="subtitle2" fontWeight={600}>Task {i + 1}</Typography>
+            <IconButton size="small" color="error" onClick={() => del(i)}><Delete fontSize="small" /></IconButton>
+          </Box>
+          <Stack spacing={1.5}>
+            <TextField size="small" fullWidth label="Task title" value={t.title}
+              onChange={(e) => upd(i, 'title', e.target.value)} />
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+              <FormControl size="small" sx={{ minWidth: 150, flex: 1 }}>
+                <InputLabel>Type</InputLabel>
+                <Select value={t.type} label="Type" onChange={(e) => upd(i, 'type', e.target.value)}>
+                  {TYPES.map((x) => <MenuItem key={x.value} value={x.value}>{x.emoji} {x.label}</MenuItem>)}
+                </Select>
+              </FormControl>
+              <FormControl size="small" sx={{ minWidth: 130, flex: 1 }}>
+                <InputLabel>Platform</InputLabel>
+                <Select value={t.platform} label="Platform" onChange={(e) => upd(i, 'platform', e.target.value)}>
+                  {PLATFORMS.map((p) => <MenuItem key={p.value} value={p.value}>{p.label}</MenuItem>)}
+                </Select>
+              </FormControl>
+            </Box>
+            <FormControl size="small" fullWidth>
+              <InputLabel>Verification</InputLabel>
+              <Select value={t.verification_mode} label="Verification" onChange={(e) => upd(i, 'verification_mode', e.target.value)}>
+                {VERIFICATION_MODES.map((v) => <MenuItem key={v.value} value={v.value}>{v.label}</MenuItem>)}
+              </Select>
+            </FormControl>
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+              <TextField size="small" type="number" label="XP" value={t.reward_xp}
+                onChange={(e) => upd(i, 'reward_xp', e.target.value)} inputProps={{ min: 0 }} sx={{ width: 110 }} />
+              <TextField size="small" label="Task link (optional)" placeholder="https://x.com/..." value={t.task_url}
+                onChange={(e) => upd(i, 'task_url', e.target.value)} sx={{ flex: 1, minWidth: 160 }} />
+            </Box>
+            <Divider textAlign="left"><Typography variant="caption">Proof fields</Typography></Divider>
+            <ProofFieldsEditor fields={t.custom_fields || []} onChange={(v) => upd(i, 'custom_fields', v)} />
+          </Stack>
+        </Box>
+      ))}
+      <Button size="small" variant="outlined" startIcon={<Add />} onClick={add} sx={{ alignSelf: 'flex-start' }}>
+        Add task
+      </Button>
+    </Stack>
+  );
+}
+
+// Click-to-view proof screenshot. Discord modals can't take a file, so the bot
+// collects the image in a follow-up message and stores its CDN url — we just
+// render it (no per-click fetch through the bot, unlike Telegizer).
+function ScreenshotViewer({ url }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button size="small" variant="text" startIcon={<Visibility fontSize="small" />}
+        onClick={() => setOpen(true)} sx={{ textTransform: 'none', p: 0, minWidth: 0 }}>
+        View screenshot
+      </Button>
+      <Dialog open={open} onClose={() => setOpen(false)} maxWidth="md">
+        <DialogTitle>Submitted screenshot</DialogTitle>
+        <DialogContent>
+          <Box component="img" src={url} alt="Submitted proof"
+            sx={{ maxWidth: '100%', maxHeight: '70vh', display: 'block', mx: 'auto', borderRadius: 1 }} />
+        </DialogContent>
+        <DialogActions>
+          <Button href={url} target="_blank" rel="noopener noreferrer">Open full size</Button>
+          <Button onClick={() => setOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+    </>
+  );
+}
+
+export default function CampaignsTab({ guildId, channels = [] }) {
+  const [campaigns, setCampaigns] = useState([]);
+  // `is_pro` accounts for plan expiry; `plan` alone would unlock the UI for a
+  // lapsed Pro guild whose writes the backend then rejects.
+  const [isPaid, setIsPaid] = useState(false);
+  // Whether X auto-verify can actually run (twitterapi.io key live + admin switch on).
+  // Owner-aware 3-state for the auto-verify chip: 'live' | 'rejected' | 'disabled'.
+  const [xAutoverifyStatus, setXAutoverifyStatus] = useState('disabled');
+  const [xKeyDialogOpen, setXKeyDialogOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [createType, setCreateType] = useState(null);   // non-null => wizard open, pre-set to this type
+  const [createAnchor, setCreateAnchor] = useState(null); // Create ▾ menu anchor
+  const [typeFilter, setTypeFilter] = useState('all');    // list filter chip
+  const [manageId, setManageId] = useState(null);
+
+  const textChannels = channels.filter((c) => TEXT_TYPES.has(c.type));
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await engagement.list(guildId);
+      setCampaigns(res.data.campaigns || []);
+      setIsPaid(res.data.is_pro ?? (res.data.plan === 'pro'));
+      if (res.data.x_autoverify_status) setXAutoverifyStatus(res.data.x_autoverify_status);
+    } catch {
+      toast.error('Failed to load campaigns');
+    } finally {
+      setLoading(false);
+    }
+  }, [guildId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const totals = campaigns.reduce((acc, c) => {
+    acc.total += 1;
+    if (c.status === 'active') acc.active += 1;
+    acc.submissions += c.submissions_total || 0;
+    acc.pending += c.submissions_pending || 0;
+    return acc;
+  }, { total: 0, active: 0, submissions: 0, pending: 0 });
+
+  // Per-type counts for the filter chips.
+  const byType = TYPES.reduce((m, t) => {
+    const list = campaigns.filter((c) => c.type === t.value);
+    m[t.value] = { total: list.length, active: list.filter((c) => c.status === 'active').length };
+    return m;
+  }, {});
+
+  const visibleCampaigns = typeFilter === 'all'
+    ? campaigns
+    : campaigns.filter((c) => c.type === typeFilter);
+
+  const openCreate = (type) => { setCreateAnchor(null); setCreateType(type); };
+
+  const activeType = TYPES.find((t) => t.value === typeFilter);
+  // Create button is context-aware: on a specific type tab it creates that type
+  // directly; on "All campaigns" it opens the type picker menu.
+  const handleCreateClick = (e) => {
+    if (typeFilter === 'all') setCreateAnchor(e.currentTarget);
+    else openCreate(typeFilter);
+  };
+
+  return (
+    <Box>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+        <Box>
+          <Typography variant="h6" fontWeight={600}>Engagement Campaigns</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Run social tasks, content submissions and proof collection. Members participate from Discord.
+          </Typography>
+        </Box>
+        <Button variant="contained" startIcon={<Add />}
+          endIcon={typeFilter === 'all' ? <ArrowDropDown /> : undefined}
+          onClick={handleCreateClick}>
+          {activeType ? `Create ${activeType.label}` : 'Create'}
+        </Button>
+        <Menu anchorEl={createAnchor} open={!!createAnchor} onClose={() => setCreateAnchor(null)}>
+          {TYPES.map((t) => (
+            <MenuItem key={t.value} onClick={() => openCreate(t.value)}>
+              <Box component="span" sx={{ mr: 1 }}>{t.emoji}</Box> {t.label}
+            </MenuItem>
+          ))}
+        </Menu>
+      </Box>
+
+      {/* Persistent type tabs — All campaigns + one tab per campaign type. Always
+          visible so an admin can jump straight to (and create) a single type. */}
+      <Tabs
+        value={typeFilter}
+        onChange={(_, v) => setTypeFilter(v)}
+        variant="scrollable"
+        scrollButtons="auto"
+        allowScrollButtonsMobile
+        sx={{
+          mb: 2, borderBottom: 1, borderColor: 'divider', minHeight: 38,
+          '& .MuiTab-root': {
+            minHeight: 38, minWidth: 0, px: 1.25, fontSize: '0.78rem', textTransform: 'none',
+          },
+        }}
+      >
+        <Tab value="all" label={`All campaigns (${totals.total})`} />
+        {TYPES.map((t) => (
+          <Tab
+            key={t.value}
+            value={t.value}
+            label={`${t.emoji} ${t.label} (${byType[t.value]?.total || 0})`}
+          />
+        ))}
+      </Tabs>
+
+      {isPaid ? (
+        <Alert severity="success" sx={{ mb: 2 }}>
+          Your plan: <strong>Pro</strong> — multiple campaigns, link-validity checks,
+          advanced fields, winner picker and bulk export are all unlocked.
+        </Alert>
+      ) : (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Free plan: 1 active campaign, manual/honor proof, server-membership auto-verify.
+          Pro unlocks multiple campaigns, link-validity checks, advanced fields, winner picker and bulk export.
+        </Alert>
+      )}
+
+      {campaigns.length > 0 && (
+        <Grid container spacing={2} sx={{ mb: 2 }}>
+          {[
+            { label: 'Campaigns', value: totals.total },
+            { label: 'Active', value: totals.active, color: 'success.main' },
+            { label: 'Submissions', value: totals.submissions },
+            { label: 'Pending Review', value: totals.pending, color: 'warning.main' },
+          ].map((s) => (
+            <Grid item xs={6} sm={3} key={s.label}>
+              <Card variant="outlined">
+                <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                  <Typography variant="caption" color="text.secondary">{s.label}</Typography>
+                  <Typography variant="h5" fontWeight={700} color={s.color || 'text.primary'}>{s.value}</Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+      )}
+
+      {loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
+      ) : campaigns.length === 0 ? (
+        <Card>
+          <CardContent sx={{ textAlign: 'center', py: 4 }}>
+            <CampaignIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
+            <Typography color="text.secondary" sx={{ mb: 2 }}>
+              {activeType ? `No ${activeType.label} campaigns yet. Create one to engage your community.`
+                          : 'No campaigns yet. Create one to engage your community.'}
+            </Typography>
+            <Button variant="contained" startIcon={<Add />}
+              endIcon={typeFilter === 'all' ? <ArrowDropDown /> : undefined}
+              onClick={handleCreateClick}>
+              {activeType ? `Create ${activeType.label}` : 'Create'}
+            </Button>
+          </CardContent>
+        </Card>
+      ) : visibleCampaigns.length === 0 ? (
+        <Card>
+          <CardContent sx={{ textAlign: 'center', py: 4 }}>
+            <CampaignIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
+            <Typography color="text.secondary" sx={{ mb: 2 }}>
+              No {(TYPES.find((t) => t.value === typeFilter) || {}).label} campaigns yet.
+            </Typography>
+            <Button variant="contained" startIcon={<Add />} onClick={() => openCreate(typeFilter)}>
+              Create {(TYPES.find((t) => t.value === typeFilter) || {}).label}
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', overflowX: 'auto' }}>
+          {/* Tight padding + compact cells so all 9 columns fit on a desktop
+              viewport without a horizontal scroll (falls back to scroll on mobile). */}
+          <Table size="small" sx={{ minWidth: { xs: 680, md: 0 }, '& td, & th': { px: { xs: 1, md: 1.25 } }, tableLayout: { md: 'fixed' } }}>
+            <TableHead>
+              <TableRow sx={{ '& th': { fontWeight: 700, whiteSpace: 'nowrap' } }}>
+                <TableCell sx={{ width: { md: '19%' } }}>Title</TableCell>
+                <TableCell sx={{ width: { md: '11%' } }}>Type</TableCell>
+                <TableCell sx={{ width: { md: '9%' } }}>Status</TableCell>
+                <TableCell sx={{ width: { md: '13%' } }}>Channel post</TableCell>
+                <TableCell align="center" sx={{ width: { md: '9%' } }}>Verified</TableCell>
+                <TableCell align="center" sx={{ width: { md: '9%' } }}>Pending</TableCell>
+                <TableCell align="center" sx={{ width: { md: '8%' } }}>Total</TableCell>
+                <TableCell sx={{ width: { md: '12%' } }}>Deadline</TableCell>
+                <TableCell align="right" sx={{ width: { md: '10%' } }}>Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {visibleCampaigns.map((c) => (
+                <CampaignRow
+                  key={c.id} c={c} guildId={guildId} channels={textChannels} isPaid={isPaid}
+                  onChanged={load} onManage={() => setManageId(c.id)}
+                />
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
+
+      {createType && (
+        <CampaignWizard
+          guildId={guildId} initialType={createType} isPaid={isPaid} channels={textChannels}
+          xAutoverifyStatus={xAutoverifyStatus}
+          onManageKey={() => setXKeyDialogOpen(true)}
+          onClose={() => setCreateType(null)}
+          onCreated={() => { setCreateType(null); load(); }}
+        />
+      )}
+
+      <XKeyDialog
+        open={xKeyDialogOpen}
+        onClose={() => setXKeyDialogOpen(false)}
+        onSaved={(s) => { if (s) setXAutoverifyStatus(s); load(); }}
+      />
+      {manageId != null && (
+        <CampaignManageDialog
+          guildId={guildId} campaignId={manageId} channels={textChannels} isPaid={isPaid}
+          onClose={() => setManageId(null)}
+          onChanged={load}
+        />
+      )}
+    </Box>
+  );
+}
+
+// ── Row + lifecycle menu ──────────────────────────────────────────────────────
+
+function PostStatusCell({ c, guildId, onChanged }) {
+  const [posting, setPosting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  // The bot posts on a ~20s loop, so there is no transient "posting" state stored:
+  // the chip stays "Not posted" until the bot confirms.
+  const map = {
+    posted: { label: 'Posted', color: 'success' },
+    failed: { label: 'Failed', color: 'error' },
+    none: { label: 'Not posted', color: 'default' },
+  };
+  const meta = map[c.post_status] || map.none;
+  const canRetry = c.status === 'active' && c.post_status !== 'posted';
+  const canDelete = c.post_status === 'posted' && c.message_id;
+
+  const doPost = async () => {
+    if (!c.channel_id) { toast.error('Set an announce channel first (Edit → Announce channel)'); return; }
+    setPosting(true);
+    try {
+      await engagement.post(guildId, c.id);
+      toast.success('Queued — the bot posts within ~20s');
+      onChanged();
+    } catch (e) {
+      toast.error(errText(e, 'Failed to post'));
+    } finally {
+      setPosting(false);
+    }
+  };
+
+  const doDelete = async () => {
+    setDeleting(true);
+    try {
+      await engagement.deletePost(guildId, c.id);
+      toast.success('Queued — the bot deletes the post within ~20s');
+      setConfirmDelete(false);
+      onChanged();
+    } catch (e) {
+      toast.error(errText(e, 'Failed to delete post'));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, whiteSpace: 'nowrap' }}>
+      <Tooltip title={c.post_error || (c.posted_at ? `Posted ${new Date(c.posted_at).toLocaleString()}` : '')}>
+        <Chip size="small" label={meta.label} color={meta.color} variant={meta.color === 'default' ? 'outlined' : 'filled'} />
+      </Tooltip>
+      {canRetry && (
+        <Tooltip title="Post to channel / retry">
+          <span>
+            <IconButton size="small" onClick={doPost} disabled={posting}>
+              {posting ? <CircularProgress size={14} /> : (c.post_status === 'failed' ? <Replay fontSize="small" /> : <Send fontSize="small" />)}
+            </IconButton>
+          </span>
+        </Tooltip>
+      )}
+      {canDelete && (
+        <Tooltip title="Delete the channel post">
+          <span>
+            <IconButton size="small" color="error" onClick={() => setConfirmDelete(true)} disabled={deleting}>
+              {deleting ? <CircularProgress size={14} /> : <DeleteOutline fontSize="small" />}
+            </IconButton>
+          </span>
+        </Tooltip>
+      )}
+      <Dialog open={confirmDelete} onClose={() => !deleting && setConfirmDelete(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Delete channel post?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            This removes the announcement message from the Discord channel. Submissions and
+            rewards are kept, and you can post it again afterwards.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmDelete(false)} disabled={deleting}>Cancel</Button>
+          <Button color="error" variant="contained" onClick={doDelete} disabled={deleting}>
+            {deleting ? <CircularProgress size={20} color="inherit" /> : 'Delete post'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+}
+
+// Compact two-line deadline ("30 Jun 2026 / 06:56") so the column stays narrow
+// enough for the whole table to fit a desktop viewport without horizontal scroll.
+function fmtDeadline(value) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '—';
+  const date = d.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+  const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  return (
+    <>
+      {date}
+      <br />
+      {time}
+    </>
+  );
+}
+
+// Collapse a long title to two lines; click "more" to expand the full text
+// inline. Long titles were wrapping into many rows and making the table messy.
+function TruncatedTitle({ title }) {
+  const [open, setOpen] = useState(false);
+  const [overflowing, setOverflowing] = useState(false);
+  const ref = useRef(null);
+  const full = title || '';
+  // Measure the collapsed (2-line-clamped) title once — only offer "more" when
+  // it actually overflows two lines, so short titles never show a dead toggle.
+  useEffect(() => {
+    const el = ref.current;
+    if (el) setOverflowing(el.scrollHeight > el.clientHeight + 1);
+  }, [full]);
+  return (
+    <Box sx={{ maxWidth: { xs: 220, md: '100%' } }}>
+      <Tooltip title={!open && overflowing ? full : ''} placement="top-start">
+        <Typography
+          ref={ref}
+          variant="body2"
+          fontWeight={500}
+          sx={{
+            wordBreak: 'break-word',
+            ...(open ? {} : {
+              display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+            }),
+          }}
+        >
+          {full || '—'}
+        </Typography>
+      </Tooltip>
+      {overflowing && (
+        <Typography
+          component="span" variant="caption" color="primary.main"
+          onClick={() => setOpen((v) => !v)}
+          sx={{ cursor: 'pointer', whiteSpace: 'nowrap' }}
+        >
+          {open ? 'less' : 'more'}
+        </Typography>
+      )}
+    </Box>
+  );
+}
+
+function CampaignRow({ c, guildId, channels, isPaid, onChanged, onManage }) {
+  const [anchor, setAnchor] = useState(null);
+  const [editOpen, setEditOpen] = useState(false);
+
+  const act = async (action) => {
+    setAnchor(null);
+    try {
+      await engagement.update(guildId, c.id, { action });
+      toast.success(`Campaign ${action}d`);
+      onChanged();
+    } catch (e) {
+      toast.error(errText(e, `Failed to ${action}`));
+    }
+  };
+
+  const remove = async () => {
+    setAnchor(null);
+    if (!window.confirm(`Delete "${c.title}"? Its tasks and submissions are removed too.`)) return;
+    try {
+      await engagement.remove(guildId, c.id);
+      toast.success('Campaign deleted');
+      onChanged();
+    } catch (e) {
+      toast.error(errText(e, 'Failed to delete'));
+    }
+  };
+
+  const lifecycle = [
+    c.status !== 'active' && { action: 'publish', label: 'Publish / Activate' },
+    c.status === 'active' && { action: 'pause', label: 'Pause' },
+    (c.status === 'paused' || c.status === 'closed') && { action: 'reopen', label: 'Reopen' },
+    c.status !== 'closed' && c.status !== 'archived' && { action: 'close', label: 'Close' },
+    c.status !== 'archived' && { action: 'archive', label: 'Archive' },
+  ].filter(Boolean);
+
+  return (
+    <TableRow hover sx={{ opacity: c.status === 'archived' ? 0.55 : 1 }}>
+      <TableCell sx={{ verticalAlign: 'top' }}>
+        <TruncatedTitle title={c.title} />
+        {c.platform && <Typography variant="caption" color="text.secondary" display="block">{c.platform}</Typography>}
+      </TableCell>
+      <TableCell>
+        <Typography variant="caption">{(TYPES.find((t) => t.value === c.type) || {}).label || c.type}</Typography>
+        {c.is_multitask && (
+          <Chip size="small" variant="outlined" label={`${c.tasks?.length || 0} tasks`} sx={{ ml: 0.5, height: 18 }} />
+        )}
+      </TableCell>
+      <TableCell><Chip size="small" label={c.status} color={STATUS_COLOR[c.status] || 'default'} /></TableCell>
+      <TableCell><PostStatusCell c={c} guildId={guildId} onChanged={onChanged} /></TableCell>
+      <TableCell align="center">{c.submissions_verified ?? 0}</TableCell>
+      <TableCell align="center">{c.submissions_pending ?? 0}</TableCell>
+      <TableCell align="center">{c.submissions_total ?? 0}</TableCell>
+      <TableCell>
+        {c.ends_at ? (
+          <Tooltip title={new Date(c.ends_at).toLocaleString()}>
+            <Typography variant="caption" sx={{ lineHeight: 1.25, display: 'block' }}>
+              {fmtDeadline(c.ends_at)}
+            </Typography>
+          </Tooltip>
+        ) : (
+          <Typography variant="caption">—</Typography>
+        )}
+      </TableCell>
+      <TableCell align="right">
+        <Tooltip title="Manage & review"><IconButton size="small" onClick={onManage}><Visibility fontSize="small" /></IconButton></Tooltip>
+        <IconButton size="small" onClick={(e) => setAnchor(e.currentTarget)}><MoreVert fontSize="small" /></IconButton>
+        <Menu anchorEl={anchor} open={!!anchor} onClose={() => setAnchor(null)}>
+          <MenuItem onClick={() => { setAnchor(null); setEditOpen(true); }}>Edit campaign</MenuItem>
+          <Divider />
+          {lifecycle.map((l) => (
+            <MenuItem key={l.action} onClick={() => act(l.action)}>{l.label}</MenuItem>
+          ))}
+          <Divider />
+          <MenuItem onClick={remove} sx={{ color: 'error.main' }}>Delete campaign</MenuItem>
+        </Menu>
+      </TableCell>
+      {editOpen && (
+        <CampaignEditDialog
+          guildId={guildId} campaign={c} channels={channels} isPaid={isPaid}
+          hasSubmissions={(c.submissions_total || 0) > 0}
+          onClose={() => setEditOpen(false)}
+          onSaved={() => { setEditOpen(false); onChanged(); }}
+        />
+      )}
+    </TableRow>
+  );
+}
+
+// ── X auto-verify status signal ───────────────────────────────────────────────
+// 3-state health signal for the "Auto-verify on X" toggle so the owner knows —
+// before they rely on it — whether actions will confirm automatically or fall back
+// to manual review. The status is account-level (the owner's BYO key or the shared
+// platform key), so it's identical across every guild and is fetched once with the
+// campaign list — no per-guild cost even with 50 servers.
 const X_STATUS_META = {
   live: {
     color: 'success', dot: '🟢', label: 'X auto-verify: live',
-    detail: 'Reposts, comments, quotes & follows confirm automatically in real time. (Likes can’t be auto-verified — X keeps likes private.)',
+    detail: 'Reposts, comments, quotes & follows confirm automatically in real time. (A like still needs the member to open the post for ~30s — X keeps likes private.)',
   },
   rejected: {
     color: 'warning', dot: '🟡', label: 'X auto-verify: key rejected',
-    detail: 'A key is configured but X rejected it (invalid key, no credits, or rate-limited). Until it’s fixed, submissions fall back to manual review.',
+    detail: 'A key is configured but X rejected it (invalid key, no credits, or rate-limited). Until it’s fixed, submissions fall back to manual review — you’ll approve them under Manage.',
   },
   disabled: {
     color: 'default', dot: '⚪', label: 'X auto-verify: not configured',
@@ -32,17 +816,23 @@ const X_STATUS_META = {
 
 function XAutoverifyStatus({ status, enabled, onManageKey }) {
   const meta = X_STATUS_META[status] || X_STATUS_META.disabled;
+  // Toggle OFF → a compact, clickable chip so the owner can check health / add a key
+  // proactively. Toggle ON → the full confirmation so enabling never leaves them guessing.
   if (!enabled) {
     return (
       <Tooltip title={meta.detail}>
-        <Chip size="small" variant="outlined" color={meta.color}
-          label={`${meta.dot} ${meta.label}`} onClick={onManageKey} sx={{ mt: 1 }} />
+        <Chip
+          size="small" variant="outlined" color={meta.color}
+          label={`${meta.dot} ${meta.label}`}
+          onClick={onManageKey}
+          sx={{ mt: 1 }}
+        />
       </Tooltip>
     );
   }
   const severity = status === 'live' ? 'success' : status === 'rejected' ? 'warning' : 'info';
-  // Button below the detail (not in Alert's right-hand action slot) so the text
-  // spans full width — 2–3 lines instead of a narrow ~10-line column on mobile.
+  // Keep the "Manage key" button BELOW the detail (not in Alert's right-hand
+  // `action` slot) so the description text spans the full width.
   return (
     <Alert severity={severity} sx={{ mt: 1 }}>
       <strong>{meta.dot} {meta.label}</strong>
@@ -57,38 +847,47 @@ function XAutoverifyStatus({ status, enabled, onManageKey }) {
   );
 }
 
+// ── Bring-your-own twitterapi.io key (account-level) ──────────────────────────
 function XKeyDialog({ open, onClose, onSaved }) {
-  const [info, setInfo] = useState(null);
+  const [info, setInfo] = useState(null);   // { configured, masked_key, status, using_own_key }
   const [keyInput, setKeyInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState(null);
 
   useEffect(() => {
     if (!open) return;
-    setKeyInput(''); setErr(null); setLoading(true);
+    setKeyInput('');
+    setLoading(true);
     guildizerXVerifyKey.get()
-      .then((r) => setInfo(r.data)).catch(() => setInfo(null))
+      .then((r) => setInfo(r.data))
+      .catch(() => setInfo(null))
       .finally(() => setLoading(false));
   }, [open]);
 
-  async function save() {
-    if (!keyInput.trim()) return;
-    setBusy(true); setErr(null);
+  const save = async () => {
+    if (!keyInput.trim()) { toast.error('Paste your twitterapi.io key'); return; }
+    setBusy(true);
     try {
       const r = await guildizerXVerifyKey.save(keyInput.trim());
-      onSaved?.(r.data.status); onClose();
-    } catch (e) { setErr(e?.response?.data?.error || 'Failed to save key'); }
-    finally { setBusy(false); }
-  }
-  async function remove() {
-    setBusy(true); setErr(null);
+      toast.success(r.data.message || 'Key saved');
+      onSaved?.(r.data.status);
+      onClose();
+    } catch (e) {
+      toast.error(errText(e, 'Failed to save key'));
+    } finally { setBusy(false); }
+  };
+
+  const remove = async () => {
+    setBusy(true);
     try {
       const r = await guildizerXVerifyKey.delete();
-      onSaved?.(r.data.status); onClose();
-    } catch (e) { setErr(e?.response?.data?.error || 'Failed to remove key'); }
-    finally { setBusy(false); }
-  }
+      toast.success(r.data.message || 'Key removed');
+      onSaved?.(r.data.status);
+      onClose();
+    } catch (e) {
+      toast.error(errText(e, 'Failed to remove key'));
+    } finally { setBusy(false); }
+  };
 
   return (
     <Dialog open={open} onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth>
@@ -100,19 +899,25 @@ function XKeyDialog({ open, onClose, onSaved }) {
           key covers every server you manage. Get a key at{' '}
           <a href="https://twitterapi.io" target="_blank" rel="noopener noreferrer">twitterapi.io</a>.
         </Typography>
-        {err && <Alert severity="error" sx={{ mb: 2 }}>{err}</Alert>}
         {loading ? (
-          <Box sx={{ display: 'grid', placeItems: 'center', py: 2 }}><CircularProgress size={24} /></Box>
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}><CircularProgress size={24} /></Box>
         ) : (
           <>
             {info?.configured && (
-              <Alert severity={info.status === 'live' ? 'success' : info.status === 'rejected' ? 'warning' : 'info'} sx={{ mb: 2 }}>
-                Saved key {info.masked_key ? `(${info.masked_key})` : ''} — current status: <strong>{info.status}</strong>.
+              <Alert
+                severity={info.status === 'live' ? 'success' : info.status === 'rejected' ? 'warning' : 'info'}
+                sx={{ mb: 2 }}
+              >
+                Saved key {info.masked_key ? `(${info.masked_key})` : ''} — current status:{' '}
+                <strong>{info.status}</strong>.
               </Alert>
             )}
-            <TextField fullWidth type="password" label="twitterapi.io API key"
+            <TextField
+              fullWidth type="password" label="twitterapi.io API key"
               placeholder={info?.configured ? 'Paste a new key to replace' : 'Paste your key'}
-              value={keyInput} onChange={(e) => setKeyInput(e.target.value)} autoComplete="off" />
+              value={keyInput} onChange={(e) => setKeyInput(e.target.value)}
+              autoComplete="off"
+            />
             <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
               We check the key against the live API before saving, so a bad key is caught here.
             </Typography>
@@ -120,7 +925,9 @@ function XKeyDialog({ open, onClose, onSaved }) {
         )}
       </DialogContent>
       <DialogActions>
-        {info?.configured && <Button color="error" onClick={remove} disabled={busy}>Remove key</Button>}
+        {info?.configured && (
+          <Button color="error" onClick={remove} disabled={busy}>Remove key</Button>
+        )}
         <Box sx={{ flex: 1 }} />
         <Button onClick={onClose} disabled={busy}>Cancel</Button>
         <Button variant="contained" onClick={save} disabled={busy || !keyInput.trim()}>
@@ -131,527 +938,1103 @@ function XKeyDialog({ open, onClose, onSaved }) {
   );
 }
 
-const TEXT_TYPES = new Set([0, 5]);
-const TYPES = ['proof_collection', 'content_submission', 'social_task', 'raid', 'giveaway'];
-const TYPE_LABEL = { proof_collection: 'Proof Collection', content_submission: 'Content Submission', social_task: 'Social Task', raid: 'Twitter Raid', giveaway: 'Giveaway' };
-// Twitter Raid targets, stored under campaign settings.raid_goals.
-const RAID_GOALS = [['likes', 'Likes'], ['retweets', 'Retweets'], ['comments', 'Comments'], ['follows', 'Follows']];
-const cleanGoals = (g) => Object.fromEntries(
-  RAID_GOALS.map(([k]) => [k, parseInt(g?.[k], 10)]).filter(([, v]) => v > 0));
-const VMODES = ['manual', 'honor', 'link'];
-// Typed proof fields — 1:1 with Telegizer's CampaignManager FIELD_TYPES.
-const FIELD_TYPES = [
-  { value: 'text', label: 'Text' },
-  { value: 'url', label: 'URL / Link' },
-  { value: 'uid', label: 'Exchange UID' },
-  { value: 'wallet', label: 'Wallet address' },
-  { value: 'screenshot', label: 'Screenshot' },
-  { value: 'tx_hash', label: 'Transaction hash' },
-  { value: 'username', label: 'Username / handle' },
-];
-const STATUS_COLOR = { draft: 'default', active: 'success', paused: 'warning', closed: 'default' };
-
-export default function CampaignsTab({ guildId, channels = [] }) {
-  const [campaigns, setCampaigns] = useState([]);
-  const [plan, setPlan] = useState('free');
-  const [xStatus, setXStatus] = useState('disabled');
-  const [keyDialogOpen, setKeyDialogOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState(null);
-  const [creating, setCreating] = useState(false);
-  const [typeFilter, setTypeFilter] = useState('all');
-  const textChannels = channels.filter((c) => TEXT_TYPES.has(c.type));
-
-  const summary = useMemo(() => {
-    const active = campaigns.filter((c) => c.status === 'active').length;
-    const submissions = campaigns.reduce((n, c) => n + (c.counts?.verified || 0) + (c.counts?.pending || 0), 0);
-    const pending = campaigns.reduce((n, c) => n + (c.counts?.pending || 0), 0);
-    return { total: campaigns.length, active, submissions, pending };
-  }, [campaigns]);
-
-  const shown = typeFilter === 'all' ? campaigns : campaigns.filter((c) => c.type === typeFilter);
-
-  async function load() {
-    setLoading(true);
-    try {
-      const { data } = await guildizerApi.get(`/api/guilds/${guildId}/campaigns`);
-      setCampaigns(data.campaigns); setPlan(data.plan);
-      if (data.x_autoverify_status) setXStatus(data.x_autoverify_status);
-    } finally { setLoading(false); }
-  }
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [guildId]);
-
-  if (selected) return <CampaignDetail guildId={guildId} campaignId={selected} channels={textChannels} plan={plan} xStatus={xStatus} onXStatus={setXStatus} onBack={() => { setSelected(null); load(); }} />;
-
+// Announce-channel picker, shared by the wizard and the edit dialog.
+function ChannelSelect({ channels, value, onChange, helperText }) {
   return (
-    <>
-    <GuildizerCollapsibleCard id="gz.engagement.campaigns" title="Campaigns">
-      <Stack direction="row" justifyContent="flex-end" alignItems="center" mb={2}>
-        <Button variant="contained" startIcon={<Add />} onClick={() => setCreating((v) => !v)}>{creating ? 'Close' : 'New campaign'}</Button>
-      </Stack>
-      <Typography variant="body2" color="text.secondary" mb={2}>Run proof, content, social, and raid campaigns that reward members with XP for completing tasks. Members participate from Discord.</Typography>
-
-      {plan !== 'pro' && (
-        <Alert severity="info" icon={false} sx={{ mb: 2 }}>
-          <strong>Free plan:</strong> 1 active campaign, manual/honor proof. Pro unlocks multiple
-          campaigns, link-validity checks, per-campaign leaderboards and bulk CSV export.
-        </Alert>
+    <FormControl fullWidth>
+      <InputLabel>Announce channel</InputLabel>
+      <Select value={value} label="Announce channel" onChange={(e) => onChange(e.target.value)}>
+        <MenuItem value="">— none (post later) —</MenuItem>
+        {channels.map((ch) => <MenuItem key={ch.id} value={ch.id}># {ch.name}</MenuItem>)}
+      </Select>
+      {helperText && (
+        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>{helperText}</Typography>
       )}
-
-      {/* Summary cards (Telegizer parity) */}
-      <Grid container spacing={1.5} mb={2}>
-        {[['Campaigns', summary.total], ['Active', summary.active, 'success.main'], ['Submissions', summary.submissions], ['Pending Review', summary.pending, 'warning.main']].map(([label, val, color]) => (
-          <Grid item xs={6} md={3} key={label}>
-            <Card variant="outlined"><CardContent sx={{ py: 1.5, textAlign: 'center' }}>
-              <Typography variant="h5" fontWeight={800} sx={color ? { color } : undefined}>{val}</Typography>
-              <Typography variant="caption" color="text.secondary">{label}</Typography>
-            </CardContent></Card>
-          </Grid>
-        ))}
-      </Grid>
-
-      {/* Type filter tabs */}
-      <Tabs value={typeFilter} onChange={(_, v) => setTypeFilter(v)} variant="scrollable" scrollButtons="auto"
-        sx={{ mb: 1, minHeight: 36, '& .MuiTab-root': { minHeight: 36, textTransform: 'none' } }}>
-        <Tab value="all" label={`All (${campaigns.length})`} />
-        {TYPES.map((t) => <Tab key={t} value={t} label={`${TYPE_LABEL[t]} (${campaigns.filter((c) => c.type === t).length})`} />)}
-      </Tabs>
-
-      {creating && <CreateForm guildId={guildId} channels={textChannels} plan={plan} xStatus={xStatus} onManageKey={() => setKeyDialogOpen(true)} onCreated={() => { setCreating(false); load(); }} />}
-
-      {loading ? <Box sx={{ display: 'grid', placeItems: 'center', py: 3 }}><CircularProgress /></Box> : (
-        <>
-          {shown.length === 0 && <Typography variant="body2" color="text.secondary">No campaigns{typeFilter !== 'all' ? ' of this type' : ''} yet.</Typography>}
-          <List dense>
-            {shown.map((c) => (
-              // ListItemButton (not `<ListItem button secondaryAction>`, which
-              // silently breaks the row click) so the whole row opens the campaign.
-              // Counts sit inside the button so tapping them still opens detail.
-              <ListItem key={c.id} disablePadding divider>
-                <ListItemButton onClick={() => setSelected(c.id)} sx={{ gap: 1 }}>
-                  <Chip size="small" label={c.status} color={STATUS_COLOR[c.status]} sx={{ flexShrink: 0 }} />
-                  <ListItemText sx={{ minWidth: 0 }} primary={c.title} secondary={`${TYPE_LABEL[c.type] || c.type} · ${c.task_count} tasks`}
-                    primaryTypographyProps={{ noWrap: true }} secondaryTypographyProps={{ noWrap: true }} />
-                  <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
-                    {c.counts.verified}✓ / {c.counts.pending}⏳
-                  </Typography>
-                </ListItemButton>
-              </ListItem>
-            ))}
-          </List>
-        </>
-      )}
-    </GuildizerCollapsibleCard>
-    <XKeyDialog open={keyDialogOpen} onClose={() => setKeyDialogOpen(false)}
-      onSaved={(s) => { if (s) setXStatus(s); load(); }} />
-    </>
+    </FormControl>
   );
 }
 
-const WIZARD_STEPS = ['Task & Proof', 'Schedule & Reward'];
+// ── Create wizard ─────────────────────────────────────────────────────────────
 
-function CreateForm({ guildId, channels, plan, xStatus = 'disabled', onManageKey, onCreated }) {
-  const [d, setD] = useState({ title: '', type: 'proof_collection', verification_mode: 'manual', description: '', reward_xp: 50, channel_id: '', one_per_user: true, task_url: '', raid_goals: {}, auto_verify_x: false });
+function CampaignWizard({ guildId, initialType, isPaid = false, channels = [], xAutoverifyStatus = 'disabled', onManageKey, onClose, onCreated }) {
   const [step, setStep] = useState(0);
-  const [error, setError] = useState(null);
+  // When auto-verify handles the X actions, proof fields are only for extra data the
+  // bot can't read from X (wallet, email, UID…), so we collapse them by default to
+  // stop them looking redundant. Owners can expand to add a field.
+  const [showProofFields, setShowProofFields] = useState(false);
+  const cfg0 = typeConfig(initialType);
+  const [form, setForm] = useState({
+    ...EMPTY_FORM,
+    type: initialType || EMPTY_FORM.type,
+    platform: initialType === 'raid' ? 'x' : EMPTY_FORM.platform,
+    platform_other: '',
+    // Per-type default verification (honor for social/giveaway, manual for content…).
+    verification_mode: cfg0.defaultVerification || EMPTY_FORM.verification_mode,
+    // Content submissions always collect a link, so seed a required URL field.
+    custom_fields: cfg0.autoUrlField
+      ? [{ label: 'Your content link', field_type: 'url', required: true, example: 'https://...' }]
+      : EMPTY_FORM.custom_fields,
+    // Intelligent default: rank competitive types; off for one-shot collection.
+    show_leaderboard: ['social_task', 'raid'].includes(initialType),
+    auto_verify_x: false,   // raid / X social task, Pro only
+  });
   const [saving, setSaving] = useState(false);
-  const isRaid = d.type === 'raid';
-  const isPro = plan === 'pro';
-  const step0Valid = !!d.title.trim();
 
-  async function create() {
-    setSaving(true); setError(null);
-    const { raid_goals, auto_verify_x, ...rest } = d;
-    const body = { ...rest, task_url: rest.task_url || null };
-    if (isRaid) body.settings = { raid_goals: cleanGoals(raid_goals), auto_verify_x: !!(isPro && auto_verify_x) };
-    try { await guildizerApi.post(`/api/guilds/${guildId}/campaigns`, body); onCreated(); }
-    catch (e) { setError(e?.response?.data?.message || e?.response?.data?.error || 'Could not create campaign.'); }
-    finally { setSaving(false); }
-  }
+  const typeMeta = TYPES.find((t) => t.value === form.type) || {};
+  const cfg = typeConfig(form.type);
+
+  const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+
+  // Resolve the platform we persist: raid is locked to X, types without a platform
+  // store null, and "Other" sends the free-text the owner typed.
+  const resolvedPlatform = () => {
+    if (form.type === 'raid') return 'x';
+    if (!cfg.showPlatform) return null;
+    if (form.platform === 'other') return form.platform_other.trim() || null;
+    return form.platform || null;
+  };
+
+  const canNext = () => {
+    if (step === 0) {
+      if (!form.title.trim()) return false;
+      if (form.multitask) return form.tasks.some((t) => (t.title || '').trim());
+      if (cfg.taskUrlRequired && !form.task_url.trim()) return false;
+      return true;
+    }
+    return true;
+  };
+
+  const submit = async () => {
+    if (!form.title.trim()) { toast.error('Title is required'); setStep(0); return; }
+    if (form.multitask && !form.tasks.some((t) => (t.title || '').trim())) {
+      toast.error('Add at least one task'); setStep(0); return;
+    }
+    if (!form.multitask && cfg.taskUrlRequired && !form.task_url.trim()) {
+      toast.error(`${cfg.taskUrlLabel || 'Link'} is required`); setStep(0); return;
+    }
+    if (form.publishNow && !form.channel_id) {
+      toast.error('Pick an announce channel to activate now'); setStep(1); return;
+    }
+    setSaving(true);
+    try {
+      const payload = {
+        type: form.type,
+        platform: resolvedPlatform(),
+        title: form.title.trim(),
+        description: form.description || null,
+        task_url: form.task_url || null,
+        verification_mode: form.verification_mode,
+        reward_xp: parseInt(form.reward_xp) || 0,
+        reward_label: form.reward_label || null,
+        max_participants: form.max_participants ? parseInt(form.max_participants) : null,
+        channel_id: form.channel_id || null,
+        one_per_user: form.one_per_user,
+        pin_message: form.pin_message,
+        status: form.publishNow ? 'active' : 'draft',
+        settings: {
+          allow_resubmit: !!form.allow_resubmit,
+          leaderboard: !!form.show_leaderboard,
+          ...(form.type === 'raid'
+            ? {
+                raid_goals: RAID_GOALS.reduce((acc, g) => {
+                  const n = parseInt(form.raid_goals[g.key]);
+                  if (n > 0) acc[g.key] = n;
+                  return acc;
+                }, {}),
+                ...(isPaid && form.auto_verify_x ? { auto_verify_x: true } : {}),
+              }
+            : {}),
+          ...(form.type === 'social_task'
+            ? {
+                social_targets: SOCIAL_TARGETS.reduce((acc, g) => {
+                  const n = parseInt(form.social_targets[g.key]);
+                  if (n > 0) acc[g.key] = n;
+                  return acc;
+                }, {}),
+                show_targets: !!form.show_targets,
+                ...(isPaid && form.auto_verify_x && form.platform === 'x' ? { auto_verify_x: true } : {}),
+              }
+            : {}),
+          ...(form.multitask && form.sequential_tasks ? { sequential_tasks: true } : {}),
+        },
+        custom_fields: form.multitask ? [] : normalizeProofFields(form.custom_fields),
+      };
+      if (form.multitask) {
+        payload.tasks = form.tasks
+          .filter((t) => (t.title || '').trim())
+          .map((t) => ({
+            title: t.title.trim(),
+            type: t.type,
+            platform: t.platform || null,
+            task_url: t.task_url || null,
+            verification_mode: t.verification_mode,
+            reward_xp: parseInt(t.reward_xp) || 0,
+            reward_label: t.reward_label || null,
+            custom_fields: normalizeProofFields(t.custom_fields),
+          }));
+      }
+      if (form.duration_hours) payload.duration_hours = form.duration_hours;
+      await engagement.create(guildId, payload);
+      toast.success(form.publishNow ? 'Campaign created & activated' : 'Campaign saved as draft');
+      onCreated();
+    } catch (e) {
+      toast.error(errText(e, 'Failed to create campaign'));
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
-    <Box sx={{ p: 2, mb: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
-      <Stepper activeStep={step} sx={{ mb: 2 }}>
-        {WIZARD_STEPS.map((s) => <Step key={s}><StepLabel>{s}</StepLabel></Step>)}
-      </Stepper>
-      {error && <Alert severity="error" sx={{ mb: 1 }}>{error}</Alert>}
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>
+        <Box component="span" sx={{ mr: 1 }}>{typeMeta.emoji}</Box>
+        Create {typeMeta.label || 'Campaign'}
+      </DialogTitle>
+      <DialogContent>
+        <Stepper activeStep={step} sx={{ mb: 3, mt: 1 }} alternativeLabel>
+          {WIZARD_STEPS.map((s) => <Step key={s}><StepLabel>{s}</StepLabel></Step>)}
+        </Stepper>
 
-      {step === 0 && (
-        <>
-          <TextField size="small" fullWidth margin="dense" label="Title" value={d.title} inputProps={{ maxLength: 200 }} onChange={(e) => setD({ ...d, title: e.target.value })} />
-          <Grid container spacing={1}>
-            <Grid item xs={6}><TextField select size="small" fullWidth margin="dense" label="Type" value={d.type} onChange={(e) => setD({ ...d, type: e.target.value })}>{TYPES.map((t) => <MenuItem key={t} value={t}>{TYPE_LABEL[t]}</MenuItem>)}</TextField></Grid>
-            <Grid item xs={6}><TextField select size="small" fullWidth margin="dense" label="Verification" value={d.verification_mode} onChange={(e) => setD({ ...d, verification_mode: e.target.value })}>{VMODES.map((m) => <MenuItem key={m} value={m}>{m}</MenuItem>)}</TextField></Grid>
-          </Grid>
-          <TextField size="small" fullWidth margin="dense" label="Description" multiline minRows={2} value={d.description} inputProps={{ maxLength: 2000 }} onChange={(e) => setD({ ...d, description: e.target.value })} />
-          {isRaid && (
-            <>
-              <TextField size="small" fullWidth margin="dense" label="Tweet URL" placeholder="https://x.com/…"
-                value={d.task_url} onChange={(e) => setD({ ...d, task_url: e.target.value })} />
-              <Typography variant="caption" color="text.secondary" display="block" mt={1}>Raid goals (shown as targets in the announcement)</Typography>
-              <Grid container spacing={1}>
-                {RAID_GOALS.map(([k, label]) => (
-                  <Grid item xs={6} sm={3} key={k}>
-                    <TextField type="number" size="small" fullWidth margin="dense" label={label} inputProps={{ min: 0 }}
-                      value={d.raid_goals[k] || ''} onChange={(e) => setD({ ...d, raid_goals: { ...d.raid_goals, [k]: e.target.value } })} />
-                  </Grid>
-                ))}
-              </Grid>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mt: 0.5 }}>
-                <Typography variant="body2">Auto-verify on X (Pro)</Typography>
-                <Switch checked={isPro && d.auto_verify_x} disabled={!isPro}
-                  onChange={(e) => setD({ ...d, auto_verify_x: e.target.checked })} />
-              </Box>
-              {isPro ? (
-                <XAutoverifyStatus status={xStatus} enabled={d.auto_verify_x} onManageKey={onManageKey} />
-              ) : (
-                <Typography variant="caption" color="text.secondary" display="block">
-                  Real-time X verification is a Pro feature. You can still run the raid with manual proof review.
+        {step === 0 && (
+          <Stack spacing={2}>
+            {typeMeta.help && (
+              <Typography variant="caption" color="text.secondary">{typeMeta.help}</Typography>
+            )}
+            <TextField fullWidth label="Title" value={form.title} onChange={(e) => set('title', e.target.value)} />
+
+            <FormControlLabel
+              control={<Switch checked={form.multitask} onChange={(e) => set('multitask', e.target.checked)} />}
+              label="Multiple tasks (Pro) — one campaign, several tasks"
+            />
+
+            {form.multitask ? (
+              <Stack spacing={2}>
+                <TextField fullWidth multiline minRows={2} label="Campaign intro / description"
+                  value={form.description} onChange={(e) => set('description', e.target.value)} />
+                <Divider textAlign="left"><Typography variant="caption">Tasks</Typography></Divider>
+                <TasksEditor tasks={form.tasks} onChange={(v) => set('tasks', v)} />
+                <FormControlLabel
+                  control={<Switch checked={form.sequential_tasks} onChange={(e) => set('sequential_tasks', e.target.checked)} />}
+                  label="Sequential — lock each task until the previous one is completed"
+                />
+              </Stack>
+            ) : (
+              <>
+                {cfg.showPlatform && (
+                  <>
+                    <FormControl fullWidth>
+                      <InputLabel>{cfg.platformRequired ? 'Platform *' : 'Platform'}</InputLabel>
+                      <Select value={form.platform} label={cfg.platformRequired ? 'Platform *' : 'Platform'}
+                        onChange={(e) => set('platform', e.target.value)}>
+                        {PLATFORMS.map((p) => <MenuItem key={p.value} value={p.value}>{p.label}</MenuItem>)}
+                      </Select>
+                    </FormControl>
+                    {form.platform === 'other' && (
+                      <TextField fullWidth label="Platform name (shown to members)"
+                        placeholder="e.g. TikTok, Reddit, Telegram"
+                        value={form.platform_other} onChange={(e) => set('platform_other', e.target.value)} />
+                    )}
+                  </>
+                )}
+                <TextField fullWidth multiline minRows={2} label="Instructions / Description"
+                  value={form.description} onChange={(e) => set('description', e.target.value)} />
+                <TextField fullWidth required={!!cfg.taskUrlRequired}
+                  label={cfg.taskUrlLabel || 'Task Link (optional)'}
+                  placeholder="https://x.com/..." value={form.task_url} onChange={(e) => set('task_url', e.target.value)} />
+                {form.type === 'raid' && (
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">Raid goals (shown as targets in the channel post)</Typography>
+                    <Grid container spacing={1} sx={{ mt: 0.5 }}>
+                      {RAID_GOALS.map((g) => (
+                        <Grid item xs={6} key={g.key}>
+                          <TextField fullWidth size="small" type="number" label={g.label}
+                            value={form.raid_goals[g.key] || ''}
+                            onChange={(e) => set('raid_goals', { ...form.raid_goals, [g.key]: e.target.value })}
+                            inputProps={{ min: 0 }} />
+                        </Grid>
+                      ))}
+                    </Grid>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mt: 1 }}>
+                      <Typography variant="body2">Auto-verify on X (Pro)</Typography>
+                      <Switch
+                        checked={isPaid && form.auto_verify_x}
+                        disabled={!isPaid}
+                        onChange={(e) => set('auto_verify_x', e.target.checked)}
+                      />
+                    </Box>
+                    {isPaid && (
+                      <XAutoverifyStatus
+                        status={xAutoverifyStatus}
+                        enabled={form.auto_verify_x}
+                        onManageKey={onManageKey}
+                      />
+                    )}
+                    {form.auto_verify_x && isPaid && (
+                      <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+                        Members are asked for their X @username so the bot can verify automatically.
+                      </Typography>
+                    )}
+                    {!isPaid && (
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        Real-time X verification is a Pro feature. You can still run the raid
+                        with manual proof review.
+                      </Typography>
+                    )}
+                  </Box>
+                )}
+                {form.type === 'social_task' && (
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">
+                      Targets (optional) — how many of each action you want
+                    </Typography>
+                    <Grid container spacing={1} sx={{ mt: 0.5 }}>
+                      {SOCIAL_TARGETS.map((g) => (
+                        <Grid item xs={6} key={g.key}>
+                          <TextField fullWidth size="small" type="number" label={g.label}
+                            value={form.social_targets[g.key] || ''}
+                            onChange={(e) => set('social_targets', { ...form.social_targets, [g.key]: e.target.value })}
+                            inputProps={{ min: 0 }} />
+                        </Grid>
+                      ))}
+                    </Grid>
+                    {/* Full-width label + switch on the right → the label reads on
+                        one short line instead of wrapping in a narrow column. */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mt: 1 }}>
+                      <Typography variant="body2">Show targets publicly</Typography>
+                      <Switch checked={form.show_targets} onChange={(e) => set('show_targets', e.target.checked)} />
+                    </Box>
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      {form.show_targets
+                        ? 'The channel post shows each target and updates as people are verified (e.g. “40 reposts left”). Likes are honor-based and counted by verified submissions — X keeps real likes private.'
+                        : 'Display a live quota in the channel post. Off → targets stay private and you’ll see verified progress in Manage.'}
+                    </Typography>
+                    {form.platform === 'x' && (
+                      <>
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mt: 1 }}>
+                          <Typography variant="body2">Auto-verify on X (Pro)</Typography>
+                          <Switch checked={isPaid && form.auto_verify_x} disabled={!isPaid}
+                            onChange={(e) => set('auto_verify_x', e.target.checked)} />
+                        </Box>
+                        {isPaid && (
+                          <XAutoverifyStatus
+                            status={xAutoverifyStatus}
+                            enabled={form.auto_verify_x}
+                            onManageKey={onManageKey}
+                          />
+                        )}
+                        <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+                          {isPaid
+                            ? 'Members do each action from a private panel in the channel and tap Verify. Off → everything goes to manual review.'
+                            : 'Real-time X verification is a Pro feature. On the free plan members still do the actions in the panel, but you approve them manually.'}
+                        </Typography>
+                      </>
+                    )}
+                  </Box>
+                )}
+                {/* A raid is driven entirely by the per-action panel (each action is
+                    checked live or sent to review on its own), so the campaign-level
+                    Verification mode doesn't apply — showing it only contradicts the
+                    Auto-verify toggle. Hide it for raids. Likewise, when auto-verify
+                    is ON for an X social task the mode is locked to API-key
+                    verification — show that instead of the manual dropdown. */}
+                {form.type !== 'raid' && (
+                  (isPaid && form.auto_verify_x && form.platform === 'x') ? (
+                    <TextField fullWidth disabled label="Verification"
+                      value="Auto-verify on X (by API key)"
+                      helperText="Reposts, comments, quotes & follows confirm automatically via your twitterapi.io key — no manual review." />
+                  ) : (
+                    <FormControl fullWidth>
+                      <InputLabel>Verification</InputLabel>
+                      <Select value={form.verification_mode} label="Verification" onChange={(e) => set('verification_mode', e.target.value)}>
+                        {VERIFICATION_MODES.map((v) => <MenuItem key={v.value} value={v.value}>{v.label}</MenuItem>)}
+                      </Select>
+                    </FormControl>
+                  )
+                )}
+
+                <Divider textAlign="left"><Typography variant="caption">Proof fields</Typography></Divider>
+                {(() => {
+                  // Auto-verify is doing the action-checking, so proof fields are now
+                  // OPTIONAL extras (wallet/email/UID the bot can't read from X). Collapse
+                  // them unless the owner has some configured or chooses to add one.
+                  const autoVerifyActive = isPaid && form.auto_verify_x
+                    && (form.type === 'raid'
+                        || (form.type === 'social_task' && form.platform === 'x'));
+                  const hasFields = (form.custom_fields || []).length > 0;
+                  if (autoVerifyActive && !hasFields && !showProofFields) {
+                    return (
+                      <>
+                        <Typography variant="caption" color="text.secondary">
+                          Auto-verify already confirms the X actions, so you don’t need proof fields.
+                          Add one only for something the bot can’t read from X — a wallet address,
+                          email or UID for a reward.
+                        </Typography>
+                        <Button size="small" startIcon={<Add />} sx={{ alignSelf: 'flex-start' }}
+                          onClick={() => setShowProofFields(true)}>
+                          Add an extra proof field
+                        </Button>
+                      </>
+                    );
+                  }
+                  return (
+                    <>
+                      <Typography variant="caption" color="text.secondary">
+                        {autoVerifyActive
+                          ? 'Optional extras the bot can’t read from X (wallet, email, UID for a reward). The actions themselves are confirmed by auto-verify, and these are collected once at the end.'
+                          : (cfg.proofHint || 'Ask participants for proof (UID, link, wallet, screenshot…). The bot collects each field privately in a modal.')}
+                      </Typography>
+                      <ProofFieldsEditor fields={form.custom_fields} onChange={(v) => set('custom_fields', v)} />
+                    </>
+                  );
+                })()}
+              </>
+            )}
+          </Stack>
+        )}
+
+        {step === 1 && (
+          <Stack spacing={2}>
+            <ChannelSelect channels={channels} value={form.channel_id} onChange={(v) => set('channel_id', v)}
+              helperText="Where the bot posts the announcement with its proof buttons." />
+            <FormControl fullWidth>
+              <InputLabel>Deadline</InputLabel>
+              <Select value={form.duration_hours} label="Deadline" onChange={(e) => set('duration_hours', e.target.value)}>
+                {DURATIONS.map((d) => <MenuItem key={d.value} value={d.value}>{d.label}</MenuItem>)}
+              </Select>
+            </FormControl>
+            {/* Flex row (not Grid) so XP + Reward Label align flush with the
+                full-width Deadline field above and Max-participants field below. */}
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <TextField fullWidth type="number" label="XP Reward" value={form.reward_xp}
+                onChange={(e) => set('reward_xp', e.target.value)} inputProps={{ min: 0 }} sx={{ flex: 1 }} />
+              <TextField fullWidth label="Reward Label" placeholder="Giveaway entry"
+                value={form.reward_label} onChange={(e) => set('reward_label', e.target.value)} sx={{ flex: 1 }} />
+            </Box>
+            <TextField fullWidth type="number" label="Max participants (optional)"
+              value={form.max_participants} onChange={(e) => set('max_participants', e.target.value)} inputProps={{ min: 1 }} />
+            <FormControlLabel control={<Switch checked={form.one_per_user} onChange={(e) => set('one_per_user', e.target.checked)} />}
+              label="One submission per user" />
+            <FormControlLabel control={<Switch checked={form.allow_resubmit} onChange={(e) => set('allow_resubmit', e.target.checked)} />}
+              label="Allow resubmission after rejection" />
+            <FormControlLabel control={<Switch checked={form.pin_message} onChange={(e) => set('pin_message', e.target.checked)} />}
+              label="Pin the channel announcement" />
+            <FormControlLabel control={<Switch checked={form.show_leaderboard} onChange={(e) => set('show_leaderboard', e.target.checked)} />}
+              label="Show leaderboard (Pro) — rank participants by XP / tasks completed" />
+            <FormControlLabel control={<Switch checked={form.publishNow} onChange={(e) => set('publishNow', e.target.checked)} />}
+              label="Activate now (otherwise saved as draft)" />
+          </Stack>
+        )}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Cancel</Button>
+        {step > 0 && <Button onClick={() => setStep(step - 1)}>Back</Button>}
+        {step < WIZARD_STEPS.length - 1
+          ? <Button variant="contained" disabled={!canNext()} onClick={() => setStep(step + 1)}>Next</Button>
+          : <Button variant="contained" disabled={saving} onClick={submit}>
+              {saving ? <CircularProgress size={20} color="inherit" /> : 'Create'}
+            </Button>}
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+// ── Manage / review dialog ────────────────────────────────────────────────────
+
+function CampaignManageDialog({ guildId, campaignId, channels, isPaid, onClose, onChanged }) {
+  const [campaign, setCampaign] = useState(null);
+  const [subs, setSubs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [winners, setWinners] = useState([]);
+  const [rejectFor, setRejectFor] = useState(null);  // submission pending a reject reason
+  const [rejectReason, setRejectReason] = useState('');
+  const [tab, setTab] = useState(0);                 // 0 = Submissions, 1 = Leaderboard
+  const [editing, setEditing] = useState(false);     // edit-campaign dialog open
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [cRes, sRes] = await Promise.all([
+        engagement.get(guildId, campaignId),
+        engagement.listSubmissions(guildId, campaignId),
+      ]);
+      setCampaign(cRes.data);
+      setSubs(sRes.data.submissions || []);
+      setWinners((cRes.data.settings || {}).winners || []);
+    } catch {
+      toast.error('Failed to load campaign');
+    } finally {
+      setLoading(false);
+    }
+  }, [guildId, campaignId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const review = async (subId, action, reason) => {
+    try {
+      await engagement.reviewSubmission(guildId, campaignId, subId, { action, reason });
+      toast.success(action === 'approve' ? 'Approved' : 'Rejected');
+      setRejectFor(null);
+      setRejectReason('');
+      load();
+      onChanged?.();
+    } catch (e) {
+      toast.error(errText(e, 'Failed'));
+    }
+  };
+
+  const tasks = campaign?.tasks || [];
+  const isMulti = tasks.length > 0;
+  const taskTitle = (tid) => (tasks.find((t) => t.id === tid) || {}).title || (tid ? `Task ${tid}` : '—');
+  // Field map spans campaign-level + all task-level fields (multi-task safe).
+  const fieldMap = [...(campaign?.custom_fields || []), ...tasks.flatMap((t) => t.custom_fields || [])]
+    .reduce((m, f) => { m[f.key] = f; return m; }, {});
+  const FIELD_TYPE_LABEL = FIELD_TYPES.reduce((m, t) => { m[t.value] = t.label; return m; }, {});
+
+  const exportCsv = () => {
+    try {
+      const rows = subs.map((s) => [
+        s.username || '', s.user_id, s.task_id ? taskTitle(s.task_id) : '', s.status,
+        (s.proof || {}).value || '',
+        Object.entries((s.proof || {}).fields || {})
+          .map(([k, v]) => `${(fieldMap[k] || {}).label || k}: ${v}`).join(' | '),
+        s.file_url || '',
+        s.flagged ? (s.flag_reason || 'flagged') : '',
+        s.review_reason || '',
+        s.created_at ? new Date(s.created_at).toLocaleString() : '',
+      ]);
+      downloadCsv(
+        `campaign_${campaignId}_submissions.csv`,
+        ['Name', 'User ID', 'Task', 'Status', 'Proof', 'Fields', 'Screenshot', 'Flag', 'Review reason', 'Submitted'],
+        rows,
+      );
+    } catch {
+      toast.error('Export failed');
+    }
+  };
+
+  const pickWinners = async () => {
+    const verified = subs.filter((s) => s.status === 'verified');
+    if (verified.length === 0) { toast.info('No verified submissions to pick from'); return; }
+    const count = Math.min(3, verified.length);
+    const shuffled = [...verified].sort(() => Math.random() - 0.5).slice(0, count);
+    const picked = shuffled.map((s) => ({ id: s.id, user_id: s.user_id, username: s.username }));
+    try {
+      const mergedSettings = { ...(campaign.settings || {}), winners: picked };
+      await engagement.update(guildId, campaignId, { settings: mergedSettings });
+      setWinners(picked);
+      toast.success(`Picked ${picked.length} winner(s)`);
+    } catch {
+      toast.error('Failed to save winners');
+    }
+  };
+
+  const renderPayload = (s) => {
+    const proof = s.proof || {};
+    const entries = Object.entries(proof.fields || {}).filter(([, v]) => v !== '' && v != null);
+    // Per-action verify submissions store a structured { action: {status} } map.
+    const actionsMap = proof.actions;
+    const hasAny = entries.length > 0 || actionsMap || proof.value || s.file_url;
+    if (!hasAny) return <Typography variant="caption" color="text.disabled">—</Typography>;
+    return (
+      <Box>
+        {actionsMap && typeof actionsMap === 'object' && (
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 0.5 }}>
+            {SOCIAL_TARGETS.map((g) => {
+              const st = (actionsMap[ACTION_KEYS[g.key]] || {}).status;
+              if (!st) return null;
+              const color = st === 'verified' ? 'success' : st === 'failed' ? 'error' : 'default';
+              return <Chip key={g.key} size="small" color={color} variant="outlined" label={`${g.label}: ${st}`} />;
+            })}
+          </Box>
+        )}
+        {proof.value && (
+          <Typography variant="caption" display="block" sx={{ wordBreak: 'break-word' }}>
+            <strong>Proof:</strong> {proof.value}
+          </Typography>
+        )}
+        {proof.x_handle && (
+          <Typography variant="caption" display="block"><strong>X handle:</strong> @{proof.x_handle}</Typography>
+        )}
+        {proof.link_check && (
+          <Chip size="small" variant="outlined" sx={{ mt: 0.5 }}
+            color={proof.link_check === 'valid' ? 'success' : proof.link_check === 'invalid' ? 'error' : 'default'}
+            label={`link ${proof.link_check}`} />
+        )}
+        {entries.map(([k, v]) => {
+          const f = fieldMap[k];
+          const typeLabel = f ? (FIELD_TYPE_LABEL[f.field_type] || f.field_type) : null;
+          const label = f ? f.label : k;
+          return (
+            <Typography key={k} variant="caption" display="block" sx={{ wordBreak: 'break-word' }}>
+              <strong>{label}{typeLabel ? ` (${typeLabel})` : ''}:</strong> {String(v)}
+            </Typography>
+          );
+        })}
+        {s.file_url && <ScreenshotViewer url={s.file_url} />}
+      </Box>
+    );
+  };
+
+  return (
+    <Dialog open onClose={onClose} maxWidth="md" fullWidth>
+      <DialogTitle>
+        {campaign ? campaign.title : 'Campaign'}
+        {campaign && <Chip size="small" label={campaign.status} color={STATUS_COLOR[campaign.status] || 'default'} sx={{ ml: 1 }} />}
+      </DialogTitle>
+      <DialogContent>
+        {loading || !campaign ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
+        ) : (
+          <>
+            {/* Even 2-col (3-col on desktop) grid → the meta pills form ≤3 tidy
+                rows using the full width, instead of each wide pill grabbing its
+                own line. */}
+            <Box sx={{ mb: 2, display: 'grid', gap: 1,
+              gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)' },
+              '& > p': { bgcolor: 'action.hover', px: 1, py: 0.4, borderRadius: 1, fontSize: '0.8rem', minWidth: 0 } }}>
+              <Typography variant="body2"><strong>Type:</strong> {campaign.type}</Typography>
+              {campaign.platform && <Typography variant="body2"><strong>Platform:</strong> {campaign.platform}</Typography>}
+              {/* Raids verify per-action (live X auto-verify or review), so the
+                  campaign-level verification_mode is meaningless here — show the
+                  auto-verify state instead of a misleading "manual". */}
+              {campaign.type === 'raid' ? (
+                <Typography variant="body2">
+                  <strong>Verification:</strong>{' '}
+                  {(campaign.settings || {}).auto_verify_x ? 'Auto-verify on X' : 'Manual review'}
                 </Typography>
+              ) : (
+                <Typography variant="body2"><strong>Verification:</strong> {campaign.verification_mode}</Typography>
+              )}
+              {campaign.reward_xp ? <Typography variant="body2"><strong>XP:</strong> {campaign.reward_xp}</Typography> : null}
+              {campaign.reward_label && <Typography variant="body2"><strong>Reward:</strong> {campaign.reward_label}</Typography>}
+              {campaign.ends_at && <Typography variant="body2"><strong>Ends:</strong> {new Date(campaign.ends_at).toLocaleString([], { month: 'numeric', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}</Typography>}
+            </Box>
+
+            <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: 'wrap', gap: 1 }}>
+              <Button size="small" variant="outlined" startIcon={<Edit />} onClick={() => setEditing(true)}>Edit</Button>
+              <Button size="small" startIcon={<Download />} onClick={exportCsv}>Export CSV</Button>
+              <Button size="small" startIcon={<EmojiEvents />} onClick={pickWinners}>Pick Winners</Button>
+            </Stack>
+
+            {winners.length > 0 && (
+              <Alert severity="success" icon={<EmojiEvents fontSize="inherit" />} sx={{ mb: 2 }}>
+                Winners: {winners.map((w) => (w.username ? `@${w.username}` : w.user_id)).join(', ')}
+              </Alert>
+            )}
+
+            {campaign.status === 'active' && campaign.post_status !== 'posted' && (
+              <Alert
+                severity={campaign.post_status === 'failed' ? 'error' : 'warning'}
+                sx={{ mb: 2 }}
+                action={
+                  <Button color="inherit" size="small" startIcon={<Send />} onClick={async () => {
+                    if (!campaign.channel_id) { toast.error('Set an announce channel first (Edit)'); return; }
+                    try {
+                      await engagement.post(guildId, campaignId);
+                      toast.success('Queued — the bot posts within ~20s');
+                      load(); onChanged?.();
+                    } catch (e) { toast.error(errText(e, 'Failed to post')); }
+                  }}>Post to channel</Button>
+                }
+              >
+                {campaign.post_status === 'failed'
+                  ? `Channel post failed: ${campaign.post_error || 'unknown error'}`
+                  : 'This campaign has not been posted to a channel yet.'}
+              </Alert>
+            )}
+            {campaign.post_status === 'posted' && campaign.posted_at && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, flexWrap: 'wrap' }}>
+                <Typography variant="caption" color="text.secondary">
+                  Posted to channel {new Date(campaign.posted_at).toLocaleString()}
+                </Typography>
+                {campaign.message_id && (
+                  <Button size="small" color="error" startIcon={<DeleteOutline />} onClick={async () => {
+                    if (!window.confirm('Delete the announcement message from Discord? Submissions are kept and you can repost afterwards.')) return;
+                    try {
+                      await engagement.deletePost(guildId, campaignId);
+                      toast.success('Queued — the bot deletes the post within ~20s');
+                      load(); onChanged?.();
+                    } catch (e) { toast.error(errText(e, 'Failed to delete post')); }
+                  }}>Delete post</Button>
+                )}
+              </Box>
+            )}
+
+            <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="fullWidth"
+              sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}>
+              <Tab label={`Submissions (${subs.length})`} />
+              <Tab icon={<EmojiEvents fontSize="small" />} iconPosition="start" label="Leaderboard" />
+            </Tabs>
+
+            {tab === 1 ? (
+              <CampaignLeaderboard guildId={guildId} campaignId={campaignId} />
+            ) : subs.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">No submissions yet.</Typography>
+            ) : (
+              <TableContainer component={Paper} variant="outlined" sx={{ overflowX: 'auto' }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow sx={{ '& th': { fontWeight: 700, whiteSpace: 'nowrap' } }}>
+                      <TableCell>User</TableCell>
+                      {isMulti && <TableCell>Task</TableCell>}
+                      <TableCell>Proof</TableCell>
+                      <TableCell>Status</TableCell>
+                      <TableCell>Submitted</TableCell>
+                      <TableCell align="right">Review</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {subs.map((s) => (
+                      <TableRow key={s.id} hover>
+                        <TableCell>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <Typography variant="body2">{s.username || `User ${s.user_id}`}</Typography>
+                            {s.flagged && (
+                              <Tooltip title={s.flag_reason || 'Flagged for review'}>
+                                <Chip size="small" color="warning" label="⚠ dup" />
+                              </Tooltip>
+                            )}
+                          </Box>
+                          <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>ID: {s.user_id}</Typography>
+                        </TableCell>
+                        {isMulti && (
+                          <TableCell><Typography variant="caption">{taskTitle(s.task_id)}</Typography></TableCell>
+                        )}
+                        <TableCell>{renderPayload(s)}</TableCell>
+                        <TableCell>
+                          <Chip size="small" label={s.status}
+                            color={s.status === 'verified' ? 'success' : s.status === 'rejected' ? 'error' : 'warning'} />
+                          {s.reward_granted > 0 && (
+                            <Typography variant="caption" display="block" color="success.main">
+                              +{s.reward_granted} XP
+                            </Typography>
+                          )}
+                          {s.reviewed_at && (
+                            <Typography variant="caption" display="block" color="text.secondary">
+                              by {s.reviewed_by || '—'}
+                            </Typography>
+                          )}
+                          {s.status === 'rejected' && s.review_reason && (
+                            <Typography variant="caption" display="block" color="error.main">{s.review_reason}</Typography>
+                          )}
+                          {s.notify_status === 'sent' && <Typography variant="caption" display="block" color="text.secondary">🔔 user notified</Typography>}
+                          {s.notify_status === 'failed' && (
+                            <Tooltip title={s.notify_error || 'Member has DMs closed'}>
+                              <Typography variant="caption" display="block" color="warning.main">🔕 notify failed</Typography>
+                            </Tooltip>
+                          )}
+                        </TableCell>
+                        <TableCell><Typography variant="caption" sx={{ whiteSpace: 'nowrap' }}>{new Date(s.created_at).toLocaleString()}</Typography></TableCell>
+                        <TableCell align="right">
+                          <Tooltip title={s.status === 'verified' ? 'Approved' : 'Approve'}>
+                            <span>
+                              <IconButton size="small" color="success" disabled={s.status === 'verified'} onClick={() => review(s.id, 'approve')}><CheckCircle fontSize="small" /></IconButton>
+                            </span>
+                          </Tooltip>
+                          <Tooltip title={s.status === 'rejected' ? 'Rejected' : 'Reject'}>
+                            <span>
+                              <IconButton size="small" color="error" disabled={s.status === 'rejected'} onClick={() => { setRejectFor(s); setRejectReason(s.review_reason || ''); }}><Cancel fontSize="small" /></IconButton>
+                            </span>
+                          </Tooltip>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
+          </>
+        )}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Close</Button>
+      </DialogActions>
+
+      <Dialog open={!!rejectFor} onClose={() => setRejectFor(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Reject submission</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            The participant is DM'd this reason (if their DMs are open). No XP is credited.
+          </Typography>
+          <TextField
+            autoFocus fullWidth multiline minRows={2} label="Reason (optional)"
+            value={rejectReason} onChange={(e) => setRejectReason(e.target.value)}
+            placeholder="e.g. UID does not match — please resend"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRejectFor(null)}>Cancel</Button>
+          <Button color="error" variant="contained" onClick={() => review(rejectFor.id, 'reject', rejectReason)}>Reject</Button>
+        </DialogActions>
+      </Dialog>
+
+      {editing && campaign && (
+        <CampaignEditDialog
+          guildId={guildId} campaign={campaign} channels={channels} isPaid={isPaid}
+          hasSubmissions={subs.length > 0}
+          onClose={() => setEditing(false)}
+          onSaved={() => { setEditing(false); load(); onChanged?.(); }}
+        />
+      )}
+    </Dialog>
+  );
+}
+
+// ── Edit existing campaign ─────────────────────────────────────────────────────
+
+function CampaignEditDialog({ guildId, campaign, channels = [], isPaid, hasSubmissions, onClose, onSaved }) {
+  const tasks0 = campaign.tasks || [];
+  const isMulti = tasks0.length > 0;
+  // Tasks / proof fields are locked once members have submitted (the backend refuses
+  // to replace them — protects their data). Details, reward, deadline and visibility
+  // stay editable.
+  const structureLocked = hasSubmissions;
+  const cfgE = typeConfig(campaign.type);
+  // A saved platform that isn't one of the preset values is a custom "Other" name.
+  const knownPlatform = !campaign.platform || PLATFORMS.some((p) => p.value === campaign.platform);
+
+  const [form, setForm] = useState({
+    title: campaign.title || '',
+    description: campaign.description || '',
+    platform: knownPlatform ? (campaign.platform || '') : 'other',
+    platform_other: knownPlatform ? '' : (campaign.platform || ''),
+    task_url: campaign.task_url || '',
+    verification_mode: campaign.verification_mode || 'manual',
+    reward_xp: campaign.reward_xp || 0,
+    reward_label: campaign.reward_label || '',
+    ends_at: campaign.ends_at ? String(campaign.ends_at).slice(0, 16) : '',
+    max_participants: campaign.max_participants || '',
+    channel_id: campaign.channel_id || '',
+    one_per_user: !!campaign.one_per_user,
+    pin_message: !!campaign.pin_message,
+    allow_resubmit: !!(campaign.settings || {}).allow_resubmit,
+    show_leaderboard: leaderboardSettingFor(campaign),
+    multitask: isMulti,
+    custom_fields: (campaign.custom_fields || []).map((f) => ({
+      label: f.label, field_type: f.field_type, required: f.required, example: f.example || '',
+    })),
+    tasks: tasks0.map((t) => ({
+      title: t.title, type: t.type, platform: t.platform || '', task_url: t.task_url || '',
+      verification_mode: t.verification_mode, reward_xp: t.reward_xp || 0, reward_label: t.reward_label || '',
+      custom_fields: (t.custom_fields || []).map((f) => ({
+        label: f.label, field_type: f.field_type, required: f.required, example: f.example || '',
+      })),
+    })),
+    raid_goals: (campaign.settings || {}).raid_goals || {},
+    social_targets: (campaign.settings || {}).social_targets || {},
+    show_targets: !!(campaign.settings || {}).show_targets,
+    auto_verify_x: !!(campaign.settings || {}).auto_verify_x,
+    sequential_tasks: !!(campaign.settings || {}).sequential_tasks,
+  });
+  const [saving, setSaving] = useState(false);
+  const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+
+  const save = async () => {
+    if (!form.title.trim()) { toast.error('Title is required'); return; }
+    setSaving(true);
+    try {
+      const payload = {
+        title: form.title.trim(),
+        description: form.description || null,
+        task_url: form.task_url || null,
+        platform: !cfgE.showPlatform ? (campaign.platform || null)
+          : form.platform === 'other' ? (form.platform_other.trim() || null)
+          : (form.platform || null),
+        verification_mode: form.verification_mode,
+        reward_xp: parseInt(form.reward_xp) || 0,
+        reward_label: form.reward_label || null,
+        max_participants: form.max_participants ? parseInt(form.max_participants) : null,
+        channel_id: form.channel_id || null,
+        one_per_user: form.one_per_user,
+        pin_message: form.pin_message,
+        ends_at: form.ends_at || null,
+        // Merge settings so we never drop winners / branding flags.
+        settings: {
+          ...(campaign.settings || {}),
+          allow_resubmit: !!form.allow_resubmit,
+          leaderboard: !!form.show_leaderboard,
+          ...(campaign.type === 'raid'
+            ? {
+                raid_goals: RAID_GOALS.reduce((acc, g) => {
+                  const n = parseInt(form.raid_goals[g.key]);
+                  if (n > 0) acc[g.key] = n;
+                  return acc;
+                }, {}),
+                auto_verify_x: !!(isPaid && form.auto_verify_x),
+              }
+            : {}),
+          ...(campaign.type === 'social_task'
+            ? {
+                social_targets: SOCIAL_TARGETS.reduce((acc, g) => {
+                  const n = parseInt(form.social_targets[g.key]);
+                  if (n > 0) acc[g.key] = n;
+                  return acc;
+                }, {}),
+                show_targets: !!form.show_targets,
+                auto_verify_x: !!(isPaid && form.auto_verify_x && campaign.platform === 'x'),
+              }
+            : {}),
+          ...(isMulti ? { sequential_tasks: !!form.sequential_tasks } : {}),
+        },
+      };
+      // Only touch tasks / fields when they're editable (no submissions yet).
+      if (!structureLocked) {
+        if (form.multitask) {
+          payload.custom_fields = [];
+          payload.tasks = form.tasks.filter((t) => (t.title || '').trim()).map((t) => ({
+            title: t.title.trim(), type: t.type, platform: t.platform || null,
+            task_url: t.task_url || null, verification_mode: t.verification_mode,
+            reward_xp: parseInt(t.reward_xp) || 0, reward_label: t.reward_label || null,
+            custom_fields: normalizeProofFields(t.custom_fields),
+          }));
+        } else {
+          payload.custom_fields = normalizeProofFields(form.custom_fields);
+        }
+      }
+      await engagement.update(guildId, campaign.id, payload);
+      toast.success('Campaign updated');
+      onSaved();
+    } catch (e) {
+      toast.error(errText(e, 'Failed to update campaign'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Edit campaign</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ mt: 1 }}>
+          {structureLocked && (
+            <Alert severity="info">
+              This campaign has submissions, so its {isMulti ? 'tasks' : 'proof fields'} are locked to
+              protect existing data. You can still edit the details, reward, deadline and visibility.
+            </Alert>
+          )}
+          <TextField fullWidth label="Title" value={form.title} onChange={(e) => set('title', e.target.value)} />
+          <TextField fullWidth multiline minRows={2} label={isMulti ? 'Campaign intro / description' : 'Instructions / Description'}
+            value={form.description} onChange={(e) => set('description', e.target.value)} />
+
+          <ChannelSelect channels={channels} value={form.channel_id} onChange={(v) => set('channel_id', v)}
+            helperText="Changing this reposts the announcement in the new channel." />
+
+          {!isMulti && (
+            <>
+              {cfgE.showPlatform && (
+                <>
+                  <FormControl fullWidth>
+                    <InputLabel>Platform</InputLabel>
+                    <Select value={form.platform} label="Platform" onChange={(e) => set('platform', e.target.value)}>
+                      {PLATFORMS.map((p) => <MenuItem key={p.value} value={p.value}>{p.label}</MenuItem>)}
+                    </Select>
+                  </FormControl>
+                  {form.platform === 'other' && (
+                    <TextField fullWidth label="Platform name (shown to members)"
+                      placeholder="e.g. TikTok, Reddit, Telegram"
+                      value={form.platform_other} onChange={(e) => set('platform_other', e.target.value)} />
+                  )}
+                </>
+              )}
+              <TextField fullWidth label={cfgE.taskUrlLabel || 'Task Link (optional)'}
+                placeholder="https://x.com/..." value={form.task_url} onChange={(e) => set('task_url', e.target.value)} />
+              {/* Raids are driven by the per-action panel, so the campaign-level
+                  Verification mode doesn't apply — hide it. */}
+              {campaign.type !== 'raid' && (
+                <FormControl fullWidth>
+                  <InputLabel>Verification</InputLabel>
+                  <Select value={form.verification_mode} label="Verification" onChange={(e) => set('verification_mode', e.target.value)}>
+                    {VERIFICATION_MODES.map((v) => <MenuItem key={v.value} value={v.value}>{v.label}</MenuItem>)}
+                  </Select>
+                </FormControl>
               )}
             </>
           )}
-          <Typography variant="caption" color="text.secondary" display="block" mt={1.5}>
-            After creating, add sub-tasks and custom proof fields from the campaign's detail view.
-          </Typography>
-        </>
-      )}
 
-      {step === 1 && (
-        <>
-          <Grid container spacing={1}>
-            <Grid item xs={6}><TextField type="number" size="small" fullWidth margin="dense" label="Reward XP" value={d.reward_xp} onChange={(e) => setD({ ...d, reward_xp: Number(e.target.value) })} /></Grid>
-            <Grid item xs={6}><TextField select size="small" fullWidth margin="dense" label="Announce channel" value={d.channel_id} onChange={(e) => setD({ ...d, channel_id: e.target.value })}><MenuItem value="">— none —</MenuItem>{channels.map((c) => <MenuItem key={c.id} value={c.id}># {c.name}</MenuItem>)}</TextField></Grid>
-          </Grid>
-          <FormControlLabel control={<Switch checked={d.one_per_user} onChange={(e) => setD({ ...d, one_per_user: e.target.checked })} />} label="One submission per user" />
-        </>
-      )}
-
-      <Stack direction="row" spacing={1} justifyContent="flex-end" mt={2}>
-        {step > 0 && <Button onClick={() => setStep((s) => s - 1)} disabled={saving}>Back</Button>}
-        {step < WIZARD_STEPS.length - 1
-          ? <Button variant="contained" onClick={() => setStep((s) => s + 1)} disabled={!step0Valid}>Next</Button>
-          : <Button variant="contained" onClick={create} disabled={saving || !step0Valid}>{saving ? 'Creating…' : 'Create campaign'}</Button>}
-      </Stack>
-    </Box>
-  );
-}
-
-function CampaignDetail({ guildId, campaignId, channels, plan, xStatus = 'disabled', onXStatus, onBack }) {
-  const base = `/api/guilds/${guildId}/campaigns/${campaignId}`;
-  const [c, setC] = useState(null);
-  const [subs, setSubs] = useState([]);
-  const [board, setBoard] = useState(null);
-  const [task, setTask] = useState({ title: '', reward_xp: 25, verification_mode: 'manual', task_url: '' });
-  const [msg, setMsg] = useState(null);
-  const [winnerCount, setWinnerCount] = useState(1);
-  const [keyDialogOpen, setKeyDialogOpen] = useState(false);
-
-  async function load() {
-    const { data } = await guildizerApi.get(base); setC(data);
-    const s = await guildizerApi.get(`${base}/submissions?status=pending`); setSubs(s.data.submissions);
-  }
-  useEffect(() => {
-    load();
-    if (plan === 'pro') loadBoard(); // auto-load; free plans see the Pro chip
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [campaignId]);
-
-  async function patch(body) {
-    try { const { data } = await guildizerApi.put(base, body); setC((p) => ({ ...p, ...data })); setMsg(null); }
-    catch (e) {
-      setMsg(e?.response?.status === 402
-        ? (e?.response?.data?.message || 'Free plan allows 1 active campaign — upgrade to Pro.')
-        : (e?.response?.data?.message || 'Update failed.'));
-    }
-  }
-  async function remove() {
-    if (!window.confirm(`Delete "${c.title}"? Its tasks and submissions are removed too.`)) return;
-    try { await guildizerApi.delete(base); onBack(); }
-    catch { setMsg('Delete failed.'); }
-  }
-  async function addTask() {
-    if (!task.title.trim()) return;
-    await guildizerApi.post(`${base}/tasks`, task); setTask({ title: '', reward_xp: 25, verification_mode: 'manual', task_url: '' }); load();
-  }
-  const delTask = async (tid) => { await guildizerApi.delete(`${base}/tasks/${tid}`); load(); };
-  const review = async (sid, action) => { await guildizerApi.post(`${base}/submissions/${sid}/review`, { action }); load(); };
-  async function post() {
-    try { await guildizerApi.post(`${base}/post`); setMsg('Queued — the bot will post within ~20s.'); }
-    catch (e) { setMsg(e?.response?.status === 400 ? 'Set an announce channel first.' : 'Post failed.'); }
-  }
-  async function loadBoard() {
-    try { const { data } = await guildizerApi.get(`${base}/leaderboard`); setBoard(data.leaderboard); }
-    catch (e) { setMsg(e?.response?.status === 402 ? 'Campaign leaderboards are a Pro feature.' : 'Failed to load.'); }
-  }
-  async function pickWinners() {
-    try {
-      const { data } = await guildizerApi.get(`${base}/submissions?status=verified`);
-      const verified = data.submissions || [];
-      if (verified.length === 0) { setMsg('No verified submissions to draw winners from yet.'); return; }
-      const n = Math.max(1, Math.min(winnerCount, verified.length));
-      const picked = [...verified].sort(() => Math.random() - 0.5).slice(0, n)
-        .map((s) => ({ id: s.id, user_id: s.user_id, username: s.username }));
-      const mergedSettings = { ...(c.settings || {}), winners: picked };
-      const { data: updated } = await guildizerApi.put(base, { settings: mergedSettings });
-      setC((p) => ({ ...p, ...updated }));
-      setMsg(`Picked ${picked.length} winner${picked.length === 1 ? '' : 's'}.`);
-    } catch { setMsg('Could not draw winners.'); }
-  }
-  async function exportCsv() {
-    try {
-      const { data } = await guildizerApi.get(`${base}/submissions`);
-      const rows = (data.submissions || []).map((s) => [
-        s.username || '', s.user_id, s.status,
-        s.proof?.value || '',
-        s.proof?.fields ? Object.entries(s.proof.fields).map(([k, v]) => `${k}: ${v}`).join(' | ') : '',
-        s.created_at ? new Date(s.created_at).toLocaleString() : '',
-      ]);
-      downloadCsv(`campaign_${campaignId}_submissions.csv`, ['Name', 'User ID', 'Status', 'Proof', 'Fields', 'Submitted'], rows);
-    } catch { setMsg('Could not export submissions.'); }
-  }
-
-  if (!c) return <Box sx={{ display: 'grid', placeItems: 'center', py: 3 }}><CircularProgress /></Box>;
-
-  return (
-    <Box>
-      <Button startIcon={<ArrowBack />} onClick={onBack} color="inherit" sx={{ mb: 1 }}>All campaigns</Button>
-      {msg && <Alert severity="info" sx={{ mb: 2 }} onClose={() => setMsg(null)}>{msg}</Alert>}
-      <Grid container spacing={2}>
-        <Grid item xs={12}>
-          <Card variant="outlined"><CardContent>
-            <Typography variant="h6" fontWeight={700}>{c.title}</Typography>
-            <Stack direction="row" spacing={1} alignItems="center" mb={1}>
-              <Chip size="small" label={c.status} color={STATUS_COLOR[c.status]} />
-              <Typography variant="caption" color="text.secondary">{c.type.replace('_', ' ')} · {c.verification_mode}</Typography>
-            </Stack>
-            <TextField select size="small" fullWidth margin="dense" label="Announce channel" value={c.channel_id || ''} onChange={(e) => patch({ channel_id: e.target.value || null })}>
-              <MenuItem value="">— none —</MenuItem>{channels.map((ch) => <MenuItem key={ch.id} value={ch.id}># {ch.name}</MenuItem>)}
-            </TextField>
-            <Stack direction="row" spacing={1} flexWrap="wrap" mt={1} useFlexGap>
-              {c.status !== 'active' && <Button size="small" variant="contained" onClick={() => patch({ status: 'active' })}>Activate</Button>}
-              {c.status === 'active' && <Button size="small" variant="outlined" onClick={() => patch({ status: 'paused' })}>Pause</Button>}
-              {c.status === 'active' && <Button size="small" variant="outlined" onClick={post}>Re-post</Button>}
-              <Button size="small" variant="outlined" startIcon={<Download />} onClick={exportCsv}>Export CSV</Button>
-              <Button size="small" variant="outlined" color="inherit" onClick={() => patch({ status: 'closed' })}>Close</Button>
-              {c.status !== 'active' && (
-                <Button size="small" variant="outlined" color="error" onClick={remove}>Delete</Button>
-              )}
-            </Stack>
-            {/* Pick Winners — random draw over verified submissions (giveaways, raffles). */}
-            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap mt={1}>
-              <TextField type="number" size="small" label="Winners" value={winnerCount}
-                inputProps={{ min: 1, max: 50 }} sx={{ width: 100 }}
-                onChange={(e) => setWinnerCount(Math.max(1, Number(e.target.value) || 1))} />
-              <Button size="small" variant="outlined" startIcon={<EmojiEvents />} onClick={pickWinners}>Pick Winners</Button>
-            </Stack>
-            {c.settings?.winners?.length > 0 && (
-              <Alert severity="success" icon={<EmojiEvents fontSize="inherit" />} sx={{ mt: 1 }}>
-                Winners: {c.settings.winners.map((w) => (w.username ? `@${w.username}` : w.user_id)).join(', ')}
-              </Alert>
-            )}
-            {c.post_status === 'posted' && <Typography variant="caption" color="success.main" display="block" mt={1}>Posted ✓</Typography>}
-            {c.post_status === 'failed' && <Typography variant="caption" color="error" display="block" mt={1}>Post failed: {c.post_error}</Typography>}
-          </CardContent></Card>
-        </Grid>
-
-        {c.type === 'raid' && (
-          <Grid item xs={12}>
-            <RaidSetupCard campaign={c} onSave={patch} plan={plan} xStatus={xStatus}
-              onManageKey={() => setKeyDialogOpen(true)} />
-          </Grid>
-        )}
-
-        <Grid item xs={12}>
-          <GuildizerCollapsibleCard id="gz.campaigns.tasks" title="Tasks">
-            <Typography variant="body2" color="text.secondary" mb={2}>Break the campaign into individual tasks, each with its own XP reward and verification.</Typography>
-            {c.tasks.length === 0 && <Typography variant="body2" color="text.secondary">No tasks — single-task campaign.</Typography>}
-            <List dense>
-              {c.tasks.map((t) => (
-                <ListItem key={t.id} disableGutters secondaryAction={<IconButton size="small" color="error" onClick={() => delTask(t.id)}><Delete fontSize="small" /></IconButton>}>
-                  <ListItemText primary={t.title} secondary={`${t.reward_xp} XP · ${t.verification_mode}`} />
-                </ListItem>
-              ))}
-            </List>
-            <Divider sx={{ my: 1 }} />
-            <TextField size="small" fullWidth margin="dense" label="Task title" value={task.title} onChange={(e) => setTask({ ...task, title: e.target.value })} />
-            <Grid container spacing={1}>
-              <Grid item xs={6}><TextField type="number" size="small" fullWidth margin="dense" label="Reward XP" value={task.reward_xp} onChange={(e) => setTask({ ...task, reward_xp: Number(e.target.value) })} /></Grid>
-              <Grid item xs={6}><TextField select size="small" fullWidth margin="dense" label="Verification" value={task.verification_mode} onChange={(e) => setTask({ ...task, verification_mode: e.target.value })}>{VMODES.map((m) => <MenuItem key={m} value={m}>{m}</MenuItem>)}</TextField></Grid>
-            </Grid>
-            <TextField size="small" fullWidth margin="dense" label="Task link (optional)" placeholder="https://…" value={task.task_url} onChange={(e) => setTask({ ...task, task_url: e.target.value })} />
-            <Button size="small" variant="outlined" onClick={addTask} disabled={!task.title.trim()}>Add task</Button>
-          </GuildizerCollapsibleCard>
-        </Grid>
-
-        <Grid item xs={12}>
-          <FieldsCard guildId={guildId} campaignId={campaignId}
-            autoVerifyActive={c.type === 'raid' && !!(c.settings || {}).auto_verify_x && plan === 'pro'} />
-        </Grid>
-
-        <Grid item xs={12}>
-          <GuildizerCollapsibleCard id="gz.campaigns.pending_submissions" title={`Pending submissions (${subs.length})`}>
-            <Typography variant="body2" color="text.secondary" mb={2}>Review member proof submissions and verify or reject each one.</Typography>
-            {subs.length === 0 && <Typography variant="body2" color="text.secondary">Nothing to review.</Typography>}
-            <List dense>
-              {subs.map((s) => (
-                // Flex row so the proof text truncates and the Verify/Reject
-                // buttons stay clear of it on narrow screens.
-                <ListItem key={s.id} disableGutters sx={{ gap: 1, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                  {s.proof?.link_check && (
-                    <Chip size="small" sx={{ flexShrink: 0, mt: 0.25 }} variant="outlined"
-                      color={s.proof.link_check === 'valid' ? 'success' : s.proof.link_check === 'invalid' ? 'error' : 'default'}
-                      label={`link ${s.proof.link_check}`} />
-                  )}
-                  <ListItemText
-                    sx={{ my: 0, minWidth: 0, flex: '1 1 160px' }}
-                    primary={s.username || s.user_id}
-                    secondary={[s.proof?.value, s.proof?.fields && Object.entries(s.proof.fields).map(([k, v]) => `${k}: ${v}`).join(' · ')].filter(Boolean).join(' — ') || '(no proof text)'}
-                    secondaryTypographyProps={{ sx: { wordBreak: 'break-word' } }} />
-                  <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0, ml: 'auto' }}>
-                    <Button size="small" variant="outlined" onClick={() => review(s.id, 'verify')}>Verify</Button>
-                    <Button size="small" variant="outlined" color="error" onClick={() => review(s.id, 'reject')}>Reject</Button>
-                  </Stack>
-                </ListItem>
-              ))}
-            </List>
-          </GuildizerCollapsibleCard>
-        </Grid>
-
-        <Grid item xs={12}>
-          <GuildizerCollapsibleCard
-            id="gz.campaigns.leaderboard"
-            title="Leaderboard"
-            badge={plan !== 'pro' && <Chip size="small" label="Pro" sx={{ ml: 1 }} />}
-            action={<Button size="small" variant="outlined" onClick={loadBoard}>{board ? 'Refresh' : 'Load'}</Button>}
-          >
-            <Typography variant="body2" color="text.secondary" mb={2}>Members ranked by the XP they have earned from verified submissions in this campaign.</Typography>
-            {board && board.length === 0 && <Typography variant="body2" color="text.secondary">No verified submissions yet.</Typography>}
-            {board && (
-              <List dense>
-                {board.map((r) => (
-                  <ListItem key={r.user_id} disableGutters secondaryAction={<Typography variant="caption" color="text.secondary">{r.xp_earned} XP</Typography>}>
-                    <Typography variant="body2" fontWeight={700} color="primary.main" sx={{ width: 34 }}>#{r.rank}</Typography>
-                    <ListItemText primary={r.username || r.user_id} />
-                    <Chip size="small" label={`${r.verified}✓`} sx={{ mr: 1 }} />
-                  </ListItem>
+          {campaign.type === 'raid' && (
+            <Box>
+              <Typography variant="caption" color="text.secondary">Raid goals (shown as targets in the channel post)</Typography>
+              <Grid container spacing={1} sx={{ mt: 0.5 }}>
+                {RAID_GOALS.map((g) => (
+                  <Grid item xs={6} key={g.key}>
+                    <TextField fullWidth size="small" type="number" label={g.label}
+                      value={form.raid_goals[g.key] || ''}
+                      onChange={(e) => set('raid_goals', { ...form.raid_goals, [g.key]: e.target.value })}
+                      inputProps={{ min: 0 }} />
+                  </Grid>
                 ))}
-              </List>
-            )}
-          </GuildizerCollapsibleCard>
-        </Grid>
-      </Grid>
-      <XKeyDialog open={keyDialogOpen} onClose={() => setKeyDialogOpen(false)}
-        onSaved={(s) => { if (s && onXStatus) onXStatus(s); }} />
-    </Box>
-  );
-}
-
-
-function RaidSetupCard({ campaign, onSave, plan, xStatus = 'disabled', onManageKey }) {
-  const [tweet, setTweet] = useState(campaign.task_url || '');
-  const [goals, setGoals] = useState((campaign.settings || {}).raid_goals || {});
-  const [autoVerify, setAutoVerify] = useState(!!(campaign.settings || {}).auto_verify_x);
-  const isPro = plan === 'pro';
-  return (
-    <GuildizerCollapsibleCard id="gz.campaigns.raid_setup" title="🐦 Twitter Raid setup">
-      <Typography variant="caption" color="text.secondary" display="block" mb={1}>
-        The tweet to raid and the engagement targets shown in the announcement. Members submit their proof link.
-      </Typography>
-      <TextField size="small" fullWidth margin="dense" label="Tweet URL" placeholder="https://x.com/…"
-        value={tweet} onChange={(e) => setTweet(e.target.value)} />
-      <Grid container spacing={1} mt={0.5}>
-        {RAID_GOALS.map(([k, label]) => (
-          <Grid item xs={6} sm={3} key={k}>
-            <TextField type="number" size="small" fullWidth label={label} inputProps={{ min: 0 }}
-              value={goals[k] || ''} onChange={(e) => setGoals({ ...goals, [k]: e.target.value })} />
-          </Grid>
-        ))}
-      </Grid>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mt: 0.5 }}>
-        <Typography variant="body2">Auto-verify on X (Pro)</Typography>
-        <Switch checked={isPro && autoVerify} disabled={!isPro}
-          onChange={(e) => setAutoVerify(e.target.checked)} />
-      </Box>
-      {isPro ? (
-        <>
-          <XAutoverifyStatus status={xStatus} enabled={autoVerify} onManageKey={onManageKey} />
-          {autoVerify && (
-            <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
-              Members tap the button and enter their X @username; reposts, comments, quotes and
-              follows are checked live. Likes need manual review (X keeps likes private).
-            </Typography>
+              </Grid>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mt: 1 }}>
+                <Typography variant="body2">Auto-verify on X (Pro)</Typography>
+                <Switch checked={isPaid && form.auto_verify_x} disabled={!isPaid}
+                  onChange={(e) => set('auto_verify_x', e.target.checked)} />
+              </Box>
+            </Box>
           )}
-        </>
-      ) : (
-        <Typography variant="caption" color="text.secondary" display="block">
-          Real-time X verification is a Pro feature. Members still submit proof for manual review.
-        </Typography>
-      )}
-      <Box>
-        <Button size="small" variant="outlined" sx={{ mt: 1.5 }}
-          onClick={() => onSave({ task_url: tweet || null, settings: { raid_goals: cleanGoals(goals), auto_verify_x: !!(isPro && autoVerify) } })}>
-          Save raid setup
+
+          {campaign.type === 'social_task' && (
+            <Box>
+              <Typography variant="caption" color="text.secondary">Targets (optional) — how many of each action you want</Typography>
+              <Grid container spacing={1} sx={{ mt: 0.5 }}>
+                {SOCIAL_TARGETS.map((g) => (
+                  <Grid item xs={6} key={g.key}>
+                    <TextField fullWidth size="small" type="number" label={g.label}
+                      value={form.social_targets[g.key] || ''}
+                      onChange={(e) => set('social_targets', { ...form.social_targets, [g.key]: e.target.value })}
+                      inputProps={{ min: 0 }} />
+                  </Grid>
+                ))}
+              </Grid>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mt: 1 }}>
+                <Typography variant="body2">Show targets publicly</Typography>
+                <Switch checked={form.show_targets} onChange={(e) => set('show_targets', e.target.checked)} />
+              </Box>
+              {campaign.platform === 'x' && (
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+                  <Typography variant="body2">Auto-verify on X (Pro)</Typography>
+                  <Switch checked={isPaid && form.auto_verify_x} disabled={!isPaid}
+                    onChange={(e) => set('auto_verify_x', e.target.checked)} />
+                </Box>
+              )}
+            </Box>
+          )}
+
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            <TextField fullWidth type="number" label="XP Reward" value={form.reward_xp}
+              onChange={(e) => set('reward_xp', e.target.value)} inputProps={{ min: 0 }} sx={{ flex: 1 }} />
+            <TextField fullWidth label="Reward Label" placeholder="Giveaway entry"
+              value={form.reward_label} onChange={(e) => set('reward_label', e.target.value)} sx={{ flex: 1 }} />
+          </Box>
+          <TextField fullWidth type="datetime-local" label="Deadline (UTC)" InputLabelProps={{ shrink: true }}
+            value={form.ends_at} onChange={(e) => set('ends_at', e.target.value)}
+            helperText="Leave empty for no deadline." />
+          <TextField fullWidth type="number" label="Max participants (optional)"
+            value={form.max_participants} onChange={(e) => set('max_participants', e.target.value)} inputProps={{ min: 1 }} />
+
+          <FormControlLabel control={<Switch checked={form.one_per_user} onChange={(e) => set('one_per_user', e.target.checked)} />}
+            label="One submission per user" />
+          <FormControlLabel control={<Switch checked={form.allow_resubmit} onChange={(e) => set('allow_resubmit', e.target.checked)} />}
+            label="Allow resubmission after rejection" />
+          <FormControlLabel control={<Switch checked={form.pin_message} onChange={(e) => set('pin_message', e.target.checked)} />}
+            label="Pin the channel announcement" />
+          <FormControlLabel control={<Switch checked={form.show_leaderboard} onChange={(e) => set('show_leaderboard', e.target.checked)} />}
+            label="Show leaderboard (Pro) — rank participants by XP / tasks completed" />
+
+          {!structureLocked && !isMulti && (
+            <>
+              <Divider textAlign="left"><Typography variant="caption">Proof fields</Typography></Divider>
+              <ProofFieldsEditor fields={form.custom_fields} onChange={(v) => set('custom_fields', v)} />
+            </>
+          )}
+          {isMulti && (
+            <FormControlLabel
+              control={<Switch checked={form.sequential_tasks} onChange={(e) => set('sequential_tasks', e.target.checked)} />}
+              label="Sequential — lock each task until the previous one is completed" />
+          )}
+          {!structureLocked && isMulti && (
+            <>
+              <Divider textAlign="left"><Typography variant="caption">Tasks</Typography></Divider>
+              <TasksEditor tasks={form.tasks} onChange={(v) => set('tasks', v)} />
+            </>
+          )}
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} disabled={saving}>Cancel</Button>
+        <Button variant="contained" onClick={save} disabled={saving}>
+          {saving ? <CircularProgress size={20} color="inherit" /> : 'Save changes'}
         </Button>
-      </Box>
-    </GuildizerCollapsibleCard>
+      </DialogActions>
+    </Dialog>
   );
 }
 
-function FieldsCard({ guildId, campaignId, autoVerifyActive = false }) {
-  const [fields, setFields] = useState([]);
-  const [label, setLabel] = useState('');
-  const [fieldType, setFieldType] = useState('text');
+// ── Per-campaign leaderboard (Pro) ──────────────────────────────────────────────
 
-  async function load() {
-    try {
-      const { data } = await guildizerApi.get(`/api/guilds/${guildId}/campaigns/${campaignId}/fields`);
-      setFields(data.fields);
-    } catch { /* quietly empty */ }
-  }
+const RANK_MEDAL = { 1: '🥇', 2: '🥈', 3: '🥉' };
+
+function CampaignLeaderboard({ guildId, campaignId }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [locked, setLocked] = useState(false);
+  const [error, setError] = useState(null);
+
   useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [campaignId]);
+    let active = true;
+    (async () => {
+      setLoading(true); setLocked(false); setError(null);
+      try {
+        const res = await engagement.leaderboard(guildId, campaignId);
+        if (active) setData(res.data);
+      } catch (e) {
+        if (!active) return;
+        // The Guildizer backend answers 402 (payment required) for Pro gates.
+        if ([402, 403].includes(e.response?.status)) setLocked(true);
+        else setError(errText(e, 'Failed to load leaderboard'));
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => { active = false; };
+  }, [guildId, campaignId]);
 
-  const typeLabel = (t) => (FIELD_TYPES.find((x) => x.value === t) || {}).label || 'Text';
+  if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>;
+  if (locked) {
+    return (
+      <Alert severity="info" icon={<EmojiEvents fontSize="inherit" />}>
+        Per-campaign leaderboards are a <strong>Pro</strong> feature. Upgrade to rank participants
+        by verified submissions and XP earned — your members see their own rank too.
+      </Alert>
+    );
+  }
+  if (error) return <Alert severity="error">{error}</Alert>;
+
+  const entries = data?.entries || [];
+  if (entries.length === 0) {
+    return <Typography variant="body2" color="text.secondary">No verified participants yet.</Typography>;
+  }
 
   return (
-    <GuildizerCollapsibleCard id="gz.campaigns.proof_form_fields" title="Proof form fields">
-      <Typography variant="caption" color="text.secondary" display="block" mb={1}>
-        {autoVerifyActive
-          ? 'Auto-verify already confirms the X actions — you only need extra fields for things the bot can’t read from X (wallet, email, UID for a reward).'
-          : 'Extra inputs shown in the proof popup (max 4) — e.g. wallet address, username on X.'}
+    <>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+        {data.total_participants} participant(s) · ranked by verified submissions
+        {data.reward_xp ? `, ${data.reward_xp} XP each` : ''}.
       </Typography>
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ xs: 'stretch', sm: 'center' }}>
-        <TextField size="small" label="Field label" value={label} inputProps={{ maxLength: 45 }}
-          onChange={(e) => setLabel(e.target.value)} sx={{ flex: 1 }} />
-        <TextField select size="small" label="Type" value={fieldType}
-          onChange={(e) => setFieldType(e.target.value)} sx={{ minWidth: 150 }}>
-          {FIELD_TYPES.map((t) => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)}
-        </TextField>
-        <Button size="small" variant="outlined" disabled={!label.trim() || fields.length >= 4}
-          onClick={() => guildizerApi.post(`/api/guilds/${guildId}/campaigns/${campaignId}/fields`, { label, field_type: fieldType }).then(() => { setLabel(''); setFieldType('text'); load(); })}>
-          Add
-        </Button>
-      </Stack>
-      <List dense>
-        {fields.map((f) => (
-          <ListItem key={f.id} disableGutters
-            secondaryAction={(
-              <IconButton size="small" color="error"
-                onClick={() => guildizerApi.delete(`/api/guilds/${guildId}/campaigns/${campaignId}/fields/${f.id}`).then(load)}>
-                <Delete fontSize="small" />
-              </IconButton>
-            )}>
-            <ListItemText primary={f.label} secondary={`${typeLabel(f.field_type)} · ${f.required ? 'required' : 'optional'}`} />
-          </ListItem>
-        ))}
-        {fields.length === 0 && <Typography variant="body2" color="text.secondary">No extra fields.</Typography>}
-      </List>
-    </GuildizerCollapsibleCard>
+      <TableContainer component={Paper} variant="outlined" sx={{ overflowX: 'auto' }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow sx={{ '& th': { fontWeight: 700, whiteSpace: 'nowrap' } }}>
+              <TableCell align="right">#</TableCell>
+              <TableCell>Participant</TableCell>
+              <TableCell align="right">Verified</TableCell>
+              <TableCell align="right">XP earned</TableCell>
+              <TableCell>First completed</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {entries.map((e) => (
+              <TableRow key={e.user_id} hover>
+                <TableCell align="right">
+                  <Typography variant="body2" fontWeight={e.rank <= 3 ? 700 : 400}>
+                    {RANK_MEDAL[e.rank] || e.rank}
+                  </Typography>
+                </TableCell>
+                <TableCell>
+                  <Typography variant="body2">{e.username || `User ${e.user_id}`}</Typography>
+                  <Typography variant="caption" color="text.secondary">ID: {e.user_id}</Typography>
+                </TableCell>
+                <TableCell align="right">{e.verified_count}</TableCell>
+                <TableCell align="right">{e.xp_earned ? `+${e.xp_earned}` : '—'}</TableCell>
+                <TableCell>
+                  <Typography variant="caption" sx={{ whiteSpace: 'nowrap' }}>
+                    {e.first_verified_at ? new Date(e.first_verified_at).toLocaleString() : '—'}
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </>
   );
 }

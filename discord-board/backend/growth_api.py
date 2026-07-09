@@ -51,7 +51,8 @@ def list_fields(guild_id: int, cid: int):
         return jsonify(error="not_found"), 404
     rows = (
         g.db.query(CampaignCustomField)
-        .filter(CampaignCustomField.campaign_id == cid)
+        .filter(CampaignCustomField.campaign_id == cid,
+                CampaignCustomField.task_id.is_(None))
         .order_by(CampaignCustomField.position)
         .all()
     )
@@ -66,7 +67,12 @@ def create_field(guild_id: int, cid: int):
         return err
     if _own_campaign(guild_id, cid) is None:
         return jsonify(error="not_found"), 404
-    count = g.db.query(CampaignCustomField).filter(CampaignCustomField.campaign_id == cid).count()
+    count = (
+        g.db.query(CampaignCustomField)
+        .filter(CampaignCustomField.campaign_id == cid,
+                CampaignCustomField.task_id.is_(None))
+        .count()
+    )
     cap = min(MAX_FIELDS, plan_limits.limit(g.db, guild_id, "campaign_fields"))
     if count >= cap:
         return plan_limits.limit_response("campaign_fields", cap)
@@ -80,6 +86,8 @@ def create_field(guild_id: int, cid: int):
         field_type = "text"
     row = CampaignCustomField(
         campaign_id=cid, label=label, field_type=field_type,
+        key=label.lower().replace(" ", "_")[:64],
+        example=str(body.get("example") or "").strip()[:200] or None,
         required=bool(body.get("required", True)), position=count,
     )
     g.db.add(row)

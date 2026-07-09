@@ -70,4 +70,24 @@ export const guildizerXVerifyKey = {
   delete: () => guildizerApi.delete('/api/account/x-verify-key'),
 };
 
+// Engagement campaigns. Mirrors the Telegizer `engagement` client so
+// CampaignsTab reads 1:1 against CampaignManager (guildId ↔ botId+groupId).
+const camp = (guildId, cid) =>
+  `/api/guilds/${guildId}/campaigns${cid != null ? `/${cid}` : ''}`;
+
+export const guildizerEngagement = {
+  list: (guildId) => guildizerApi.get(camp(guildId)),
+  create: (guildId, body) => guildizerApi.post(camp(guildId), body),
+  get: (guildId, cid) => guildizerApi.get(camp(guildId, cid)),
+  update: (guildId, cid, body) => guildizerApi.put(camp(guildId, cid), body),
+  remove: (guildId, cid) => guildizerApi.delete(camp(guildId, cid)),
+  post: (guildId, cid) => guildizerApi.post(`${camp(guildId, cid)}/post`),
+  deletePost: (guildId, cid) => guildizerApi.delete(`${camp(guildId, cid)}/post`),
+  listSubmissions: (guildId, cid, params) =>
+    guildizerApi.get(`${camp(guildId, cid)}/submissions`, { params }),
+  reviewSubmission: (guildId, cid, sid, body) =>
+    guildizerApi.post(`${camp(guildId, cid)}/submissions/${sid}/review`, body),
+  leaderboard: (guildId, cid) => guildizerApi.get(`${camp(guildId, cid)}/leaderboard`),
+};
+
 export default guildizerApi;

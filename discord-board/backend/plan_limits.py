@@ -16,7 +16,9 @@ LIMITS = {
         "scheduled_messages": 3,
         "auto_responses": 5,
         "knowledge_docs": 5,
-        "campaign_fields": 2,
+        # Matches Telegizer's FREE_MAX_CUSTOM_FIELDS. Pro is capped at 4 by
+        # Discord's modal limit (5 components incl. the proof input), not by plan.
+        "campaign_fields": 3,
     },
     "pro": {
         "active_campaigns": 10,

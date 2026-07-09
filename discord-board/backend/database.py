@@ -52,6 +52,26 @@ _HEAL_COLUMNS = [
     ("auto_responses", "use_as_ai_knowledge", "BOOLEAN"),
     # Typed proof fields (Telegizer parity): text / url / uid / wallet / screenshot / …
     ("campaign_custom_fields", "field_type", "VARCHAR(20)"),
+    # Campaign parity with Telegizer's CampaignManager: platform, caps, pinning,
+    # post lifecycle, per-task proof fields, review reasons and dup flagging.
+    ("campaign_custom_fields", "task_id", "INTEGER"),
+    ("campaign_custom_fields", "example", "VARCHAR(200)"),
+    ("campaign_custom_fields", "key", "VARCHAR(64)"),
+    ("campaigns", "platform", "VARCHAR(40)"),
+    ("campaigns", "max_participants", "INTEGER"),
+    ("campaigns", "pin_message", "BOOLEAN"),
+    ("campaigns", "needs_unpost", "BOOLEAN"),
+    ("campaigns", "posted_at", "TIMESTAMP"),
+    ("campaigns", "posted_channel_id", "BIGINT"),
+    ("campaign_tasks", "platform", "VARCHAR(40)"),
+    ("campaign_tasks", "reward_label", "VARCHAR(200)"),
+    ("campaign_submissions", "file_url", "VARCHAR(500)"),
+    ("campaign_submissions", "reviewer_name", "VARCHAR(120)"),
+    ("campaign_submissions", "review_reason", "VARCHAR(500)"),
+    ("campaign_submissions", "flagged", "BOOLEAN"),
+    ("campaign_submissions", "flag_reason", "VARCHAR(255)"),
+    ("campaign_submissions", "notify_status", "VARCHAR(16)"),
+    ("campaign_submissions", "notify_error", "VARCHAR(255)"),
     # First-message verification: member passed the captcha once
     ("members", "verified", "BOOLEAN"),
     # Notification preferences (sound / web push opt-in / per-category mute)

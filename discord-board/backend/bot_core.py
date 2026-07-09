@@ -1687,6 +1687,18 @@ class CoreMixin:
                 await campaign_views.post_campaign(self, cid)
             except Exception:  # noqa: BLE001
                 log.exception("post_campaign failed for %s", cid)
+        for cid, gid in await asyncio.to_thread(campaign_runtime.campaigns_to_unpost):
+            if not serves(self, gid):
+                continue
+            try:
+                await campaign_views.unpost_campaign(self, cid)
+            except Exception:  # noqa: BLE001
+                log.exception("unpost_campaign failed for %s", cid)
+        try:
+            # The web process has no gateway, so review outcomes are queued for us.
+            await campaign_views.deliver_review_notices(self)
+        except Exception:  # noqa: BLE001
+            log.exception("campaign review notices failed")
         try:
             await self_roles.process_pending(self)
         except Exception:  # noqa: BLE001

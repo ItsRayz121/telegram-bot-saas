@@ -3,22 +3,28 @@
   GET    /api/guilds/<id>/campaigns
   POST   /api/guilds/<id>/campaigns
   GET    /api/guilds/<id>/campaigns/<cid>
-  PUT    /api/guilds/<id>/campaigns/<cid>
+  PUT    /api/guilds/<id>/campaigns/<cid>                 # edits and/or {action}
   DELETE /api/guilds/<id>/campaigns/<cid>
-  POST   /api/guilds/<id>/campaigns/<cid>/post           # ask the bot to (re)post
+  POST   /api/guilds/<id>/campaigns/<cid>/post            # ask the bot to (re)post
+  DELETE /api/guilds/<id>/campaigns/<cid>/post            # ask the bot to delete it
   POST   /api/guilds/<id>/campaigns/<cid>/tasks
   PUT    /api/guilds/<id>/campaigns/<cid>/tasks/<tid>
   DELETE /api/guilds/<id>/campaigns/<cid>/tasks/<tid>
   GET    /api/guilds/<id>/campaigns/<cid>/submissions?status=
-  POST   /api/guilds/<id>/campaigns/<cid>/submissions/<sid>/review  {action}
-  GET    /api/guilds/<id>/campaigns/<cid>/leaderboard    # Pro only
+  POST   /api/guilds/<id>/campaigns/<cid>/submissions/<sid>/review  {action, reason}
+  GET    /api/guilds/<id>/campaigns/<cid>/leaderboard     # Pro only
+
+Mirrors Telegizer's engagement service: the same free-plan caps, the same
+lifecycle verbs (publish/pause/reopen/close/archive), the same create payload
+(campaign-level proof fields + sub-tasks with their own fields), and the same
+structure lock once members have started submitting.
 
 Free guilds may keep one ACTIVE campaign; Pro is unlimited. Verifying a
 submission grants the task/campaign reward via the XP ledger.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from flask import Blueprint, g, jsonify, request
 from sqlalchemy import func
@@ -30,20 +36,60 @@ import twitter_verify
 from auth import login_required
 from crypto import decrypt_token, encrypt_token
 from models import (
+    CAMPAIGN_FIELD_TYPES,
     CAMPAIGN_STATUSES,
     CAMPAIGN_TYPES,
     CAMPAIGN_VERIFICATION_MODES,
     Campaign,
+    CampaignCustomField,
     CampaignSubmission,
     CampaignTask,
     Guild,
     User,
-    UserGuild,
 )
 
 campaigns_bp = Blueprint("campaigns", __name__)
 
+# ── Free-plan caps (mirror Telegizer's engagement.py) ─────────────────────────
 FREE_ACTIVE_LIMIT = 1
+FREE_MAX_CUSTOM_FIELDS = 3
+# Hard platform cap, not a plan cap: a Discord modal allows 5 components and the
+# proof input takes one, so at most 4 admin-defined fields can ever be shown.
+MAX_CUSTOM_FIELDS = 4
+
+# Valid lifecycle transitions for the PUT `action` verb.
+_LIFECYCLE_ACTIONS = {
+    "publish": "active",
+    "pause": "paused",
+    "reopen": "active",
+    "close": "closed",
+    "archive": "archived",
+}
+
+# Fields a PUT may edit directly (content edits, distinct from a lifecycle action).
+_EDITABLE_FIELDS = {
+    "title", "description", "task_url", "platform", "reward_xp", "reward_label",
+    "starts_at", "ends_at", "max_participants", "one_per_user", "pin_message",
+    "verification_mode", "settings", "channel_id",
+}
+
+
+class ApiError(Exception):
+    """Client-facing error; the blueprint handler converts it to JSON."""
+
+    def __init__(self, message, status=400, code=None):
+        super().__init__(message)
+        self.message = message
+        self.status = status
+        self.code = code
+
+
+@campaigns_bp.errorhandler(ApiError)
+def _handle_api_error(exc: ApiError):
+    body = {"error": exc.message, "message": exc.message}
+    if exc.code:
+        body["code"] = exc.code
+    return jsonify(body), exc.status
 
 
 def _ctx(guild_id: int):
@@ -70,6 +116,19 @@ def _as_int(value, default, lo, hi):
         return default
 
 
+def _opt_int(value, name, *, minimum=None):
+    """None/'' -> None; otherwise a validated int."""
+    if value in (None, ""):
+        return None
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        raise ApiError(f"{name} must be a number")
+    if minimum is not None and n < minimum:
+        raise ApiError(f"{name} must be >= {minimum}")
+    return n
+
+
 def _parse_iso(value):
     """ISO-8601 string (optionally with trailing Z) -> naive UTC datetime, or None."""
     if not value:
@@ -78,6 +137,12 @@ def _parse_iso(value):
         return datetime.fromisoformat(str(value).replace("Z", "+00:00")).replace(tzinfo=None)
     except (TypeError, ValueError):
         return None
+
+
+def _norm_platform(value):
+    if not value:
+        return None
+    return str(value).strip().lower()[:40] or None
 
 
 def _counts(cid: int) -> dict:
@@ -105,6 +170,178 @@ def _active_count(guild_id: int, exclude_id=None) -> int:
     return q.count()
 
 
+def _has_submissions(cid: int) -> bool:
+    return (
+        g.db.query(CampaignSubmission.id)
+        .filter(CampaignSubmission.campaign_id == cid)
+        .first()
+        is not None
+    )
+
+
+# ── Proof fields & tasks ──────────────────────────────────────────────────────
+
+def _validate_fields(fields_in, *, plan_is_pro: bool):
+    """Validate raw proof-field dicts -> normalized kwargs. No DB writes."""
+    if not isinstance(fields_in, list):
+        raise ApiError("custom_fields must be a list")
+    if len(fields_in) > MAX_CUSTOM_FIELDS:
+        raise ApiError(
+            f"Discord modals allow at most {MAX_CUSTOM_FIELDS} extra proof fields."
+        )
+    if not plan_is_pro and len(fields_in) > FREE_MAX_CUSTOM_FIELDS:
+        raise ApiError(
+            f"The free plan allows up to {FREE_MAX_CUSTOM_FIELDS} proof fields per "
+            "campaign. Upgrade to Pro for more.",
+            403, code="FEATURE_REQUIRES_PRO",
+        )
+    out, seen = [], set()
+    for idx, raw in enumerate(fields_in):
+        if not isinstance(raw, dict):
+            raise ApiError("Each custom field must be an object")
+        label = str(raw.get("label") or "").strip()
+        if not label:
+            raise ApiError("Each custom field needs a label")
+        ftype = str(raw.get("field_type") or "text").strip()
+        if ftype not in CAMPAIGN_FIELD_TYPES:
+            raise ApiError(f"Invalid field_type: {ftype}")
+        key = str(raw.get("key") or label).strip().lower().replace(" ", "_")[:64]
+        if key in seen:
+            key = f"{key}_{idx}"[:64]
+        seen.add(key)
+        example = str(raw.get("example") or "").strip()
+        out.append(dict(
+            key=key,
+            label=label[:45],
+            field_type=ftype,
+            required=bool(raw.get("required", True)),
+            example=(example[:200] or None),
+            position=idx,
+        ))
+    return out
+
+
+def _replace_custom_fields(campaign, fields_in, *, plan_is_pro: bool):
+    """(Re)create the campaign-level proof fields. Caller commits."""
+    for f in list(campaign.custom_fields):
+        if f.task_id is None:
+            g.db.delete(f)
+    g.db.flush()
+    for kw in _validate_fields(fields_in, plan_is_pro=plan_is_pro):
+        g.db.add(CampaignCustomField(campaign_id=campaign.id, **kw))
+
+
+def _replace_tasks(campaign, tasks_in, *, plan_is_pro: bool):
+    """(Re)create sub-tasks and their proof fields. `None` leaves tasks untouched;
+    an empty list clears them (back to a single-task campaign)."""
+    if tasks_in is None:
+        return
+    if not isinstance(tasks_in, list):
+        raise ApiError("tasks must be a list")
+    if len(tasks_in) > 1 and not plan_is_pro:
+        raise ApiError(
+            "Multi-task campaigns require a Pro subscription.",
+            403, code="FEATURE_REQUIRES_PRO",
+        )
+    if len(tasks_in) > 25:
+        raise ApiError("A campaign can hold at most 25 tasks (Discord button limit).")
+
+    existing = list(campaign.tasks)
+    if existing:
+        # Deleting a task orphans its submissions — refuse to replace tasks once
+        # members have started submitting (data-loss guard, Telegizer parity).
+        ids = [t.id for t in existing]
+        clash = (
+            g.db.query(CampaignSubmission.id)
+            .filter(CampaignSubmission.task_id.in_(ids))
+            .first()
+        )
+        if clash is not None:
+            raise ApiError(
+                "This campaign's tasks can't be changed after members have started "
+                "submitting. Close it and create a new campaign instead."
+            )
+    for t in existing:
+        for f in list(t.custom_fields):   # no delete-orphan on the task side
+            g.db.delete(f)
+        g.db.delete(t)
+    g.db.flush()
+
+    for idx, raw in enumerate(tasks_in):
+        if not isinstance(raw, dict):
+            raise ApiError("Each task must be an object")
+        title = str(raw.get("title") or "").strip()
+        if not title:
+            raise ApiError("Each task needs a title")
+        ttype = str(raw.get("type") or "social_task").strip()
+        if ttype not in CAMPAIGN_TYPES:
+            raise ApiError(f"Invalid task type: {ttype}")
+        tmode = str(raw.get("verification_mode") or "manual").strip()
+        if tmode not in CAMPAIGN_VERIFICATION_MODES:
+            raise ApiError(f"Invalid verification_mode: {tmode}")
+        task = CampaignTask(
+            campaign_id=campaign.id,
+            order=idx,
+            title=title[:200],
+            description=str(raw.get("description") or "")[:2000],
+            type=ttype,
+            platform=_norm_platform(raw.get("platform")),
+            task_url=str(raw.get("task_url") or "")[:2000] or None,
+            verification_mode=tmode,
+            reward_xp=_as_int(raw.get("reward_xp", 0), 0, 0, 100000),
+            reward_label=str(raw.get("reward_label") or "")[:200] or None,
+        )
+        g.db.add(task)
+        g.db.flush()  # need task.id for its fields
+        for kw in _validate_fields(raw.get("custom_fields") or [], plan_is_pro=plan_is_pro):
+            g.db.add(CampaignCustomField(campaign_id=campaign.id, task_id=task.id, **kw))
+
+
+def _check_gating(guild, *, status, verification_mode, platform, field_count,
+                  task_count, settings, exclude_id=None):
+    """Raise ApiError(403) when a free guild exceeds the free-plan limits."""
+    if guild.is_pro:
+        return
+    if task_count > 1:
+        raise ApiError("Multi-task campaigns require a Pro subscription.",
+                       403, code="FEATURE_REQUIRES_PRO")
+    if verification_mode == "link":
+        raise ApiError("Link-validity verification requires a Pro subscription.",
+                       403, code="FEATURE_REQUIRES_PRO")
+    # 'auto' is free only for Discord itself (server-membership check), matching
+    # Telegizer where 'auto' is free only for a Telegram channel join.
+    if verification_mode == "auto" and platform not in (None, "", "discord"):
+        raise ApiError(
+            "Automatic verification for this platform requires a Pro subscription.",
+            403, code="FEATURE_REQUIRES_PRO")
+    if field_count > FREE_MAX_CUSTOM_FIELDS:
+        raise ApiError(
+            f"The free plan allows up to {FREE_MAX_CUSTOM_FIELDS} proof fields per "
+            "campaign. Upgrade to Pro for more.",
+            403, code="FEATURE_REQUIRES_PRO")
+    if (settings or {}).get("auto_verify_x"):
+        raise ApiError("Automatic X verification requires a Pro subscription.",
+                       403, code="FEATURE_REQUIRES_PRO")
+    if status == "active" and _active_count(guild.id, exclude_id=exclude_id) >= FREE_ACTIVE_LIMIT:
+        raise ApiError(
+            f"The free plan allows {FREE_ACTIVE_LIMIT} active campaign at a time. "
+            "Close it or upgrade to Pro to run more.",
+            402, code="FEATURE_REQUIRES_PRO")
+
+
+def _serialize(c: Campaign, *, include_tasks=True) -> dict:
+    d = c.to_dict(include_tasks=include_tasks)
+    counts = _counts(c.id)
+    d["counts"] = counts
+    # Flat aliases so the table can read them without digging into `counts`.
+    d["submissions_total"] = counts["total"]
+    d["submissions_pending"] = counts["pending"]
+    d["submissions_verified"] = counts["verified"]
+    d["task_count"] = len(c.tasks)
+    d["is_multitask"] = len(c.tasks) > 0
+    return d
+
+
 # --- campaign CRUD ------------------------------------------------------------
 @campaigns_bp.get("/api/guilds/<int:guild_id>/campaigns")
 @login_required
@@ -118,12 +355,7 @@ def list_campaigns(guild_id: int):
         .order_by(Campaign.created_at.desc())
         .all()
     )
-    out = []
-    for c in rows:
-        d = c.to_dict(include_tasks=False)
-        d["counts"] = _counts(c.id)
-        d["task_count"] = len(c.tasks)
-        out.append(d)
+    out = [_serialize(c, include_tasks=True) for c in rows]
     # Owner-aware 3-state for the auto-verify chip (live | rejected | disabled).
     # The key is account-level, so this is identical across all the owner's guilds.
     x_status = "disabled"
@@ -131,7 +363,9 @@ def list_campaigns(guild_id: int):
         x_status = twitter_verify.autoverify_status(guild.owner_id)
     except Exception:
         pass
-    return jsonify(campaigns=out, plan=guild.plan or "free", x_autoverify_status=x_status)
+    # `is_pro` is authoritative (it accounts for expiry); `plan` is the raw label.
+    return jsonify(campaigns=out, plan=guild.plan or "free", is_pro=bool(guild.is_pro),
+                   x_autoverify_status=x_status)
 
 
 @campaigns_bp.post("/api/guilds/<int:guild_id>/campaigns")
@@ -143,27 +377,63 @@ def create_campaign(guild_id: int):
     body = request.get_json(silent=True) or {}
     title = str(body.get("title", "")).strip()
     if not title:
-        return jsonify(error="Title is required"), 400
+        raise ApiError("Title is required")
+
     ctype = body.get("type") if body.get("type") in CAMPAIGN_TYPES else "proof_collection"
-    vmode = body.get("verification_mode") if body.get("verification_mode") in CAMPAIGN_VERIFICATION_MODES else "manual"
+    vmode = (body.get("verification_mode") or "manual").strip()
+    if vmode not in CAMPAIGN_VERIFICATION_MODES:
+        raise ApiError(f"Invalid verification_mode: {vmode}")
+    status = (body.get("status") or "draft").strip()
+    if status not in ("draft", "active"):
+        raise ApiError("Campaign can only be created as 'draft' or 'active'")
+
+    platform = "x" if ctype == "raid" else _norm_platform(body.get("platform"))
+    settings = body["settings"] if isinstance(body.get("settings"), dict) else {}
+    fields_in = body.get("custom_fields") or []
+    tasks_in = body.get("tasks")
+    task_count = len(tasks_in) if isinstance(tasks_in, list) else 0
+
+    _check_gating(guild, status=status, verification_mode=vmode, platform=platform,
+                  field_count=len(fields_in) if isinstance(fields_in, list) else 0,
+                  task_count=task_count, settings=settings)
+
+    # Deadline: explicit ends_at wins; otherwise derive it from duration_hours.
+    starts_at = _parse_iso(body.get("starts_at"))
+    ends_at = _parse_iso(body.get("ends_at"))
+    if not ends_at and body.get("duration_hours"):
+        hours = _opt_int(body.get("duration_hours"), "duration_hours", minimum=1)
+        if hours:
+            ends_at = (starts_at or datetime.utcnow()) + timedelta(hours=hours)
 
     c = Campaign(
         guild_id=guild_id,
         type=ctype,
+        platform=platform,
         title=title[:200],
         description=str(body.get("description") or "")[:2000],
         task_url=str(body.get("task_url") or "")[:2000] or None,
         verification_mode=vmode,
         reward_xp=_as_int(body.get("reward_xp", 0), 0, 0, 100000),
         reward_label=str(body.get("reward_label") or "")[:200] or None,
+        max_participants=_opt_int(body.get("max_participants"), "max_participants", minimum=1),
         one_per_user=bool(body.get("one_per_user", True)),
+        pin_message=bool(body.get("pin_message", False)),
+        starts_at=starts_at,
+        ends_at=ends_at,
         channel_id=int(body["channel_id"]) if str(body.get("channel_id") or "").isdigit() else None,
-        status="draft",
-        settings=body["settings"] if isinstance(body.get("settings"), dict) else {},
+        status=status,
+        settings=settings,
     )
     g.db.add(c)
+    g.db.flush()  # need c.id for its fields / tasks
+
+    _replace_custom_fields(c, fields_in, plan_is_pro=guild.is_pro)
+    _replace_tasks(c, tasks_in, plan_is_pro=guild.is_pro)
+
+    if c.status == "active" and c.channel_id:
+        c.needs_post = True
     g.db.commit()
-    return jsonify(c.to_dict()), 201
+    return jsonify(_serialize(c)), 201
 
 
 @campaigns_bp.get("/api/guilds/<int:guild_id>/campaigns/<int:cid>")
@@ -175,8 +445,8 @@ def get_campaign(guild_id: int, cid: int):
     c = _get_campaign(guild_id, cid)
     if c is None:
         return jsonify(error="not_found"), 404
-    d = c.to_dict()
-    d["counts"] = _counts(cid)
+    d = _serialize(c)
+    d["structure_locked"] = _has_submissions(cid)
     return jsonify(d)
 
 
@@ -190,51 +460,83 @@ def update_campaign(guild_id: int, cid: int):
     if c is None:
         return jsonify(error="not_found"), 404
     body = request.get_json(silent=True) or {}
+    is_pro = guild.is_pro
 
-    if "title" in body and str(body["title"]).strip():
-        c.title = str(body["title"]).strip()[:200]
-    if "description" in body:
-        c.description = str(body["description"] or "")[:2000]
-    if "task_url" in body:
-        c.task_url = str(body["task_url"] or "")[:2000] or None
-    if "type" in body and body["type"] in CAMPAIGN_TYPES:
-        c.type = body["type"]
-    if "verification_mode" in body and body["verification_mode"] in CAMPAIGN_VERIFICATION_MODES:
-        c.verification_mode = body["verification_mode"]
-    if "reward_xp" in body:
-        c.reward_xp = _as_int(body["reward_xp"], 0, 0, 100000)
-    if "reward_label" in body:
-        c.reward_label = str(body["reward_label"] or "")[:200] or None
-    if "one_per_user" in body:
-        c.one_per_user = bool(body["one_per_user"])
-    if "channel_id" in body:
-        v = body["channel_id"]
-        c.channel_id = int(v) if str(v or "").isdigit() else None
-    if "ends_at" in body:
-        c.ends_at = _parse_iso(body["ends_at"])
-    if "starts_at" in body:
-        c.starts_at = _parse_iso(body["starts_at"])
-    if isinstance(body.get("settings"), dict):
-        # Merge so we never drop existing keys (winners, branding, etc.).
-        merged = dict(c.settings or {})
-        merged.update(body["settings"])
-        c.settings = merged
-        flag_modified(c, "settings")
+    # Free-plan gates that apply to edits as well as creation.
+    if isinstance(body.get("tasks"), list) and len(body["tasks"]) > 1 and not is_pro:
+        raise ApiError("Multi-task campaigns require a Pro subscription.",
+                       403, code="FEATURE_REQUIRES_PRO")
+    if isinstance(body.get("settings"), dict) and body["settings"].get("auto_verify_x") and not is_pro:
+        raise ApiError("Automatic X verification requires a Pro subscription.",
+                       403, code="FEATURE_REQUIRES_PRO")
+    if "title" in body and not str(body["title"] or "").strip():
+        raise ApiError("Title is required")
+    # Structure edits are refused once members have submitted (protects their data).
+    # Checked before anything is mutated so a rejected edit changes nothing.
+    if (isinstance(body.get("custom_fields"), list) or "tasks" in body) and _has_submissions(cid):
+        raise ApiError(
+            "This campaign has submissions, so its tasks and proof fields are locked. "
+            "You can still edit the details, reward, deadline and visibility."
+        )
 
-    if "status" in body and body["status"] in CAMPAIGN_STATUSES:
-        new_status = body["status"]
-        if new_status == "active" and c.status != "active":
-            if not guild.is_pro and _active_count(guild_id, exclude_id=cid) >= FREE_ACTIVE_LIMIT:
-                return jsonify(error="plan_limit_reached",
-                               message="Free plan allows one active campaign. Upgrade to Pro for more."), 402
-            c.status = "active"
-            if c.channel_id:
-                c.needs_post = True   # bot posts the announcement with proof buttons
-        else:
-            c.status = new_status
+    # Lifecycle verb (publish/pause/reopen/close/archive), Telegizer parity.
+    action = body.get("action")
+    if action is not None:
+        if action not in _LIFECYCLE_ACTIONS:
+            raise ApiError(f"Unknown action: {action}")
+        new_status = _LIFECYCLE_ACTIONS[action]
+        if new_status == "active" and c.status != "active" and not is_pro:
+            if _active_count(guild_id, exclude_id=cid) >= FREE_ACTIVE_LIMIT:
+                raise ApiError(
+                    "Free plan allows one active campaign. Upgrade to Pro for more.",
+                    402, code="FEATURE_REQUIRES_PRO")
+        c.status = new_status
+        if new_status == "active" and c.channel_id and c.post_status != "posted":
+            c.needs_post = True
+
+    for key in list(body.keys()):
+        if key not in _EDITABLE_FIELDS:
+            continue
+        value = body[key]
+        if key in ("starts_at", "ends_at"):
+            setattr(c, key, _parse_iso(value))
+        elif key == "reward_xp":
+            c.reward_xp = _as_int(value, 0, 0, 100000)
+        elif key == "max_participants":
+            c.max_participants = _opt_int(value, "max_participants", minimum=1)
+        elif key in ("one_per_user", "pin_message"):
+            setattr(c, key, bool(value))
+        elif key == "verification_mode":
+            if value not in CAMPAIGN_VERIFICATION_MODES:
+                raise ApiError(f"Invalid verification_mode: {value}")
+            c.verification_mode = value
+        elif key == "platform":
+            c.platform = _norm_platform(value)
+        elif key == "channel_id":
+            c.channel_id = int(value) if str(value or "").isdigit() else None
+        elif key == "settings":
+            # Merge so we never drop existing keys (winners, branding, etc.).
+            merged = dict(c.settings or {})
+            merged.update(value or {})
+            c.settings = merged
+            flag_modified(c, "settings")
+        elif key == "title":
+            c.title = str(value).strip()[:200]
+        elif key in ("description", "task_url", "reward_label"):
+            setattr(c, key, (str(value).strip() or None) if value else None)
+
+    if isinstance(body.get("custom_fields"), list):
+        _replace_custom_fields(c, body["custom_fields"], plan_is_pro=is_pro)
+    if "tasks" in body:
+        _replace_tasks(c, body.get("tasks"), plan_is_pro=is_pro)
+
+    # A pure content edit refreshes the live announcement so it reflects the new
+    # title / reward / deadline / proof line.
+    if action is None and c.status == "active" and c.channel_id and c.post_status == "posted":
+        c.needs_post = True
 
     g.db.commit()
-    return jsonify(c.to_dict())
+    return jsonify(_serialize(c))
 
 
 @campaigns_bp.delete("/api/guilds/<int:guild_id>/campaigns/<int:cid>")
@@ -264,6 +566,25 @@ def post_campaign(guild_id: int, cid: int):
         return jsonify(error="no_channel", message="Set an announcement channel first."), 400
     c.needs_post = True
     g.db.commit()
+    return jsonify(ok=True, post_status="queued", campaign=_serialize(c))
+
+
+@campaigns_bp.delete("/api/guilds/<int:guild_id>/campaigns/<int:cid>/post")
+@login_required
+def delete_campaign_post(guild_id: int, cid: int):
+    """Ask the bot to delete the channel announcement. Submissions and rewards are
+    kept, and the campaign can be posted again afterwards."""
+    guild, err = _ctx(guild_id)
+    if err:
+        return err
+    c = _get_campaign(guild_id, cid)
+    if c is None:
+        return jsonify(error="not_found"), 404
+    if not c.message_id:
+        return jsonify(error="not_posted", message="This campaign has no channel post."), 400
+    c.needs_unpost = True
+    c.needs_post = False
+    g.db.commit()
     return jsonify(ok=True, post_status="queued")
 
 
@@ -280,7 +601,10 @@ def add_task(guild_id: int, cid: int):
     body = request.get_json(silent=True) or {}
     title = str(body.get("title", "")).strip()
     if not title:
-        return jsonify(error="Task title is required"), 400
+        raise ApiError("Task title is required")
+    if len(c.tasks) >= 1 and not guild.is_pro:
+        raise ApiError("Multi-task campaigns require a Pro subscription.",
+                       403, code="FEATURE_REQUIRES_PRO")
     order = (max((t.order for t in c.tasks), default=-1)) + 1
     t = CampaignTask(
         campaign_id=cid,
@@ -288,11 +612,16 @@ def add_task(guild_id: int, cid: int):
         title=title[:200],
         description=str(body.get("description") or "")[:2000],
         type=body.get("type") if body.get("type") in CAMPAIGN_TYPES else "social_task",
+        platform=_norm_platform(body.get("platform")),
         task_url=str(body.get("task_url") or "")[:2000] or None,
         verification_mode=body.get("verification_mode") if body.get("verification_mode") in CAMPAIGN_VERIFICATION_MODES else "manual",
         reward_xp=_as_int(body.get("reward_xp", 0), 0, 0, 100000),
+        reward_label=str(body.get("reward_label") or "")[:200] or None,
     )
     g.db.add(t)
+    g.db.flush()
+    for kw in _validate_fields(body.get("custom_fields") or [], plan_is_pro=guild.is_pro):
+        g.db.add(CampaignCustomField(campaign_id=cid, task_id=t.id, **kw))
     if c.status == "active" and c.channel_id:
         c.needs_post = True
     g.db.commit()
@@ -318,10 +647,14 @@ def update_task(guild_id: int, cid: int, tid: int):
         t.description = str(body["description"] or "")[:2000]
     if "task_url" in body:
         t.task_url = str(body["task_url"] or "")[:2000] or None
+    if "platform" in body:
+        t.platform = _norm_platform(body["platform"])
     if "verification_mode" in body and body["verification_mode"] in CAMPAIGN_VERIFICATION_MODES:
         t.verification_mode = body["verification_mode"]
     if "reward_xp" in body:
         t.reward_xp = _as_int(body["reward_xp"], 0, 0, 100000)
+    if "reward_label" in body:
+        t.reward_label = str(body["reward_label"] or "")[:200] or None
     if c.status == "active" and c.channel_id:
         c.needs_post = True
     g.db.commit()
@@ -340,6 +673,10 @@ def delete_task(guild_id: int, cid: int, tid: int):
     t = g.db.get(CampaignTask, tid)
     if t is None or t.campaign_id != cid:
         return jsonify(error="not_found"), 404
+    # Task-level fields have no delete-orphan cascade (Campaign owns it), so drop
+    # them explicitly or they'd linger with a dangling task_id.
+    for f in list(t.custom_fields):
+        g.db.delete(f)
     g.db.delete(t)
     if c.status == "active" and c.channel_id:
         c.needs_post = True
@@ -361,7 +698,7 @@ def list_submissions(guild_id: int, cid: int):
     status = request.args.get("status")
     if status in ("pending", "verified", "rejected"):
         q = q.filter(CampaignSubmission.status == status)
-    subs = q.order_by(CampaignSubmission.created_at.desc()).limit(500).all()
+    subs = q.order_by(CampaignSubmission.created_at.desc()).limit(1000).all()
     return jsonify(submissions=[s.to_dict() for s in subs])
 
 
@@ -377,27 +714,35 @@ def review_submission(guild_id: int, cid: int, sid: int):
     s = g.db.get(CampaignSubmission, sid)
     if s is None or s.campaign_id != cid:
         return jsonify(error="not_found"), 404
-    action = (request.get_json(silent=True) or {}).get("action")
-    if action not in ("verify", "reject"):
-        return jsonify(error="action must be verify or reject"), 400
+    body = request.get_json(silent=True) or {}
+    action = body.get("action")
+    # "verify" is the legacy verb the old dashboard sent; keep it working.
+    if action == "verify":
+        action = "approve"
+    if action not in ("approve", "reject"):
+        raise ApiError("action must be approve or reject")
+
+    reviewer = g.db.get(User, g.user_id)
+    s.reviewed_at = datetime.utcnow()
+    s.reviewer_id = g.user_id
+    s.reviewer_name = (getattr(reviewer, "username", None) or str(g.user_id))[:120]
+    s.review_reason = str(body.get("reason") or "")[:500] or None
+    # Queue the outcome DM; the bot process drains this (the web dyno has no gateway).
+    s.notify_status = "pending"
 
     if action == "reject":
         s.status = "rejected"
-        s.reviewed_at = datetime.utcnow()
-        s.reviewer_id = g.user_id
         g.db.commit()
         return jsonify(s.to_dict())
 
-    # verify → grant the task/campaign reward once
+    # approve -> grant the task/campaign reward exactly once
     if s.status != "verified":
         reward = _reward_for(c, s.task_id)
         if reward > 0:
             leveling.add_xp(g.db, guild_id, s.user_id, reward, s.username, reason=f"campaign:{cid}")
         s.reward_granted = reward
         s.status = "verified"
-        s.reviewed_at = datetime.utcnow()
-        s.reviewer_id = g.user_id
-        g.db.commit()
+    g.db.commit()
     return jsonify(s.to_dict())
 
 
@@ -428,20 +773,23 @@ def campaign_leaderboard(guild_id: int, cid: int):
             func.max(CampaignSubmission.username),
             func.count(CampaignSubmission.id),
             func.coalesce(func.sum(CampaignSubmission.reward_granted), 0),
+            func.min(CampaignSubmission.reviewed_at),
         )
         .filter(CampaignSubmission.campaign_id == cid, CampaignSubmission.status == "verified")
         .group_by(CampaignSubmission.user_id)
         .order_by(func.sum(CampaignSubmission.reward_granted).desc(),
                   func.count(CampaignSubmission.id).desc())
-        .limit(50)
+        .limit(100)
         .all()
     )
     board = [
         {"rank": i, "user_id": str(uid), "username": uname,
-         "verified": int(cnt), "xp_earned": int(xp)}
-        for i, (uid, uname, cnt, xp) in enumerate(rows, start=1)
+         "verified": int(cnt), "verified_count": int(cnt), "xp_earned": int(xp),
+         "first_verified_at": (first.isoformat() + "Z") if first else None}
+        for i, (uid, uname, cnt, xp, first) in enumerate(rows, start=1)
     ]
-    return jsonify(leaderboard=board)
+    return jsonify(leaderboard=board, entries=board, total_participants=len(board),
+                   reward_xp=c.reward_xp or 0)
 
 
 # --- account-level bring-your-own twitterapi.io key ---------------------------
