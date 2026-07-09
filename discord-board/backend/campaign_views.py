@@ -91,12 +91,13 @@ class ProofModal(discord.ui.Modal):
         self.cid = cid
         self.tid = tid
         self.needs_screenshot = needs_screenshot
-        # For an auto-verify raid, prompt_label becomes "Your X @username" (short input)
-        # so the bot can confirm the actions live against twitterapi.io.
+        # When a screenshot is the real proof (collected as an upload after this
+        # modal), the text input is just an optional caption — don't force it, or a
+        # member with nothing to type can't submit at all.
         self.value = discord.ui.TextInput(
-            label=prompt_label[:45],
+            label=("Add a note (optional)" if needs_screenshot else prompt_label)[:45],
             style=discord.TextStyle.short if prompt_short else discord.TextStyle.paragraph,
-            required=True,
+            required=not needs_screenshot,
             max_length=120 if prompt_short else 500,
         )
         self.add_item(self.value)
@@ -236,6 +237,7 @@ class ExtraFieldsModal(discord.ui.Modal):
     def __init__(self, cid: int, fields: list[dict], title: str) -> None:
         super().__init__(title=f"Your details · {title}"[:45])
         self.cid = cid
+        self.wants_screenshot = any((f or {}).get("field_type") == "screenshot" for f in (fields or []))
         self.inputs: list[tuple[str, discord.ui.TextInput]] = []
         for f in (fields or [])[:5]:
             if f.get("field_type") == "screenshot":
@@ -259,6 +261,10 @@ class ExtraFieldsModal(discord.ui.Modal):
             content="✅ **All done — thanks!** Your details were saved with your submission.",
             view=None,
         )
+        # A screenshot extra can't live in a modal (no file input), so collect it as
+        # a follow-up upload — otherwise a configured screenshot field is never asked.
+        if self.wants_screenshot:
+            await _collect_screenshot(interaction, self.cid)
 
 
 class ExtraFieldsView(discord.ui.View):
@@ -271,10 +277,21 @@ class ExtraFieldsView(discord.ui.View):
         self.cid = cid
         self.fields = fields
         self.ctitle = title
+        # Whether the modal would have any text inputs at all — a modal made purely
+        # of screenshot fields would have zero components, which Discord rejects.
+        self.has_text = any((f or {}).get("field_type") != "screenshot" for f in (fields or []))
+        self.wants_screenshot = any((f or {}).get("field_type") == "screenshot" for f in (fields or []))
 
     @discord.ui.button(label="Add your details", style=discord.ButtonStyle.primary)
     async def add_details(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_modal(ExtraFieldsModal(self.cid, self.fields, self.ctitle))
+        if self.has_text:
+            await interaction.response.send_modal(ExtraFieldsModal(self.cid, self.fields, self.ctitle))
+            return
+        # Only a screenshot to collect — no modal (it would be empty). Go straight
+        # to the follow-up upload.
+        await interaction.response.edit_message(content="📸 One last step — upload your screenshot below.", view=None)
+        if self.wants_screenshot:
+            await _collect_screenshot(interaction, self.cid)
 
 
 class ActionPanelView(discord.ui.View):
@@ -526,7 +543,7 @@ def build_view(data: dict) -> discord.ui.View:
         for t in tasks:
             view.add_item(ProofButton(
                 data["id"], t["id"],
-                label=f"Submit: {t['title']}", honor=(t["verification_mode"] == "honor"),
+                label=f"Submit: {t['title']}", honor=(t["verification_mode"] in ("honor", "auto")),
             ))
     else:
         view.add_item(ProofButton(
@@ -601,10 +618,17 @@ async def unpost_campaign(bot, cid: int) -> None:
     log.info("Deleted campaign %s announcement", cid)
 
 
-async def deliver_review_notices(bot) -> None:
+async def deliver_review_notices(bot, serves_fn=None) -> None:
     """DM members the outcome of a reviewed submission. Best-effort: a closed DM
-    is recorded on the submission, never retried forever."""
+    is recorded on the submission, never retried forever.
+
+    `serves_fn(guild_id) -> bool` scopes delivery to the guilds this bot identity
+    owns, so in a multi-bot deployment a custom bot never grabs (and fails, and
+    thereby marks) a notice that belongs to the official bot — unserved notices are
+    left pending for the right identity to pick up."""
     for item in await asyncio.to_thread(cr.submissions_to_notify):
+        if serves_fn is not None and not serves_fn(item["guild_id"]):
+            continue
         try:
             user = bot.get_user(int(item["user_id"])) or await bot.fetch_user(int(item["user_id"]))
         except Exception:  # noqa: BLE001

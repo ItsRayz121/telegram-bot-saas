@@ -1696,7 +1696,9 @@ class CoreMixin:
                 log.exception("unpost_campaign failed for %s", cid)
         try:
             # The web process has no gateway, so review outcomes are queued for us.
-            await campaign_views.deliver_review_notices(self)
+            # Scope delivery to the guilds this identity serves so a custom bot
+            # never consumes the official bot's notices (or vice versa).
+            await campaign_views.deliver_review_notices(self, lambda gid: serves(self, gid))
         except Exception:  # noqa: BLE001
             log.exception("campaign review notices failed")
         try:

@@ -463,7 +463,10 @@ def create_submission(cid: int, tid: int, user_id: int, username: str, value: st
             sub.flagged = True
             sub.flag_reason = dup_reason
 
-        if vmode == "honor":
+        # honor is a one-tap accept; 'auto' verifies server membership, and a
+        # member who can click the button in the guild's channel IS a member — so
+        # both auto-verify on submission (mirrors Telegizer's Telegram-join 'auto').
+        if vmode in ("honor", "auto"):
             sub.status = "verified"
             sub.reward_granted = reward
             sub.reviewed_at = datetime.utcnow()
