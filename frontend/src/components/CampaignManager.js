@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box, Card, CardContent, Typography, Button, TextField, Grid,
   Dialog, DialogTitle, DialogContent, DialogActions, IconButton,
@@ -629,9 +629,8 @@ function PostStatusCell({ c, botId, groupId, onChanged }) {
   );
 }
 
-// Collapse a long title to a few words; click to expand the full text inline.
-// Long titles were wrapping into many rows and making the whole table look messy.
-const TITLE_PREVIEW_CHARS = 38;
+// Collapse a long title to two lines; click "more" to expand the full text
+// inline. Long titles were wrapping into many rows and making the table messy.
 
 // Compact two-line deadline ("30 Jun 2026 / 06:56") so the column stays narrow
 // enough for the whole table to fit a desktop viewport without horizontal scroll.
@@ -651,26 +650,43 @@ function fmtDeadline(value) {
 }
 function TruncatedTitle({ title }) {
   const [open, setOpen] = useState(false);
+  const [overflowing, setOverflowing] = useState(false);
+  const ref = useRef(null);
   const full = title || '';
-  const isLong = full.length > TITLE_PREVIEW_CHARS;
-  if (!isLong) {
-    return <Typography variant="body2" fontWeight={500} sx={{ wordBreak: 'break-word' }}>{full || '—'}</Typography>;
-  }
-  const preview = full.slice(0, TITLE_PREVIEW_CHARS).trimEnd();
+  // Measure the collapsed (2-line-clamped) title once — only offer "more" when
+  // it actually overflows two lines, so short titles never show a dead toggle
+  // and long ones never wrap past two lines regardless of column width.
+  useEffect(() => {
+    const el = ref.current;
+    if (el) setOverflowing(el.scrollHeight > el.clientHeight + 1);
+  }, [full]);
   return (
-    <Tooltip title={open ? '' : full} placement="top-start">
-      <Typography
-        variant="body2"
-        fontWeight={500}
-        onClick={() => setOpen((v) => !v)}
-        sx={{ cursor: 'pointer', maxWidth: { xs: 240, md: '100%' }, wordBreak: 'break-word' }}
-      >
-        {open ? full : `${preview}…`}
-        <Typography component="span" variant="caption" color="primary.main" sx={{ ml: 0.5, whiteSpace: 'nowrap' }}>
+    <Box sx={{ maxWidth: { xs: 220, md: '100%' } }}>
+      <Tooltip title={!open && overflowing ? full : ''} placement="top-start">
+        <Typography
+          ref={ref}
+          variant="body2"
+          fontWeight={500}
+          sx={{
+            wordBreak: 'break-word',
+            ...(open ? {} : {
+              display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+            }),
+          }}
+        >
+          {full || '—'}
+        </Typography>
+      </Tooltip>
+      {overflowing && (
+        <Typography
+          component="span" variant="caption" color="primary.main"
+          onClick={() => setOpen((v) => !v)}
+          sx={{ cursor: 'pointer', whiteSpace: 'nowrap' }}
+        >
           {open ? 'less' : 'more'}
         </Typography>
-      </Typography>
-    </Tooltip>
+      )}
+    </Box>
   );
 }
 
@@ -786,18 +802,19 @@ function XAutoverifyStatus({ status, enabled, onManageKey }) {
     );
   }
   const severity = status === 'live' ? 'success' : status === 'rejected' ? 'warning' : 'info';
+  // Keep the "Manage key" button BELOW the detail (not in Alert's right-hand
+  // `action` slot) so the description text spans the full width — 2–3 lines
+  // instead of a ~10-line narrow column on mobile.
   return (
-    <Alert
-      severity={severity}
-      sx={{ mt: 1 }}
-      action={onManageKey && (
-        <Button color="inherit" size="small" onClick={onManageKey} sx={{ whiteSpace: 'nowrap' }}>
+    <Alert severity={severity} sx={{ mt: 1 }}>
+      <strong>{meta.dot} {meta.label}</strong>
+      <Typography variant="caption" display="block">{meta.detail}</Typography>
+      {onManageKey && (
+        <Button color="inherit" size="small" onClick={onManageKey}
+          sx={{ mt: 0.5, px: 0, minWidth: 0, whiteSpace: 'nowrap' }}>
           {status === 'live' ? 'Manage key' : 'Add your key'}
         </Button>
       )}
-    >
-      <strong>{meta.dot} {meta.label}</strong>
-      <Typography variant="caption" display="block">{meta.detail}</Typography>
     </Alert>
   );
 }
@@ -1107,17 +1124,14 @@ function CampaignWizard({ botId, groupId, initialType, isPaid = false, xAutoveri
                         </Grid>
                       ))}
                     </Grid>
-                    <FormControlLabel
-                      sx={{ mt: 1 }}
-                      control={
-                        <Switch
-                          checked={isPaid && form.auto_verify_x}
-                          disabled={!isPaid}
-                          onChange={(e) => set('auto_verify_x', e.target.checked)}
-                        />
-                      }
-                      label="Auto-verify on X (Pro) — confirm likes / retweets / comments / follows in real time"
-                    />
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mt: 1 }}>
+                      <Typography variant="body2">Auto-verify on X (Pro)</Typography>
+                      <Switch
+                        checked={isPaid && form.auto_verify_x}
+                        disabled={!isPaid}
+                        onChange={(e) => set('auto_verify_x', e.target.checked)}
+                      />
+                    </Box>
                     {isPaid && (
                       <XAutoverifyStatus
                         status={xAutoverifyStatus}
@@ -1153,26 +1167,24 @@ function CampaignWizard({ botId, groupId, initialType, isPaid = false, xAutoveri
                         </Grid>
                       ))}
                     </Grid>
-                    <FormControlLabel
-                      sx={{ mt: 1 }}
-                      control={<Switch checked={form.show_targets} onChange={(e) => set('show_targets', e.target.checked)} />}
-                      label="Show targets publicly — display a live quota in the group post"
-                    />
+                    {/* Full-width label + switch on the right → the label reads on
+                        one short line instead of wrapping in a narrow column. */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mt: 1 }}>
+                      <Typography variant="body2">Show targets publicly</Typography>
+                      <Switch checked={form.show_targets} onChange={(e) => set('show_targets', e.target.checked)} />
+                    </Box>
                     <Typography variant="caption" color="text.secondary" display="block">
                       {form.show_targets
                         ? 'The group post shows each target and updates as people are verified (e.g. “40 reposts left”). Likes are honor-based and counted by verified submissions — X keeps real likes private.'
-                        : 'Targets stay private — you’ll see verified progress in Manage. Turn this on to show a live countdown to members.'}
+                        : 'Display a live quota in the group post. Off → targets stay private and you’ll see verified progress in Manage.'}
                     </Typography>
                     {form.platform === 'x' && (
                       <>
-                        <FormControlLabel
-                          sx={{ mt: 1 }}
-                          control={
-                            <Switch checked={isPaid && form.auto_verify_x} disabled={!isPaid}
-                              onChange={(e) => set('auto_verify_x', e.target.checked)} />
-                          }
-                          label="Auto-verify on X (Pro) — check reposts / comments / quotes / follows in real time"
-                        />
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mt: 1 }}>
+                          <Typography variant="body2">Auto-verify on X (Pro)</Typography>
+                          <Switch checked={isPaid && form.auto_verify_x} disabled={!isPaid}
+                            onChange={(e) => set('auto_verify_x', e.target.checked)} />
+                        </Box>
                         {isPaid && (
                           <XAutoverifyStatus
                             status={xAutoverifyStatus}
@@ -1192,14 +1204,22 @@ function CampaignWizard({ botId, groupId, initialType, isPaid = false, xAutoveri
                 {/* A raid is driven entirely by the per-action DM verify flow (each
                     action is checked live or sent to review on its own), so the
                     campaign-level Verification mode doesn't apply — showing it only
-                    contradicts the Auto-verify toggle. Hide it for raids. */}
+                    contradicts the Auto-verify toggle. Hide it for raids. Likewise,
+                    when auto-verify is ON for an X social task the mode is locked to
+                    API-key verification — show that instead of the manual dropdown. */}
                 {form.type !== 'raid' && (
-                  <FormControl fullWidth>
-                    <InputLabel>Verification</InputLabel>
-                    <Select value={form.verification_mode} label="Verification" onChange={(e) => set('verification_mode', e.target.value)}>
-                      {VERIFICATION_MODES.map((v) => <MenuItem key={v.value} value={v.value}>{v.label}</MenuItem>)}
-                    </Select>
-                  </FormControl>
+                  (isPaid && form.auto_verify_x && form.platform === 'x') ? (
+                    <TextField fullWidth disabled label="Verification"
+                      value="Auto-verify on X (by API key)"
+                      helperText="Reposts, comments, quotes & follows confirm automatically via your twitterapi.io key — no manual review." />
+                  ) : (
+                    <FormControl fullWidth>
+                      <InputLabel>Verification</InputLabel>
+                      <Select value={form.verification_mode} label="Verification" onChange={(e) => set('verification_mode', e.target.value)}>
+                        {VERIFICATION_MODES.map((v) => <MenuItem key={v.value} value={v.value}>{v.label}</MenuItem>)}
+                      </Select>
+                    </FormControl>
+                  )
                 )}
 
                 <Divider textAlign="left"><Typography variant="caption">Proof fields</Typography></Divider>
@@ -1250,16 +1270,14 @@ function CampaignWizard({ botId, groupId, initialType, isPaid = false, xAutoveri
                 {DURATIONS.map((d) => <MenuItem key={d.value} value={d.value}>{d.label}</MenuItem>)}
               </Select>
             </FormControl>
-            <Grid container spacing={2}>
-              <Grid item xs={6}>
-                <TextField fullWidth type="number" label="XP Reward" value={form.reward_xp}
-                  onChange={(e) => set('reward_xp', e.target.value)} inputProps={{ min: 0 }} />
-              </Grid>
-              <Grid item xs={6}>
-                <TextField fullWidth label="Reward Label" placeholder="Giveaway entry"
-                  value={form.reward_label} onChange={(e) => set('reward_label', e.target.value)} />
-              </Grid>
-            </Grid>
+            {/* Flex row (not Grid) so XP + Reward Label align flush with the
+                full-width Deadline field above and Max-participants field below. */}
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <TextField fullWidth type="number" label="XP Reward" value={form.reward_xp}
+                onChange={(e) => set('reward_xp', e.target.value)} inputProps={{ min: 0 }} sx={{ flex: 1 }} />
+              <TextField fullWidth label="Reward Label" placeholder="Giveaway entry"
+                value={form.reward_label} onChange={(e) => set('reward_label', e.target.value)} sx={{ flex: 1 }} />
+            </Box>
             <TextField fullWidth type="number" label="Max participants (optional)"
               value={form.max_participants} onChange={(e) => set('max_participants', e.target.value)} inputProps={{ min: 1 }} />
             <FormControlLabel control={<Switch checked={form.one_per_user} onChange={(e) => set('one_per_user', e.target.checked)} />}
@@ -1416,8 +1434,12 @@ function CampaignManageDialog({ botId, groupId, campaignId, onClose, onChanged }
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
         ) : (
           <>
-            <Stack direction="row" useFlexGap flexWrap="wrap" sx={{ mb: 2, gap: 1, rowGap: 0.75,
-              '& > p': { bgcolor: 'action.hover', px: 1, py: 0.4, borderRadius: 1, whiteSpace: 'nowrap' } }}>
+            {/* Even 2-col (3-col on desktop) grid → the meta pills form ≤3 tidy
+                rows using the full width, instead of each wide pill grabbing its
+                own line. */}
+            <Box sx={{ mb: 2, display: 'grid', gap: 1,
+              gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)' },
+              '& > p': { bgcolor: 'action.hover', px: 1, py: 0.4, borderRadius: 1, fontSize: '0.8rem', minWidth: 0 } }}>
               <Typography variant="body2"><strong>Type:</strong> {campaign.type}</Typography>
               {campaign.platform && <Typography variant="body2"><strong>Platform:</strong> {campaign.platform}</Typography>}
               {/* Raids verify per-action (live X auto-verify or review), so the
@@ -1433,8 +1455,8 @@ function CampaignManageDialog({ botId, groupId, campaignId, onClose, onChanged }
               )}
               {campaign.reward_xp ? <Typography variant="body2"><strong>XP:</strong> {campaign.reward_xp}</Typography> : null}
               {campaign.reward_label && <Typography variant="body2"><strong>Reward:</strong> {campaign.reward_label}</Typography>}
-              {campaign.ends_at && <Typography variant="body2"><strong>Ends:</strong> {new Date(campaign.ends_at).toLocaleString()}</Typography>}
-            </Stack>
+              {campaign.ends_at && <Typography variant="body2"><strong>Ends:</strong> {new Date(campaign.ends_at).toLocaleString([], { month: 'numeric', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}</Typography>}
+            </Box>
 
             <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: 'wrap', gap: 1 }}>
               <Button size="small" variant="outlined" startIcon={<Edit />} onClick={() => setEditing(true)}>Edit</Button>
@@ -1487,7 +1509,8 @@ function CampaignManageDialog({ botId, groupId, campaignId, onClose, onChanged }
               </Box>
             )}
 
-            <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}>
+            <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="fullWidth"
+              sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}>
               <Tab label={`Submissions (${subs.length})`} />
               <Tab icon={<EmojiEvents fontSize="small" />} iconPosition="start" label="Leaderboard" />
             </Tabs>
@@ -1521,7 +1544,7 @@ function CampaignManageDialog({ botId, groupId, campaignId, onClose, onChanged }
                               </Tooltip>
                             )}
                           </Box>
-                          <Typography variant="caption" color="text.secondary">ID: {s.telegram_user_id}</Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>ID: {s.telegram_user_id}</Typography>
                         </TableCell>
                         {isMulti && (
                           <TableCell><Typography variant="caption">{taskTitle(s.task_id)}</Typography></TableCell>
@@ -1804,28 +1827,25 @@ function CampaignEditDialog({ botId, groupId, campaign, hasSubmissions, onClose,
                   </Grid>
                 ))}
               </Grid>
-              <FormControlLabel
-                sx={{ mt: 1 }}
-                control={<Switch checked={form.show_targets} onChange={(e) => set('show_targets', e.target.checked)} />}
-                label="Show targets publicly — display a live quota in the group post" />
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mt: 1 }}>
+                <Typography variant="body2">Show targets publicly</Typography>
+                <Switch checked={form.show_targets} onChange={(e) => set('show_targets', e.target.checked)} />
+              </Box>
               {campaign.platform === 'x' && (
-                <FormControlLabel
-                  control={<Switch checked={form.auto_verify_x} onChange={(e) => set('auto_verify_x', e.target.checked)} />}
-                  label="Auto-verify on X (Pro) — check reposts / comments / quotes / follows in real time" />
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+                  <Typography variant="body2">Auto-verify on X (Pro)</Typography>
+                  <Switch checked={form.auto_verify_x} onChange={(e) => set('auto_verify_x', e.target.checked)} />
+                </Box>
               )}
             </Box>
           )}
 
-          <Grid container spacing={2}>
-            <Grid item xs={6}>
-              <TextField fullWidth type="number" label="XP Reward" value={form.reward_xp}
-                onChange={(e) => set('reward_xp', e.target.value)} inputProps={{ min: 0 }} />
-            </Grid>
-            <Grid item xs={6}>
-              <TextField fullWidth label="Reward Label" placeholder="Giveaway entry"
-                value={form.reward_label} onChange={(e) => set('reward_label', e.target.value)} />
-            </Grid>
-          </Grid>
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            <TextField fullWidth type="number" label="XP Reward" value={form.reward_xp}
+              onChange={(e) => set('reward_xp', e.target.value)} inputProps={{ min: 0 }} sx={{ flex: 1 }} />
+            <TextField fullWidth label="Reward Label" placeholder="Giveaway entry"
+              value={form.reward_label} onChange={(e) => set('reward_label', e.target.value)} sx={{ flex: 1 }} />
+          </Box>
           <TextField fullWidth type="datetime-local" label="Deadline (UTC)" InputLabelProps={{ shrink: true }}
             value={form.ends_at} onChange={(e) => set('ends_at', e.target.value)}
             helperText="Leave empty for no deadline." />

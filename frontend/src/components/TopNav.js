@@ -184,20 +184,22 @@ export default function TopNav({ title, subtitle, actions, breadcrumb, hasSideba
             })}
           </Box>
         )}
-        {hasSidebar && <Box sx={{ flex: 1 }} />}
+        {/* Spacer only pushes actions right on desktop; on mobile it would grow
+            and force the action button + help icon to wrap onto a second line. */}
+        {hasSidebar && <Box sx={{ flex: 1, display: { xs: 'none', md: 'block' } }} />}
 
-        {/* Universal search — grows to fill on mobile so trailing icons (?, settings)
-            stay on the same row instead of stranding on a line of their own. */}
+        {/* Universal search — shrinks (never grows) on mobile so the action button
+            and trailing icons keep their space on the SAME row. */}
         {hasSidebar && (
           <UniversalSearchBar
             placeholder="Search…"
-            sx={{ flexGrow: { xs: 1, md: 0 }, width: { xs: 'auto', sm: 200, md: 260 }, minWidth: { xs: 90, sm: 160 }, mr: 1, flexShrink: 1 }}
+            sx={{ flexGrow: { xs: 1, md: 0 }, flexShrink: 1, width: { xs: 'auto', sm: 200, md: 260 }, minWidth: { xs: 72, sm: 160 }, mr: 1 }}
           />
         )}
 
-        {/* Optional actions slot */}
+        {/* Optional actions slot — never shrinks/wraps; search yields space to it */}
         {actions && (
-          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexShrink: 0 }}>
             {actions}
           </Box>
         )}

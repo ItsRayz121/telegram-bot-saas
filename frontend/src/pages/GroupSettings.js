@@ -54,33 +54,30 @@ function EntBadge() {
 
 function DefaultTimezoneCard({ value, onChange }) {
   return (
-    <Card sx={{ mb: 2 }}>
-      <CardContent>
-        <Typography variant="subtitle1" fontWeight={600} mb={0.5}>Group Default Timezone</Typography>
-        <Typography variant="body2" color="text.secondary" mb={2}>
-          Saved per this group. All new scheduled items in this group use it automatically.
-          You can still override the timezone per individual item.
-        </Typography>
-        <Grid container spacing={2} alignItems="center">
-          <Grid item xs={12} sm={6}>
-            <TimezoneSelect value={value} onChange={onChange} label="Default Timezone" size="medium" />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <Typography variant="caption" color="text.secondary">
-              Current time in this timezone:{' '}
-              <strong>
-                {new Date().toLocaleString('en-GB', {
-                  timeZone: value || 'UTC',
-                  year: 'numeric', month: '2-digit', day: '2-digit',
-                  hour: '2-digit', minute: '2-digit', second: '2-digit',
-                  hour12: false,
-                })}
-              </strong>
-            </Typography>
-          </Grid>
+    <CollapsibleCard id="tg.automation.default_timezone" title="Group Default Timezone" sx={{ mb: 2 }}>
+      <Typography variant="body2" color="text.secondary" mb={2}>
+        Saved per this group. All new scheduled items in this group use it automatically.
+        You can still override the timezone per individual item.
+      </Typography>
+      <Grid container spacing={2} alignItems="center">
+        <Grid item xs={12} sm={6}>
+          <TimezoneSelect value={value} onChange={onChange} label="Default Timezone" size="medium" />
         </Grid>
-      </CardContent>
-    </Card>
+        <Grid item xs={12} sm={6}>
+          <Typography variant="caption" color="text.secondary">
+            Current time in this timezone:{' '}
+            <strong>
+              {new Date().toLocaleString('en-GB', {
+                timeZone: value || 'UTC',
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', second: '2-digit',
+                hour12: false,
+              })}
+            </strong>
+          </Typography>
+        </Grid>
+      </Grid>
+    </CollapsibleCard>
   );
 }
 
@@ -4558,8 +4555,12 @@ function GroupSettingsInner() {
                 ))}
               </Grid>
 
-              {/* Category filter */}
-              <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: 'wrap', gap: 1 }}>
+              {/* Category filter — even grid so the 6 chips form 2 tidy rows on
+                  mobile (3×2) and a single row on desktop, all equal width. */}
+              <Box sx={{
+                mb: 2, display: 'grid', gap: 1,
+                gridTemplateColumns: { xs: 'repeat(3, 1fr)', sm: 'repeat(6, 1fr)' },
+              }}>
                 {['', 'moderation', 'knowledge', 'engagement', 'automation', 'analytics'].map((c) => (
                   <Chip
                     key={c || 'all'}
@@ -4570,10 +4571,10 @@ function GroupSettingsInner() {
                     color={aiActivityCategory === c ? 'primary' : 'default'}
                     variant={aiActivityCategory === c ? 'filled' : 'outlined'}
                     onClick={() => setAiActivityCategory(c)}
-                    sx={{ textTransform: 'capitalize' }}
+                    sx={{ textTransform: 'capitalize', width: '100%' }}
                   />
                 ))}
-              </Stack>
+              </Box>
 
               {/* Timeline */}
               <Card>

@@ -254,9 +254,11 @@ const telegizer = createTheme({
       styleOverrides: {
         root: {
           backgroundImage: 'none',
-          backgroundColor: alpha(PALETTE.bg1, 0.85),
-          backdropFilter: 'blur(16px) saturate(1.6)',
-          WebkitBackdropFilter: 'blur(16px) saturate(1.6)',
+          // Fully opaque — a translucent header + backdrop-filter bleeds page
+          // content through the sticky bar in WebViews that don't render
+          // backdrop-filter (notably the Telegram Mini App), which made section
+          // headers/banners look "half pushed above" the fixed boundary on scroll.
+          backgroundColor: PALETTE.bg1,
           boxShadow: 'none',
           borderBottom: `1px solid ${PALETTE.border1}`,
         },

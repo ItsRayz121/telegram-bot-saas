@@ -116,9 +116,9 @@ def render(*, username: str, avatar_bytes: bytes | None, level: int, xp: int,
         fill_x1 = int(bar_x0 + (bar_x1 - bar_x0) * frac)
         if fill_x1 - bar_x0 >= bar_h:
             draw.rounded_rectangle([bar_x0, bar_y, fill_x1, bar_y + bar_h], radius=radius, fill=accent)
-        # xp text above the bar
-        draw.text((tx, bar_y - 30), f"{into_level} / {need} XP   ·   {xp} total",
-                  font=_font(20), fill=muted)
+        # xp text above the bar — bold + brighter so it reads clearly on a phone
+        draw.text((tx, bar_y - 32), f"{into_level} / {need} XP   ·   {xp} total",
+                  font=_font(22, bold=True), fill=(205, 210, 224))
 
         out = io.BytesIO()
         card.convert("RGB").save(out, format="PNG")

@@ -256,10 +256,10 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
             sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
             onClick={() => setApiKeyOpen(o => !o)}
           >
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', rowGap: 0.5, minWidth: 0 }}>
               <Key color="secondary" />
               <Typography variant="subtitle1" fontWeight={600}>
-                AI Provider & API Key{platformAiIncluded ? ' (Optional Override)' : ''}
+                AI Provider & API Key
               </Typography>
               {platformAiIncluded && !savedApiKey && (
                 <Chip

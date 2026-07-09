@@ -210,20 +210,24 @@ export default function MyBots() {
         </Typography>
         <Card sx={{ mb: 4, border: '1px solid', borderColor: 'success.dark', background: 'rgba(34,197,94,0.05)' }}>
           <CardContent>
-            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, flexWrap: 'wrap' }}>
-              <SmartToy sx={{ fontSize: 40, color: 'success.main', mt: 0.5 }} />
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 0.5 }}>
-                  <Typography variant="h6" fontWeight={700}>@{BOT_USERNAME}</Typography>
-                  <Chip label="Always Active" color="success" size="small" />
-                  <Chip label="Shared" variant="outlined" size="small" />
-                </Box>
+            {/* Header row: icon sits beside the title only, so the description,
+                stats, and buttons below all use the FULL card width (no indent). */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
+              <SmartToy sx={{ fontSize: 40, color: 'success.main', flexShrink: 0 }} />
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                <Typography variant="h6" fontWeight={700}>@{BOT_USERNAME}</Typography>
+                <Chip label="Always Active" color="success" size="small" />
+                <Chip label="Shared" variant="outlined" size="small" />
+              </Box>
+            </Box>
+
+            <Box sx={{ minWidth: 0 }}>
                 <Typography variant="body2" color="text.secondary" mb={2}>
                   One shared bot serving all your linked groups. Automod, verification, custom commands — all managed from your dashboard.
                 </Typography>
 
                 {/* Stats row */}
-                <Grid container spacing={2} sx={{ mb: 2 }}>
+                <Grid container spacing={1.5} sx={{ mb: 2 }}>
                   <Grid item xs={6} sm={3}>
                     <Box sx={{ textAlign: 'center', p: 1.5, bgcolor: 'background.default', borderRadius: 2 }}>
                       <Typography variant="h5" fontWeight={700} color="success.main">
@@ -264,13 +268,14 @@ export default function MyBots() {
                   </Grid>
                 </Grid>
 
-                {/* Action buttons */}
-                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                {/* Action buttons — kept on ONE row (equal width, no wrap) */}
+                <Stack direction="row" spacing={1}>
                   <Button
                     variant="contained"
                     size="small"
                     startIcon={<Groups />}
                     onClick={() => navigate('/groups?bot_type=official')}
+                    sx={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap' }}
                   >
                     Manage Groups
                   </Button>
@@ -279,6 +284,7 @@ export default function MyBots() {
                     size="small"
                     startIcon={<BarChart />}
                     onClick={() => navigate('/official-analytics')}
+                    sx={{ flex: 1, minWidth: 0 }}
                   >
                     Analytics
                   </Button>
@@ -289,44 +295,12 @@ export default function MyBots() {
                     href={`https://t.me/${BOT_USERNAME}`}
                     target="_blank"
                     rel="noopener noreferrer"
+                    sx={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap' }}
                   >
                     Open Bot
                   </Button>
                 </Stack>
               </Box>
-            </Box>
-
-            {/* Linked groups preview */}
-            {!loading && officialGroups.length > 0 && (
-              <>
-                <Divider sx={{ my: 2 }} />
-                <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={1}>
-                  LINKED GROUPS
-                </Typography>
-                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                  {officialGroups.slice(0, 6).map((g) => (
-                    <Chip
-                      key={g.telegram_group_id}
-                      label={g.title}
-                      size="small"
-                      color={g.bot_status === 'active' ? 'success' : 'default'}
-                      variant="outlined"
-                      onClick={() => navigate(`/groups/${g.telegram_group_id}`)}
-                      sx={{ cursor: 'pointer' }}
-                    />
-                  ))}
-                  {officialGroups.length > 6 && (
-                    <Chip
-                      label={`+${officialGroups.length - 6} more`}
-                      size="small"
-                      variant="outlined"
-                      onClick={() => navigate('/groups')}
-                      sx={{ cursor: 'pointer' }}
-                    />
-                  )}
-                </Box>
-              </>
-            )}
           </CardContent>
         </Card>
 

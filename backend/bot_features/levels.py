@@ -181,20 +181,22 @@ class LevelSystem:
                         pass
                 return ImageFont.load_default()
 
-            f_name    = _load_font(px(19))
-            f_user    = _load_font(px(13), bold=False)
-            f_rank_l  = _load_font(px(13), bold=False)
-            f_rank_v  = _load_font(px(13))
-            f_prog    = _load_font(px(12), bold=False)
-            f_xp      = _load_font(px(11))
-            f_pct     = _load_font(px(11))
-            f_lvl_lbl = _load_font(px(11))
+            # All faces bold + slightly larger so the card reads clearly on a
+            # phone — the previous thin/regular text was hard to see.
+            f_name    = _load_font(px(20))
+            f_user    = _load_font(px(14))
+            f_rank_l  = _load_font(px(14))
+            f_rank_v  = _load_font(px(14))
+            f_prog    = _load_font(px(13))
+            f_xp      = _load_font(px(12))
+            f_pct     = _load_font(px(12))
+            f_lvl_lbl = _load_font(px(12))
             f_lvl_num = _load_font(px(38))
             f_avatar  = _load_font(px(24))
 
             # ── Light palette ──
             ink       = (28, 32, 44)     # primary text
-            muted     = (122, 130, 146)  # secondary text
+            muted     = (92, 100, 118)   # secondary text — darkened for contrast
             border    = (228, 231, 238)  # card hairline
             track     = (234, 237, 243)  # progress track
             tint      = tuple(int(255 * 0.84 + c * 0.16) for c in accent)  # light accent wash

@@ -41,15 +41,18 @@ function XAutoverifyStatus({ status, enabled, onManageKey }) {
     );
   }
   const severity = status === 'live' ? 'success' : status === 'rejected' ? 'warning' : 'info';
+  // Button below the detail (not in Alert's right-hand action slot) so the text
+  // spans full width — 2–3 lines instead of a narrow ~10-line column on mobile.
   return (
-    <Alert severity={severity} sx={{ mt: 1 }}
-      action={onManageKey && (
-        <Button color="inherit" size="small" onClick={onManageKey} sx={{ whiteSpace: 'nowrap' }}>
-          {status === 'live' ? 'Manage key' : 'Add your key'}
-        </Button>
-      )}>
+    <Alert severity={severity} sx={{ mt: 1 }}>
       <strong>{meta.dot} {meta.label}</strong>
       <Typography variant="caption" display="block">{meta.detail}</Typography>
+      {onManageKey && (
+        <Button color="inherit" size="small" onClick={onManageKey}
+          sx={{ mt: 0.5, px: 0, minWidth: 0, whiteSpace: 'nowrap' }}>
+          {status === 'live' ? 'Manage key' : 'Add your key'}
+        </Button>
+      )}
     </Alert>
   );
 }
@@ -297,10 +300,11 @@ function CreateForm({ guildId, channels, plan, xStatus = 'disabled', onManageKey
                   </Grid>
                 ))}
               </Grid>
-              <FormControlLabel sx={{ mt: 0.5 }}
-                control={<Switch checked={isPro && d.auto_verify_x} disabled={!isPro}
-                  onChange={(e) => setD({ ...d, auto_verify_x: e.target.checked })} />}
-                label="Auto-verify on X (Pro) — confirm reposts / comments / quotes / follows in real time" />
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mt: 0.5 }}>
+                <Typography variant="body2">Auto-verify on X (Pro)</Typography>
+                <Switch checked={isPro && d.auto_verify_x} disabled={!isPro}
+                  onChange={(e) => setD({ ...d, auto_verify_x: e.target.checked })} />
+              </Box>
               {isPro ? (
                 <XAutoverifyStatus status={xStatus} enabled={d.auto_verify_x} onManageKey={onManageKey} />
               ) : (
@@ -567,10 +571,11 @@ function RaidSetupCard({ campaign, onSave, plan, xStatus = 'disabled', onManageK
           </Grid>
         ))}
       </Grid>
-      <FormControlLabel sx={{ mt: 0.5 }}
-        control={<Switch checked={isPro && autoVerify} disabled={!isPro}
-          onChange={(e) => setAutoVerify(e.target.checked)} />}
-        label="Auto-verify on X (Pro) — confirm reposts / comments / quotes / follows in real time" />
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mt: 0.5 }}>
+        <Typography variant="body2">Auto-verify on X (Pro)</Typography>
+        <Switch checked={isPro && autoVerify} disabled={!isPro}
+          onChange={(e) => setAutoVerify(e.target.checked)} />
+      </Box>
       {isPro ? (
         <>
           <XAutoverifyStatus status={xStatus} enabled={autoVerify} onManageKey={onManageKey} />
