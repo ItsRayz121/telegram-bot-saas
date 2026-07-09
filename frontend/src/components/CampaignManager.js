@@ -148,6 +148,31 @@ const EXAMPLE_PLACEHOLDER = {
   username: '@username',
 };
 
+// A proof field given a type (URL/UID/wallet…) but no prompt label would
+// otherwise be silently dropped on save (the label-empty filter), leaving the
+// campaign with zero fields — so the bot falls back to asking for a screenshot.
+// Derive a sensible label from the type so the chosen field type is honored.
+const FIELD_DEFAULT_LABEL = {
+  text: 'Your answer',
+  url: 'Proof link',
+  uid: 'Your exchange UID',
+  wallet: 'Your wallet address',
+  screenshot: 'Proof screenshot',
+  tx_hash: 'Transaction hash',
+  username: 'Your username / handle',
+};
+// Normalize proof fields for saving. Only truly-empty rows (default 'text' type
+// AND no label) are dropped; a typed field with a blank prompt keeps a default
+// label so its type survives to the bot.
+const normalizeProofFields = (arr) => (arr || [])
+  .filter((f) => (f.label || '').trim() || f.field_type !== 'text')
+  .map((f) => ({
+    label: (f.label || '').trim() || FIELD_DEFAULT_LABEL[f.field_type] || 'Your answer',
+    field_type: f.field_type,
+    required: f.required,
+    example: (f.example || '').trim() || null,
+  }));
+
 // Type is chosen up-front (via the Create ▾ menu), so the wizard no longer asks
 // for it — it opens straight on the task definition. Platform now lives in step 1.
 const WIZARD_STEPS = ['Task & Proof', 'Schedule & Reward'];
@@ -971,15 +996,7 @@ function CampaignWizard({ botId, groupId, initialType, isPaid = false, xAutoveri
     setSaving(true);
     // Clean proof fields. The per-action DM verify flow now collects the X handle
     // once and reuses it (SocialIdentity), so we no longer inject a username field.
-    const buildCustomFields = () =>
-      form.custom_fields
-        .filter((f) => f.label.trim())
-        .map((f) => ({
-          label: f.label.trim(),
-          field_type: f.field_type,
-          required: f.required,
-          example: (f.example || '').trim() || null,
-        }));
+    const buildCustomFields = () => normalizeProofFields(form.custom_fields);
     try {
       const payload = {
         type: form.type,
@@ -1681,10 +1698,7 @@ function CampaignEditDialog({ botId, groupId, campaign, hasSubmissions, onClose,
     if (!form.title.trim()) { toast.error('Title is required'); return; }
     setSaving(true);
     try {
-      const cleanFields = (arr) => (arr || []).filter((f) => f.label.trim()).map((f) => ({
-        label: f.label.trim(), field_type: f.field_type, required: f.required,
-        example: (f.example || '').trim() || null,
-      }));
+      const cleanFields = normalizeProofFields;
       const payload = {
         title: form.title.trim(),
         description: form.description || null,

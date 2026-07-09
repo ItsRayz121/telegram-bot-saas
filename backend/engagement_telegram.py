@@ -125,6 +125,49 @@ def _deadline_text(campaign):
     return f"{int(secs // 60)}m left"
 
 
+_PROOF_PHRASE = {
+    "url": "a link", "screenshot": "a screenshot", "uid": "your UID",
+    "wallet": "your wallet address", "tx_hash": "a transaction hash",
+    "username": "your username", "text": "a short answer",
+}
+
+
+def _proof_summary(campaign):
+    """One-line description of what a member submits, so the group post sets
+    expectations up front. Empty for flows where there's nothing to submit
+    (one-tap honor/auto, or the per-action X flow that verifies actions directly;
+    multi-task campaigns list their own tasks already)."""
+    try:
+        if campaign.tasks.count() > 0:
+            return ""
+    except Exception:
+        pass
+    try:
+        from . import engagement as eng
+        if eng.has_action_flow(campaign):
+            return ""
+    except Exception:
+        pass
+    try:
+        fields = campaign.custom_fields.all()
+    except Exception:
+        fields = []
+    if fields:
+        seen = []
+        for f in fields:
+            phrase = _PROOF_PHRASE.get(getattr(f, "field_type", "text"), "a short answer")
+            if phrase not in seen:
+                seen.append(phrase)
+        return ", ".join(seen)
+    # No configured fields → mirror the bot's default proof (see
+    # engagement_bot._default_proof_field): honor/auto are one-tap (nothing to
+    # show); link mode asks for a link; everything else asks for a screenshot.
+    mode = getattr(campaign, "verification_mode", None)
+    if mode in ("honor", "auto"):
+        return ""
+    return "a link" if mode == "link" else "a screenshot"
+
+
 def build_campaign_message(campaign, bot_username):
     """Return (html_text, InlineKeyboardMarkup) for the group announcement."""
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -161,6 +204,10 @@ def build_campaign_message(campaign, bot_username):
         lines.append(f"🎁 <b>Reward:</b> {html.escape(campaign.reward_label)}")
     if campaign.reward_xp:
         lines.append(f"⭐ <b>XP:</b> {campaign.reward_xp}")
+
+    proof = _proof_summary(campaign)
+    if proof:
+        lines.append(f"📝 <b>Proof:</b> {proof}")
 
     deadline = _deadline_text(campaign)
     if deadline:
