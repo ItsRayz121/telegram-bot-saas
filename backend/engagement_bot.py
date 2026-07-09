@@ -691,10 +691,35 @@ async def on_private(update, context, *, flask_app, lineage, bot_id=None):
     f_hash = state.get("file_hash")
     forced = "verified" if state.get("force_verified") else None
     task_id = state.get("task_id")
+    user = update.effective_user
+
+    # Extra fields collected AFTER the per-action X flow → merge them into the
+    # existing action submission (don't create a second submission), then show
+    # the closing message the action flow deferred.
+    if state.get("action_extra"):
+        completed = state.get("completed")
+        context.user_data.pop("eng", None)
+        with flask_app.app_context():
+            from . import engagement as eng
+            campaign = _load_campaign(state["cid"], lineage, bot_id)
+            footer = ""
+            if campaign:
+                try:
+                    eng.attach_action_extra_fields(
+                        campaign, user.id, answers, telegram_username=user.username)
+                except Exception:
+                    logger.info("attach_action_extra_fields failed for %s", state["cid"], exc_info=True)
+                footer = _promo_footer(campaign, lineage, str(user.id))
+        closing = ("🎉 All done! Thanks for taking part." if completed
+                   else "✅ All actions submitted — your proof is now under review. "
+                        "You'll be notified once it's approved.")
+        await msg.reply_text(f"{closing}{footer}", parse_mode="HTML", disable_web_page_preview=True)
+        return True
+
     context.user_data.pop("eng", None)
     with flask_app.app_context():
         await _finalize(msg, context, flask_app, state["cid"], answers, f_id, f_hash,
-                        user=update.effective_user, lineage=lineage, bot_id=bot_id,
+                        user=user, lineage=lineage, bot_id=bot_id,
                         forced_status=forced, task_id=task_id)
     return True
 
@@ -920,21 +945,47 @@ async def _handle_action_verify(query, context, data, *, flask_app, lineage, bot
         except Exception:
             pass
 
-        if result.get("completed"):
-            footer = _promo_footer(campaign, lineage, str(user.id))
-            reward = campaign.reward_xp
-            bonus = f" +{reward} XP" if reward else ""
-            await msg.reply_text(
-                f"🎉 All done!{bonus} Thanks for taking part.{footer}",
-                parse_mode="HTML", disable_web_page_preview=True,
-            )
-        elif result.get("all_submitted"):
-            # Every action recorded but some await manual review (free owner).
-            await msg.reply_text(
-                "✅ All actions submitted — your proof is now under review. "
-                "You'll be notified once it's approved.",
-                disable_web_page_preview=True,
-            )
+        if result.get("completed") or result.get("all_submitted"):
+            # Once the actions are done, collect any extra proof fields the owner
+            # configured (wallet / email / UID for a reward — things the bot can't
+            # read from X), then show the closing message. Skip if none, already
+            # collected, or a field flow is somehow already active.
+            fields = _ordered_fields(campaign)
+            need_extra = bool(fields) and not context.user_data.get("eng")
+            if need_extra:
+                try:
+                    need_extra = not eng.action_extra_collected(campaign, user.id)
+                except Exception:
+                    need_extra = False
+            if need_extra:
+                context.user_data["eng"] = {
+                    "cid": campaign.id, "task_id": None, "fields": fields, "idx": 0,
+                    "answers": {}, "file_id": None, "file_hash": None,
+                    "lineage": lineage, "bot_id": bot_id, "force_verified": False,
+                    "platform": campaign.platform, "action_extra": True,
+                    "completed": bool(result.get("completed")),
+                }
+                await msg.reply_text(
+                    f"✅ Actions recorded! A couple more details for your reward — "
+                    f"{len(fields)} step(s).",
+                    disable_web_page_preview=True,
+                )
+                await _ask_field(msg, fields[0])
+            elif result.get("completed"):
+                footer = _promo_footer(campaign, lineage, str(user.id))
+                reward = campaign.reward_xp
+                bonus = f" +{reward} XP" if reward else ""
+                await msg.reply_text(
+                    f"🎉 All done!{bonus} Thanks for taking part.{footer}",
+                    parse_mode="HTML", disable_web_page_preview=True,
+                )
+            else:
+                # Every action recorded but some await manual review (free owner).
+                await msg.reply_text(
+                    "✅ All actions submitted — your proof is now under review. "
+                    "You'll be notified once it's approved.",
+                    disable_web_page_preview=True,
+                )
 
 
 # ── Finalize: create the submission + reply ───────────────────────────────────

@@ -1201,6 +1201,34 @@ def verify_user_action(campaign, *, telegram_user_id, telegram_username, action,
     return {"status": status, "detail": detail, "completed": completed, "all_submitted": done}
 
 
+def action_extra_collected(campaign, telegram_user_id):
+    """True if the participant already answered the campaign's extra proof fields
+    (wallet/UID/link the bot can't read from X) in the per-action flow. Derived
+    from key presence on the action submission payload — no separate marker."""
+    keys = [f.key for f in campaign.custom_fields.all()]
+    if not keys:
+        return True
+    sub = _action_submission(campaign, telegram_user_id)
+    payload = (sub.payload or {}) if sub else {}
+    return all(k in payload for k in keys)
+
+
+def attach_action_extra_fields(campaign, telegram_user_id, answers, *, telegram_username=None):
+    """Merge extra proof-field answers into the participant's per-action submission
+    payload (stored top-level so they show in the dashboard / CSV like any field).
+    Best-effort; returns True if stored."""
+    sub = _action_submission(campaign, telegram_user_id, telegram_username, create=True)
+    if not sub:
+        return False
+    payload = dict(sub.payload or {})
+    payload.update(answers or {})
+    sub.payload = payload
+    from sqlalchemy.orm.attributes import flag_modified
+    flag_modified(sub, "payload")
+    db.session.commit()
+    return True
+
+
 # ── Leaderboards (premium) ─────────────────────────────────────────────────────
 
 LEADERBOARD_DEFAULT_LIMIT = 50
