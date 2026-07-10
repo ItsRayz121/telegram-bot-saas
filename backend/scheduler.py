@@ -27,6 +27,16 @@ def make_celery(app=None):
         # Per-task overrides can still be set via @celery.task(soft_time_limit=...).
         task_soft_time_limit=120,
         task_time_limit=180,
+        # Reclaim leaked memory: recycle a worker child once it passes ~350 MB
+        # RSS (value is in KB). Prevents the slow RAM creep that ran up the
+        # Railway GB-minute bill. Pairs with --max-tasks-per-child in the
+        # worker start command.
+        worker_max_memory_per_child=350000,
+        # Don't hoard task results in Redis forever (each result eats memory).
+        result_expires=3600,
+        # Only prefetch one task at a time so a big job can't pin RAM for the
+        # whole queue.
+        worker_prefetch_multiplier=1,
         beat_schedule={
             "send-scheduled-messages": {
                 "task": "backend.scheduler.send_scheduled_messages",
