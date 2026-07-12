@@ -2279,15 +2279,16 @@ def create_announcement():
     announcement.delivered_count = delivered
     db.session.commit()
 
-    # Email delivery via Celery (best-effort).
+    # Email delivery in the background (best-effort).
     if "email" in channels:
         try:
             from ..scheduler import send_announcement_emails
-            send_announcement_emails.delay(announcement.id, [u.id for u in opted_in])
+            from ..jobs import dispatch
+            dispatch(send_announcement_emails, announcement.id, [u.id for u in opted_in])
         except Exception:
             pass
 
-    # Bot DM broadcast via Celery — filtered to opted-in, /started, unblocked users.
+    # Bot DM broadcast — filtered to opted-in, /started, unblocked users.
     if "bot" in channels:
         try:
             from ..models import TelegramBotStarted
@@ -2299,7 +2300,8 @@ def create_announcement():
                 and TelegramBotStarted.has_started(u.telegram_user_id)
             ]
             from ..scheduler import send_announcement_bot_dms
-            send_announcement_bot_dms.delay(announcement.id, bot_targets)
+            from ..jobs import dispatch
+            dispatch(send_announcement_bot_dms, announcement.id, bot_targets)
         except Exception:
             pass
 

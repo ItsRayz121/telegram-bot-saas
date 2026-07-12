@@ -2063,7 +2063,8 @@ def export_data():
 
     try:
         from ..scheduler import generate_gdpr_export
-        generate_gdpr_export.delay(user.id)
+        from ..jobs import dispatch
+        dispatch(generate_gdpr_export, user.id)
     except Exception as exc:
         logger.error("Failed to queue GDPR export for user %s: %s", user.id, exc)
         return jsonify({"error": "Failed to queue export. Please try again."}), 500
@@ -2142,12 +2143,11 @@ def delete_account():
     except Exception:
         db.session.rollback()
 
-    # Schedule hard deletion in 30 days
-    try:
-        from ..scheduler import hard_delete_user
-        hard_delete_user.apply_async(args=[user.id], countdown=30 * 86400)
-    except Exception as exc:
-        logger.error("Failed to schedule hard deletion for user %s: %s", user.id, exc)
+    # Hard deletion happens 30 days from now. It is NOT queued here: this used to be
+    # hard_delete_user.apply_async(countdown=30*86400), which parked the job in Redis
+    # for a month, so a Redis restart or eviction meant the erasure silently never ran.
+    # user.deleted_at (set above) is the durable record — the daily hard-delete sweep
+    # in the scheduler picks it up once it is 30 days old.
 
     # Revoke the current JWT by adding it to the blacklist
     try:

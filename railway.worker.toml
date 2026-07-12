@@ -1,7 +1,33 @@
+# ── celery-worker: IDLED (costs nothing, deliberately kept) ────────────────────
+#
+# Every job this worker ran now runs inside the web service's in-process scheduler
+# (_scheduler_loop in backend/app.py). Nothing schedules work here any more, so the
+# container is started only to exit immediately: Railway bills RAM/CPU per second of
+# runtime, so a service that exits at boot costs ~nothing, while the service, its
+# variables and this config stay in place.
+#
+# Why it was idled: each Celery task opened with create_app(), which re-ran every
+# migration, started a DUPLICATE set of Telegram bots and spawned another copy of the
+# in-process scheduler — once per task, every 60 seconds. That, not Celery itself, is
+# what ran up the Railway GB-minute bill, and it also meant reminders could be
+# delivered twice (once from here, once from the web loop).
+#
+# ── To bring Celery back ───────────────────────────────────────────────────────
+#   1. Restore the start command below.
+#   2. Set DISABLE_BACKGROUND_THREADS=1 on THIS service, so its create_app() calls
+#      never start bots or a second scheduler loop.
+#   3. Set USE_CELERY=1 on the WEB service, so .delay() dispatch goes to the broker
+#      instead of a thread (backend/jobs.py).
+#   4. Remove the job names from _CELERY_INTERVAL_JOBS / _CELERY_DAILY_JOBS in
+#      backend/app.py, or they will run in both places.
+#
+#   startCommand = "celery -A backend.scheduler worker --beat --concurrency=1 --max-tasks-per-child=200 --loglevel=info"
+#
+# The task bodies in backend/scheduler.py are unchanged and still Celery-decorated.
+
 [build]
 builder = "RAILPACK"
 
 [deploy]
-startCommand = "celery -A backend.scheduler worker --beat --concurrency=1 --max-tasks-per-child=200 --loglevel=info"
-restartPolicyType = "ON_FAILURE"
-restartPolicyMaxRetries = 10
+startCommand = "echo 'celery-worker is intentionally idled — all jobs run in the web service scheduler. See railway.worker.toml to re-enable.' && exit 0"
+restartPolicyType = "NEVER"

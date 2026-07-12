@@ -1,5 +1,12 @@
-from .app import create_app
-from .models import db
+import os
+
+# Importing backend.app runs its module body, which calls create_app() — and that
+# starts the Telegram bots and the scheduler thread. A migration container has no
+# business polling Telegram, so opt out before the import happens.
+os.environ.setdefault("DISABLE_BACKGROUND_THREADS", "1")
+
+from .app import create_app  # noqa: E402
+from .models import db  # noqa: E402
 
 
 def _run_alter(engine, sql, description):
@@ -24,6 +31,14 @@ def init_db():
         print("Database tables created (new tables only).")
 
         print("Applying schema additions…")
+        _run_alter(
+            db.engine,
+            "CREATE TABLE IF NOT EXISTS scheduled_job_runs ("
+            "  job_name    VARCHAR(120) PRIMARY KEY,"
+            "  last_run_at TIMESTAMP NOT NULL"
+            ")",
+            "scheduled_job_runs (in-process scheduler run ledger)",
+        )
         _run_alter(
             db.engine,
             "ALTER TABLE bots ADD COLUMN IF NOT EXISTS webhook_secret VARCHAR(64)",

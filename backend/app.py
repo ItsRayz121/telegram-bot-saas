@@ -191,7 +191,26 @@ def _init_sentry():
 _init_sentry()
 
 
+# Set once the bots + scheduler thread are running, so a nested create_app() (or a
+# second gunicorn import) can never start a duplicate set.
+_BACKGROUND_THREADS_STARTED = False
+
+
 def create_app():
+    # Reuse the live app when we're already inside an app context.
+    #
+    # Every job in scheduler.py opens with `app = create_app()`. That was written
+    # for a standalone Celery worker, but the jobs now also run inside the web
+    # process via _scheduler_loop. Building a second Flask app there would re-run
+    # every migration, start a duplicate set of Telegram bots, and spawn another
+    # _scheduler_loop — per job, per tick. Returning the live app keeps the jobs
+    # working unchanged in both places, and gives them the real bot_manager
+    # instances (a fresh app's active_bots is always empty, so sends silently
+    # no-op).
+    from flask import has_app_context, current_app
+    if has_app_context():
+        return current_app._get_current_object()
+
     app = Flask(__name__)
     app.config.from_object(Config)
 
@@ -664,6 +683,7 @@ def create_app():
         _run_assistant_v2_migrations()
         _run_xp_period_migrations()
         _run_user_columns_migration()
+        _run_scheduled_job_runs_migration()
 
         # Encryption self-check — must run after all migrations so tokens exist
         from .utils.encryption import startup_encryption_selfcheck
@@ -762,11 +782,21 @@ def create_app():
                         _max_attempts,
                     )
 
+    # Start the bots and the scheduler at most once per process, and never at all
+    # when DISABLE_BACKGROUND_THREADS is set (used by any standalone worker, CLI
+    # or migration process that only needs an app context, not a live bot).
+    global _BACKGROUND_THREADS_STARTED
+    if os.environ.get("DISABLE_BACKGROUND_THREADS", "").strip().lower() in ("1", "true", "yes"):
+        return app
+    if _BACKGROUND_THREADS_STARTED:
+        return app
+    _BACKGROUND_THREADS_STARTED = True
+
     threading.Thread(target=_deferred_bot_start, daemon=True).start()
 
-    # In-process scheduler: runs every 60 s inside the web process so that
-    # scheduled messages and polls are delivered even when no separate Celery
-    # worker is running on Railway.
+    # In-process scheduler: runs every 60 s inside the web process. This is now the
+    # only scheduler — the Celery worker service is idled (see railway.worker.toml),
+    # and every job that used to run on Celery beat is registered in _scheduler_loop.
     threading.Thread(target=_scheduler_loop, args=(app,), daemon=True).start()
 
     return app
@@ -1347,6 +1377,78 @@ def _run_assistant_v2_migrations():
         _mig_log.info("assistant_v2 migrations complete")
     except Exception as exc:
         _mig_log.warning("assistant_v2 migrations failed: %s", exc)
+
+
+def _run_scheduled_job_runs_migration():
+    """Ledger of when each scheduled job last ran.
+
+    The scheduler's in-memory `_last_*` timestamps reset to 0 on every deploy, which
+    is harmless for a health check but would re-fire the daily jobs — including the
+    renewal, lifecycle and onboarding email blasts — on each redeploy. Persisting
+    last_run_at makes the daily jobs fire once per day no matter how often we ship.
+    """
+    _mig_log = logging.getLogger("migrations")
+    stmt = """
+        CREATE TABLE IF NOT EXISTS scheduled_job_runs (
+            job_name    VARCHAR(120) PRIMARY KEY,
+            last_run_at TIMESTAMP NOT NULL
+        )
+    """
+    try:
+        with db.engine.connect() as conn:
+            conn.execute(text(stmt))
+            conn.commit()
+        _mig_log.info("scheduled_job_runs migration complete")
+    except Exception as exc:
+        _mig_log.error("scheduled_job_runs migration failed: %s", exc)
+
+
+# Claim a job for this tick: insert the row, or update it only if it is older than
+# :cutoff. RETURNING is non-empty exactly when we won the claim.
+#
+# The comparison is done in SQL, not Python, on purpose: it keeps the whole check
+# atomic (two overlapping ticks cannot both claim the same job) and it does not
+# depend on the driver decoding TIMESTAMP into a datetime.
+_JOB_CLAIM_SQL = text(
+    "INSERT INTO scheduled_job_runs (job_name, last_run_at) VALUES (:job, :now) "
+    "ON CONFLICT (job_name) DO UPDATE SET last_run_at = :now "
+    "WHERE scheduled_job_runs.last_run_at < :cutoff "
+    "RETURNING job_name"
+)
+
+
+def _claim_job(app, job_name, cutoff, now):
+    """True if this tick won the claim on *job_name*. Fails CLOSED — on a DB error we
+    skip the tick rather than risk double-sending a customer email."""
+    try:
+        with app.app_context(), db.engine.connect() as conn:
+            won = conn.execute(
+                _JOB_CLAIM_SQL, {"job": job_name, "now": now, "cutoff": cutoff}
+            ).fetchone()
+            conn.commit()
+            return won is not None
+    except Exception as exc:
+        _scheduler_log.error("[SCHEDULER] job claim failed for %s: %s", job_name, exc)
+        return False
+
+
+def _job_due(app, job_name, interval_seconds):
+    """True if *job_name* has not run in the last *interval_seconds*."""
+    now = datetime.utcnow()
+    return _claim_job(app, job_name, now - timedelta(seconds=interval_seconds), now)
+
+
+def _job_due_daily(app, job_name, hour, minute=0):
+    """True once per UTC day, on or after hour:minute.
+
+    Preserves the exact times the old Celery beat crontab used (renewal reminders at
+    09:00 UTC, and so on) instead of drifting to 'whenever the process last restarted'.
+    """
+    now = datetime.utcnow()
+    if (now.hour, now.minute) < (hour, minute):
+        return False
+    today_at_target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    return _claim_job(app, job_name, today_at_target, now)
 
 
 def _run_xp_period_migrations():
@@ -2510,6 +2612,95 @@ def _run_calendar_reverse_sync(app):
             _scheduler_log.debug("[SCHEDULER] calendar reverse-sync idle tokens=%d", len(rows))
 
 
+# ── Jobs migrated off the Celery beat schedule ────────────────────────────────────
+# The celery-worker service is idled (see railway.worker.toml). It was a second
+# always-on container, and every task in it opened with create_app() — which re-ran
+# the migrations, started a duplicate set of Telegram bots and spawned another copy
+# of this loop, once per task. That is what ran up the Railway GB-minute bill.
+#
+# The task bodies in scheduler.py are UNCHANGED and still Celery-decorated, so the
+# worker can be switched back on at any time; nothing schedules them there any more.
+# Intervals and UTC times below are exactly the ones the old beat schedule used.
+#
+# Deliberately NOT listed (the loop already does this work — listing them would
+# double-run it): send_scheduled_messages, send_scheduled_polls, the four hub_* tasks
+# (all no-ops), deliver_due_reminders (-> _deliver_reminders), send_meeting_prealerts
+# (-> _deliver_meeting_reminders) and cleanup_message_buffer (-> _cleanup_message_buffers,
+# which purges at 48h, stricter than the task's 72h).
+_CELERY_INTERVAL_JOBS = [
+    ("retry_pending_unbans", 60),
+    ("expire_pending_verifications", 300),
+    ("check_raid_reminders", 300),
+    ("check_campaign_lifecycle", 300),
+    ("check_group_health", 1800),
+    ("recover_missed_payments", 1800),
+    ("recompute_xp_periods", 1800),
+    ("reconcile_pending_groups_task", 3600),
+    ("extract_group_signals", 7200),
+    ("ping_all_bots", 21600),
+]
+
+_CELERY_DAILY_JOBS = [
+    ("expire_trials", 0, 30),
+    ("downgrade_expired_subscriptions", 1, 0),
+    ("hub_enforce_retention", 3, 15),
+    ("scan_fraud_alerts", 7, 0),
+    ("send_daily_briefings", 8, 0),
+    ("send_renewal_reminders", 9, 0),
+    ("check_inactive_groups", 9, 30),
+    ("send_onboarding_emails", 10, 0),
+    ("send_lifecycle_emails", 10, 0),
+]
+
+
+def _run_hard_delete_sweep(app):
+    """GDPR Art. 17: purge accounts soft-deleted more than 30 days ago.
+
+    This replaces `hard_delete_user.apply_async(countdown=30*86400)`, which parked the
+    job in Redis for a month — a Redis restart or eviction meant the deletion silently
+    never ran. A sweep over User.deleted_at survives anything short of losing the DB.
+
+    hard_delete_user anonymises the row in place (it does not drop it) and leaves
+    deleted_at set, so filter out rows it has already processed or the sweep would
+    re-purge the same users every day.
+    """
+    from .models import User
+    from .scheduler import hard_delete_user
+
+    with app.app_context():
+        cutoff = datetime.utcnow() - timedelta(days=30)
+        stale = User.query.filter(
+            User.deleted_at.isnot(None),
+            User.deleted_at <= cutoff,
+            User.email.notlike("deleted_%@deleted.invalid"),
+        ).all()
+        for user in stale:
+            try:
+                hard_delete_user(user.id)
+            except Exception as exc:
+                _scheduler_log.error("[SCHEDULER] hard_delete_user(%s) failed: %s", user.id, exc)
+        if stale:
+            _scheduler_log.info("[SCHEDULER] hard-delete sweep purged=%d", len(stale))
+
+
+def _run_celery_jobs(app):
+    """Run the jobs that used to live on the Celery beat schedule."""
+    from . import scheduler as _sched
+
+    for name, interval in _CELERY_INTERVAL_JOBS:
+        job = getattr(_sched, name, None)
+        if job is not None and _job_due(app, name, interval):
+            _run_task_with_timeout(job, timeout=150, label=name, flask_app=app)
+
+    for name, hour, minute in _CELERY_DAILY_JOBS:
+        job = getattr(_sched, name, None)
+        if job is not None and _job_due_daily(app, name, hour, minute):
+            _run_task_with_timeout(job, timeout=300, label=name, flask_app=app)
+
+    if _job_due_daily(app, "hard_delete_sweep", 4, 0):
+        _run_task_with_timeout(_run_hard_delete_sweep, app, timeout=300, label="hard_delete_sweep")
+
+
 def _scheduler_loop(app):
     import time
     _last_expiry_check = [0]
@@ -2602,6 +2793,10 @@ def _scheduler_loop(app):
             if now_ts - _last_calendar_pull[0] > 900:
                 _last_calendar_pull[0] = now_ts
                 _run_task_with_timeout(_run_calendar_reverse_sync, app, timeout=120, label="_run_calendar_reverse_sync")
+            # Jobs that used to run on the Celery beat schedule. Gated on the
+            # scheduled_job_runs table, not in-memory counters, so a redeploy cannot
+            # re-fire the daily email blasts.
+            _run_celery_jobs(app)
         except Exception as exc:
             # During a redeploy/restart the process gets SIGTERM and the
             # interpreter starts tearing down. A scheduler tick mid-shutdown
