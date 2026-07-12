@@ -2697,7 +2697,10 @@ def _run_celery_jobs(app):
         if job is not None and _job_due_daily(app, name, hour, minute):
             _run_task_with_timeout(job, timeout=300, label=name, flask_app=app)
 
-    if _job_due_daily(app, "hard_delete_sweep", 4, 0):
+    # Hourly, not daily: the old apply_async(countdown=30*86400) fired at exactly the
+    # 30-day mark, and we promise the user "removed within 30 days". A daily sweep
+    # could land up to 24h late and overshoot that; hourly keeps it tight.
+    if _job_due(app, "hard_delete_sweep", 3600):
         _run_task_with_timeout(_run_hard_delete_sweep, app, timeout=300, label="hard_delete_sweep")
 
 
