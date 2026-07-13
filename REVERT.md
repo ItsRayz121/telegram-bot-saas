@@ -37,7 +37,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
-## `cee7936` — retention: make the dry-run preview visible on every deploy
+## `9af3685` — retention: make the dry-run preview visible on every deploy
 **Date:** 2026-07-13 · **Risk:** low · **Touches:** scheduling only (no deletion behaviour change)
 
 ### What changed
@@ -49,7 +49,7 @@ day via the DB claim so a redeploy can't re-fire it.
 
 ### To revert
 ```bash
-git revert cee7936
+git revert 9af3685
 git push origin main
 ```
 Reverting only restores the buried-preview behaviour; it does not affect what gets deleted.
