@@ -3325,8 +3325,16 @@ class BotInstance:
                     )
                     await app.bot.set_my_short_description("Powered by Telegizer")
                 else:
-                    custom_desc = (bot_rec.settings or {}).get("bot_description") if bot_rec else None
+                    # Paid = white-label: no Telegizer branding. The Bot model has no
+                    # settings column (a per-bot custom description was never a real
+                    # field), so getattr guards it — reading bot_rec.settings directly
+                    # raised AttributeError and skipped BOTH calls below, which meant a
+                    # bot upgraded from free kept its "Powered by Telegizer" short
+                    # description stuck forever. Clear both to a neutral default.
+                    _bot_settings = getattr(bot_rec, "settings", None) or {} if bot_rec else {}
+                    custom_desc = _bot_settings.get("bot_description")
                     await app.bot.set_my_description(custom_desc or "Community Manager Bot")
+                    await app.bot.set_my_short_description(_bot_settings.get("bot_short_description") or "Community Manager")
         except Exception as _e:
             logger.warning(f"Bot {self.bot_id}: set_my_description failed: {_e}")
 

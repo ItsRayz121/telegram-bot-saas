@@ -37,6 +37,27 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
+## `<pending-desc>` — fix paid custom-bot profile description crash
+**Date:** 2026-07-13 · **Risk:** low · **Touches:** custom-bot startup (cosmetic profile text)
+
+### What changed
+`bot_manager.py:3328` read `bot_rec.settings`, but the `Bot` model has no `settings` column,
+so the paid-tier branch raised AttributeError on every paid custom-bot start (seen in prod as
+`Bot 9/11: set_my_description failed`). Effect: paid/white-label bots never got their profile
+description set, AND — because the crash skipped both calls — a bot upgraded from free kept its
+"Powered by Telegizer" short description stuck forever. Fixed with a `getattr` guard; paid bots
+now get a neutral default and their short description is cleared of Telegizer branding. Reads an
+optional `bot_description` / `bot_short_description` if a settings dict is ever added later.
+
+### To revert
+```bash
+git revert <pending-desc>
+git push origin main
+```
+Pure cosmetic (bot profile text). No data, billing, or deletion impact. No kill switch needed.
+
+---
+
 ## `9af3685` — retention: make the dry-run preview visible on every deploy
 **Date:** 2026-07-13 · **Risk:** low · **Touches:** scheduling only (no deletion behaviour change)
 
