@@ -1748,6 +1748,26 @@ class CoreMixin:
         await self.wait_until_ready()
 
     # --- execute due scheduled moderation work (tempban expiry) ------------------
+    # --- data retention: cap the append-only tables (xp_events, audit logs, ...) ---
+    @tasks.loop(hours=24)
+    async def retention_loop(self) -> None:
+        """Daily: roll expiring xp_events into xp_monthly, then prune the append-only
+        tables. Dry-run by default (RETENTION_DRY_RUN=1) — it reports what it *would*
+        delete and deletes nothing until that is set to 0. See backend/retention.py.
+
+        Runs in a worker thread: the sweep is blocking DB work and must never stall the
+        bot's event loop (and so its heartbeat).
+        """
+        try:
+            import retention
+            await asyncio.to_thread(retention.run_retention_sweep)
+        except Exception as exc:
+            log.error("retention sweep failed: %s", exc)
+
+    @retention_loop.before_loop
+    async def _before_retention(self) -> None:
+        await self.wait_until_ready()
+
     @tasks.loop(seconds=60)
     async def process_mod_actions(self) -> None:
         rows = await asyncio.to_thread(self._fetch_due_mod_actions)

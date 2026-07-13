@@ -13,9 +13,11 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 
@@ -456,6 +458,36 @@ class XpEvent(Base):
     amount = Column(Integer, default=0)
     reason = Column(String(64))                           # message | campaign:<id> | manual
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class XpMonthly(Base):
+    """Permanent monthly XP history — the archive that lets xp_events be pruned.
+
+    xp_events is append-only and nothing reads it beyond a 30-day window
+    (member_stats.PERIOD_DAYS), yet it grows by one row per XP grant forever.
+    Retention (backend/retention.py) folds each expiring row into this table before
+    deleting it, so month-by-month history survives at one row per member per month.
+
+    NOT the source of lifetime XP — that stays on Member.xp / Member.level, which
+    retention never touches. This exists so old history is still *reportable* once
+    the raw rows are gone.
+    """
+
+    __tablename__ = "xp_monthly"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False)
+    user_id = Column(BigInteger, nullable=False)
+    period = Column(String(7), nullable=False)            # 'YYYY-MM'
+    total_xp = Column(BigInteger, nullable=False, default=0)
+    event_count = Column(Integer, nullable=False, default=0)
+
+    __table_args__ = (
+        # The upsert target — retention adds into an existing bucket instead of
+        # inserting a duplicate, which is what makes the sweep safe to re-run.
+        UniqueConstraint("guild_id", "user_id", "period", name="uq_xp_monthly_guild_user_period"),
+        Index("ix_xp_monthly_guild_user", "guild_id", "user_id"),
+    )
 
 
 CAMPAIGN_TYPES = ("proof_collection", "content_submission", "social_task", "raid", "giveaway")

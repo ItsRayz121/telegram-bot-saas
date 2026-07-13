@@ -23,7 +23,14 @@ def period_since(period: str | None):
 
 
 def xp_by_user(db, guild_id: int, since) -> dict[int, int]:
-    """{user_id: summed XP} from the append-only ledger, optionally since a time."""
+    """{user_id: summed XP} from the append-only ledger, optionally since a time.
+
+    ⚠️ NEVER call this with since=None to get an all-time total. The ledger is pruned
+    at 180 days by backend/retention.py, so summing it without a `since` would silently
+    under-report anything older. All-time XP is Member.xp (a running-total column that
+    retention never touches) — which is why crm_api and leveling_api both guard their
+    calls with `if period and period != "all"`. Keep that guard.
+    """
     q = db.query(XpEvent.user_id, func.coalesce(func.sum(XpEvent.amount), 0)) \
         .filter(XpEvent.guild_id == guild_id)
     if since is not None:
