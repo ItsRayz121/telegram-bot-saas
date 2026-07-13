@@ -37,7 +37,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
-## `<pending-desc>` — fix paid custom-bot profile description crash
+## `d098eec` — fix paid custom-bot profile description crash
 **Date:** 2026-07-13 · **Risk:** low · **Touches:** custom-bot startup (cosmetic profile text)
 
 ### What changed
@@ -51,7 +51,7 @@ optional `bot_description` / `bot_short_description` if a settings dict is ever 
 
 ### To revert
 ```bash
-git revert <pending-desc>
+git revert d098eec
 git push origin main
 ```
 Pure cosmetic (bot profile text). No data, billing, or deletion impact. No kill switch needed.
