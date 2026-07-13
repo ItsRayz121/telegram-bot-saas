@@ -511,6 +511,36 @@ class XpEvent(db.Model):
     )
 
 
+class XpMonthly(db.Model):
+    """Permanent monthly XP history — the archive that lets xp_events be pruned.
+
+    xp_events is an append-only ledger that nothing reads beyond a 30-day window
+    (see database.xp_period_subquery and scheduler.recompute_xp_periods), yet it
+    grows by one row per XP award forever. Retention folds each expiring row into
+    this table first, so a member's month-by-month history survives at one row per
+    member per month instead of thousands.
+
+    This is NOT the source of lifetime XP — that stays on Member.xp / OfficialMember.xp,
+    which retention never touches. This table exists so old history is still
+    *reportable* after the raw rows are gone.
+    """
+    __tablename__ = "xp_monthly"
+
+    id = db.Column(db.Integer, primary_key=True)
+    scope = db.Column(db.String(16), nullable=False)           # 'custom' | 'official'
+    member_id = db.Column(db.Integer, nullable=False)
+    period = db.Column(db.String(7), nullable=False)           # 'YYYY-MM'
+    total_xp = db.Column(db.BigInteger, nullable=False, default=0)
+    event_count = db.Column(db.Integer, nullable=False, default=0)
+
+    __table_args__ = (
+        # The upsert target — retention adds into an existing bucket rather than
+        # inserting a duplicate, which is what makes the sweep safe to re-run.
+        db.UniqueConstraint("scope", "member_id", "period", name="uq_xp_monthly_scope_member_period"),
+        db.Index("ix_xp_monthly_scope_member", "scope", "member_id"),
+    )
+
+
 class AuditLog(db.Model):
     __tablename__ = "audit_logs"
 

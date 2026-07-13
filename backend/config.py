@@ -125,7 +125,7 @@ class Config:
 
     # Daily platform AI spend cap in USD. When exceeded, platform-key AI calls are
     # blocked until midnight UTC. Users with their own API key are unaffected.
-    MAX_DAILY_AI_SPEND_USD = float(os.environ.get("MAX_DAILY_AI_SPEND_USD", "50"))
+    MAX_DAILY_AI_SPEND_USD = float(os.environ.get("MAX_DAILY_AI_SPEND_USD", "5"))
 
 
     # Official Telegizer shared bot (management/community features)
@@ -207,9 +207,13 @@ class Config:
     # AI token daily budgets (platform Gemini key)
     # Free = 0: platform AI (auto-reply, digests, Echo) is Pro/Enterprise only,
     # so free users are not granted any platform AI credits.
+    # Must stay in step with ai_config.AI_DEFAULTS (ai_tokens_pro / ai_tokens_enterprise),
+    # which is what actually gates a request, and with PLANS[*]["ai_tokens_day"] below,
+    # which is what the pricing page advertises. All three disagreeing is what shipped
+    # a 500k/day promise on top of a 200k/day enforcement.
     AI_TOKEN_LIMITS = {
         "free": 0,
-        "pro": 500_000,
+        "pro": 200_000,
         "enterprise": 500_000,
     }
 
@@ -238,7 +242,7 @@ class Config:
             "price": 900,          # $9/mo in cents
             "price_annual": 8640,  # $86.40/yr (~$7.20/mo, save ~20%)
             "max_bots": 3,
-            "ai_tokens_day": 500_000,
+            "ai_tokens_day": 200_000,
             "features": [
                 "3 custom bots",
                 "Unlimited groups",
@@ -246,7 +250,7 @@ class Config:
                 "AI Auto-Reply (knowledge base Q&A)",
                 "AI Group Digests (daily/weekly)",
                 "Echo — AI Assistant (notes, tasks, queries)",
-                "500k AI credits / day included",
+                "200k AI credits / day included",
                 "Advanced analytics (90 days)",
                 "Message forwarding & automations",
                 "Webhook integrations",

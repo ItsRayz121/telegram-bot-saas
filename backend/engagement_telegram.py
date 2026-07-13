@@ -476,8 +476,9 @@ def edit_campaign_post(campaign):
 # and re-editing on every single verification would risk a 429 (anti-ban rule).
 # A dropped edit is harmless: the next verification re-renders the true count.
 import time as _time
+from .utils.ttl_map import TTLMap
 _PROGRESS_MIN_INTERVAL = 4.0   # seconds between progress edits per campaign
-_last_progress_edit = {}
+_last_progress_edit = TTLMap(_PROGRESS_MIN_INTERVAL)
 
 
 def refresh_post_progress(campaign):

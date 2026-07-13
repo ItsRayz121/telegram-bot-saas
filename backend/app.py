@@ -2121,6 +2121,18 @@ def _run_official_group_digests(app):
                                          tg.telegram_group_id, mail_exc)
 
 
+def _run_retention_sweep(app):
+    """Daily: archive expiring xp_events into xp_monthly, then cap the append-only
+    tables (audit_logs, feature_usage_events, ...) that otherwise grow forever.
+
+    Dry-run by default (RETENTION_DRY_RUN=1): it reports the row counts it *would*
+    remove and removes nothing. See backend/retention.py.
+    """
+    with app.app_context():
+        from .retention import run_retention_sweep
+        run_retention_sweep(app)
+
+
 def _run_bot_event_cleanup(retention_days=90):
     """Delete BotEvent rows older than retention_days to prevent unbounded table growth."""
     try:
@@ -2746,6 +2758,11 @@ def _scheduler_loop(app):
             if now_ts - _last_event_cleanup[0] > 86400:
                 _last_event_cleanup[0] = now_ts
                 _run_task_with_timeout(_run_bot_event_cleanup, timeout=30, label="_run_bot_event_cleanup", flask_app=app)
+            # Retention sweep (xp_events roll-up + the other append-only tables): once
+            # per day. Gated on scheduled_job_runs rather than an in-memory counter so a
+            # redeploy cannot re-fire it, and batched internally so it never long-locks.
+            if _job_due(app, "retention_sweep", 86400):
+                _run_task_with_timeout(_run_retention_sweep, app, timeout=600, label="_run_retention_sweep")
             # Revoked token TTL cleanup: once per day
             if now_ts - _last_token_cleanup[0] > 86400:
                 _last_token_cleanup[0] = now_ts

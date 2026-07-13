@@ -2633,8 +2633,45 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as exc:
             _log.debug("Auto-response check failed: %s", exc)
 
+    # ── Group settings, fetched ONCE for the optional features below ─────────────
+    # Each of the next three blocks used to open its own app_context and re-query the
+    # SAME TelegramGroup row purely to read one on/off flag — so every message paid
+    # for several identical round-trips to Postgres, for features that are off for
+    # almost every group (image AI, social replies and AI digest are all Pro, and the
+    # free tier has no platform AI at all). Read the flags once here, then let each
+    # block bail out before it opens a context.
+    #
+    # None means "we could not read the settings" — the gates below fall through to
+    # the original behaviour in that case, so a lookup failure can never silently
+    # disable a feature the group has paid for.
+    _msg_settings = None
+    if flask_app and group_id:
+        try:
+            with flask_app.app_context():
+                from .models import TelegramGroup as _TGCfg
+                _cfg_row = _TGCfg.query.filter_by(telegram_group_id=group_id).first()
+                _msg_settings = (_cfg_row.settings or {}) if _cfg_row else {}
+        except Exception as _cfg_exc:
+            _log.debug("group settings prefetch failed: %s", _cfg_exc)
+            _msg_settings = None
+
+    def _feature_off(*path):
+        """True only when we positively know the feature is disabled."""
+        if _msg_settings is None:
+            return False
+        node = _msg_settings
+        for key in path:
+            if not isinstance(node, dict):
+                return True
+            node = node.get(key)
+        return not bool(node)
+
     # Multimodal image AI
-    if flask_app and (message.photo or message.document) and message.from_user and not message.from_user.is_bot:
+    if (
+        flask_app and (message.photo or message.document)
+        and message.from_user and not message.from_user.is_bot
+        and not _feature_off("image_ai", "enabled")
+    ):
         try:
             with flask_app.app_context():
                 from .models import TelegramGroup as _TGImg
@@ -2666,7 +2703,11 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             _log.debug("image_ai error in on_message: %s", _img_exc)
 
     # Social / human-like appreciation replies
-    if text and not text.startswith("/") and flask_app and message.from_user and not message.from_user.is_bot:
+    if (
+        text and not text.startswith("/") and flask_app
+        and message.from_user and not message.from_user.is_bot
+        and not _feature_off("social_replies", "enabled")
+    ):
         try:
             with flask_app.app_context():
                 from .models import TelegramGroup as _TGSocial
@@ -2688,7 +2729,11 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             _log.debug("social_reply error: %s", _se)
 
     # Message buffering for AI Daily Digest (opt-in per group)
-    if text and not text.startswith("/") and flask_app:
+    if (
+        text and not text.startswith("/") and flask_app
+        and not _feature_off("ai_message_storage_enabled")
+        and not _feature_off("assistant", "ai_digest_enabled")
+    ):
         try:
             with flask_app.app_context():
                 from .models import TelegramGroup, MessageBuffer, db as _db

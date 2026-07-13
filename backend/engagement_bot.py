@@ -21,11 +21,13 @@ import logging
 import os
 import time
 
+from .utils.ttl_map import TTLMap
+
 logger = logging.getLogger(__name__)
 
 # Per-user anti-spam cooldown between participation taps (seconds, in-process).
 _PARTICIPATE_COOLDOWN = 3.0
-_last_participate = {}
+_last_participate = TTLMap(_PARTICIPATE_COOLDOWN)
 
 # How long a pending X @username entry stays "armed" (seconds). After this, the
 # next stray DM is NOT hijacked as a username — the entry expires and the member
@@ -39,7 +41,7 @@ _HANDLE_ENTRY_TTL = 180.0
 # _PROMO_INTERVAL per user, with a referral link attributed to the campaign owner.
 _PROMO_ENABLED = os.environ.get("ENGAGEMENT_PROMO", "true").lower() in ("1", "true", "yes")
 _PROMO_INTERVAL = float(os.environ.get("ENGAGEMENT_PROMO_INTERVAL_DAYS", "3")) * 86400.0
-_last_promo = {}
+_last_promo = TTLMap(_PROMO_INTERVAL)
 
 
 def _promo_footer(campaign, lineage, user_id):
