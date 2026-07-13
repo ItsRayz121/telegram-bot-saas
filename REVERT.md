@@ -37,6 +37,26 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
+## `cee7936` — retention: make the dry-run preview visible on every deploy
+**Date:** 2026-07-13 · **Risk:** low · **Touches:** scheduling only (no deletion behaviour change)
+
+### What changed
+The first deploy of `26f201e` ran the dry-run once and claimed the daily `scheduled_job_runs`
+slot, so the next deploy skipped it and the preview numbers were locked out for 24h. Now,
+**while in dry-run** the sweep reports on the first scheduler tick after every deploy and then
+hourly (in-memory counter, read-only). **Real deletion is unchanged** — still gated to once per
+day via the DB claim so a redeploy can't re-fire it.
+
+### To revert
+```bash
+git revert cee7936
+git push origin main
+```
+Reverting only restores the buried-preview behaviour; it does not affect what gets deleted.
+Kill switch is unchanged: `RETENTION_ENABLED=0`.
+
+---
+
 ## `957dedb` — Guildizer: retention sweep + XP roll-up
 **Date:** 2026-07-13 · **Risk:** medium · **Touches:** data deletion (Guildizer only)
 

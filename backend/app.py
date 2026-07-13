@@ -2732,6 +2732,7 @@ def _scheduler_loop(app):
     _last_hub_digests = [0]
     _last_calendar_sync = [0]
     _last_calendar_pull = [0]
+    _last_retention_report = [0]
     time.sleep(15)  # Wait for bots to fully start
     while True:
         try:
@@ -2758,10 +2759,22 @@ def _scheduler_loop(app):
             if now_ts - _last_event_cleanup[0] > 86400:
                 _last_event_cleanup[0] = now_ts
                 _run_task_with_timeout(_run_bot_event_cleanup, timeout=30, label="_run_bot_event_cleanup", flask_app=app)
-            # Retention sweep (xp_events roll-up + the other append-only tables): once
-            # per day. Gated on scheduled_job_runs rather than an in-memory counter so a
-            # redeploy cannot re-fire it, and batched internally so it never long-locks.
-            if _job_due(app, "retention_sweep", 86400):
+            # Retention sweep (xp_events roll-up + the other append-only tables).
+            #
+            # Dry-run and real deletion are scheduled differently ON PURPOSE:
+            #   • Dry-run (default) is READ-ONLY — it just reports what it *would*
+            #     delete. It runs on the first tick after every deploy and then
+            #     hourly, via an in-memory counter, so the preview is always visible
+            #     right after a redeploy instead of being buried in a superseded
+            #     deploy's logs and then locked out for a day.
+            #   • Real deletion is gated on the scheduled_job_runs DB claim (once per
+            #     day) so a redeploy can never re-fire it.
+            from .retention import DRY_RUN as _RETENTION_DRY_RUN
+            if _RETENTION_DRY_RUN:
+                if now_ts - _last_retention_report[0] > 3600:
+                    _last_retention_report[0] = now_ts
+                    _run_task_with_timeout(_run_retention_sweep, app, timeout=600, label="_run_retention_sweep")
+            elif _job_due(app, "retention_sweep", 86400):
                 _run_task_with_timeout(_run_retention_sweep, app, timeout=600, label="_run_retention_sweep")
             # Revoked token TTL cleanup: once per day
             if now_ts - _last_token_cleanup[0] > 86400:
