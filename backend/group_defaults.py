@@ -459,10 +459,11 @@ _DEFAULTS: dict = {
         "types": ["ai_kb", "ai_image", "automation", "command"],
         "auto_learn": True,           # auto-store admin replies back into KB
         "notify_group_on_resolve": False,
-        # When a question is escalated, post a professional "forwarded to the
-        # admins — you'll get an answer shortly" ack in the group. False = the
-        # bot stays completely silent and only the admins are pinged.
-        "public_ack": True,
+        # When a question is escalated, optionally post a professional
+        # "forwarded to the admins — you'll get an answer shortly" ack in the
+        # group. Default False: the bot stays completely silent in the group and
+        # only the admins are pinged (owner's explicit preference, 2026-07-17).
+        "public_ack": False,
     },
 
     # ── Multimodal image AI ───────────────────────────────────────────────────

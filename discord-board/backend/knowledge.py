@@ -16,12 +16,34 @@ def _terms(text: str) -> set[str]:
     return set(_WORD_RE.findall((text or "").lower()))
 
 
+# When the knowledge below doesn't cover the question, the model must output
+# exactly this token — callers turn it into a moderator escalation instead of
+# posting "I don't know" into the channel. (Same pattern as Telegizer's
+# NO_ANSWER sentinel; logic copied, never imported.)
+NO_ANSWER_SENTINEL = "NO_ANSWER"
+
 _PROMPT_HEADER = (
     "You are this Discord server's helpful assistant. Answer the member's "
-    "question using ONLY the server knowledge below when relevant; if the "
-    "answer isn't covered, say so briefly. Be concise.\n\n"
+    "question using ONLY the server knowledge below. If the server knowledge "
+    "does not contain the information needed to answer, reply with exactly "
+    "NO_ANSWER and nothing else — no apology, no explanation; the system "
+    "forwards unanswered questions to the moderators. Never tell the member "
+    "you don't know. Be concise.\n\n"
     "SERVER KNOWLEDGE:\n"
 )
+
+
+def is_no_answer(text: str | None) -> bool:
+    """True when the model signalled it has no answer (or produced nothing)."""
+    if not text or not text.strip():
+        return True
+    stripped = text.strip()
+    head = stripped.strip("\"'`*_ .!").upper()
+    if head in (NO_ANSWER_SENTINEL, "NO ANSWER"):
+        return True
+    # Sentinel token followed by extra prose — underscore form only, so a real
+    # answer like "No answers are given for…" is never misclassified.
+    return stripped.upper().startswith(NO_ANSWER_SENTINEL)
 
 
 def grounded_with_confidence(guild_id: int, question: str) -> tuple[str | None, bool]:

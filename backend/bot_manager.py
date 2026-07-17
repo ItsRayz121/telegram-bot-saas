@@ -22,8 +22,13 @@ from .bot_features.welcome import WelcomeSystem
 from .bot_features.levels import LevelSystem
 from .bot_features.moderation import ModerationSystem
 from .bot_features.knowledge_base import KnowledgeBaseSystem
+from .utils.ttl_map import TTLMap
 
 logger = logging.getLogger(__name__)
+
+# Anti-spam: one KB escalation per (group, user) per 60s, no matter how many
+# unanswered questions they fire off.
+_kb_escalation_cooldown = TTLMap(ttl=120)
 
 # Set during process shutdown (SIGTERM / atexit) so polling threads stop cleanly
 # and shutdown-time crashes are NOT recorded as real failures. See Part 7/8:
@@ -1990,33 +1995,32 @@ class BotInstance:
             await update.message.reply_text(answer, parse_mode="Markdown")
             return
 
-        # No answer — escalate to the configured admins instead of a public shrug.
+        # No answer — forward to a human (dashboard inbox always, admin DMs when
+        # configured) instead of a public shrug.
         escalated = False
-        esc_settings = group.settings.get("escalation", {})
-        if esc_settings.get("enabled") and "ai_kb" in esc_settings.get("types", []):
-            try:
-                from .bot_features.escalation import trigger_escalation
-                sender = update.message.from_user
-                event_id = await trigger_escalation(
-                    bot=context.bot,
-                    group_settings=group.settings,
-                    issue_type="ai_kb",
-                    original_content=question,
-                    context_data={
-                        "confidence": confidence,
-                        "group_name": getattr(group, "group_name", None) or "this community",
-                        "user_id": getattr(sender, "id", None),
-                        "username": getattr(sender, "username", None) or "",
-                        "thread_id": getattr(update.message, "message_thread_id", None),
-                    },
-                    app=self.app,
-                    group_id=group.id,
-                    telegram_group_id=getattr(group, "telegram_group_id", None),
-                    original_message=update.message,
-                )
-                escalated = event_id is not None
-            except Exception as exc:
-                logger.warning(f"/ask escalation failed: {exc}")
+        try:
+            from .bot_features.escalation import trigger_escalation
+            sender = update.message.from_user
+            event_id = await trigger_escalation(
+                bot=context.bot,
+                group_settings=group.settings,
+                issue_type="ai_kb",
+                original_content=question,
+                context_data={
+                    "confidence": confidence,
+                    "group_name": getattr(group, "group_name", None) or "this community",
+                    "user_id": getattr(sender, "id", None),
+                    "username": getattr(sender, "username", None) or "",
+                    "thread_id": getattr(update.message, "message_thread_id", None),
+                },
+                app=self.app,
+                group_id=group.id,
+                telegram_group_id=getattr(group, "telegram_group_id", None),
+                original_message=update.message,
+            )
+            escalated = event_id is not None
+        except Exception as exc:
+            logger.warning(f"/ask escalation failed: {exc}")
 
         if escalated:
             await update.message.reply_text(
@@ -2847,47 +2851,49 @@ class BotInstance:
                 except Exception as e:
                     logger.error(f"KB auto-reply send error: {e}")
         else:
-            # No answer in the KB — ping the configured admins privately instead
-            # of telling the group "I don't know".
-            esc_settings = group.settings.get("escalation", {})
-            if esc_settings.get("enabled") and "ai_kb" in esc_settings.get("types", []):
-                try:
-                    from .bot_features.escalation import trigger_escalation
-                    sender = update.message.from_user
-                    uname = getattr(sender, "username", None) or ""
-                    uid   = getattr(sender, "id", None)
-                    event_id = await trigger_escalation(
-                        bot=context.bot,
-                        group_settings=group.settings,
-                        issue_type="ai_kb",
-                        original_content=text,
-                        context_data={
-                            "confidence": confidence,
-                            "group_name": getattr(group, "group_name", None) or "this community",
-                            "user_id": uid,
-                            "username": uname,
-                            "thread_id": getattr(update.message, "message_thread_id", None),
-                        },
-                        app=self.app,
-                        group_id=group.id,
-                        telegram_group_id=getattr(group, "telegram_group_id", None),
-                        original_message=update.message,
-                    )
-                    logger.debug(f"KB auto-reply: escalated (confidence={confidence:.3f})")
-                    if event_id and esc_settings.get("public_ack", True):
-                        try:
-                            await update.message.reply_text(
-                                "✅ I've passed your question along to the group admins — "
-                                "you'll get an answer shortly."
-                            )
-                        except Exception:
-                            pass
-                    return
-                except Exception as exc:
-                    logger.warning(f"KB auto-reply: escalation failed: {exc}")
-
-            # Escalation off or failed — stay quiet rather than posting "I don't know".
-            logger.debug(f"KB auto-reply: no answer, staying silent (confidence={confidence:.3f})")
+            # No answer in the KB — forward the question to a human (dashboard
+            # inbox always; Telegram admin DMs when configured) instead of
+            # telling the group "I don't know". Silent in the group unless
+            # escalation.public_ack is turned on.
+            sender = update.message.from_user
+            uid = getattr(sender, "id", None)
+            cd_key = (group.id, uid)
+            import time as _time
+            if _time.monotonic() - _kb_escalation_cooldown.get(cd_key, 0) < 60:
+                return
+            _kb_escalation_cooldown.set(cd_key, _time.monotonic())
+            try:
+                from .bot_features.escalation import trigger_escalation
+                uname = getattr(sender, "username", None) or ""
+                event_id = await trigger_escalation(
+                    bot=context.bot,
+                    group_settings=group.settings,
+                    issue_type="ai_kb",
+                    original_content=text,
+                    context_data={
+                        "confidence": confidence,
+                        "group_name": getattr(group, "group_name", None) or "this community",
+                        "user_id": uid,
+                        "username": uname,
+                        "thread_id": getattr(update.message, "message_thread_id", None),
+                    },
+                    app=self.app,
+                    group_id=group.id,
+                    telegram_group_id=getattr(group, "telegram_group_id", None),
+                    original_message=update.message,
+                )
+                logger.debug(f"KB auto-reply: escalated (confidence={confidence:.3f})")
+                esc_settings = group.settings.get("escalation", {})
+                if event_id and esc_settings.get("public_ack", False):
+                    try:
+                        await update.message.reply_text(
+                            "✅ I've passed your question along to the group admins — "
+                            "you'll get an answer shortly."
+                        )
+                    except Exception:
+                        pass
+            except Exception as exc:
+                logger.warning(f"KB auto-reply: escalation failed: {exc}")
 
     async def handle_chat_member(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Track when users join via a tracked invite link."""

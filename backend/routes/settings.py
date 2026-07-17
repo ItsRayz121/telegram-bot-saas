@@ -291,7 +291,7 @@ def get_group_settings(bot_id, group_id):
         # Annotate escalation admin DM eligibility (has the admin started the bot?)
         escalation_dm_status = {}
         try:
-            admin_ids = (group.settings or {}).get("escalation", {}).get("admins", [])
+            admin_ids = (group.settings or {}).get("escalation", {}).get("admin_ids", [])
             for admin_id in admin_ids:
                 if admin_id:
                     started = TelegramBotStarted.query.filter_by(

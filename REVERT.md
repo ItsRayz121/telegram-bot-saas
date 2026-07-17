@@ -37,6 +37,48 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
+## `<pending>` — escalations always reach a human; silent-in-group default; Guildizer sentinel
+**Date:** 2026-07-17 · **Risk:** medium · **Touches:** bot hot path (both boards)
+
+### What changed
+1. **Escalations can no longer vanish.** `trigger_escalation` used to silently no-op when
+   `escalation.enabled` was off or no admin_ids were set (the default!) — this is why
+   "it never went to the admin". Now every unanswered question of an active type records
+   an EscalationEvent AND sends an in-app dashboard notification (bell + web push) to the
+   group owner. Telegram admin DMs remain the extra channel when enabled + admins picked.
+   DM failures (admin never /start-ed the bot) now log at warning, not debug.
+2. **Silent in the group by default** — `escalation.public_ack` default flipped to False
+   per the owner's explicit preference; the professional ack is opt-in.
+3. **Guildizer got the same NO_ANSWER sentinel fix** (copied, not imported): model
+   escalates to the mod alert channel instead of saying "that's not covered" in-channel;
+   /ask and auto-reply both covered; fallback copy professionalised.
+4. Fixed stale `escalation.admins` key in settings.py (DM-eligibility indicator read the
+   wrong key, so the UI could never show whether admins had started the bot).
+
+### To revert
+```bash
+git revert <pending>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Restores the old gating (escalations skipped unless fully configured).
+- ⚠️ Dashboard notifications and EscalationEvent rows already created stay (data).
+
+### Kill switch (if any)
+Per-group: turn off the escalation types in dashboard AI › Escalation, or disable AI
+Auto-Reply. Global: `OFFICIAL_KB_AUTO_REPLY=0` still kills the official auto-reply path
+(escalations only fire from AI paths, so this silences the main source too).
+
+### Safety properties (verified, not assumed)
+- Escalation volume is bounded: 60s per (group, user) cooldown on both TG lineages
+  (TTLMap — no unbounded dict), 10-min per (guild, user, type) on Guildizer, and the
+  in-app notification layer coalesces bursts within 90s into one bell item.
+- In-app notification is best-effort inside try/except — a notifications failure can
+  never break the escalation DM path or the message handler.
+
+---
+
 ## `e475f2f` — AI KB: professional no-answer handling + official-bot auto-reply
 **Date:** 2026-07-17 · **Risk:** medium · **Touches:** bot hot path (`on_message`, both lineages)
 

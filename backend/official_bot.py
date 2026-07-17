@@ -6013,7 +6013,7 @@ async def _maybe_auto_kb_reply(context, message, group_id, settings, flask_app):
     escalated = await _maybe_escalate_kb(
         context.bot, flask_app, group_id, text, message, confidence
     )
-    if escalated and (settings or {}).get("escalation", {}).get("public_ack", True):
+    if escalated and (settings or {}).get("escalation", {}).get("public_ack", False):
         try:
             await message.reply_text(
                 "✅ I've passed your question along to the group admins — "

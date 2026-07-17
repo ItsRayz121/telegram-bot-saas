@@ -82,20 +82,23 @@ async def trigger_escalation(
     original_message=None,        # telegram.Message to forward (optional)
 ) -> int | None:
     """
-    Send escalation DMs to all configured admins and record the event.
-    Returns the EscalationEvent.id, or None if escalation is skipped.
+    Record the escalation, notify the group owner in the dashboard inbox
+    (bell/web-push), and DM the configured admins on Telegram.
+
+    The dashboard notification and the EscalationEvent row happen for every
+    escalation of an active type — even when Telegram-DM escalation is not
+    configured — so an unanswered question always reaches a human somewhere.
+    Telegram DMs additionally require escalation.enabled + admin_ids.
+
+    Returns the EscalationEvent.id, or None if the type is disabled.
     """
     esc = _get_escalation_settings(group_settings)
-    if not esc.get("enabled", False):
-        return None
 
     active_types = esc.get("types", ["ai_kb", "ai_image", "automation", "command"])
     if issue_type not in active_types:
         return None
 
-    admin_ids = esc.get("admin_ids", [])
-    if not admin_ids:
-        return None
+    admin_ids = esc.get("admin_ids", []) if esc.get("enabled", False) else []
 
     group_name = context_data.get("group_name", "Unknown group")
     user_id    = context_data.get("user_id", "")
@@ -131,6 +134,41 @@ async def trigger_escalation(
 
     if event_id is None:
         return None
+
+    # Dashboard inbox: notify the group owner in-app (bell + web push). This is
+    # the guaranteed channel — it needs no Telegram DM permission and works even
+    # when no escalation admins are configured.
+    preview_short = (original_content or "")[:200]
+    with app.app_context():
+        try:
+            from ..routes.notifications import create_notification
+            owner_user_id = None
+            if telegram_group_id:
+                from ..models import TelegramGroup
+                _tg = TelegramGroup.query.filter_by(
+                    telegram_group_id=str(telegram_group_id)
+                ).first()
+                if _tg:
+                    owner_user_id = _tg.owner_user_id
+            elif group_id:
+                from ..models import Group, Bot
+                _grp = Group.query.get(group_id)
+                if _grp:
+                    _bot = Bot.query.get(_grp.bot_id)
+                    if _bot:
+                        owner_user_id = _bot.user_id
+            if owner_user_id:
+                create_notification(
+                    owner_user_id,
+                    "ai_escalation",
+                    f"AI needs a human answer in {group_name}",
+                    f"{user_str} asked: “{preview_short}” — the AI had no answer. "
+                    f"Reply via the escalation DM or add the answer to the knowledge base.",
+                    metadata={"escalation_id": event_id, "group": group_name,
+                              "issue_type": issue_type},
+                )
+        except Exception as exc:
+            logger.warning("escalation: dashboard notification failed: %s", exc)
 
     # Build header message
     conf_str = f"{int(confidence * 100)}%" if confidence is not None else "N/A"
@@ -172,7 +210,13 @@ async def trigger_escalation(
                 except Exception:
                     pass
         except Exception as exc:
-            logger.debug("escalation: DM to admin %s failed: %s", admin_id, exc)
+            # Most common cause: the admin has never opened a DM with the bot,
+            # so Telegram forbids the send. The dashboard notification above
+            # still delivered; surface this so it's diagnosable.
+            logger.warning(
+                "escalation: DM to admin %s failed (have they started the bot?): %s",
+                admin_id, exc,
+            )
 
     # Persist DM refs for reply matching
     with app.app_context():

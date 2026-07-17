@@ -974,7 +974,8 @@ class CoreMixin:
             )
             if kb.get("low_confidence_fallback"):
                 await governor.safe(message.reply(
-                    "I'm not sure about that one — a moderator can help. 🙏",
+                    "✅ I've passed your question along to the moderators — "
+                    "you'll get an answer shortly.",
                     mention_author=False,
                 ), what="kb fallback reply")
                 return True
@@ -1009,6 +1010,24 @@ class CoreMixin:
             tone += f"\n\nAdditional rules from the server admins:\n{custom[:1200]}"
         result = await asyncio.to_thread(ai.complete, f"{system}\n\n{tone}", question)
         if result is None or not result.text:
+            return False
+        if knowledge.is_no_answer(result.text):
+            # The model affirmed the KB has no answer — forward to the mods
+            # instead of posting "I don't know" into the channel. Silent unless
+            # the fallback ack is enabled.
+            await self._escalate_type(
+                message.guild, "ai_kb",
+                f"KB couldn't answer {message.author.mention} in "
+                f"{message.channel.mention}: “{question[:120]}” — {message.jump_url}",
+                user_id=message.author.id,
+            )
+            if kb.get("low_confidence_fallback"):
+                await governor.safe(message.reply(
+                    "✅ I've passed your question along to the moderators — "
+                    "you'll get an answer shortly.",
+                    mention_author=False,
+                ), what="kb no-answer ack")
+                return True
             return False
         await asyncio.to_thread(self._log_ai, message.guild.id, message.author.id, result)
         await governor.safe(message.reply(linkify_channels(message.guild, result.text)[:1950], mention_author=False),
@@ -2545,6 +2564,21 @@ def attach_builtin_commands(client) -> None:
             result = await asyncio.to_thread(ai.ask, question)
         if result is None:
             await interaction.followup.send("Sorry, I couldn't answer that right now.", ephemeral=True)
+            return
+        if system and knowledge.is_no_answer(result.text):
+            # KB-grounded but the model signalled no answer — forward to the
+            # mods and tell the asker professionally (ephemeral, so only they
+            # see it).
+            if interaction.guild is not None:
+                await client._escalate_type(
+                    interaction.guild, "ai_kb",
+                    f"/ask had no KB answer for {interaction.user.mention}: "
+                    f"“{question[:120]}”",
+                    user_id=interaction.user.id,
+                )
+            await interaction.followup.send(
+                "✅ I've passed your question along to the moderators — "
+                "you'll get an answer shortly.", ephemeral=True)
             return
         await asyncio.to_thread(CoreMixin._log_ai, interaction.guild_id, interaction.user.id, result)
         await interaction.followup.send(
