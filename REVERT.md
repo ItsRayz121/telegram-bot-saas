@@ -37,7 +37,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
-## `<pending>` — escalations always reach a human; silent-in-group default; Guildizer sentinel
+## `7b62337` — escalations always reach a human; silent-in-group default; Guildizer sentinel
 **Date:** 2026-07-17 · **Risk:** medium · **Touches:** bot hot path (both boards)
 
 ### What changed
@@ -57,7 +57,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ### To revert
 ```bash
-git revert <pending>
+git revert 7b62337
 git push origin main
 ```
 
