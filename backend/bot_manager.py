@@ -1977,15 +1977,56 @@ class BotInstance:
         if not group.settings.get("knowledge_base", {}).get("enabled", True):
             return
         typing_msg = await update.message.reply_text("🔍 Searching knowledge base...")
-        answer, confidence = await self.knowledge_base.answer_question(question, group.id)
+        answer, confidence = await self.knowledge_base.answer_question(
+            question, group.id,
+            group_name=getattr(group, "group_name", None) or "this community",
+            kb_settings=group.settings.get("knowledge_base", {}),
+        )
         try:
             await context.bot.delete_message(chat_id=chat.id, message_id=typing_msg.message_id)
         except Exception:
             pass
         if answer:
             await update.message.reply_text(answer, parse_mode="Markdown")
+            return
+
+        # No answer — escalate to the configured admins instead of a public shrug.
+        escalated = False
+        esc_settings = group.settings.get("escalation", {})
+        if esc_settings.get("enabled") and "ai_kb" in esc_settings.get("types", []):
+            try:
+                from .bot_features.escalation import trigger_escalation
+                sender = update.message.from_user
+                event_id = await trigger_escalation(
+                    bot=context.bot,
+                    group_settings=group.settings,
+                    issue_type="ai_kb",
+                    original_content=question,
+                    context_data={
+                        "confidence": confidence,
+                        "group_name": getattr(group, "group_name", None) or "this community",
+                        "user_id": getattr(sender, "id", None),
+                        "username": getattr(sender, "username", None) or "",
+                        "thread_id": getattr(update.message, "message_thread_id", None),
+                    },
+                    app=self.app,
+                    group_id=group.id,
+                    telegram_group_id=getattr(group, "telegram_group_id", None),
+                    original_message=update.message,
+                )
+                escalated = event_id is not None
+            except Exception as exc:
+                logger.warning(f"/ask escalation failed: {exc}")
+
+        if escalated:
+            await update.message.reply_text(
+                "✅ I've forwarded your question to the group admins — "
+                "you'll get an answer shortly."
+            )
         else:
-            await update.message.reply_text("I couldn't find an answer in the knowledge base.")
+            await update.message.reply_text(
+                "I don't have that in the knowledge base yet — an admin can help with this one."
+            )
 
     async def handle_invitelink(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if update.effective_chat.type == "private":
@@ -2764,8 +2805,6 @@ class BotInstance:
         if not self._is_kb_question(text, kb_settings):
             return
 
-        threshold = float(kb_settings.get("confidence_threshold", 0.35))
-
         # Collect auto-reply triggers as optional AI knowledge
         auto_reply_triggers = []
         if kb_settings.get("use_auto_replies_as_knowledge", False):
@@ -2794,9 +2833,11 @@ class BotInstance:
             auto_reply_triggers=auto_reply_triggers or None,
         )
 
-        logger.debug(f"KB auto-reply: confidence={confidence:.3f}, threshold={threshold:.3f}")
+        logger.debug(f"KB auto-reply: confidence={confidence:.3f}")
 
-        if answer and confidence >= threshold:
+        if answer:
+            # The model only answers when the KB actually contains the answer
+            # (NO_ANSWER sentinel otherwise), so a non-empty answer is safe to post.
             logger.debug(f"KB auto-reply: replying (confidence={confidence:.3f})")
             try:
                 await update.message.reply_text(answer, parse_mode="Markdown")
@@ -2806,7 +2847,8 @@ class BotInstance:
                 except Exception as e:
                     logger.error(f"KB auto-reply send error: {e}")
         else:
-            # Low confidence or no answer — try global escalation before fallback
+            # No answer in the KB — ping the configured admins privately instead
+            # of telling the group "I don't know".
             esc_settings = group.settings.get("escalation", {})
             if esc_settings.get("enabled") and "ai_kb" in esc_settings.get("types", []):
                 try:
@@ -2814,7 +2856,7 @@ class BotInstance:
                     sender = update.message.from_user
                     uname = getattr(sender, "username", None) or ""
                     uid   = getattr(sender, "id", None)
-                    await trigger_escalation(
+                    event_id = await trigger_escalation(
                         bot=context.bot,
                         group_settings=group.settings,
                         issue_type="ai_kb",
@@ -2832,19 +2874,20 @@ class BotInstance:
                         original_message=update.message,
                     )
                     logger.debug(f"KB auto-reply: escalated (confidence={confidence:.3f})")
-                    return  # suppress public reply when escalating
+                    if event_id and esc_settings.get("public_ack", True):
+                        try:
+                            await update.message.reply_text(
+                                "✅ I've passed your question along to the group admins — "
+                                "you'll get an answer shortly."
+                            )
+                        except Exception:
+                            pass
+                    return
                 except Exception as exc:
                     logger.warning(f"KB auto-reply: escalation failed: {exc}")
 
-            if kb_settings.get("fallback_enabled", False) and answer:
-                logger.debug(f"KB auto-reply: low confidence fallback (confidence={confidence:.3f})")
-                try:
-                    fallback_text = f"I found some related information, but I'm not fully certain: {answer}"
-                    await update.message.reply_text(fallback_text)
-                except Exception as e:
-                    logger.error(f"KB fallback reply error: {e}")
-            else:
-                logger.debug(f"KB auto-reply: no confident answer (confidence={confidence:.3f})")
+            # Escalation off or failed — stay quiet rather than posting "I don't know".
+            logger.debug(f"KB auto-reply: no answer, staying silent (confidence={confidence:.3f})")
 
     async def handle_chat_member(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Track when users join via a tracked invite link."""

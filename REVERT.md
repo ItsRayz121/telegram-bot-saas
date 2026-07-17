@@ -37,6 +37,53 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
+## `<pending>` — AI KB: professional no-answer handling + official-bot auto-reply
+**Date:** 2026-07-17 · **Risk:** medium · **Touches:** bot hot path (`on_message`, both lineages)
+
+### What changed
+1. **The AI no longer says "I don't know" in the group.** The prompt now makes the model
+   return a `NO_ANSWER` sentinel when the PDFs/KB don't contain the answer; the code turns
+   that into: ping the configured admins' DMs (existing Escalation system) + a professional
+   "I've passed your question to the admins — you'll get an answer shortly" ack in the group
+   (`escalation.public_ack`, default on; set it false for full silence). If escalation is
+   not configured, the bot stays quiet (auto-reply) or gives a professional one-liner (/ask).
+2. **KB answers are no longer rejected by the cosine-similarity gate.** The old
+   `confidence_threshold` default (0.65) was above what real embedding matches score
+   (~0.4–0.6), so correct PDF answers were being thrown away — this is why "the AI can't
+   fetch answers from the PDFs". The threshold is now only a pre-LLM retrieval floor,
+   capped at 0.25; the model itself decides answerability.
+3. **The official (shared) bot now actually has AI Auto-Reply.** The
+   `knowledge_base.auto_reply_enabled` toggle existed in Quick Settings/dashboard but no
+   code read it — only `/ask` worked. Implemented in `official_bot.py` (mention-only by
+   default, off by default, per-group opt-in).
+
+### To revert
+```bash
+git revert <pending>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Restores the old behaviour (public "I don't know" replies, 0.65 gate, no official auto-reply).
+- ⚠️ Escalation DMs already sent to admins are not unsent (they're just messages).
+- ⚠️ Auto-learned Q&A rows (`AutoResponse` with `use_as_ai_knowledge`) created by admin
+  replies stay — they're data the admin authored, keep them.
+
+### Kill switch (if any)
+`OFFICIAL_KB_AUTO_REPLY=0` — instantly disables the new official-bot auto-reply globally
+(the rest of the change is prompt/copy behaviour with no switch; per-group, the dashboard
+"AI Auto-Reply" toggle turns it off in seconds).
+
+### Safety properties (verified, not assumed)
+- Auto-reply is **default OFF** and **mention-only by default** — no group gets new AI
+  replies without opting in. On a settings-lookup failure it does NOT run (fails closed,
+  because it costs money; the paid-feature gates around it still fail open).
+- Escalation DMs are throttled 60s per user per group (existing `_kb_escalation_cooldown`).
+- A real answer starting with the words "No answer…" is not misclassified as the sentinel
+  (underscore-token match only; unit-smoke-tested).
+
+---
+
 ## `d098eec` — fix paid custom-bot profile description crash
 **Date:** 2026-07-13 · **Risk:** low · **Touches:** custom-bot startup (cosmetic profile text)
 

@@ -19,6 +19,27 @@ PROVIDER_DEFAULT_BASE_URLS = {
 }
 
 
+# The model is instructed (ai_personality._KNOWLEDGE_RULES) to output exactly this
+# token when the KB context does not contain the answer. We convert it to
+# answer=None so callers escalate to admins instead of posting "I don't know"
+# into the group.
+NO_ANSWER_SENTINEL = "NO_ANSWER"
+
+
+def _is_no_answer(text):
+    """True when the model signalled it has no answer (or produced nothing)."""
+    if not text or not text.strip():
+        return True
+    stripped = text.strip()
+    head = stripped.strip("\"'`*_ .!").upper()
+    # Entire reply is the sentinel (possibly quoted/punctuated)…
+    if head in (NO_ANSWER_SENTINEL, "NO ANSWER"):
+        return True
+    # …or the sentinel token followed by extra prose. Underscore form only, so a
+    # real answer like "No answers are given for…" is never misclassified.
+    return stripped.upper().startswith(NO_ANSWER_SENTINEL)
+
+
 def _cosine_similarity(a, b):
     dot = sum(x * y for x, y in zip(a, b))
     norm_a = math.sqrt(sum(x * x for x in a))
@@ -269,8 +290,12 @@ class KnowledgeBaseSystem:
                     group_name=group_name,
                     kb_settings=kb_settings,
                 )
+                if _is_no_answer(answer):
+                    self._log_kb_activity(question, group_id, telegram_group_id,
+                                          answered=False, source="auto_reply_triggers")
+                    return None, 0.0
                 self._log_kb_activity(question, group_id, telegram_group_id,
-                                      answered=bool(answer), source="auto_reply_triggers",
+                                      answered=True, source="auto_reply_triggers",
                                       answer=answer)
                 return answer, 0.75  # fixed confidence: admin-curated content
 
@@ -306,6 +331,25 @@ class KnowledgeBaseSystem:
             top_score = _cosine_similarity(q_emb, scored[0]["embedding"]) if scored else 0.0
             logger.debug(f"KB: Top confidence score for group {group_id}: {top_score:.3f}")
 
+            # Retrieval floor: skip the LLM call only when nothing in the KB is
+            # even vaguely related (saves tokens on chit-chat). The configured
+            # confidence_threshold is capped at 0.25 because cosine similarity
+            # with text-embedding-3-small rarely exceeds ~0.6 even for exact
+            # matches — the old behaviour of gating the FINAL answer on this
+            # score rejected correct answers. The model itself now decides
+            # answerability via the NO_ANSWER sentinel.
+            raw_threshold = (kb_settings or {}).get("confidence_threshold", 0.25)
+            try:
+                configured = float(raw_threshold)
+            except (TypeError, ValueError):
+                configured = 0.25
+            floor = min(configured, 0.25)
+            if top_score < floor and not trigger_context:
+                self._log_kb_activity(question, group_id, telegram_group_id,
+                                      answered=False, confidence=top_score,
+                                      source="knowledge_base")
+                return None, top_score
+
             context = "\n\n---\n\n".join(c["text"] for c in scored[:3])
             if trigger_context:
                 context = context + "\n\n---\n\n" + trigger_context
@@ -315,8 +359,13 @@ class KnowledgeBaseSystem:
                 group_name=group_name,
                 kb_settings=kb_settings,
             )
+            if _is_no_answer(answer):
+                self._log_kb_activity(question, group_id, telegram_group_id,
+                                      answered=False, confidence=top_score,
+                                      source="knowledge_base")
+                return None, top_score
             self._log_kb_activity(question, group_id, telegram_group_id,
-                                  answered=bool(answer), confidence=top_score,
+                                  answered=True, confidence=top_score,
                                   source="knowledge_base", answer=answer)
             return answer, top_score
 

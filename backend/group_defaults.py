@@ -429,7 +429,11 @@ _DEFAULTS: dict = {
         "auto_reply_enabled": False,
         "auto_reply_mention_only": True,  # require @mention — intentional interaction
         "auto_reply_in_groups": True,
-        "confidence_threshold": 0.65,     # raised from 0.35 — only reply when confident
+        # Retrieval floor only (capped at 0.25 in knowledge_base.py). The model
+        # decides answerability itself via the NO_ANSWER sentinel — the old 0.65
+        # gate rejected correct answers because cosine similarity rarely
+        # exceeds ~0.6 even for exact matches.
+        "confidence_threshold": 0.25,
         "fallback_enabled": False,
         "min_message_words": 5,
         # AI personality & reply behavior (new — all have safe defaults)
@@ -455,6 +459,10 @@ _DEFAULTS: dict = {
         "types": ["ai_kb", "ai_image", "automation", "command"],
         "auto_learn": True,           # auto-store admin replies back into KB
         "notify_group_on_resolve": False,
+        # When a question is escalated, post a professional "forwarded to the
+        # admins — you'll get an answer shortly" ack in the group. False = the
+        # bot stays completely silent and only the admins are pinged.
+        "public_ack": True,
     },
 
     # ── Multimodal image AI ───────────────────────────────────────────────────

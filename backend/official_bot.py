@@ -2728,6 +2728,19 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as _se:
             _log.debug("social_reply error: %s", _se)
 
+    # AI Knowledge-Base auto-reply — the "AI Auto-Reply" toggle. Off by default;
+    # requires _msg_settings so we never call the AI on a settings-lookup failure.
+    if (
+        text and not text.startswith("/") and flask_app
+        and message.from_user and not message.from_user.is_bot
+        and _msg_settings is not None
+        and not _feature_off("knowledge_base", "auto_reply_enabled")
+    ):
+        try:
+            await _maybe_auto_kb_reply(context, message, group_id, _msg_settings, flask_app)
+        except Exception as _kb_exc:
+            _log.debug("auto KB reply error: %s", _kb_exc)
+
     # Message buffering for AI Daily Digest (opt-in per group)
     if (
         text and not text.startswith("/") and flask_app
@@ -5865,8 +5878,8 @@ async def cmd_ask(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         pass
 
-    CONFIDENCE_THRESHOLD = 0.35
-    if not answer or confidence < CONFIDENCE_THRESHOLD:
+    if not answer:
+        # The model signalled the KB has no answer (NO_ANSWER sentinel).
         # Don't just give up — flag it to the group admins (if escalation is on),
         # so they can answer and teach the bot for next time.
         escalated = await _maybe_escalate_kb(
@@ -5874,13 +5887,12 @@ async def cmd_ask(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         if escalated:
             await update.message.reply_text(
-                "❓ I'm not sure about that one yet — I've flagged it to the group "
-                "admins and they'll follow up. Thanks for your patience!"
+                "✅ I've forwarded your question to the group admins — "
+                "you'll get an answer shortly."
             )
         else:
             await update.message.reply_text(
-                "❓ I couldn't find a confident answer in the knowledge base. "
-                "Try rephrasing or ask an admin."
+                "I don't have that in the knowledge base yet — an admin can help with this one."
             )
         return
 
@@ -5888,6 +5900,127 @@ async def cmd_ask(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"💡 *Answer:*\n{answer}",
         parse_mode=ParseMode.MARKDOWN,
     )
+
+
+# ─── Auto KB reply (official bot) ────────────────────────────────────────────
+# The dashboard and Quick Settings expose knowledge_base.auto_reply_enabled, but
+# the official bot historically only answered via /ask — the toggle did nothing.
+# This implements it: qualifying member questions get answered from the group's
+# knowledge base; unanswered ones are escalated to the configured admins' DMs
+# instead of a public "I don't know".
+# Kill switch: set OFFICIAL_KB_AUTO_REPLY=0 to disable globally without a deploy.
+
+_KB_CASUAL_RE = re.compile(
+    r"^(hi|hello|hey|hiya|howdy|sup|yo|ok|okay|lol|lmao|haha|thanks|thank you|thx"
+    r"|np|yw|brb|gtg|bye|cya|gm|gn|gg)[\s!?.]*$",
+    re.IGNORECASE,
+)
+
+
+def _looks_like_kb_question(text: str, kb_cfg: dict) -> bool:
+    """Heuristic: is this message worth an AI knowledge-base lookup?"""
+    if not text or not text.strip() or text.startswith("/"):
+        return False
+    if len(text.split()) < int(kb_cfg.get("min_message_words", 5) or 0):
+        return False
+    if not re.sub(r"[^\w\s]", "", text, flags=re.UNICODE).strip():
+        return False
+    return not _KB_CASUAL_RE.match(text.lower().strip())
+
+
+async def _maybe_auto_kb_reply(context, message, group_id, settings, flask_app):
+    """Answer a group message from the KB when AI Auto-Reply is enabled."""
+    import os
+    if os.environ.get("OFFICIAL_KB_AUTO_REPLY", "1") == "0":
+        return
+    kb_cfg = (settings or {}).get("knowledge_base", {})
+    if not (kb_cfg.get("enabled", True) and kb_cfg.get("auto_reply_enabled", False)):
+        return
+    if not kb_cfg.get("auto_reply_in_groups", True):
+        return
+
+    text = message.text or ""
+    bot_username = (context.bot.username or "").lower()
+
+    # Detect an explicit interaction: @mention of the bot or a reply to the bot.
+    mentioned = bool(bot_username) and f"@{bot_username}" in text.lower()
+    rt = message.reply_to_message
+    replied_to_bot = bool(
+        rt and rt.from_user and (rt.from_user.username or "").lower() == bot_username
+    )
+    explicit = mentioned or replied_to_bot
+    if kb_cfg.get("auto_reply_mention_only", True) and not explicit:
+        return
+    if mentioned:
+        text = re.sub(rf"@{re.escape(bot_username)}", "", text, flags=re.IGNORECASE).strip()
+
+    # Explicit interactions skip the length/casual heuristics — the member is
+    # deliberately talking to the bot.
+    if explicit:
+        if not text.strip():
+            return
+    elif not _looks_like_kb_question(text, kb_cfg):
+        return
+
+    # Load AI-knowledge auto-replies (incl. escalation-learned answers) so a
+    # previously-resolved question gets answered directly next time.
+    auto_reply_triggers = []
+    group_name = "this community"
+    try:
+        with flask_app.app_context():
+            from .models import TelegramGroup, AutoResponse
+            tg = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
+            if tg:
+                group_name = tg.name or tg.title or group_name
+            if kb_cfg.get("use_auto_replies_as_knowledge", False):
+                trs = AutoResponse.query.filter_by(
+                    telegram_group_id=group_id, is_enabled=True,
+                    use_as_ai_knowledge=True, response_type="auto_response",
+                ).all()
+                auto_reply_triggers = [
+                    {"trigger": t.trigger_text, "response": t.response_text} for t in trs
+                ]
+    except Exception:
+        pass
+
+    try:
+        from .bot_features.knowledge_base import KnowledgeBaseSystem
+        kb = KnowledgeBaseSystem(flask_app)
+        answer, confidence = await kb.answer_question(
+            question=text,
+            group_id=None,
+            telegram_group_id=group_id,
+            group_name=group_name,
+            kb_settings=kb_cfg,
+            auto_reply_triggers=auto_reply_triggers or None,
+        )
+    except Exception as exc:
+        _log.debug("auto KB reply failed: %s", exc)
+        return
+
+    if answer:
+        try:
+            await message.reply_text(answer, parse_mode=ParseMode.MARKDOWN)
+        except Exception:
+            try:
+                await message.reply_text(answer)
+            except Exception:
+                pass
+        return
+
+    # No answer in the KB — ping the configured admins privately (60s/user
+    # cooldown inside _maybe_escalate_kb), with an optional professional ack.
+    escalated = await _maybe_escalate_kb(
+        context.bot, flask_app, group_id, text, message, confidence
+    )
+    if escalated and (settings or {}).get("escalation", {}).get("public_ack", True):
+        try:
+            await message.reply_text(
+                "✅ I've passed your question along to the group admins — "
+                "you'll get an answer shortly."
+            )
+        except Exception:
+            pass
 
 
 # ─── /invitelink — Create a Telegram invite link ──────────────────────────────
