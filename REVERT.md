@@ -284,6 +284,65 @@ git push origin main
 
 ---
 
+## `<sha>` — bot deletion failed with "unexpected error" (FK violation)
+**Date:** 2026-07-20 · **Risk:** medium · **Touches:** data deletion
+
+### What changed
+- Deleting a custom bot from the dashboard returned a 500 for any bot that had ever been
+  used. `DELETE /api/bots/<id>` relied entirely on the `Bot.groups` ORM cascade, but four
+  foreign keys have neither an ORM cascade nor a DB-level `ondelete`:
+  `telegram_group_link_codes.bot_id`, `auto_responses.group_id`,
+  `reported_messages.group_id`, `engagement_campaigns.group_id`. Postgres rejected the
+  DELETE, and the generic 500 handler hid the reason.
+- `delete_bot` now clears those four itself before deleting the bot. Campaigns are removed
+  one at a time through the ORM so their own cascade takes their tasks, custom fields and
+  submissions with them.
+- The whole delete is now wrapped in `try/except` with a rollback, so a failure leaves the
+  bot intact instead of leaving a half-torn-down session, and the real exception is logged.
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Restores the previous code path. Bots that still have any of those four row types
+  become undeletable again (the original bug) — nothing worse than that.
+- ⚠️ Bots already deleted under this commit are **gone**, along with their groups, members,
+  auto-responses, reported messages and engagement campaigns (including campaign
+  submissions and any XP already spent proving them). A revert does not bring back a
+  single row.
+- ⚠️ There is no soft-delete or archive on this path. It was destructive before this
+  commit and it is destructive after.
+
+### Kill switch (if any)
+None, and none is warranted — this is a bug fix on an admin-initiated, explicitly
+confirmed action, not a background job. To stop deletions entirely you would have to
+revert. The blast radius is one bot per deliberate click.
+
+### Safety properties (verified, not assumed)
+Verified by building a throwaway SQLite DB from the real models with `PRAGMA
+foreign_keys=ON` and driving the actual endpoint through a Flask test client:
+- The bug reproduces on the old code path — `sqlite3.IntegrityError: FOREIGN KEY
+  constraint failed` — and the fixed endpoint returns 200 with all six row types gone.
+- Campaign **tasks** are removed too, confirming the per-campaign ORM delete keeps the
+  campaign's own cascade working (a bulk `.delete()` here would have orphaned them).
+- Deleting bot A leaves bot B fully intact — row, group, auto-response, reported message,
+  campaign and link code — even under the same owner.
+- Official-bot-lineage rows (`group_id IS NULL`, anchored on `telegram_group_id`) survive
+  deletion of a custom bot sharing the same Telegram group. Scoping is by `group_id IN
+  (this bot's groups)`, never by `telegram_group_id`.
+- Ownership is still checked first (`Bot.query.filter_by(id=bot_id, user_id=user.id)`), so
+  the cleanup can only ever reach the caller's own groups.
+- Single commit at the end; any exception rolls the whole thing back, so a partial
+  teardown cannot be left behind.
+
+⚠️ Verified on SQLite, not Postgres. The FK topology is identical, but production is
+Postgres — the first real delete is still the real proof.
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown
