@@ -368,7 +368,7 @@ verification pass.
 
 ---
 
-## `<sha>` — groups the bot is in but that never linked were invisible
+## `8738c9b` — groups the bot is in but that never linked were invisible
 **Date:** 2026-07-20 · **Risk:** low · **Touches:** bot hot path (logging only)
 
 ### What changed
@@ -396,7 +396,7 @@ verification pass.
 
 ### To revert
 ```bash
-git revert <sha>
+git revert 8738c9b
 git push origin main
 ```
 
