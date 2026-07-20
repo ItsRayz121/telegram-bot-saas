@@ -159,8 +159,13 @@ export default function MyGroups() {
   const groups = useMemo(() => {
     if (botIdFilter) return allGroups.filter((g) => g.linked_bot_id === botIdFilter);
     if (botTypeFilter === 'official')
+      // linked_via_bot_type is authoritative, matching the "Bot Type" badge below.
+      // The old test also required !linked_bot_id, so a group re-linked to the
+      // official bot while carrying a stale custom-bot id showed the Official
+      // badge in the all-groups list but disappeared from this view.
       return allGroups.filter(
-        (g) => (g.linked_via_bot_type === 'official' || !g.linked_via_bot_type) && !g.linked_bot_id
+        (g) => g.linked_via_bot_type === 'official'
+          || (!g.linked_via_bot_type && !g.linked_bot_id)
       );
     return allGroups;
   }, [allGroups, botIdFilter, botTypeFilter]);

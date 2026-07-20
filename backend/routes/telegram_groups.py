@@ -254,6 +254,11 @@ def link_group():
     tg.bot_status = "active"
     tg.linked_at = datetime.utcnow()
     tg.linked_via_bot_type = "official"
+    # Clear any custom-bot pointer left over from a previous linking. Without
+    # this the group keeps a stale linked_bot_id, shows the "Official Telegizer"
+    # badge, and is then filtered OUT of the official-bot view — present in the
+    # all-groups list but missing from @telegizer_bot's own page.
+    tg.linked_bot_id = None
     tg.group_context = "group_management"
     # Fill in any default sections the group may be missing (handles both
     # brand-new groups and those created before a feature was added).
@@ -453,19 +458,36 @@ def get_pending_groups():
     by_tg_id = {g.telegram_group_id: g for g in unlinked}
     events = BotEvent.query.filter(
         BotEvent.telegram_group_id.in_(list(by_tg_id.keys())),
-        BotEvent.event_type == "bot_added",
-    ).all()
+        BotEvent.event_type.in_(["bot_added", "group_unlinked"]),
+    ).order_by(BotEvent.created_at.asc()).all()
+
+    # unlink_group() sets owner_user_id = NULL, which makes a group the user
+    # deliberately removed look exactly like one that never linked. Without
+    # this, every group they ever unlinked gets resurfaced as "waiting to be
+    # linked" — which is the opposite of what they asked for.
+    added_at = {}     # tg_id -> newest bot_added by THIS user
+    unlinked_at = {}  # tg_id -> newest deliberate unlink
+    for ev in events:
+        gid = ev.telegram_group_id
+        if ev.event_type == "group_unlinked":
+            unlinked_at[gid] = ev.created_at
+            continue
+        added_by = (ev.metadata_ or {}).get("added_by_telegram_id")
+        if added_by is not None and str(added_by) in my_tg_ids:
+            added_at[gid] = ev.created_at
 
     mine = []
-    seen = set()
-    for ev in events:
-        added_by = (ev.metadata_ or {}).get("added_by_telegram_id")
-        if added_by is None or str(added_by) not in my_tg_ids:
+    for gid, when_added in added_at.items():
+        when_unlinked = unlinked_at.get(gid)
+        # Only re-surface if the bot was added again AFTER the last removal —
+        # that is a genuine new join, not a group they chose to get rid of.
+        if when_unlinked and when_unlinked >= when_added:
             continue
-        grp = by_tg_id.get(ev.telegram_group_id)
-        if grp and grp.telegram_group_id not in seen:
-            seen.add(grp.telegram_group_id)
+        grp = by_tg_id.get(gid)
+        if grp:
             mine.append(grp)
+
+    mine.sort(key=lambda g: g.created_at or datetime.min, reverse=True)
 
     return jsonify({
         "groups": [g.to_dict() for g in mine],

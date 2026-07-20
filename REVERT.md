@@ -431,6 +431,62 @@ field's lifecycle, revisit this endpoint.
 
 ---
 
+## `<sha>` — unlinked-groups banner resurfaced groups the user had removed
+**Date:** 2026-07-20 · **Risk:** low · **Touches:** dashboard reads only
+
+### What changed
+Two bugs found immediately after `8738c9b` shipped, one of them caused by it.
+
+1. **The banner showed groups the user had deliberately removed.** `unlink_group` does not
+   delete the row — it sets `owner_user_id = NULL` and `bot_status = "pending"`. That makes
+   a deliberately removed group indistinguishable from one that never linked, so the new
+   banner offered all 9 of them back as "waiting to be linked". `get_pending_groups` now
+   compares the newest `bot_added` event against the newest `group_unlinked` event and
+   suppresses the group when the removal is the more recent of the two. A group whose bot
+   is added *again* after a removal still surfaces — that is a real new join.
+
+2. **Official-bot view was missing groups (pre-existing, not from `8738c9b`).**
+   `link_group` set `linked_via_bot_type = "official"` but never cleared `linked_bot_id`.
+   A group re-linked to the official bot kept its stale custom-bot pointer, so it showed
+   the "Official Telegizer" badge in the all-groups list (which reads `linked_via_bot_type`)
+   yet was filtered out of the official view (which also required `!linked_bot_id`). Fixed
+   at the source — `link_group` now clears `linked_bot_id` — and the frontend filter was
+   aligned with the badge so **existing** rows display correctly with no data migration.
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Fully reversible. Read-path and one write of `linked_bot_id = None` on link; no schema
+  change, no migration, no deletion.
+- ⚠️ Reverting brings back the banner offering removed groups, and re-hides official groups
+  that carry a stale `linked_bot_id`.
+- ⚠️ `linked_bot_id` values cleared by a link performed while this was live are not
+  restored by a revert. They were stale pointers to a bot no longer managing the group, so
+  losing them is the intended outcome, but it is not undone.
+
+### Kill switch (if any)
+None needed. To hide the banner without a deploy, make the endpoint return
+`{"groups": []}`.
+
+### Safety properties (verified, not assumed)
+Driven through a Flask test client against SQLite built from the real models:
+- never-linked group → shown; deliberately unlinked → hidden; unlinked-then-re-added →
+  shown again; another user's group → hidden; currently linked → hidden.
+- The earlier `8738c9b` test suite still passes unchanged (no regression to the privacy
+  scoping).
+- Frontend builds clean.
+
+### Note for whoever reads this next
+`unlink_group` deliberately keeps the row and nulls the owner. Any future "is this group
+orphaned?" logic has the same trap: absence of an owner does **not** mean the user wants
+the group back. Check the `group_unlinked` event before assuming.
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown
