@@ -107,11 +107,6 @@ export default function MyGroups() {
   // Full-screen permissions modal
   const [permsModalGroup, setPermsModalGroup] = useState(null);
 
-  // Groups this user added the bot to that never got linked to their account.
-  // Without this they are invisible everywhere — the bot works in the group but
-  // nothing in the dashboard shows it exists.
-  const [unlinkedGroups, setUnlinkedGroups] = useState([]);
-
   const load = useCallback(async ({ silent = false } = {}) => {
     if (!silent) setLoading(true);
     setLoadError(false);
@@ -143,18 +138,6 @@ export default function MyGroups() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Best-effort — a failure here must never block the main groups list.
-  const loadUnlinked = useCallback(async () => {
-    try {
-      const res = await telegramGroups.getPending();
-      setUnlinkedGroups(res.data.groups || []);
-    } catch {
-      setUnlinkedGroups([]);
-    }
-  }, []);
-
-  useEffect(() => { loadUnlinked(); }, [loadUnlinked]);
-
   // When bot_id is in the URL, show only that custom bot's groups
   const groups = useMemo(() => {
     if (botIdFilter) return allGroups.filter((g) => g.linked_bot_id === botIdFilter);
@@ -179,7 +162,6 @@ export default function MyGroups() {
       setLinkOpen(false);
       setLinkCode('');
       load({ silent: true });
-      loadUnlinked();
       // Show celebration dialog on first group ever linked
       const wasEmpty = allGroups.length === 0;
       if (wasEmpty) setCelebrationGroup(res.data.group?.title || 'your group');
@@ -307,36 +289,6 @@ export default function MyGroups() {
             <Button size="small" sx={{ p: 0, minWidth: 0, textTransform: 'none', fontWeight: 600, verticalAlign: 'baseline' }} onClick={() => navigate('/groups')}>
               View all groups
             </Button>
-          </Alert>
-        )}
-
-        {/* Groups the bot is in but that were never linked to this account.
-            Auto-link on join only fires when the person who added the bot has
-            their Telegram connected to a website account, so these would
-            otherwise be invisible while the bot works fine in the group. */}
-        {unlinkedGroups.length > 0 && (
-          <Alert
-            severity="warning"
-            icon={<Warning fontSize="small" />}
-            sx={{ mb: 2, borderRadius: 2 }}
-            action={
-              <Button size="small" variant="outlined" onClick={() => setLinkOpen(true)}>
-                Link with code
-              </Button>
-            }
-          >
-            <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
-              {unlinkedGroups.length === 1
-                ? '1 group is waiting to be linked'
-                : `${unlinkedGroups.length} groups are waiting to be linked`}
-            </Typography>
-            <Typography variant="caption" color="text.secondary" component="div">
-              {unlinkedGroups.map((g) => g.title || g.telegram_group_id).join(', ')}
-              {' — '}
-              the bot is running there, but the group is not connected to your
-              account yet. Run <code>/linkgroup</code> inside the group, then paste
-              the code here.
-            </Typography>
           </Alert>
         )}
 

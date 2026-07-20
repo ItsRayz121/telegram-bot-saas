@@ -600,8 +600,13 @@ export default function Dashboard() {
   const fetchOfficialGroups = useCallback(async () => {
     try {
       const res = await telegramGroupsApi.list();
+      // Must stay identical to the official-bot filter in MyGroups.js, or this
+      // count disagrees with the list it links to. linked_via_bot_type is
+      // authoritative; a group re-linked to the official bot can still carry a
+      // stale linked_bot_id, and requiring !linked_bot_id dropped it here.
       const officialOnly = (res.data.groups ?? []).filter(
-        (g) => (g.linked_via_bot_type === 'official' || !g.linked_via_bot_type) && !g.linked_bot_id
+        (g) => g.linked_via_bot_type === 'official'
+          || (!g.linked_via_bot_type && !g.linked_bot_id)
       );
       setOfficialGroupCount(officialOnly.length);
     } catch { /* non-fatal */ }
