@@ -284,7 +284,7 @@ git push origin main
 
 ---
 
-## `507db0f` — bot deletion failed with "unexpected error" (FK violation)
+## `507db0f` + `4963903` — bot deletion failed with "unexpected error" (FK violation)
 **Date:** 2026-07-20 · **Risk:** medium · **Touches:** data deletion
 
 ### What changed
@@ -309,14 +309,32 @@ git push origin main
   - `scheduler.py` GDPR purge job — same loop, same failure.
 
 ### To revert
+This fix landed as **two commits**, and `507db0f` alone is not revertable — `4963903`
+rewrote the same hunk in `bots.py` and moved the cleanup into `purge_bot_dependents()` in
+`models.py`. Reverting only `507db0f` conflicts in `bots.py`; forcing that resolution
+leaves `routes/bots.py` importing a helper that no longer exists, which is an ImportError
+at startup for the whole bots blueprint — a worse outage than the bug.
+
+Revert both, newest first. `REVERT.md` conflicts (both commits edited it) and is restored
+untouched, since docs do not need to roll back to fix production:
+
 ```bash
-git revert 507db0f
+git revert --no-commit 4963903 507db0f
+git checkout HEAD -- REVERT.md
+git commit -m "revert: bot-delete FK fix (507db0f + 4963903)"
 git push origin main
 ```
+
+Verified 2026-07-20: this sequence applies with **zero conflicts** in the code, and the
+resulting tree compiles with no dangling `purge_bot_dependents` references.
 
 ### What revert restores, and what it does NOT
 - ✅ Restores the previous code path. Bots that still have any of those four row types
   become undeletable again (the original bug) — nothing worse than that.
+- ⚠️ Reverting brings back the **broken GDPR erasure path** in `routes/auth.py` and
+  `scheduler.py`: account deletion fails for any user who has ever used a bot. If you
+  revert for a bot-deletion problem, you have re-broken right-to-erasure — treat that as
+  a live compliance issue, not a dormant one.
 - ⚠️ Bots already deleted under this commit are **gone**, along with their groups, members,
   auto-responses, reported messages and engagement campaigns (including campaign
   submissions and any XP already spent proving them). A revert does not bring back a
