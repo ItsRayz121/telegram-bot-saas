@@ -284,7 +284,7 @@ git push origin main
 
 ---
 
-## `<sha>` — bot deletion failed with "unexpected error" (FK violation)
+## `507db0f` — bot deletion failed with "unexpected error" (FK violation)
 **Date:** 2026-07-20 · **Risk:** medium · **Touches:** data deletion
 
 ### What changed
@@ -302,7 +302,7 @@ git push origin main
 
 ### To revert
 ```bash
-git revert <sha>
+git revert 507db0f
 git push origin main
 ```
 
