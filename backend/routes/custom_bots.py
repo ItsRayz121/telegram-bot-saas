@@ -275,6 +275,9 @@ def delete_custom_bot(bot_id):
         ).first()
         if bot_rec:
             _bm.stop_bot(bot_rec.id)
+            # Same FK wall as DELETE /api/bots/<id> — see purge_bot_dependents.
+            from ..models import purge_bot_dependents
+            purge_bot_dependents(bot_rec)
             db.session.delete(bot_rec)
     except Exception as e:
         import logging as _log

@@ -1174,6 +1174,13 @@ def _purge_user_data(user):
         (Referral.referrer_user_id == uid) | (Referral.referred_user_id == uid)
     ).delete(synchronize_session=False)
 
+    # Bots cascade into groups, and several tables referencing groups.id have
+    # no cascade of their own — clear them first or db.session.delete(user)
+    # raises IntegrityError for any user who has ever used a bot.
+    from ..models import purge_bot_dependents
+    for bot in user.bots:
+        purge_bot_dependents(bot)
+
     # Group/bot configurations — instance deletes so ORM child cascades
     # (members, commands, warnings, events, ...) fire.
     for grp in TelegramGroup.query.filter_by(owner_user_id=uid).all():

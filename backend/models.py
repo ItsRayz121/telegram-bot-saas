@@ -362,6 +362,42 @@ class Bot(db.Model):
         return data
 
 
+def purge_bot_dependents(bot):
+    """Delete rows referencing a Bot (or its groups) that have neither an ORM
+    cascade nor a DB-level ON DELETE. Without this, db.session.delete(bot)
+    raises IntegrityError for any bot that has ever been used.
+
+    Call this immediately before deleting a Bot, or before deleting a User
+    (whose `bots` relationship cascades into the same wall).
+
+    Mirrors _purge_user_data() in routes/auth.py, which does the same job for
+    rows referencing users.id.
+
+    The four FKs handled here are the complete set — verified by walking the
+    delete closure over db.metadata, not by grep. If you add a table with a
+    FK to bots.id or groups.id, give it an ondelete or add it here.
+    """
+    group_ids = [g.id for g in bot.groups]
+
+    if group_ids:
+        AutoResponse.query.filter(
+            AutoResponse.group_id.in_(group_ids)
+        ).delete(synchronize_session=False)
+        ReportedMessage.query.filter(
+            ReportedMessage.group_id.in_(group_ids)
+        ).delete(synchronize_session=False)
+        # ORM delete (not bulk) so each campaign's own cascade removes its
+        # tasks, custom fields and submissions.
+        for campaign in EngagementCampaign.query.filter(
+            EngagementCampaign.group_id.in_(group_ids)
+        ).all():
+            db.session.delete(campaign)
+
+    TelegramGroupLinkCode.query.filter_by(bot_id=bot.id).delete(
+        synchronize_session=False
+    )
+
+
 class Group(db.Model):
     __tablename__ = "groups"
 

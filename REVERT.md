@@ -294,11 +294,19 @@ git push origin main
   `telegram_group_link_codes.bot_id`, `auto_responses.group_id`,
   `reported_messages.group_id`, `engagement_campaigns.group_id`. Postgres rejected the
   DELETE, and the generic 500 handler hid the reason.
-- `delete_bot` now clears those four itself before deleting the bot. Campaigns are removed
-  one at a time through the ORM so their own cascade takes their tasks, custom fields and
-  submissions with them.
+- The cleanup lives in `purge_bot_dependents(bot)` in `backend/models.py`, mirroring the
+  existing `_purge_user_data()` in `routes/auth.py`. Campaigns are removed one at a time
+  through the ORM so their own cascade takes their tasks, custom fields and submissions
+  with them — a bulk delete would have orphaned those.
 - The whole delete is now wrapped in `try/except` with a rollback, so a failure leaves the
   bot intact instead of leaving a half-torn-down session, and the real exception is logged.
+- **A follow-up cross-check found the same wall on three more paths**, all now calling the
+  same helper:
+  - `routes/custom_bots.py` `delete_custom_bot` — deletes the mirrored `Bot` row.
+  - `routes/auth.py` `_purge_user_data` — self-serve account deletion. `User.bots` cascades
+    into groups, so **GDPR right-to-erasure was broken** for any user who had ever used a
+    bot. This is the most serious of the four.
+  - `scheduler.py` GDPR purge job — same loop, same failure.
 
 ### To revert
 ```bash
@@ -326,6 +334,16 @@ Verified by building a throwaway SQLite DB from the real models with `PRAGMA
 foreign_keys=ON` and driving the actual endpoint through a Flask test client:
 - The bug reproduces on the old code path — `sqlite3.IntegrityError: FOREIGN KEY
   constraint failed` — and the fixed endpoint returns 200 with all six row types gone.
+- The four FKs are the **complete** set, established by walking the delete closure over
+  `db.metadata` (every table reachable from `bots`, and every FK pointing into them),
+  not by grep. That audit now reports zero unhandled FKs.
+- All five delete paths pass — helper, dashboard endpoint, custom-bot delete,
+  `_purge_user_data` + `delete(user)`, and the scheduler loop — leaving zero orphan rows.
+- The DB-level `ondelete` clauses the closure relies on (`bot_group_commands`,
+  `escalation_events`, `engagement_submissions.task_id`, `auto_reply_logs`) were checked
+  against git history and `migrate.py`: each was present when its table/column was first
+  created, so production's constraints match the models. `db.create_all()` never alters
+  an existing table, which is what made this worth checking.
 - Campaign **tasks** are removed too, confirming the per-campaign ORM delete keeps the
   campaign's own cascade working (a bulk `.delete()` here would have orphaned them).
 - Deleting bot A leaves bot B fully intact — row, group, auto-response, reported message,
@@ -340,6 +358,13 @@ foreign_keys=ON` and driving the actual endpoint through a Flask test client:
 
 ⚠️ Verified on SQLite, not Postgres. The FK topology is identical, but production is
 Postgres — the first real delete is still the real proof.
+
+### Known adjacent bug, NOT fixed here
+`routes/admin.py delete_user` (`DELETE /api/admin/users/<id>`) calls `db.session.delete(user)`
+without ever calling `_purge_user_data()`. It will fail on dozens of `users.id` FKs, not just
+the bot ones — a broader pre-existing bug, deliberately left alone to keep this commit
+scoped. Fix is likely one line (call `_purge_user_data(user)` first) but needs its own
+verification pass.
 
 ---
 

@@ -1706,7 +1706,9 @@ def hard_delete_user(user_id: int):
             )
 
             # Delete bots + cascaded groups/members/logs
+            from .models import purge_bot_dependents
             for bot in Bot.query.filter_by(user_id=user_id).all():
+                purge_bot_dependents(bot)
                 db.session.delete(bot)
 
             # Anonymise user record (keep row for referential integrity if needed)

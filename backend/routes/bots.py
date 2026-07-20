@@ -2,7 +2,7 @@ import requests as http_requests
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
-from ..models import db, User, Bot, Group, AdminAuditLog
+from ..models import db, User, Bot, Group, AdminAuditLog, purge_bot_dependents
 from ..middleware.rate_limit import rate_limit
 
 bots_bp = Blueprint("bots", __name__, url_prefix="/api/bots")
@@ -170,38 +170,8 @@ def delete_bot(bot_id):
     except Exception as e:
         current_app.logger.error(f"Failed to stop bot {bot_id}: {e}")
 
-    # Bot.groups cascades to members/audit_logs/scheduled_messages/raids/
-    # knowledge_documents/polls/webhook_integrations/invite_links/api_keys.
-    # These four FKs have no ORM cascade and no DB-level ondelete, so they
-    # must be cleared by hand or the DELETE fails with a FK violation.
     try:
-        from ..models import (
-            AutoResponse,
-            EngagementCampaign,
-            ReportedMessage,
-            TelegramGroupLinkCode,
-        )
-
-        group_ids = [g.id for g in bot.groups]
-
-        if group_ids:
-            AutoResponse.query.filter(
-                AutoResponse.group_id.in_(group_ids)
-            ).delete(synchronize_session=False)
-            ReportedMessage.query.filter(
-                ReportedMessage.group_id.in_(group_ids)
-            ).delete(synchronize_session=False)
-            # ORM delete (not bulk) so the campaign's own cascade removes its
-            # tasks, custom fields and submissions.
-            for campaign in EngagementCampaign.query.filter(
-                EngagementCampaign.group_id.in_(group_ids)
-            ).all():
-                db.session.delete(campaign)
-
-        TelegramGroupLinkCode.query.filter_by(bot_id=bot_id).delete(
-            synchronize_session=False
-        )
-
+        purge_bot_dependents(bot)
         db.session.delete(bot)
         db.session.commit()
     except Exception as e:
