@@ -2412,8 +2412,26 @@ async def on_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                 _log_event(flask_app, group_id, "group_auto_linked",
                                            f"Group auto-linked to user {website_user.id}",
                                            {"telegram_user_id": added_by})
+                            else:
+                                _log.warning(
+                                    "Auto-link skipped for group %s: no TelegramGroup "
+                                    "row (upsert must have failed)", group_id,
+                                )
+                    else:
+                        # The most common reason a group never reaches the
+                        # dashboard: whoever added the bot has no website
+                        # account connected to their Telegram identity.
+                        _log.info(
+                            "Auto-link skipped for group %s: telegram user %s is not "
+                            "linked to a website account", group_id, added_by,
+                        )
             except Exception as exc:
-                _log.debug("Auto-link on join failed: %s", exc)
+                # Was debug, so a group silently failing to link left no trace
+                # and the group then showed up nowhere in the dashboard.
+                _log.warning(
+                    "Auto-link on join failed for group %s (added_by=%s): %s",
+                    group_id, added_by, exc, exc_info=True,
+                )
 
         if auto_linked:
             try:

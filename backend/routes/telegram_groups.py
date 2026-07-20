@@ -406,18 +406,74 @@ def get_group_events(group_id):
 @jwt_required()
 @rate_limit(requests_per_minute=30)
 def get_pending_groups():
-    """Groups where bot is present but not yet linked to any user."""
+    """Groups this user added the bot to that never got linked to an account.
+
+    Two things were wrong here before:
+
+    1. It filtered on bot_status == "pending", but on_my_chat_member calls
+       _refresh_permissions right after _upsert_group, which sets the status to
+       "active" before linking is even attempted. So a group where the bot works
+       correctly could never appear — only ones where fetching permissions
+       failed. A group that failed to auto-link was invisible in both this list
+       and GET /api/telegram-groups, with no way to find it in the dashboard.
+
+    2. It returned every unlinked group on the platform to any logged-in user —
+       titles, usernames, member counts. Harmless while nothing called it, a
+       leak the moment it was wired into the UI. Scoped now to groups this user
+       personally added the bot to, proven by the bot_added event.
+
+    Claiming still requires a /linkgroup code — this only makes the group
+    visible so the user knows it exists and what to do about it.
+    """
     user = _current_user()
     if not user:
         return jsonify({"error": "User not found"}), 404
 
-    # Return unlinked groups — user must supply link code to claim
-    pending = TelegramGroup.query.filter_by(
-        owner_user_id=None,
-        bot_status="pending",
-    ).order_by(TelegramGroup.created_at.desc()).limit(50).all()
+    # Every Telegram identity belonging to this account (legacy column + the
+    # junction table), mirroring _user_by_tg_id() in official_bot.py.
+    from ..models import UserTelegramAccount
+    my_tg_ids = {str(a.telegram_user_id) for a in
+                 UserTelegramAccount.query.filter_by(user_id=user.id).all()}
+    if user.telegram_user_id:
+        my_tg_ids.add(str(user.telegram_user_id))
+    if not my_tg_ids:
+        # No Telegram account connected — nothing can be attributed to them.
+        return jsonify({"groups": []})
 
-    return jsonify({"groups": [g.to_dict() for g in pending]})
+    unlinked = TelegramGroup.query.filter(
+        TelegramGroup.owner_user_id.is_(None),
+        TelegramGroup.is_disabled == False,  # noqa: E712
+        TelegramGroup.bot_status != "removed",
+    ).order_by(TelegramGroup.created_at.desc()).limit(200).all()
+    if not unlinked:
+        return jsonify({"groups": []})
+
+    # Attribute each group to whoever added the bot. Filtering in Python keeps
+    # this portable — JSON column querying differs between Postgres and SQLite.
+    by_tg_id = {g.telegram_group_id: g for g in unlinked}
+    events = BotEvent.query.filter(
+        BotEvent.telegram_group_id.in_(list(by_tg_id.keys())),
+        BotEvent.event_type == "bot_added",
+    ).all()
+
+    mine = []
+    seen = set()
+    for ev in events:
+        added_by = (ev.metadata_ or {}).get("added_by_telegram_id")
+        if added_by is None or str(added_by) not in my_tg_ids:
+            continue
+        grp = by_tg_id.get(ev.telegram_group_id)
+        if grp and grp.telegram_group_id not in seen:
+            seen.add(grp.telegram_group_id)
+            mine.append(grp)
+
+    return jsonify({
+        "groups": [g.to_dict() for g in mine],
+        "hint": (
+            "Run /linkgroup in the group, then open the bot privately to get "
+            "your code and paste it below."
+        ) if mine else None,
+    })
 
 
 # ── Warnings ───────────────────────────────────────────────────────────────────

@@ -368,6 +368,69 @@ verification pass.
 
 ---
 
+## `<sha>` — groups the bot is in but that never linked were invisible
+**Date:** 2026-07-20 · **Risk:** low · **Touches:** bot hot path (logging only)
+
+### What changed
+- Reported symptom: a group was added to the official bot, the bot worked in it, but
+  the group appeared nowhere on the website.
+- Auto-link on join only fires when whoever added the bot has their Telegram connected
+  to a website account (`_user_by_tg_id`). When it doesn't fire, the group is left with
+  `owner_user_id = NULL` — and was then invisible in **both** places that could show it:
+  - `GET /api/telegram-groups` filters on `owner_user_id == you` → no match.
+  - `GET /api/telegram-groups/pending` filtered on `bot_status == "pending"`, but
+    `on_my_chat_member` calls `_refresh_permissions` right after `_upsert_group`, which
+    sets the status to `"active"` before linking is attempted. So the pending list could
+    only ever show groups where *fetching permissions failed* — exactly backwards.
+  - It wouldn't have helped anyway: `getPending()` existed in `api.js` but was never
+    called anywhere in the frontend.
+- `get_pending_groups` now keys off `owner_user_id IS NULL` + `bot_status != "removed"`,
+  and `MyGroups.js` shows a banner listing those groups with the `/linkgroup` instruction.
+- **Security fix in the same endpoint:** it previously returned *every* unlinked group on
+  the platform to *any* logged-in user (titles, usernames, member counts). Harmless while
+  nothing called it, a live leak the moment it was wired into the UI. Now scoped to groups
+  the caller personally added the bot to, proven by the `bot_added` event in `bot_events`.
+- The auto-link failure was logged at `debug`, which is why this was invisible in the
+  logs. Raised to `warning` with a traceback, plus an `info` line for the common case
+  (adder has no linked website account).
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Fully reversible. No schema change, no data migration, no writes to existing rows —
+  this only changes which rows a read endpoint returns, plus log levels and one banner.
+- ⚠️ Reverting restores the information leak described above. If you revert this, do not
+  wire `getPending()` into the UI.
+- ⚠️ Groups linked while this was live stay linked. Reverting does not unlink them.
+
+### Kill switch (if any)
+None needed — nothing here runs in the background or touches money or data. To hide the
+banner without a deploy, the endpoint can be made to return `{"groups": []}`.
+
+### Safety properties (verified, not assumed)
+Verified against a throwaway SQLite DB with the real models, driving the endpoint through
+a Flask test client:
+- The old filter finds **nothing** for a group in the reported state (bug reproduced), and
+  the new endpoint surfaces exactly that group.
+- A second user does **not** see the first user's unlinked group, and vice versa —
+  each sees only their own.
+- An already-linked group does **not** appear in the pending list.
+- Claiming still requires a valid `/linkgroup` code; this change only makes the group
+  visible. No new way to take ownership of a group was added.
+- Frontend builds clean; the banner reuses the existing link dialog.
+
+### Note for whoever reads this next
+The real root cause is that `_refresh_permissions` sets `bot_status = "active"` before
+linking is attempted, so `"pending"` never means what its name suggests. This commit works
+around that rather than fixing it, because other code reads `bot_status`. If you touch that
+field's lifecycle, revisit this endpoint.
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown
