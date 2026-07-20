@@ -431,7 +431,7 @@ field's lifecycle, revisit this endpoint.
 
 ---
 
-## `<sha>` — unlinked-groups banner resurfaced groups the user had removed
+## `e74dbc3` — unlinked-groups banner resurfaced groups the user had removed
 **Date:** 2026-07-20 · **Risk:** low · **Touches:** dashboard reads only
 
 ### What changed
@@ -455,7 +455,7 @@ Two bugs found immediately after `8738c9b` shipped, one of them caused by it.
 
 ### To revert
 ```bash
-git revert <sha>
+git revert e74dbc3
 git push origin main
 ```
 
