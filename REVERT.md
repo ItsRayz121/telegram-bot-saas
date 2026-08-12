@@ -30,10 +30,48 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 | `RETENTION_XP_DAYS` | e.g. `3650` | Effectively stops XP pruning without disabling the rest. |
 | `ENGAGEMENT_PROMO` | `false` | Turns off the promo footer. |
 | `USE_CELERY` | `1` | Re-enables Celery dispatch (see `railway.worker.toml` for the full 4 steps). |
+| `GUNICORN_MAX_REQUESTS` | `0` | Stops the web worker from recycling itself. |
 
 ---
 
 # Change log — newest first
+
+---
+
+## `3ad8dde` — recycle gunicorn worker periodically to cap memory creep
+**Date:** 2026-08-12 · **Risk:** low · **Touches:** hot path
+
+### What changed
+- `Procfile`: web dyno now restarts its worker every ~500 (±50) requests via
+  `gunicorn --max-requests` / `--max-requests-jitter`, so any slow RSS growth
+  or allocator fragmentation gets returned to the OS instead of accumulating
+  for the life of the deploy.
+- Both numbers are env-overridable (`GUNICORN_MAX_REQUESTS`,
+  `GUNICORN_MAX_REQUESTS_JITTER`); the Procfile values are just defaults.
+- Purely a Railway memory-cost optimization — no application behavior change.
+
+### To revert
+​```bash
+git revert 3ad8dde
+git push origin main
+​```
+
+### What revert restores, and what it does NOT
+- ✅ Web worker runs for the life of the deploy again, never self-restarting.
+- ⚠️ Nothing is deleted, sent, or charged by this change either way — it only
+  affects when the single worker process recycles itself.
+
+### Kill switch (if any)
+Set `GUNICORN_MAX_REQUESTS=0` in Railway → web service → Variables. Gunicorn
+treats `0` as "disabled." Takes effect on the next restart (~30s), no deploy.
+
+### Safety properties (verified, not assumed)
+- `--workers 1`, so a recycle briefly drops the listener while the old worker
+  finishes its in-flight request and the new one boots; `--graceful-timeout 20`
+  already governs that window. Telegram retries webhook deliveries on
+  failure, so a missed update is redelivered, not lost.
+- 500 requests is a request-count trigger, not a timer — low-traffic periods
+  won't force restarts.
 
 ---
 
