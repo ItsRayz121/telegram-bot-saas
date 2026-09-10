@@ -228,6 +228,84 @@ _official_slow_warn_tracker: dict = {}
 # Per (group,user) cooldown so /ask spam can't flood admin DMs with escalations.
 _kb_escalation_cooldown: dict = {}
 
+
+# ─── Retention for the in-process trackers above ─────────────────────────────
+# _spam_tracker / _official_slow_tracker / _official_slow_warn_tracker /
+# _official_ai_cooldown / _kb_escalation_cooldown are all keyed per
+# (chat, user) — one entry for every member who has ever sent a message in an
+# official-bot group — and none of them ever shrank. They grew in step with the
+# member base for the life of the process; only a redeploy reclaimed them, which
+# is exactly the "slow RAM creep" the Gunicorn worker recycle was hiding.
+#
+# Eviction is behaviour-preserving by construction: every call site reads these
+# as `now - last < window`, so an entry older than the widest window any config
+# can express already fails that test and is indistinguishable from a missing
+# key. The 24h cutoff is far wider than any real setting (spam windows are
+# seconds, slow-mode gaps minutes, the AI and escalation cooldowns ≤ a few
+# minutes), so no live cooldown is ever cut short.
+#
+# _dm_modes is NOT pruned: it holds a mode ("menu"/"assistant"), not a
+# timestamp, and dropping an entry would silently kick a user out of assistant
+# mode. It is one small int→str pair per user who has ever DM'd the bot.
+_TRACKER_TTL_SECONDS = 24 * 3600
+
+
+def collect_official_cache_sizes() -> dict:
+    """Read-only sizes of the trackers above — no eviction. For diagnostics."""
+    return {
+        "spam_tracker": len(_spam_tracker),
+        "slow_tracker": len(_official_slow_tracker),
+        "slow_warn_tracker": len(_official_slow_warn_tracker),
+        "ai_cooldown": len(_official_ai_cooldown),
+        "kb_escalation_cooldown": len(_kb_escalation_cooldown),
+        "pending_verifications": len(_pending_verifications),
+        "dm_modes": len(_dm_modes),
+    }
+
+
+def prune_official_caches() -> dict:
+    """Drop stale entries from the module-level trackers. Never raises.
+
+    Returns post-prune sizes, for the memory diagnostics endpoint.
+    """
+    cutoff = datetime.utcnow() - timedelta(seconds=_TRACKER_TTL_SECONDS)
+    try:
+        # _spam_tracker values are LISTS of timestamps, not a single timestamp.
+        for key, stamps in list(_spam_tracker.items()):
+            if not stamps or max(stamps) < cutoff:
+                _spam_tracker.pop(key, None)
+
+        for tracker in (
+            _official_slow_tracker,
+            _official_slow_warn_tracker,
+            _official_ai_cooldown,
+            _kb_escalation_cooldown,
+        ):
+            for key, last in list(tracker.items()):
+                if last is None or last < cutoff:
+                    tracker.pop(key, None)
+
+        # Pending verifications carry an explicit expires_at and are popped on
+        # answer/timeout — but a lost timeout handler (bot restart, loop
+        # teardown) orphans the entry. Sweep anything well past expiry.
+        for key, val in list(_pending_verifications.items()):
+            exp = (val or {}).get("expires_at")
+            if exp is None or datetime.utcnow() > exp + timedelta(minutes=10):
+                _pending_verifications.pop(key, None)
+    except Exception as exc:  # pragma: no cover - defensive
+        _log.debug("[OfficialBot] prune_official_caches failed (ignored): %s", exc)
+
+    return {
+        "spam_tracker": len(_spam_tracker),
+        "slow_tracker": len(_official_slow_tracker),
+        "slow_warn_tracker": len(_official_slow_warn_tracker),
+        "ai_cooldown": len(_official_ai_cooldown),
+        "kb_escalation_cooldown": len(_kb_escalation_cooldown),
+        "pending_verifications": len(_pending_verifications),
+        "dm_modes": len(_dm_modes),
+    }
+
+
 # Default word list for word-method verification
 _DEFAULT_VERIFY_WORDS = [
     ("python", "What programming language is named after a snake?"),

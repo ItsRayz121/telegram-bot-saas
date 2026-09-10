@@ -81,13 +81,25 @@ from .routes.team import team_bp
 from .routes.blog import blog_bp
 from .routes.chat import support_bp
 from .assistant import hub_models as _hub_models_import  # noqa: F401 — ensures models registered with db.create_all()
-from .bot_manager import BotManager
+from .bot_manager import bot_manager
 from .official_bot import start_official_bot
 from .echo_bot import start_echo_bot
 
 _scheduler_log = logging.getLogger(__name__)
 
-bot_manager = BotManager()
+# NOTE: bot_manager is imported, NOT constructed here. It used to be a second
+# `BotManager()` instance, which split the fleet's bookkeeping in two: this module
+# started every bot, while every `from ..bot_manager import bot_manager` call site
+# (routes/bots.py, custom_bots.py, settings.py, digest.py, hub.py, auth.py,
+# scheduler.py) talked to a permanently EMPTY manager. That meant
+#   • stop_bot() from the dashboard / bot deletion silently no-op'd, so the real
+#     polling thread kept long-polling Telegram forever with no DB row behind it —
+#     an orphan that nothing could ever reap, until the worker recycled;
+#   • GET /api/bots/<id>/status saw is_running()==False and "auto-restarted" a bot
+#     that was already running, giving one token two pollers (409 Conflict) and
+#     doubling its RAM;
+#   • "thread_alive" in the bots API was always False.
+# One process, one manager.
 
 # ── Graceful shutdown — stops all polling threads before the process exits ────
 # Railway rolling deploys start the new container before killing the old one.
@@ -2454,6 +2466,59 @@ def _cleanup_message_buffers(app):
         _scheduler_log.debug("MessageBuffer cleanup failed: %s", exc)
 
 
+def collect_in_process_cache_sizes(prune: bool = False) -> dict:
+    """Size (and optionally prune) every in-process per-user map in this process.
+
+    These maps are keyed per (chat, user) and none of them used to shrink, so RSS
+    grew in step with the member base until the worker recycled. Called by the
+    scheduler every 10 minutes with prune=True, and read-only by the memory
+    diagnostics endpoint. Never raises.
+    """
+    out: dict = {}
+    try:
+        from .official_bot import prune_official_caches, collect_official_cache_sizes
+        out["official_bot"] = (
+            prune_official_caches() if prune else collect_official_cache_sizes()
+        )
+    except Exception as exc:
+        out["official_bot"] = {"error": str(exc)}
+
+    per_bot = {}
+    try:
+        with bot_manager._lock:
+            instances = list(bot_manager.active_bots.items())
+        for bot_id, inst in instances:
+            entry = {}
+            for attr in ("moderation", "verification"):
+                sub = getattr(inst, attr, None)
+                fn = getattr(sub, "prune", None) if sub is not None else None
+                if fn is None:
+                    continue
+                try:
+                    entry[attr] = fn() if prune else _sizes_only(sub)
+                except Exception as exc:
+                    entry[attr] = {"error": str(exc)}
+            per_bot[str(bot_id)] = entry
+    except Exception as exc:
+        per_bot = {"error": str(exc)}
+    out["custom_bots"] = per_bot
+    return out
+
+
+def _sizes_only(obj) -> dict:
+    """len() of every dict attribute on *obj* — read-only counterpart to prune()."""
+    return {
+        name: len(val)
+        for name, val in vars(obj).items()
+        if isinstance(val, dict)
+    }
+
+
+def _prune_in_process_caches():
+    sizes = collect_in_process_cache_sizes(prune=True)
+    _scheduler_log.debug("in-process cache sizes after prune: %s", sizes)
+
+
 def _cleanup_revoked_tokens():
     """Delete expired rows from revoked_tokens to prevent unbounded table growth.
 
@@ -2473,8 +2538,47 @@ def _cleanup_revoked_tokens():
             pass
 
 
+# ── Scheduler worker pool ─────────────────────────────────────────────────────
+# One pool for the whole scheduler, created once. The previous version opened a
+# fresh ThreadPoolExecutor per job per tick — ~15 jobs every 60 s, so roughly
+# 20 000 OS threads created and destroyed per day. Two things came out of that:
+#
+#   1. RSS creep. glibc hands a fresh malloc arena to a new thread (up to
+#      8 x ncores of them) and never really gives the memory back, so a process
+#      that churns threads all day grows even with no leak in Python objects.
+#      This is what the periodic Gunicorn worker recycle was papering over.
+#   2. The timeout did not actually time anything out. `with ThreadPoolExecutor()`
+#      calls shutdown(wait=True) on exit, so after `future.result(timeout=30)`
+#      raised TimeoutError the __exit__ blocked until the runaway job finished.
+#      A single hung Telegram/OpenAI call stalled the ENTIRE scheduler — all 19
+#      jobs — for as long as it hung, with a log line claiming it had timed out.
+#
+# With a shared pool a timed-out job keeps running on its own worker and the loop
+# moves on. Kill switch: SCHEDULER_SHARED_POOL=0 restores the old per-call
+# executor without a code change.
+_SCHED_POOL = None
+_SCHED_POOL_LOCK = threading.Lock()
+
+
+def _scheduler_pool():
+    global _SCHED_POOL
+    if _SCHED_POOL is None:
+        with _SCHED_POOL_LOCK:
+            if _SCHED_POOL is None:
+                import concurrent.futures
+                try:
+                    workers = max(2, int(os.environ.get("SCHEDULER_POOL_WORKERS", "4")))
+                except ValueError:
+                    workers = 4
+                _SCHED_POOL = concurrent.futures.ThreadPoolExecutor(
+                    max_workers=workers, thread_name_prefix="sched",
+                )
+    return _SCHED_POOL
+
+
 def _run_task_with_timeout(fn, *args, timeout=30, label="task", flask_app=None):
-    """Run *fn* in a worker thread; push an app context in the thread if flask_app is given.
+    """Run *fn* on the shared scheduler pool; push an app context in the worker
+    thread if flask_app is given.
 
     All errors and timeouts are logged and captured to Sentry so scheduler failures
     surface in alerting rather than disappearing silently into log files.
@@ -2487,8 +2591,15 @@ def _run_task_with_timeout(fn, *args, timeout=30, label="task", flask_app=None):
                 return fn(*args)
         return fn(*args)
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        future = pool.submit(_run)
+    if os.environ.get("SCHEDULER_SHARED_POOL", "1").strip().lower() in ("0", "false", "no"):
+        pool_cm = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        owned = True
+    else:
+        pool_cm = _scheduler_pool()
+        owned = False
+
+    try:
+        future = pool_cm.submit(_run)
         try:
             future.result(timeout=timeout)
         except concurrent.futures.TimeoutError:
@@ -2508,6 +2619,10 @@ def _run_task_with_timeout(fn, *args, timeout=30, label="task", flask_app=None):
                     sentry_sdk.capture_exception(exc)
             except Exception:
                 pass
+    finally:
+        if owned:
+            # Don't wait on the runaway task — that was the old stall.
+            pool_cm.shutdown(wait=False)
 
 
 def _run_hub_priority_extraction(app):
@@ -2733,6 +2848,7 @@ def _scheduler_loop(app):
     _last_calendar_sync = [0]
     _last_calendar_pull = [0]
     _last_retention_report = [0]
+    _last_cache_prune = [0]
     time.sleep(15)  # Wait for bots to fully start
     while True:
         try:
@@ -2751,6 +2867,12 @@ def _scheduler_loop(app):
             if now_ts - _last_heartbeat[0] > 300:
                 _last_heartbeat[0] = now_ts
                 _run_task_with_timeout(bot_manager.heartbeat, app, timeout=30, label="bot_heartbeat")
+            # In-process per-user cache prune every 10 minutes. Cheap (a few
+            # dict scans) and the only thing that stops these maps growing for
+            # the whole life of the process.
+            if now_ts - _last_cache_prune[0] > 600:
+                _last_cache_prune[0] = now_ts
+                _run_task_with_timeout(_prune_in_process_caches, timeout=30, label="_prune_in_process_caches")
             # Bot watchdog: restart dead threads every 2 minutes
             if now_ts - _last_watchdog[0] > 120:
                 _last_watchdog[0] = now_ts

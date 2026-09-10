@@ -31,10 +31,92 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 | `ENGAGEMENT_PROMO` | `false` | Turns off the promo footer. |
 | `USE_CELERY` | `1` | Re-enables Celery dispatch (see `railway.worker.toml` for the full 4 steps). |
 | `GUNICORN_MAX_REQUESTS` | `0` | Stops the web worker from recycling itself. |
+| `SCHEDULER_SHARED_POOL` | `0` | Scheduler goes back to a fresh thread pool per job per tick. |
+| `MALLOC_ARENA_MAX` | `8` | Restores glibc's default per-thread malloc arenas. |
 
 ---
 
 # Change log — newest first
+
+---
+
+## `<pending>` — cut web-service RAM: one bot manager, one scheduler pool, bounded per-user caches
+**Date:** 2026-09-10 · **Risk:** medium · **Touches:** bot hot path
+
+### What changed
+- **`backend/app.py` no longer constructs its own `BotManager`.** There were two
+  instances: `app.py` started every bot, while every `from ..bot_manager import
+  bot_manager` call site (`routes/bots.py`, `custom_bots.py`, `settings.py`, `digest.py`,
+  `hub.py`, `auth.py`, `scheduler.py`) talked to a permanently empty one. Consequences
+  that are now fixed: `stop_bot()` from the dashboard or bot deletion silently no-op'd,
+  leaving a poller running forever with no DB row behind it; `GET /api/bots/<id>/status`
+  saw `is_running()==False` and "auto-restarted" an already-running bot, giving one token
+  two pollers (409 Conflict) and double its RAM; `thread_alive` was always `False`.
+- **One shared scheduler thread pool** instead of a new `ThreadPoolExecutor` per job per
+  tick (~15 jobs/minute, ~20k thread creations/day). Also fixes the timeout: `with
+  ThreadPoolExecutor()` called `shutdown(wait=True)` on exit, so after a job "timed out"
+  the loop blocked until it actually finished — one hung Telegram/OpenAI call stalled all
+  19 jobs while the log claimed a timeout.
+- **`MALLOC_ARENA_MAX=2`** in the `Procfile`. glibc hands each new thread its own 64 MB
+  arena and does not really give it back, so thread churn grows RSS with no Python leak.
+- **Per-`(chat, user)` maps are now pruned** every 10 minutes: `official_bot`'s five
+  trackers, `ModerationSystem`'s four, and `VerificationSystem.pending` /
+  `first_message_pending`. None of them ever shrank — one entry per member who had ever
+  sent a message, for the life of the process. `first_message_pending` was the worst: it
+  held a detached ORM group row, its settings JSON and a Telegram User object for every
+  member who joined and never posted.
+- **`knowledge_base` ranking** keeps only the top 3 chunk texts (`heapq.nlargest`) instead
+  of full-sorting every chunk and holding every 1536-float embedding live across the LLM
+  call, and hoists the query norm out of the per-chunk cosine (a third of the arithmetic).
+- **New `GET /api/admin/memory`** (`health.view`) reports live RSS, threads by name prefix,
+  pollers-vs-DB-rows, cache sizes and DB pool state. Read-only; `?deep=1` adds a heap census.
+
+### To revert
+```bash
+git revert <pending>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Fully reversible. No schema change, no migration, no deletion, no writes to user data.
+- ⚠️ Reverting brings back the two-`BotManager` split — including `stop_bot()` silently
+  failing and deleted bots continuing to poll Telegram. Prefer the kill switches.
+- ⚠️ Cache entries already evicted by a prune are not restored. They were entries older
+  than 24h that every call site already read as absent (`now - last < window`), so nothing
+  depended on them, but they do not come back.
+- ⚠️ A revert does **not** stop an orphan poller that is already running in the live
+  process — only a restart does. Redeploy after reverting.
+
+### Kill switch (if any)
+- `SCHEDULER_SHARED_POOL=0` — back to a per-job executor, no deploy.
+- `MALLOC_ARENA_MAX=8` — back to glibc defaults.
+- `SCHEDULER_POOL_WORKERS=<n>` — resize the pool (floor 2, default 4).
+- The cache prune and the single `BotManager` have **no** kill switch: both are corrections
+  to bookkeeping, and a flag that re-enabled the split brain would be a flag that
+  re-enabled duplicate pollers. Use `git revert` if they must go.
+
+### Safety properties (verified, not assumed)
+No test suite in this repo, so two harnesses were written and run:
+- **Prune + ranking (30 checks).** Live cooldowns kept, stale dropped; a spam entry mixing
+  stale and live timestamps survives on its newest stamp; an in-flight challenge and one
+  just past expiry are both kept (10-minute grace) while a long-orphaned one goes; prune is
+  idempotent and safe on empty state. For KB ranking: the hoisted-norm cosine is
+  arithmetically identical to the original (max delta < 1e-12) and the new top-3 matches
+  the old `sorted()` top-3 in both membership and order — including exact ties, which the
+  negated index preserves in original order the way the old stable sort did.
+- **Scheduler pool (14 checks), run against the real function source extracted from
+  `app.py`.** The pool is a singleton; a job that overruns its timeout returns control in
+  ~1s instead of blocking until it finishes; a later job still runs while that one hangs;
+  errors are swallowed; `flask_app` context is pushed inside the worker thread; args are
+  forwarded; and the kill-switch path also no longer blocks on a runaway job.
+- All six changed Python files compile.
+
+### Note for whoever reads this next
+`GUNICORN_MAX_REQUESTS` (default 500) recycles the web worker — and because the bots run
+in threads *inside* that worker, every recycle restarts the whole bot fleet and re-runs
+every migration in `create_app()`. It was added to cap the RAM creep this change removes at
+the source. Once `/api/admin/memory` shows RSS flat over a few hours, raise it (or set `0`)
+so the fleet stops restarting; do not raise it before checking that.
 
 ---
 

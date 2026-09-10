@@ -49,6 +49,20 @@ def _cosine_similarity(a, b):
     return dot / (norm_a * norm_b)
 
 
+def _cosine_against_query(query_vec, query_norm, b):
+    """Cosine similarity where the query's norm is already known.
+
+    Ranking N chunks with _cosine_similarity re-derived the *query* norm on
+    every single chunk — three 1536-element Python passes per chunk where one is
+    enough. Hoisting it out is the same arithmetic, a third of the work.
+    """
+    dot = sum(x * y for x, y in zip(query_vec, b))
+    norm_b = math.sqrt(sum(x * x for x in b))
+    if query_norm == 0 or norm_b == 0:
+        return 0.0
+    return dot / (query_norm * norm_b)
+
+
 def _chunk_text(text, chunk_size=400, overlap=50):
     words = text.split()
     chunks = []
@@ -323,12 +337,32 @@ class KnowledgeBaseSystem:
             q_resp = embed_client.embeddings.create(model="text-embedding-3-small", input=question)
             q_emb = q_resp.data[0].embedding
 
-            scored = sorted(
-                all_chunks,
-                key=lambda c: _cosine_similarity(q_emb, c["embedding"]),
-                reverse=True,
+            # Rank once, keep only what the prompt actually uses (the top 3
+            # texts). The previous version full-sorted every chunk, then
+            # recomputed the winner's score a second time, and held every
+            # chunk's 1536-float embedding live across the LLM call that
+            # follows — as Python lists of floats that is roughly 50 KB per
+            # chunk, so a group with a few hundred chunks pinned tens of MB for
+            # the duration of the request. heapq.nlargest keeps 3.
+            # The index is negated so that chunks with an identical score come
+            # out in their original order, exactly as the previous stable
+            # `sorted(...)` left them. Carrying an index at all also keeps
+            # nlargest from ever falling through to comparing the text payloads.
+            import heapq
+            q_norm = math.sqrt(sum(x * x for x in q_emb))
+            ranked = heapq.nlargest(
+                3,
+                (
+                    (_cosine_against_query(q_emb, q_norm, c["embedding"]), -i, c["text"])
+                    for i, c in enumerate(all_chunks)
+                ),
             )
-            top_score = _cosine_similarity(q_emb, scored[0]["embedding"]) if scored else 0.0
+            top_score = ranked[0][0] if ranked else 0.0
+            # Drop the embeddings before the (slow) LLM call so they are
+            # collectable instead of resident for its whole duration.
+            scored = [{"text": t} for _score, _i, t in ranked]
+            all_chunks = None
+            docs = None
             logger.debug(f"KB: Top confidence score for group {group_id}: {top_score:.3f}")
 
             # Retrieval floor: skip the LLM call only when nothing in the KB is

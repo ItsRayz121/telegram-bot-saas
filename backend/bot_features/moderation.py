@@ -209,6 +209,38 @@ class ModerationSystem:
         self._slow_tracker: dict = {}       # "chat:user" → datetime of last ACCEPTED message
         self._slow_warn_tracker: dict = {}  # "chat:user" → datetime of last "slow down" notice
 
+    # These four maps hold one entry per (chat, user) that has ever sent a
+    # message and never shrank — they grew in step with the member base for the
+    # life of the process, and only a redeploy reclaimed them.
+    #
+    # Every call site reads them as `now - last < window`, so an entry older than
+    # the widest window a config can express is already indistinguishable from a
+    # missing key. Dropping it cannot change a single moderation decision; it
+    # only stops us paying to remember it. The cutoff is deliberately far wider
+    # than any real setting (spam windows are seconds, slow mode minutes).
+    _TRACKER_TTL = timedelta(hours=24)
+
+    def prune(self) -> dict:
+        """Drop stale cooldown/rate entries. Returns post-prune sizes."""
+        cutoff = datetime.utcnow() - self._TRACKER_TTL
+
+        # _spam_tracker values are LISTS of timestamps, not a single timestamp.
+        for key, stamps in list(self._spam_tracker.items()):
+            if not stamps or max(stamps) < cutoff:
+                self._spam_tracker.pop(key, None)
+
+        for tracker in (self._ai_cooldown, self._slow_tracker, self._slow_warn_tracker):
+            for key, last in list(tracker.items()):
+                if last is None or last < cutoff:
+                    tracker.pop(key, None)
+
+        return {
+            "spam_tracker": len(self._spam_tracker),
+            "ai_cooldown": len(self._ai_cooldown),
+            "slow_tracker": len(self._slow_tracker),
+            "slow_warn_tracker": len(self._slow_warn_tracker),
+        }
+
     async def warn_user(self, bot, chat_id, target_user_id, target_username,
                         moderator_id, moderator_username, reason, group):
         with self.app.app_context():

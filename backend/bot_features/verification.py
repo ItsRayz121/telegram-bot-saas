@@ -41,6 +41,12 @@ class VerificationSystem:
                 "settings": settings,
                 "user": member_user,
                 "message_thread_id": message_thread_id,
+                # Only read by prune(). An entry is dropped when the joiner is
+                # popped on their first message — a joiner who never speaks used
+                # to keep this dict entry (and with it a detached ORM group row,
+                # its settings JSON and a Telegram User object) for the life of
+                # the process.
+                "queued_at": datetime.utcnow(),
             }
             return
 
@@ -58,6 +64,38 @@ class VerificationSystem:
             bot, chat_id, user_id, member_user, group, method, timeout, settings, group_name,
             message_thread_id=message_thread_id,
         )
+
+    # Retention for the two in-process pending maps. Both are keyed per
+    # (chat, user) and neither shrank on its own: `pending` leaked whenever a
+    # challenge timeout handler was lost (bot restart, event-loop teardown), and
+    # `first_message_pending` leaked one entry — holding a detached ORM group,
+    # its settings dict and a Telegram User — for every member who joined and
+    # never posted. Only a redeploy ever reclaimed them.
+    #
+    # Dropping an expired entry cannot change a decision: `pending` is always
+    # read past an `expires_at` check that already treats it as gone, and a
+    # `first_message_pending` entry older than the cutoff would today be wiped
+    # by any redeploy anyway (which happens far more often than every 7 days).
+    _FIRST_MESSAGE_TTL = timedelta(days=7)
+
+    def prune(self) -> dict:
+        """Drop expired entries. Returns the sizes after pruning, for diagnostics."""
+        now = datetime.utcnow()
+        for key, val in list(self.pending.items()):
+            exp = (val or {}).get("expires_at")
+            # Grace period past expiry so an in-flight answer is never dropped
+            # out from under the handler that is about to read it.
+            if exp is None or now > exp + timedelta(minutes=10):
+                self.pending.pop(key, None)
+        cutoff = now - self._FIRST_MESSAGE_TTL
+        for key, val in list(self.first_message_pending.items()):
+            queued = (val or {}).get("queued_at")
+            if queued is None or queued < cutoff:
+                self.first_message_pending.pop(key, None)
+        return {
+            "pending": len(self.pending),
+            "first_message_pending": len(self.first_message_pending),
+        }
 
     async def handle_first_message(self, bot, message, group, settings):
         """Called from bot_manager on every message — triggers challenge if user is first_message pending."""

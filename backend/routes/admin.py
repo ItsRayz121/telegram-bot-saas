@@ -4340,3 +4340,143 @@ def admin_system():
         "scheduled_jobs": jobs,
         "errors": errors,
     })
+
+
+# ── Memory diagnostics ─────────────────────────────────────────────────────────
+
+class _SkipDeepGC(Exception):
+    """Internal control flow — skips the expensive heap census."""
+
+
+@admin_bp.route("/memory", methods=["GET"])
+@require_permission(rbac.P_HEALTH_VIEW)
+@rate_limit(requests_per_minute=12)
+def memory_diagnostics():
+    """What this web process is actually holding in RAM, right now.
+
+    Railway bills GB-minutes, so RSS is the bill. This exists because the RAM
+    line was previously diagnosed by reading code and guessing; every number
+    below is measured in the live process instead.
+
+    Read `rss_mb` first, then:
+      • threads.by_prefix   — a growing "sched" count means the scheduler pool
+                              leaked; a "Bot-"/asyncio count above one per
+                              active bot means duplicate pollers.
+      • bots.active_ids vs bots.active_db_ids — a live poller with no DB row is
+                              an orphan: the bot was deleted or deactivated but
+                              its thread kept long-polling Telegram.
+      • caches              — per-(chat,user) maps. These are pruned every 10
+                              minutes; if a count keeps climbing across calls,
+                              that map's eviction is not working.
+    """
+    import gc
+    import os
+    import sys
+    import threading
+
+    out = {"pid": os.getpid()}
+
+    # RSS. /proc is authoritative on Linux (Railway); resource.getrusage is the
+    # portable fallback and reports KB on Linux, bytes on macOS.
+    rss_mb = None
+    try:
+        with open(f"/proc/{os.getpid()}/status", "r") as fh:
+            for line in fh:
+                if line.startswith("VmRSS:"):
+                    rss_mb = round(int(line.split()[1]) / 1024, 1)
+                    break
+    except Exception:
+        pass
+    if rss_mb is None:
+        try:
+            import resource
+            ru = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+            rss_mb = round(ru / 1024, 1) if sys.platform != "darwin" else round(ru / 1048576, 1)
+        except Exception:
+            pass
+    out["rss_mb"] = rss_mb
+
+    # Threads, grouped by name prefix — this is where thread churn shows up.
+    try:
+        names = [t.name for t in threading.enumerate()]
+        by_prefix: dict = {}
+        for n in names:
+            prefix = n.rsplit("-", 1)[0] if "-" in n else n
+            by_prefix[prefix] = by_prefix.get(prefix, 0) + 1
+        out["threads"] = {
+            "total": threading.active_count(),
+            "by_prefix": dict(sorted(by_prefix.items(), key=lambda kv: -kv[1])),
+        }
+    except Exception as exc:
+        out["threads"] = {"error": str(exc)}
+
+    # Running bots vs bots that should be running. A difference either way is a bug.
+    try:
+        from ..app import bot_manager
+        with bot_manager._lock:
+            active_ids = sorted(bot_manager.active_bots.keys())
+        db_ids = sorted(
+            b.id for b in Bot.query.filter_by(is_active=True).with_entities(Bot.id).all()
+        )
+        out["bots"] = {
+            "active_ids": active_ids,
+            "active_db_ids": db_ids,
+            "orphans_polling_without_db_row": [i for i in active_ids if i not in db_ids],
+            "expected_but_not_running": [i for i in db_ids if i not in active_ids],
+        }
+    except Exception as exc:
+        out["bots"] = {"error": str(exc)}
+
+    # Per-(chat,user) in-process maps. Read-only — never prunes on a GET, so
+    # repeated calls show real growth rather than the effect of this request.
+    try:
+        from ..app import collect_in_process_cache_sizes
+        out["caches"] = collect_in_process_cache_sizes(prune=False)
+    except Exception as exc:
+        out["caches"] = {"error": str(exc)}
+
+    # GC generations + the heaviest object types, as a leak shape hint.
+    # The type census walks the whole heap, which itself allocates and can take
+    # a second on a big process — opt in with ?deep=1 rather than paying for it
+    # on every poll.
+    try:
+        if request.args.get("deep") not in ("1", "true", "yes"):
+            out["gc"] = {
+                "generation_counts": gc.get_count(),
+                "note": "pass ?deep=1 for a full object-type census",
+            }
+            raise _SkipDeepGC
+        counts: dict = {}
+        for obj in gc.get_objects():
+            name = type(obj).__name__
+            counts[name] = counts.get(name, 0) + 1
+        out["gc"] = {
+            "generation_counts": gc.get_count(),
+            "tracked_objects": sum(counts.values()),
+            "top_types": dict(sorted(counts.items(), key=lambda kv: -kv[1])[:15]),
+        }
+    except _SkipDeepGC:
+        pass
+    except Exception as exc:
+        out["gc"] = {"error": str(exc)}
+
+    # SQLAlchemy connection pool — an exhausted or oversized pool costs RAM on
+    # both this process and Postgres.
+    try:
+        pool = db.engine.pool
+        out["db_pool"] = {
+            "class": type(pool).__name__,
+            "size": pool.size(),
+            "checked_out": pool.checkedout(),
+            "overflow": pool.overflow(),
+        }
+    except Exception as exc:
+        out["db_pool"] = {"error": str(exc)}
+
+    out["env"] = {
+        "MALLOC_ARENA_MAX": os.environ.get("MALLOC_ARENA_MAX"),
+        "GUNICORN_MAX_REQUESTS": os.environ.get("GUNICORN_MAX_REQUESTS"),
+        "SCHEDULER_SHARED_POOL": os.environ.get("SCHEDULER_SHARED_POOL"),
+        "SCHEDULER_POOL_WORKERS": os.environ.get("SCHEDULER_POOL_WORKERS"),
+    }
+    return jsonify(out), 200
