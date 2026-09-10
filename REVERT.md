@@ -40,7 +40,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
-## `<pending>` — cut web-service RAM: one bot manager, one scheduler pool, bounded per-user caches
+## `051fb13` — cut web-service RAM: one bot manager, one scheduler pool, bounded per-user caches
 **Date:** 2026-09-10 · **Risk:** medium · **Touches:** bot hot path
 
 ### What changed
@@ -73,7 +73,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ### To revert
 ```bash
-git revert <pending>
+git revert 051fb13
 git push origin main
 ```
 
