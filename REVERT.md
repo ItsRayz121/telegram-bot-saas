@@ -69,7 +69,8 @@ Set these in **Railway → service → Variables**. The service restarts and pic
   of full-sorting every chunk and holding every 1536-float embedding live across the LLM
   call, and hoists the query norm out of the per-chunk cosine (a third of the arithmetic).
 - **New `GET /api/admin/memory`** (`health.view`) reports live RSS, threads by name prefix,
-  pollers-vs-DB-rows, cache sizes and DB pool state. Read-only; `?deep=1` adds a heap census.
+  pollers-vs-DB-rows, cache sizes, DB pool state and whether the retention sweep is armed
+  (`retention.dry_run_effective`). Read-only; `?deep=1` adds a heap census.
 
 ### To revert
 ```bash
@@ -110,6 +111,31 @@ No test suite in this repo, so two harnesses were written and run:
   errors are swallowed; `flask_app` context is pushed inside the worker thread; args are
   forwarded; and the kill-switch path also no longer blocks on a runaway job.
 - All six changed Python files compile.
+
+### Known failure mode: a saturated scheduler pool
+The shared pool has **4 workers** (`SCHEDULER_POOL_WORKERS`, floor 2). A job that overruns
+its timeout keeps its worker until it actually finishes — that is the whole point, it is
+what stops one hung job freezing the loop. But it means four jobs hung *at the same time*
+occupy every worker, and then every later job just sits in the queue until its own timeout
+expires and is skipped.
+
+**Symptom:** `[SCHEDULER] <job> timed out after 30s` for many different jobs, in a steady
+drumbeat, for jobs that normally finish instantly. The log line is misleading — those jobs
+did not run slowly, they **never started**. Digests, watchdog restarts and the retention
+sweep all silently stop happening. Nothing crashes and health checks stay green.
+
+**Confirm it:** `GET /api/admin/memory` → `threads.by_prefix`. Four or more live `sched`
+threads with the scheduler still logging timeouts means the pool is full, not busy.
+
+**Fix:** `SCHEDULER_POOL_WORKERS=8` (restart, ~30 s, no deploy) buys headroom and gets the
+skipped jobs running again; a restart clears the hung workers outright. Then find the job
+that hangs — it is a network call with no timeout, and raising the worker count only widens
+the margin before it fills up again.
+
+**This is not a regression.** Before this commit a *single* hung job blocked the loop on
+`shutdown(wait=True)` and froze all 19 jobs indefinitely. It now takes four simultaneous
+hangs to reach a worse-behaved version of the same state, and it self-heals the moment any
+of them returns — measured, both before and after.
 
 ### Note for whoever reads this next
 `GUNICORN_MAX_REQUESTS` (default 500) recycles the web worker — and because the bots run

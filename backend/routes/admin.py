@@ -4368,6 +4368,9 @@ def memory_diagnostics():
       • caches              — per-(chat,user) maps. These are pruned every 10
                               minutes; if a count keeps climbing across calls,
                               that map's eviction is not working.
+      • retention.dry_run_effective — true means the daily sweep deletes NOTHING
+                              (the default). Append-only tables grow forever
+                              until RETENTION_DRY_RUN=0 is set in Railway.
     """
     import gc
     import os
@@ -4473,10 +4476,32 @@ def memory_diagnostics():
     except Exception as exc:
         out["db_pool"] = {"error": str(exc)}
 
+    # Retention: the sweep is DRY-RUN BY DEFAULT, so an unset RETENTION_DRY_RUN
+    # means nothing is ever deleted and the append-only tables grow forever —
+    # which costs both disk and the RAM this endpoint exists to watch. Report the
+    # *effective* boolean, not just the raw env var: the raw var being absent is
+    # the easy thing to misread as "fine".
+    try:
+        from ..retention import DRY_RUN as _retention_dry_run
+        out["retention"] = {
+            "dry_run_effective": bool(_retention_dry_run),
+            "RETENTION_DRY_RUN_env": os.environ.get("RETENTION_DRY_RUN"),
+            "note": (
+                "dry_run_effective=true means the sweep reports what it WOULD "
+                "delete and deletes nothing. Set RETENTION_DRY_RUN=0 in Railway "
+                "to arm it — after reading a dry-run log."
+                if _retention_dry_run else
+                "armed — the daily sweep deletes for real."
+            ),
+        }
+    except Exception as exc:
+        out["retention"] = {"error": str(exc)}
+
     out["env"] = {
         "MALLOC_ARENA_MAX": os.environ.get("MALLOC_ARENA_MAX"),
         "GUNICORN_MAX_REQUESTS": os.environ.get("GUNICORN_MAX_REQUESTS"),
         "SCHEDULER_SHARED_POOL": os.environ.get("SCHEDULER_SHARED_POOL"),
         "SCHEDULER_POOL_WORKERS": os.environ.get("SCHEDULER_POOL_WORKERS"),
+        "RETENTION_DRY_RUN": os.environ.get("RETENTION_DRY_RUN"),
     }
     return jsonify(out), 200
