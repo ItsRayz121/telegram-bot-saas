@@ -40,7 +40,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
-## `<this commit>` — AI Knowledge Base: external sources (website / Telegram / X / YouTube)
+## `ff584f2` — AI Knowledge Base: external sources (website / Telegram / X / YouTube)
 **Date:** 2026-09-15 · **Risk:** low-medium · **Touches:** money (AI/API spend), plan limits
 
 ### What changed
@@ -73,7 +73,7 @@ New opt-in capability, additive only — no existing behavior changed for anyone
 
 ### To revert
 ```bash
-git revert <this commit>
+git revert ff584f2
 git push origin main
 ```
 
