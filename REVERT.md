@@ -40,7 +40,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
-## `<this commit>` — KB external sources: official-bot parity
+## `3d28b51` — KB external sources: official-bot parity
 **Date:** 2026-09-15 · **Risk:** low · **Touches:** money (AI/API spend), plan limits
 
 ### What changed
@@ -63,7 +63,7 @@ feature. Extended the same feature to the official-bot lineage:
 
 ### To revert
 ```bash
-git revert <this commit>
+git revert 3d28b51
 git push origin main
 ```
 
