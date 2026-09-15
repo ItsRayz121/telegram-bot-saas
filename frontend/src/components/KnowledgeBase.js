@@ -44,8 +44,7 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
   const kb = settings?.knowledge_base || {};
 
   // External sources (website / Telegram channel / X / YouTube / any URL).
-  // Custom bots only — there is no official-bot route for these yet.
-  const supportsSources = botId !== 'official';
+  // Supported on both bot lineages (official and custom).
   const [sources, setSources] = useState([]);
   const [newSourceUrl, setNewSourceUrl] = useState('');
   const [newSourceLabel, setNewSourceLabel] = useState('');
@@ -53,12 +52,11 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
   const [syncingId, setSyncingId] = useState(null);
 
   const loadSources = useCallback(async () => {
-    if (!supportsSources) return;
     try {
       const res = await knowledge.listSources(botId, groupId);
       setSources(res.data.sources || []);
     } catch { /* silent — section still renders, just empty */ }
-  }, [botId, groupId, supportsSources]);
+  }, [botId, groupId]);
 
   useEffect(() => { loadSources(); }, [loadSources]);
 
@@ -1094,8 +1092,7 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
       </CollapsibleCard>
 
       {/* External Sources */}
-      {supportsSources && (
-        <CollapsibleCard
+      <CollapsibleCard
           id="tg.ai.kb_sources"
           title={(
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -1187,8 +1184,7 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
               ))}
             </List>
           )}
-        </CollapsibleCard>
-      )}
+      </CollapsibleCard>
 
       {/* Document list */}
       <CollapsibleCard id="tg.ai.kb_documents" title={`Indexed Documents (${docs.length})`}>

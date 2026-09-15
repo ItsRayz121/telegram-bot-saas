@@ -1565,19 +1565,25 @@ def _run_knowledge_sources_migration():
     stmts = [
         """
         CREATE TABLE IF NOT EXISTS knowledge_sources (
-            id               SERIAL PRIMARY KEY,
-            group_id         INTEGER NOT NULL REFERENCES groups(id),
-            source_type      VARCHAR(20) NOT NULL DEFAULT 'website',
-            url              VARCHAR(500) NOT NULL,
-            label            VARCHAR(120),
-            last_synced_at   TIMESTAMP,
-            last_sync_status VARCHAR(20),
-            last_sync_error  VARCHAR(500),
-            last_sync_chars  INTEGER,
-            created_at       TIMESTAMP NOT NULL DEFAULT NOW()
+            id                 SERIAL PRIMARY KEY,
+            group_id           INTEGER REFERENCES groups(id),
+            telegram_group_id  VARCHAR(255),
+            source_type        VARCHAR(20) NOT NULL DEFAULT 'website',
+            url                VARCHAR(500) NOT NULL,
+            label              VARCHAR(120),
+            last_synced_at     TIMESTAMP,
+            last_sync_status   VARCHAR(20),
+            last_sync_error    VARCHAR(500),
+            last_sync_chars    INTEGER,
+            created_at         TIMESTAMP NOT NULL DEFAULT NOW()
         )
         """,
+        # Belt-and-suspenders for an environment where this table was already
+        # created with the original group_id-NOT-NULL, custom-bot-only shape.
+        "ALTER TABLE knowledge_sources ALTER COLUMN group_id DROP NOT NULL",
+        "ALTER TABLE knowledge_sources ADD COLUMN IF NOT EXISTS telegram_group_id VARCHAR(255)",
         "CREATE INDEX IF NOT EXISTS ix_knowledge_sources_group_id ON knowledge_sources (group_id)",
+        "CREATE INDEX IF NOT EXISTS ix_knowledge_sources_telegram_group_id ON knowledge_sources (telegram_group_id)",
         "ALTER TABLE knowledge_documents ADD COLUMN IF NOT EXISTS source_id INTEGER",
         "CREATE INDEX IF NOT EXISTS ix_knowledge_documents_source_id ON knowledge_documents (source_id)",
     ]

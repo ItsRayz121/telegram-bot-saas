@@ -758,11 +758,15 @@ class KnowledgeSource(db.Model):
     channel, an X/Twitter handle, a YouTube channel, or any other page. Ingestion
     reuses the same chunk+embed pipeline as an uploaded file (see
     bot_features/knowledge_base.py process_external_source); the resulting chunks
-    live in KnowledgeDocument, linked back here via source_id."""
+    live in KnowledgeDocument, linked back here via source_id.
+
+    Dual-scoped exactly like KnowledgeDocument: a custom-bot source sets group_id,
+    an official-bot source sets telegram_group_id — never both."""
     __tablename__ = "knowledge_sources"
 
     id = db.Column(db.Integer, primary_key=True)
-    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False, index=True)
+    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=True, index=True)
+    telegram_group_id = db.Column(db.String(255), nullable=True, index=True)
     source_type = db.Column(db.String(20), nullable=False, default="website")
     url = db.Column(db.String(500), nullable=False)
     label = db.Column(db.String(120), nullable=True)
@@ -776,6 +780,7 @@ class KnowledgeSource(db.Model):
         return {
             "id": self.id,
             "group_id": self.group_id,
+            "telegram_group_id": self.telegram_group_id,
             "source_type": self.source_type,
             "url": self.url,
             "label": self.label,

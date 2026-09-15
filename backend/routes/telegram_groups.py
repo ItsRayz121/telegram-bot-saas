@@ -18,11 +18,12 @@ Endpoints:
   GET/POST/DELETE /api/telegram-groups/<id>/api-key     — CRUD AI provider API key
 """
 
+import os
 import secrets as _secrets
 from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify, Response
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from ..models import db, User, TelegramGroup, TelegramGroupLinkCode, BotEvent, OfficialWarning, OfficialMember, Bot, CustomBot, OfficialScheduledMessage, OfficialPoll, KnowledgeDocument, AutoResponse, InviteLink, InviteLinkJoin, UserApiKey, OfficialRaid, OfficialWebhookIntegration, OfficialReportedMessage
+from ..models import db, User, TelegramGroup, TelegramGroupLinkCode, BotEvent, OfficialWarning, OfficialMember, Bot, CustomBot, OfficialScheduledMessage, OfficialPoll, KnowledgeDocument, KnowledgeSource, AutoResponse, InviteLink, InviteLinkJoin, UserApiKey, OfficialRaid, OfficialWebhookIntegration, OfficialReportedMessage
 from ..middleware.rate_limit import rate_limit
 from .. import engagement as eng
 from ..config import Config
@@ -42,6 +43,26 @@ def _owns_group(user_id: int, group_id: str) -> "TelegramGroup | None":
         owner_user_id=user_id,
         is_disabled=False,
     ).first()
+
+
+_PAID_TIERS = {"pro", "enterprise"}
+
+
+def _require_paid(user, feature="This feature"):
+    """Return a 403 response tuple if user lacks a valid paid subscription, else None.
+    subscription_tier is independent of bot lineage — a Pro/Enterprise user's
+    official-bot groups get paid features exactly like a custom bot's would."""
+    if user.subscription_tier not in _PAID_TIERS:
+        return (
+            jsonify({"error": f"{feature} requires a Pro or Enterprise subscription. Upgrade at /pricing."}),
+            403,
+        )
+    if not user.subscription_active:
+        return (
+            jsonify({"error": "Your subscription has expired. Please renew to continue using this feature."}),
+            403,
+        )
+    return None
 
 
 # ── List user's linked groups ──────────────────────────────────────────────────
@@ -1530,6 +1551,107 @@ def delete_knowledge_doc(group_id, doc_id):
         return jsonify({"error": "Document not found"}), 404
 
     db.session.delete(doc)
+    db.session.commit()
+    return jsonify({"message": "Deleted"}), 200
+
+
+# ── Knowledge Base: external sources (website / Telegram / X / YouTube / any URL) ──
+# Mirrors routes/knowledge.py's custom-bot version exactly — same model
+# (KnowledgeSource), same ingestion (KnowledgeBaseSystem.process_external_source),
+# same Pro gate and limits — scoped to telegram_group_id instead of group_id.
+_MAX_SOURCES_PER_GROUP = 20
+_SOURCE_SYNC_COOLDOWN = timedelta(seconds=60)
+
+
+@tg_groups_bp.route("/<group_id>/knowledge/sources", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def list_knowledge_sources(group_id):
+    user = _current_user()
+    tg = _owns_group(user.id, group_id)
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+    sources = KnowledgeSource.query.filter_by(telegram_group_id=group_id).order_by(KnowledgeSource.created_at.desc()).all()
+    return jsonify({"sources": [s.to_dict() for s in sources]}), 200
+
+
+@tg_groups_bp.route("/<group_id>/knowledge/sources", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=10)
+def create_knowledge_source(group_id):
+    user = _current_user()
+    paid_error = _require_paid(user, "External knowledge sources")
+    if paid_error:
+        return paid_error
+    tg = _owns_group(user.id, group_id)
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    url = (data.get("url") or "").strip()
+    if not url or not url.lower().startswith(("http://", "https://")):
+        return jsonify({"error": "Please provide a valid URL starting with http:// or https://"}), 400
+    label = (data.get("label") or "").strip()[:120] or None
+
+    from ..bot_features.knowledge_sources import detect_source_type, SOURCE_TYPES
+    source_type = data.get("source_type") or detect_source_type(url)
+    if source_type not in SOURCE_TYPES:
+        source_type = "website"
+
+    existing_count = KnowledgeSource.query.filter_by(telegram_group_id=group_id).count()
+    if existing_count >= _MAX_SOURCES_PER_GROUP:
+        return jsonify({"error": f"Limit of {_MAX_SOURCES_PER_GROUP} knowledge sources per group reached."}), 400
+
+    source = KnowledgeSource(telegram_group_id=group_id, source_type=source_type, url=url, label=label)
+    db.session.add(source)
+    db.session.commit()
+    return jsonify({"source": source.to_dict()}), 201
+
+
+@tg_groups_bp.route("/<group_id>/knowledge/sources/<int:source_id>/sync", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=5)
+def sync_knowledge_source(group_id, source_id):
+    if os.environ.get("KNOWLEDGE_SOURCES_ENABLED", "1") == "0":
+        return jsonify({"error": "External knowledge source syncing is temporarily disabled."}), 503
+    user = _current_user()
+    paid_error = _require_paid(user, "External knowledge sources")
+    if paid_error:
+        return paid_error
+    tg = _owns_group(user.id, group_id)
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+    source = KnowledgeSource.query.filter_by(id=source_id, telegram_group_id=group_id).first()
+    if not source:
+        return jsonify({"error": "Source not found"}), 404
+
+    if source.last_synced_at and datetime.utcnow() - source.last_synced_at < _SOURCE_SYNC_COOLDOWN:
+        wait = _SOURCE_SYNC_COOLDOWN - (datetime.utcnow() - source.last_synced_at)
+        return jsonify({"error": f"Please wait {int(wait.total_seconds())}s before syncing this source again."}), 429
+
+    from flask import current_app
+    from ..bot_features.knowledge_base import KnowledgeBaseSystem
+    kb = KnowledgeBaseSystem(current_app._get_current_object())
+    ok, error = kb.process_external_source(source)
+    db.session.refresh(source)
+    if not ok:
+        return jsonify({"error": error, "source": source.to_dict()}), 400
+    return jsonify({"source": source.to_dict()}), 200
+
+
+@tg_groups_bp.route("/<group_id>/knowledge/sources/<int:source_id>", methods=["DELETE"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def delete_knowledge_source(group_id, source_id):
+    user = _current_user()
+    tg = _owns_group(user.id, group_id)
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+    source = KnowledgeSource.query.filter_by(id=source_id, telegram_group_id=group_id).first()
+    if not source:
+        return jsonify({"error": "Source not found"}), 404
+    KnowledgeDocument.query.filter_by(source_id=source.id).delete()
+    db.session.delete(source)
     db.session.commit()
     return jsonify({"message": "Deleted"}), 200
 

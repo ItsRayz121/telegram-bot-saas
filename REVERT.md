@@ -40,6 +40,54 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
+## `<this commit>` — KB external sources: official-bot parity
+**Date:** 2026-09-15 · **Risk:** low · **Touches:** money (AI/API spend), plan limits
+
+### What changed
+Follow-up to `ff584f2`. That commit only wired external knowledge sources up for
+custom bots; a check confirmed `subscription_tier` (the Pro gate) is independent of
+bot lineage — a Pro/Enterprise user can have groups on the shared official bot
+instead of a custom bot, and nothing about that makes them less entitled to a paid
+feature. Extended the same feature to the official-bot lineage:
+- `KnowledgeSource` now dual-scoped like `KnowledgeDocument` already was:
+  `group_id` is nullable, new nullable `telegram_group_id` column added. A
+  custom-bot source sets one, an official-bot source sets the other — never both.
+- `KnowledgeBaseSystem.process_external_source` threads `telegram_group_id`
+  through to `_embed` (AI key resolution) and the upserted `KnowledgeDocument`.
+- New mirrored routes in `routes/telegram_groups.py` (list/create/sync/delete),
+  same Pro gate, same `KNOWLEDGE_SOURCES_ENABLED` kill switch, same 20-source cap
+  and 60s sync cooldown — scoped to `telegram_group_id` instead of `group_id`.
+- Frontend: `api.js` branches the 4 source calls on `botId === 'official'` (same
+  pattern the existing upload/list/delete calls already used); `KnowledgeBase.js`'s
+  "External Knowledge Sources" section is no longer custom-bot-only.
+
+### To revert
+```bash
+git revert <this commit>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Fully reversible — `telegram_group_id` is a new nullable column, nothing is
+  dropped. Reverting removes official-bot access to this feature; custom bots
+  (shipped in `ff584f2`) are untouched.
+- ⚠️ Any official-bot-lineage sources/documents already synced while this was
+  live stay in the DB (harmless, just unreachable through the UI after a revert).
+
+### Kill switch (if any)
+Same as `ff584f2`: `KNOWLEDGE_SOURCES_ENABLED=0` disables sync-now on **both**
+lineages at once (it's one env var checked in both route files).
+
+### Safety properties (verified, not assumed)
+Extended the same throwaway harness used for `ff584f2`: a `KnowledgeSource` with
+`group_id=None, telegram_group_id=<a chat id>` syncs successfully end-to-end and
+produces a `KnowledgeDocument` with `group_id IS NULL` / `telegram_group_id` set —
+confirming the dual-scoping doesn't cross-contaminate the two lineages. All
+touched Python files compile; the frontend changes pass this project's own
+ESLint config with zero errors or warnings.
+
+---
+
 ## `ff584f2` — AI Knowledge Base: external sources (website / Telegram / X / YouTube)
 **Date:** 2026-09-15 · **Risk:** low-medium · **Touches:** money (AI/API spend), plan limits
 

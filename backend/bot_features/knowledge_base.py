@@ -254,7 +254,9 @@ class KnowledgeBaseSystem:
                 db.session.commit()
                 return False, "No content to embed"
 
-            embeddings = self._embed(chunks, group_id=row.group_id)
+            embeddings = self._embed(
+                chunks, group_id=row.group_id, telegram_group_id=row.telegram_group_id,
+            )
             if all(e is None for e in embeddings):
                 err = (
                     "Embeddings failed: no AI API key is configured. Add your OpenAI "
@@ -281,6 +283,7 @@ class KnowledgeBaseSystem:
             else:
                 existing = KnowledgeDocument(
                     group_id=row.group_id,
+                    telegram_group_id=row.telegram_group_id,
                     filename=label,
                     file_type=row.source_type,
                     content_text=text[:10000],
