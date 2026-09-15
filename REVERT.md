@@ -40,7 +40,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
-## `<this commit>` — audit pass: fix a real cross-lineage verification bug + SSRF + sync races
+## `2b6c0be` — audit pass: fix a real cross-lineage verification bug + SSRF + sync races
 **Date:** 2026-09-15 · **Risk:** medium · **Touches:** money, bot hot path, security
 
 ### What changed
@@ -101,7 +101,7 @@ models/SQLite. Found and fixed real bugs, not just style:
 
 ### To revert
 ```bash
-git revert <this commit>
+git revert 2b6c0be
 git push origin main
 ```
 
