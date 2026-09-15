@@ -45,24 +45,9 @@ def _owns_group(user_id: int, group_id: str) -> "TelegramGroup | None":
     ).first()
 
 
-_PAID_TIERS = {"pro", "enterprise"}
-
-
-def _require_paid(user, feature="This feature"):
-    """Return a 403 response tuple if user lacks a valid paid subscription, else None.
-    subscription_tier is independent of bot lineage — a Pro/Enterprise user's
-    official-bot groups get paid features exactly like a custom bot's would."""
-    if user.subscription_tier not in _PAID_TIERS:
-        return (
-            jsonify({"error": f"{feature} requires a Pro or Enterprise subscription. Upgrade at /pricing."}),
-            403,
-        )
-    if not user.subscription_active:
-        return (
-            jsonify({"error": "Your subscription has expired. Please renew to continue using this feature."}),
-            403,
-        )
-    return None
+# subscription_tier is independent of bot lineage — a Pro/Enterprise user's
+# official-bot groups get paid features exactly like a custom bot's would.
+from ..utils.plan_gating import require_paid as _require_paid
 
 
 # ── List user's linked groups ──────────────────────────────────────────────────
@@ -734,14 +719,10 @@ def moderate_official_member(group_id, user_id):
                 default_perms = (await _bot.get_chat(chat_id)).permissions
             except Exception:
                 default_perms = None
+            from ..telegram_permissions import full_member_permissions
             await _bot.restrict_chat_member(
                 chat_id=chat_id, user_id=int(user_id),
-                permissions=default_perms or ChatPermissions(
-                    can_send_messages=True, can_send_audios=True, can_send_documents=True,
-                    can_send_photos=True, can_send_videos=True, can_send_video_notes=True,
-                    can_send_voice_notes=True, can_send_polls=True,
-                    can_send_other_messages=True, can_add_web_page_previews=True,
-                ),
+                permissions=default_perms or full_member_permissions(),
             )
         elif action == "unban":
             await _bot.unban_chat_member(chat_id=chat_id, user_id=int(user_id), only_if_banned=True)

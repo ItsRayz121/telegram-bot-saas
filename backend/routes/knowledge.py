@@ -8,25 +8,9 @@ logger = logging.getLogger(__name__)
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..models import db, User, Bot, Group, KnowledgeDocument, KnowledgeSource
 from ..middleware.rate_limit import rate_limit
+from ..utils.plan_gating import require_paid as _require_paid
 
 knowledge_bp = Blueprint("knowledge", __name__, url_prefix="/api")
-
-_PAID_TIERS = {"pro", "enterprise"}
-
-
-def _require_paid(user, feature="This feature"):
-    """Return a 403 response tuple if user lacks a valid paid subscription, else None."""
-    if user.subscription_tier not in _PAID_TIERS:
-        return (
-            jsonify({"error": f"{feature} requires a Pro or Enterprise subscription. Upgrade at /pricing."}),
-            403,
-        )
-    if not user.subscription_active:
-        return (
-            jsonify({"error": "Your subscription has expired. Please renew to continue using this feature."}),
-            403,
-        )
-    return None
 
 
 def _get_current_user():

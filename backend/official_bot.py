@@ -150,17 +150,24 @@ def _set_dm_mode(user_id: int, mode: str) -> None:
 
 
 def _save_pending_verification(flask_app, chat_id: int, user_id: int, pending: dict):
-    """Write-through: persist a pending verification to the DB."""
+    """Write-through: persist a pending verification to the DB.
+
+    Scoped by bot_type="official" — a group can have BOTH the official bot and a
+    custom bot as members (this platform explicitly supports that elsewhere), and
+    since custom bots now write into this same table too (bot_features/verification.py),
+    an unscoped lookup here would find and silently overwrite/steal a custom bot's
+    row for the same (chat_id, user_id), or vice versa.
+    """
     if not flask_app:
         return
     try:
         with flask_app.app_context():
             from .models import db, PendingVerification
             row = PendingVerification.query.filter_by(
-                chat_id=chat_id, user_id=user_id
+                chat_id=chat_id, user_id=user_id, bot_type="official",
             ).first()
             if not row:
-                row = PendingVerification(chat_id=chat_id, user_id=user_id)
+                row = PendingVerification(chat_id=chat_id, user_id=user_id, bot_type="official")
                 db.session.add(row)
             row.method = pending.get("method", "button")
             row.msg_id = pending.get("msg_id")
@@ -175,14 +182,14 @@ def _save_pending_verification(flask_app, chat_id: int, user_id: int, pending: d
 
 
 def _remove_pending_verification(flask_app, chat_id: int, user_id: int):
-    """Delete a pending verification from DB."""
+    """Delete a pending verification from DB. bot_type-scoped — see _save_pending_verification."""
     if not flask_app:
         return
     try:
         with flask_app.app_context():
             from .models import db, PendingVerification
             PendingVerification.query.filter_by(
-                chat_id=chat_id, user_id=user_id
+                chat_id=chat_id, user_id=user_id, bot_type="official",
             ).delete()
             db.session.commit()
     except Exception as exc:
@@ -190,14 +197,21 @@ def _remove_pending_verification(flask_app, chat_id: int, user_id: int):
 
 
 def _load_pending_verifications_from_db(flask_app):
-    """On startup: load non-expired verifications from DB into memory dict."""
+    """On startup: load non-expired OFFICIAL-bot verifications from DB into memory dict.
+
+    bot_type-scoped — without this filter, restoring after a restart would also
+    load custom bots' in-flight challenges (same shared table) into the official
+    bot's own dict, which would then try to manage them with the wrong bot token
+    and delete the custom bot's row out from under it.
+    """
     if not flask_app:
         return
     try:
         with flask_app.app_context():
             from .models import PendingVerification
             rows = PendingVerification.query.filter(
-                PendingVerification.expires_at > datetime.utcnow()
+                PendingVerification.expires_at > datetime.utcnow(),
+                PendingVerification.bot_type == "official",
             ).all()
             for row in rows:
                 key = f"{row.chat_id}:{row.user_id}"
@@ -3680,20 +3694,11 @@ async def _complete_verification(bot, query, chat_id, user_id, pending, flask_ap
     key = f"{chat_id}:{user_id}"
     group_id = str(chat_id)
     try:
+        from .telegram_permissions import full_member_permissions
         await bot.restrict_chat_member(
             chat_id=chat_id,
             user_id=user_id,
-            permissions=ChatPermissions(
-                can_send_messages=True,
-                can_send_audios=True,
-                can_send_documents=True,
-                can_send_photos=True,
-                can_send_videos=True,
-                can_send_video_notes=True,
-                can_send_voice_notes=True,
-                can_send_other_messages=True,
-                can_add_web_page_previews=True,
-            ),
+            permissions=full_member_permissions(),
         )
         if pending.get("msg_id"):
             try:
@@ -3824,6 +3829,7 @@ async def _verification_timeout(bot, chat_id, user_id, flask_app=None):
         except Exception:
             pass
         _pending_verifications.pop(key, None)
+        _remove_pending_verification(flask_app, chat_id, user_id)
 
 
 async def _safe_delete(bot, chat_id, message_id):
@@ -5071,19 +5077,10 @@ async def cmd_unmute(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     try:
+        from .telegram_permissions import full_member_permissions
         await context.bot.restrict_chat_member(
             chat_id=chat_id, user_id=target_id,
-            permissions=ChatPermissions(
-                can_send_messages=True,
-                can_send_audios=True,
-                can_send_documents=True,
-                can_send_photos=True,
-                can_send_videos=True,
-                can_send_video_notes=True,
-                can_send_voice_notes=True,
-                can_send_other_messages=True,
-                can_add_web_page_previews=True,
-            ),
+            permissions=full_member_permissions(),
         )
         _log_event(flask_app, group_id, "mod_unmute",
                    f"{target_name} unmuted by {update.effective_user.first_name}",

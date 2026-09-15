@@ -1,6 +1,6 @@
 import math
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -221,71 +221,136 @@ class KnowledgeBaseSystem:
             db.session.commit()
             return doc.to_dict(), None
 
+    _KB_GROUP_QUOTA_BYTES = 100 * 1024 * 1024  # matches routes/knowledge.py's upload quota
+
+    def _mark_source_error(self, source_id, msg):
+        """Best-effort: record a sync failure on the source row. Never raises."""
+        from ..models import db, KnowledgeSource
+        try:
+            with self.app.app_context():
+                row = KnowledgeSource.query.get(source_id)
+                if row:
+                    row.last_sync_status = "error"
+                    row.last_sync_error = str(msg)[:500]
+                    row.last_synced_at = datetime.utcnow()
+                    db.session.commit()
+        except Exception:
+            logger.debug("Failed to record sync error for source %s", source_id, exc_info=True)
+
     def process_external_source(self, source):
         """Fetch, chunk and embed one KnowledgeSource, upserting the resulting
         KnowledgeDocument (keyed by source_id, so a re-sync replaces the old
         chunks instead of piling up duplicates). Updates the source's
         last_synced_at/last_sync_status/last_sync_error either way. Returns
         (ok: bool, error: str|None) — never raises.
+
+        Network I/O (the fetch, and the embedding call) deliberately happens
+        OUTSIDE any `with self.app.app_context()` block, matching the pattern
+        process_document already uses — nesting a second app context inside one
+        a caller (a Flask route) already has open works, but is unnecessary churn.
         """
         from . import knowledge_sources as _ks
+        from sqlalchemy import text as _sql_text
         from ..models import db, KnowledgeDocument, KnowledgeSource
 
-        ok, text_or_error = _ks.sync_source(source.source_type, source.url)
+        # Atomic claim: an UPDATE ... WHERE that only succeeds if this source
+        # wasn't (successfully or not) synced in the last ~55s. Without this,
+        # two near-simultaneous "Sync now" clicks (a double-click, two browser
+        # tabs) both read the same last_synced_at, both pass the routes'
+        # Python-level cooldown check, and both fetch + call paid third-party/
+        # embedding APIs for the same source at once. Deliberately timestamp-only
+        # (no separate "claimed"/"syncing" status): a status that only gets
+        # cleared at the end would leave the source permanently un-syncable if
+        # the process crashes or recycles mid-sync, since nothing would ever
+        # clear it. This self-heals after the cooldown window instead.
+        with self.app.app_context():
+            now = datetime.utcnow()
+            cutoff = now - timedelta(seconds=55)
+            claimed = db.session.execute(
+                _sql_text(
+                    "UPDATE knowledge_sources SET last_synced_at = :now "
+                    "WHERE id = :id AND (last_synced_at IS NULL OR last_synced_at < :cutoff)"
+                ),
+                {"id": source.id, "now": now, "cutoff": cutoff},
+            ).rowcount
+            db.session.commit()
+            if not claimed:
+                return False, "A sync for this source is already running or ran within the last minute."
+
+            row = KnowledgeSource.query.get(source.id)
+            if not row:
+                return False, "Source was deleted"
+            source_type, url, group_id, telegram_group_id = (
+                row.source_type, row.url, row.group_id, row.telegram_group_id,
+            )
+            label = row.label or row.url
+
+            # Storage quota — shares the same 100MB/group cap routes/knowledge.py
+            # enforces on file uploads, since both write into knowledge_documents.
+            # Skip the check when replacing an existing doc for this source (its
+            # own prior content_text is about to be superseded, not added to).
+            # Custom-bot (group_id) sources only — the official-bot upload route
+            # (routes/telegram_groups.py) has no aggregate quota today either
+            # (only a per-file cap), so this doesn't newly restrict that lineage
+            # relative to its own existing upload path.
+            if group_id is not None:
+                from sqlalchemy import func as _func
+                existing_doc = KnowledgeDocument.query.filter_by(source_id=row.id).first()
+                existing_total = db.session.query(
+                    _func.sum(_func.length(KnowledgeDocument.content_text))
+                ).filter(
+                    KnowledgeDocument.group_id == group_id,
+                    KnowledgeDocument.id != (existing_doc.id if existing_doc else -1),
+                ).scalar() or 0
+                if existing_total + 10_000 > self._KB_GROUP_QUOTA_BYTES:
+                    err = "Group knowledge base storage limit (100MB) reached. Delete documents to free space."
+                    row.last_sync_status = "error"
+                    row.last_sync_error = err
+                    db.session.commit()
+                    return False, err
+
+        ok, text_or_error = _ks.sync_source(source_type, url)
+        if not ok:
+            self._mark_source_error(source.id, text_or_error)
+            return False, text_or_error
+
+        text = text_or_error
+        chunks = _chunk_text(text)
+        if not chunks:
+            self._mark_source_error(source.id, "No content to embed")
+            return False, "No content to embed"
+
+        embeddings = self._embed(chunks, group_id=group_id, telegram_group_id=telegram_group_id)
+        if all(e is None for e in embeddings):
+            err = (
+                "Embeddings failed: no AI API key is configured. Add your OpenAI "
+                "API key in Knowledge Base → AI Provider & API Key."
+            )
+            self._mark_source_error(source.id, err)
+            return False, err
+
+        chunk_data = [
+            {"text": c, "embedding": e}
+            for c, e in zip(chunks, embeddings)
+            if e is not None
+        ]
 
         with self.app.app_context():
             row = KnowledgeSource.query.get(source.id)
             if not row:
                 return False, "Source was deleted"
 
-            if not ok:
-                row.last_sync_status = "error"
-                row.last_sync_error = str(text_or_error)[:500]
-                row.last_synced_at = datetime.utcnow()
-                db.session.commit()
-                return False, text_or_error
-
-            text = text_or_error
-            chunks = _chunk_text(text)
-            if not chunks:
-                row.last_sync_status = "error"
-                row.last_sync_error = "No content to embed"
-                row.last_synced_at = datetime.utcnow()
-                db.session.commit()
-                return False, "No content to embed"
-
-            embeddings = self._embed(
-                chunks, group_id=row.group_id, telegram_group_id=row.telegram_group_id,
-            )
-            if all(e is None for e in embeddings):
-                err = (
-                    "Embeddings failed: no AI API key is configured. Add your OpenAI "
-                    "API key in Knowledge Base → AI Provider & API Key."
-                )
-                row.last_sync_status = "error"
-                row.last_sync_error = err[:500]
-                row.last_synced_at = datetime.utcnow()
-                db.session.commit()
-                return False, err
-
-            chunk_data = [
-                {"text": c, "embedding": e}
-                for c, e in zip(chunks, embeddings)
-                if e is not None
-            ]
-
             existing = KnowledgeDocument.query.filter_by(source_id=row.id).first()
-            label = row.label or row.url
             if existing:
                 existing.filename = label
                 existing.content_text = text[:10000]
                 existing.chunks = chunk_data
             else:
                 existing = KnowledgeDocument(
-                    group_id=row.group_id,
-                    telegram_group_id=row.telegram_group_id,
+                    group_id=group_id,
+                    telegram_group_id=telegram_group_id,
                     filename=label,
-                    file_type=row.source_type,
+                    file_type=source_type,
                     content_text=text[:10000],
                     chunks=chunk_data,
                     source_id=row.id,

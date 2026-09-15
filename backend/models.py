@@ -1570,14 +1570,24 @@ class PendingVerification(db.Model):
     max_attempts = db.Column(db.Integer, default=3)
     attempts = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    # Custom-bot fields — official bot rows leave these null/default.
+    # Custom-bot fields — official bot rows leave these null.
     bot_id = db.Column(db.Integer, nullable=True)
     group_id = db.Column(db.Integer, nullable=True)
-    bot_type = db.Column(db.String(20), nullable=True, default="custom")
-    telegram_group_id = db.Column(db.BigInteger, nullable=True)
+    # "official" | "custom" — every writer sets this explicitly (official_bot.py's
+    # own read/write helpers, and VerificationSystem._save_pending for custom
+    # bots). Deliberately no column default: a default here would silently
+    # mislabel whichever lineage's writer doesn't set it. Part of the unique
+    # constraint below so a group running both an official AND a custom bot
+    # (supported elsewhere in this platform) can't have one lineage's challenge
+    # collide with — and silently overwrite or get deleted alongside — the other's.
+    bot_type = db.Column(db.String(20), nullable=True)
+    # String, matching Group.telegram_group_id / TelegramGroup.telegram_group_id
+    # (this is an identity reference, not the raw numeric id used for API calls
+    # — that's `chat_id` above).
+    telegram_group_id = db.Column(db.String(255), nullable=True)
 
     __table_args__ = (
-        db.UniqueConstraint("chat_id", "user_id", name="uq_pending_verification"),
+        db.UniqueConstraint("chat_id", "user_id", "bot_type", name="uq_pending_verification"),
     )
 
 

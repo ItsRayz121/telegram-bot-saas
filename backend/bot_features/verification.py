@@ -41,9 +41,16 @@ class VerificationSystem:
         try:
             with self.app.app_context():
                 from ..models import db, PendingVerification
-                row = PendingVerification.query.filter_by(chat_id=chat_id, user_id=user_id).first()
+                # bot_type="custom" in both the lookup and the row itself — a group
+                # can have the official bot AND a custom bot as members at once, and
+                # both now write into this same table. Without this scoping, this
+                # lookup could find and silently overwrite the official bot's row
+                # for the same (chat_id, user_id), or vice versa.
+                row = PendingVerification.query.filter_by(
+                    chat_id=chat_id, user_id=user_id, bot_type="custom",
+                ).first()
                 if not row:
-                    row = PendingVerification(chat_id=chat_id, user_id=user_id)
+                    row = PendingVerification(chat_id=chat_id, user_id=user_id, bot_type="custom")
                     db.session.add(row)
                 row.method = data.get("method", "button")
                 row.msg_id = data.get("message_id")
@@ -56,7 +63,6 @@ class VerificationSystem:
                 row.attempts = int(data.get("attempts", 0))
                 row.bot_id = self.bot_manager.bot_id
                 row.group_id = data.get("group_id")
-                row.bot_type = data.get("bot_type", "custom")
                 row.telegram_group_id = data.get("telegram_group_id")
                 db.session.commit()
         except Exception as exc:
@@ -68,7 +74,9 @@ class VerificationSystem:
         try:
             with self.app.app_context():
                 from ..models import db, PendingVerification
-                PendingVerification.query.filter_by(chat_id=chat_id, user_id=user_id).delete()
+                PendingVerification.query.filter_by(
+                    chat_id=chat_id, user_id=user_id, bot_type="custom",
+                ).delete()
                 db.session.commit()
         except Exception as exc:
             logger.debug("Verification _remove_pending failed: %s", exc)
@@ -283,7 +291,7 @@ class VerificationSystem:
             "expires_at": datetime.utcnow() + timedelta(seconds=timeout),
             "group_id": group.id,
             "bot_type": getattr(group, "bot_type", "custom"),
-            "telegram_group_id": getattr(group, "telegram_chat_id", None),
+            "telegram_group_id": getattr(group, "telegram_group_id", None),
             "attempts": 0,
             "max_attempts": max_attempts,
             "kick_on_fail": v_cfg.get("kick_on_fail", True),
@@ -349,7 +357,7 @@ class VerificationSystem:
             "expires_at": datetime.utcnow() + timedelta(seconds=timeout),
             "group_id": group.id,
             "bot_type": getattr(group, "bot_type", "custom"),
-            "telegram_group_id": getattr(group, "telegram_chat_id", None),
+            "telegram_group_id": getattr(group, "telegram_group_id", None),
             "attempts": 0,
             "max_attempts": max_attempts,
             "a": a, "b": b, "op_sym": op_sym, "options": options,
@@ -388,7 +396,7 @@ class VerificationSystem:
             "expires_at": datetime.utcnow() + timedelta(seconds=timeout),
             "group_id": group.id,
             "bot_type": getattr(group, "bot_type", "custom"),
-            "telegram_group_id": getattr(group, "telegram_chat_id", None),
+            "telegram_group_id": getattr(group, "telegram_group_id", None),
             "attempts": 0,
             "max_attempts": max_attempts,
             "kick_on_fail": v_cfg.get("kick_on_fail", True),
@@ -496,20 +504,11 @@ class VerificationSystem:
     async def _complete_verification(self, bot, query, chat_id, user_id, pending):
         key = f"{chat_id}:{user_id}"
         try:
+            from ..telegram_permissions import full_member_permissions
             await bot.restrict_chat_member(
                 chat_id=chat_id,
                 user_id=user_id,
-                permissions=ChatPermissions(
-                    can_send_messages=True,
-                    can_send_audios=True,
-                    can_send_documents=True,
-                    can_send_photos=True,
-                    can_send_videos=True,
-                    can_send_video_notes=True,
-                    can_send_voice_notes=True,
-                    can_send_other_messages=True,
-                    can_add_web_page_previews=True,
-                ),
+                permissions=full_member_permissions(),
             )
             await bot.delete_message(chat_id=chat_id, message_id=pending["message_id"])
             await query.answer("✅ Verified! Welcome to the group.")

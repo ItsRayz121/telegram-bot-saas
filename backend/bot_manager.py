@@ -1392,20 +1392,11 @@ class BotInstance:
 
         auto_delete = group.settings.get("moderation", {}).get("auto_delete_action_seconds", 0)
         try:
+            from .telegram_permissions import full_member_permissions
             await context.bot.restrict_chat_member(
                 chat_id=update.effective_chat.id,
                 user_id=target.id,
-                permissions=ChatPermissions(
-                    can_send_messages=True,
-                    can_send_audios=True,
-                    can_send_documents=True,
-                    can_send_photos=True,
-                    can_send_videos=True,
-                    can_send_video_notes=True,
-                    can_send_voice_notes=True,
-                    can_send_other_messages=True,
-                    can_add_web_page_previews=True,
-                ),
+                permissions=full_member_permissions(),
             )
             sent = await update.message.reply_text(f"🔊 {target.first_name} has been unmuted.")
             if auto_delete and sent:

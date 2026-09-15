@@ -15,16 +15,84 @@ Every fetcher is defensive: a network error, an unexpected response shape, or a
 missing credential returns (False, <human-readable reason>) instead of raising —
 a sync failure should always be a clear dashboard message, never a 500.
 """
+import ipaddress
 import logging
 import re
+import socket
+from urllib.parse import urlparse, urljoin
 
 logger = logging.getLogger(__name__)
 
-_TIMEOUT = 12        # seconds — runs synchronously inside a request handler
-_MAX_CHARS = 50_000  # cap ingested text per source so embedding cost stays bounded
+_TIMEOUT = 12                  # seconds — runs synchronously inside a request handler
+_MAX_CHARS = 50_000            # cap ingested text per source so embedding cost stays bounded
+_MAX_RESPONSE_BYTES = 5 * 1024 * 1024  # stop reading a response body past 5MB
+_MAX_REDIRECTS = 5
 _USER_AGENT = "Mozilla/5.0 (compatible; TelegizerBot/1.0; +https://telegizer.com)"
 
 SOURCE_TYPES = ("website", "telegram", "twitter", "youtube")
+
+
+class _UnsafeUrlError(Exception):
+    """Raised when a URL resolves to a non-public address — never surfaced
+    verbatim to the caller with internal detail, just a generic reason."""
+
+
+def _assert_public_host(url: str):
+    """Reject anything that isn't a plain http(s) URL resolving only to public
+    IP addresses — this admin-supplied URL is fetched server-side, so without
+    this check an admin could point a source at cloud metadata endpoints
+    (169.254.169.254), localhost, or an internal Railway service and have the
+    scraped response reflected back through the dashboard (SSRF)."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise _UnsafeUrlError("Only http:// and https:// URLs are allowed.")
+    host = parsed.hostname
+    if not host:
+        raise _UnsafeUrlError("That URL has no host.")
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except socket.gaierror:
+        raise _UnsafeUrlError("Could not resolve that host.")
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if (
+            ip.is_private or ip.is_loopback or ip.is_link_local
+            or ip.is_multicast or ip.is_reserved or ip.is_unspecified
+        ):
+            raise _UnsafeUrlError("That URL points to a non-public address, which isn't allowed.")
+
+
+def _safe_get(url: str, *, max_redirects: int = _MAX_REDIRECTS):
+    """requests.get, but every hop (including redirects) is host-validated and
+    the body is capped at _MAX_RESPONSE_BYTES — a redirect to an internal
+    address only this second check (not the initial-URL one) would catch."""
+    import requests
+
+    for _ in range(max_redirects + 1):
+        _assert_public_host(url)
+        resp = requests.get(
+            url, timeout=_TIMEOUT, headers={"User-Agent": _USER_AGENT},
+            allow_redirects=False, stream=True,
+        )
+        if resp.is_redirect or resp.is_permanent_redirect:
+            location = resp.headers.get("Location")
+            resp.close()
+            if not location:
+                raise _UnsafeUrlError("Redirected with no destination.")
+            url = urljoin(url, location)
+            continue
+
+        chunks = []
+        total = 0
+        for chunk in resp.iter_content(chunk_size=8192):
+            total += len(chunk)
+            if total > _MAX_RESPONSE_BYTES:
+                resp.close()
+                raise _UnsafeUrlError("That page's response was too large.")
+            chunks.append(chunk)
+        resp._content = b"".join(chunks)  # so resp.text below decodes what we already read
+        return resp
+    raise _UnsafeUrlError("Too many redirects.")
 
 
 def detect_source_type(url: str) -> str:
@@ -62,7 +130,9 @@ def _fetch_website(url: str):
     from bs4 import BeautifulSoup
 
     try:
-        resp = requests.get(url, timeout=_TIMEOUT, headers={"User-Agent": _USER_AGENT})
+        resp = _safe_get(url)
+    except _UnsafeUrlError as exc:
+        return False, str(exc)
     except requests.RequestException as exc:
         return False, f"Could not reach that URL: {exc}"
     if resp.status_code != 200:
@@ -101,7 +171,9 @@ def _fetch_telegram_channel(url: str):
 
     preview_url = f"https://t.me/s/{username}"
     try:
-        resp = requests.get(preview_url, timeout=_TIMEOUT, headers={"User-Agent": _USER_AGENT})
+        resp = _safe_get(preview_url)
+    except _UnsafeUrlError as exc:
+        return False, str(exc)
     except requests.RequestException as exc:
         return False, f"Could not reach Telegram: {exc}"
     if resp.status_code != 200:
@@ -188,6 +260,8 @@ def _fetch_youtube(url: str):
             params={"part": "contentDetails", "id": channel_id, "key": key},
             timeout=_TIMEOUT,
         )
+        if ch_resp.status_code != 200:
+            return False, f"YouTube Data API returned HTTP {ch_resp.status_code} — check the configured API key/quota."
         items = (ch_resp.json() or {}).get("items") or []
         uploads_playlist = None
         if items:
@@ -204,6 +278,8 @@ def _fetch_youtube(url: str):
             params={"part": "snippet", "playlistId": uploads_playlist, "maxResults": 15, "key": key},
             timeout=_TIMEOUT,
         )
+        if pl_resp.status_code != 200:
+            return False, f"YouTube Data API returned HTTP {pl_resp.status_code} — check the configured API key/quota."
         pl_items = (pl_resp.json() or {}).get("items") or []
     except requests.RequestException as exc:
         return False, f"Could not reach YouTube: {exc}"

@@ -1522,7 +1522,7 @@ def _run_user_columns_migration():
 
 
 def _run_pending_verification_columns_migration():
-    """Custom-bot columns on pending_verifications.
+    """Custom-bot columns on pending_verifications, and lineage-scoping the table.
 
     Custom bots (bot_manager.py) used to keep join-verification challenges only
     in an in-process dict. The Procfile recycles the single gunicorn worker every
@@ -1532,13 +1532,34 @@ def _run_pending_verification_columns_migration():
     custom bots write-through to the same pending_verifications table the
     official bot already persists to, and reload their own rows (filtered by
     bot_id) on every (re)start.
+
+    A group can have BOTH the official bot and a custom bot as members (this
+    platform supports that elsewhere) — so this also widens the uniqueness key
+    to (chat_id, user_id, bot_type) and backfills bot_type on any pre-existing
+    rows (which, before this column existed, could only be official-bot rows),
+    so the two lineages can never collide on or steal each other's row for the
+    same joining user.
     """
     _mig_log = logging.getLogger("migrations")
     stmts = [
         "ALTER TABLE pending_verifications ADD COLUMN IF NOT EXISTS bot_id INTEGER",
         "ALTER TABLE pending_verifications ADD COLUMN IF NOT EXISTS group_id INTEGER",
-        "ALTER TABLE pending_verifications ADD COLUMN IF NOT EXISTS bot_type VARCHAR(20) DEFAULT 'custom'",
-        "ALTER TABLE pending_verifications ADD COLUMN IF NOT EXISTS telegram_group_id BIGINT",
+        "ALTER TABLE pending_verifications ADD COLUMN IF NOT EXISTS bot_type VARCHAR(20)",
+        "ALTER TABLE pending_verifications ADD COLUMN IF NOT EXISTS telegram_group_id VARCHAR(255)",
+        # Correct an earlier version of this migration that added the column as
+        # BIGINT — it must match Group/TelegramGroup.telegram_group_id (String),
+        # not the raw numeric chat_id.
+        "ALTER TABLE pending_verifications ALTER COLUMN telegram_group_id TYPE VARCHAR(255) USING telegram_group_id::VARCHAR",
+        # Undo the DEFAULT 'custom' an earlier version of this migration set —
+        # a default here would silently mislabel official-bot rows as custom
+        # since official_bot.py's writer doesn't set this column itself.
+        "ALTER TABLE pending_verifications ALTER COLUMN bot_type DROP DEFAULT",
+        # Backfill: a row with no bot_id predates the custom-bot write path
+        # entirely (bot_id is likewise new) and so can only be official-bot's.
+        "UPDATE pending_verifications SET bot_type = 'official' WHERE bot_type IS NULL AND bot_id IS NULL",
+        "UPDATE pending_verifications SET bot_type = 'custom' WHERE bot_type IS NULL AND bot_id IS NOT NULL",
+        "ALTER TABLE pending_verifications DROP CONSTRAINT IF EXISTS uq_pending_verification",
+        "ALTER TABLE pending_verifications ADD CONSTRAINT uq_pending_verification UNIQUE (chat_id, user_id, bot_type)",
     ]
     try:
         with db.engine.connect() as conn:

@@ -40,6 +40,109 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
+## `<this commit>` — audit pass: fix a real cross-lineage verification bug + SSRF + sync races
+**Date:** 2026-09-15 · **Risk:** medium · **Touches:** money, bot hot path, security
+
+### What changed
+An in-depth cross-check of the last 4 commits (requested after they shipped), using an
+independent 8-angle automated review plus manual verification against real
+models/SQLite. Found and fixed real bugs, not just style:
+
+1. **Cross-lineage collision in `pending_verifications` (real, serious).** `ff584f2`'s
+   own predecessor made custom bots write into the same table the official bot already
+   used, but never scoped either side by lineage. A group running BOTH the official bot
+   and a custom bot (this platform explicitly supports that — see `507db0f`'s notes)
+   could have one bot's challenge silently overwritten, or its DB row deleted out from
+   under it, by the other. Fixed: `bot_type` is now part of the unique constraint
+   (`chat_id, user_id, bot_type`) and every read/write in both `official_bot.py` and
+   `bot_features/verification.py` filters by it. Also removed a column default that
+   would have silently mislabeled official-bot rows as `"custom"` (official_bot.py never
+   set the column itself), and backfills any pre-existing rows.
+2. **`telegram_group_id` was silently always NULL for custom bots.** Three call sites in
+   `verification.py` read `group.telegram_chat_id` — `Group` has no such attribute
+   (it's `telegram_group_id`) — so `getattr(..., None)` always fell through. Fixed the
+   typo, and corrected the column's type (was `BigInteger`, should be `String(255)` to
+   match `Group`/`TelegramGroup.telegram_group_id`).
+3. **SSRF in the new website/"any URL" scraper (security).** `knowledge_sources.py`
+   fetched an admin-supplied URL server-side with no host validation — a Pro user could
+   point a source at `169.254.169.254` (cloud metadata), localhost, or an internal
+   Railway service and have the response reflected back through the dashboard. Fixed:
+   every hostname (including each hop of a redirect chain, checked individually — not
+   just the initial URL) is resolved and rejected if it's private/loopback/link-local/
+   reserved/multicast. Response bodies are also now capped at 5MB via streaming instead
+   of buffered in full before truncation.
+4. **Sync could double-fire (real, costs money).** The 60s cooldown was a Python-level
+   check-then-act in the route handler — two near-simultaneous "Sync now" clicks (or a
+   double-click) both read the same `last_synced_at` and both ran, double-spending
+   embeddings/YouTube/twitterapi.io calls for one click. Fixed with an atomic
+   `UPDATE ... WHERE` claim inside `process_external_source` itself (so both routes get
+   the fix from one place) — timestamp-only, deliberately no separate "syncing" status,
+   so a crash mid-sync self-heals after the cooldown instead of locking the source out
+   forever.
+5. **The 100MB/group storage quota that `ff584f2`'s own writeup claimed was automatic,
+   wasn't** — `process_external_source` never actually checked it. Now does, for
+   custom-bot (group_id) sources; official-bot sources have no aggregate quota today
+   either way (matching that lineage's existing file-upload route).
+6. **Official bot's restrict-only verification-timeout branch never removed its DB row**
+   (only the in-memory dict) — inconsistent with the exact same fix already applied to
+   the custom-bot side in `df8da28`. Now calls `_remove_pending_verification` there too.
+7. **YouTube API errors were swallowed** — a bad/quota-exhausted API key returned a 4xx
+   with no `items` key, and the code reported "channel has no public uploads" instead of
+   the real cause. Now checks `status_code` first, like the other fetchers already did.
+8. **Consolidated the `ChatPermissions` "restore full member" block**, which was
+   copy-pasted at 6 call sites platform-wide (4 touched by the verification fix, 1 in
+   `routes/telegram_groups.py`, 1 more found in `routes/settings.py`) — 4 of the 6 were
+   missing `can_send_polls`, meaning a "fully unmuted" member still couldn't send polls.
+   Now one shared `telegram_permissions.full_member_permissions()`.
+9. **Consolidated the two new `_require_paid` copies** (`routes/knowledge.py`,
+   `routes/telegram_groups.py`) into `backend/utils/plan_gating.py`. Three older,
+   independent copies (`polls.py`, `settings.py`, `totp.py`) are left alone — out of
+   scope, higher risk to touch for a pure dedup with no bug attached to them.
+
+### To revert
+```bash
+git revert <this commit>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Mostly reversible — no data is deleted by reverting. The unique-constraint change
+  and `bot_type` backfill are additive/corrective; reverting just stops enforcing them.
+- ⚠️ Reverting brings back all 9 issues above, including the SSRF path (#3) and the
+  cross-lineage collision (#1) — treat a revert of this commit as re-opening a real
+  security gap, not just an inconvenience.
+- ⚠️ Sync attempts already correctly blocked by the double-fire fix, or already correctly
+  rejected by the SSRF guard, are not "undone" by a revert — there was nothing to undo.
+
+### Kill switch (if any)
+- `VERIFICATION_DB_PERSIST=0` — still disables the whole custom-bot DB-persistence path
+  from `df8da28`/this commit at once, including the lineage-scoping fix; only use this if
+  the persistence path itself is the problem, not the SSRF/race fixes.
+- `KNOWLEDGE_SOURCES_ENABLED=0` — still disables sync-now on both lineages.
+- No standalone kill switch for the SSRF guard or the ChatPermissions/plan-gating
+  consolidation — these are corrections to code that was never safe/correct; a flag that
+  disabled them would just be a flag that reintroduced the vulnerability or the bug.
+
+### Safety properties (verified, not assumed)
+No test suite in this repo. Extended the throwaway harnesses from the prior two entries:
+- **Cross-lineage isolation (7 checks):** an official-bot row and a custom-bot row for
+  the identical `(chat_id, user_id)` both persist independently with no collision; each
+  lineage's loader restores only its own row after a simulated restart; deleting one
+  lineage's row leaves the other's intact.
+- **KB sources (28 checks, up from 13):** all prior checks still pass, plus new ones —
+  an immediate re-sync attempt and a post-success double-click are both rejected by the
+  atomic claim without creating a second document; the SSRF guard blocks 127.0.0.1,
+  localhost, 169.254.169.254, two private ranges, and a non-http(s) scheme, while still
+  allowing a normal public URL and following a real redirect (tested live against
+  `http://github.com` → `https://github.com`); a source aimed at the metadata endpoint
+  fails cleanly end-to-end with no raw exception text leaked.
+- All touched Python files compile; every touched module (including the new
+  `telegram_permissions.py` and `utils/plan_gating.py`) imports cleanly standalone.
+- `full_member_permissions()` was confirmed to build a valid `ChatPermissions` with all
+  10 fields, returning an independent object on each call (no shared-mutable-state risk).
+
+---
+
 ## `3d28b51` — KB external sources: official-bot parity
 **Date:** 2026-09-15 · **Risk:** low · **Touches:** money (AI/API spend), plan limits
 
