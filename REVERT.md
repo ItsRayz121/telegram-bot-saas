@@ -40,7 +40,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
-## `<this commit>` — fix join-verification: users stuck muted, "expired" on click
+## `df8da28` — fix join-verification: users stuck muted, "expired" on click
 **Date:** 2026-09-15 · **Risk:** medium · **Touches:** bot hot path
 
 ### What changed
@@ -81,7 +81,7 @@ tracing the full flow end to end:
 
 ### To revert
 ```bash
-git revert <this commit>
+git revert df8da28
 git push origin main
 ```
 
