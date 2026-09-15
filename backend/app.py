@@ -696,6 +696,7 @@ def create_app():
         _run_xp_period_migrations()
         _run_user_columns_migration()
         _run_scheduled_job_runs_migration()
+        _run_pending_verification_columns_migration()
 
         # Encryption self-check — must run after all migrations so tokens exist
         from .utils.encryption import startup_encryption_selfcheck
@@ -1517,6 +1518,41 @@ def _run_user_columns_migration():
         _mig_log.info("user_columns migrations complete")
     except Exception as exc:
         _mig_log.warning("user_columns migrations failed: %s", exc)
+
+
+def _run_pending_verification_columns_migration():
+    """Custom-bot columns on pending_verifications.
+
+    Custom bots (bot_manager.py) used to keep join-verification challenges only
+    in an in-process dict. The Procfile recycles the single gunicorn worker every
+    ~500 requests (--max-requests), which rebuilds every BotInstance with an empty
+    dict — so a challenge sent moments before a recycle reads as "already
+    processed or expired" the instant a real user clicks it. These columns let
+    custom bots write-through to the same pending_verifications table the
+    official bot already persists to, and reload their own rows (filtered by
+    bot_id) on every (re)start.
+    """
+    _mig_log = logging.getLogger("migrations")
+    stmts = [
+        "ALTER TABLE pending_verifications ADD COLUMN IF NOT EXISTS bot_id INTEGER",
+        "ALTER TABLE pending_verifications ADD COLUMN IF NOT EXISTS group_id INTEGER",
+        "ALTER TABLE pending_verifications ADD COLUMN IF NOT EXISTS bot_type VARCHAR(20) DEFAULT 'custom'",
+        "ALTER TABLE pending_verifications ADD COLUMN IF NOT EXISTS telegram_group_id BIGINT",
+    ]
+    try:
+        with db.engine.connect() as conn:
+            for sql in stmts:
+                try:
+                    conn.execute(text(sql))
+                    conn.commit()
+                except Exception:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+        _mig_log.info("pending_verification_columns migration complete")
+    except Exception as exc:
+        _mig_log.warning("pending_verification_columns migration failed: %s", exc)
 
 
 def _backfill_group_defaults():

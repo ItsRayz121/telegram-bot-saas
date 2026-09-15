@@ -3608,7 +3608,7 @@ async def _start_verification(bot, chat, user, v_cfg, flask_app, group_id):
 
     asyncio.get_running_loop().call_later(
         timeout,
-        lambda: asyncio.ensure_future(_verification_timeout(bot, chat_id, user_id)),
+        lambda: asyncio.ensure_future(_verification_timeout(bot, chat_id, user_id, flask_app)),
     )
 
     _log.info(
@@ -3685,7 +3685,12 @@ async def _complete_verification(bot, query, chat_id, user_id, pending, flask_ap
             user_id=user_id,
             permissions=ChatPermissions(
                 can_send_messages=True,
-                can_send_media_messages=True,
+                can_send_audios=True,
+                can_send_documents=True,
+                can_send_photos=True,
+                can_send_videos=True,
+                can_send_video_notes=True,
+                can_send_voice_notes=True,
                 can_send_other_messages=True,
                 can_add_web_page_previews=True,
             ),
@@ -3787,7 +3792,7 @@ async def _fail_verification(bot, chat_id, user_id, pending, flask_app):
         _remove_pending_verification(flask_app, chat_id, user_id)
 
 
-async def _verification_timeout(bot, chat_id, user_id):
+async def _verification_timeout(bot, chat_id, user_id, flask_app=None):
     key = f"{chat_id}:{user_id}"
     pending = _pending_verifications.get(key)
     if not pending:
@@ -3797,8 +3802,13 @@ async def _verification_timeout(bot, chat_id, user_id):
     _log.info("[OfficialBot] Verification timed out: user=%s group=%s", user_id, chat_id)
 
     if pending.get("kick_on_fail", True):
-        # Full fail: kick + delete message
-        await _fail_verification(bot, chat_id, user_id, pending, None)
+        # Full fail: kick + delete message. flask_app must be threaded through here —
+        # without it, _fail_verification silently skips writing the PendingUnban row,
+        # so the scheduled 1-hour unban never gets scheduled. The 5-minute
+        # expire_pending_verifications sweep then finds this row still present and
+        # immediately bans+unbans the user, undoing the temp-ban within minutes
+        # instead of the intended hour.
+        await _fail_verification(bot, chat_id, user_id, pending, flask_app)
     else:
         # Restrict-only: just auto-delete the challenge message if enabled
         if pending.get("auto_delete_on_timeout", True) and pending.get("msg_id"):
@@ -5065,7 +5075,12 @@ async def cmd_unmute(update: Update, context: ContextTypes.DEFAULT_TYPE):
             chat_id=chat_id, user_id=target_id,
             permissions=ChatPermissions(
                 can_send_messages=True,
-                can_send_media_messages=True,
+                can_send_audios=True,
+                can_send_documents=True,
+                can_send_photos=True,
+                can_send_videos=True,
+                can_send_video_notes=True,
+                can_send_voice_notes=True,
                 can_send_other_messages=True,
                 can_add_web_page_previews=True,
             ),
@@ -6680,7 +6695,7 @@ class OfficialBotRunner:
             loop.call_later(
                 _vremaining,
                 lambda _c=int(_vc), _u=int(_vu): asyncio.ensure_future(
-                    _verification_timeout(self.application.bot, _c, _u)
+                    _verification_timeout(self.application.bot, _c, _u, flask_app)
                 ),
             )
         self.application.bot_data["flask_app"] = flask_app

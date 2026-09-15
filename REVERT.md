@@ -40,6 +40,88 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
+## `<this commit>` — fix join-verification: users stuck muted, "expired" on click
+**Date:** 2026-09-15 · **Risk:** medium · **Touches:** bot hot path
+
+### What changed
+Reported symptom: clicking a join-verification challenge (button/math/word, either bot
+lineage) says "verification completed" or "verification expired" and the user is left
+unable to post — this was actively costing real members. Two independent bugs, found by
+tracing the full flow end to end:
+
+1. **`ChatPermissions(can_send_media_messages=True, ...)` — this kwarg was removed from
+   python-telegram-bot in v20.5; the pinned version here is 21.3 (`requirements.txt`).
+   Every call **raised `TypeError` before the user was ever unmuted**, in all 4 places that
+   build this object: verification success on both bot lineages
+   (`bot_features/verification.py`, `official_bot.py`) and the `/unmute` command on both
+   lineages (`bot_manager.py`, `official_bot.py`). The exception was swallowed by an
+   existing `except Exception` — so `query.answer(...)` was sometimes never reached, and
+   Telegram's own client shows a generic "expired" toast for an unanswered callback query.
+   This matches the reported symptom directly and is the more likely primary cause.
+   Replaced with the 6 granular flags PTB has used since 20.5 (`can_send_audios`,
+   `can_send_documents`, `can_send_photos`, `can_send_videos`, `can_send_video_notes`,
+   `can_send_voice_notes`) at all 4 call sites.
+2. **Custom-bot verification state was in-process-only.** `VerificationSystem.pending`
+   (`bot_features/verification.py`) is a plain dict with no persistence, unlike the
+   official bot's `PendingVerification` DB table. The `Procfile` recycles the single
+   gunicorn worker every ~500 requests (`--max-requests`), which rebuilds every
+   `BotInstance`/`VerificationSystem` with an **empty** dict. A challenge sent moments
+   before a recycle reads as "already processed or expired" to a real user clicking
+   within the original timeout. Custom bots now write-through to the same
+   `pending_verifications` table (new columns: `bot_id`, `group_id`, `bot_type`,
+   `telegram_group_id`) and reload their own rows on every (re)start, re-arming the
+   timeout timer for each restored challenge — mirroring what the official bot already did.
+3. **Adjacent bug in the same code, not the reported symptom:** the official bot's
+   in-process timeout handler called `_fail_verification(bot, chat_id, user_id, pending,
+   None)` — `None` is the `flask_app` param, not `group_id`. With no `flask_app`, the
+   1-hour scheduled `PendingUnban` row was never written, so the independent 5-minute
+   `expire_pending_verifications` Celery sweep found the still-present DB row and
+   immediately banned+unbanned the user — undoing a temp-ban within ~5 minutes instead of
+   the intended 1 hour. Fixed by threading the real `flask_app` through both call sites.
+
+### To revert
+```bash
+git revert <this commit>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Fully reversible. New columns are additive (`ADD COLUMN IF NOT EXISTS`, all nullable)
+  and are simply left unused by a revert — no data loss, no destructive migration.
+- ⚠️ Reverting brings back all 3 bugs above: unmute crashing silently, custom-bot
+  verification state lost on every worker recycle, and the official bot's temp-ban
+  duration collapsing to ~5 minutes.
+- ⚠️ Members already correctly unmuted or verified while this was live stay that way — a
+  revert does not re-mute them.
+
+### Kill switch (if any)
+- `VERIFICATION_DB_PERSIST=0` — instantly reverts custom bots to the old in-memory-only
+  behavior (bug #2 above) without touching the `ChatPermissions` fix, no deploy needed.
+- `GUNICORN_MAX_REQUESTS=0` — stops the worker recycle that triggers bug #2 at all, without
+  code changes, if the DB write-through itself needs to be avoided under load.
+- No kill switch for the `ChatPermissions` fix or the `flask_app` threading fix — both are
+  straightforward corrections to code that could not possibly have worked before; a flag
+  that reintroduced them would just be a flag that reintroduced the crash.
+
+### Safety properties (verified, not assumed)
+No test suite in this repo, so a throwaway harness was built against a real Flask app +
+in-memory SQLite using the actual models and the actual `VerificationSystem` class (no
+mocks of the logic under test):
+- A challenge write-through produces a DB row with the correct `bot_id`/`group_id` and a
+  future `expires_at`.
+- A brand-new `VerificationSystem` (simulating the post-recycle process) starts with an
+  empty `pending` dict — reproducing the bug — and `load_pending_from_db()` restores it.
+- A button click on the **restored** instance completes successfully end-to-end (was: the
+  `ChatPermissions` crash prevented this even pre-recycle) and removes the DB row.
+- Math-method wrong-answer attempt counts persist to the DB and survive a simulated
+  restart; a correct answer on the restored instance still succeeds.
+- All 5 touched Python files compile.
+- ⚠️ Verified against SQLite with a hand-built minimal schema (only `pending_verifications`
+  created), not the full Postgres schema — the FK/column types are plain and additive, but
+  the first real verification click in production is still the real proof.
+
+---
+
 ## `051fb13` — cut web-service RAM: one bot manager, one scheduler pool, bounded per-user caches
 **Date:** 2026-09-10 · **Risk:** medium · **Touches:** bot hot path
 

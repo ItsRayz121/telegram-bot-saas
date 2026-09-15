@@ -1,10 +1,16 @@
 import asyncio
+import os
 import random
 import logging
 from datetime import datetime, timedelta
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ChatPermissions
 
 logger = logging.getLogger(__name__)
+
+# Kill switch: set VERIFICATION_DB_PERSIST=0 to fall back to the old in-memory-only
+# behavior (no write-through, no reload-on-restart) without a deploy.
+def _db_persist_enabled() -> bool:
+    return os.environ.get("VERIFICATION_DB_PERSIST", "1") != "0"
 
 MATH_OPS = [
     ("add", "+"),
@@ -21,6 +27,106 @@ class VerificationSystem:
         self.pending = {}
         # Track users waiting for first-message verification (not yet restricted)
         self.first_message_pending = {}
+
+    def _save_pending(self, chat_id, user_id):
+        """Write-through: persist a pending challenge to pending_verifications so
+        it survives a gunicorn worker recycle (Procfile: --max-requests), which
+        tears down this process and rebuilds a fresh, empty `self.pending`."""
+        if not _db_persist_enabled():
+            return
+        key = f"{chat_id}:{user_id}"
+        data = self.pending.get(key)
+        if not data:
+            return
+        try:
+            with self.app.app_context():
+                from ..models import db, PendingVerification
+                row = PendingVerification.query.filter_by(chat_id=chat_id, user_id=user_id).first()
+                if not row:
+                    row = PendingVerification(chat_id=chat_id, user_id=user_id)
+                    db.session.add(row)
+                row.method = data.get("method", "button")
+                row.msg_id = data.get("message_id")
+                row.message_thread_id = data.get("message_thread_id")
+                row.answer = str(data["answer"]) if data.get("answer") is not None else None
+                row.expires_at = data["expires_at"]
+                row.kick_on_fail = bool(data.get("kick_on_fail", True))
+                row.auto_delete_on_timeout = bool(data.get("auto_delete_on_timeout", True))
+                row.max_attempts = int(data.get("max_attempts", 3))
+                row.attempts = int(data.get("attempts", 0))
+                row.bot_id = self.bot_manager.bot_id
+                row.group_id = data.get("group_id")
+                row.bot_type = data.get("bot_type", "custom")
+                row.telegram_group_id = data.get("telegram_group_id")
+                db.session.commit()
+        except Exception as exc:
+            logger.debug("Verification _save_pending failed: %s", exc)
+
+    def _remove_pending(self, chat_id, user_id):
+        if not _db_persist_enabled():
+            return
+        try:
+            with self.app.app_context():
+                from ..models import db, PendingVerification
+                PendingVerification.query.filter_by(chat_id=chat_id, user_id=user_id).delete()
+                db.session.commit()
+        except Exception as exc:
+            logger.debug("Verification _remove_pending failed: %s", exc)
+
+    def load_pending_from_db(self, bot):
+        """Restore this bot's in-flight challenges from the DB on (re)start.
+
+        Without this, a gunicorn worker recycle (or any process restart) wipes
+        `self.pending` and a user clicking a challenge sent moments earlier gets
+        "Verification already processed or expired" even though they're well
+        within the original timeout. Also re-arms the timeout timer for each
+        restored challenge, since the original `call_later` died with the old
+        process/event loop.
+        """
+        if not _db_persist_enabled():
+            return
+        restored = []
+        try:
+            with self.app.app_context():
+                from ..models import PendingVerification
+                rows = PendingVerification.query.filter(
+                    PendingVerification.bot_id == self.bot_manager.bot_id,
+                    PendingVerification.expires_at > datetime.utcnow(),
+                ).all()
+                for row in rows:
+                    key = f"{row.chat_id}:{row.user_id}"
+                    self.pending[key] = {
+                        "method": row.method,
+                        "message_id": row.msg_id,
+                        "message_thread_id": row.message_thread_id,
+                        "answer": row.answer,
+                        "expires_at": row.expires_at,
+                        "group_id": row.group_id,
+                        "bot_type": row.bot_type or "custom",
+                        "telegram_group_id": row.telegram_group_id,
+                        "attempts": row.attempts or 0,
+                        "max_attempts": row.max_attempts or 3,
+                        "kick_on_fail": row.kick_on_fail,
+                        "auto_delete_on_timeout": row.auto_delete_on_timeout,
+                    }
+                    restored.append((row.chat_id, row.user_id, row.group_id, row.expires_at))
+        except Exception as exc:
+            logger.warning("Bot %s: load_pending_from_db failed: %s", self.bot_manager.bot_id, exc)
+            return
+
+        for chat_id, user_id, group_id, expires_at in restored:
+            remaining = max(1.0, (expires_at - datetime.utcnow()).total_seconds())
+            asyncio.get_event_loop().call_later(
+                remaining,
+                lambda c=chat_id, u=user_id, g=group_id: asyncio.ensure_future(
+                    self._check_verification_timeout(bot, c, u, g)
+                ),
+            )
+        if restored:
+            logger.info(
+                "Bot %s: restored %d pending verification(s) from DB",
+                self.bot_manager.bot_id, len(restored),
+            )
 
     async def verify_new_member(self, bot, update, member_user, group, settings):
         v_cfg = settings.get("verification", {})
@@ -183,9 +289,10 @@ class VerificationSystem:
             "kick_on_fail": v_cfg.get("kick_on_fail", True),
             "auto_delete_on_timeout": auto_delete,
         }
+        self._save_pending(chat_id, user_id)
         asyncio.get_event_loop().call_later(
             timeout,
-            lambda: asyncio.ensure_future(self._check_verification_timeout(bot, chat_id, user_id, group)),
+            lambda: asyncio.ensure_future(self._check_verification_timeout(bot, chat_id, user_id, group.id)),
         )
 
     async def math_verification(self, bot, chat_id, user_id, user, group, timeout, group_name,
@@ -249,9 +356,10 @@ class VerificationSystem:
             "kick_on_fail": v_cfg.get("kick_on_fail", True),
             "auto_delete_on_timeout": auto_delete,
         }
+        self._save_pending(chat_id, user_id)
         asyncio.get_event_loop().call_later(
             timeout,
-            lambda: asyncio.ensure_future(self._check_verification_timeout(bot, chat_id, user_id, group)),
+            lambda: asyncio.ensure_future(self._check_verification_timeout(bot, chat_id, user_id, group.id)),
         )
 
     async def word_verification(self, bot, chat_id, user_id, user, group, settings, timeout, group_name,
@@ -286,9 +394,10 @@ class VerificationSystem:
             "kick_on_fail": v_cfg.get("kick_on_fail", True),
             "auto_delete_on_timeout": auto_delete,
         }
+        self._save_pending(chat_id, user_id)
         asyncio.get_event_loop().call_later(
             timeout,
-            lambda: asyncio.ensure_future(self._check_verification_timeout(bot, chat_id, user_id, group)),
+            lambda: asyncio.ensure_future(self._check_verification_timeout(bot, chat_id, user_id, group.id)),
         )
 
     async def handle_verification_callback(self, bot, query, chat_id, user_id, group_id, method, extra_data):
@@ -326,6 +435,7 @@ class VerificationSystem:
                 return False
 
             remaining = max_attempts - pending["attempts"]
+            self._save_pending(chat_id, user_id)
             await query.answer(f"❌ Wrong answer! {remaining} attempt(s) left.")
             return False
 
@@ -376,6 +486,7 @@ class VerificationSystem:
                     pass
             else:
                 remaining = max_attempts - pending["attempts"]
+                self._save_pending(chat_id, user_id)
                 try:
                     await bot.send_message(chat_id=chat_id, text=f"❌ Wrong answer. {remaining} attempt(s) left.")
                 except Exception:
@@ -390,7 +501,12 @@ class VerificationSystem:
                 user_id=user_id,
                 permissions=ChatPermissions(
                     can_send_messages=True,
-                    can_send_media_messages=True,
+                    can_send_audios=True,
+                    can_send_documents=True,
+                    can_send_photos=True,
+                    can_send_videos=True,
+                    can_send_video_notes=True,
+                    can_send_voice_notes=True,
                     can_send_other_messages=True,
                     can_add_web_page_previews=True,
                 ),
@@ -421,6 +537,7 @@ class VerificationSystem:
             logger.error(f"Complete verification error: {e}")
         finally:
             self.pending.pop(key, None)
+            self._remove_pending(chat_id, user_id)
 
     async def fail_verification(self, bot, chat_id, user_id, pending, group_id):
         # kick_on_fail is stored in pending at challenge time so we avoid
@@ -450,8 +567,9 @@ class VerificationSystem:
             logger.error(f"Fail verification error: {e}")
         finally:
             self.pending.pop(key, None)
+            self._remove_pending(chat_id, user_id)
 
-    async def _check_verification_timeout(self, bot, chat_id, user_id, group):
+    async def _check_verification_timeout(self, bot, chat_id, user_id, group_id):
         """Called when the timeout timer fires. Kicks/restricts and auto-deletes the challenge message."""
         key = f"{chat_id}:{user_id}"
         pending = self.pending.get(key)
@@ -465,7 +583,7 @@ class VerificationSystem:
 
         if pending.get("kick_on_fail", True):
             # Full fail path: kick + delete message
-            await self.fail_verification(bot, chat_id, user_id, pending, group.id)
+            await self.fail_verification(bot, chat_id, user_id, pending, group_id)
         else:
             # Restrict-only path: user stays restricted but message is auto-deleted if enabled
             if auto_delete:
@@ -482,3 +600,4 @@ class VerificationSystem:
             except Exception:
                 pass
             self.pending.pop(key, None)
+            self._remove_pending(chat_id, user_id)

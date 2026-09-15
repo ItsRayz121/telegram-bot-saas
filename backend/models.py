@@ -1525,6 +1525,11 @@ class PendingVerification(db.Model):
     max_attempts = db.Column(db.Integer, default=3)
     attempts = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # Custom-bot fields — official bot rows leave these null/default.
+    bot_id = db.Column(db.Integer, nullable=True)
+    group_id = db.Column(db.Integer, nullable=True)
+    bot_type = db.Column(db.String(20), nullable=True, default="custom")
+    telegram_group_id = db.Column(db.BigInteger, nullable=True)
 
     __table_args__ = (
         db.UniqueConstraint("chat_id", "user_id", name="uq_pending_verification"),
