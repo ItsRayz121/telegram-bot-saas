@@ -1,5 +1,6 @@
 import math
 import logging
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -219,6 +220,81 @@ class KnowledgeBaseSystem:
             db.session.add(doc)
             db.session.commit()
             return doc.to_dict(), None
+
+    def process_external_source(self, source):
+        """Fetch, chunk and embed one KnowledgeSource, upserting the resulting
+        KnowledgeDocument (keyed by source_id, so a re-sync replaces the old
+        chunks instead of piling up duplicates). Updates the source's
+        last_synced_at/last_sync_status/last_sync_error either way. Returns
+        (ok: bool, error: str|None) — never raises.
+        """
+        from . import knowledge_sources as _ks
+        from ..models import db, KnowledgeDocument, KnowledgeSource
+
+        ok, text_or_error = _ks.sync_source(source.source_type, source.url)
+
+        with self.app.app_context():
+            row = KnowledgeSource.query.get(source.id)
+            if not row:
+                return False, "Source was deleted"
+
+            if not ok:
+                row.last_sync_status = "error"
+                row.last_sync_error = str(text_or_error)[:500]
+                row.last_synced_at = datetime.utcnow()
+                db.session.commit()
+                return False, text_or_error
+
+            text = text_or_error
+            chunks = _chunk_text(text)
+            if not chunks:
+                row.last_sync_status = "error"
+                row.last_sync_error = "No content to embed"
+                row.last_synced_at = datetime.utcnow()
+                db.session.commit()
+                return False, "No content to embed"
+
+            embeddings = self._embed(chunks, group_id=row.group_id)
+            if all(e is None for e in embeddings):
+                err = (
+                    "Embeddings failed: no AI API key is configured. Add your OpenAI "
+                    "API key in Knowledge Base → AI Provider & API Key."
+                )
+                row.last_sync_status = "error"
+                row.last_sync_error = err[:500]
+                row.last_synced_at = datetime.utcnow()
+                db.session.commit()
+                return False, err
+
+            chunk_data = [
+                {"text": c, "embedding": e}
+                for c, e in zip(chunks, embeddings)
+                if e is not None
+            ]
+
+            existing = KnowledgeDocument.query.filter_by(source_id=row.id).first()
+            label = row.label or row.url
+            if existing:
+                existing.filename = label
+                existing.content_text = text[:10000]
+                existing.chunks = chunk_data
+            else:
+                existing = KnowledgeDocument(
+                    group_id=row.group_id,
+                    filename=label,
+                    file_type=row.source_type,
+                    content_text=text[:10000],
+                    chunks=chunk_data,
+                    source_id=row.id,
+                )
+                db.session.add(existing)
+
+            row.last_sync_status = "success"
+            row.last_sync_error = None
+            row.last_sync_chars = len(text)
+            row.last_synced_at = datetime.utcnow()
+            db.session.commit()
+            return True, None
 
     def _log_kb_activity(self, question, group_id, telegram_group_id,
                          answered=True, confidence=None, source="knowledge_base",

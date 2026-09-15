@@ -734,6 +734,10 @@ class KnowledgeDocument(db.Model):
     content_text = db.Column(db.Text, nullable=False)
     chunks = db.Column(db.JSON, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # Logical (not FK-constrained — matches this table's existing loose-reference
+    # style) link back to the KnowledgeSource that produced this document, so a
+    # re-sync can find and replace it instead of piling up duplicates.
+    source_id = db.Column(db.Integer, nullable=True, index=True)
 
     def to_dict(self):
         return {
@@ -743,6 +747,42 @@ class KnowledgeDocument(db.Model):
             "filename": self.filename,
             "file_type": self.file_type,
             "chunk_count": len(self.chunks) if self.chunks else 0,
+            "source_id": self.source_id,
+            "created_at": self.created_at.isoformat(),
+        }
+
+
+class KnowledgeSource(db.Model):
+    """An external URL an admin registers so the AI Knowledge Base can pull real
+    content from it on demand ("Sync now") — a website, an official Telegram
+    channel, an X/Twitter handle, a YouTube channel, or any other page. Ingestion
+    reuses the same chunk+embed pipeline as an uploaded file (see
+    bot_features/knowledge_base.py process_external_source); the resulting chunks
+    live in KnowledgeDocument, linked back here via source_id."""
+    __tablename__ = "knowledge_sources"
+
+    id = db.Column(db.Integer, primary_key=True)
+    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False, index=True)
+    source_type = db.Column(db.String(20), nullable=False, default="website")
+    url = db.Column(db.String(500), nullable=False)
+    label = db.Column(db.String(120), nullable=True)
+    last_synced_at = db.Column(db.DateTime, nullable=True)
+    last_sync_status = db.Column(db.String(20), nullable=True)  # "success" | "error"
+    last_sync_error = db.Column(db.String(500), nullable=True)
+    last_sync_chars = db.Column(db.Integer, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "group_id": self.group_id,
+            "source_type": self.source_type,
+            "url": self.url,
+            "label": self.label,
+            "last_synced_at": self.last_synced_at.isoformat() if self.last_synced_at else None,
+            "last_sync_status": self.last_sync_status,
+            "last_sync_error": self.last_sync_error,
+            "last_sync_chars": self.last_sync_chars,
             "created_at": self.created_at.isoformat(),
         }
 

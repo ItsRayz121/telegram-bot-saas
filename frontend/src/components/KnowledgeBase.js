@@ -6,7 +6,7 @@ import {
   MenuItem, Select, FormControl, InputLabel, Slider, CircularProgress,
   Collapse, Paper, Tooltip, Checkbox, InputAdornment,
 } from '@mui/material';
-import { Upload, Delete, Description, Psychology, Key, ExpandMore, ExpandLess, CheckCircle, SmartToy, Tune, EmojiPeople, ImageSearch, Search, Person } from '@mui/icons-material';
+import { Upload, Delete, Description, Psychology, Key, ExpandMore, ExpandLess, CheckCircle, SmartToy, Tune, EmojiPeople, ImageSearch, Search, Person, Language, Sync, Add, Error as ErrorIcon } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import CollapsibleCard from './CollapsibleCard';
 import { knowledge, apiKeys, settings as settingsApi } from '../services/api';
@@ -28,6 +28,13 @@ const DEFAULT_MODELS = {
   custom: '',
 };
 
+const SOURCE_TYPE_LABELS = {
+  website: 'Website',
+  telegram: 'Telegram',
+  twitter: 'X / Twitter',
+  youtube: 'YouTube',
+};
+
 export default function KnowledgeBase({ botId, groupId, settings, updateSetting }) {
   const [docs, setDocs] = useState([]);
   const [uploading, setUploading] = useState(false);
@@ -35,6 +42,69 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
   const [uploadStage, setUploadStage] = useState('');
   const fileRef = useRef();
   const kb = settings?.knowledge_base || {};
+
+  // External sources (website / Telegram channel / X / YouTube / any URL).
+  // Custom bots only — there is no official-bot route for these yet.
+  const supportsSources = botId !== 'official';
+  const [sources, setSources] = useState([]);
+  const [newSourceUrl, setNewSourceUrl] = useState('');
+  const [newSourceLabel, setNewSourceLabel] = useState('');
+  const [addingSource, setAddingSource] = useState(false);
+  const [syncingId, setSyncingId] = useState(null);
+
+  const loadSources = useCallback(async () => {
+    if (!supportsSources) return;
+    try {
+      const res = await knowledge.listSources(botId, groupId);
+      setSources(res.data.sources || []);
+    } catch { /* silent — section still renders, just empty */ }
+  }, [botId, groupId, supportsSources]);
+
+  useEffect(() => { loadSources(); }, [loadSources]);
+
+  const handleAddSource = async () => {
+    const url = newSourceUrl.trim();
+    if (!url) { toast.error('Enter a URL first'); return; }
+    setAddingSource(true);
+    try {
+      const res = await knowledge.createSource(botId, groupId, { url, label: newSourceLabel.trim() || undefined });
+      setSources(prev => [res.data.source, ...prev]);
+      setNewSourceUrl('');
+      setNewSourceLabel('');
+      toast.success('Source added — click Sync to pull its content in');
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Failed to add source');
+    } finally {
+      setAddingSource(false);
+    }
+  };
+
+  const handleSyncSource = async (source) => {
+    setSyncingId(source.id);
+    try {
+      const res = await knowledge.syncSource(botId, groupId, source.id);
+      setSources(prev => prev.map(s => (s.id === source.id ? res.data.source : s)));
+      toast.success(`Synced "${source.label || source.url}"`);
+      loadDocs();
+    } catch (e) {
+      const data = e.response?.data;
+      if (data?.source) setSources(prev => prev.map(s => (s.id === source.id ? data.source : s)));
+      toast.error(data?.error || 'Sync failed');
+    } finally {
+      setSyncingId(null);
+    }
+  };
+
+  const handleDeleteSource = async (source) => {
+    try {
+      await knowledge.deleteSource(botId, groupId, source.id);
+      setSources(prev => prev.filter(s => s.id !== source.id));
+      toast.success('Source removed');
+      loadDocs();
+    } catch {
+      toast.error('Failed to remove source');
+    }
+  };
 
   // Determine whether the platform AI key is available (Pro/Enterprise plan).
   // The server uses PLATFORM_OPENROUTER_API_KEY as a fallback for all groups
@@ -1022,6 +1092,103 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
             {uploading ? uploadStage || 'Processing…' : 'Upload Document'}
           </Button>
       </CollapsibleCard>
+
+      {/* External Sources */}
+      {supportsSources && (
+        <CollapsibleCard
+          id="tg.ai.kb_sources"
+          title={(
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Language color="primary" fontSize="small" />
+              <Typography variant="subtitle1" fontWeight={600}>External Knowledge Sources</Typography>
+            </Box>
+          )}
+          badge={<Chip label="Pro" size="small" color="primary" variant="outlined" sx={{ height: 18, fontSize: '0.6rem' }} />}
+        >
+          <Typography variant="body2" color="text.secondary" mb={2}>
+            Point the bot at your official website, Telegram channel, X/Twitter handle, YouTube
+            channel — or literally any other page — and click <strong>Sync</strong> to pull its real
+            content into the knowledge base. Sync is on-demand only; nothing is fetched automatically.
+          </Typography>
+
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
+            <TextField
+              size="small"
+              placeholder="https://yourproject.com or https://t.me/yourchannel"
+              value={newSourceUrl}
+              onChange={e => setNewSourceUrl(e.target.value)}
+              sx={{ flex: '1 1 320px' }}
+            />
+            <TextField
+              size="small"
+              placeholder="Label (optional)"
+              value={newSourceLabel}
+              onChange={e => setNewSourceLabel(e.target.value)}
+              sx={{ flex: '0 1 180px' }}
+            />
+            <Button
+              variant="outlined"
+              startIcon={addingSource ? <CircularProgress size={16} /> : <Add />}
+              onClick={handleAddSource}
+              disabled={addingSource || !newSourceUrl.trim()}
+            >
+              Add Source
+            </Button>
+          </Box>
+
+          {sources.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">No external sources added yet.</Typography>
+          ) : (
+            <List disablePadding>
+              {sources.map((s, i) => (
+                <React.Fragment key={s.id}>
+                  {i > 0 && <Divider />}
+                  <ListItem disableGutters>
+                    <Language sx={{ mr: 1.5, color: 'text.secondary' }} />
+                    <ListItemText
+                      primary={s.label || s.url}
+                      secondary={
+                        s.last_sync_status === 'error'
+                          ? `Last sync failed: ${s.last_sync_error || 'unknown error'}`
+                          : s.last_synced_at
+                            ? `Synced ${new Date(s.last_synced_at).toLocaleString()} · ${s.last_sync_chars || 0} chars`
+                            : 'Not synced yet'
+                      }
+                      secondaryTypographyProps={s.last_sync_status === 'error' ? { color: 'error' } : undefined}
+                    />
+                    <ListItemSecondaryAction>
+                      <Chip
+                        label={SOURCE_TYPE_LABELS[s.source_type] || s.source_type}
+                        size="small"
+                        sx={{ mr: 1 }}
+                      />
+                      {s.last_sync_status === 'error' && (
+                        <Tooltip title={s.last_sync_error || 'Sync failed'}>
+                          <ErrorIcon color="error" fontSize="small" sx={{ mr: 1, verticalAlign: 'middle' }} />
+                        </Tooltip>
+                      )}
+                      <Tooltip title="Sync now">
+                        <span>
+                          <IconButton
+                            size="small"
+                            onClick={() => handleSyncSource(s)}
+                            disabled={syncingId === s.id}
+                          >
+                            {syncingId === s.id ? <CircularProgress size={16} /> : <Sync fontSize="small" />}
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                      <IconButton size="small" color="error" onClick={() => handleDeleteSource(s)}>
+                        <Delete fontSize="small" />
+                      </IconButton>
+                    </ListItemSecondaryAction>
+                  </ListItem>
+                </React.Fragment>
+              ))}
+            </List>
+          )}
+        </CollapsibleCard>
+      )}
 
       {/* Document list */}
       <CollapsibleCard id="tg.ai.kb_documents" title={`Indexed Documents (${docs.length})`}>

@@ -464,6 +464,16 @@ export const knowledge = {
     botId === 'official'
       ? api.delete(`/api/telegram-groups/${groupId}/knowledge/${docId}`)
       : api.delete(`/api/bots/${botId}/groups/${groupId}/knowledge/${docId}`),
+  // External sources (website / Telegram channel / X / YouTube / any URL) —
+  // custom bots only for now; there is no official-bot route for these yet.
+  listSources: (botId, groupId) =>
+    api.get(`/api/bots/${botId}/groups/${groupId}/knowledge/sources`),
+  createSource: (botId, groupId, payload) =>
+    api.post(`/api/bots/${botId}/groups/${groupId}/knowledge/sources`, payload),
+  syncSource: (botId, groupId, sourceId) =>
+    api.post(`/api/bots/${botId}/groups/${groupId}/knowledge/sources/${sourceId}/sync`),
+  deleteSource: (botId, groupId, sourceId) =>
+    api.delete(`/api/bots/${botId}/groups/${groupId}/knowledge/sources/${sourceId}`),
 };
 
 // Official groups: real polls endpoints via /api/telegram-groups

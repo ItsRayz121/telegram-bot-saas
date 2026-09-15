@@ -697,6 +697,7 @@ def create_app():
         _run_user_columns_migration()
         _run_scheduled_job_runs_migration()
         _run_pending_verification_columns_migration()
+        _run_knowledge_sources_migration()
 
         # Encryption self-check — must run after all migrations so tokens exist
         from .utils.encryption import startup_encryption_selfcheck
@@ -1553,6 +1554,47 @@ def _run_pending_verification_columns_migration():
         _mig_log.info("pending_verification_columns migration complete")
     except Exception as exc:
         _mig_log.warning("pending_verification_columns migration failed: %s", exc)
+
+
+def _run_knowledge_sources_migration():
+    """New table backing the Knowledge Base 'external sources' feature (admin
+    registers a website/Telegram channel/X handle/YouTube channel/any URL; a
+    'Sync now' click fetches and embeds it through the same pipeline as an
+    uploaded file) plus the linking column on knowledge_documents."""
+    _mig_log = logging.getLogger("migrations")
+    stmts = [
+        """
+        CREATE TABLE IF NOT EXISTS knowledge_sources (
+            id               SERIAL PRIMARY KEY,
+            group_id         INTEGER NOT NULL REFERENCES groups(id),
+            source_type      VARCHAR(20) NOT NULL DEFAULT 'website',
+            url              VARCHAR(500) NOT NULL,
+            label            VARCHAR(120),
+            last_synced_at   TIMESTAMP,
+            last_sync_status VARCHAR(20),
+            last_sync_error  VARCHAR(500),
+            last_sync_chars  INTEGER,
+            created_at       TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_knowledge_sources_group_id ON knowledge_sources (group_id)",
+        "ALTER TABLE knowledge_documents ADD COLUMN IF NOT EXISTS source_id INTEGER",
+        "CREATE INDEX IF NOT EXISTS ix_knowledge_documents_source_id ON knowledge_documents (source_id)",
+    ]
+    try:
+        with db.engine.connect() as conn:
+            for sql in stmts:
+                try:
+                    conn.execute(text(sql))
+                    conn.commit()
+                except Exception:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+        _mig_log.info("knowledge_sources migration complete")
+    except Exception as exc:
+        _mig_log.warning("knowledge_sources migration failed: %s", exc)
 
 
 def _backfill_group_defaults():

@@ -40,6 +40,79 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
+## `<this commit>` — AI Knowledge Base: external sources (website / Telegram / X / YouTube)
+**Date:** 2026-09-15 · **Risk:** low-medium · **Touches:** money (AI/API spend), plan limits
+
+### What changed
+New opt-in capability, additive only — no existing behavior changed for anyone not using it:
+- **New table `knowledge_sources`** (`backend/models.py`, migration in `app.py`) — an admin
+  registers a URL (website, official Telegram channel, X/Twitter handle, YouTube channel, or
+  literally any other page); a new `source_id` column on `knowledge_documents` links the
+  ingested content back to it so a re-sync replaces rather than duplicates.
+- **`backend/bot_features/knowledge_sources.py` (new)** — fetches a source's current content:
+  a plain page scrape (new `beautifulsoup4` dependency) for websites/"any other URL", the
+  public `t.me/s/<channel>` HTML preview for Telegram (public channels only — no MTProto user
+  session, deliberately, per this project's Anti-Ban Rule), twitterapi.io for X (same provider
+  already used for engagement verification), and the YouTube Data API for a channel's recent
+  uploads. Every fetcher degrades to `(False, reason)` on any error — never raises.
+- **`KnowledgeBaseSystem.process_external_source`** (`knowledge_base.py`) reuses the exact same
+  chunk+embed pipeline as an uploaded file, so it shares the existing 100MB/group storage quota
+  automatically (both write into `knowledge_documents`).
+- **New routes** in `routes/knowledge.py`: list/create/sync-now/delete for a group's sources.
+  **Gated Pro-only** (stricter than plain file upload, which has no plan gate) because a sync
+  makes outbound calls to a third party or a site we don't control, and can call a paid API
+  (YouTube Data API / twitterapi.io) — a materially bigger cost and abuse surface than accepting
+  a file the admin already has on disk. Capped at 20 sources/group and a 60s per-source sync
+  cooldown.
+- **Sync is on-demand only** (an explicit "Sync now" click) — no new Celery/scheduler job, no
+  new recurring load on the scheduler pool this file already flags as saturation-prone.
+- Frontend: new "External Knowledge Sources" section in `KnowledgeBase.js`, custom bots only —
+  there is no official-bot route for this yet (the official bot has its own separate
+  `/api/telegram-groups/<id>/knowledge` file-upload routes in `telegram_groups.py`; this feature
+  does not touch or extend that path).
+
+### To revert
+```bash
+git revert <this commit>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Fully reversible. `knowledge_sources` is a new table and `source_id` is a new nullable
+  column — a revert just stops the code paths that read/write them; nothing is dropped.
+- ⚠️ Sources and documents already synced while this was live are not deleted by a revert —
+  they simply stop being reachable through the UI. Harmless; an unused table/column costs
+  nothing and holds real content if this ships again later.
+- ⚠️ Any AI-embedding or third-party API spend already incurred by syncs that already ran is
+  not undone (it's a real API call, not a reversible write).
+
+### Kill switch (if any)
+`KNOWLEDGE_SOURCES_ENABLED=0` — disables the one endpoint that actually spends money (sync-now)
+in ~30 seconds with no deploy. Adding/listing/deleting sources still works; only fetching new
+content is stopped. Per-group: nothing stops it from a plan downgrade below Pro other than the
+existing Pro gate itself.
+
+### Safety properties (verified, not assumed)
+No test suite in this repo, so a throwaway harness was built against a real Flask app +
+in-memory SQLite using the actual models and the actual `KnowledgeBaseSystem`:
+- A live fetch against a real URL (`example.com`) correctly extracts text end-to-end.
+- With no AI key configured, a sync fails cleanly (`ok=False`, a clear reason, source marked
+  `error`) and creates **no** `KnowledgeDocument` row — never raises.
+- With a (mocked) working embedding call, a sync creates exactly one `KnowledgeDocument`
+  linked by `source_id`; a **second** sync of the same source still leaves exactly one
+  document (upsert, not duplicate).
+- An unreachable/invalid URL fails cleanly with a specific error message, not a crash.
+- `detect_source_type` correctly classifies youtube.com / t.me / x.com / everything-else URLs.
+- All 5 touched/new Python files compile; the new frontend section passes this project's own
+  ESLint config with zero errors or warnings.
+- ⚠️ Not verified against the live YouTube Data API, twitterapi.io, or a real Telegram public
+  channel — this sandbox's network blocks Telegram's domains outright, and no YouTube/X API key
+  was available to test against. Each fetcher's error handling was verified via injected
+  failures (missing key, bad URL, unreachable host), but the first real sync against each of
+  those three providers in production is still the real proof.
+
+---
+
 ## `df8da28` — fix join-verification: users stuck muted, "expired" on click
 **Date:** 2026-09-15 · **Risk:** medium · **Touches:** bot hot path
 
