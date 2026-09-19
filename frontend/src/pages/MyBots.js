@@ -268,14 +268,14 @@ export default function MyBots() {
                   </Grid>
                 </Grid>
 
-                {/* Action buttons — kept on ONE row (equal width, no wrap) */}
-                <Stack direction="row" spacing={1}>
+                {/* Action buttons — full width on mobile so labels never crowd each other */}
+                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                   <Button
                     variant="contained"
                     size="small"
                     startIcon={<Groups />}
                     onClick={() => navigate('/groups?bot_type=official')}
-                    sx={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap' }}
+                    sx={{ flex: { xs: '1 1 100%', sm: 1 }, minWidth: 0 }}
                   >
                     Manage Groups
                   </Button>
@@ -295,7 +295,7 @@ export default function MyBots() {
                     href={`https://t.me/${BOT_USERNAME}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    sx={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap' }}
+                    sx={{ flex: 1, minWidth: 0 }}
                   >
                     Open Bot
                   </Button>

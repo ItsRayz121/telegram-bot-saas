@@ -7,7 +7,7 @@ import {
 } from '@mui/material';
 import {
   SmartToy, Add, Settings, GroupAdd, Lock, Psychology,
-  Delete,
+  Delete, Groups, Assignment, Event, History,
 } from '@mui/icons-material';
 import { hub } from '../services/api';
 import BotTokenConnectModal from '../components/shared/BotTokenConnectModal';
@@ -239,22 +239,26 @@ function OfficialBotCard({ bot, onManage }) {
         {/* Stats row */}
         <Box
           sx={{
-            mt: 2.5, display: 'flex', gap: 0,
-            bgcolor: 'rgba(0,0,0,0.2)', borderRadius: 2,
-            border: `1px solid ${PALETTE.border1}`,
-            overflow: 'hidden',
+            mt: 2.5,
+            display: 'grid',
+            gridTemplateColumns: {
+              xs: 'repeat(2, 1fr)',
+              sm: bot.last_summary ? 'repeat(4, 1fr)' : 'repeat(3, 1fr)',
+            },
+            gap: 1,
           }}
         >
-          <StatItem label="Groups" value={bot.group_count ?? 0} />
-          <Divider orientation="vertical" flexItem sx={{ borderColor: PALETTE.border1 }} />
-          <StatItem label="Pending tasks" value={bot.pending_tasks ?? 0} />
-          <Divider orientation="vertical" flexItem sx={{ borderColor: PALETTE.border1 }} />
-          <StatItem label="Meetings today" value={bot.meetings_today ?? 0} />
+          <StatItem icon={<Groups sx={{ fontSize: 15 }} />} color={PALETTE.blue} label="Groups" value={bot.group_count ?? 0} />
+          <StatItem icon={<Assignment sx={{ fontSize: 15 }} />} color={PALETTE.amber} label="Pending Tasks" value={bot.pending_tasks ?? 0} />
+          <StatItem
+            icon={<Event sx={{ fontSize: 15 }} />}
+            color={PALETTE.purple}
+            label="Meetings Today"
+            value={bot.meetings_today ?? 0}
+            sx={!bot.last_summary ? { gridColumn: { xs: '1 / -1', sm: 'auto' } } : undefined}
+          />
           {bot.last_summary && (
-            <>
-              <Divider orientation="vertical" flexItem sx={{ borderColor: PALETTE.border1 }} />
-              <StatItem label="Last summary" value={formatRelative(bot.last_summary)} />
-            </>
+            <StatItem icon={<History sx={{ fontSize: 15 }} />} color={PALETTE.cyan} label="Last Summary" value={formatRelative(bot.last_summary)} />
           )}
         </Box>
 
@@ -478,13 +482,32 @@ function CustomBotsSection({ plan }) {
   );
 }
 
-function StatItem({ label, value }) {
+function StatItem({ icon, color, label, value, sx }) {
   return (
-    <Box sx={{ flex: 1, px: 2, py: 1.5, textAlign: 'center' }}>
-      <Typography variant="h6" fontWeight={800} lineHeight={1} letterSpacing="-0.02em">
+    <Box
+      sx={{
+        minWidth: 0,
+        px: 1.5, py: 1.5,
+        textAlign: 'center',
+        borderRadius: 2,
+        bgcolor: 'rgba(255,255,255,0.03)',
+        border: `1px solid ${PALETTE.border1}`,
+        ...sx,
+      }}
+    >
+      {icon && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', mb: 0.5, color }}>
+          {icon}
+        </Box>
+      )}
+      <Typography variant="h6" fontWeight={800} lineHeight={1.1} letterSpacing="-0.02em" noWrap>
         {value}
       </Typography>
-      <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.68rem' }}>
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        sx={{ fontSize: '0.68rem', display: 'block', mt: 0.25, whiteSpace: 'normal', lineHeight: 1.25 }}
+      >
         {label}
       </Typography>
     </Box>
