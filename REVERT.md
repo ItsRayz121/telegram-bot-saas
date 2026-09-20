@@ -48,7 +48,13 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 - `telegram-bot-saas`'s `DATABASE_URL` now points to a Neon Postgres project ("Telegizer",
   project id `wandering-bread-61933881`) instead of the Railway-hosted Postgres service.
   Motivation: cost reduction (Railway bills RAM per always-on service; Neon's free tier
-  absorbs this database at ~$0).
+  absorbs this database at ~$0 *if* the compute can scale to zero between requests).
+  ⚠️ **That assumption doesn't fully hold**: `backend/app.py`'s `_scheduler_loop` polls the
+  DB every 60s, 24/7, for scheduled messages/reminders/automations — by design, for
+  near-real-time delivery. That keeps the Neon compute at its 0.25 CU floor continuously
+  instead of suspending, i.e. a small but genuinely recurring compute-hour cost (~180
+  CU-hours/month), not the ~$0 originally assumed. Not a leak — a known, flat baseline.
+  Check it against the Neon plan's included compute-hours before relying on "~$0" again.
 - Data was dumped from the Railway Postgres (`pg_dump --no-owner --no-privileges -Fc`) and
   restored into Neon (`pg_restore --clean --if-exists`) — 128 tables, ~64k rows, verified by
   table/row count before cutover.
@@ -95,6 +101,15 @@ application code was touched.
 ### Kill switch (if any)
 The `DATABASE_URL` variable itself is the kill switch (see the emergency table above) —
 not instant (requires a redeploy), but no code changes needed.
+
+Added 2026-09-20: a Neon project-level usage quota (Console → Telegizer project →
+Settings → Quota; `compute_time_seconds` 1,980,000/mo, `active_time_seconds`
+2,988,000/mo, `data_transfer_bytes` 50GB/mo, `written_data_bytes` 20GB/mo) as a tripwire
+against a *real* leak (e.g. a duplicate-bot-fleet bug like the past Railway/Celery
+incident) — generous headroom above the known ~180 CU-hr/month baseline above, so it
+should never trip under normal traffic. If it ever does trip, Neon suspends the compute
+until the quota is raised or the billing period resets — that itself becomes an outage,
+so raise the quota in the Neon console rather than waiting for the reset if it fires.
 
 ### Safety properties (verified, not assumed)
 - Pre-cutover: verified 128/128 tables and matching row counts between the Railway dump
