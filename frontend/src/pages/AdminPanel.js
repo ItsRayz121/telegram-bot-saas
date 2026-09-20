@@ -102,7 +102,7 @@ function StatCard({ label, value, color = '#2196f3', sub, icon: Icon, onClick })
 // ─── Status chip helper ───────────────────────────────────────────────────────
 
 function StatusChip({ label, map }) {
-  const defaults = { active: 'success', approved: 'success', ok: 'success', pending: 'warning', warning: 'warning', error: 'error', disabled: 'error', rejected: 'error', banned: 'error', suspicious: 'warning', unknown: 'default', info: 'info', critical: 'error' };
+  const defaults = { active: 'success', approved: 'success', ok: 'success', pending: 'warning', warning: 'warning', paused: 'warning', error: 'error', disabled: 'error', rejected: 'error', banned: 'error', suspicious: 'warning', unknown: 'default', info: 'info', critical: 'error' };
   const color = (map || defaults)[label] || defaults[label] || 'default';
   return <Chip label={label} size="small" color={color} />;
 }

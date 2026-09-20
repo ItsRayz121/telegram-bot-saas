@@ -16,6 +16,7 @@ import { customBots, telegramGroups as telegramGroupsApi } from '../services/api
 import TopNav from '../components/TopNav';
 import PlanGate from '../components/PlanGate';
 import UpsellModal from '../components/UpsellModal';
+import CustomBotLifecycleBanner from '../components/CustomBotLifecycleBanner';
 
 function _getUser() {
   try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; }
@@ -46,6 +47,7 @@ function StatusChip({ status }) {
     starting:   { label: 'Active',   color: 'success' },
     warning:    { label: 'Active',   color: 'success' },
     error:      { label: 'Unreachable', color: 'error' },
+    paused:     { label: 'Paused',      color: 'warning' },
   };
   const { label, color } = map[status] || { label: 'Active', color: 'success' };
   return <Chip label={label} color={color} size="small" />;
@@ -385,12 +387,14 @@ export default function MyBots() {
                           <Typography variant="caption" color="text.secondary">Status</Typography>
                           <Typography variant="body2" fontWeight={600} color={
                             healthStatus === 'active' ? 'success.main' :
-                            healthStatus === 'unreachable' ? 'error.main' : 'text.secondary'
+                            healthStatus === 'unreachable' ? 'error.main' :
+                            healthStatus === 'paused' ? 'warning.main' : 'text.secondary'
                           }>
                             {healthStatus === 'active' ? 'Active' :
                              healthStatus === 'idle' ? 'Idle' :
                              healthStatus === 'offline' ? 'Offline' :
-                             healthStatus === 'unreachable' ? 'Unreachable' : 'Active'}
+                             healthStatus === 'unreachable' ? 'Unreachable' :
+                             healthStatus === 'paused' ? 'Paused' : 'Active'}
                           </Typography>
                         </Grid>
                       </Grid>
@@ -400,6 +404,12 @@ export default function MyBots() {
                           Bot hasn't been active in over 30 days. Check your token is still valid.
                         </Alert>
                       )}
+
+                      <CustomBotLifecycleBanner
+                        bot={bot}
+                        userTier={user.subscription_tier}
+                        onReactivated={load}
+                      />
 
                       {/* Actions */}
                       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>

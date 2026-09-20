@@ -696,6 +696,7 @@ def create_app():
         _run_xp_period_migrations()
         _run_user_columns_migration()
         _run_scheduled_job_runs_migration()
+        _run_custom_bot_lifecycle_migration()
         _run_pending_verification_columns_migration()
         _run_knowledge_sources_migration()
 
@@ -1463,6 +1464,71 @@ def _job_due_daily(app, job_name, hour, minute=0):
         return False
     today_at_target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
     return _claim_job(app, job_name, today_at_target, now)
+
+
+def _run_custom_bot_lifecycle_migration():
+    """Tier-expiry lifecycle for custom bots: pause -> retain -> delete.
+
+    Custom bots require Pro/Enterprise to exist (MAX_CUSTOM_BOTS['free'] == 0), but
+    historically nothing happened to a bot's dedicated poller thread when its owner's
+    subscription lapsed — it kept running at full cost, indefinitely, until someone
+    manually deleted it. These columns + ledger table let a daily job pause the bot
+    after a grace period, then delete it after a retention window, with an
+    exactly-once claim per stage (see custom_bot_lifecycle.py).
+    """
+    _mig_log = logging.getLogger("migrations")
+    stmts = [
+        "ALTER TABLE custom_bots ADD COLUMN IF NOT EXISTS pause_reason VARCHAR(30)",
+        "ALTER TABLE custom_bots ADD COLUMN IF NOT EXISTS grace_started_at TIMESTAMP",
+        "ALTER TABLE custom_bots ADD COLUMN IF NOT EXISTS paused_at TIMESTAMP",
+        "ALTER TABLE custom_bots ADD COLUMN IF NOT EXISTS retention_deadline_at TIMESTAMP",
+        """
+        CREATE TABLE IF NOT EXISTS custom_bot_lifecycle_stages (
+            bot_id  INTEGER NOT NULL REFERENCES custom_bots(id) ON DELETE CASCADE,
+            stage   VARCHAR(20) NOT NULL,
+            sent_at TIMESTAMP NOT NULL,
+            PRIMARY KEY (bot_id, stage)
+        )
+        """,
+    ]
+    try:
+        with db.engine.connect() as conn:
+            for sql in stmts:
+                try:
+                    conn.execute(text(sql))
+                    conn.commit()
+                except Exception:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+        _mig_log.info("custom_bot_lifecycle migration complete")
+    except Exception as exc:
+        _mig_log.warning("custom_bot_lifecycle migration failed: %s", exc)
+
+    # Seed the two win-back promo codes this feature's messaging refers to.
+    # ON CONFLICT DO NOTHING so re-running this (every deploy) never resets a code
+    # an admin has since edited (e.g. deactivated, changed the discount).
+    try:
+        with db.engine.connect() as conn:
+            conn.execute(text("""
+                INSERT INTO promo_codes
+                    (code, discount_type, discount_value, applicable_plans,
+                     uses_count, max_uses_per_user, valid_from, is_active,
+                     is_influencer_code, label, created_at)
+                VALUES
+                    ('TRIAL20', 'percent', 20, '["pro","enterprise"]',
+                     0, 1, :now, TRUE, FALSE,
+                     'Trial-to-paid conversion (custom bot lifecycle)', :now),
+                    ('COMEBACK20', 'percent', 20, '["pro","enterprise"]',
+                     0, 1, :now, TRUE, FALSE,
+                     'Lapsed-subscription win-back (custom bot lifecycle)', :now)
+                ON CONFLICT (code) DO NOTHING
+            """), {"now": datetime.utcnow()})
+            conn.commit()
+        _mig_log.info("custom_bot_lifecycle promo codes seeded")
+    except Exception as exc:
+        _mig_log.warning("custom_bot_lifecycle promo code seed failed: %s", exc)
 
 
 def _run_xp_period_migrations():
@@ -2875,6 +2941,7 @@ _CELERY_INTERVAL_JOBS = [
 _CELERY_DAILY_JOBS = [
     ("expire_trials", 0, 30),
     ("downgrade_expired_subscriptions", 1, 0),
+    ("run_custom_bot_lifecycle", 2, 0),
     ("hub_enforce_retention", 3, 15),
     ("scan_fraud_alerts", 7, 0),
     ("send_daily_briefings", 8, 0),

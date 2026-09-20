@@ -42,6 +42,7 @@ import GroupSettings from './pages/GroupSettings';
 import GroupManagement from './pages/GroupManagement';
 import OfficialGroupAnalytics from './pages/OfficialGroupAnalytics';
 import MyBots from './pages/MyBots';
+import CustomBotLifecycle from './pages/CustomBotLifecycle';
 import BotSettings from './pages/BotSettings';
 import GroupAnalytics from './pages/GroupAnalytics';
 import Analytics from './pages/Analytics';
@@ -384,6 +385,8 @@ export default function App() {
             {/* ── Custom bots (canonical /custom-bots, keep /my-bots alias) ─── */}
             <Route path="/custom-bots"              element={<AppRoute><MyBots /></AppRoute>} />
             <Route path="/my-bots"                  element={<Navigate to="/custom-bots" replace />} />
+            {/* Deep-link target only (in-app notification metadata.url) — no nav entry */}
+            <Route path="/dashboard/bots/:botId/lifecycle" element={<AppRoute><CustomBotLifecycle /></AppRoute>} />
             <Route path="/bot/:id"                  element={<AppRoute><BotSettings /></AppRoute>} />
             <Route path="/bot/:id/group/:groupId"            element={<AppRoute><KeyedGroupSettings /></AppRoute>} />
             <Route path="/bot/:id/group/:groupId/analytics"  element={<AppRoute><GroupAnalytics /></AppRoute>} />

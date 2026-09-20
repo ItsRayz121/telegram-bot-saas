@@ -8,7 +8,7 @@ import {
 } from '@mui/material';
 import { Check, Close, ArrowBack, CurrencyBitcoin, LocalOffer, ExpandMore, AutoAwesome, Bolt, Star } from '@mui/icons-material';
 import Switch from '@mui/material/Switch';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { billing } from '../services/api';
 import usePageMeta from '../hooks/usePageMeta';
@@ -119,6 +119,7 @@ export default function Pricing() {
     'Telegizer pricing: start free, Pro from $9/month, Enterprise $49/month. 14-day Pro trial, crypto payments, no auto-renew, 14-day money-back guarantee.'
   );
   const navigate = useNavigate();
+  const location = useLocation();
   const [loading] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedTier, setSelectedTier] = useState(null);
@@ -128,6 +129,11 @@ export default function Pricing() {
   const [annual, setAnnual] = useState(false);
   const [trialLoading, setTrialLoading] = useState(false);
   const [trialStarted, setTrialStarted] = useState(false);
+  // Promo code auto-applied from ?promo=CODE (e.g. the custom-bot reactivation
+  // discount link) — no manual entry field, just a URL param.
+  const [promoCode, setPromoCode] = useState('');
+  const [promoInfo, setPromoInfo] = useState(null); // billing.validatePromo() response
+  const [promoChecking, setPromoChecking] = useState(false);
   // Live prices from the backend — the same source checkout charges against,
   // so the displayed price can never drift from the invoiced amount.
   // Defaults mirror backend billing_config.PRICE_DEFAULTS as a fallback.
@@ -136,6 +142,23 @@ export default function Pricing() {
     enterprise: { monthly: 49, annual: 392 },
   });
   const token = localStorage.getItem('token');
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const code = params.get('promo');
+    if (code) setPromoCode(code.trim().toUpperCase());
+  }, [location.search]);
+
+  // Preview the discount against whichever tier is in view (defaults to Pro,
+  // re-checked against the exact tier once the upgrade dialog is open).
+  useEffect(() => {
+    if (!promoCode || !token) { setPromoInfo(null); return; }
+    setPromoChecking(true);
+    billing.validatePromo({ code: promoCode, tier: selectedTier || 'pro', annual })
+      .then((res) => setPromoInfo(res.data))
+      .catch(() => setPromoInfo(null))
+      .finally(() => setPromoChecking(false));
+  }, [promoCode, annual, token, selectedTier]);
 
   useEffect(() => {
     billing.getPlans()
@@ -220,7 +243,11 @@ export default function Pricing() {
   const handlePaymentMethod = async () => {
     setMethodLoading('crypto');
     try {
-      const res = await billing.cryptoCheckout({ tier: selectedTier, annual });
+      const res = await billing.cryptoCheckout({
+        tier: selectedTier,
+        annual,
+        promo_code: promoInfo?.valid ? promoCode : undefined,
+      });
 
       if (res.data.admin_upgrade) {
         toast.success(res.data.message || `Plan switched to ${selectedTier}`);
@@ -313,6 +340,24 @@ export default function Pricing() {
             sx={{ fontWeight: 700 }}
           />
         </Stack>
+
+        {promoCode && promoInfo?.valid && (
+          <Chip
+            icon={<LocalOffer fontSize="small" />}
+            color="success"
+            label={`Code ${promoInfo.code} applied — ${
+              promoInfo.discount_type === 'percent' ? `${promoInfo.discount_value}% off`
+                : promoInfo.discount_type === 'trial_days' ? `${promoInfo.discount_value} bonus trial days`
+                : `$${promoInfo.discount_value} off`
+            } your first payment`}
+            sx={{ mb: 3, fontWeight: 700 }}
+          />
+        )}
+        {promoCode && !promoChecking && promoInfo && promoInfo.valid === false && (
+          <Alert severity="warning" sx={{ mb: 3, maxWidth: 480, mx: 'auto' }}>
+            Promo code "{promoCode}" {promoInfo.error || 'could not be applied'}.
+          </Alert>
+        )}
 
         {subExpires && (
           <Chip

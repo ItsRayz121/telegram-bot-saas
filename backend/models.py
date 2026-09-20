@@ -1777,10 +1777,20 @@ class CustomBot(db.Model):
     bot_name = db.Column(db.String(255), nullable=True)
     bot_username = db.Column(db.String(255), nullable=False)
     bot_token_encrypted = db.Column(db.Text, nullable=False)
-    # active | inactive | error
+    # active | inactive | error | paused
     status = db.Column(db.String(20), default="active", nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    # ── Tier-expiry lifecycle (pause -> retain -> delete) ──────────────────────
+    # Snapshotted the moment the owner's tier flips to free, since by the time
+    # later stages run, User.trial_ends_at / subscription_expires_at are already
+    # cleared and we'd otherwise lose whether this was a trial or a paid churn.
+    # trial_expired | subscription_expired
+    pause_reason = db.Column(db.String(30), nullable=True)
+    grace_started_at = db.Column(db.DateTime, nullable=True)
+    paused_at = db.Column(db.DateTime, nullable=True)
+    retention_deadline_at = db.Column(db.DateTime, nullable=True)
 
     # Link to the matching HubBotIdentity — set when the bot is auto-mirrored to Assistant Hub
     hub_bot_id = db.Column(db.String(36), db.ForeignKey("hub_bot_identities.id", ondelete="SET NULL"), nullable=True, index=True)
@@ -1801,8 +1811,8 @@ class CustomBot(db.Model):
 
     @property
     def health_status(self) -> str:
-        """Derive health from status field. active/inactive/error map directly."""
-        if self.status in ("active", "inactive", "error"):
+        """Derive health from status field. active/inactive/error/paused map directly."""
+        if self.status in ("active", "inactive", "error", "paused"):
             return self.status
         return "unknown"
 
@@ -1819,10 +1829,29 @@ class CustomBot(db.Model):
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "hub_bot_id": self.hub_bot_id,
+            "pause_reason": self.pause_reason,
+            "grace_started_at": (self.grace_started_at.isoformat() + "Z") if self.grace_started_at else None,
+            "paused_at": (self.paused_at.isoformat() + "Z") if self.paused_at else None,
+            "retention_deadline_at": (self.retention_deadline_at.isoformat() + "Z") if self.retention_deadline_at else None,
         }
         if include_token:
             data["bot_token"] = self.get_token()
         return data
+
+
+class CustomBotLifecycleStage(db.Model):
+    """Exactly-once ledger for the tier-expiry notification/pause/delete sequence.
+
+    One row per (bot, stage) ever fired. A stage only fires (notification, and any
+    pause/delete action) if the insert wins — see custom_bot_lifecycle.claim_stage.
+    Same idiom as scheduled_job_runs / _JOB_CLAIM_SQL in app.py, applied per-bot
+    instead of per-job, so the daily tick is safe to re-run and safe across restarts.
+    """
+    __tablename__ = "custom_bot_lifecycle_stages"
+
+    bot_id = db.Column(db.Integer, db.ForeignKey("custom_bots.id", ondelete="CASCADE"), primary_key=True)
+    stage = db.Column(db.String(20), primary_key=True)
+    sent_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
 
 class GroupForumTopic(db.Model):

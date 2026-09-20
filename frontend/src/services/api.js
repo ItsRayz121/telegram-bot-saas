@@ -891,6 +891,8 @@ export const customBots = {
   get: (id) => api.get(`/api/custom-bots/${id}`),
   delete: (id) => api.delete(`/api/custom-bots/${id}`),
   ping: (id) => api.post(`/api/custom-bots/${id}/ping`),
+  getLifecycleStatus: (id) => api.get(`/api/custom-bots/${id}/lifecycle-status`),
+  reactivate: (id) => api.post(`/api/custom-bots/${id}/reactivate`),
 };
 
 export const telegramAccount = {

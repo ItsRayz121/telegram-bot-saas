@@ -1205,6 +1205,9 @@ def downgrade_expired_subscriptions():
                 User.subscription_grace_until < now,
             ).all()
 
+            from .models import CustomBot
+            from .custom_bot_lifecycle import start_grace_period
+
             for user in expired:
                 user.subscription_tier = "free"
                 user.subscription_expires_at = None
@@ -1216,6 +1219,11 @@ def downgrade_expired_subscriptions():
                     title="Subscription Expired",
                     message="Your Pro subscription has expired. Upgrade to restore access.",
                 ))
+                # Snapshot pause_reason now — trial_ends_at/subscription_expires_at are
+                # cleared right here, so this is the only moment we can still tell a
+                # paid churn apart from a trial lapse for the custom-bot lifecycle.
+                for bot in CustomBot.query.filter_by(owner_user_id=user.id, status="active").all():
+                    start_grace_period(bot, reason="subscription_expired")
 
             db.session.commit()
             logger.info("[celery:downgrade_expired_subscriptions] downgraded=%d", len(expired))
@@ -1345,6 +1353,9 @@ def expire_trials():
             User.subscription_tier == "pro",
             User.subscription_expires == None,  # noqa: E711 — not a paid subscriber
         ).all()
+        from .models import CustomBot
+        from .custom_bot_lifecycle import start_grace_period
+
         for user in expired:
             user.subscription_tier = "free"
             user.trial_ends_at = None
@@ -1352,11 +1363,28 @@ def expire_trials():
                 send_subscription_expired(user.email, user.full_name or user.email.split("@")[0], "Pro Trial")
             except Exception as exc:
                 logger.debug("trial expiry email failed user=%s: %s", user.id, exc)
+            for bot in CustomBot.query.filter_by(owner_user_id=user.id, status="active").all():
+                start_grace_period(bot, reason="trial_expired")
         if expired:
             db.session.commit()
             logger.info("[expire_trials] downgraded=%d", len(expired))
     except Exception as exc:
         logger.error("expire_trials error: %s", exc)
+
+
+@celery.task(name="backend.scheduler.run_custom_bot_lifecycle")
+def run_custom_bot_lifecycle():
+    """Daily 02:00 UTC. Advance every custom bot through its tier-expiry lifecycle:
+    pre-expiry warnings, day-0 lapse notice, grace reminders, pause, retention
+    reminder, and final deletion. See custom_bot_lifecycle.py for the stage machine.
+    """
+    try:
+        from .app import create_app
+        from .custom_bot_lifecycle import run_lifecycle_tick
+        app = create_app()
+        run_lifecycle_tick(app)
+    except Exception as exc:
+        logger.error("run_custom_bot_lifecycle error: %s", exc, exc_info=True)
 
 
 @celery.task(name="backend.scheduler.send_lifecycle_emails")

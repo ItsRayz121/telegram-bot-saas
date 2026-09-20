@@ -304,3 +304,63 @@ def delete_custom_bot(bot_id):
     db.session.commit()
 
     return jsonify({"message": "Custom bot disconnected"})
+
+
+# ── Tier-expiry lifecycle: status + reactivation ──────────────────────────────
+
+@custom_bots_bp.route("/<int:bot_id>/lifecycle-status", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def custom_bot_lifecycle_status(bot_id):
+    """Stats + deadlines for the pause/retain/delete banner and lifecycle page."""
+    user = _current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    bot = CustomBot.query.filter_by(id=bot_id, owner_user_id=user.id).first()
+    if not bot:
+        return jsonify({"error": "Bot not found"}), 404
+
+    from ..bot_links import resolve_connected_groups
+    from ..custom_bot_lifecycle import DISCOUNT_CODE
+
+    groups = resolve_connected_groups(bot)
+    group_count = len(groups)
+    member_count = sum(g.get("member_count") or 0 for g in groups)
+    code = DISCOUNT_CODE.get(bot.pause_reason) if bot.pause_reason else None
+
+    return jsonify({
+        "bot": bot.to_dict(),
+        "group_count": group_count,
+        "member_count": member_count,
+        "discount_code": code,
+        "pricing_url": f"/pricing?promo={code}" if code else None,
+    })
+
+
+@custom_bots_bp.route("/<int:bot_id>/reactivate", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=10)
+def reactivate_custom_bot_route(bot_id):
+    """Resume a paused bot after the owner upgrades. Does not touch
+    MAX_CUSTOM_BOTS — this resumes an existing row, it never creates a new one."""
+    user = _current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    bot = CustomBot.query.filter_by(id=bot_id, owner_user_id=user.id).first()
+    if not bot:
+        return jsonify({"error": "Bot not found"}), 404
+    if bot.status != "paused":
+        return jsonify({"error": "This bot is not paused."}), 400
+    if user.subscription_tier not in ("pro", "enterprise"):
+        return jsonify({
+            "error": "Upgrade to Pro or Enterprise first, then reactivate this bot.",
+        }), 403
+
+    from ..custom_bot_lifecycle import reactivate_custom_bot
+    ok = reactivate_custom_bot(bot, current_app._get_current_object())
+    if not ok:
+        return jsonify({"error": "Could not reactivate the bot. Check the token is still valid."}), 502
+
+    return jsonify({"message": "Bot reactivated", "bot": bot.to_dict()})

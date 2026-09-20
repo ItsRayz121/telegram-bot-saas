@@ -26,6 +26,8 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 |---|---|---|
 | `RETENTION_ENABLED` | `0` | **Stops all data deletion instantly.** Nothing is pruned or archived. |
 | `RETENTION_DRY_RUN` | `1` | Sweep still runs and reports, but **deletes nothing**. This is the default. |
+| `CUSTOM_BOT_LIFECYCLE_ENABLED` | `0` | Stops the custom-bot pause/retain/delete lifecycle instantly. Nothing gets warned, paused, or deleted. |
+| `CUSTOM_BOT_LIFECYCLE_DRY_RUN` | `1` | Lifecycle tick still runs and logs what it would do, but **sends nothing and pauses/deletes nothing**. This is the default. |
 | `MAX_DAILY_AI_SPEND_USD` | any number | Hard ceiling on platform AI spend per day. Set `0` to stop all platform AI. |
 | `RETENTION_XP_DAYS` | e.g. `3650` | Effectively stops XP pruning without disabling the rest. |
 | `ENGAGEMENT_PROMO` | `false` | Turns off the promo footer. |
@@ -38,6 +40,79 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 ---
 
 # Change log — newest first
+
+---
+
+## `<pending-sha>` — Custom bots now auto-pause and auto-delete after tier expiry
+**Date:** 2026-09-20 · **Risk:** high · **Touches:** money, data deletion, bot hot path, plan limits
+
+### What changed
+- Custom bots require Pro/Enterprise to exist (`Config.MAX_CUSTOM_BOTS['free'] == 0`), but until now,
+  when an owner's subscription lapsed or trial expired, the bot's dedicated poller thread kept running
+  forever at full cost — confirmed live in prod (a FREE-tier custom bot active in the admin console).
+  This ships an automatic lifecycle: warn 2 and 1 days before expiry → on expiry, snapshot whether it
+  was a trial or paid churn (`CustomBot.pause_reason`) and send a 3-option message (switch to the
+  official bot for free, export settings, or reactivate at a discount) → grace-period reminders →
+  **pause** the poller (`BotManager.stop_bot` + `Bot.is_active = False`) → retention reminder →
+  **permanently delete** the bot and unlink its groups.
+- Timelines: paid churn = 7-day grace + 15-day retention (22 days total). Trial expiry = 3-day grace +
+  7-day retention (10 days total, tighter because these accounts never generated revenue).
+- Every notification/pause/delete stage fires **exactly once per bot**, via an insert-or-skip claim
+  table (`custom_bot_lifecycle_stages`), the same idiom as the existing `scheduled_job_runs` gate —
+  safe to re-run daily and safe across redeploys.
+- Two new promo codes seeded: `TRIAL20` (trial→paid conversion) and `COMEBACK20` (paid win-back), both
+  20% off first cycle, tracked separately. Checkout support for `promo_code` already existed
+  (`routes/billing.py`) — nothing new added there beyond wiring `Pricing.js` to read `?promo=` from
+  the URL and pre-validate it.
+- New route `POST /api/custom-bots/<id>/reactivate` resumes a paused bot after the owner upgrades,
+  bypassing the `MAX_CUSTOM_BOTS` creation-limit check (it resumes an existing row, not a new one).
+- Files: `backend/models.py` (new `CustomBot` columns + `CustomBotLifecycleStage` table),
+  `backend/custom_bot_lifecycle.py` (new — the whole stage machine), `backend/scheduler.py` (hooks in
+  `downgrade_expired_subscriptions` / `expire_trials`, new `run_custom_bot_lifecycle` daily job),
+  `backend/app.py` (migration + job registration), `backend/routes/custom_bots.py` (reactivate +
+  status routes), plus a frontend banner/lifecycle page and `Pricing.js` promo handling.
+
+### To revert
+```bash
+git revert <pending-sha>
+git push origin main
+```
+The new columns/table are additive (`ADD COLUMN IF NOT EXISTS` / `CREATE TABLE IF NOT EXISTS`) and a
+code revert does not drop them — harmless to leave in place.
+
+### What revert restores, and what it does NOT
+- ✅ Reverting stops the pause/delete cron from running at all (the job function goes away with the
+  code) — any bot still mid-grace or mid-retention at that point simply stays as-is indefinitely again,
+  same as before this feature existed.
+- ⚠️ **A revert does NOT undo anything that already happened**: bots already paused stay paused (their
+  poller was actually stopped — `git revert` does not restart a thread), bots already **permanently
+  deleted are gone** (the `CustomBot` row, its group links, and its Assistant Hub mirror are dropped,
+  not soft-deleted), DMs/emails/in-app notifications already sent were actually sent, and any
+  `PromoCodeUsage` rows already recorded from `TRIAL20`/`COMEBACK20` redemptions stay recorded (the
+  discount was actually applied to that checkout).
+- ⚠️ The two promo codes themselves are NOT removed by a revert (the seed uses
+  `ON CONFLICT DO NOTHING`, and a revert doesn't run a corresponding delete) — deactivate them by hand
+  in the admin promo-codes panel if a revert should also stop them from being redeemable.
+
+### Kill switch (env vars, no deploy needed)
+| Variable | Set to | Effect |
+|---|---|---|
+| `CUSTOM_BOT_LIFECYCLE_ENABLED` | `0` | Stops the entire daily tick instantly — no bot gets warned, paused, or deleted. Bots already paused stay paused; nothing auto-resumes. |
+| `CUSTOM_BOT_LIFECYCLE_DRY_RUN` | `1` (**default on this ship**) | Every stage still evaluates and logs what it *would* do — notify / pause / delete — but sends nothing and touches no bot. **Flip to `0` only after reading a day or two of `[custom_bot_lifecycle][DRY_RUN]` logs and confirming the numbers look right** — this is the same gotcha as `RETENTION_DRY_RUN`: forgetting this step means the feature silently does nothing in production. |
+
+### Safety properties (verified, not assumed)
+- Exactly-once per (bot, stage): verified by reading the `INSERT ... ON CONFLICT (bot_id, stage) DO
+  NOTHING RETURNING bot_id` claim — a stage's notification and any pause/delete action only run when
+  this insert wins, so re-running the daily tick (redeploys, retries) cannot double-send or double-act.
+- Pausing does not get silently undone: `bot_links.reconcile_custom_bots` (the self-healing startup
+  reconciliation) only iterates `Bot.query.filter_by(is_active=True)` and never re-activates an existing
+  row or flips an existing `CustomBot.status` back to `active` — confirmed by reading `bot_links.py`
+  Pass 1. The boot-time bot restarter and the watchdog (`app.py: _restart_active_bots`,
+  `_watchdog_bots`) both also gate on `Bot.is_active`, so a paused bot cannot be auto-resumed by any of
+  the three restart paths this codebase has.
+- Trial vs. paid churn is captured at the one moment it's still knowable: `pause_reason` is stamped
+  synchronously inside `downgrade_expired_subscriptions` / `expire_trials`, before those functions clear
+  the very `User` fields (`subscription_expires_at`, `trial_ends_at`) that distinguish the two paths.
 
 ---
 
