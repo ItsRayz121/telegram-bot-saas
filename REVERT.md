@@ -114,6 +114,21 @@ code revert does not drop them — harmless to leave in place.
   synchronously inside `downgrade_expired_subscriptions` / `expire_trials`, before those functions clear
   the very `User` fields (`subscription_expires_at`, `trial_ends_at`) that distinguish the two paths.
 
+### Update 2026-09-20: first deploy attempt failed healthcheck, unrelated to this feature
+This commit's first deploy (bundled with the docs commit `d6aa912`) failed Railway's `/health`
+healthcheck — **not a bug in this feature**: total startup (migrate.py release step + gunicorn's
+own `create_app()` re-running every migration on import, against Neon's higher per-round-trip
+latency than the old Railway Postgres) exceeded the 5-minute healthcheck window. Production kept
+serving the prior successful deploy throughout; no outage.
+
+While tracing it, found and fixed a real ordering bug it exposed: `reconcile_custom_bots()` in
+`backend/app.py` ran *before* `_run_custom_bot_lifecycle_migration()`, so on this feature's very
+first boot in any environment, the ORM's `CustomBot.pause_reason` column reference threw
+`UndefinedColumn` (caught, logged as a warning, harmless — see `bot_links.py:212`) until the
+migration below it added the column. Moved the reconciliation block to run after all migrations
+instead. Pure reorder, no behavior change — does not affect the revert command or safety
+properties above; a `git revert 31769de` still removes this feature cleanly either way.
+
 ---
 
 ## `infra-2026-09-20` — Telegizer production database migrated: Railway Postgres → Neon
