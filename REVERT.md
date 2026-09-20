@@ -43,7 +43,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
-## `<pending-sha>` — Custom bots now auto-pause and auto-delete after tier expiry
+## `31769de` — Custom bots now auto-pause and auto-delete after tier expiry
 **Date:** 2026-09-20 · **Risk:** high · **Touches:** money, data deletion, bot hot path, plan limits
 
 ### What changed
@@ -74,7 +74,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ### To revert
 ```bash
-git revert <pending-sha>
+git revert 31769de
 git push origin main
 ```
 The new columns/table are additive (`ADD COLUMN IF NOT EXISTS` / `CREATE TABLE IF NOT EXISTS`) and a
