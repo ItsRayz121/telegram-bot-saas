@@ -33,10 +33,78 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 | `GUNICORN_MAX_REQUESTS` | `0` | Stops the web worker from recycling itself. |
 | `SCHEDULER_SHARED_POOL` | `0` | Scheduler goes back to a fresh thread pool per job per tick. |
 | `MALLOC_ARENA_MAX` | `8` | Restores glibc's default per-thread malloc arenas. |
+| `DATABASE_URL` (telegram-bot-saas) | `${{Postgres.DATABASE_URL}}` | Reverts Telegizer's DB from Neon back to Railway Postgres. Requires a redeploy (~1-2 min). Loses anything written to Neon after the revert — see the migration entry below before using this on live data. |
 
 ---
 
 # Change log — newest first
+
+---
+
+## `infra-2026-09-20` — Telegizer production database migrated: Railway Postgres → Neon
+**Date:** 2026-09-20 · **Risk:** high · **Touches:** data, bot hot path
+
+### What changed
+- `telegram-bot-saas`'s `DATABASE_URL` now points to a Neon Postgres project ("Telegizer",
+  project id `wandering-bread-61933881`) instead of the Railway-hosted Postgres service.
+  Motivation: cost reduction (Railway bills RAM per always-on service; Neon's free tier
+  absorbs this database at ~$0).
+- Data was dumped from the Railway Postgres (`pg_dump --no-owner --no-privileges -Fc`) and
+  restored into Neon (`pg_restore --clean --if-exists`) — 128 tables, ~64k rows, verified by
+  table/row count before cutover.
+- Start command was split because mixing this up caused two failed deployments first:
+  ```
+  DATABASE_URL=$DATABASE_URL_UNPOOLED python -m backend.migrate && gunicorn backend.app:app --timeout 120
+  ```
+  Migrations run against Neon's **direct/unpooled** connection (DDL needs a stable
+  `search_path`, which Neon's pooled/PgBouncer connection doesn't reliably preserve — first
+  attempt hit `no schema has been selected to create in`). The running app uses the
+  **pooled** connection (`DATABASE_URL`) — running the app itself on the unpooled
+  connection was the second failed attempt: BotManager startup got slow enough over
+  per-connection overhead to blow gunicorn's 30s worker timeout (`WORKER TIMEOUT` →
+  `SIGKILL`, repeatedly, until the healthcheck window expired). `--timeout 120` added as
+  a safety margin regardless of DB backend.
+- The old Railway Postgres service (`vigilant-integrity` project, service `Postgres`) is
+  left running untouched — not deleted, not even paused yet — as an instant fallback.
+
+### To revert
+No code revert — this was a Railway-config-only change (env vars + start command), no
+application code was touched.
+1. Railway → `telegram-bot-saas` → Variables → set `DATABASE_URL` back to
+   `${{Postgres.DATABASE_URL}}`.
+2. Settings → Deploy → Start Command back to:
+   `python -m backend.migrate && gunicorn backend.app:app`
+3. Deploy.
+
+### What revert restores, and what it does NOT
+- ✅ The old Railway Postgres still has every row exactly as it was at the moment of
+  cutover (2026-09-20 ~09:00 UTC) — nothing was deleted or altered on it.
+- ⚠️ **Anything written to Neon after cutover is NOT in the old Railway Postgres.**
+  Reverting after any real usage on Neon means losing every message/record/subscription
+  change written in between. If reverting after the app has been live on Neon for a
+  while, dump Neon and restore into the Railway Postgres first, then swap the variable
+  back — do not flip the variable onto stale data.
+- ⚠️ The two failed intermediate deployments (schema error, then worker timeout) never
+  took production traffic — Railway kept serving the last successful deployment
+  throughout both failures, so there was no live outage from either attempt. The false
+  "all clear" that happened mid-migration was from pinging `/health` during that window,
+  which was still answering from the old (still-active) deployment — not proof the new
+  one was healthy. Verify the actual deployment `status` field, not just the URL, when
+  checking a rollout like this in the future.
+
+### Kill switch (if any)
+The `DATABASE_URL` variable itself is the kill switch (see the emergency table above) —
+not instant (requires a redeploy), but no code changes needed.
+
+### Safety properties (verified, not assumed)
+- Pre-cutover: verified 128/128 tables and matching row counts between the Railway dump
+  and the Neon restore.
+- Post-cutover: verified via the actual Railway deployment `status: SUCCESS` (not just an
+  HTTP ping), and confirmed steady-state operation — `getUpdates` polling succeeding
+  continuously in deploy logs for several minutes post-boot, no crash/restart loop.
+- `[startup] Encryption self-check passed.` and `[startup] CustomBot token spot-check
+  passed (4 bots checked).` confirm `ENCRYPTION_KEY`/`ENCRYPTION_KEY_OLD` still decrypt
+  correctly against the migrated data.
 
 ---
 
