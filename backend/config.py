@@ -52,6 +52,10 @@ class Config:
     raw_db_url = os.environ.get("DATABASE_URL", "sqlite:///telegram_saas.db")
     if raw_db_url.startswith("postgres://"):
         raw_db_url = raw_db_url.replace("postgres://", "postgresql://", 1)
+    # SQLAlchemy 2.1 made psycopg (v3) the default for "postgresql://", but we ship
+    # psycopg2 — name the driver so a dependency bump can never break the DB connection.
+    if raw_db_url.startswith("postgresql://"):
+        raw_db_url = raw_db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
     SQLALCHEMY_DATABASE_URI = raw_db_url
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {

@@ -3,6 +3,7 @@ flask==3.0.0
 cryptography==42.0.5
 flask-cors==4.0.0
 flask-sqlalchemy==3.1.1
+sqlalchemy>=2.0.16,<2.1
 flask-jwt-extended==4.5.3
 psycopg2-binary==2.9.9
 python-telegram-bot[rate-limiter]==21.3
