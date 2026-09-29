@@ -23,3 +23,10 @@ htmlcov/
 .coverage
 .neon
 .env.local
+
+# DB migration dumps (contain user data — never commit)
+*.dump
+backups/
+
+# graphify knowledge graph (regenerable)
+graphify-out/
