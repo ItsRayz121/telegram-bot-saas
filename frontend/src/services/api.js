@@ -703,6 +703,10 @@ export const admin = {
   supportSetStatus: (id, status) => api.post(`/api/admin/support/conversations/${id}/status`, { status }),
   // Stats & Revenue
   getStats: () => api.get('/api/admin/stats'),
+  getPlatformOverview: (days, config) => api.get('/api/admin/platform-overview', { params: { days }, ...config }),
+  grantCustomBotTrial: (id, days) => api.post(`/api/admin/users/${id}/custom-bot-trial`, { days }),
+  revokeCustomBotTrial: (id) => api.delete(`/api/admin/users/${id}/custom-bot-trial`),
+  getGrowth: (range, config) => api.get('/api/admin/growth', { params: { range }, ...config }),
   getRevenue: () => api.get('/api/admin/revenue'),
   getHealth: () => api.get('/api/admin/health'),
   // Bots

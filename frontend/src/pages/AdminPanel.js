@@ -21,6 +21,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ADMIN_CATEGORIES, findAdminItem } from '../config/adminNav';
 import BlogAdminTab from './admin/BlogAdminTab';
 import SupportInboxTab from './admin/SupportInboxTab';
+import GrowthAnalytics from './admin/GrowthAnalytics';
+import { ManagedMembersPanel, PlatformCharts } from './admin/PlatformOverview';
 import { useAdmin } from '../contexts/AdminContext';
 import { toast } from 'react-toastify';
 import { admin } from '../services/api';
@@ -166,11 +168,14 @@ function DashboardTab({ stats, botStats, revenue, health, featureAdoption, loadi
       <Grid container spacing={2} mb={3}>
         <Grid item xs={6} sm={4} md={2}><StatCard label="Total Users" value={stats?.total_users} icon={People} onClick={go('users', {})} /></Grid>
         <Grid item xs={6} sm={4} md={2}><StatCard label="Free" value={stats?.free_users} color="#64748b" onClick={go('users', { tier: 'free' })} /></Grid>
-        <Grid item xs={6} sm={4} md={2}><StatCard label="Pro" value={stats?.pro_users} color="#7c4dff" icon={VerifiedUser} onClick={go('users', { tier: 'pro' })} /></Grid>
+        <Grid item xs={6} sm={4} md={2}><StatCard label="Pro (incl. trials)" value={stats?.pro_users} color="#7c4dff" icon={VerifiedUser} onClick={go('users', { tier: 'pro' })} /></Grid>
         <Grid item xs={6} sm={4} md={2}><StatCard label="Enterprise" value={stats?.enterprise_users} color="#f59e0b" onClick={go('users', { tier: 'enterprise' })} /></Grid>
         <Grid item xs={6} sm={4} md={2}><StatCard label="New (7d)" value={stats?.new_users_7d} color="#06b6d4" /></Grid>
         <Grid item xs={6} sm={4} md={2}><StatCard label="Banned" value={stats?.banned_users} color="#ef4444" onClick={go('users', { status: 'banned' })} /></Grid>
       </Grid>
+
+      <GrowthAnalytics />
+      <PlatformCharts />
 
       {/* Bot / group stats */}
       <Typography variant="subtitle2" color="text.secondary" fontWeight={600} mb={1} textTransform="uppercase" letterSpacing={1}>
@@ -485,7 +490,7 @@ function UsersTab({ onAdminError, initialFilter }) {
         u.full_name || '',
         u.email || '',
         u.id || '',
-        u.subscription_tier || '',
+        u.plan_status?.kind === 'trial' ? `trial (ends ${u.plan_status.trial_ends_at.slice(0, 10)})` : (u.subscription_tier || ''),
         u.email_verified ? 'Yes' : 'No',
         u.is_banned ? 'Banned' : u.is_suspicious ? 'Suspicious' : 'Active',
         u.created_at ? new Date(u.created_at).toLocaleDateString() : '',
@@ -566,6 +571,7 @@ function UsersTab({ onAdminError, initialFilter }) {
 
   return (
     <Box>
+      <ManagedMembersPanel />
       {/* Filters row */}
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} mb={1.5} alignItems={{ sm: 'center' }}>
         <TextField
@@ -600,7 +606,7 @@ function UsersTab({ onAdminError, initialFilter }) {
       {/* Tier filter chips */}
       <Stack direction="row" spacing={0.75} mb={0.75} flexWrap="wrap" useFlexGap>
         <Typography variant="caption" color="text.secondary" alignSelf="center" mr={0.5}>Tier:</Typography>
-        {[['', 'All'], ['free', 'Free'], ['pro', 'Pro'], ['enterprise', 'Enterprise']].map(([val, label]) => (
+        {[['', 'All'], ['free', 'Free'], ['trial', 'Trial'], ['pro', 'Pro'], ['enterprise', 'Enterprise']].map(([val, label]) => (
           <Chip key={val} label={label} size="small"
             color={tierFilter === val ? (val === 'enterprise' ? 'secondary' : 'primary') : 'default'}
             variant={tierFilter === val ? 'filled' : 'outlined'}
@@ -666,11 +672,17 @@ function UsersTab({ onAdminError, initialFilter }) {
                       <Typography variant="caption" color="text.secondary">{u.email || (u.telegram_username ? `@${u.telegram_username}` : `ID ${u.id}`)}</Typography>
                     </TableCell>
                     <TableCell>
-                      <Chip
-                        label={u.subscription_tier?.toUpperCase()}
-                        size="small"
-                        color={u.subscription_tier === 'enterprise' ? 'secondary' : u.subscription_tier === 'pro' ? 'primary' : 'default'}
-                      />
+                      {u.plan_status?.kind === 'trial' ? (
+                        <Tooltip title={`Trial ${fmtDate(u.plan_status.trial_started_at)} → ${fmtDate(u.plan_status.trial_ends_at)}`}>
+                          <Chip label={`TRIAL · ${u.plan_status.days_left}d left`} size="small" color="warning" />
+                        </Tooltip>
+                      ) : (
+                        <Chip
+                          label={u.subscription_tier?.toUpperCase()}
+                          size="small"
+                          color={u.subscription_tier === 'enterprise' ? 'secondary' : u.subscription_tier === 'pro' ? 'primary' : 'default'}
+                        />
+                      )}
                     </TableCell>
                     <TableCell>
                       {u.email_verified

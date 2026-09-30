@@ -25,6 +25,13 @@ function StatCard({ label, value, sub, color }) {
   );
 }
 
+// Trial users are Pro-by-trial, not paying customers: never show them as plain "PRO".
+function planLabel(u) {
+  const ps = u?.plan_status;
+  if (ps?.kind === 'trial') return `TRIAL · ${ps.days_left}d left`;
+  return (u?.subscription_tier || 'free').toUpperCase();
+}
+
 const TABS = [
   'Overview', 'Auth & Security', 'Subscription & Revenue', 'Referrals',
   'Groups & Bots', 'AI / Token Usage', 'Risk & Moderation', 'Audit Log', 'Admin Notes',
@@ -127,7 +134,7 @@ export default function AdminUserDetail() {
           <Typography variant="caption" color="text.secondary">ID: {u.id} · Joined {fmtDate(u.created_at)}</Typography>
         </Box>
         <Chip size="small" color={riskColor} label={`Risk: ${u.risk?.score ?? 0} (${u.risk?.level || 'low'})`} />
-        <Chip size="small" label={(u.subscription_tier || 'free').toUpperCase()} variant="outlined" />
+        <Chip size="small" color={u.plan_status?.kind === 'trial' ? 'warning' : 'default'} label={planLabel(u)} variant="outlined" />
         {u.is_banned && <Chip size="small" color="error" label="BANNED" />}
       </Stack>
 
@@ -159,7 +166,7 @@ export default function AdminUserDetail() {
       {tab === 0 && (
         <Box>
           <Grid container spacing={1.5} mb={1}>
-            <Grid item xs={6} sm={3}><StatCard label="Plan" value={(u.subscription_tier || 'free').toUpperCase()} /></Grid>
+            <Grid item xs={6} sm={3}><StatCard label="Plan" value={planLabel(u)} color={u.plan_status?.kind === 'trial' ? 'warning.main' : undefined} /></Grid>
             <Grid item xs={6} sm={3}><StatCard label="Lifetime revenue" value={usd(u.revenue?.lifetime_usd || 0)} color="success.main" /></Grid>
             <Grid item xs={6} sm={3}><StatCard label="Groups owned" value={u.owned_groups?.length ?? 0} /></Grid>
             <Grid item xs={6} sm={3}><StatCard label="Custom bots" value={u.custom_bots?.length ?? 0} /></Grid>
@@ -203,6 +210,29 @@ export default function AdminUserDetail() {
             <Grid item xs={6} sm={3}><StatCard label="Trial used" value={u.revenue?.trial_used ? 'Yes' : 'No'} /></Grid>
             <Grid item xs={6} sm={3}><StatCard label="Expires" value={u.revenue?.subscription_expires_at ? fmtDate(u.revenue.subscription_expires_at) : '—'} /></Grid>
           </Grid>
+
+          <SectionTitle>Trial &amp; custom bots</SectionTitle>
+          {u.plan_status?.kind === 'trial' ? (
+            <Grid container spacing={1.5} mb={1}>
+              <Grid item xs={6} sm={3}><StatCard label="Trial started" value={fmtDate(u.plan_status.trial_started_at)} /></Grid>
+              <Grid item xs={6} sm={3}><StatCard label="Trial ends" value={fmtDate(u.plan_status.trial_ends_at)} sub={`${u.plan_status.days_left} days left`} color="warning.main" /></Grid>
+            </Grid>
+          ) : (
+            <Typography variant="body2" color="text.secondary" mb={1}>Not on a signup trial.</Typography>
+          )}
+          <Alert severity={u.plan_status?.custom_bot_trial_ends_at ? 'success' : 'info'} sx={{ mb: 1 }}
+            action={u.plan_status?.custom_bot_trial_ends_at ? (
+              <Button color="inherit" size="small" disabled={action === 'cbt'}
+                onClick={() => run('cbt', () => admin.revokeCustomBotTrial(userId), 'Custom-bot trial revoked')}>Revoke</Button>
+            ) : (
+              <Button color="inherit" size="small" disabled={action === 'cbt'}
+                onClick={() => window.confirm('Grant a 7-day custom-bot trial (1 bot)? Each custom bot costs us a dedicated poller.')
+                  && run('cbt', () => admin.grantCustomBotTrial(userId, 7), '7-day custom-bot trial granted')}>Grant 7 days</Button>
+            )}>
+            {u.plan_status?.custom_bot_trial_ends_at
+              ? `Custom-bot trial active until ${fmtDate(u.plan_status.custom_bot_trial_ends_at)} (1 bot).`
+              : 'Signup trials include Pro features but cannot create custom bots. Grant a trial for communities worth the cost.'}
+          </Alert>
 
           <SectionTitle>Recent payments</SectionTitle>
           {u.recent_payments?.length > 0 ? u.recent_payments.slice(0, 10).map((p) => (

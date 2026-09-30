@@ -1370,6 +1370,48 @@ def expire_trials():
             logger.info("[expire_trials] downgraded=%d", len(expired))
     except Exception as exc:
         logger.error("expire_trials error: %s", exc)
+    _expire_custom_bot_trials()
+
+
+def _expire_custom_bot_trials():
+    """Admin-granted custom-bot trials: when one ends and the owner has not paid,
+    hand their bots to the normal pause -> retain -> delete lifecycle."""
+    try:
+        from .models import db, User, CustomBot
+        from .custom_bot_lifecycle import start_grace_period
+        from .custom_bot_access import is_on_free_trial
+        now = datetime.utcnow()
+        users = User.query.filter(
+            User.custom_bot_trial_ends_at != None,  # noqa: E711
+            User.custom_bot_trial_ends_at < now,
+        ).all()
+        for user in users:
+            # Paid = a Pro/Enterprise plan that is not just the signup trial and has not
+            # lapsed. Admin-set permanent plans have no expiry, so None counts as paid.
+            paid = (
+                user.subscription_tier in ("pro", "enterprise")
+                and not is_on_free_trial(user, now)
+                and (user.subscription_expires is None or user.subscription_expires > now)
+            )
+            user.custom_bot_trial_ends_at = None
+            if not paid:
+                for bot in CustomBot.query.filter_by(owner_user_id=user.id, status="active").all():
+                    start_grace_period(bot, reason="trial_expired")
+        if users:
+            db.session.commit()
+            logger.info("[expire_custom_bot_trials] expired=%d", len(users))
+    except Exception as exc:
+        logger.error("expire_custom_bot_trials error: %s", exc)
+
+
+@celery.task(name="backend.scheduler.snapshot_platform_stats")
+def snapshot_platform_stats():
+    """Daily: store platform totals (members, groups, users by plan) for admin charts."""
+    try:
+        from .platform_stats import save_snapshot
+        save_snapshot()
+    except Exception as exc:
+        logger.error("snapshot_platform_stats error: %s", exc)
 
 
 @celery.task(name="backend.scheduler.run_custom_bot_lifecycle")

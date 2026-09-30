@@ -28,6 +28,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 | `RETENTION_DRY_RUN` | `1` | Sweep still runs and reports, but **deletes nothing**. This is the default. |
 | `CUSTOM_BOT_LIFECYCLE_ENABLED` | `0` | Stops the custom-bot pause/retain/delete lifecycle instantly. Nothing gets warned, paused, or deleted. |
 | `CUSTOM_BOT_LIFECYCLE_DRY_RUN` | `1` | Lifecycle tick still runs and logs what it would do, but **sends nothing and pauses/deletes nothing**. This is the default. |
+| `CUSTOM_BOT_TRIAL_GATE_ENABLED` | `0` | Restores the old rule: anyone on Pro (including the free 14-day signup trial) can create custom bots again. Only affects NEW bot creation. |
 | `MAX_DAILY_AI_SPEND_USD` | any number | Hard ceiling on platform AI spend per day. Set `0` to stop all platform AI. |
 | `RETENTION_XP_DAYS` | e.g. `3650` | Effectively stops XP pruning without disabling the rest. |
 | `ENGAGEMENT_PROMO` | `false` | Turns off the promo footer. |
@@ -40,6 +41,46 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 ---
 
 # Change log — newest first
+
+---
+
+## `<sha>` — Signup trials can no longer create custom bots; trial visibility + managed-members charts in admin
+**Date:** 2026-09-30 · **Risk:** medium · **Touches:** plan limits (custom-bot creation), bot hot path (scheduler jobs)
+
+### What changed
+- Every signup gets a 14-day Pro trial, and Pro allowed 3 custom bots, so any new account could spin up
+  dedicated bot pollers at our cost. Custom-bot **creation and reactivation** now need a paid Pro/Enterprise
+  plan, or an admin-granted custom-bot trial (7 days by default, 1 bot). Existing bots and existing trial
+  users are untouched: only *new* bot creation is gated.
+- New column `users.custom_bot_trial_ends_at`; new table `platform_daily_stats` (one row per UTC day: managed
+  members, verified members, groups, users by plan, custom bots). Both are created by `backend.migrate`.
+- New scheduler jobs: `snapshot_platform_stats` (daily 00:45 UTC) and, inside `expire_trials`, expiry of
+  granted custom-bot trials (hands unpaid owners' bots to the normal pause -> retain -> delete lifecycle).
+- Admin: plan badge (Free / TRIAL Nd left / Pro / Enterprise) on every user, trial start/end on the user page,
+  "Trial" filter, grant/revoke custom-bot trial, managed-members panel and plan/trial/custom-bot charts.
+- Setting a paid plan from the admin panel now clears `trial_ends_at` (otherwise the user still read as a
+  trial and would be downgraded by `expire_trials`).
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Restores the old tier-only custom-bot rule and removes the new admin UI/endpoints.
+- ⚠️ Does **not** drop `users.custom_bot_trial_ends_at` or `platform_daily_stats` (harmless when unused).
+- ⚠️ Does **not** undo custom-bot trials an admin already granted, or bots created under them.
+- ⚠️ Does **not** restore `trial_ends_at` for users an admin set to a paid plan after this shipped.
+
+### Kill switch
+`CUSTOM_BOT_TRIAL_GATE_ENABLED=0` in Railway -> Variables restores the old creation rule in ~30 seconds, no deploy.
+
+### Safety properties (verified, not assumed)
+- Gate matrix tested: free, signup trial, trial + granted, paid Pro, admin-set Pro, Enterprise, expired grant,
+  paid-during-trial, kill switch off — all return the expected limit.
+- Overview, user-list `tier=trial` filter, grant/revoke, day-limit validation and granted-trial expiry run
+  against a SQLite database built from the real models; frontend builds clean.
 
 ---
 

@@ -242,6 +242,42 @@ def init_db():
             "ai_activity composite index",
         )
 
+        _run_alter(
+            db.engine,
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS custom_bot_trial_ends_at TIMESTAMP",
+            "users.custom_bot_trial_ends_at",
+        )
+        _run_alter(
+            db.engine,
+            "CREATE TABLE IF NOT EXISTS platform_daily_stats ("
+            "  day DATE PRIMARY KEY,"
+            "  managed_members INTEGER NOT NULL DEFAULT 0,"
+            "  verified_members INTEGER NOT NULL DEFAULT 0,"
+            "  groups_total INTEGER NOT NULL DEFAULT 0,"
+            "  groups_official INTEGER NOT NULL DEFAULT 0,"
+            "  groups_custom INTEGER NOT NULL DEFAULT 0,"
+            "  users_total INTEGER NOT NULL DEFAULT 0,"
+            "  users_free INTEGER NOT NULL DEFAULT 0,"
+            "  users_trial INTEGER NOT NULL DEFAULT 0,"
+            "  users_paid INTEGER NOT NULL DEFAULT 0,"
+            "  custom_bots_total INTEGER NOT NULL DEFAULT 0,"
+            "  custom_bots_active INTEGER NOT NULL DEFAULT 0"
+            ")",
+            "platform_daily_stats (daily snapshot for admin charts)",
+        )
+
+        # Admin growth analytics range-scan created_at (see /api/admin/growth).
+        _run_alter(
+            db.engine,
+            "CREATE INDEX IF NOT EXISTS ix_users_created_at ON users (created_at)",
+            "users.created_at index",
+        )
+        _run_alter(
+            db.engine,
+            "CREATE INDEX IF NOT EXISTS ix_telegram_groups_created_at ON telegram_groups (created_at)",
+            "telegram_groups.created_at index",
+        )
+
         # ── UserAssistantProfile table (new — db.create_all handles creation) ─
         # ── Index for fast per-user lookup ────────────────────────────────────
         _run_alter(

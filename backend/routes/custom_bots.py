@@ -96,12 +96,13 @@ def add_custom_bot():
     if not _pc.is_feature_enabled("new_bot_creation_enabled"):
         return jsonify({"error": "New bot creation is temporarily disabled.", "code": "FEATURE_DISABLED"}), 403
 
-    max_bots = Config.MAX_CUSTOM_BOTS.get(user.subscription_tier, 0)
+    from ..custom_bot_access import custom_bot_allowance, denial_message
+    max_bots, access_reason = custom_bot_allowance(user)
     current_count = CustomBot.query.filter_by(owner_user_id=user.id).count()
     if current_count >= max_bots:
         return jsonify({
-            "error": f"Custom bots are available on Pro/Enterprise plans. "
-                     f"Upgrade to connect your own bot token.",
+            "error": denial_message(access_reason),
+            "code": "CUSTOM_BOT_TRIAL_BLOCKED" if access_reason == "free_trial" else "PLAN_LIMIT",
             "limit": max_bots,
         }), 403
 
@@ -353,7 +354,8 @@ def reactivate_custom_bot_route(bot_id):
         return jsonify({"error": "Bot not found"}), 404
     if bot.status != "paused":
         return jsonify({"error": "This bot is not paused."}), 400
-    if user.subscription_tier not in ("pro", "enterprise"):
+    from ..custom_bot_access import custom_bot_allowance
+    if custom_bot_allowance(user)[0] < 1:
         return jsonify({
             "error": "Upgrade to Pro or Enterprise first, then reactivate this bot.",
         }), 403

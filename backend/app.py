@@ -9,6 +9,7 @@ from flask import Flask, jsonify, g, request
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
 from .config import Config
 from .models import db
 from .routes.auth import auth_bp
@@ -644,6 +645,25 @@ def create_app():
     @app.errorhandler(429)
     def too_many_requests(e):
         return _err("Too many requests — please slow down", "RATE_LIMITED", 429)
+
+    @app.errorhandler(OperationalError)
+    def database_unavailable(e):
+        # DB unreachable / quota-suspended / connection dropped. This is a service
+        # outage, not a bug in the request, so say so (503 + Retry-After) instead
+        # of the generic 500 "unexpected error" that hides the real cause.
+        # The exception text can contain the DB host/user, so it is logged only.
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        _scheduler_log.error("Database unavailable path=%s: %s", request.path, e)
+        resp = _err(
+            "Telegizer is temporarily unable to reach its database. "
+            "Please try again in a few minutes.",
+            "DB_UNAVAILABLE", 503,
+        )
+        resp[0].headers["Retry-After"] = "60"
+        return resp
 
     @app.errorhandler(500)
     def server_error(e):
@@ -2944,6 +2964,7 @@ _CELERY_INTERVAL_JOBS = [
 
 _CELERY_DAILY_JOBS = [
     ("expire_trials", 0, 30),
+    ("snapshot_platform_stats", 0, 45),
     ("downgrade_expired_subscriptions", 1, 0),
     ("run_custom_bot_lifecycle", 2, 0),
     ("hub_enforce_retention", 3, 15),

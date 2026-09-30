@@ -108,6 +108,31 @@ def require_permission(permission):
 
 # ── User Management ────────────────────────────────────────────────────────────
 
+def _plan_status(u, now=None):
+    """Human-facing plan state: free | trial | pro | enterprise.
+
+    "trial" = Pro via the signup trial with nothing paid, so it is never
+    mistaken for a paying customer. trial_started_at is derived (end - 14d).
+    """
+    from ..custom_bot_access import is_on_free_trial, has_granted_trial, TRIAL_DAYS
+    now = now or datetime.utcnow()
+    if is_on_free_trial(u, now):
+        left = (u.trial_ends_at - now).total_seconds() / 86400.0
+        return {
+            "kind": "trial",
+            "trial_started_at": (u.trial_ends_at - timedelta(days=TRIAL_DAYS)).isoformat() + "Z",
+            "trial_ends_at": u.trial_ends_at.isoformat() + "Z",
+            "days_left": max(int(left) + (1 if left % 1 else 0), 0),
+            "custom_bot_trial_ends_at": (u.custom_bot_trial_ends_at.isoformat() + "Z") if has_granted_trial(u, now) else None,
+        }
+    kind = u.subscription_tier if u.subscription_tier in ("pro", "enterprise") else "free"
+    return {
+        "kind": kind,
+        "trial_started_at": None, "trial_ends_at": None, "days_left": None,
+        "custom_bot_trial_ends_at": (u.custom_bot_trial_ends_at.isoformat() + "Z") if has_granted_trial(u, now) else None,
+    }
+
+
 @admin_bp.route("/users", methods=["GET"])
 @require_permission(rbac.P_USERS_VIEW)
 @rate_limit(requests_per_minute=60)
@@ -145,7 +170,12 @@ def list_users():
             conds.append(User.id == int(search))
         query = query.filter(db.or_(*conds))
 
-    if tier in ("free", "pro", "enterprise"):
+    if tier == "trial":
+        query = query.filter(
+            User.subscription_tier == "pro", User.subscription_expires.is_(None),
+            User.trial_ends_at.isnot(None), User.trial_ends_at > datetime.utcnow(),
+        )
+    elif tier in ("free", "pro", "enterprise"):
         query = query.filter(User.subscription_tier == tier)
 
     if status == "banned":
@@ -227,7 +257,7 @@ def list_users():
 
     paginated = query.paginate(page=page, per_page=per_page, error_out=False)
     return jsonify({
-        "users": [u.to_dict() for u in paginated.items],
+        "users": [dict(u.to_dict(), plan_status=_plan_status(u)) for u in paginated.items],
         "total": paginated.total,
         "pages": paginated.pages,
         "page": page,
@@ -251,6 +281,7 @@ def get_user(user_id):
         return jsonify({"error": "User not found"}), 404
 
     user_data = user.to_dict()
+    user_data["plan_status"] = _plan_status(user)
 
     # ── Auth source & verification ─────────────────────────────────────────────
     user_data["auth"] = {
@@ -458,6 +489,9 @@ def update_subscription(user_id):
     if tier == "free":
         user.subscription_expires = None
     else:
+        # An admin-set paid plan replaces any signup trial, otherwise it would
+        # still read as "trial" (and be downgraded by expire_trials).
+        user.trial_ends_at = None
         expires_str = data.get("expires")
         if expires_str:
             try:
@@ -466,6 +500,37 @@ def update_subscription(user_id):
                 return jsonify({"error": "Invalid expires format"}), 400
     db.session.commit()
     return jsonify({"user": user.to_dict(), "message": "Subscription updated"})
+
+
+@admin_bp.route("/users/<int:user_id>/custom-bot-trial", methods=["POST", "DELETE"])
+@require_permission(rbac.P_USERS_MANAGE)
+@rate_limit(requests_per_minute=30)
+def custom_bot_trial(user_id):
+    """Grant (POST {days, default 7, max 30}) or revoke (DELETE) a custom-bot trial.
+
+    The signup trial has every Pro feature except creating custom bots; this is the
+    manual exception for communities worth the cost. Grants allow 1 custom bot.
+    Revoking only stops NEW bot creation; an existing bot is handled by the
+    normal expiry lifecycle when the trial ends.
+    """
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    if request.method == "DELETE":
+        user.custom_bot_trial_ends_at = None
+        msg = "Custom-bot trial revoked"
+    else:
+        days = (request.get_json(silent=True) or {}).get("days", 7)
+        try:
+            days = int(days)
+        except (TypeError, ValueError):
+            return jsonify({"error": "days must be a number"}), 400
+        if not 1 <= days <= 30:
+            return jsonify({"error": "days must be between 1 and 30"}), 400
+        user.custom_bot_trial_ends_at = datetime.utcnow() + timedelta(days=days)
+        msg = f"{days}-day custom-bot trial granted"
+    db.session.commit()
+    return jsonify({"user": dict(user.to_dict(), plan_status=_plan_status(user)), "message": msg})
 
 
 @admin_bp.route("/users/<int:user_id>/notes", methods=["PUT"])
@@ -584,6 +649,219 @@ def get_stats():
             "tracked_member_rows": tracked_member_rows,
         }
     })
+
+
+# ── Growth analytics (users / linked groups / custom bots) ────────────────────
+#
+# All aggregation happens in SQL (date_trunc + GROUP BY); the browser only gets
+# one small bucket list per series. "Total" is cumulative: rows created before
+# the window plus the running sum of buckets inside it.
+
+_GROWTH_RANGES = {
+    # key: (window, bucket unit)
+    "1d":  (timedelta(days=1),   "hour"),
+    "7d":  (timedelta(days=7),   "day"),
+    "30d": (timedelta(days=30),  "day"),
+    "6m":  (timedelta(days=183), "week"),
+    "1y":  (timedelta(days=365), "month"),
+    "all": (None,                None),
+}
+_GROWTH_CACHE: dict = {}
+_GROWTH_TTL = 60  # seconds — growth curves do not need to be real-time
+
+
+def _trunc(dt, unit):
+    if unit == "hour":
+        return dt.replace(minute=0, second=0, microsecond=0)
+    d = dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    if unit == "day":
+        return d
+    if unit == "week":  # Postgres date_trunc('week') starts on Monday
+        return d - timedelta(days=d.weekday())
+    if unit == "month":
+        return d.replace(day=1)
+    return d.replace(month=1, day=1)
+
+
+def _next_bucket(dt, unit):
+    if unit == "hour":
+        return dt + timedelta(hours=1)
+    if unit == "day":
+        return dt + timedelta(days=1)
+    if unit == "week":
+        return dt + timedelta(days=7)
+    if unit == "month":
+        return dt.replace(year=dt.year + (dt.month == 12), month=dt.month % 12 + 1)
+    return dt.replace(year=dt.year + 1)
+
+
+def _growth_block(model, key, now, extra_filter=None):
+    """Return (block, bucket_unit) for one model over the requested range."""
+    window, unit = _GROWTH_RANGES[key]
+    col = model.created_at
+    start = (now - window) if window else None
+
+    def count(*conds):
+        q = db.session.query(db.func.count(model.id))
+        for c in conds:
+            q = q.filter(c)
+        if extra_filter is not None:
+            q = q.filter(extra_filter)
+        return q.scalar() or 0
+
+    if key == "all":
+        first = db.session.query(db.func.min(col)).scalar()
+        span = (now - first).days if first else 0
+        unit = "day" if span <= 60 else "week" if span <= 400 else "month" if span <= 365 * 5 else "year"
+
+    q = db.session.query(db.func.date_trunc(unit, col).label("b"), db.func.count(model.id))
+    if extra_filter is not None:
+        q = q.filter(extra_filter)
+    if start is not None:
+        q = q.filter(col >= start)
+    counts = {b.replace(tzinfo=None): n for b, n in q.group_by("b").all()}
+
+    running = count(col < start) if start is not None else 0
+    first_bucket = _trunc(start, unit) if start is not None else (min(counts) if counts else _trunc(now, unit))
+    points, cur, last = [], first_bucket, _trunc(now, unit)
+    while cur <= last:
+        n = counts.get(cur, 0)
+        running += n
+        points.append({"t": cur.isoformat(), "new": n, "total": running})
+        cur = _next_bucket(cur, unit)
+
+    new_in_period = sum(p["new"] for p in points)
+    block = {"total": count(), "new": new_in_period, "points": points,
+             "previous_new": None, "change_pct": None}
+    if start is not None:
+        prev = count(col >= start - window, col < start)
+        block["previous_new"] = prev
+        # No baseline → no percentage (never divide by zero or invent a number).
+        block["change_pct"] = round((new_in_period - prev) * 100.0 / prev, 1) if prev else None
+    return block, unit
+
+
+@admin_bp.route("/growth", methods=["GET"])
+@require_permission(rbac.P_ANALYTICS_VIEW)
+@rate_limit(requests_per_minute=30)
+def growth_analytics():
+    """Time-bucketed growth for users, linked Telegram groups and custom bots.
+
+    ?range = 1d | 7d | 30d | 6m | 1y | all   (default 30d)
+    Group "connected" = a TelegramGroup row (the bot was added to the group);
+    "active" is the subset whose bot_status is currently 'active'.
+    """
+    key = request.args.get("range", "30d")
+    if key not in _GROWTH_RANGES:
+        return jsonify({"error": "Invalid range", "allowed": list(_GROWTH_RANGES)}), 400
+
+    now = datetime.utcnow()
+    cached = _GROWTH_CACHE.get(key)
+    if cached and (now - cached[0]).total_seconds() < _GROWTH_TTL:
+        return jsonify(cached[1])
+
+    users, unit = _growth_block(User, key, now)
+    groups, _ = _growth_block(TelegramGroup, key, now)
+    bots, _ = _growth_block(CustomBot, key, now)
+    groups["active_now"] = TelegramGroup.query.filter(
+        TelegramGroup.bot_status == "active", TelegramGroup.is_disabled == False  # noqa: E712
+    ).count()
+
+    payload = {"range": key, "bucket": unit, "generated_at": now.isoformat(),
+               "users": users, "groups": groups, "custom_bots": bots}
+    _GROWTH_CACHE[key] = (now, payload)
+    return jsonify(payload)
+
+
+_OVERVIEW_CACHE: dict = {}
+
+
+@admin_bp.route("/platform-overview", methods=["GET"])
+@require_permission(rbac.P_ANALYTICS_VIEW)
+@rate_limit(requests_per_minute=30)
+def platform_overview():
+    """Dashboard data: managed vs verified members, users by plan, custom bots.
+
+    Platform users = website accounts. Managed members = everyone in groups our
+    bots protect. Verified = the subset our bot verified. History comes from the
+    daily snapshot table (platform_stats); today's row is refreshed on request.
+    ?days = 7 | 30 | 90 | 365 (default 30)
+    """
+    from ..models import PlatformDailyStat
+    from ..platform_stats import save_snapshot
+
+    days = request.args.get("days", 30, type=int)
+    if days not in (7, 30, 90, 365):
+        return jsonify({"error": "Invalid days", "allowed": [7, 30, 90, 365]}), 400
+
+    now = datetime.utcnow()
+    cached = _OVERVIEW_CACHE.get(days)
+    if cached and (now - cached[0]).total_seconds() < 60:
+        return jsonify(cached[1])
+
+    try:
+        totals = save_snapshot(now)
+    except Exception:
+        # Two dashboards loading on a new day can race to insert today's row; the
+        # winner's row is fine, so just read live totals instead of failing.
+        db.session.rollback()
+        from ..platform_stats import compute_totals
+        totals = compute_totals(now)
+    since = now.date() - timedelta(days=days)
+    # one extra row before the window so the first day's "gained" has a baseline
+    rows = (PlatformDailyStat.query.filter(PlatformDailyStat.day >= since - timedelta(days=1))
+            .order_by(PlatformDailyStat.day.asc()).all())
+    history, prev = [], None
+    for r in rows:
+        if r.day >= since:
+            history.append({
+                "day": r.day.isoformat(),
+                "managed_members": r.managed_members, "verified_members": r.verified_members,
+                "managed_gained": (r.managed_members - prev.managed_members) if prev else None,
+                "verified_gained": (r.verified_members - prev.verified_members) if prev else None,
+                "users_free": r.users_free, "users_trial": r.users_trial, "users_paid": r.users_paid,
+                "groups_official": r.groups_official, "groups_custom": r.groups_custom,
+                "custom_bots_active": r.custom_bots_active,
+            })
+        prev = r
+
+    bots_by_status = dict(db.session.query(CustomBot.status, db.func.count(CustomBot.id)).group_by(CustomBot.status).all())
+    per_bot = (
+        db.session.query(CustomBot.bot_username, db.func.count(TelegramGroup.id).label("n"),
+                         db.func.coalesce(db.func.sum(TelegramGroup.member_count), 0).label("members"))
+        .join(TelegramGroup, TelegramGroup.linked_bot_id == CustomBot.id)
+        .group_by(CustomBot.id, CustomBot.bot_username)
+        .order_by(db.text("n DESC")).limit(10).all()
+    )
+
+    week = now + timedelta(days=7)
+    trial_used = User.query.filter(User.trial_used == True).count()  # noqa: E712
+    converted = (
+        db.session.query(db.func.count(db.distinct(PaymentHistory.user_id)))
+        .join(User, User.id == PaymentHistory.user_id)
+        .filter(User.trial_used == True, PaymentHistory.status == "confirmed")  # noqa: E712
+        .scalar() or 0
+    )
+    payload = {
+        "days": days, "generated_at": now.isoformat(),
+        "totals": totals,
+        "history": history,
+        "custom_bots_by_status": bots_by_status,
+        "groups_per_custom_bot": [{"bot": f"@{u}", "groups": int(n), "members": int(m)} for u, n, m in per_bot],
+        "trials": {
+            "active": totals["users_trial"],
+            "expiring_7d": User.query.filter(
+                User.subscription_tier == "pro", User.subscription_expires.is_(None),
+                User.trial_ends_at.isnot(None), User.trial_ends_at > now, User.trial_ends_at <= week,
+            ).count(),
+            "ever_started": trial_used,
+            "converted_to_paid": converted,
+            "conversion_pct": round(converted * 100.0 / trial_used, 1) if trial_used else None,
+            "custom_bot_trials_active": User.query.filter(User.custom_bot_trial_ends_at > now).count(),
+        },
+    }
+    _OVERVIEW_CACHE[days] = (now, payload)
+    return jsonify(payload)
 
 
 def _compute_mrr(now):

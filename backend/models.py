@@ -123,6 +123,8 @@ class User(db.Model):
     # 14-day Pro trial (2-D-01)
     trial_ends_at        = db.Column(db.DateTime, nullable=True)
     trial_used           = db.Column(db.Boolean, default=False)
+    # Admin-granted custom-bot trial (the signup trial does NOT include custom bots)
+    custom_bot_trial_ends_at = db.Column(db.DateTime, nullable=True)
     # Onboarding checklist (2-B-01)
     onboarding_completed_steps = db.Column(db.JSON, nullable=True)  # list of completed step keys
     # Product tour: server-side persistence so it never re-appears across
@@ -198,6 +200,7 @@ class User(db.Model):
             "timezone": self.timezone or "UTC",
             "trial_ends_at": self.trial_ends_at.isoformat() if self.trial_ends_at else None,
             "trial_used": bool(self.trial_used),
+            "custom_bot_trial_ends_at": self.custom_bot_trial_ends_at.isoformat() if self.custom_bot_trial_ends_at else None,
             "onboarding_completed_steps": self.onboarding_completed_steps or [],
             "onboarding_tour_completed": bool(self.onboarding_tour_completed),
         }
@@ -1852,6 +1855,29 @@ class CustomBotLifecycleStage(db.Model):
     bot_id = db.Column(db.Integer, db.ForeignKey("custom_bots.id", ondelete="CASCADE"), primary_key=True)
     stage = db.Column(db.String(20), primary_key=True)
     sent_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+
+class PlatformDailyStat(db.Model):
+    """One row per UTC day: point-in-time platform totals for admin charts.
+
+    Member counts cannot be reconstructed after the fact (Telegram only gives the
+    current count, and OfficialMember has no verified_at), so we snapshot them daily.
+    "Members gained that day" is the difference between consecutive rows.
+    """
+    __tablename__ = "platform_daily_stats"
+
+    day = db.Column(db.Date, primary_key=True)
+    managed_members = db.Column(db.Integer, nullable=False, default=0)
+    verified_members = db.Column(db.Integer, nullable=False, default=0)
+    groups_total = db.Column(db.Integer, nullable=False, default=0)
+    groups_official = db.Column(db.Integer, nullable=False, default=0)
+    groups_custom = db.Column(db.Integer, nullable=False, default=0)
+    users_total = db.Column(db.Integer, nullable=False, default=0)
+    users_free = db.Column(db.Integer, nullable=False, default=0)
+    users_trial = db.Column(db.Integer, nullable=False, default=0)
+    users_paid = db.Column(db.Integer, nullable=False, default=0)
+    custom_bots_total = db.Column(db.Integer, nullable=False, default=0)
+    custom_bots_active = db.Column(db.Integer, nullable=False, default=0)
 
 
 class GroupForumTopic(db.Model):
