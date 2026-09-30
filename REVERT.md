@@ -1182,7 +1182,7 @@ the group back. Check the `group_unlinked` event before assuming.
 
 ### To revert
 ​```bash
-git revert 5b0b531
+git revert <sha>
 git push origin main
 ​```
 

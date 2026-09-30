@@ -314,7 +314,7 @@ function LivePlatformStats({ proofRef, proofVisible, reveal, stats, statsLoading
   ];
 
   return (
-    <Box ref={proofRef} sx={{ bgcolor: '#060e1c', borderBottom: '1px solid', borderColor: 'divider', py: { xs: 6, md: 9 } }}>
+    <Box id="proof" ref={proofRef} sx={{ bgcolor: '#060e1c', borderBottom: '1px solid', borderColor: 'divider', py: { xs: 6, md: 9 } }}>
       <Container maxWidth="lg">
 
         {/* Header */}
@@ -471,6 +471,13 @@ export default function Landing() {
       .finally(() => { if (!cancelled) setStatsLoading(false); });
     return () => { cancelled = true; };
   }, []);
+
+  // Deep link (/#proof): the section mounts after stats load, so the browser's own
+  // hash scroll misses it. Scroll once it exists.
+  useEffect(() => {
+    if (statsLoading || window.location.hash !== '#proof') return;
+    document.getElementById('proof')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [statsLoading]);
 
   const reveal = (visible, delay = 0) => ({
     opacity: visible ? 1 : 0,

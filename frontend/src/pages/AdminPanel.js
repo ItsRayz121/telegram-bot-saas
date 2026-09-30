@@ -15,14 +15,14 @@ import {
   CheckCircleOutline, Cancel, Circle, Flag,
   Security, AccountTree, TrendingDown, Payment, FileDownload,
   MonitorHeart, NetworkCheck, Tune, Key, Psychology, AttachMoney as MoneyIcon,
-  Gavel, Dns, Insights, Verified, Timeline, InfoOutlined, Article, SupportAgent,
+  Gavel, Dns, Insights, Verified, Timeline, InfoOutlined, Article, SupportAgent, OpenInNew,
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ADMIN_CATEGORIES, findAdminItem } from '../config/adminNav';
 import BlogAdminTab from './admin/BlogAdminTab';
 import SupportInboxTab from './admin/SupportInboxTab';
 import GrowthAnalytics from './admin/GrowthAnalytics';
-import { ManagedMembersPanel, PlatformCharts } from './admin/PlatformOverview';
+import { ManagedMembersPanel, PlatformCharts, Tile } from './admin/PlatformOverview';
 import { useAdmin } from '../contexts/AdminContext';
 import { toast } from 'react-toastify';
 import { admin } from '../services/api';
@@ -175,7 +175,7 @@ function DashboardTab({ stats, botStats, revenue, health, featureAdoption, loadi
       </Grid>
 
       <GrowthAnalytics />
-      <PlatformCharts />
+      <PlatformCharts onOpen={onNavigate} />
 
       {/* Bot / group stats */}
       <Typography variant="subtitle2" color="text.secondary" fontWeight={600} mb={1} textTransform="uppercase" letterSpacing={1}>
@@ -382,7 +382,7 @@ function DashboardTab({ stats, botStats, revenue, health, featureAdoption, loadi
 // TAB 1 — USER MANAGEMENT
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function UsersTab({ onAdminError, initialFilter }) {
+function UsersTab({ onAdminError, initialFilter, onNavigate }) {
   const navigate = useNavigate();
   const [users, setUsers] = useState([]);
   const [total, setTotal] = useState(0);
@@ -571,7 +571,7 @@ function UsersTab({ onAdminError, initialFilter }) {
 
   return (
     <Box>
-      <ManagedMembersPanel />
+      <ManagedMembersPanel onOpen={(key, f) => (key === 'users' ? query({ tier: f?.tier || '' }) : onNavigate && onNavigate(key, f))} />
       {/* Filters row */}
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} mb={1.5} alignItems={{ sm: 'center' }}>
         <TextField
@@ -1027,7 +1027,8 @@ function TelegramGroupsTab({ onAdminError, initialFilter }) {
   useEffect(() => {
     if (!initialFilter) return;
     const st = (initialFilter.filter || {}).status || '';
-    setStatusFilter(st); setPage(1); fetchGroups({ page: 1, status: st });
+    const bt = (initialFilter.filter || {}).bot_type || '';
+    setStatusFilter(st); setBotType(bt); setPage(1); fetchGroups({ page: 1, status: st, bot_type: bt });
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, [initialFilter]);
 
@@ -4822,6 +4823,8 @@ const PROOF_DRILLABLE = new Set([
   'muted', 'banned', 'kicked',
 ]);
 
+const PUBLIC_PROOF_URL = `${process.env.REACT_APP_API_URL || ''}/api/platform/proof`;
+
 const _humanCol = (c) => c.replace(/_/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase());
 
 function ProofDrilldownDialog({ metric, label, onClose }) {
@@ -4932,7 +4935,7 @@ function ProofDrilldownDialog({ metric, label, onClose }) {
   );
 }
 
-function ProofMetricsTab({ onAdminError, canManage }) {
+function ProofMetricsTab({ onAdminError, canManage, onNavigate }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [publicKeys, setPublicKeys] = useState(new Set());
@@ -4998,6 +5001,14 @@ function ProofMetricsTab({ onAdminError, canManage }) {
   if (loading) return <Box display="flex" justifyContent="center" mt={4}><CircularProgress /></Box>;
 
   const ms = data?.members_sync || {};
+  const byKey = Object.fromEntries((data?.metrics || []).map((m) => [m.key, m]));
+  const actionData = ['spam_deleted', 'links_blocked', 'warnings_issued', 'muted', 'banned', 'kicked']
+    .filter((k) => byKey[k]).map((k) => ({ key: k, label: byKey[k].label, value: byKey[k].value || 0 }));
+  const publicCount = publicKeys.size;
+  const visData = [
+    { name: 'Public', value: publicCount, color: '#22c55e' },
+    { name: 'Private', value: Math.max((data?.metrics || []).length - publicCount, 0), color: '#64748b' },
+  ].filter((d) => d.value > 0);
 
   return (
     <Box>
@@ -5036,65 +5047,152 @@ function ProofMetricsTab({ onAdminError, canManage }) {
         </Alert>
       )}
 
-      <Grid container spacing={2} mb={2}>
-        {(data?.metrics || []).map((m) => {
-          const drillable = PROOF_DRILLABLE.has(m.key);
-          return (
-          <Grid item xs={6} sm={4} md={3} key={m.key}>
-            <Card sx={{ height: '100%', position: 'relative', borderColor: publicKeys.has(m.key) ? 'success.main' : 'divider' }}>
-              <CardContent sx={{ pb: '12px !important' }}>
-                <Stack direction="row" alignItems="flex-start" justifyContent="space-between">
-                  <Box
-                    onClick={drillable ? () => setDrill({ metric: m.key, label: m.label }) : undefined}
-                    sx={drillable ? { cursor: 'pointer' } : undefined}
-                  >
-                    <Typography variant="h5" fontWeight={700}
-                      sx={drillable ? { '&:hover': { textDecoration: 'underline' } } : undefined}>
-                      {(m.value ?? 0).toLocaleString()}
-                    </Typography>
-                    {drillable && (
-                      <Typography variant="caption" color="primary.main" display="block">View details →</Typography>
-                    )}
-                  </Box>
-                  <Tooltip
-                    arrow
-                    title={
-                      <Box>
-                        <Typography variant="caption" display="block" fontWeight={600}>Source</Typography>
-                        <Typography variant="caption" display="block">{m.source || 'Derived from platform DB'}</Typography>
-                        {data?.generated_at && (
-                          <Typography variant="caption" display="block" sx={{ mt: 0.5, opacity: 0.8 }}>
-                            Last updated {fmtRelative(data.generated_at)}
-                          </Typography>
-                        )}
-                      </Box>
-                    }
-                  >
-                    <InfoOutlined sx={{ fontSize: 15, color: 'text.disabled', cursor: 'help' }} />
-                  </Tooltip>
-                </Stack>
-                <Typography variant="caption" color="text.secondary" display="block">{m.label}</Typography>
-                <FormControlLabel
-                  sx={{ mt: 0.5, ml: 0 }}
-                  control={<Switch size="small" checked={publicKeys.has(m.key)} onChange={() => toggle(m.key)} disabled={!canManage} />}
-                  label={<Typography variant="caption" color={publicKeys.has(m.key) ? 'success.main' : 'text.disabled'}>{publicKeys.has(m.key) ? 'Public' : 'Private'}</Typography>}
-                />
-              </CardContent>
-            </Card>
+      <Alert severity="info" sx={{ mb: 2 }}
+        action={(
+          <Stack direction="row" spacing={0.5}>
+            <Button color="inherit" size="small" endIcon={<OpenInNew fontSize="small" />}
+              href="/#proof" target="_blank" rel="noopener noreferrer">Landing page</Button>
+            <Button color="inherit" size="small" endIcon={<OpenInNew fontSize="small" />}
+              href={PUBLIC_PROOF_URL} target="_blank" rel="noopener noreferrer">Public JSON</Button>
+          </Stack>
+        )}>
+        <strong>Where visitors see these:</strong> metrics switched to <em>Public</em> are served without login at{' '}
+        <code>/api/platform/proof</code>. The landing page section <strong>&quot;Real groups. Real numbers.&quot;</strong> currently
+        reads its own counters from <code>/api/platform-stats</code>, so the Public/Private switches below do not change what that
+        page shows yet.
+      </Alert>
+
+      <Typography variant="subtitle2" color="text.secondary" fontWeight={600} mb={1} textTransform="uppercase" letterSpacing={1}>
+        Reach {onNavigate ? '· click a tile to open it' : ''}
+      </Typography>
+      <Grid container spacing={2} mb={3}>
+        {[
+          ['groups_managed', () => onNavigate && onNavigate('groups', {}), '#8b5cf6'],
+          ['members_protected', () => setDrill({ metric: 'members_protected', label: byKey.members_protected?.label }), '#2196f3'],
+          ['custom_bots_created', () => onNavigate && onNavigate('bots', {}), '#00bcd4'],
+          ['active_groups_today', () => onNavigate && onNavigate('groups', {}), '#22c55e'],
+          ['active_members_today', undefined, '#f59e0b'],
+        ].map(([k, fn, color]) => byKey[k] && (
+          <Grid item xs={6} md key={k}>
+            <Tile label={byKey[k].label} value={(byKey[k].value ?? 0).toLocaleString()} color={color}
+              sub={publicKeys.has(k) ? 'Public' : 'Private'} onClick={fn} />
           </Grid>
-          );
-        })}
+        ))}
       </Grid>
+
+      <Grid container spacing={2} mb={3}>
+        <Grid item xs={12} md={8}>
+          <Card variant="outlined" sx={{ height: '100%' }}>
+            <CardContent>
+              <Typography variant="subtitle2" fontWeight={600}>What the bots did</Typography>
+              <Typography variant="caption" color="text.secondary" display="block">
+                Actions by type · click a bar to see the rows behind it
+              </Typography>
+              <Box sx={{ height: 260, mt: 1 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={actionData} layout="vertical" margin={{ top: 4, right: 24, left: 10, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                    <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
+                    <YAxis type="category" dataKey="label" width={130} tick={{ fontSize: 11 }} />
+                    <ReTooltip />
+                    <Bar dataKey="value" name="Count" radius={[0, 3, 3, 0]} style={{ cursor: 'pointer' }}
+                      onClick={(d) => setDrill({ metric: d.key, label: d.label })}>
+                      {actionData.map((d) => <Cell key={d.key} fill={publicKeys.has(d.key) ? '#22c55e' : '#64748b'} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </Box>
+              <Stack direction="row" spacing={2} mt={0.5}>
+                <Typography variant="caption" sx={{ color: '#22c55e' }}>■ Public</Typography>
+                <Typography variant="caption" sx={{ color: '#64748b' }}>■ Private</Typography>
+              </Stack>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={4}>
+          <Card variant="outlined" sx={{ height: '100%' }}>
+            <CardContent>
+              <Typography variant="subtitle2" fontWeight={600}>Public vs private</Typography>
+              <Typography variant="caption" color="text.secondary" display="block">
+                {publicCount} of {(data?.metrics || []).length} metrics are marked public
+              </Typography>
+              <Box sx={{ height: 240, mt: 1 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={visData} dataKey="value" nameKey="name" innerRadius={45} outerRadius={80} paddingAngle={2}>
+                      {visData.map((d) => <Cell key={d.name} fill={d.color} />)}
+                    </Pie>
+                    <ReTooltip /><Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      <Grid container spacing={2} mb={3}>
+        {['moderation_actions', 'commands_handled', 'ai_checks', 'errors_24h'].map((k) => byKey[k] && (
+          <Grid item xs={6} md={3} key={k}>
+            <Tile label={byKey[k].label} value={(byKey[k].value ?? 0).toLocaleString()}
+              color={k === 'errors_24h' && byKey[k].value > 0 ? '#ef4444' : undefined}
+              sub={publicKeys.has(k) ? 'Public' : 'Private'}
+              onClick={PROOF_DRILLABLE.has(k) ? () => setDrill({ metric: k, label: byKey[k].label }) : undefined} />
+          </Grid>
+        ))}
+      </Grid>
+
+      <Typography variant="subtitle2" color="text.secondary" fontWeight={600} mb={1} textTransform="uppercase" letterSpacing={1}>
+        Visibility &amp; details
+      </Typography>
+      <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', mb: 2 }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Metric</TableCell>
+              <TableCell align="right">Value</TableCell>
+              <TableCell>Visibility</TableCell>
+              <TableCell align="right">Details</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {(data?.metrics || []).map((m) => {
+              const drillable = PROOF_DRILLABLE.has(m.key);
+              return (
+                <TableRow key={m.key} hover>
+                  <TableCell>
+                    <Stack direction="row" spacing={0.75} alignItems="center">
+                      <Typography variant="body2">{m.label}</Typography>
+                      <Tooltip arrow title={`Source: ${m.source || 'Derived from platform DB'}${data?.generated_at ? ` · updated ${fmtRelative(data.generated_at)}` : ''}`}>
+                        <InfoOutlined sx={{ fontSize: 15, color: 'text.disabled', cursor: 'help' }} />
+                      </Tooltip>
+                    </Stack>
+                  </TableCell>
+                  <TableCell align="right"><Typography variant="body2" fontWeight={600}>{(m.value ?? 0).toLocaleString()}</Typography></TableCell>
+                  <TableCell>
+                    <FormControlLabel
+                      sx={{ m: 0 }}
+                      control={<Switch size="small" checked={publicKeys.has(m.key)} onChange={() => toggle(m.key)} disabled={!canManage} />}
+                      label={<Typography variant="caption" color={publicKeys.has(m.key) ? 'success.main' : 'text.disabled'}>{publicKeys.has(m.key) ? 'Public' : 'Private'}</Typography>}
+                    />
+                  </TableCell>
+                  <TableCell align="right">
+                    {drillable
+                      ? <Button size="small" onClick={() => setDrill({ metric: m.key, label: m.label })}>View details →</Button>
+                      : <Typography variant="caption" color="text.disabled">—</Typography>}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </TableContainer>
 
       {drill && (
         <ProofDrilldownDialog metric={drill.metric} label={drill.label} onClose={() => setDrill(null)} />
       )}
 
-      <Alert severity="info">
-        The <strong>Public</strong> toggle only controls whether a metric appears on the public landing page
-        (served unauthenticated at <code>/api/platform/proof</code>). It never changes the value or hides it from this admin view.
-        {!canManage && ' Only a Super Admin can change which metrics are public.'}
-      </Alert>
+      {!canManage && <Alert severity="info">Only a Super Admin can change which metrics are public.</Alert>}
       <Typography variant="caption" color="text.disabled" display="block" mt={1}>
         Generated {data?.generated_at ? fmtDateTime(data.generated_at) : '—'} · updated {data?.generated_at ? fmtRelative(data.generated_at) : '—'}.
         All values are live DB reads — hover any card's ⓘ for its source table.
@@ -5509,9 +5607,9 @@ export default function AdminPanel() {
     { key: 'dashboard', label: 'Dashboard', icon: <TrendingUp fontSize="small" />, permission: 'analytics.view',
       render: () => <DashboardTab stats={stats} botStats={botStats} revenue={revenue} health={health} featureAdoption={featureAdoption} loading={dashLoading} onRefresh={fetchDashboard} onNavigate={goToTab} /> },
     { key: 'proof', label: 'Proof Metrics', icon: <Verified fontSize="small" />, permission: 'analytics.view',
-      render: () => <ProofMetricsTab onAdminError={handleAdminError} canManage={can('config.manage')} /> },
+      render: () => <ProofMetricsTab onAdminError={handleAdminError} canManage={can('config.manage')} onNavigate={goToTab} /> },
     { key: 'users', label: 'Users', icon: <People fontSize="small" />, permission: 'users.view',
-      render: () => <UsersTab onAdminError={handleAdminError} initialFilter={navFilter?.key === 'users' ? navFilter : null} /> },
+      render: () => <UsersTab onAdminError={handleAdminError} initialFilter={navFilter?.key === 'users' ? navFilter : null} onNavigate={goToTab} /> },
     { key: 'groups', label: 'TG Groups', icon: <Groups fontSize="small" />, permission: 'groups.view',
       render: () => <TelegramGroupsTab onAdminError={handleAdminError} initialFilter={navFilter?.key === 'groups' ? navFilter : null} /> },
     { key: 'bots', label: 'Custom Bots', icon: <SmartToy fontSize="small" />, permission: 'bots.view',

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Box, Typography, Card, CardContent, Grid, CircularProgress, Alert, Button,
+  Box, Typography, Card, CardContent, CardActionArea, Grid, CircularProgress, Alert, Button,
   ToggleButton, ToggleButtonGroup, Stack,
 } from '@mui/material';
 import { OpenInNew } from '@mui/icons-material';
@@ -62,14 +62,19 @@ function RangeToggle({ days, setDays }) {
   );
 }
 
-function Tile({ label, value, sub, color }) {
+// onClick makes the whole tile a button (keyboard + screen-reader friendly via CardActionArea).
+export function Tile({ label, value, sub, color, onClick }) {
+  const body = (
+    <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+      <Typography variant="caption" color="text.secondary">{label}</Typography>
+      <Typography variant="h5" fontWeight={700} sx={{ color }}>{value}</Typography>
+      {sub && <Typography variant="caption" color="text.secondary" display="block">{sub}</Typography>}
+      {onClick && <Typography variant="caption" color="primary.main">View →</Typography>}
+    </CardContent>
+  );
   return (
     <Card variant="outlined" sx={{ height: '100%' }}>
-      <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
-        <Typography variant="caption" color="text.secondary">{label}</Typography>
-        <Typography variant="h5" fontWeight={700} sx={{ color }}>{value}</Typography>
-        {sub && <Typography variant="caption" color="text.secondary">{sub}</Typography>}
-      </CardContent>
+      {onClick ? <CardActionArea onClick={onClick} sx={{ height: '100%' }}>{body}</CardActionArea> : body}
     </Card>
   );
 }
@@ -98,7 +103,8 @@ function Shell({ state, children }) {
 }
 
 /** Users section: website accounts vs members managed by our bots. */
-export function ManagedMembersPanel() {
+export function ManagedMembersPanel({ onOpen }) {
+  const open = (key, filter) => (onOpen ? () => onOpen(key, filter || {}) : undefined);
   const state = usePlatformOverview();
   const { data, days, setDays } = state;
   const t = data?.totals;
@@ -121,11 +127,12 @@ export function ManagedMembersPanel() {
         </Stack>
         <Shell state={state}>
           <Grid container spacing={2} mb={2}>
-            <Grid item xs={6} md={3}><Tile label="Members managed" value={n(t?.managed_members)} color={C.managed} sub={`in ${n(t?.groups_total)} active groups`} /></Grid>
-            <Grid item xs={6} md={3}><Tile label="Verified by bot" value={n(t?.verified_members)} color={C.verified}
-              sub={t?.managed_members ? `${Math.round((t.verified_members * 100) / t.managed_members)}% of managed` : ''} /></Grid>
-            <Grid item xs={6} md={3}><Tile label="Website accounts" value={n(t?.users_total)} sub={`${n(t?.users_paid)} paid · ${n(t?.users_trial)} on trial`} /></Grid>
-            <Grid item xs={6} md={3}><Tile label="Groups: official / custom" value={`${n(t?.groups_official)} / ${n(t?.groups_custom)}`} color={C.official} /></Grid>
+            <Grid item xs={6} md><Tile label="Members managed" value={n(t?.managed_members)} color={C.managed} sub={`in ${n(t?.groups_total)} active groups`} onClick={open('groups')} /></Grid>
+            <Grid item xs={6} md><Tile label="Verified by bot" value={n(t?.verified_members)} color={C.verified}
+              sub={t?.managed_members ? `${Math.round((t.verified_members * 100) / t.managed_members)}% of managed` : ''} onClick={open('proof')} /></Grid>
+            <Grid item xs={6} md><Tile label="Website accounts" value={n(t?.users_total)} sub={`${n(t?.users_paid)} paid · ${n(t?.users_trial)} on trial`} onClick={open('users')} /></Grid>
+            <Grid item xs={6} md><Tile label="Official-bot groups" value={n(t?.groups_official)} color={C.official} onClick={open('groups', { bot_type: 'official' })} /></Grid>
+            <Grid item xs={6} md><Tile label="Custom-bot groups" value={n(t?.groups_custom)} color={C.custom} onClick={open('groups', { bot_type: 'custom' })} /></Grid>
           </Grid>
 
           <Grid container spacing={2}>
@@ -183,7 +190,9 @@ export function ManagedMembersPanel() {
 }
 
 /** Dashboard: plans, trials and custom bots as charts instead of bare numbers. */
-export function PlatformCharts() {
+export function PlatformCharts({ onOpen }) {
+  const open = (key, filter) => (onOpen ? () => onOpen(key, filter || {}) : undefined);
+  const PLAN_FILTER = { Free: 'free', Trial: 'trial', Paid: 'pro' };
   const state = usePlatformOverview();
   const { data, days, setDays } = state;
   const hist = (data?.history || []).map(h => ({ ...h, label: fmtDay(h.day) }));
@@ -208,10 +217,10 @@ export function PlatformCharts() {
         </Stack>
         <Shell state={state}>
           <Grid container spacing={2} mb={2}>
-            <Grid item xs={6} md={3}><Tile label="Trials active" value={n(tr?.active)} color={C.trial} sub={`${n(tr?.expiring_7d)} end within 7 days`} /></Grid>
+            <Grid item xs={6} md={3}><Tile label="Trials active" value={n(tr?.active)} color={C.trial} sub={`${n(tr?.expiring_7d)} end within 7 days`} onClick={open('users', { tier: 'trial' })} /></Grid>
             <Grid item xs={6} md={3}><Tile label="Trial → paid" value={tr?.conversion_pct == null ? '—' : `${tr.conversion_pct}%`}
               sub={`${n(tr?.converted_to_paid)} of ${n(tr?.ever_started)} trials`} color={C.paid} /></Grid>
-            <Grid item xs={6} md={3}><Tile label="Custom bots active" value={n(t?.custom_bots_active)} color={C.custom} sub={`${n(t?.custom_bots_total)} total`} /></Grid>
+            <Grid item xs={6} md={3}><Tile label="Custom bots active" value={n(t?.custom_bots_active)} color={C.custom} sub={`${n(t?.custom_bots_total)} total`} onClick={open('bots')} /></Grid>
             <Grid item xs={6} md={3}><Tile label="Custom-bot trials granted" value={n(tr?.custom_bot_trials_active)} sub="admin-approved, 1 bot each" /></Grid>
           </Grid>
 
@@ -234,10 +243,12 @@ export function PlatformCharts() {
               </ChartCard>
             </Grid>
             <Grid item xs={12} sm={6} md={3}>
-              <ChartCard title="Plan mix now" empty={planNow.length === 0 ? 'No users yet.' : null}>
+              <ChartCard title="Plan mix now" subtitle={onOpen ? 'Click a slice to list those users' : undefined} empty={planNow.length === 0 ? 'No users yet.' : null}>
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={planNow} dataKey="value" nameKey="name" innerRadius={45} outerRadius={80} paddingAngle={2}>
+                    <Pie data={planNow} dataKey="value" nameKey="name" innerRadius={45} outerRadius={80} paddingAngle={2}
+                      style={{ cursor: onOpen ? 'pointer' : 'default' }}
+                      onClick={(d) => onOpen && onOpen('users', { tier: PLAN_FILTER[d.name] || '' })}>
                       {planNow.map(d => <Cell key={d.name} fill={d.color} />)}
                     </Pie>
                     <Tooltip /><Legend />
@@ -249,7 +260,8 @@ export function PlatformCharts() {
               <ChartCard title="Custom bots by status" empty={statusData.length === 0 ? 'No custom bots.' : null}>
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={statusData} dataKey="value" nameKey="name" innerRadius={45} outerRadius={80} paddingAngle={2}>
+                    <Pie data={statusData} dataKey="value" nameKey="name" innerRadius={45} outerRadius={80} paddingAngle={2}
+                      style={{ cursor: onOpen ? 'pointer' : 'default' }} onClick={() => onOpen && onOpen('bots', {})}>
                       {statusData.map(d => <Cell key={d.name} fill={BOT_STATUS_COLORS[d.name] || '#94a3b8'} />)}
                     </Pie>
                     <Tooltip /><Legend />
@@ -266,7 +278,8 @@ export function PlatformCharts() {
                     <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
                     <YAxis type="category" dataKey="bot" width={130} tick={{ fontSize: 11 }} />
                     <Tooltip formatter={(v, name, p) => [`${v} groups · ${n(p.payload.members)} members`, 'Linked']} />
-                    <Bar dataKey="groups" name="Groups" fill={C.custom} radius={[0, 3, 3, 0]} />
+                    <Bar dataKey="groups" name="Groups" fill={C.custom} radius={[0, 3, 3, 0]}
+                      style={{ cursor: onOpen ? 'pointer' : 'default' }} onClick={() => onOpen && onOpen('bots', {})} />
                   </BarChart>
                 </ResponsiveContainer>
               </ChartCard>
