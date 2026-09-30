@@ -56,7 +56,7 @@ def get_platform_stats():
     # Total groups = official + custom bot groups (via Bot → Group relationships)
     from ..models import Group
     custom_group_count = db.session.query(func.count(Group.id)).scalar() or 0
-    custom_member_count = db.session.query(func.coalesce(func.sum(Group.member_count), 0)).scalar() or 0
+    custom_member_count = db.session.query(func.coalesce(func.sum(Group.telegram_member_count), 0)).scalar() or 0
 
     total_groups = official_count + custom_group_count
     total_members = official_members + custom_member_count
@@ -81,7 +81,13 @@ def get_platform_stats():
         TelegramGroup.linked_at >= week_ago,
     ).count()
 
+    # Same definitions as the admin Proof Metrics tab, so the landing page and the
+    # admin console always agree: groups managed = active now; ever = any status.
+    groups_ever = TelegramGroup.query.count()
+
     return jsonify({
+        "groups_managed": official_count,
+        "groups_ever": groups_ever,
         "total_groups": total_groups,
         "official_groups": official_count,
         "custom_bots": custom_bot_count,

@@ -289,10 +289,18 @@ function LivePlatformStats({ proofRef, proofVisible, reveal, stats, statsLoading
     },
     {
       key: 'groups', proofKey: 'groups_managed',
-      target: stats?.total_groups ?? null,
-      label: 'Active groups',
+      target: stats?.groups_managed ?? stats?.total_groups ?? null,
+      label: 'Groups managed',
       sub: 'communities using Telegizer right now',
       color: 'secondary.main',
+      icon: <People />,
+    },
+    {
+      key: 'groups_ever', proofKey: 'groups_ever',
+      target: stats?.groups_ever ?? null,
+      label: 'Groups served, all-time',
+      sub: 'every group that has ever used Telegizer',
+      color: 'success.main',
       icon: <People />,
     },
     {
@@ -344,7 +352,7 @@ function LivePlatformStats({ proofRef, proofVisible, reveal, stats, statsLoading
         {/* 6 stat cards */}
         <Grid container spacing={2} justifyContent="center" sx={{ mb: 7 }}>
           {cards.map((c, i) => (
-            <Grid item xs={6} sm={4} md={2} key={c.key}>
+            <Grid item xs={6} sm={4} md={3} key={c.key}>
               <StatCard {...c} delay={i * 60} visible={proofVisible} reveal={reveal} loading={statsLoading} />
             </Grid>
           ))}
@@ -505,6 +513,17 @@ export default function Landing() {
   // A counter is shown when its proof metric is public (or the choice is unknown).
   const showProof = (key) => !Array.isArray(proofKeys) || proofKeys.includes(key);
 
+  // The "Groups managed" tile in the example dashboard shows the real number (same
+  // source and definition as the admin console) once stats have loaded.
+  const liveGroups = platformStats?.groups_managed;
+  const liveGroupsTile = (typeof liveGroups === 'number' && showProof('groups_managed'))
+    ? {
+      label: 'Groups Managed', value: liveGroups.toLocaleString(), color: 'secondary.main',
+      delta: (typeof platformStats.groups_ever === 'number' && showProof('groups_ever'))
+        ? `${platformStats.groups_ever.toLocaleString()} groups all-time` : 'using Telegizer now',
+    }
+    : { label: 'Groups Managed', value: '3', delta: 'all healthy', color: 'secondary.main' };
+
   const reveal = (visible, delay = 0) => ({
     opacity: visible ? 1 : 0,
     transform: visible ? 'none' : 'translateY(22px)',
@@ -615,9 +634,9 @@ export default function Landing() {
           <Typography variant="caption" color="text.disabled">
             14-day Pro trial included · No credit card required · Free plan, forever · Pay with 300+ cryptos · No auto-renew
           </Typography>
-          {platformStats?.total_groups > 0 && showProof('groups_managed') && (
+          {platformStats?.groups_managed > 0 && showProof('groups_managed') && (
             <Typography variant="caption" color="text.disabled" display="block" mt={1.5}>
-              Trusted by <Box component="span" sx={{ color: 'primary.light', fontWeight: 700 }}>{platformStats.total_groups}+ active communities</Box>
+              Trusted by <Box component="span" sx={{ color: 'primary.light', fontWeight: 700 }}>{platformStats.groups_managed}+ active communities</Box>
               {showProof('members_protected') && (<>{' '}managing{' '}
               <Box component="span" sx={{ color: 'primary.light', fontWeight: 700 }}>{platformStats.total_members?.toLocaleString()}+ members</Box></>)}
             </Typography>
@@ -642,7 +661,7 @@ export default function Landing() {
                   { label: 'Members', value: '12,847', delta: '+214 today', color: 'primary.main' },
                   { label: 'Spam Blocked', value: '1,392', delta: 'this month', color: 'success.main' },
                   { label: 'Messages', value: '84,210', delta: 'last 30 days', color: 'info.main' },
-                  { label: 'Active Groups', value: '3', delta: 'all healthy', color: 'secondary.main' },
+                  liveGroupsTile,
                 ].map(s => (
                   <Grid item xs={6} sm={3} key={s.label}>
                     <Box sx={{ bgcolor: '#1e293b', borderRadius: 2, p: 1.5, border: '1px solid rgba(255,255,255,0.06)' }}>

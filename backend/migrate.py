@@ -33,7 +33,7 @@ def _migrate_proof_landing_keys():
     them again afterwards and this will not re-add them.
     """
     import json
-    marker = "migrate_proof_landing_keys_v1"
+    marker = "migrate_proof_landing_keys_v2"
     try:
         with db.engine.begin() as conn:
             won = conn.execute(db.text(
@@ -48,7 +48,7 @@ def _migrate_proof_landing_keys():
                 print("  – proof landing keys (no saved list; defaults already include them)")
                 return
             keys = json.loads(row[0]) if row[0] else []
-            merged = list(keys) + [k for k in ("official_groups", "new_members_week", "custom_bots_created")
+            merged = list(keys) + [k for k in ("official_groups", "new_members_week", "custom_bots_created", "groups_ever")
                                    if k not in keys]
             conn.execute(db.text(
                 "UPDATE platform_settings SET value_json = :v WHERE key = 'proof_public_metrics'"),

@@ -55,7 +55,9 @@ DEFAULT_SETTINGS = {
     # marked hidden (kept out of the generic settings editor).
     "proof_public_metrics": {
         "value": ["groups_managed", "members_protected", "spam_deleted", "links_blocked",
-                  "warnings_issued", "moderation_actions", "ai_checks", "commands_handled"],
+                  "warnings_issued", "moderation_actions", "ai_checks", "commands_handled",
+                  # backing the landing-page counters (Landing.js), so they show by default
+                  "official_groups", "new_members_week", "custom_bots_created", "groups_ever"],
         "category": "proof", "is_public": False, "hidden": True,
     },
 }

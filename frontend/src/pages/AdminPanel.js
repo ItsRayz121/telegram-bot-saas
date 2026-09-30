@@ -15,7 +15,7 @@ import {
   CheckCircleOutline, Cancel, Circle, Flag,
   Security, AccountTree, TrendingDown, Payment, FileDownload,
   MonitorHeart, NetworkCheck, Tune, Key, Psychology, AttachMoney as MoneyIcon,
-  Gavel, Dns, Insights, Verified, Timeline, InfoOutlined, Article, SupportAgent, OpenInNew,
+  Gavel, Dns, Insights, Verified, Timeline, Article, SupportAgent, OpenInNew,
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ADMIN_CATEGORIES, findAdminItem } from '../config/adminNav';
@@ -4828,7 +4828,8 @@ const LANDING_COUNTER = {
   members_protected: 'Members tracked',
   moderation_actions: 'Mod actions taken',
   new_members_week: 'New members this week',
-  groups_managed: 'Active groups',
+  groups_managed: 'Groups managed',
+  groups_ever: 'Groups served, all-time',
   official_groups: 'Groups on Telegizer bot',
   custom_bots_created: 'Custom bots created',
 };
@@ -5014,6 +5015,9 @@ function ProofMetricsTab({ onAdminError, canManage, onNavigate }) {
   const actionData = ['spam_deleted', 'links_blocked', 'warnings_issued', 'muted', 'banned', 'kicked']
     .filter((k) => byKey[k]).map((k) => ({ key: k, label: byKey[k].label, value: byKey[k].value || 0 }));
   const publicCount = publicKeys.size;
+  const allData = (data?.metrics || []).map((m) => ({ key: m.key, label: m.label, value: m.value || 0, added: m.added_7d, pub: publicKeys.has(m.key) }));
+  const weekData = allData.filter((d) => d.added != null);
+  const openBar = (d) => d && PROOF_DRILLABLE.has(d.key) && setDrill({ metric: d.key, label: d.label });
   const visData = [
     { name: 'Public', value: publicCount, color: '#22c55e' },
     { name: 'Private', value: Math.max((data?.metrics || []).length - publicCount, 0), color: '#64748b' },
@@ -5092,21 +5096,21 @@ function ProofMetricsTab({ onAdminError, canManage, onNavigate }) {
 
       <Grid container spacing={2} mb={3}>
         <Grid item xs={12} md={8}>
-          <Card variant="outlined" sx={{ height: '100%' }}>
+          <Card variant="outlined" sx={{ height: '100%', borderRadius: 2 }}>
             <CardContent>
               <Typography variant="subtitle2" fontWeight={600}>What the bots did</Typography>
               <Typography variant="caption" color="text.secondary" display="block">
                 Actions by type · click a bar to see the rows behind it
               </Typography>
-              <Box sx={{ height: 260, mt: 1 }}>
+              <Box sx={{ height: 280, mt: 1 }}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={actionData} layout="vertical" margin={{ top: 4, right: 24, left: 10, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-                    <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
-                    <YAxis type="category" dataKey="label" width={130} tick={{ fontSize: 11 }} />
+                  <BarChart data={actionData} margin={{ top: 8, right: 16, left: -10, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" opacity={0.25} vertical={false} />
+                    <XAxis dataKey="label" interval={0} angle={-20} textAnchor="end" height={60} tick={{ fontSize: 11 }} />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
                     <ReTooltip contentStyle={{ borderRadius: 8, fontSize: 12 }} cursor={{ fill: 'rgba(128,128,128,0.08)' }} />
-                    <Bar dataKey="value" name="Count" radius={[0, 4, 4, 0]} maxBarSize={24} style={{ cursor: 'pointer' }}
-                      onClick={(d) => setDrill({ metric: d.key, label: d.label })}>
+                    <Bar dataKey="value" name="Count" radius={[4, 4, 0, 0]} maxBarSize={56} style={{ cursor: 'pointer' }}
+                      onClick={openBar}>
                       {actionData.map((d) => <Cell key={d.key} fill={publicKeys.has(d.key) ? '#22c55e' : '#64748b'} />)}
                     </Bar>
                   </BarChart>
@@ -5120,19 +5124,19 @@ function ProofMetricsTab({ onAdminError, canManage, onNavigate }) {
           </Card>
         </Grid>
         <Grid item xs={12} md={4}>
-          <Card variant="outlined" sx={{ height: '100%' }}>
+          <Card variant="outlined" sx={{ height: '100%', borderRadius: 2 }}>
             <CardContent>
               <Typography variant="subtitle2" fontWeight={600}>Public vs private</Typography>
               <Typography variant="caption" color="text.secondary" display="block">
                 {publicCount} of {(data?.metrics || []).length} metrics are marked public
               </Typography>
-              <Box sx={{ height: 240, mt: 1 }}>
+              <Box sx={{ height: 260, mt: 1 }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie data={visData} dataKey="value" nameKey="name" innerRadius={45} outerRadius={80} paddingAngle={2}>
                       {visData.map((d) => <Cell key={d.name} fill={d.color} />)}
                     </Pie>
-                    <ReTooltip /><Legend />
+                    <ReTooltip contentStyle={{ borderRadius: 8, fontSize: 12 }} /><Legend />
                   </PieChart>
                 </ResponsiveContainer>
               </Box>
@@ -5156,61 +5160,95 @@ function ProofMetricsTab({ onAdminError, canManage, onNavigate }) {
       <Typography variant="subtitle2" color="text.secondary" fontWeight={600} mb={1} textTransform="uppercase" letterSpacing={1}>
         Visibility &amp; details
       </Typography>
-      <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', mb: 2 }}>
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Metric</TableCell>
-              <TableCell align="right">Value</TableCell>
-              <TableCell align="right">Last 7 days</TableCell>
-              <TableCell>Visibility</TableCell>
-              <TableCell>Landing counter</TableCell>
-              <TableCell align="right">Details</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {(data?.metrics || []).map((m) => {
-              const drillable = PROOF_DRILLABLE.has(m.key);
-              return (
-                <TableRow key={m.key} hover>
-                  <TableCell>
-                    <Stack direction="row" spacing={0.75} alignItems="center">
-                      <Typography variant="body2">{m.label}</Typography>
-                      <Tooltip arrow title={`Source: ${m.source || 'Derived from platform DB'}${data?.generated_at ? ` · updated ${fmtRelative(data.generated_at)}` : ''}`}>
-                        <InfoOutlined sx={{ fontSize: 15, color: 'text.disabled', cursor: 'help' }} />
-                      </Tooltip>
-                    </Stack>
-                  </TableCell>
-                  <TableCell align="right"><Typography variant="body2" fontWeight={600}>{(m.value ?? 0).toLocaleString()}</Typography></TableCell>
-                  <TableCell align="right">
-                    {m.added_7d == null
-                      ? <Typography variant="caption" color="text.disabled">—</Typography>
-                      : <Typography variant="body2" sx={{ color: m.added_7d > 0 ? '#22c55e' : 'text.secondary', fontWeight: 600 }}>{m.added_7d > 0 ? '+' : ''}{m.added_7d.toLocaleString()}</Typography>}
-                  </TableCell>
-                  <TableCell>
-                    <FormControlLabel
-                      sx={{ m: 0 }}
-                      control={<Switch size="small" checked={publicKeys.has(m.key)} onChange={() => toggle(m.key)} disabled={!canManage} />}
-                      label={<Typography variant="caption" color={publicKeys.has(m.key) ? 'success.main' : 'text.disabled'}>{publicKeys.has(m.key) ? 'Public' : 'Private'}</Typography>}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    {LANDING_COUNTER[m.key]
-                      ? <Chip size="small" variant="outlined" color={publicKeys.has(m.key) ? 'success' : 'default'}
-                          label={publicKeys.has(m.key) ? LANDING_COUNTER[m.key] : `${LANDING_COUNTER[m.key]} · hidden`} />
-                      : <Typography variant="caption" color="text.disabled">—</Typography>}
-                  </TableCell>
-                  <TableCell align="right">
-                    {drillable
-                      ? <Button size="small" onClick={() => setDrill({ metric: m.key, label: m.label })}>View details →</Button>
-                      : <Typography variant="caption" color="text.disabled">—</Typography>}
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </TableContainer>
+      <Grid container spacing={2} mb={3}>
+        <Grid item xs={12} lg={7}>
+          <Card variant="outlined" sx={{ height: '100%', borderRadius: 2 }}>
+            <CardContent>
+              <Typography variant="subtitle2" fontWeight={600}>Every metric, current value</Typography>
+              <Typography variant="caption" color="text.secondary" display="block">
+                Green = public, grey = private · square-root scale so small numbers stay visible · click a bar for its rows
+              </Typography>
+              <Box sx={{ height: 340, mt: 1 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={allData} margin={{ top: 8, right: 16, left: -10, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" opacity={0.25} vertical={false} />
+                    <XAxis dataKey="label" interval={0} angle={-40} textAnchor="end" height={110} tick={{ fontSize: 10 }} />
+                    <YAxis scale="sqrt" domain={[0, 'auto']} allowDecimals={false} tick={{ fontSize: 11 }} />
+                    <ReTooltip contentStyle={{ borderRadius: 8, fontSize: 12 }} cursor={{ fill: 'rgba(128,128,128,0.08)' }}
+                      formatter={(v, n, p) => [Number(v).toLocaleString(), p.payload.pub ? 'Value (public)' : 'Value (private)']} />
+                    <Bar dataKey="value" name="Value" radius={[4, 4, 0, 0]} maxBarSize={36} style={{ cursor: 'pointer' }} onClick={openBar}>
+                      {allData.map((d) => <Cell key={d.key} fill={d.pub ? '#22c55e' : '#64748b'} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} lg={5}>
+          <Card variant="outlined" sx={{ height: '100%', borderRadius: 2 }}>
+            <CardContent>
+              <Typography variant="subtitle2" fontWeight={600}>Change in the last 7 days</Typography>
+              <Typography variant="caption" color="text.secondary" display="block">
+                Real rows added since last week · metrics without a time axis are left out
+              </Typography>
+              <Box sx={{ height: 340, mt: 1 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={weekData} margin={{ top: 8, right: 16, left: -10, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" opacity={0.25} vertical={false} />
+                    <XAxis dataKey="label" interval={0} angle={-40} textAnchor="end" height={110} tick={{ fontSize: 10 }} />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                    <ReTooltip contentStyle={{ borderRadius: 8, fontSize: 12 }} cursor={{ fill: 'rgba(128,128,128,0.08)' }} />
+                    <Bar dataKey="added" name="Added (7d)" fill="#2196f3" radius={[4, 4, 0, 0]} maxBarSize={36} style={{ cursor: 'pointer' }} onClick={openBar} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      <Card variant="outlined" sx={{ mb: 2, borderRadius: 2 }}>
+        <CardContent>
+          <Typography variant="subtitle2" fontWeight={600}>Who can see what</Typography>
+          <Typography variant="caption" color="text.secondary" display="block" mb={1.5}>
+            {canManage ? 'Flip a switch, then press "Save public flags" at the top.' : 'Only a Super Admin can change these.'}
+            {' '}A green tag shows the landing-page counter a metric drives.
+          </Typography>
+          <Grid container spacing={1}>
+            {(data?.metrics || []).map((m) => (
+              <Grid item xs={12} sm={6} md={4} lg={3} key={m.key}>
+                <Box sx={{
+                  p: 1.25, borderRadius: 1.5, height: '100%',
+                  border: '1px solid', borderColor: publicKeys.has(m.key) ? 'success.main' : 'divider',
+                  bgcolor: publicKeys.has(m.key) ? 'rgba(34,197,94,0.06)' : 'transparent',
+                }}>
+                  <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
+                    <Box minWidth={0}>
+                      <Typography variant="body2" fontWeight={600} noWrap title={m.label}>{m.label}</Typography>
+                      <Typography variant="caption" color="text.secondary">{(m.value ?? 0).toLocaleString()}</Typography>
+                    </Box>
+                    <Tooltip arrow title={`Source: ${m.source || 'Derived from platform DB'}`}>
+                      <Box>
+                        <Switch size="small" checked={publicKeys.has(m.key)} onChange={() => toggle(m.key)} disabled={!canManage} />
+                      </Box>
+                    </Tooltip>
+                  </Stack>
+                  <Stack direction="row" spacing={0.5} mt={0.5} flexWrap="wrap" useFlexGap>
+                    {LANDING_COUNTER[m.key] && (
+                      <Chip size="small" variant="outlined" color={publicKeys.has(m.key) ? 'success' : 'default'}
+                        label={publicKeys.has(m.key) ? `Landing: ${LANDING_COUNTER[m.key]}` : `${LANDING_COUNTER[m.key]} · hidden`} />
+                    )}
+                    {PROOF_DRILLABLE.has(m.key) && (
+                      <Chip size="small" color="primary" variant="outlined" label="View details →" onClick={() => setDrill({ metric: m.key, label: m.label })} />
+                    )}
+                  </Stack>
+                </Box>
+              </Grid>
+            ))}
+          </Grid>
+        </CardContent>
+      </Card>
 
       {drill && (
         <ProofDrilldownDialog metric={drill.metric} label={drill.label} onClose={() => setDrill(null)} />

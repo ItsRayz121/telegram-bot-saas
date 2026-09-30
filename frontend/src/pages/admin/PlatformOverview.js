@@ -312,12 +312,13 @@ export function PlatformCharts({ onOpen }) {
               <ChartCard title="Groups per custom bot" subtitle="Top 10 by linked groups · members in those groups shown on hover"
                 empty={perBot.length === 0 ? 'No custom bot has linked groups yet.' : null}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={perBot} layout="vertical" margin={{ top: 4, right: 16, left: 20, bottom: 0 }}>
+                  <BarChart data={perBot} margin={{ top: 8, right: 16, left: -10, bottom: 0 }}>
+                    <defs><Gradient id="gBots" color={C.custom} top={0.95} bottom={0.45} /></defs>
                     <CartesianGrid {...GRID} />
-                    <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
-                    <YAxis type="category" dataKey="bot" width={130} tick={{ fontSize: 11 }} />
+                    <XAxis dataKey="bot" interval={0} angle={-25} textAnchor="end" height={70} tick={{ fontSize: 11 }} />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
                     <Tooltip {...TT} formatter={(v, name, p) => [`${v} groups · ${n(p.payload.members)} members`, 'Linked']} />
-                    <Bar dataKey="groups" name="Groups" fill={C.custom} radius={[0, 4, 4, 0]} maxBarSize={22}
+                    <Bar dataKey="groups" name="Groups" fill="url(#gBots)" radius={[4, 4, 0, 0]} maxBarSize={48}
                       style={{ cursor: onOpen ? 'pointer' : 'default' }} onClick={() => onOpen && onOpen('bots', {})} />
                   </BarChart>
                 </ResponsiveContainer>

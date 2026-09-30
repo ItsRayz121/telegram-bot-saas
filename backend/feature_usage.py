@@ -434,7 +434,7 @@ DEFAULT_PUBLIC_PROOF_KEYS = [
     "warnings_issued", "moderation_actions", "ai_checks", "commands_handled",
     # The landing-page counters (Landing.js) each map to one of these keys, so the
     # keys must be public by default or an untouched install would hide its cards.
-    "official_groups", "new_members_week", "custom_bots_created",
+    "official_groups", "new_members_week", "custom_bots_created", "groups_ever",
 ]
 
 PROOF_METRIC_LABELS = {
@@ -453,6 +453,7 @@ PROOF_METRIC_LABELS = {
     "active_members_today": "Active members today",
     "custom_bots_created": "Custom bots created",
     "official_groups": "Groups on the official bot",
+    "groups_ever": "Groups that have ever used Telegizer",
     "new_members_week": "New members this week",
     "errors_24h": "Errors (last 24h)",
 }
@@ -475,6 +476,7 @@ PROOF_METRIC_SOURCES = {
     "active_members_today": "feature_usage_events (distinct user_ref since today 00:00 UTC)",
     "custom_bots_created": "custom_bots + bots tables (row count)",
     "official_groups": "telegram_groups (active, not disabled, linked_via_bot_type='official')",
+    "groups_ever": "telegram_groups (every group the bot was ever added to, any status)",
     "new_members_week": "official_members (joined_at in the last 7 days)",
     "errors_24h": "bot_health_events (severity != 'info', last 24h)",
 }
@@ -566,12 +568,14 @@ def compute_proof_metrics(public_keys=None) -> dict:
         FeatureUsageEvent.feature, func.coalesce(func.sum(FeatureUsageEvent.count), 0)
     ).filter(FeatureUsageEvent.created_at >= week_ago).group_by(FeatureUsageEvent.feature).all()}
     official_groups = active_groups.filter(TelegramGroup.linked_via_bot_type == "official").count()
+    groups_ever = TelegramGroup.query.count()
     new_members_week = db.session.query(func.count(OfficialMember.id)).filter(
         OfficialMember.joined_at >= week_ago).scalar() or 0
     added_7d = {
         "groups_managed": active_groups.filter(TelegramGroup.created_at >= week_ago).count(),
         "official_groups": active_groups.filter(
             TelegramGroup.linked_via_bot_type == "official", TelegramGroup.created_at >= week_ago).count(),
+        "groups_ever": TelegramGroup.query.filter(TelegramGroup.created_at >= week_ago).count(),
         "members_protected": int(new_members_week),
         "new_members_week": None,
         "custom_bots_created": (CustomBot.query.filter(CustomBot.created_at >= week_ago).count() or 0)
@@ -601,6 +605,7 @@ def compute_proof_metrics(public_keys=None) -> dict:
         "active_members_today": int(active_members_today),
         "custom_bots_created": custom_bots_created,
         "official_groups": official_groups,
+        "groups_ever": groups_ever,
         "new_members_week": int(new_members_week),
         "errors_24h": errors_24h,
     }

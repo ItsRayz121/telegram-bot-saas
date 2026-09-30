@@ -151,7 +151,8 @@ export default function AdminSidebar({ collapsed, onToggle, onClose, user: userP
   // Categories with at least one permitted item.
   const visibleCategories = useMemo(() =>
     ADMIN_CATEGORIES
-      .map(c => ({ ...c, items: c.items.filter(i => can(i.permission)) }))
+      // items must carry their category slug, or go() builds /admin/undefined/<key>
+      .map(c => ({ ...c, items: c.items.filter(i => can(i.permission)).map(i => ({ ...i, category: c.slug })) }))
       .filter(c => c.items.length > 0),
   [can]);
 
