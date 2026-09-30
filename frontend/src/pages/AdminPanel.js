@@ -4823,6 +4823,15 @@ const PROOF_DRILLABLE = new Set([
   'muted', 'banned', 'kicked',
 ]);
 
+// Landing-page counter each proof metric drives (see Landing.js LivePlatformStats).
+const LANDING_COUNTER = {
+  members_protected: 'Members tracked',
+  moderation_actions: 'Mod actions taken',
+  new_members_week: 'New members this week',
+  groups_managed: 'Active groups',
+  official_groups: 'Groups on Telegizer bot',
+  custom_bots_created: 'Custom bots created',
+};
 const PUBLIC_PROOF_URL = `${process.env.REACT_APP_API_URL || ''}/api/platform/proof`;
 
 const _humanCol = (c) => c.replace(/_/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase());
@@ -5057,9 +5066,9 @@ function ProofMetricsTab({ onAdminError, canManage, onNavigate }) {
           </Stack>
         )}>
         <strong>Where visitors see these:</strong> metrics switched to <em>Public</em> are served without login at{' '}
-        <code>/api/platform/proof</code>. The landing page section <strong>&quot;Real groups. Real numbers.&quot;</strong> currently
-        reads its own counters from <code>/api/platform-stats</code>, so the Public/Private switches below do not change what that
-        page shows yet.
+        <code>/api/platform/proof</code>, and the landing page section <strong>&quot;Real groups. Real numbers.&quot;</strong> only
+        shows a counter when its metric is <em>Public</em> (see the &quot;Landing counter&quot; column). Switch a metric to Private and
+        Save to hide that counter for visitors.
       </Alert>
 
       <Typography variant="subtitle2" color="text.secondary" fontWeight={600} mb={1} textTransform="uppercase" letterSpacing={1}>
@@ -5075,7 +5084,8 @@ function ProofMetricsTab({ onAdminError, canManage, onNavigate }) {
         ].map(([k, fn, color]) => byKey[k] && (
           <Grid item xs={6} md key={k}>
             <Tile label={byKey[k].label} value={(byKey[k].value ?? 0).toLocaleString()} color={color}
-              sub={publicKeys.has(k) ? 'Public' : 'Private'} onClick={fn} />
+              sub={publicKeys.has(k) ? 'Public' : 'Private'}
+              trend={byKey[k].added_7d != null ? { delta: byKey[k].added_7d, label: 'last 7 days' } : null} onClick={fn} />
           </Grid>
         ))}
       </Grid>
@@ -5094,8 +5104,8 @@ function ProofMetricsTab({ onAdminError, canManage, onNavigate }) {
                     <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
                     <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
                     <YAxis type="category" dataKey="label" width={130} tick={{ fontSize: 11 }} />
-                    <ReTooltip />
-                    <Bar dataKey="value" name="Count" radius={[0, 3, 3, 0]} style={{ cursor: 'pointer' }}
+                    <ReTooltip contentStyle={{ borderRadius: 8, fontSize: 12 }} cursor={{ fill: 'rgba(128,128,128,0.08)' }} />
+                    <Bar dataKey="value" name="Count" radius={[0, 4, 4, 0]} maxBarSize={24} style={{ cursor: 'pointer' }}
                       onClick={(d) => setDrill({ metric: d.key, label: d.label })}>
                       {actionData.map((d) => <Cell key={d.key} fill={publicKeys.has(d.key) ? '#22c55e' : '#64748b'} />)}
                     </Bar>
@@ -5137,6 +5147,7 @@ function ProofMetricsTab({ onAdminError, canManage, onNavigate }) {
             <Tile label={byKey[k].label} value={(byKey[k].value ?? 0).toLocaleString()}
               color={k === 'errors_24h' && byKey[k].value > 0 ? '#ef4444' : undefined}
               sub={publicKeys.has(k) ? 'Public' : 'Private'}
+              trend={byKey[k].added_7d != null ? { delta: byKey[k].added_7d, label: 'last 7 days' } : null}
               onClick={PROOF_DRILLABLE.has(k) ? () => setDrill({ metric: k, label: byKey[k].label }) : undefined} />
           </Grid>
         ))}
@@ -5151,7 +5162,9 @@ function ProofMetricsTab({ onAdminError, canManage, onNavigate }) {
             <TableRow>
               <TableCell>Metric</TableCell>
               <TableCell align="right">Value</TableCell>
+              <TableCell align="right">Last 7 days</TableCell>
               <TableCell>Visibility</TableCell>
+              <TableCell>Landing counter</TableCell>
               <TableCell align="right">Details</TableCell>
             </TableRow>
           </TableHead>
@@ -5169,12 +5182,23 @@ function ProofMetricsTab({ onAdminError, canManage, onNavigate }) {
                     </Stack>
                   </TableCell>
                   <TableCell align="right"><Typography variant="body2" fontWeight={600}>{(m.value ?? 0).toLocaleString()}</Typography></TableCell>
+                  <TableCell align="right">
+                    {m.added_7d == null
+                      ? <Typography variant="caption" color="text.disabled">—</Typography>
+                      : <Typography variant="body2" sx={{ color: m.added_7d > 0 ? '#22c55e' : 'text.secondary', fontWeight: 600 }}>{m.added_7d > 0 ? '+' : ''}{m.added_7d.toLocaleString()}</Typography>}
+                  </TableCell>
                   <TableCell>
                     <FormControlLabel
                       sx={{ m: 0 }}
                       control={<Switch size="small" checked={publicKeys.has(m.key)} onChange={() => toggle(m.key)} disabled={!canManage} />}
                       label={<Typography variant="caption" color={publicKeys.has(m.key) ? 'success.main' : 'text.disabled'}>{publicKeys.has(m.key) ? 'Public' : 'Private'}</Typography>}
                     />
+                  </TableCell>
+                  <TableCell>
+                    {LANDING_COUNTER[m.key]
+                      ? <Chip size="small" variant="outlined" color={publicKeys.has(m.key) ? 'success' : 'default'}
+                          label={publicKeys.has(m.key) ? LANDING_COUNTER[m.key] : `${LANDING_COUNTER[m.key]} · hidden`} />
+                      : <Typography variant="caption" color="text.disabled">—</Typography>}
                   </TableCell>
                   <TableCell align="right">
                     {drillable

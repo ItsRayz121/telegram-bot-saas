@@ -24,6 +24,40 @@ def _run_alter(engine, sql, description):
             print(f"  ✗ {description}: {e}")
 
 
+def _migrate_proof_landing_keys():
+    """One-shot: the landing counters now follow the admin's Public/Private switches.
+
+    If an admin already saved a custom public list, the three metrics that back the
+    counters that were always visible would default to hidden, silently removing them.
+    Add them once, using scheduled_job_runs as the run-once marker. Admins can hide
+    them again afterwards and this will not re-add them.
+    """
+    import json
+    marker = "migrate_proof_landing_keys_v1"
+    try:
+        with db.engine.begin() as conn:
+            won = conn.execute(db.text(
+                "INSERT INTO scheduled_job_runs (job_name, last_run_at) VALUES (:n, NOW()) "
+                "ON CONFLICT (job_name) DO NOTHING RETURNING job_name"), {"n": marker}).first()
+            if won is None:
+                print("  – proof landing keys (already migrated)")
+                return
+            row = conn.execute(db.text(
+                "SELECT value_json FROM platform_settings WHERE key = 'proof_public_metrics'")).first()
+            if row is None:
+                print("  – proof landing keys (no saved list; defaults already include them)")
+                return
+            keys = json.loads(row[0]) if row[0] else []
+            merged = list(keys) + [k for k in ("official_groups", "new_members_week", "custom_bots_created")
+                                   if k not in keys]
+            conn.execute(db.text(
+                "UPDATE platform_settings SET value_json = :v WHERE key = 'proof_public_metrics'"),
+                {"v": json.dumps(merged)})
+            print(f"  ✓ proof landing keys added to saved public list ({len(merged) - len(keys)} new)")
+    except Exception as e:
+        print(f"  ✗ proof landing keys migration: {e}")
+
+
 def init_db():
     app = create_app()
     with app.app_context():
@@ -1082,6 +1116,8 @@ def init_db():
         # Must run AFTER all users-table ALTER statements (including auth_provider)
         # so SQLAlchemy's User model doesn't query columns that don't exist yet.
         _backfill_telegram_accounts(app)
+
+        _migrate_proof_landing_keys()
 
         print("Migration complete.")
 

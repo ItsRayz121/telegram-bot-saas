@@ -622,6 +622,8 @@ export const analytics = {
       ? api.get(`/api/official-groups/${groupId}/analytics`, { params })
       : api.get(`/api/bots/${botId}/groups/${groupId}/analytics`, { params }),
   getPlatformStats: () => api.get('/api/platform-stats'),
+  // Which proof metrics the admin has marked public (drives the landing counters).
+  getPublicProof: () => api.get('/api/platform/proof'),
   // Official bot ecosystem analytics
   getOfficialGroupAnalytics: (groupId, params) =>
     api.get(`/api/official-groups/${groupId}/analytics`, { params }),

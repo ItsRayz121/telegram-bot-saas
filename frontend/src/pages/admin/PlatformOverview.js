@@ -3,7 +3,7 @@ import {
   Box, Typography, Card, CardContent, CardActionArea, Grid, CircularProgress, Alert, Button,
   ToggleButton, ToggleButtonGroup, Stack,
 } from '@mui/material';
-import { OpenInNew } from '@mui/icons-material';
+import { OpenInNew, TrendingUp, TrendingDown, TrendingFlat } from '@mui/icons-material';
 import {
   ResponsiveContainer, BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, Tooltip,
   CartesianGrid, Legend,
@@ -20,6 +20,19 @@ const C = {
 const BOT_STATUS_COLORS = { active: '#22c55e', paused: '#f59e0b', error: '#ef4444', inactive: '#64748b' };
 // Google Analytics realtime is the source of truth for "people on the site right now".
 const GA_URL = process.env.REACT_APP_GA_DASHBOARD_URL || 'https://analytics.google.com/analytics/web/';
+
+// Shared chart look: soft tooltip card, horizontal grid only.
+const TT = {
+  contentStyle: { borderRadius: 8, border: '1px solid rgba(128,128,128,0.25)', fontSize: 12, boxShadow: '0 6px 20px rgba(0,0,0,0.25)' },
+  cursor: { fill: 'rgba(128,128,128,0.08)' },
+};
+const GRID = { strokeDasharray: '3 3', opacity: 0.25, vertical: false };
+const Gradient = ({ id, color, top = 0.9, bottom = 0.35 }) => (
+  <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stopColor={color} stopOpacity={top} />
+    <stop offset="100%" stopColor={color} stopOpacity={bottom} />
+  </linearGradient>
+);
 
 const fmtDay = (iso) => new Date(iso + 'T00:00:00Z').toLocaleDateString([], { month: 'short', day: 'numeric', timeZone: 'UTC' });
 const n = (v) => (v == null ? '—' : Number(v).toLocaleString());
@@ -62,18 +75,41 @@ function RangeToggle({ days, setDays }) {
   );
 }
 
+/** Real change over a window. delta null = unknown (renders nothing); 0 = "no change". */
+export function TrendChip({ delta, label }) {
+  if (delta == null) return null;
+  const up = delta > 0, down = delta < 0;
+  const Icon = up ? TrendingUp : down ? TrendingDown : TrendingFlat;
+  const color = up ? '#22c55e' : down ? '#ef4444' : '#94a3b8';
+  return (
+    <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 0.25 }}>
+      <Icon sx={{ fontSize: 16, color }} />
+      <Typography variant="caption" sx={{ color, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+        {delta === 0 ? 'No change' : `${up ? '+' : '−'}${Math.abs(delta).toLocaleString()}`}
+      </Typography>
+      {label && <Typography variant="caption" color="text.disabled">{label}</Typography>}
+    </Stack>
+  );
+}
+
 // onClick makes the whole tile a button (keyboard + screen-reader friendly via CardActionArea).
-export function Tile({ label, value, sub, color, onClick }) {
+// trend = { delta, label } shows real change over a window (see TrendChip).
+export function Tile({ label, value, sub, color, onClick, trend }) {
   const body = (
     <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
       <Typography variant="caption" color="text.secondary">{label}</Typography>
-      <Typography variant="h5" fontWeight={700} sx={{ color }}>{value}</Typography>
+      <Typography variant="h5" fontWeight={700} sx={{ color, fontVariantNumeric: 'tabular-nums' }}>{value}</Typography>
+      {trend && <TrendChip delta={trend.delta} label={trend.label} />}
       {sub && <Typography variant="caption" color="text.secondary" display="block">{sub}</Typography>}
       {onClick && <Typography variant="caption" color="primary.main">View →</Typography>}
     </CardContent>
   );
   return (
-    <Card variant="outlined" sx={{ height: '100%' }}>
+    <Card variant="outlined" sx={{
+      height: '100%', borderRadius: 2, borderTop: `3px solid ${color || 'rgba(128,128,128,0.35)'}`,
+      transition: 'box-shadow .15s, transform .15s',
+      ...(onClick ? { '&:hover': { boxShadow: 4, transform: 'translateY(-1px)' } } : {}),
+    }}>
       {onClick ? <CardActionArea onClick={onClick} sx={{ height: '100%' }}>{body}</CardActionArea> : body}
     </Card>
   );
@@ -81,7 +117,7 @@ export function Tile({ label, value, sub, color, onClick }) {
 
 function ChartCard({ title, subtitle, children, empty }) {
   return (
-    <Card variant="outlined" sx={{ height: '100%' }}>
+    <Card variant="outlined" sx={{ height: '100%', borderRadius: 2 }}>
       <CardContent>
         <Typography variant="subtitle2" fontWeight={600}>{title}</Typography>
         {subtitle && <Typography variant="caption" color="text.secondary" display="block">{subtitle}</Typography>}
@@ -107,6 +143,7 @@ export function ManagedMembersPanel({ onOpen }) {
   const open = (key, filter) => (onOpen ? () => onOpen(key, filter || {}) : undefined);
   const state = usePlatformOverview();
   const { data, days, setDays } = state;
+  const tr7 = (k) => (data?.trends && data.trends[k] != null ? { delta: data.trends[k], label: `vs ${data.trends.window_days}d ago` } : null);
   const t = data?.totals;
   const hist = (data?.history || []).map(h => ({ ...h, label: fmtDay(h.day) }));
   const latest = hist.length ? hist[hist.length - 1] : null;
@@ -127,10 +164,10 @@ export function ManagedMembersPanel({ onOpen }) {
         </Stack>
         <Shell state={state}>
           <Grid container spacing={2} mb={2}>
-            <Grid item xs={6} md><Tile label="Members managed" value={n(t?.managed_members)} color={C.managed} sub={`in ${n(t?.groups_total)} active groups`} onClick={open('groups')} /></Grid>
+            <Grid item xs={6} md><Tile label="Members managed" value={n(t?.managed_members)} color={C.managed} sub={`in ${n(t?.groups_total)} active groups`} trend={tr7('managed_members')} onClick={open('groups')} /></Grid>
             <Grid item xs={6} md><Tile label="Verified by bot" value={n(t?.verified_members)} color={C.verified}
-              sub={t?.managed_members ? `${Math.round((t.verified_members * 100) / t.managed_members)}% of managed` : ''} onClick={open('proof')} /></Grid>
-            <Grid item xs={6} md><Tile label="Website accounts" value={n(t?.users_total)} sub={`${n(t?.users_paid)} paid · ${n(t?.users_trial)} on trial`} onClick={open('users')} /></Grid>
+              sub={t?.managed_members ? `${Math.round((t.verified_members * 100) / t.managed_members)}% of managed` : ''} trend={tr7('verified_members')} onClick={open('proof')} /></Grid>
+            <Grid item xs={6} md><Tile label="Website accounts" value={n(t?.users_total)} sub={`${n(t?.users_paid)} paid · ${n(t?.users_trial)} on trial`} trend={tr7('users_total')} onClick={open('users')} /></Grid>
             <Grid item xs={6} md><Tile label="Official-bot groups" value={n(t?.groups_official)} color={C.official} onClick={open('groups', { bot_type: 'official' })} /></Grid>
             <Grid item xs={6} md><Tile label="Custom-bot groups" value={n(t?.groups_custom)} color={C.custom} onClick={open('groups', { bot_type: 'custom' })} /></Grid>
           </Grid>
@@ -141,13 +178,14 @@ export function ManagedMembersPanel({ onOpen }) {
                 empty={hist.length < 2 ? 'History builds up one point per day from the day this shipped.' : null}>
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={hist} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                    <defs><Gradient id="gManaged" color={C.managed} top={0.5} bottom={0.02} /><Gradient id="gVerified" color={C.verified} top={0.5} bottom={0.02} /></defs>
+                    <CartesianGrid {...GRID} />
                     <XAxis dataKey="label" tick={{ fontSize: 11 }} minTickGap={24} />
                     <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                    <Tooltip />
+                    <Tooltip {...TT} />
                     <Legend />
-                    <Area type="monotone" dataKey="managed_members" name="Managed" stroke={C.managed} fill={C.managed} fillOpacity={0.2} />
-                    <Area type="monotone" dataKey="verified_members" name="Verified" stroke={C.verified} fill={C.verified} fillOpacity={0.25} />
+                    <Area type="monotone" dataKey="managed_members" name="Managed" stroke={C.managed} strokeWidth={2} fill="url(#gManaged)" />
+                    <Area type="monotone" dataKey="verified_members" name="Verified" stroke={C.verified} strokeWidth={2} fill="url(#gVerified)" />
                   </AreaChart>
                 </ResponsiveContainer>
               </ChartCard>
@@ -162,13 +200,13 @@ export function ManagedMembersPanel({ onOpen }) {
               >
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={hist} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                    <CartesianGrid {...GRID} />
                     <XAxis dataKey="label" tick={{ fontSize: 11 }} minTickGap={24} />
                     <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                    <Tooltip />
+                    <Tooltip {...TT} />
                     <Legend />
-                    <Bar dataKey="managed_gained" name="Managed" fill={C.managed} radius={[3, 3, 0, 0]} />
-                    <Bar dataKey="verified_gained" name="Verified" fill={C.verified} radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="managed_gained" name="Managed" fill={C.managed} radius={[4, 4, 0, 0]} maxBarSize={22} />
+                    <Bar dataKey="verified_gained" name="Verified" fill={C.verified} radius={[4, 4, 0, 0]} maxBarSize={22} />
                   </BarChart>
                 </ResponsiveContainer>
               </ChartCard>
@@ -195,6 +233,7 @@ export function PlatformCharts({ onOpen }) {
   const PLAN_FILTER = { Free: 'free', Trial: 'trial', Paid: 'pro' };
   const state = usePlatformOverview();
   const { data, days, setDays } = state;
+  const tr7 = (k) => (data?.trends && data.trends[k] != null ? { delta: data.trends[k], label: `vs ${data.trends.window_days}d ago` } : null);
   const hist = (data?.history || []).map(h => ({ ...h, label: fmtDay(h.day) }));
   const statusData = Object.entries(data?.custom_bots_by_status || {}).map(([name, value]) => ({ name, value }));
   const perBot = data?.groups_per_custom_bot || [];
@@ -217,10 +256,10 @@ export function PlatformCharts({ onOpen }) {
         </Stack>
         <Shell state={state}>
           <Grid container spacing={2} mb={2}>
-            <Grid item xs={6} md={3}><Tile label="Trials active" value={n(tr?.active)} color={C.trial} sub={`${n(tr?.expiring_7d)} end within 7 days`} onClick={open('users', { tier: 'trial' })} /></Grid>
+            <Grid item xs={6} md={3}><Tile label="Trials active" value={n(tr?.active)} color={C.trial} sub={`${n(tr?.expiring_7d)} end within 7 days`} trend={tr7('users_trial')} onClick={open('users', { tier: 'trial' })} /></Grid>
             <Grid item xs={6} md={3}><Tile label="Trial → paid" value={tr?.conversion_pct == null ? '—' : `${tr.conversion_pct}%`}
               sub={`${n(tr?.converted_to_paid)} of ${n(tr?.ever_started)} trials`} color={C.paid} /></Grid>
-            <Grid item xs={6} md={3}><Tile label="Custom bots active" value={n(t?.custom_bots_active)} color={C.custom} sub={`${n(t?.custom_bots_total)} total`} onClick={open('bots')} /></Grid>
+            <Grid item xs={6} md={3}><Tile label="Custom bots active" value={n(t?.custom_bots_active)} color={C.custom} sub={`${n(t?.custom_bots_total)} total`} trend={tr7('custom_bots_active')} onClick={open('bots')} /></Grid>
             <Grid item xs={6} md={3}><Tile label="Custom-bot trials granted" value={n(tr?.custom_bot_trials_active)} sub="admin-approved, 1 bot each" /></Grid>
           </Grid>
 
@@ -230,10 +269,10 @@ export function PlatformCharts({ onOpen }) {
                 empty={hist.length < 2 ? 'History builds up one point per day from the day this shipped.' : null}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={hist} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                    <CartesianGrid {...GRID} />
                     <XAxis dataKey="label" tick={{ fontSize: 11 }} minTickGap={24} />
                     <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                    <Tooltip />
+                    <Tooltip {...TT} />
                     <Legend />
                     <Bar dataKey="users_free" name="Free" stackId="p" fill={C.free} />
                     <Bar dataKey="users_trial" name="Trial" stackId="p" fill={C.trial} />
@@ -251,7 +290,7 @@ export function PlatformCharts({ onOpen }) {
                       onClick={(d) => onOpen && onOpen('users', { tier: PLAN_FILTER[d.name] || '' })}>
                       {planNow.map(d => <Cell key={d.name} fill={d.color} />)}
                     </Pie>
-                    <Tooltip /><Legend />
+                    <Tooltip {...TT} /><Legend />
                   </PieChart>
                 </ResponsiveContainer>
               </ChartCard>
@@ -264,7 +303,7 @@ export function PlatformCharts({ onOpen }) {
                       style={{ cursor: onOpen ? 'pointer' : 'default' }} onClick={() => onOpen && onOpen('bots', {})}>
                       {statusData.map(d => <Cell key={d.name} fill={BOT_STATUS_COLORS[d.name] || '#94a3b8'} />)}
                     </Pie>
-                    <Tooltip /><Legend />
+                    <Tooltip {...TT} /><Legend />
                   </PieChart>
                 </ResponsiveContainer>
               </ChartCard>
@@ -274,11 +313,11 @@ export function PlatformCharts({ onOpen }) {
                 empty={perBot.length === 0 ? 'No custom bot has linked groups yet.' : null}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={perBot} layout="vertical" margin={{ top: 4, right: 16, left: 20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                    <CartesianGrid {...GRID} />
                     <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
                     <YAxis type="category" dataKey="bot" width={130} tick={{ fontSize: 11 }} />
-                    <Tooltip formatter={(v, name, p) => [`${v} groups · ${n(p.payload.members)} members`, 'Linked']} />
-                    <Bar dataKey="groups" name="Groups" fill={C.custom} radius={[0, 3, 3, 0]}
+                    <Tooltip {...TT} formatter={(v, name, p) => [`${v} groups · ${n(p.payload.members)} members`, 'Linked']} />
+                    <Bar dataKey="groups" name="Groups" fill={C.custom} radius={[0, 4, 4, 0]} maxBarSize={22}
                       style={{ cursor: onOpen ? 'pointer' : 'default' }} onClick={() => onOpen && onOpen('bots', {})} />
                   </BarChart>
                 </ResponsiveContainer>

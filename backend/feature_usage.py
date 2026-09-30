@@ -432,6 +432,9 @@ def usage_overview(scopes) -> dict:
 DEFAULT_PUBLIC_PROOF_KEYS = [
     "groups_managed", "members_protected", "spam_deleted", "links_blocked",
     "warnings_issued", "moderation_actions", "ai_checks", "commands_handled",
+    # The landing-page counters (Landing.js) each map to one of these keys, so the
+    # keys must be public by default or an untouched install would hide its cards.
+    "official_groups", "new_members_week", "custom_bots_created",
 ]
 
 PROOF_METRIC_LABELS = {
@@ -449,6 +452,8 @@ PROOF_METRIC_LABELS = {
     "active_groups_today": "Active groups today",
     "active_members_today": "Active members today",
     "custom_bots_created": "Custom bots created",
+    "official_groups": "Groups on the official bot",
+    "new_members_week": "New members this week",
     "errors_24h": "Errors (last 24h)",
 }
 
@@ -469,6 +474,8 @@ PROOF_METRIC_SOURCES = {
     "active_groups_today": "telegram_groups (last_activity >= today 00:00 UTC)",
     "active_members_today": "feature_usage_events (distinct user_ref since today 00:00 UTC)",
     "custom_bots_created": "custom_bots + bots tables (row count)",
+    "official_groups": "telegram_groups (active, not disabled, linked_via_bot_type='official')",
+    "new_members_week": "official_members (joined_at in the last 7 days)",
     "errors_24h": "bot_health_events (severity != 'info', last 24h)",
 }
 
@@ -483,6 +490,7 @@ def compute_proof_metrics(public_keys=None) -> dict:
     from sqlalchemy import func, distinct
     from .models import (
         db, TelegramGroup, FeatureUsageEvent, AIActivity, BotHealthEvent, CustomBot, Bot,
+        OfficialMember,
     )
 
     if public_keys is None:
@@ -552,6 +560,33 @@ def compute_proof_metrics(public_keys=None) -> dict:
         db.or_(BotHealthEvent.severity != "info", BotHealthEvent.severity.is_(None)),
     ).count()
 
+    # ── Last-7-days additions (real rows, never extrapolated) ───────────────────
+    week_ago = now - timedelta(days=7)
+    usage_7d = {feat: int(c) for feat, c in db.session.query(
+        FeatureUsageEvent.feature, func.coalesce(func.sum(FeatureUsageEvent.count), 0)
+    ).filter(FeatureUsageEvent.created_at >= week_ago).group_by(FeatureUsageEvent.feature).all()}
+    official_groups = active_groups.filter(TelegramGroup.linked_via_bot_type == "official").count()
+    new_members_week = db.session.query(func.count(OfficialMember.id)).filter(
+        OfficialMember.joined_at >= week_ago).scalar() or 0
+    added_7d = {
+        "groups_managed": active_groups.filter(TelegramGroup.created_at >= week_ago).count(),
+        "official_groups": active_groups.filter(
+            TelegramGroup.linked_via_bot_type == "official", TelegramGroup.created_at >= week_ago).count(),
+        "members_protected": int(new_members_week),
+        "new_members_week": None,
+        "custom_bots_created": (CustomBot.query.filter(CustomBot.created_at >= week_ago).count() or 0)
+        + (Bot.query.filter(Bot.created_at >= week_ago).count() or 0),
+        "spam_deleted": usage_7d.get("spam", 0) + usage_7d.get("automod", 0),
+        "links_blocked": usage_7d.get("link", 0),
+        "warnings_issued": usage_7d.get("warn", 0),
+        "muted": usage_7d.get("mute", 0), "banned": usage_7d.get("ban", 0), "kicked": usage_7d.get("kick", 0),
+        "moderation_actions": sum(usage_7d.get(k, 0) for k in
+                                  ("spam", "link", "automod", "warn", "mute", "ban", "kick", "nsfw")),
+        "commands_handled": usage_7d.get("command", 0),
+        "ai_checks": db.session.query(func.count(AIActivity.id)).filter(
+            AIActivity.category == "moderation", AIActivity.created_at >= week_ago).scalar() or 0,
+    }
+
     raw = {
         "groups_managed": groups_managed,
         "members_protected": int(members_protected),
@@ -565,6 +600,8 @@ def compute_proof_metrics(public_keys=None) -> dict:
         "active_groups_today": active_groups_today,
         "active_members_today": int(active_members_today),
         "custom_bots_created": custom_bots_created,
+        "official_groups": official_groups,
+        "new_members_week": int(new_members_week),
         "errors_24h": errors_24h,
     }
 
@@ -575,6 +612,8 @@ def compute_proof_metrics(public_keys=None) -> dict:
             "value": v,
             "public": k in public_set,
             "source": PROOF_METRIC_SOURCES.get(k, "Derived from platform DB"),
+            # Real change over the last 7 days; None where a metric has no time axis.
+            "added_7d": added_7d.get(k),
         }
         for k, v in raw.items()
     ]

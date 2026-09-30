@@ -261,10 +261,10 @@ function StatCard({ target, label, sub, color, icon, delay, visible, reveal, loa
   );
 }
 
-function LivePlatformStats({ proofRef, proofVisible, reveal, stats, statsLoading }) {
-  const cards = [
+function LivePlatformStats({ proofRef, proofVisible, reveal, stats, statsLoading, proofKeys }) {
+  const allCards = [
     {
-      key: 'members',
+      key: 'members', proofKey: 'members_protected',
       target: stats?.total_members ?? null,
       label: 'Members tracked',
       sub: 'across all groups platform-wide',
@@ -272,7 +272,7 @@ function LivePlatformStats({ proofRef, proofVisible, reveal, stats, statsLoading
       icon: <People />,
     },
     {
-      key: 'mod',
+      key: 'mod', proofKey: 'moderation_actions',
       target: stats?.total_mod_actions ?? null,
       label: 'Mod actions taken',
       sub: 'spam, bans, mutes — automated',
@@ -280,7 +280,7 @@ function LivePlatformStats({ proofRef, proofVisible, reveal, stats, statsLoading
       icon: <Shield />,
     },
     {
-      key: 'new_members',
+      key: 'new_members', proofKey: 'new_members_week',
       target: stats?.new_members_this_week ?? null,
       label: 'New members this week',
       sub: 'joined groups managed by Telegizer',
@@ -288,7 +288,7 @@ function LivePlatformStats({ proofRef, proofVisible, reveal, stats, statsLoading
       icon: <TrendingDown sx={{ transform: 'rotate(180deg)' }} />,
     },
     {
-      key: 'groups',
+      key: 'groups', proofKey: 'groups_managed',
       target: stats?.total_groups ?? null,
       label: 'Active groups',
       sub: 'communities using Telegizer right now',
@@ -296,7 +296,7 @@ function LivePlatformStats({ proofRef, proofVisible, reveal, stats, statsLoading
       icon: <People />,
     },
     {
-      key: 'official',
+      key: 'official', proofKey: 'official_groups',
       target: stats?.official_groups ?? null,
       label: 'Groups on Telegizer bot',
       sub: 'using the shared official bot',
@@ -304,7 +304,7 @@ function LivePlatformStats({ proofRef, proofVisible, reveal, stats, statsLoading
       icon: <SmartToy />,
     },
     {
-      key: 'bots',
+      key: 'bots', proofKey: 'custom_bots_created',
       target: stats?.custom_bots ?? null,
       label: 'Custom bots created',
       sub: 'private branded bots built on Telegizer',
@@ -312,11 +312,16 @@ function LivePlatformStats({ proofRef, proofVisible, reveal, stats, statsLoading
       icon: <Bolt />,
     },
   ];
+  // The admin's Public/Private switches decide which counters visitors see.
+  // proofKeys: array = known, undefined = still loading (show skeleton cards),
+  // null = the proof endpoint failed with no cache (keep the old show-all behaviour).
+  const cards = Array.isArray(proofKeys) ? allCards.filter((c) => proofKeys.includes(c.proofKey)) : allCards;
 
   return (
     <Box id="proof" ref={proofRef} sx={{ bgcolor: '#060e1c', borderBottom: '1px solid', borderColor: 'divider', py: { xs: 6, md: 9 } }}>
       <Container maxWidth="lg">
 
+        {cards.length > 0 && (<>
         {/* Header */}
         <Box sx={{ textAlign: 'center', mb: 5, ...reveal(proofVisible) }}>
           <Chip
@@ -337,13 +342,15 @@ function LivePlatformStats({ proofRef, proofVisible, reveal, stats, statsLoading
         </Box>
 
         {/* 6 stat cards */}
-        <Grid container spacing={2} sx={{ mb: 7 }}>
+        <Grid container spacing={2} justifyContent="center" sx={{ mb: 7 }}>
           {cards.map((c, i) => (
             <Grid item xs={6} sm={4} md={2} key={c.key}>
               <StatCard {...c} delay={i * 60} visible={proofVisible} reveal={reveal} loading={statsLoading} />
             </Grid>
           ))}
         </Grid>
+
+        </>)}
 
         {/* Dashboard proof panel */}
         <Box sx={{ ...reveal(proofVisible, 300) }}>
@@ -421,6 +428,13 @@ function formatStat(n) {
 }
 
 const STATS_CACHE_KEY = 'telegizer_platform_stats_v1';
+const PROOF_KEYS_CACHE_KEY = 'telegizer_public_proof_keys_v1';
+function loadCachedProofKeys() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PROOF_KEYS_CACHE_KEY) || 'null');
+    return Array.isArray(raw) ? raw : undefined;
+  } catch { return undefined; }
+}
 // NOTE: no fabricated fallback numbers here. The section is headlined
 // "Real groups. Real numbers." — if we have no real data (no cache, API down)
 // the entire section is hidden rather than showing invented stats.
@@ -438,6 +452,7 @@ export default function Landing() {
 
   const [platformStats, setPlatformStats] = useState(() => loadCachedStats());
   const [statsLoading, setStatsLoading] = useState(true);
+  const [proofKeys, setProofKeys] = useState(() => loadCachedProofKeys());
   const [statsRef, statsVisible] = useScrollReveal(0.15);
   const [proofRef, proofVisible] = useScrollReveal(0.1);
   const [painRef, painVisible] = useScrollReveal(0.08);
@@ -453,22 +468,30 @@ export default function Landing() {
 
   useEffect(() => {
     let cancelled = false;
-    analyticsApi.getPlatformStats()
-      .then(res => {
+    // Fetch the numbers and the admin's public/private choices together so the
+    // counters never flash in and then disappear.
+    Promise.allSettled([analyticsApi.getPlatformStats(), analyticsApi.getPublicProof()])
+      .then(([stats, proof]) => {
         if (cancelled) return;
-        const data = res.data;
-        if (data && typeof data.total_members === 'number') {
-          setPlatformStats(data);
-          try { localStorage.setItem(STATS_CACHE_KEY, JSON.stringify(data)); } catch { /* quota */ }
-        }
-      })
-      .catch((err) => {
-        if (process.env.NODE_ENV !== 'production') {
-          console.warn('[platform-stats] fetch failed, using cached data if any:', err?.message);
+        if (stats.status === 'fulfilled') {
+          const data = stats.value.data;
+          if (data && typeof data.total_members === 'number') {
+            setPlatformStats(data);
+            try { localStorage.setItem(STATS_CACHE_KEY, JSON.stringify(data)); } catch { /* quota */ }
+          }
+        } else if (process.env.NODE_ENV !== 'production') {
+          console.warn('[platform-stats] fetch failed, using cached data if any:', stats.reason?.message);
         }
         // platformStats stays at cached value or null (section hidden) — never fabricated
-      })
-      .finally(() => { if (!cancelled) setStatsLoading(false); });
+        if (proof.status === 'fulfilled' && Array.isArray(proof.value.data?.metrics)) {
+          const keys = proof.value.data.metrics.map((m) => m.key);
+          setProofKeys(keys);
+          try { localStorage.setItem(PROOF_KEYS_CACHE_KEY, JSON.stringify(keys)); } catch { /* quota */ }
+        } else {
+          setProofKeys((prev) => (prev === undefined ? null : prev)); // keep cache; else show all
+        }
+        setStatsLoading(false);
+      });
     return () => { cancelled = true; };
   }, []);
 
@@ -478,6 +501,9 @@ export default function Landing() {
     if (statsLoading || window.location.hash !== '#proof') return;
     document.getElementById('proof')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [statsLoading]);
+
+  // A counter is shown when its proof metric is public (or the choice is unknown).
+  const showProof = (key) => !Array.isArray(proofKeys) || proofKeys.includes(key);
 
   const reveal = (visible, delay = 0) => ({
     opacity: visible ? 1 : 0,
@@ -589,10 +615,11 @@ export default function Landing() {
           <Typography variant="caption" color="text.disabled">
             14-day Pro trial included · No credit card required · Free plan, forever · Pay with 300+ cryptos · No auto-renew
           </Typography>
-          {platformStats?.total_groups > 0 && (
+          {platformStats?.total_groups > 0 && showProof('groups_managed') && (
             <Typography variant="caption" color="text.disabled" display="block" mt={1.5}>
-              Trusted by <Box component="span" sx={{ color: 'primary.light', fontWeight: 700 }}>{platformStats.total_groups}+ active communities</Box> managing{' '}
-              <Box component="span" sx={{ color: 'primary.light', fontWeight: 700 }}>{platformStats.total_members?.toLocaleString()}+ members</Box>
+              Trusted by <Box component="span" sx={{ color: 'primary.light', fontWeight: 700 }}>{platformStats.total_groups}+ active communities</Box>
+              {showProof('members_protected') && (<>{' '}managing{' '}
+              <Box component="span" sx={{ color: 'primary.light', fontWeight: 700 }}>{platformStats.total_members?.toLocaleString()}+ members</Box></>)}
             </Typography>
           )}
         </Container>
@@ -686,7 +713,7 @@ export default function Landing() {
 
       {/* ── Live Platform Stats — only rendered with real data (cache or live API) ── */}
       {(platformStats || statsLoading) && (
-        <LivePlatformStats proofRef={proofRef} proofVisible={proofVisible} reveal={reveal} stats={platformStats} statsLoading={statsLoading} />
+        <LivePlatformStats proofRef={proofRef} proofVisible={proofVisible} reveal={reveal} stats={platformStats} statsLoading={statsLoading} proofKeys={proofKeys} />
       )}
 
       {/* ── Pain ── */}

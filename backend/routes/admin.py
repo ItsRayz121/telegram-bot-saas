@@ -825,6 +825,20 @@ def platform_overview():
             })
         prev = r
 
+    # Change vs ~7 days ago, from stored snapshots only. If we have fewer than 7 days of
+    # history, compare against the oldest earlier snapshot and say how many days that is.
+    today = now.date()
+    base = (PlatformDailyStat.query.filter(PlatformDailyStat.day <= today - timedelta(days=7))
+            .order_by(PlatformDailyStat.day.desc()).first()
+            or PlatformDailyStat.query.filter(PlatformDailyStat.day < today)
+            .order_by(PlatformDailyStat.day.asc()).first())
+    trends = None
+    if base is not None:
+        trends = {"window_days": (today - base.day).days, "since": base.day.isoformat()}
+        for k in ("managed_members", "verified_members", "users_total", "users_paid",
+                  "users_trial", "groups_total", "custom_bots_active"):
+            trends[k] = totals[k] - getattr(base, k)
+
     bots_by_status = dict(db.session.query(CustomBot.status, db.func.count(CustomBot.id)).group_by(CustomBot.status).all())
     per_bot = (
         db.session.query(CustomBot.bot_username, db.func.count(TelegramGroup.id).label("n"),
@@ -845,6 +859,7 @@ def platform_overview():
     payload = {
         "days": days, "generated_at": now.isoformat(),
         "totals": totals,
+        "trends": trends,
         "history": history,
         "custom_bots_by_status": bots_by_status,
         "groups_per_custom_bot": [{"bot": f"@{u}", "groups": int(n), "members": int(m)} for u, n, m in per_bot],
