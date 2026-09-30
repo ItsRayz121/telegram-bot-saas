@@ -44,7 +44,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
-## `<sha>` — Signup trials can no longer create custom bots; trial visibility + managed-members charts in admin
+## `5b0b531` — Signup trials can no longer create custom bots; trial visibility + managed-members charts in admin
 **Date:** 2026-09-30 · **Risk:** medium · **Touches:** plan limits (custom-bot creation), bot hot path (scheduler jobs)
 
 ### What changed
@@ -63,7 +63,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ### To revert
 ```bash
-git revert <sha>
+git revert 5b0b531
 git push origin main
 ```
 
@@ -1182,7 +1182,7 @@ the group back. Check the `group_unlinked` event before assuming.
 
 ### To revert
 ​```bash
-git revert <sha>
+git revert 5b0b531
 git push origin main
 ​```
 
