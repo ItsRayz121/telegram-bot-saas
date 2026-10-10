@@ -45,7 +45,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
-## `PENDING` — share a whole bot in one step (every group a bot manages, now and later) + two fixes from the audit
+## `41e558c` — share a whole bot in one step (every group a bot manages, now and later) + two fixes from the audit
 **Date:** 2026-10-10 · **Risk:** medium · **Touches:** access control (who can open a group and everything tied to it)
 
 ### What changed
