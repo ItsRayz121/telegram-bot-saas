@@ -2406,6 +2406,7 @@ def review_official_submission(group_id, campaign_id, submission_id):
         sub = eng.review_submission(
             c, submission_id, data.get("action"),
             reviewed_by=user.id, reason=data.get("reason"),
+            expected_status=data.get("expected_status"),
         )
         return jsonify({"submission": sub.to_dict()}), 200
     except eng.EngagementError as e:
@@ -2453,10 +2454,11 @@ def export_official_submissions(group_id, campaign_id):
         return jsonify({"error": "Group not found"}), 404
     try:
         c = eng.get_campaign(campaign_id, "official", telegram_group_id=group_id)
-        csv_text = eng.submissions_csv(c)
+        tg = _owns_group(user.id, group_id)
+        csv_text, fname = eng.submissions_export(c, request.args, tg.title if tg else "")
         return Response(
-            csv_text, mimetype="text/csv",
-            headers={"Content-Disposition": f"attachment; filename=campaign_{c.id}_submissions.csv"},
+            csv_text, mimetype="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f"attachment; filename={fname}"},
         )
     except eng.EngagementError as e:
         return _eng_err(e)

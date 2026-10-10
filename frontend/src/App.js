@@ -108,6 +108,7 @@ const AssistantKnowledge = React.lazy(() => import('./pages/AssistantKnowledge')
 const AssistantMemory = React.lazy(() => import('./pages/AssistantMemory'));
 const AssistantMeetingLinks = React.lazy(() => import('./pages/AssistantMeetingLinks'));
 const AnalyticsHub = React.lazy(() => import('./pages/AnalyticsHub'));
+const CampaignWorkspace = React.lazy(() => import('./pages/campaigns/Workspace'));
 const WorkflowBuilder = React.lazy(() => import('./pages/WorkflowBuilder'));
 
 // Initialize Sentry if DSN is configured
@@ -306,6 +307,12 @@ export default function App() {
             <Route path="/groups/:groupId/analytics"        element={<AppRoute><OfficialGroupAnalytics /></AppRoute>} />
             <Route path="/groups/:groupId/manage"           element={<AppRoute><GroupManagement /></AppRoute>} />
             <Route path="/groups/:groupId/crm"             element={<AppRoute><GroupCRM /></AppRoute>} />
+            {/* Campaign workspace: the group in the URL is the only boundary */}
+            <Route path="/groups/:groupId/campaigns"              element={<AppRoute><React.Suspense fallback={null}><CampaignWorkspace view="overview" /></React.Suspense></AppRoute>} />
+            <Route path="/groups/:groupId/campaigns/all"          element={<AppRoute><React.Suspense fallback={null}><CampaignWorkspace view="list" /></React.Suspense></AppRoute>} />
+            <Route path="/groups/:groupId/campaigns/review"       element={<AppRoute><React.Suspense fallback={null}><CampaignWorkspace view="review" /></React.Suspense></AppRoute>} />
+            <Route path="/groups/:groupId/campaigns/new"          element={<AppRoute><React.Suspense fallback={null}><CampaignWorkspace view="create" /></React.Suspense></AppRoute>} />
+            <Route path="/groups/:groupId/campaigns/:campaignId"  element={<AppRoute><React.Suspense fallback={null}><CampaignWorkspace view="detail" /></React.Suspense></AppRoute>} />
 
             {/* /my-groups/* → redirect to /groups/* (backward compat, preserves query string) */}
             <Route path="/my-groups"                        element={<RedirectMyGroups />} />
@@ -393,6 +400,11 @@ export default function App() {
             <Route path="/bot/:id/group/:groupId"            element={<AppRoute><KeyedGroupSettings /></AppRoute>} />
             <Route path="/bot/:id/group/:groupId/analytics"  element={<AppRoute><GroupAnalytics /></AppRoute>} />
             <Route path="/bot/:id/group/:groupId/crm"        element={<AppRoute><GroupCRM /></AppRoute>} />
+            <Route path="/bot/:id/group/:groupId/campaigns"              element={<AppRoute><React.Suspense fallback={null}><CampaignWorkspace view="overview" /></React.Suspense></AppRoute>} />
+            <Route path="/bot/:id/group/:groupId/campaigns/all"          element={<AppRoute><React.Suspense fallback={null}><CampaignWorkspace view="list" /></React.Suspense></AppRoute>} />
+            <Route path="/bot/:id/group/:groupId/campaigns/review"       element={<AppRoute><React.Suspense fallback={null}><CampaignWorkspace view="review" /></React.Suspense></AppRoute>} />
+            <Route path="/bot/:id/group/:groupId/campaigns/new"          element={<AppRoute><React.Suspense fallback={null}><CampaignWorkspace view="create" /></React.Suspense></AppRoute>} />
+            <Route path="/bot/:id/group/:groupId/campaigns/:campaignId"  element={<AppRoute><React.Suspense fallback={null}><CampaignWorkspace view="detail" /></React.Suspense></AppRoute>} />
 
             {/* ── Referrals ─────────────────────────────────────────────────── */}
             <Route path="/referrals" element={<AppRoute><Referrals /></AppRoute>} />

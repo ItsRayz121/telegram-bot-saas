@@ -36,7 +36,7 @@ import WebhookManager from '../components/WebhookManager';
 import WorkspaceForwarding from './WorkspaceForwarding';
 import WorkspaceAutomations from './WorkspaceAutomations';
 import InviteLinks from '../components/InviteLinks';
-import CampaignManager from '../components/CampaignManager';
+import CampaignsEntry from '../components/CampaignsEntry';
 import ForumTopicSelector from '../components/ForumTopicSelector';
 import TimezoneSelect from '../components/TimezoneSelect';
 import {
@@ -3219,7 +3219,7 @@ function GroupSettingsInner() {
 
         {/* COMMUNITY › Campaigns */}
         {cat === 'community' && subTab === 2 && (
-          <CampaignManager botId={botId} groupId={groupId} userTier={userTier} />
+          <CampaignsEntry botId={botId} groupId={groupId} isOfficial={isOfficial} />
         )}
 
         {/* ══════════════════════════════════════════════════════════

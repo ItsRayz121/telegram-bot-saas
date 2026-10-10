@@ -1502,6 +1502,7 @@ def review_engagement_submission(bot_id, group_id, campaign_id, submission_id):
         sub = eng.review_submission(
             c, submission_id, data.get("action"),
             reviewed_by=user.id, reason=data.get("reason"),
+            expected_status=data.get("expected_status"),
         )
         return jsonify({"submission": sub.to_dict()})
     except eng.EngagementError as e:
@@ -1558,10 +1559,10 @@ def export_engagement_submissions(bot_id, group_id, campaign_id):
         return err
     try:
         c = eng.get_campaign(campaign_id, "custom", group_id=group.id)
-        csv_text = eng.submissions_csv(c)
+        csv_text, fname = eng.submissions_export(c, request.args, group.group_name)
         return Response(
-            csv_text, mimetype="text/csv",
-            headers={"Content-Disposition": f"attachment; filename=campaign_{c.id}_submissions.csv"},
+            csv_text, mimetype="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f"attachment; filename={fname}"},
         )
     except eng.EngagementError as e:
         return _eng_err(e)

@@ -45,6 +45,30 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
+## `PENDING` — Campaign workspace: overview, directory, review queue, campaign pages, safer review + exports
+**Date:** 2026-10-10 · **Risk:** medium · **Touches:** the review decision path (XP is granted on approve), CSV exports, new read-only campaign endpoints, campaign pages
+
+### What changed
+- New read-only endpoints under `/engagement/` (overview, directory, review queue, per-campaign summary/activity, message preview). Every query is limited to the one group in the URL; a campaign or submission id from another group returns 404.
+- **Review guard (`engagement.review_submission`)**: the queue and the campaign page now send `expected_status`. The change is applied only if the submission is still in that state (one atomic UPDATE); otherwise the server answers 409 `STALE_SUBMISSION` and changes nothing, rewards nothing and notifies nobody. Callers that do not send `expected_status` behave exactly as before.
+- Submissions CSV: formula-injection neutralised, ids written as text (leading zeros kept), UTF-8 BOM, UTC timestamps, descriptive file name, optional `status` / `from` / `to` filters.
+- Campaigns moved from dialogs to pages (`/groups/<id>/campaigns...`). The old forms are reused unchanged; the wizard now has 4 steps with an explicit "Save as draft" / "Publish now" instead of an "Activate now" switch.
+
+### Kill switch
+None needed for the read-only pages. If reviewing misbehaves, the old behaviour is available instantly by reverting the commit; there is no flag.
+
+### To revert
+```bash
+git revert <sha>
+```
+
+### What a revert does NOT undo
+- Submissions approved or rejected, XP already granted, DMs already sent to members, and group posts already published stay as they are.
+- Drafts or campaigns created through the new pages remain.
+- CSV files already downloaded stay on people's machines.
+
+---
+
 ## `PENDING` — Analytics redesign: member/audit/warning/AI summaries, digest preview, profile links
 **Date:** 2026-10-10 · **Risk:** low-medium · **Touches:** read-only analytics endpoints, scheduled digest text builder, report wording, member/audit list filters, CSV exports
 

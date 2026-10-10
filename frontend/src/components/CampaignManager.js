@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useContext } from 'react';
 import {
   Box, Card, CardContent, Typography, Button, TextField, Grid,
   Dialog, DialogTitle, DialogContent, DialogActions, IconButton,
@@ -12,9 +12,35 @@ import {
   CheckCircle, Cancel, Visibility, Send, Replay, ArrowDropDown,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
-import { engagement, xVerifyKey } from '../services/api';
+import { engagement, engagementWs, xVerifyKey } from '../services/api';
+import { downloadBlob } from '../utils/csvExport';
 
-const TYPES = [
+// The same forms are used both as dialogs (legacy entry points) and as full pages
+// (campaign workspace). PDialog* render a Dialog normally, or plain page chrome
+// when `page` is set - so there is one implementation of each form.
+const PageCtx = React.createContext(false);
+function PDialog({ page, children, onClose, maxWidth = 'sm' }) {
+  if (page) return <PageCtx.Provider value><Box>{children}</Box></PageCtx.Provider>;
+  return <Dialog open onClose={onClose} maxWidth={maxWidth} fullWidth>{children}</Dialog>;
+}
+function PDialogTitle({ children, ...rest }) {
+  const page = useContext(PageCtx);
+  return page
+    ? <Typography variant="h6" component="h2" fontWeight={700} sx={{ mb: 2 }}>{children}</Typography>
+    : <DialogTitle {...rest}>{children}</DialogTitle>;
+}
+function PDialogContent({ children, ...rest }) {
+  const page = useContext(PageCtx);
+  return page ? <Box>{children}</Box> : <DialogContent {...rest}>{children}</DialogContent>;
+}
+function PDialogActions({ children, ...rest }) {
+  const page = useContext(PageCtx);
+  return page
+    ? <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, flexWrap: 'wrap', mt: 3, pt: 2, borderTop: 1, borderColor: 'divider' }}>{children}</Box>
+    : <DialogActions {...rest}>{children}</DialogActions>;
+}
+
+export const TYPES = [
   { value: 'social_task',       label: 'Social Task',         emoji: '📢', chip: 'Social',   help: 'Like / repost / follow / subscribe / join a channel.' },
   { value: 'proof_collection',  label: 'Proof Collection',   emoji: '📋', chip: 'Proof',    help: 'Collect UID, wallet, referral link, screenshot or custom fields.' },
   { value: 'content_submission', label: 'Content Submission', emoji: '📝', chip: 'Content',  help: 'Users submit a link (YouTube / X / Telegram / blog) for review.' },
@@ -84,7 +110,7 @@ const VERIFICATION_MODES = [
   { value: 'link',   label: 'Link-validity check (Pro)' },
   { value: 'auto',   label: 'Auto-verify (Telegram join)' },
 ];
-const FIELD_TYPES = [
+export const FIELD_TYPES = [
   { value: 'text', label: 'Text' },
   { value: 'url', label: 'URL / Link' },
   { value: 'uid', label: 'Exchange UID' },
@@ -101,7 +127,7 @@ const DURATIONS = [
   { value: 0, label: 'No deadline' },
 ];
 
-const STATUS_COLOR = {
+export const STATUS_COLOR = {
   draft: 'default', active: 'success', paused: 'warning',
   closed: 'default', archived: 'default',
 };
@@ -173,9 +199,108 @@ const normalizeProofFields = (arr) => (arr || [])
     example: (f.example || '').trim() || null,
   }));
 
+// Decode the handful of entities Python's html.escape produces, and render the
+// <b>/<i> tags the group post uses - nothing else is ever interpreted as markup.
+const ENT = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#x27;': "'" };
+const decodeEntities = (t) => t.replace(/&(amp|lt|gt|quot|#x27);/g, (m) => ENT[m] || m);
+function renderTelegramHtml(html) {
+  return html.split('\n').map((line, li) => {
+    const parts = line.split(/(<\/?b>|<\/?i>)/);
+    let bold = false; let ital = false;
+    return (
+      <Box key={li} sx={{ minHeight: line ? undefined : '0.7em', whiteSpace: 'pre-wrap' }}>
+        {parts.map((part, pi) => {
+          if (part === '<b>') { bold = true; return null; }
+          if (part === '</b>') { bold = false; return null; }
+          if (part === '<i>') { ital = true; return null; }
+          if (part === '</i>') { ital = false; return null; }
+          const txt = decodeEntities(part);
+          if (!txt) return null;
+          let node = txt;
+          if (bold) node = <strong key={pi}>{node}</strong>;
+          if (ital) node = <em key={pi}>{node}</em>;
+          return <React.Fragment key={pi}>{node}</React.Fragment>;
+        })}
+      </Box>
+    );
+  });
+}
+
+// Last wizard step: a plain summary plus the exact group post (built by the real
+// message builder on the server; nothing is saved or sent while previewing).
+export function WizardReview({ botId, groupId, form, typeMeta, payload, groupName, platform }) {
+  const [pv, setPv] = useState({ loading: true, data: null, error: null });
+  const key = JSON.stringify(payload);
+  useEffect(() => {
+    let cancelled = false;
+    setPv((p) => ({ ...p, loading: true, error: null }));
+    engagementWs.preview(botId, groupId, payload)
+      .then((r) => { if (!cancelled) setPv({ loading: false, data: r.data, error: null }); })
+      .catch((e) => { if (!cancelled) setPv({ loading: false, data: null, error: e.response?.data?.error || 'Could not build the preview' }); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [botId, groupId, key]);
+
+  const tasks = payload.tasks || [];
+  const rows = [
+    ['Group', groupName || '—'],
+    ['Type', typeMeta.label],
+    ['Platform', platform || '—'],
+    ['Verification', form.type === 'raid' ? (form.auto_verify_x ? 'Auto-verify on X' : 'Manual review') : (VERIFICATION_MODES.find((v) => v.value === form.verification_mode) || {}).label],
+    tasks.length ? ['Tasks', `${tasks.length} task${tasks.length === 1 ? '' : 's'}`] : ['Proof fields', (payload.custom_fields || []).map((f) => f.label).join(', ') || 'None'],
+    ['Deadline', form.duration_hours ? (DURATIONS.find((d) => d.value === form.duration_hours) || {}).label : 'No deadline'],
+    ['XP per approval', payload.reward_xp || 0],
+    ['Reward (text)', payload.reward_label || '—'],
+    ['Max participants', payload.max_participants || 'No limit'],
+  ];
+  return (
+    <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' } }}>
+      <Box>
+        <Typography variant="subtitle2" sx={{ mb: 1 }}>Summary</Typography>
+        <Box component="dl" sx={{ m: 0, display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 2, rowGap: 0.75 }}>
+          {rows.map(([k, v]) => (
+            <React.Fragment key={k}>
+              <Typography component="dt" variant="body2" color="text.secondary">{k}</Typography>
+              <Typography component="dd" variant="body2" sx={{ m: 0, wordBreak: 'break-word' }}>{v}</Typography>
+            </React.Fragment>
+          ))}
+        </Box>
+        <Alert severity="info" icon={false} sx={{ mt: 2 }}>
+          <strong>Save as draft</strong> keeps it private - nothing is posted. <strong>Publish now</strong> activates it and posts
+          it to {groupName || 'the group'} (subject to your plan's active-campaign limit).
+        </Alert>
+      </Box>
+      <Box>
+        <Typography variant="subtitle2" sx={{ mb: 1 }}>What members will see in the group</Typography>
+        {pv.error ? <Alert severity="warning">{pv.error}</Alert> : !pv.data ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}><CircularProgress size={22} /></Box>
+        ) : (
+          <Box sx={{ bgcolor: '#0e1621', borderRadius: 2, p: 1.5, opacity: pv.loading ? 0.6 : 1 }} aria-busy={pv.loading}>
+            <Box sx={{ bgcolor: '#182533', color: '#e8edf5', borderRadius: '14px 14px 14px 4px', px: 1.75, py: 1.25, fontSize: 14.5, lineHeight: 1.45, wordBreak: 'break-word' }}>
+              {renderTelegramHtml(pv.data.html)}
+            </Box>
+            <Box sx={{ mt: 0.75, display: 'grid', gap: 0.5 }}>
+              {pv.data.buttons.map((row, ri) => (
+                <Box key={ri} sx={{ display: 'flex', gap: 0.5 }}>
+                  {row.map((b) => (
+                    <Box key={b.text} sx={{ flex: 1, textAlign: 'center', bgcolor: 'rgba(106,179,243,0.18)', color: '#6ab3f3', borderRadius: 1.5, py: 0.6, fontSize: 13 }}>{b.text}</Box>
+                  ))}
+                </Box>
+              ))}
+            </Box>
+          </Box>
+        )}
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+          Preview only. Buttons open the bot's private chat once the campaign is live.
+        </Typography>
+      </Box>
+    </Box>
+  );
+}
+
 // Type is chosen up-front (via the Create ▾ menu), so the wizard no longer asks
 // for it — it opens straight on the task definition. Platform now lives in step 1.
-const WIZARD_STEPS = ['Task & Proof', 'Schedule & Reward'];
+const WIZARD_STEPS = ['Basics', 'Tasks & proof', 'Schedule & rewards', 'Review & preview'];
 
 const EMPTY_TASK = { title: '', type: 'social_task', platform: '', task_url: '', verification_mode: 'manual', reward_xp: 0, reward_label: '', custom_fields: [] };
 
@@ -290,7 +415,7 @@ function TasksEditor({ tasks, onChange }) {
 
 // Click-to-view proof screenshot. The image lives on Telegram's servers and is
 // fetched on demand (one request per click) as a blob, then shown in a lightbox.
-function ScreenshotViewer({ botId, groupId, campaignId, submissionId }) {
+export function ScreenshotViewer({ botId, groupId, campaignId, submissionId }) {
   const [open, setOpen] = useState(false);
   const [url, setUrl] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -568,7 +693,7 @@ export default function CampaignManager({ botId, groupId, userTier = 'free' }) {
 
 // ── Row + lifecycle menu ──────────────────────────────────────────────────────
 
-function PostStatusCell({ c, botId, groupId, onChanged }) {
+export function PostStatusCell({ c, botId, groupId, onChanged }) {
   const [posting, setPosting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -810,7 +935,7 @@ const X_STATUS_META = {
   },
 };
 
-function XAutoverifyStatus({ status, enabled, onManageKey }) {
+export function XAutoverifyStatus({ status, enabled, onManageKey }) {
   const meta = X_STATUS_META[status] || X_STATUS_META.disabled;
   // Toggle OFF → a compact, clickable chip so the owner can check health / add a key
   // proactively. Toggle ON → the full confirmation so enabling never leaves them guessing.
@@ -845,7 +970,7 @@ function XAutoverifyStatus({ status, enabled, onManageKey }) {
 }
 
 // ── Bring-your-own twitterapi.io key (account-level) ──────────────────────────
-function XKeyDialog({ open, onClose, onSaved }) {
+export function XKeyDialog({ open, onClose, onSaved }) {
   const [info, setInfo] = useState(null);   // { configured, masked_key, status, using_own_key }
   const [keyInput, setKeyInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -937,7 +1062,7 @@ function XKeyDialog({ open, onClose, onSaved }) {
 
 // ── Create wizard ─────────────────────────────────────────────────────────────
 
-function CampaignWizard({ botId, groupId, initialType, isPaid = false, xAutoverifyStatus = 'disabled', onManageKey, onClose, onCreated }) {
+export function CampaignWizard({ botId, groupId, initialType, isPaid = false, xAutoverifyStatus = 'disabled', onManageKey, onClose, onCreated, page = false, onDirty, groupName }) {
   const [step, setStep] = useState(0);
   // When auto-verify handles the X actions, proof fields are only for extra data the
   // bot can't read from X (wallet, email, UID…), so we collapse them by default to
@@ -964,7 +1089,7 @@ function CampaignWizard({ botId, groupId, initialType, isPaid = false, xAutoveri
   const typeMeta = TYPES.find((t) => t.value === form.type) || {};
   const cfg = typeConfig(form.type);
 
-  const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+  const set = (k, v) => setForm((p) => touch({ ...p, [k]: v }));
 
   // Resolve the platform we persist: raid is locked to X, types without a platform
   // store null, and "Other" sends the free-text the owner typed.
@@ -976,29 +1101,23 @@ function CampaignWizard({ botId, groupId, initialType, isPaid = false, xAutoveri
   };
 
   const canNext = () => {
-    if (step === 0) {
-      if (!form.title.trim()) return false;
+    if (step === 0) return !!form.title.trim();
+    if (step === 1) {
       if (form.multitask) return form.tasks.some((t) => (t.title || '').trim());
       if (cfg.taskUrlRequired && !form.task_url.trim()) return false;
-      return true;
     }
     return true;
   };
 
-  const submit = async () => {
-    if (!form.title.trim()) { toast.error('Title is required'); setStep(0); return; }
-    if (form.multitask && !form.tasks.some((t) => (t.title || '').trim())) {
-      toast.error('Add at least one task'); setStep(0); return;
-    }
-    if (!form.multitask && cfg.taskUrlRequired && !form.task_url.trim()) {
-      toast.error(`${cfg.taskUrlLabel || 'Link'} is required`); setStep(0); return;
-    }
-    setSaving(true);
+  // Tell the page when there is unsaved input (it warns before leaving).
+  const dirtyRef = useRef(false);
+  const touch = (nextForm) => { if (!dirtyRef.current) { dirtyRef.current = true; onDirty?.(true); } return nextForm; };
+
+  const buildPayload = (publish = false) => {
     // Clean proof fields. The per-action DM verify flow now collects the X handle
     // once and reuses it (SocialIdentity), so we no longer inject a username field.
     const buildCustomFields = () => normalizeProofFields(form.custom_fields);
-    try {
-      const payload = {
+    const payload = {
         type: form.type,
         platform: resolvedPlatform(),
         title: form.title.trim(),
@@ -1010,7 +1129,7 @@ function CampaignWizard({ botId, groupId, initialType, isPaid = false, xAutoveri
         max_participants: form.max_participants ? parseInt(form.max_participants) : null,
         one_per_user: form.one_per_user,
         pin_message: form.pin_message,
-        status: form.publishNow ? 'active' : 'draft',
+        status: publish ? 'active' : 'draft',
         settings: {
           allow_resubmit: !!form.allow_resubmit,
           leaderboard: !!form.show_leaderboard,
@@ -1061,9 +1180,25 @@ function CampaignWizard({ botId, groupId, initialType, isPaid = false, xAutoveri
           }));
       }
       if (form.duration_hours) payload.duration_hours = form.duration_hours;
-      await engagement.create(botId, groupId, payload);
-      toast.success(form.publishNow ? 'Campaign created & activated' : 'Campaign saved as draft');
-      onCreated();
+    return payload;
+  };
+
+  const submit = async (publish) => {
+    if (!form.title.trim()) { toast.error('Title is required'); setStep(0); return; }
+    if (form.multitask && !form.tasks.some((t) => (t.title || '').trim())) {
+      toast.error('Add at least one task'); setStep(1); return;
+    }
+    if (!form.multitask && cfg.taskUrlRequired && !form.task_url.trim()) {
+      toast.error(`${cfg.taskUrlLabel || 'Link'} is required`); setStep(1); return;
+    }
+    setSaving(true);
+    try {
+      const payload = buildPayload(publish);
+      const created = await engagement.create(botId, groupId, payload);
+      dirtyRef.current = false;
+      onDirty?.(false);
+      toast.success(publish ? 'Campaign published' : 'Campaign saved as draft');
+      onCreated(publish, created.data?.campaign);
     } catch (e) {
       toast.error(e.response?.data?.error || 'Failed to create campaign');
     } finally {
@@ -1072,12 +1207,12 @@ function CampaignWizard({ botId, groupId, initialType, isPaid = false, xAutoveri
   };
 
   return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>
+    <PDialog page={page} onClose={onClose} maxWidth="sm">
+      <PDialogTitle>
         <Box component="span" sx={{ mr: 1 }}>{typeMeta.emoji}</Box>
         Create {typeMeta.label || 'Campaign'}
-      </DialogTitle>
-      <DialogContent>
+      </PDialogTitle>
+      <PDialogContent>
         <Stepper activeStep={step} sx={{ mb: 3, mt: 1 }} alternativeLabel>
           {WIZARD_STEPS.map((s) => <Step key={s}><StepLabel>{s}</StepLabel></Step>)}
         </Stepper>
@@ -1088,23 +1223,13 @@ function CampaignWizard({ botId, groupId, initialType, isPaid = false, xAutoveri
               <Typography variant="caption" color="text.secondary">{typeMeta.help}</Typography>
             )}
             <TextField fullWidth label="Title" value={form.title} onChange={(e) => set('title', e.target.value)} />
-
             <FormControlLabel
               control={<Switch checked={form.multitask} onChange={(e) => set('multitask', e.target.checked)} />}
               label="Multiple tasks (Pro) — one campaign, several tasks"
             />
-
             {form.multitask ? (
-              <Stack spacing={2}>
-                <TextField fullWidth multiline minRows={2} label="Campaign intro / description"
-                  value={form.description} onChange={(e) => set('description', e.target.value)} />
-                <Divider textAlign="left"><Typography variant="caption">Tasks</Typography></Divider>
-                <TasksEditor tasks={form.tasks} onChange={(v) => set('tasks', v)} />
-                <FormControlLabel
-                  control={<Switch checked={form.sequential_tasks} onChange={(e) => set('sequential_tasks', e.target.checked)} />}
-                  label="Sequential — lock each task until the previous one is completed"
-                />
-              </Stack>
+              <TextField fullWidth multiline minRows={2} label="Campaign intro / description"
+                value={form.description} onChange={(e) => set('description', e.target.value)} />
             ) : (
               <>
                 {cfg.showPlatform && (
@@ -1125,6 +1250,24 @@ function CampaignWizard({ botId, groupId, initialType, isPaid = false, xAutoveri
                 )}
                 <TextField fullWidth multiline minRows={2} label="Instructions / Description"
                   value={form.description} onChange={(e) => set('description', e.target.value)} />
+              </>
+            )}
+          </Stack>
+        )}
+
+        {step === 1 && (
+          <Stack spacing={2}>
+            {form.multitask ? (
+              <Stack spacing={2}>
+                <Divider textAlign="left"><Typography variant="caption">Tasks</Typography></Divider>
+                <TasksEditor tasks={form.tasks} onChange={(v) => set('tasks', v)} />
+                <FormControlLabel
+                  control={<Switch checked={form.sequential_tasks} onChange={(e) => set('sequential_tasks', e.target.checked)} />}
+                  label="Sequential — lock each task until the previous one is completed"
+                />
+              </Stack>
+            ) : (
+              <>
                 <TextField fullWidth required={!!cfg.taskUrlRequired}
                   label={cfg.taskUrlLabel || 'Task Link (optional)'}
                   placeholder="https://x.com/..." value={form.task_url} onChange={(e) => set('task_url', e.target.value)} />
@@ -1279,7 +1422,7 @@ function CampaignWizard({ botId, groupId, initialType, isPaid = false, xAutoveri
           </Stack>
         )}
 
-        {step === 1 && (
+        {step === 2 && (
           <Stack spacing={2}>
             <FormControl fullWidth>
               <InputLabel>Deadline</InputLabel>
@@ -1305,27 +1448,39 @@ function CampaignWizard({ botId, groupId, initialType, isPaid = false, xAutoveri
               label="Pin the group announcement" />
             <FormControlLabel control={<Switch checked={form.show_leaderboard} onChange={(e) => set('show_leaderboard', e.target.checked)} />}
               label="Show leaderboard (Pro) — rank participants by XP / tasks completed" />
-            <FormControlLabel control={<Switch checked={form.publishNow} onChange={(e) => set('publishNow', e.target.checked)} />}
-              label="Activate now (otherwise saved as draft)" />
           </Stack>
         )}
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
-        {step > 0 && <Button onClick={() => setStep(step - 1)}>Back</Button>}
+
+        {step === 3 && (
+          <WizardReview
+            botId={botId} groupId={groupId} form={form} typeMeta={typeMeta} payload={buildPayload(false)}
+            groupName={groupName} platform={resolvedPlatform()}
+          />
+        )}
+      </PDialogContent>
+      <PDialogActions>
+        <Button onClick={onClose} disabled={saving}>Cancel</Button>
+        {step > 0 && <Button onClick={() => setStep(step - 1)} disabled={saving}>Back</Button>}
         {step < WIZARD_STEPS.length - 1
           ? <Button variant="contained" disabled={!canNext()} onClick={() => setStep(step + 1)}>Next</Button>
-          : <Button variant="contained" disabled={saving} onClick={submit}>
-              {saving ? <CircularProgress size={20} color="inherit" /> : 'Create'}
-            </Button>}
-      </DialogActions>
-    </Dialog>
+          : (
+            <>
+              <Button variant="outlined" disabled={saving} onClick={() => submit(false)}>
+                {saving ? <CircularProgress size={20} color="inherit" /> : 'Save as draft'}
+              </Button>
+              <Button variant="contained" disabled={saving} onClick={() => submit(true)}>
+                Publish now
+              </Button>
+            </>
+          )}
+      </PDialogActions>
+    </PDialog>
   );
 }
 
 // ── Manage / review dialog ────────────────────────────────────────────────────
 
-function CampaignManageDialog({ botId, groupId, campaignId, onClose, onChanged }) {
+export function CampaignManageDialog({ botId, groupId, campaignId, onClose, onChanged, page = false, view = 'submissions' }) {
   const [campaign, setCampaign] = useState(null);
   const [subs, setSubs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1355,8 +1510,9 @@ function CampaignManageDialog({ botId, groupId, campaignId, onClose, onChanged }
   useEffect(() => { load(); }, [load]);
 
   const review = async (subId, action, reason) => {
+    const current = (subs.find((x) => x.id === subId) || {}).status;
     try {
-      await engagement.reviewSubmission(botId, groupId, campaignId, subId, { action, reason });
+      await engagement.reviewSubmission(botId, groupId, campaignId, subId, { action, reason, expected_status: current });
       toast.success(action === 'approve' ? 'Approved' : 'Rejected');
       setRejectFor(null);
       setRejectReason('');
@@ -1364,6 +1520,7 @@ function CampaignManageDialog({ botId, groupId, campaignId, onClose, onChanged }
       onChanged?.();
     } catch (e) {
       toast.error(e.response?.data?.error || 'Failed');
+      if (e.response?.status === 409) { setRejectFor(null); load(); }   // someone else decided first: show the latest
     }
   };
 
@@ -1378,14 +1535,11 @@ function CampaignManageDialog({ botId, groupId, campaignId, onClose, onChanged }
   const exportCsv = async () => {
     try {
       const res = await engagement.exportCsv(botId, groupId, campaignId);
-      const url = window.URL.createObjectURL(new Blob([res.data]));
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `campaign_${campaignId}_submissions.csv`;
-      a.click();
-      window.URL.revokeObjectURL(url);
+      const name = /filename=([^;]+)/.exec(res.headers?.['content-disposition'] || '')?.[1] || `campaign_${campaignId}_submissions.csv`;
+      downloadBlob(res.data, name.replace(/"/g, ''));
+      toast.success('Export downloaded (all submissions)');
     } catch {
-      toast.error('Export failed');
+      toast.error('Export failed - nothing was downloaded');
     }
   };
 
@@ -1441,12 +1595,14 @@ function CampaignManageDialog({ botId, groupId, campaignId, onClose, onChanged }
   };
 
   return (
-    <Dialog open onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>
+    <PDialog page={page} onClose={onClose} maxWidth="md">
+      {!page && (
+      <PDialogTitle>
         {campaign ? campaign.title : 'Campaign'}
         {campaign && <Chip size="small" label={campaign.status} color={STATUS_COLOR[campaign.status] || 'default'} sx={{ ml: 1 }} />}
-      </DialogTitle>
-      <DialogContent>
+      </PDialogTitle>
+      )}
+      <PDialogContent>
         {loading || !campaign ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
         ) : (
@@ -1454,7 +1610,7 @@ function CampaignManageDialog({ botId, groupId, campaignId, onClose, onChanged }
             {/* Even 2-col (3-col on desktop) grid → the meta pills form ≤3 tidy
                 rows using the full width, instead of each wide pill grabbing its
                 own line. */}
-            <Box sx={{ mb: 2, display: 'grid', gap: 1,
+            {!page && <Box sx={{ mb: 2, display: 'grid', gap: 1,
               gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)' },
               '& > p': { bgcolor: 'action.hover', px: 1, py: 0.4, borderRadius: 1, fontSize: '0.8rem', minWidth: 0 } }}>
               <Typography variant="body2"><strong>Type:</strong> {campaign.type}</Typography>
@@ -1473,21 +1629,21 @@ function CampaignManageDialog({ botId, groupId, campaignId, onClose, onChanged }
               {campaign.reward_xp ? <Typography variant="body2"><strong>XP:</strong> {campaign.reward_xp}</Typography> : null}
               {campaign.reward_label && <Typography variant="body2"><strong>Reward:</strong> {campaign.reward_label}</Typography>}
               {campaign.ends_at && <Typography variant="body2"><strong>Ends:</strong> {new Date(campaign.ends_at).toLocaleString([], { month: 'numeric', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}</Typography>}
-            </Box>
+            </Box>}
 
             <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: 'wrap', gap: 1 }}>
-              <Button size="small" variant="outlined" startIcon={<Edit />} onClick={() => setEditing(true)}>Edit</Button>
-              <Button size="small" startIcon={<Download />} onClick={exportCsv}>Export CSV</Button>
-              <Button size="small" startIcon={<EmojiEvents />} onClick={pickWinners}>Pick Winners</Button>
+              {!page && <Button size="small" variant="outlined" startIcon={<Edit />} onClick={() => setEditing(true)}>Edit</Button>}
+              {(!page || view === 'submissions') && <Button size="small" startIcon={<Download />} onClick={exportCsv}>Export all submissions (CSV)</Button>}
+              {(!page || view === 'results') && <Button size="small" startIcon={<EmojiEvents />} onClick={pickWinners}>Pick Winners</Button>}
             </Stack>
 
-            {winners.length > 0 && (
+            {winners.length > 0 && (!page || view === 'results') && (
               <Alert severity="success" icon={<EmojiEvents fontSize="inherit" />} sx={{ mb: 2 }}>
                 Winners: {winners.map((w) => w.telegram_username ? `@${w.telegram_username}` : w.telegram_user_id).join(', ')}
               </Alert>
             )}
 
-            {campaign.status === 'active' && campaign.post_status !== 'posted' && (
+            {!page && campaign.status === 'active' && campaign.post_status !== 'posted' && (
               <Alert
                 severity={campaign.post_status === 'failed' ? 'error' : 'warning'}
                 sx={{ mb: 2 }}
@@ -1507,7 +1663,7 @@ function CampaignManageDialog({ botId, groupId, campaignId, onClose, onChanged }
                   : 'This campaign has not been posted to the group yet.'}
               </Alert>
             )}
-            {campaign.post_status === 'posted' && campaign.posted_at && (
+            {!page && campaign.post_status === 'posted' && campaign.posted_at && (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, flexWrap: 'wrap' }}>
                 <Typography variant="caption" color="text.secondary">
                   Posted to group {new Date(campaign.posted_at).toLocaleString()}
@@ -1526,13 +1682,13 @@ function CampaignManageDialog({ botId, groupId, campaignId, onClose, onChanged }
               </Box>
             )}
 
-            <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="fullWidth"
+            {!page && <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="fullWidth"
               sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}>
               <Tab label={`Submissions (${subs.length})`} />
               <Tab icon={<EmojiEvents fontSize="small" />} iconPosition="start" label="Leaderboard" />
-            </Tabs>
+            </Tabs>}
 
-            {tab === 1 ? (
+            {(page ? view === 'results' : tab === 1) ? (
               <CampaignLeaderboard botId={botId} groupId={groupId} campaignId={campaignId} />
             ) : subs.length === 0 ? (
               <Typography variant="body2" color="text.secondary">No submissions yet.</Typography>
@@ -1611,10 +1767,10 @@ function CampaignManageDialog({ botId, groupId, campaignId, onClose, onChanged }
             )}
           </>
         )}
-      </DialogContent>
-      <DialogActions>
+      </PDialogContent>
+      {!page && <DialogActions>
         <Button onClick={onClose}>Close</Button>
-      </DialogActions>
+      </DialogActions>}
 
       <Dialog open={!!rejectFor} onClose={() => setRejectFor(null)} maxWidth="xs" fullWidth>
         <DialogTitle>Reject submission</DialogTitle>
@@ -1642,13 +1798,13 @@ function CampaignManageDialog({ botId, groupId, campaignId, onClose, onChanged }
           onSaved={() => { setEditing(false); load(); onChanged?.(); }}
         />
       )}
-    </Dialog>
+    </PDialog>
   );
 }
 
 // ── Edit existing campaign ─────────────────────────────────────────────────────
 
-function CampaignEditDialog({ botId, groupId, campaign, hasSubmissions, onClose, onSaved }) {
+export function CampaignEditDialog({ botId, groupId, campaign, hasSubmissions, onClose, onSaved, page = false }) {
   const tasks0 = campaign.tasks || [];
   const isMulti = tasks0.length > 0;
   // Tasks / proof fields are locked once members have submitted (backend refuses to
@@ -1766,9 +1922,9 @@ function CampaignEditDialog({ botId, groupId, campaign, hasSubmissions, onClose,
   };
 
   return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Edit campaign</DialogTitle>
-      <DialogContent>
+    <PDialog page={page} onClose={onClose} maxWidth="sm">
+      <PDialogTitle>Edit campaign</PDialogTitle>
+      <PDialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
           {structureLocked && (
             <Alert severity="info">
@@ -1893,14 +2049,14 @@ function CampaignEditDialog({ botId, groupId, campaign, hasSubmissions, onClose,
             </>
           )}
         </Stack>
-      </DialogContent>
-      <DialogActions>
+      </PDialogContent>
+      <PDialogActions>
         <Button onClick={onClose} disabled={saving}>Cancel</Button>
         <Button variant="contained" onClick={save} disabled={saving}>
           {saving ? <CircularProgress size={20} color="inherit" /> : 'Save changes'}
         </Button>
-      </DialogActions>
-    </Dialog>
+      </PDialogActions>
+    </PDialog>
   );
 }
 
@@ -1908,7 +2064,7 @@ function CampaignEditDialog({ botId, groupId, campaign, hasSubmissions, onClose,
 
 const RANK_MEDAL = { 1: '🥇', 2: '🥈', 3: '🥉' };
 
-function CampaignLeaderboard({ botId, groupId, campaignId }) {
+export function CampaignLeaderboard({ botId, groupId, campaignId }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [locked, setLocked] = useState(false);

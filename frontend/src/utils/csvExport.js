@@ -50,6 +50,19 @@ export function downloadCsv(filename, headers, rows) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+/** Save an already-built Blob (e.g. a server-generated CSV) under a given file name. */
+export function downloadBlob(data, filename) {
+  const blob = data instanceof Blob ? data : new Blob([data], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 const slug = (s) => String(s || '').normalize('NFKD').replace(/[^\w]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase().slice(0, 40);
 
 /** e.g. exportFilename('RupChain Community', 'members', '7d') -> rupchain-community_members_7d_2026-10-10.csv */

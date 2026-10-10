@@ -584,7 +584,7 @@ def get_submission_file(campaign, submission_id):
     return fetch_submission_file(campaign, sub.file_id)
 
 
-def review_submission(campaign, submission_id, action, *, reviewed_by=None, reason=None):
+def review_submission(campaign, submission_id, action, *, reviewed_by=None, reason=None, expected_status=None):
     """Approve or reject a submission. On approve we credit XP idempotently
     (guarded by EngagementSubmission.rewarded) and the verified row is what the
     winner picker / giveaway pool draws from. On reject we credit nothing and
@@ -595,16 +595,37 @@ def review_submission(campaign, submission_id, action, *, reviewed_by=None, reas
     ).first()
     if not sub:
         raise EngagementError("Submission not found", 404)
-    if action == "approve":
-        sub.status = "verified"
-    elif action == "reject":
-        sub.status = "rejected"
-    else:
+    if action not in ("approve", "reject"):
         raise EngagementError(f"Unknown review action: {action}", 400)
-    sub.reviewed_by = str(reviewed_by) if reviewed_by is not None else None
-    sub.review_reason = (reason or None)
-    sub.reviewed_at = datetime.utcnow()
-    db.session.commit()
+    new_status = "verified" if action == "approve" else "rejected"
+    if expected_status is not None:
+        # Compare-and-set: the decision is only applied if the submission is still in
+        # the state the reviewer was looking at. The check lives in the UPDATE itself,
+        # so two admins (or a double click / retry) cannot both decide the same
+        # submission - the loser gets a 409 and nothing is changed, rewarded or sent.
+        changed = EngagementSubmission.query.filter_by(
+            id=sub.id, campaign_id=campaign.id, status=expected_status,
+        ).update({
+            "status": new_status,
+            "reviewed_by": str(reviewed_by) if reviewed_by is not None else None,
+            "review_reason": (reason or None),
+            "reviewed_at": datetime.utcnow(),
+        }, synchronize_session=False)
+        if not changed:
+            db.session.rollback()
+            current = EngagementSubmission.query.filter_by(id=sub.id).first()
+            raise EngagementError(
+                f"This submission was already {current.status if current else 'changed'} - reload to see the latest.",
+                409, code="STALE_SUBMISSION",
+            )
+        db.session.commit()
+        db.session.refresh(sub)
+    else:
+        sub.status = new_status
+        sub.reviewed_by = str(reviewed_by) if reviewed_by is not None else None
+        sub.review_reason = (reason or None)
+        sub.reviewed_at = datetime.utcnow()
+        db.session.commit()
     if action == "approve":
         award_submission(campaign, sub)  # credits XP, then commits
         _refresh_post_progress(campaign)  # update the live quota countdown
@@ -1388,8 +1409,35 @@ def campaign_leaderboard(campaign, *, limit=LEADERBOARD_DEFAULT_LIMIT, offset=0,
     }
 
 
-def submissions_csv(campaign):
-    """Return a CSV string of all submissions for a campaign."""
+_FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _csv_safe(value):
+    """Neutralise spreadsheet formula injection in user-controlled text: a leading
+    = + - @ (or tab/CR) would be EXECUTED by Excel/Sheets, so prefix an apostrophe.
+    Plain numbers pass through untouched."""
+    if not isinstance(value, str) or not value:
+        return value
+    if value[0] in _FORMULA_START:
+        try:
+            float(value)
+            return value
+        except ValueError:
+            return "'" + value
+    return value
+
+
+def _csv_id(value):
+    """Identifiers (Telegram ids, exchange UIDs) must keep leading zeros and every
+    digit - spreadsheets otherwise turn them into rounded numbers. Digits-only ids
+    are written as ="123", which Excel/Sheets read as text and cannot execute."""
+    s = "" if value is None else str(value)
+    return f'="{s}"' if s.isdigit() or (s[:1] == "-" and s[1:].isdigit()) else _csv_safe(s)
+
+
+def submissions_csv(campaign, *, status=None, since=None, until=None):
+    """Return a CSV string of submissions for a campaign (all by default; optionally
+    only a status and/or a created_at window - the same filters the UI shows)."""
     # Union of campaign-level and all task-level field keys (multi-task safe).
     field_keys = [f.key for f in campaign.custom_fields.all()]
     task_titles = {}
@@ -1398,7 +1446,17 @@ def submissions_csv(campaign):
         for f in t.custom_fields.all():
             if f.key not in field_keys:
                 field_keys.append(f.key)
-    subs = campaign.submissions.order_by(EngagementSubmission.created_at.asc()).all()
+    q = campaign.submissions
+    if status in ("pending", "verified", "rejected"):
+        q = q.filter(EngagementSubmission.status == status)
+    if since is not None:
+        q = q.filter(EngagementSubmission.created_at >= since)
+    if until is not None:
+        q = q.filter(EngagementSubmission.created_at < until)
+    subs = q.order_by(EngagementSubmission.created_at.asc()).all()
+    uid_keys = {f.key for f in campaign.custom_fields.all() if f.field_type in ("uid", "tx_hash")}
+    for t in campaign.tasks.all():
+        uid_keys |= {f.key for f in t.custom_fields.all() if f.field_type in ("uid", "tx_hash")}
     # Also surface any extra payload keys that aren't a configured field — e.g. a
     # bot-injected default proof field on a review task with no custom fields — so
     # the proof never silently drops out of the export.
@@ -1412,7 +1470,7 @@ def submissions_csv(campaign):
                 field_keys.append(k)
     header = [
         "submission_id", "task_id", "task_title", "telegram_user_id", "telegram_username",
-        "status", "created_at", "reviewed_at", "reviewed_by", "review_reason",
+        "status", "created_at_utc", "reviewed_at_utc", "reviewed_by", "review_reason",
     ] + field_keys + (["actions"] if has_actions else []) + ["file_id", "file_hash"]
 
     buf = io.StringIO()
@@ -1421,13 +1479,15 @@ def submissions_csv(campaign):
     for s in subs:
         payload = s.payload or {}
         row = [
-            s.id, s.task_id or "", task_titles.get(s.task_id, ""),
-            s.telegram_user_id, s.telegram_username or "",
+            s.id, s.task_id or "", _csv_safe(task_titles.get(s.task_id, "")),
+            _csv_id(s.telegram_user_id), _csv_safe(s.telegram_username or ""),
             s.status,
-            s.created_at.isoformat() if s.created_at else "",
-            s.reviewed_at.isoformat() if s.reviewed_at else "",
-            s.reviewed_by or "", s.review_reason or "",
-        ] + [payload.get(k, "") for k in field_keys]
+            (s.created_at.isoformat() + "Z") if s.created_at else "",
+            (s.reviewed_at.isoformat() + "Z") if s.reviewed_at else "",
+            s.reviewed_by or "", _csv_safe(s.review_reason or ""),
+        ] + [(_csv_id(payload.get(k)) if k in uid_keys else _csv_safe(
+                "" if payload.get(k) is None else (payload.get(k) if isinstance(payload.get(k), str) else str(payload.get(k)))))
+             for k in field_keys]
         if has_actions:
             amap = payload.get("actions") or {}
             row.append("; ".join(
@@ -1436,3 +1496,34 @@ def submissions_csv(campaign):
         row += [s.file_id or "", s.file_hash or ""]
         writer.writerow(row)
     return buf.getvalue()
+
+
+def _slug(text, default="x"):
+    import re
+    import unicodedata
+    s = unicodedata.normalize("NFKD", str(text or "")).encode("ascii", "ignore").decode()
+    s = re.sub(r"[^A-Za-z0-9]+", "-", s).strip("-").lower()[:40]
+    return s or default
+
+
+def submissions_export(campaign, args, group_label=""):
+    """CSV text + a descriptive filename for the submissions export.
+
+    Honours the same filters the screen shows (status, from/to dates as UTC days),
+    so a filtered export contains every matching row - not just one page. The text
+    starts with a BOM so Excel reads Unicode (Urdu, Arabic, emoji) correctly."""
+    status = (args.get("status") or "").strip() or None
+    since = until = None
+    try:
+        if args.get("from"):
+            since = datetime.strptime(args["from"][:10], "%Y-%m-%d")
+        if args.get("to"):
+            until = datetime.strptime(args["to"][:10], "%Y-%m-%d") + timedelta(days=1)
+    except ValueError:
+        raise EngagementError("Dates must be YYYY-MM-DD", 400)
+    text = "\ufeff" + submissions_csv(campaign, status=status, since=since, until=until)
+    parts = [_slug(group_label, "group"), _slug(campaign.title, "campaign"), "submissions"]
+    if status:
+        parts.append(status)
+    parts.append(datetime.utcnow().strftime("%Y-%m-%d"))
+    return text, "_".join(parts) + ".csv"

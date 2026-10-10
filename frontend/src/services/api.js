@@ -566,14 +566,30 @@ export const engagement = {
     api.get(`${campaignBase(botId, groupId)}/${id}/submissions`, { params }),
   reviewSubmission: (botId, groupId, id, subId, data) =>
     api.post(`${campaignBase(botId, groupId)}/${id}/submissions/${subId}/review`, data),
-  exportCsv: (botId, groupId, id) =>
-    api.get(`${campaignBase(botId, groupId)}/${id}/submissions/export`, { responseType: 'blob' }),
+  // params: { status, from, to } narrow the export to what is on screen (all matching rows, not one page).
+  exportCsv: (botId, groupId, id, params) =>
+    api.get(`${campaignBase(botId, groupId)}/${id}/submissions/export`, { responseType: 'blob', params }),
   // Screenshot/photo proof for a submission — streamed from Telegram via the bot.
   submissionFile: (botId, groupId, id, subId) =>
     api.get(`${campaignBase(botId, groupId)}/${id}/submissions/${subId}/file`, { responseType: 'blob' }),
   // Per-campaign leaderboard (Pro). 403 (FEATURE_REQUIRES_PRO) on a free owner.
   leaderboard: (botId, groupId, id, params) =>
     api.get(`${campaignBase(botId, groupId)}/${id}/leaderboard`, { params }),
+};
+
+// Campaign workspace (overview / directory / review queue / one-campaign summary).
+// Read-only, scoped to the group in the URL on the server; reviewing and editing use `engagement`.
+const _wsBase = (botId, groupId) =>
+  botId && botId !== 'official'
+    ? `/api/bots/${botId}/groups/${groupId}/engagement`
+    : `/api/telegram-groups/${groupId}/engagement`;
+export const engagementWs = {
+  overview: (botId, groupId, params) => api.get(`${_wsBase(botId, groupId)}/overview`, { params }),
+  campaigns: (botId, groupId, params) => api.get(`${_wsBase(botId, groupId)}/campaigns`, { params }),
+  queue: (botId, groupId, params) => api.get(`${_wsBase(botId, groupId)}/queue`, { params }),
+  summary: (botId, groupId, id, params) => api.get(`${_wsBase(botId, groupId)}/campaigns/${id}/summary`, { params }),
+  activity: (botId, groupId, id) => api.get(`${_wsBase(botId, groupId)}/campaigns/${id}/activity`),
+  preview: (botId, groupId, data) => api.post(`${_wsBase(botId, groupId)}/preview`, data),
 };
 
 // Participant-facing campaign API (Mini App task pages — Phase 9).
