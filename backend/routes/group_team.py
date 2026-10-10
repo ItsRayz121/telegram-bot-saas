@@ -6,7 +6,7 @@
   PUT    /api/telegram-groups/<gid>/team/members/<uid>   {role}
   DELETE /api/telegram-groups/<gid>/team/members/<uid>
   DELETE /api/telegram-groups/<gid>/team/leave           member leaves
-  GET    /api/group-team/invite/<code>                   preview (logged in)
+  GET    /api/group-team/invite/<code>                   preview a pasted access code
   POST   /api/group-team/redeem                          {code}
 
 Only the group owner manages the team.
@@ -17,9 +17,9 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
-from ..models import db, User, TelegramGroup, TelegramGroupAccess, TelegramGroupInvite, BotEvent
+from ..models import db, User, TelegramGroupAccess, TelegramGroupInvite, BotEvent
 from ..middleware.rate_limit import rate_limit
-from ..group_access import get_group_for_user, team_access_enabled
+from ..group_access import team_access_enabled, owned_group_record, resolve_group_record
 
 logger = logging.getLogger(__name__)
 group_team_bp = Blueprint("group_team", __name__, url_prefix="/api")
@@ -36,7 +36,7 @@ def _owner_group(user, gid):
     """Group the user OWNS (not merely manages), or (None, error response)."""
     if not team_access_enabled():
         return None, (jsonify({"error": "Team access is temporarily disabled"}), 503)
-    group = get_group_for_user(user.id, gid, owner_only=True)
+    group = owned_group_record(user.id, gid)  # works for official AND custom-bot groups
     if not group:
         return None, (jsonify({"error": "Group not found"}), 404)
     return group, None
@@ -159,23 +159,33 @@ def leave_group(gid):
     return jsonify({"ok": True})
 
 
+def _clean_code(raw):
+    return "".join(ch for ch in (raw or "") if ch.isalnum())
+
+
 def _valid_invite(code):
+    code = _clean_code(code)
+    if not code:
+        return None, None
     inv = TelegramGroupInvite.query.filter_by(code=code).first()
     if not inv or inv.used_by is not None or inv.expires_at <= datetime.utcnow():
         return None, None
-    group = TelegramGroup.query.filter_by(telegram_group_id=inv.telegram_group_id, is_disabled=False).first()
-    if not group or group.owner_user_id is None:
+    group = resolve_group_record(inv.telegram_group_id)
+    # The code only works while the person who made it still owns the group.
+    if not group or group.owner_user_id != inv.created_by:
         return None, None
     return inv, group
 
 
 @group_team_bp.route("/group-team/invite/<code>", methods=["GET"])
 @jwt_required()
-@rate_limit(requests_per_minute=30)
+@rate_limit(requests_per_minute=10)
 def preview_invite(code):
+    if not team_access_enabled():
+        return jsonify({"error": "Team access is temporarily disabled"}), 503
     inv, group = _valid_invite(code)
     if not inv:
-        return jsonify({"error": "Invalid or expired invite"}), 404
+        return jsonify({"error": "Invalid or expired access code"}), 404
     return jsonify({"invite": {"group_title": group.title, "role": inv.role}})
 
 
@@ -186,15 +196,18 @@ def redeem():
     user = _me()
     if not team_access_enabled():
         return jsonify({"error": "Team access is temporarily disabled"}), 503
-    code = ((request.get_json(silent=True) or {}).get("code") or "").strip()
-    inv, group = _valid_invite(code) if code else (None, None)
+    code = (request.get_json(silent=True) or {}).get("code")
+    inv, group = _valid_invite(code)
     if not inv:
-        return jsonify({"error": "Invalid or expired invite"}), 404
+        return jsonify({"error": "Invalid or expired access code"}), 404
     if group.owner_user_id == user.id:
         return jsonify({"error": "You already own this group"}), 400
     existing = TelegramGroupAccess.query.filter_by(
         telegram_group_id=group.telegram_group_id, user_id=user.id).first()
-    if not existing:
+    if existing:
+        existing.role = inv.role
+        existing.invited_by = inv.created_by
+    else:
         db.session.add(TelegramGroupAccess(
             telegram_group_id=group.telegram_group_id, user_id=user.id,
             role=inv.role, invited_by=inv.created_by))

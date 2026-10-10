@@ -133,10 +133,10 @@ def get_group_analytics(bot_id, group_id):
     user = _get_current_user()
     if not user:
         return jsonify({"error": "User not found"}), 404
-    bot = Bot.query.filter_by(id=bot_id, user_id=user.id).first()
+    from ..group_access import get_legacy_bot_group
+    bot, group = get_legacy_bot_group(user.id, bot_id, group_id)
     if not bot:
         return jsonify({"error": "Bot not found"}), 404
-    group = Group.query.filter_by(id=group_id, bot_id=bot.id).first()
     if not group:
         return jsonify({"error": "Group not found"}), 404
     days = min(request.args.get("days", 30, type=int), 90)

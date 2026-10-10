@@ -18,11 +18,8 @@ def _get_current_user():
 
 
 def _get_group(user, bot_id, group_id):
-    bot = Bot.query.filter_by(id=bot_id, user_id=user.id).first()
-    if not bot:
-        return None, None
-    group = Group.query.filter_by(id=group_id, bot_id=bot.id).first()
-    return bot, group
+    from ..group_access import get_legacy_bot_group
+    return get_legacy_bot_group(user.id, bot_id, group_id)
 
 
 @knowledge_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/knowledge", methods=["GET"])
@@ -179,12 +176,13 @@ def create_knowledge_source(bot_id, group_id):
         user = _get_current_user()
         if not user:
             return jsonify({"error": "User not found"}), 404
-        paid_error = _require_paid(user, "External knowledge sources")
-        if paid_error:
-            return paid_error
-        _, group = _get_group(user, bot_id, group_id)
+        bot_obj, group = _get_group(user, bot_id, group_id)
         if not group:
             return jsonify({"error": "Group not found"}), 404
+        from ..group_access import plan_user
+        paid_error = _require_paid(plan_user(user, bot_obj.user_id), "External knowledge sources")
+        if paid_error:
+            return paid_error
 
         data = request.get_json(silent=True) or {}
         url = (data.get("url") or "").strip()
@@ -227,12 +225,13 @@ def sync_knowledge_source(bot_id, group_id, source_id):
         user = _get_current_user()
         if not user:
             return jsonify({"error": "User not found"}), 404
-        paid_error = _require_paid(user, "External knowledge sources")
-        if paid_error:
-            return paid_error
-        _, group = _get_group(user, bot_id, group_id)
+        bot_obj, group = _get_group(user, bot_id, group_id)
         if not group:
             return jsonify({"error": "Group not found"}), 404
+        from ..group_access import plan_user
+        paid_error = _require_paid(plan_user(user, bot_obj.user_id), "External knowledge sources")
+        if paid_error:
+            return paid_error
         source = KnowledgeSource.query.filter_by(id=source_id, group_id=group.id).first()
         if not source:
             return jsonify({"error": "Source not found"}), 404

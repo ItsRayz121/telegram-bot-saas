@@ -15,10 +15,10 @@ def _get_current_user():
 
 
 def _get_bot_and_group(user, bot_id, group_id):
-    bot = Bot.query.filter_by(id=bot_id, user_id=user.id).first()
+    from ..group_access import get_legacy_bot_group
+    bot, group = get_legacy_bot_group(user.id, bot_id, group_id)
     if not bot:
         return None, None, (jsonify({"error": "Bot not found"}), 404)
-    group = Group.query.filter_by(id=group_id, bot_id=bot.id).first()
     if not group:
         return bot, None, (jsonify({"error": "Group not found"}), 404)
     return bot, group, None

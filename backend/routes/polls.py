@@ -29,11 +29,8 @@ def _get_current_user():
 
 
 def _get_group(user, bot_id, group_id):
-    bot = Bot.query.filter_by(id=bot_id, user_id=user.id).first()
-    if not bot:
-        return None, None
-    group = Group.query.filter_by(id=group_id, bot_id=bot.id).first()
-    return bot, group
+    from ..group_access import get_legacy_bot_group
+    return get_legacy_bot_group(user.id, bot_id, group_id)
 
 
 @polls_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/polls", methods=["GET"])
@@ -64,7 +61,8 @@ def create_poll(bot_id, group_id):
     # Scheduled polls are a paid feature; enforce before touching the DB.
     data = request.get_json() or {}
     if data.get("scheduled_at"):
-        sub_err = _require_paid(user, "Scheduled polls")
+        from ..group_access import plan_user
+        sub_err = _require_paid(plan_user(user, bot_obj.user_id), "Scheduled polls")
         if sub_err:
             return sub_err
 

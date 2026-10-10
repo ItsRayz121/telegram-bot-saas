@@ -20,11 +20,9 @@ def _current_user():
 
 def _get_group(user, bot_id: int, group_id: int):
     """Return (bot, group) if user owns the bot and group belongs to it, else (None, None)."""
-    bot = Bot.query.filter_by(id=bot_id, user_id=user.id).first()
-    if not bot:
-        return None, None
-    group = Group.query.filter_by(id=group_id, bot_id=bot.id).first()
-    if not group:
+    from ..group_access import get_legacy_bot_group
+    bot, group = get_legacy_bot_group(user.id, bot_id, group_id)
+    if not bot or not group:
         return None, None
     return bot, group
 

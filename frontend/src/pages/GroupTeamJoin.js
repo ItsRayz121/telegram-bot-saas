@@ -55,7 +55,7 @@ export default function GroupTeamJoin() {
           ) : !isLoggedIn ? (
             <>
               <Group sx={{ fontSize: 48, mb: 1 }} color="primary" />
-              <Typography variant="h6" gutterBottom>You've been invited to a Telegram group</Typography>
+              <Typography variant="h6" gutterBottom>You've been given access to a Telegram group</Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                 Log in or create an account to accept.
               </Typography>

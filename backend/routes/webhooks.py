@@ -19,11 +19,8 @@ def _get_current_user():
 
 
 def _get_group(user, bot_id, group_id):
-    bot = Bot.query.filter_by(id=bot_id, user_id=user.id).first()
-    if not bot:
-        return None, None
-    group = Group.query.filter_by(id=group_id, bot_id=bot.id).first()
-    return bot, group
+    from ..group_access import get_legacy_bot_group
+    return get_legacy_bot_group(user.id, bot_id, group_id)
 
 
 def _verify_webhook_signature(hook: WebhookIntegration, raw_body: bytes) -> bool:

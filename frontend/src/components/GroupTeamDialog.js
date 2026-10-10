@@ -13,7 +13,6 @@ const ROLE_HELP = {
   viewer: 'Can look at everything but cannot change anything.',
 };
 
-const joinLink = (code) => `${window.location.origin}/group-team/join/${code}`;
 
 export default function GroupTeamDialog({ group, open, onClose }) {
   const gid = group?.telegram_group_id;
@@ -55,7 +54,8 @@ export default function GroupTeamDialog({ group, open, onClose }) {
       <DialogContent>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           Invite people to manage <strong>this group only</strong>. They won't see your other groups,
-          billing, or API keys, and can't unlink the group. Links are one-use and expire in 7 days.
+          billing, or API keys, and can't unlink the group. Send them the access code; they paste it under
+          "Join with access code" on My Groups. Each code works once and expires in 7 days.
         </Typography>
         {error && <Alert severity="warning" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
 
@@ -65,8 +65,8 @@ export default function GroupTeamDialog({ group, open, onClose }) {
             <ToggleButton value="viewer" sx={{ textTransform: 'none' }}>Viewer</ToggleButton>
           </ToggleButtonGroup>
           <Button variant="contained" size="small" startIcon={<PersonAdd />} disabled={busy}
-            onClick={() => run(() => groupTeam.createInvite(gid, role), 'Invite link created')}>
-            New invite link
+            onClick={() => run(() => groupTeam.createInvite(gid, role), 'Access code created')}>
+            New access code
           </Button>
         </Stack>
         <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
@@ -79,23 +79,28 @@ export default function GroupTeamDialog({ group, open, onClose }) {
           <>
             {invites.length > 0 && (
               <>
-                <Typography variant="subtitle2" fontWeight={700}>Open invites</Typography>
+                <Typography variant="subtitle2" fontWeight={700}>Open access codes</Typography>
                 <List dense>
                   {invites.map((i) => (
-                    <ListItem key={i.id} disableGutters
+                    <ListItem key={i.id} disableGutters sx={{ pr: 10 }}
                       secondaryAction={(
                         <Stack direction="row" spacing={0.5}>
-                          <Tooltip title="Copy invite link">
-                            <IconButton size="small" onClick={() => copy(joinLink(i.code))}><ContentCopy fontSize="small" /></IconButton>
+                          <Tooltip title="Copy access code">
+                            <IconButton size="small" onClick={() => copy(i.code)}><ContentCopy fontSize="small" /></IconButton>
                           </Tooltip>
-                          <Tooltip title="Cancel invite">
+                          <Tooltip title="Cancel code">
                             <IconButton size="small" disabled={busy}
                               onClick={() => run(() => groupTeam.cancelInvite(gid, i.id))}><Delete fontSize="small" /></IconButton>
                           </Tooltip>
                         </Stack>
                       )}>
                       <ListItemText
-                        primary={<Chip size="small" label={i.role} />}
+                        primary={(
+                          <Stack direction="row" spacing={1} alignItems="center">
+                            <Typography component="span" sx={{ fontFamily: 'monospace', fontSize: '0.85rem', wordBreak: 'break-all' }}>{i.code}</Typography>
+                            <Chip size="small" label={i.role} />
+                          </Stack>
+                        )}
                         secondary={`Expires ${new Date(i.expires_at).toLocaleDateString()}`} />
                     </ListItem>
                   ))}

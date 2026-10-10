@@ -268,10 +268,10 @@ def _get_current_user():
 
 
 def _get_bot_and_group(user, bot_id, group_id):
-    bot = Bot.query.filter_by(id=bot_id, user_id=user.id).first()
+    from ..group_access import get_legacy_bot_group
+    bot, group = get_legacy_bot_group(user.id, bot_id, group_id)
     if not bot:
         return None, None, (jsonify({"error": "Bot not found"}), 404)
-    group = Group.query.filter_by(id=group_id, bot_id=bot.id).first()
     if not group:
         return bot, None, (jsonify({"error": "Group not found"}), 404)
     return bot, group, None
@@ -348,7 +348,8 @@ def import_group_settings(bot_id, group_id):
             return jsonify({"error": "No settings file provided."}), 400
         dry_run = bool(body.get("dry_run", True))
 
-        result, plan_err = plan_import(user, group.settings or {}, raw_file)
+        from ..group_access import plan_user
+        result, plan_err = plan_import(plan_user(user, bot.user_id), group.settings or {}, raw_file)
         if plan_err:
             return plan_err
 
@@ -404,7 +405,8 @@ def update_group_settings(bot_id, group_id):
         data = request.get_json()
         if not data:
             return jsonify({"error": "No data provided"}), 400
-        gated_err = _check_gated_settings(user, data)
+        from ..group_access import plan_user
+        gated_err = _check_gated_settings(plan_user(user, bot.user_id), data)
         if gated_err:
             return gated_err
         current = dict(group.settings or {})
@@ -1111,7 +1113,8 @@ def create_scheduled_message(bot_id, group_id):
         bot, group, err = _get_bot_and_group(user, bot_id, group_id)
         if err:
             return err
-        sub_err = _require_paid(user, "Scheduled messages")
+        from ..group_access import plan_user
+        sub_err = _require_paid(plan_user(user, bot.user_id), "Scheduled messages")
         if sub_err:
             return sub_err
         data = request.get_json()
@@ -1250,7 +1253,8 @@ def create_raid(bot_id, group_id):
         bot, group, err = _get_bot_and_group(user, bot_id, group_id)
         if err:
             return err
-        if user.subscription_tier == "free":
+        from ..group_access import plan_user
+        if plan_user(user, bot.user_id).subscription_tier == "free":
             return jsonify({"error": "Raids require a Pro or Enterprise subscription"}), 403
         data = request.get_json()
         if not data:
@@ -1977,11 +1981,9 @@ def list_escalations(bot_id, group_id):
     user = User.query.get(user_id)
     if not user:
         return jsonify({"error": "Not found"}), 404
-    bot = Bot.query.filter_by(id=bot_id, owner_user_id=user_id).first()
-    if not bot:
-        return jsonify({"error": "Not found"}), 404
-    group = Group.query.filter_by(id=group_id, bot_id=bot_id).first()
-    if not group:
+    from ..group_access import get_legacy_bot_group
+    bot, group = get_legacy_bot_group(user_id, bot_id, group_id)
+    if not bot or not group:
         return jsonify({"error": "Not found"}), 404
     status = request.args.get("status")
     q = EscalationEvent.query.filter_by(group_id=group_id)
@@ -2007,8 +2009,9 @@ def list_official_escalations(telegram_group_id):
 @jwt_required()
 def patch_escalation(bot_id, group_id, event_id):
     user_id = int(get_jwt_identity())
-    bot = Bot.query.filter_by(id=bot_id, owner_user_id=user_id).first()
-    if not bot:
+    from ..group_access import get_legacy_bot_group
+    bot, _grp = get_legacy_bot_group(user_id, bot_id, group_id)
+    if not bot or not _grp:
         return jsonify({"error": "Not found"}), 404
     ev = EscalationEvent.query.get(event_id)
     if not ev or ev.group_id != group_id:

@@ -26,11 +26,8 @@ def _current_user():
 
 
 def _owns_group(user_id: int, group_id: str):
-    return TelegramGroup.query.filter_by(
-        telegram_group_id=group_id,
-        owner_user_id=user_id,
-        is_disabled=False,
-    ).first()
+    from ..group_access import get_group_for_user
+    return get_group_for_user(user_id, group_id)
 
 
 # ── List commands for a group ──────────────────────────────────────────────────

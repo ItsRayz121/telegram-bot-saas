@@ -3821,13 +3821,19 @@ class TelegramGroupAccess(db.Model):
         }
 
 
+def _new_group_access_code():
+    """24 letters+digits (no look-alikes), easy to paste in a chat."""
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789"
+    return "".join(secrets.choice(alphabet) for _ in range(24))
+
+
 class TelegramGroupInvite(db.Model):
     """One-use invite code that grants TelegramGroupAccess to a single group."""
     __tablename__ = "telegram_group_invites"
 
     id                = db.Column(db.Integer, primary_key=True)
     telegram_group_id = db.Column(db.String(255), nullable=False, index=True)
-    code              = db.Column(db.String(64), unique=True, nullable=False, default=lambda: secrets.token_urlsafe(16))
+    code              = db.Column(db.String(64), unique=True, nullable=False, default=_new_group_access_code)
     role              = db.Column(db.String(20), nullable=False, default="manager")
     created_by        = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     expires_at        = db.Column(db.DateTime, nullable=False, default=lambda: datetime.utcnow() + timedelta(days=7))

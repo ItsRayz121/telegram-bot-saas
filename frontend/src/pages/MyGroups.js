@@ -18,6 +18,7 @@ import { telegramGroups, bots as botsApi, settings as settingsApi } from '../ser
 import { track } from '../services/analytics';
 import TopNav from '../components/TopNav';
 import GroupTeamDialog from '../components/GroupTeamDialog';
+import JoinGroupCodeDialog from '../components/JoinGroupCodeDialog';
 
 const BOT_USERNAME = process.env.REACT_APP_BOT_USERNAME || 'telegizer_bot';
 
@@ -97,6 +98,7 @@ export default function MyGroups() {
   const [linking, setLinking] = useState(false);
   const [unlinkTarget, setUnlinkTarget] = useState(null);
   const [teamTarget, setTeamTarget] = useState(null);
+  const [joinCodeOpen, setJoinCodeOpen] = useState(false);
   const [hubConflictOpen, setHubConflictOpen] = useState(false);
   const [celebrationGroup, setCelebrationGroup] = useState(null);
 
@@ -309,13 +311,21 @@ export default function MyGroups() {
           >
             How to link a group?
           </Button>
+          <Button
+            size="small"
+            variant="text"
+            startIcon={<PeopleAlt fontSize="small" />}
+            onClick={() => setJoinCodeOpen(true)}
+            sx={{ ml: 'auto', textTransform: 'none', fontSize: '0.8rem' }}
+          >
+            Join with access code
+          </Button>
           {botTypeFilter !== 'official' && (
             <Button
               size="small"
               variant="outlined"
               startIcon={<Add fontSize="small" />}
               onClick={() => setLinkOpen(true)}
-              sx={{ ml: 'auto' }}
             >
               Link Group
             </Button>
@@ -591,7 +601,7 @@ export default function MyGroups() {
                           Analytics
                         </Button>
                         {(!g.access_role || g.access_role === 'owner') && (<>
-                        {g.source !== 'legacy' && (<Tooltip title="Invite people to manage this group"><span style={{ display: 'flex' }}><Button size="small" variant="outlined" startIcon={<PeopleAlt sx={{ fontSize: '0.95rem !important' }} />} onClick={() => setTeamTarget(g)} sx={{ fontSize: '0.72rem', fontWeight: 600, textTransform: 'none', py: 0.75, borderRadius: 1.5 }}>Team</Button></span></Tooltip>)}
+                        {(g.source !== 'legacy' || g.legacy_bot_id) && (<Tooltip title="Invite people to manage this group"><span style={{ display: 'flex' }}><Button size="small" variant="outlined" startIcon={<PeopleAlt sx={{ fontSize: '0.95rem !important' }} />} onClick={() => setTeamTarget(g)} sx={{ fontSize: '0.72rem', fontWeight: 600, textTransform: 'none', py: 0.75, borderRadius: 1.5 }}>Team</Button></span></Tooltip>)}
                         <Tooltip title={g.source === 'legacy' && !g.legacy_bot_id ? 'Use the bot page to manage legacy groups' : isCustomBot ? 'Unlink from custom bot' : 'Unlink group'}>
                           <span style={{ flex: 1, display: 'flex' }}>
                             <Button
@@ -633,6 +643,8 @@ export default function MyGroups() {
       </Container>
 
       <GroupTeamDialog group={teamTarget} open={!!teamTarget} onClose={() => setTeamTarget(null)} />
+      <JoinGroupCodeDialog open={joinCodeOpen} onClose={() => setJoinCodeOpen(false)}
+        onJoined={() => { setJoinCodeOpen(false); toast.success('Access granted'); load(); }} />
 
       {/* Permissions detail modal */}
       <Dialog

@@ -182,6 +182,42 @@ def list_groups():
                 "source": "legacy",
             })
 
+    # Shared groups that only exist in the legacy Bot/Group tables (older custom-bot runner).
+    from ..models import TelegramGroupAccess as _TGA, Group as _LegacyGroup
+    _shared_rows = {r.telegram_group_id: r for r in _TGA.query.filter_by(user_id=user.id).all()}
+    _have = {d["telegram_group_id"] for d in groups_data}
+    if _shared_rows:
+        from ..group_access import team_access_enabled
+        if team_access_enabled():
+            for _lg in _LegacyGroup.query.filter(_LegacyGroup.telegram_group_id.in_(list(_shared_rows))).all():
+                if _lg.telegram_group_id in _have:
+                    continue
+                _ob = Bot.query.get(_lg.bot_id)
+                _row = _shared_rows[_lg.telegram_group_id]
+                if not _ob or _ob.user_id == user.id or _row.invited_by != _ob.user_id:
+                    continue
+                _have.add(_lg.telegram_group_id)
+                _cbid = custom_bot_id_by_username.get(_ob.bot_username)
+                groups_data.append({
+                    "id": _lg.id,
+                    "telegram_group_id": _lg.telegram_group_id,
+                    "title": _lg.group_name or "Unknown Group",
+                    "username": None, "invite_link": None,
+                    "owner_user_id": _ob.user_id,
+                    "linked_via_bot_type": "custom",
+                    "linked_bot_id": _cbid,
+                    "linked_bot_name": custom_bot_name_by_id.get(_cbid) if _cbid else None,
+                    "linked_bot_username": custom_bot_username_by_id.get(_cbid) if _cbid else None,
+                    "legacy_bot_id": _ob.id,
+                    "bot_status": "active" if _ob.is_active else "inactive",
+                    "bot_permissions": None, "linked_at": None,
+                    "last_activity": _ob.last_active.isoformat() if _ob.last_active else None,
+                    "is_disabled": False, "created_at": None, "updated_at": None,
+                    "member_count": _lg.telegram_member_count or 0,
+                    "description": None, "source": "legacy",
+                    "access_role": _row.role,
+                })
+
     # Inject linked_bot_name into groups already in the TelegramGroup table
     for g in groups_data:
         if g.get("linked_bot_id") and "linked_bot_name" not in g:
@@ -1574,12 +1610,13 @@ def list_knowledge_sources(group_id):
 @rate_limit(requests_per_minute=10)
 def create_knowledge_source(group_id):
     user = _current_user()
-    paid_error = _require_paid(user, "External knowledge sources")
-    if paid_error:
-        return paid_error
     tg = _owns_group(user.id, group_id)
     if not tg:
         return jsonify({"error": "Group not found"}), 404
+    from ..group_access import plan_user
+    paid_error = _require_paid(plan_user(user, tg.owner_user_id), "External knowledge sources")
+    if paid_error:
+        return paid_error
 
     data = request.get_json(silent=True) or {}
     url = (data.get("url") or "").strip()
@@ -1609,12 +1646,13 @@ def sync_knowledge_source(group_id, source_id):
     if os.environ.get("KNOWLEDGE_SOURCES_ENABLED", "1") == "0":
         return jsonify({"error": "External knowledge source syncing is temporarily disabled."}), 503
     user = _current_user()
-    paid_error = _require_paid(user, "External knowledge sources")
-    if paid_error:
-        return paid_error
     tg = _owns_group(user.id, group_id)
     if not tg:
         return jsonify({"error": "Group not found"}), 404
+    from ..group_access import plan_user
+    paid_error = _require_paid(plan_user(user, tg.owner_user_id), "External knowledge sources")
+    if paid_error:
+        return paid_error
     source = KnowledgeSource.query.filter_by(id=source_id, telegram_group_id=group_id).first()
     if not source:
         return jsonify({"error": "Source not found"}), 404

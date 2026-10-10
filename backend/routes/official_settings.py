@@ -113,7 +113,8 @@ def update_official_settings(group_id):
         unknown = set(data.keys()) - _ALLOWED_SETTING_KEYS
         if unknown:
             return jsonify({"error": f"Unknown settings keys: {sorted(unknown)}"}), 400
-        gated_err = _check_gated_settings(user, data)
+        from ..group_access import plan_user
+        gated_err = _check_gated_settings(plan_user(user, tg.owner_user_id), data)
         if gated_err:
             return gated_err
         current = dict(tg.settings or {})
@@ -195,7 +196,8 @@ def import_official_settings(group_id):
             return jsonify({"error": "No settings file provided."}), 400
         dry_run = bool(body.get("dry_run", True))
 
-        result, plan_err = plan_import(user, tg.settings or {}, raw_file)
+        from ..group_access import plan_user
+        result, plan_err = plan_import(plan_user(user, tg.owner_user_id), tg.settings or {}, raw_file)
         if plan_err:
             return plan_err
 

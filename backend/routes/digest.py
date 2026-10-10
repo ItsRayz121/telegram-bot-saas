@@ -42,11 +42,8 @@ digest_bp = Blueprint("digest", __name__, url_prefix="/api/bots/<int:bot_id>/gro
 
 def _get_group_or_404(bot_id, group_id):
     user_id = int(get_jwt_identity())
-    bot = Bot.query.filter_by(id=bot_id, user_id=user_id).first()
-    if not bot:
-        return None, None
-    group = Group.query.filter_by(id=group_id, bot_id=bot_id).first()
-    return bot, group
+    from ..group_access import get_legacy_bot_group
+    return get_legacy_bot_group(user_id, bot_id, group_id)
 
 
 def _mask_chat_id(chat_id) -> str:

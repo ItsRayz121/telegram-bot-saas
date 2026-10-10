@@ -30,6 +30,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 | `CUSTOM_BOT_LIFECYCLE_DRY_RUN` | `1` | Lifecycle tick still runs and logs what it would do, but **sends nothing and pauses/deletes nothing**. This is the default. |
 | `CUSTOM_BOT_TRIAL_GATE_ENABLED` | `0` | Restores the old rule: anyone on Pro (including the free 14-day signup trial) can create custom bots again. Only affects NEW bot creation. |
 | `MAX_DAILY_AI_SPEND_USD` | any number | Hard ceiling on platform AI spend per day. Set `0` to stop all platform AI. |
+| Admin panel flag `group_team_access_enabled` (or env `GROUP_TEAM_ACCESS_ENABLED`) | off / `0` | Locks out everyone who was given access to someone else's group; owners unaffected. Flag applies in ~30s with no deploy; the env var is the fallback and wins. |
 | `RETENTION_XP_DAYS` | e.g. `3650` | Effectively stops XP pruning without disabling the rest. |
 | `ENGAGEMENT_PROMO` | `false` | Turns off the promo footer. |
 | `USE_CELERY` | `1` | Re-enables Celery dispatch (see `railway.worker.toml` for the full 4 steps). |
@@ -44,7 +45,42 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
-## `61b1e92` — per-group team access for Telegram groups (invite friends to ONE group)
+## `PENDING` — per-group team access (Telegram groups: official AND custom-bot), shared by access code
+**Date:** 2026-10-10 · **Risk:** medium · **Touches:** access control on every per-group dashboard route; plan gating for shared groups
+
+### What changed
+- New tables `telegram_group_access` and `telegram_group_invites` (created automatically on boot).
+- The group owner creates a one-use **access code** (24 letters/digits, expires in 7 days) with a role: **manager** (read + write) or **viewer** (read-only). The friend pastes it under **My Groups → Join with access code**. Max 10 people per group.
+- One shared check, `backend/group_access.py`, now decides access for: official-bot groups (`telegram_groups`, `official_settings`, `crm`, `tasks`, `custom_commands`) AND the older custom-bot routes `/api/bots/<bot_id>/groups/<group_id>/...` (`settings`, `polls`, `knowledge`, `webhooks`, `invites`, `digest`, `analytics`, `custom_bot_crm`, `bot_group_commands`, `api_keys`). Owners behave exactly as before.
+- Shared people see only the groups they were given. Unlinking/disconnecting a group, AI API keys, the bot itself and managing the team stay owner-only. Viewers get 403 on any write.
+- A grant only counts while the person who issued it still owns the group; a code or grant from a previous owner stops working.
+- Paid features and plan limits on a shared group follow the **group owner's** plan, not the shared person's.
+- Bonus fix: the escalation list/update routes used a column that does not exist on `Bot` (`owner_user_id`) and returned 500 for everyone; they now work.
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Only the owner can open a group again; the Team button, join dialog and new endpoints disappear.
+- ⚠️ The two new tables and their rows stay in the database (harmless and unused after a revert).
+- ⚠️ Anything a shared manager already changed (settings, moderation, sent messages) is NOT undone.
+- ⚠️ Access codes already handed out stop working but are not recalled from wherever they were pasted.
+- ⚠️ A revert also puts the escalation routes back to returning 500.
+
+### Kill switch (if any)
+**Admin panel → Configuration → Feature flags → `group_team_access_enabled` → off.** Applies within ~30 seconds, no deploy. Every shared person is locked out, the shared groups vanish from their list, new codes and redemptions return 503, owners are unaffected. Turn it back on and the same grants work again. Emergency fallback if the admin panel is unreachable: set `GROUP_TEAM_ACCESS_ENABLED=0` in Railway (this wins over the flag).
+
+### Safety properties (verified, not assumed)
+- Run on the real Flask app (SQLite) with owner / manager / viewer / stranger / second owner: a stranger gets 404; a manager reads and edits the shared group but gets 404 on the owner's other groups and on another owner's bot that sits in the same chat; manager gets 403 on unlink, API keys and team management; viewer gets 403 on every write, in both official and legacy routes; codes are single use and reject garbage; ownership change kills old grants and old codes; the DB flag locks out managers (official and legacy), hides shared groups, refuses new codes, and leaves owners untouched; turning it back on restores access.
+- A Pro friend on a free owner's group is refused paid features (plan follows the owner).
+- Not covered (stay owner-only): automations, forwarding, meetings, workspace reminders, Assistant Hub groups, the Telegram mini app.
+
+---
+
+## `61b1e92` — per-group team access, first version (official-bot groups only, invite link)
 **Date:** 2026-10-10 · **Risk:** medium · **Touches:** access control on the group dashboard API (who may read/change a group)
 
 ### What changed

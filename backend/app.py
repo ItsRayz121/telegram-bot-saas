@@ -317,6 +317,8 @@ def create_app():
     app.register_blueprint(totp_bp)
     app.register_blueprint(tg_groups_bp)
     app.register_blueprint(group_team_bp)
+    from .group_access import register_group_access_guard
+    register_group_access_guard(app)
     app.register_blueprint(custom_bots_bp)
     app.register_blueprint(custom_commands_bp)
     app.register_blueprint(bot_group_commands_bp)
